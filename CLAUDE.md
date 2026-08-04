@@ -30,6 +30,10 @@ protocol. Read these before changing scope or structure:
   Jobs are one-shot, but a run that parks frees its slot and stops its duration clock.
 - `packages/server` — HTTP + WS gateway (`node:http` + `ws`): session registry, auth hook,
   optional `/jobs` + `/queue` routes, profiles (+ `profileStore` CRUD), `GET /sessions/:id/files`,
+  the host-filesystem routes (`/fs/*`, `host-files.ts` + `host-file-search.ts` — operator
+  privilege; reads follow `allowedCwdRoots` and `hostFiles.roots` only narrows, writes opt in
+  separately; realpath-based containment and uniform-404 disclosure, so **do not** reuse
+  `cwdAllowed` there — see `docs/GOTCHAS.md` §Host filesystem),
   `SessionNotifier` (`notifications.ts`) — server-wide session webhooks for the four
   human-attention moments, subscribed through `SessionRegistry`'s `onRegister` so a rebuilt
   parked session is covered too; transport-agnostic on purpose (no push credentials here),

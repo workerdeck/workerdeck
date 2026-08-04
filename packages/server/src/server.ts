@@ -1,8 +1,16 @@
-import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import {
+  existsSync,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  type Dirent,
+} from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { homedir } from 'node:os'
 import type { Duplex } from 'node:stream'
-import { join, resolve as resolvePath, sep } from 'node:path'
+import { basename, join, resolve as resolvePath, sep } from 'node:path'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { listSessions as sdkListSessions } from '@anthropic-ai/claude-agent-sdk'
 import { checkClaudeAuth } from '@workerdeck/core'
@@ -31,7 +39,17 @@ import {
   type ServerFrame,
   type SubmitExecutionResultRequest,
   type UpdateProfileRequest,
+  type WriteHostFileRequest,
 } from '@workerdeck/protocol'
+import { searchFiles } from './host-file-search.ts'
+import {
+  createHostFileRoots,
+  entryKind,
+  readContained,
+  resolveExisting,
+  resolveForWrite,
+  writeContained,
+} from './host-files.ts'
 import { SessionRegistry } from './registry.ts'
 import { SessionNotifier, type SessionNotificationOptions } from './notifications.ts'
 import { BridgeHub, type BridgeHubOptions } from './bridge.ts'
@@ -79,6 +97,49 @@ export type WorkerServerOptions = {
   allowUnauthenticated?: boolean
   /** If set, session cwd must resolve inside one of these roots. Strongly recommended. */
   allowedCwdRoots?: string[]
+  /**
+   * The host filesystem routes (`{basePath}/fs/*`) — browse and read the
+   * operator's real project tree, and optionally write to it.
+   *
+   * **Reading follows {@link allowedCwdRoots} and needs no grant of its own.**
+   * A caller holding the auth key can already start a session in any allowed root
+   * and have the agent read whatever is in it, so serving those same trees over
+   * `/fs` adds no authority — it only removes the absurdity of going through a
+   * language model to `cat` a file. Set `roots` here only to *narrow* that (or to
+   * expose a tree sessions may not run in).
+   *
+   * With neither set the routes 404. That is not the same as inheriting
+   * `allowedCwdRoots`' permissive "unset means anywhere": no cwd policy means
+   * there is nothing to inherit, and "anywhere" is a statement about paths the
+   * operator types at a keyboard, not one about what a phone may read.
+   *
+   * **Writing is a separate opt-in**, because it is the one part that is not
+   * already implied. An agent's writes go through the permission flow; a `PUT` to
+   * `/fs/write` does not. These routes are operator-privileged by design — the
+   * caller is the operator — but that is a reason to make the bypass deliberate,
+   * not a reason to skip the switch.
+   *
+   * Containment is *not* `cwdAllowed`, whichever roots are in play: these routes
+   * walk paths the agent may have authored, so a symlink can escape a lexical
+   * prefix check. See `host-files.ts` — canonicalize, then re-check.
+   */
+  hostFiles?: {
+    /** Absolute paths. Unset inherits {@link allowedCwdRoots}; an explicit empty
+     * array disables the routes (a policy, not an absence). */
+    roots?: string[]
+    /** Enable `PUT {basePath}/fs/write`. Default false — read-only. */
+    write?: boolean
+    /** Refuse reads above this (413) rather than streaming a gigabyte to a phone.
+     * Default 1 MiB. Writes are bounded by {@link maxBodyBytes} instead. */
+    maxFileBytes?: number
+    /** Cap on entries returned per directory (the response says `truncated`).
+     * Default 5000. */
+    maxEntries?: number
+    /** Directory names `GET /fs/find` will not descend into. Defaults to
+     * `DEFAULT_IGNORED_DIRS` (`.git`, `node_modules`, build output…) — the thing
+     * that keeps a per-keystroke search cheap on a real source tree. */
+    ignore?: string[]
+  }
   /**
    * Named Claude Code config directories sessions can run under (each becomes the
    * session's CLAUDE_CONFIG_DIR — settings, memory, skills, and the credentials the
@@ -380,6 +441,23 @@ const CONTENT_TYPES: Record<string, string> = {
   csv: 'text/csv; charset=utf-8',
   xml: 'application/xml; charset=utf-8',
   svg: 'image/svg+xml; charset=utf-8',
+}
+
+/** sha256 hex — the currency of the conditional-write protocol on `/fs/write`. */
+function hashBytes(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex')
+}
+
+/**
+ * The file's text, or null if it isn't text. Decoding never fails in Node — invalid
+ * bytes become U+FFFD — so the only honest test is a round trip: if re-encoding the
+ * decoded string reproduces the original bytes, nothing was lost and the client can
+ * safely edit and send it back. Anything else ships base64, which an editor can
+ * refuse to open rather than silently corrupt on save.
+ */
+function asUtf8(bytes: Buffer): string | null {
+  const text = bytes.toString('utf8')
+  return Buffer.from(text, 'utf8').equals(bytes) ? text : null
 }
 
 function contentTypeFor(filename: string): string {
@@ -941,6 +1019,269 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     return null
   }
 
+  // Host filesystem: built once at startup so a misdeclared root fails here rather
+  // than on the first request from a phone. Null = the routes do not exist.
+  //
+  // Reading inherits the cwd policy — a caller who can start a session in a root
+  // can already read it through the agent — so `hostFiles.roots` is a narrowing,
+  // not the enabling grant. `??` and not `||`: an explicit `roots: []` is an
+  // operator turning the routes off, which must not fall through to the cwd roots.
+  const hostFileRootPaths = options.hostFiles?.roots ?? options.allowedCwdRoots
+  const hostFiles = hostFileRootPaths?.length ? createHostFileRoots(hostFileRootPaths) : null
+  const hostFilesWritable = options.hostFiles?.write === true
+  const maxHostFileBytes = options.hostFiles?.maxFileBytes ?? 1024 * 1024
+  const maxHostDirEntries = options.hostFiles?.maxEntries ?? 5000
+
+  /**
+   * `{basePath}/fs/*` — the operator's real tree. Authorized by the auth key alone
+   * and deliberately outside the agent permission flow: the caller is the operator.
+   *
+   * Every path in here goes through `host-files.ts` first, which canonicalizes and
+   * *then* re-checks containment. The naive prefix compare `cwdAllowed` does would
+   * be wrong at this door — the agent writes into these trees, and a symlink it
+   * created is a path the operator never typed.
+   */
+  const handleHostFiles = async (
+    req: IncomingMessage,
+    res: ServerResponse,
+    pathname: string,
+  ): Promise<void> => {
+    if (!hostFiles) {
+      json(res, 404, { error: 'host file access is not configured on this server' })
+      return
+    }
+    const route = pathname.slice((basePath + '/fs/').length)
+    const url = new URL(req.url ?? '/', 'http://internal')
+    const requested = url.searchParams.get('path')
+
+    if (route === 'roots') {
+      if (req.method !== 'GET') {
+        json(res, 405, { error: 'method not allowed' })
+        return
+      }
+      // The canonical spelling, not the operator's: every other route answers in
+      // canonical paths, and a client that round-trips a root it was given must
+      // land on the same tree.
+      json(res, 200, {
+        roots: hostFiles.roots.map(({ canonical }) => ({
+          path: canonical,
+          name: basename(canonical) || canonical,
+        })),
+        canWrite: hostFilesWritable,
+      })
+      return
+    }
+
+    if (route === 'find') {
+      if (req.method !== 'GET') {
+        json(res, 405, { error: 'method not allowed' })
+        return
+      }
+      if (!requested) {
+        json(res, 400, { error: 'path is required' })
+        return
+      }
+      const resolved = resolveExisting(hostFiles, requested)
+      if (!resolved.ok) {
+        json(res, resolved.status, { error: resolved.error })
+        return
+      }
+      if (resolved.kind !== 'dir') {
+        json(res, 400, { error: 'not a directory' })
+        return
+      }
+      // Clamped, not validated: this runs per keystroke from a phone, and a
+      // client asking for 10,000 matches is a client that made a typo.
+      const asked = Number(url.searchParams.get('limit') ?? '')
+      const limit = Number.isFinite(asked) && asked > 0 ? Math.min(asked, 200) : 50
+      const result = searchFiles(resolved.path, {
+        query: url.searchParams.get('q') ?? '',
+        limit,
+        ignore: options.hostFiles?.ignore,
+      })
+      json(res, 200, { base: resolved.path, ...result })
+      return
+    }
+
+    if (route === 'list' || route === 'read') {
+      if (req.method !== 'GET') {
+        json(res, 405, { error: 'method not allowed' })
+        return
+      }
+      if (!requested) {
+        json(res, 400, { error: 'path is required' })
+        return
+      }
+      const resolved = resolveExisting(hostFiles, requested)
+      if (!resolved.ok) {
+        json(res, resolved.status, { error: resolved.error })
+        return
+      }
+      if (route === 'list') {
+        if (resolved.kind !== 'dir') {
+          json(res, 400, { error: 'not a directory' })
+          return
+        }
+        let names: Dirent[]
+        try {
+          names = readdirSync(resolved.path, { withFileTypes: true })
+        } catch {
+          json(res, 403, { error: 'directory is not readable' })
+          return
+        }
+        const truncated = names.length > maxHostDirEntries
+        const entries = names.slice(0, maxHostDirEntries).map((entry) => {
+          const path = join(resolved.path, entry.name)
+          const type = entryKind(entry)
+          // Size/mtime for regular files only, and via lstat — a listing must
+          // never stat *through* a link, or a directory holding a link to a fifo
+          // becomes an unlistable directory.
+          let bytes: number | undefined
+          let modifiedAt: number | undefined
+          if (type === 'file') {
+            try {
+              const s = lstatSync(path)
+              bytes = s.size
+              modifiedAt = s.mtimeMs
+            } catch {
+              // Raced with a delete, or unreadable — the entry still lists.
+            }
+          }
+          return { name: entry.name, path, type, bytes, modifiedAt }
+        })
+        entries.sort((a, b) => {
+          const rank = (t: string): number => (t === 'dir' ? 0 : 1)
+          return rank(a.type) - rank(b.type) || a.name.localeCompare(b.name)
+        })
+        json(res, 200, { path: resolved.path, entries, ...(truncated ? { truncated } : {}) })
+        return
+      }
+
+      if (resolved.kind !== 'file') {
+        json(res, 400, { error: 'not a regular file' })
+        return
+      }
+      // Cheap pre-check so a gigabyte is refused rather than buffered. Advisory
+      // only — the authoritative cap is on the bytes actually read, since the
+      // file can grow between the stat and the open.
+      let modifiedAt = 0
+      try {
+        const stats = lstatSync(resolved.path)
+        if (stats.size > maxHostFileBytes) {
+          json(res, 413, { error: `file is larger than ${maxHostFileBytes} bytes` })
+          return
+        }
+        modifiedAt = stats.mtimeMs
+      } catch {
+        json(res, 404, { error: 'not found' })
+        return
+      }
+      // Opens the canonical path with O_NOFOLLOW and gates on fstat, so a
+      // component swapped for a symlink or a fifo after the resolve is refused
+      // rather than followed or blocked on.
+      const read = readContained(resolved.path)
+      if (!read.ok) {
+        json(res, read.status, { error: read.error })
+        return
+      }
+      if (read.data.length > maxHostFileBytes) {
+        json(res, 413, { error: `file is larger than ${maxHostFileBytes} bytes` })
+        return
+      }
+      const text = asUtf8(read.data)
+      json(res, 200, {
+        path: resolved.path,
+        content: text ?? read.data.toString('base64'),
+        encoding: text === null ? 'base64' : 'utf8',
+        bytes: read.data.length,
+        hash: hashBytes(read.data),
+        modifiedAt,
+      })
+      return
+    }
+
+    if (route === 'write') {
+      if (req.method !== 'PUT') {
+        json(res, 405, { error: 'method not allowed' })
+        return
+      }
+      if (!hostFilesWritable) {
+        json(res, 403, { error: 'host file writes are not enabled on this server' })
+        return
+      }
+      const body = (await readJsonBody(req, maxBodyBytes)) as WriteHostFileRequest
+      if (!body.path || typeof body.path !== 'string') {
+        json(res, 400, { error: 'path is required' })
+        return
+      }
+      if (typeof body.content !== 'string') {
+        json(res, 400, { error: 'content is required' })
+        return
+      }
+      if (body.encoding !== undefined && body.encoding !== 'utf8' && body.encoding !== 'base64') {
+        json(res, 400, { error: "encoding must be 'utf8' or 'base64'" })
+        return
+      }
+      const resolved = resolveForWrite(hostFiles, body.path)
+      if (!resolved.ok) {
+        json(res, resolved.status, { error: resolved.error })
+        return
+      }
+      const next = Buffer.from(body.content, body.encoding ?? 'utf8')
+      if (next.length > maxHostFileBytes) {
+        json(res, 413, { error: `content is larger than ${maxHostFileBytes} bytes` })
+        return
+      }
+      // The agent is editing this same tree. Every write is conditional: either it
+      // creates a file that does not exist, or it names the hash it is replacing.
+      // There is no unconditional overwrite to reach for from a phone.
+      //
+      // Existence is decided by the read, not by a stat: `readContained` answers
+      // 404 only for ENOENT, so anything else — an unreadable file, a swapped-in
+      // device — refuses here instead of being mistaken for "not there yet" and
+      // then clobbered as a create.
+      const current = readContained(resolved.path)
+      if (!current.ok && current.status !== 404) {
+        json(res, current.status, { error: current.error })
+        return
+      }
+      const existing = current.ok ? current.data : null
+      if (existing && !body.expectedHash) {
+        json(res, 409, { error: 'file exists — pass expectedHash to overwrite it' })
+        return
+      }
+      if (existing && hashBytes(existing) !== body.expectedHash) {
+        json(res, 409, { error: 'file changed on disk since it was read' })
+        return
+      }
+      if (!existing && body.expectedHash) {
+        json(res, 409, { error: 'file no longer exists' })
+        return
+      }
+      const written = writeContained(resolved.path, next)
+      if (!written.ok) {
+        json(res, written.status, { error: written.error })
+        return
+      }
+      let writtenAt = 0
+      try {
+        writtenAt = lstatSync(resolved.path).mtimeMs
+      } catch {
+        // The write landed; a stat that loses a race with a delete is not a
+        // reason to report failure.
+      }
+      json(res, 200, {
+        path: resolved.path,
+        bytes: next.length,
+        hash: hashBytes(next),
+        modifiedAt: writtenAt,
+      })
+      return
+    }
+
+    json(res, 404, { error: 'not found' })
+  }
+
   const listSdkSessions = options.listSdkSessions ?? defaultSdkSessionLister
 
   const handleSdkSessions = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
@@ -1236,6 +1577,16 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         return
       }
       await handleSdkSessions(req, res)
+      return
+    }
+    if (pathname.startsWith(basePath + '/fs/')) {
+      // Authenticated before the 404-when-unconfigured answer, so an unauthenticated
+      // caller cannot learn whether this server exposes a filesystem at all.
+      if (!(await authenticate(req)).ok) {
+        json(res, 401, { error: 'unauthorized' })
+        return
+      }
+      await handleHostFiles(req, res, pathname)
       return
     }
     const route = parseRoute(req.url ?? '/')

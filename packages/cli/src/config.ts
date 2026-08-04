@@ -76,6 +76,8 @@ export type CliFlags = {
   authKey?: string
   profiles: ProfileInfo[]
   cwdRoots: string[]
+  fsRoots: string[]
+  fsWrite?: boolean
   allowedOrigins: string[]
   allowedHosts: string[]
   insecureHosts: string[]
@@ -107,6 +109,7 @@ export function parseArgs(argv: string[]): CliFlags {
   const flags: CliFlags = {
     profiles: [],
     cwdRoots: [],
+    fsRoots: [],
     allowedOrigins: [],
     allowedHosts: [],
     insecureHosts: [],
@@ -164,6 +167,13 @@ export function parseArgs(argv: string[]): CliFlags {
       case '--cwd-root':
         flags.cwdRoots.push(resolve(next(i, arg)))
         i++
+        break
+      case '--fs-root':
+        flags.fsRoots.push(resolve(next(i, arg)))
+        i++
+        break
+      case '--fs-write':
+        flags.fsWrite = true
         break
       case '--allowed-origin':
         flags.allowedOrigins.push(next(i, arg))
@@ -395,6 +405,14 @@ export function resolveInstanceConfig(
     .map((p) => resolve(cwd, p))
   const cwdRoots = flags.cwdRoots.length ? flags.cwdRoots : envCwdRoots
 
+  // --fs-root *narrows* file access; it does not enable it. Reading follows
+  // --cwd-root, since a caller who may start a session in a tree can already read
+  // that tree through the agent. Writing still needs --fs-write.
+  const envFsRoots = env.WORKERDECK_FS_ROOTS?.split(':')
+    .filter(Boolean)
+    .map((p) => resolve(cwd, p))
+  const fsRoots = flags.fsRoots.length ? flags.fsRoots : envFsRoots
+
   const auth: CliAuthOptions = {
     ...loaded.options.auth,
     secret: authKey,
@@ -443,6 +461,13 @@ export function resolveInstanceConfig(
   } = loaded.options
   const options: WorkerServerOptions = { ...serverOptions }
   if (cwdRoots?.length) options.allowedCwdRoots = cwdRoots
+  if (fsRoots?.length || flags.fsWrite) {
+    options.hostFiles = {
+      ...loaded.options.hostFiles,
+      ...(fsRoots?.length ? { roots: fsRoots } : {}),
+      ...(flags.fsWrite ? { write: true } : {}),
+    }
+  }
   // Flags win, but they *replace* rather than merge: a half-declared profile set
   // is a credential mix-up waiting to happen.
   if (flags.profiles.length) options.profiles = flags.profiles

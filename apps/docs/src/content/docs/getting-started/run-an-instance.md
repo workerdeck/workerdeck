@@ -65,6 +65,32 @@ stands between it and DNS rebinding.
 Behind TLS termination, add `--trust-proxy` — otherwise the session cookie loses its `Secure`
 flag and the origin check computes `http://` where the browser says `https://`.
 
+## Browsing the host's files
+
+```bash
+npx workerdeck --cwd-root ~/projects --fs-write
+```
+
+`/v1/fs/*` lets a client — the iOS app, or anything holding the key — list directories, read
+files, and search them (which is what backs `@file` completion in the app's composer).
+
+**Reading follows `--cwd-root` and needs no flag of its own.** You could already start a session
+in one of those directories and ask the agent to print any file in it, so serving the same trees
+directly adds no authority — it just removes the absurdity of going through a language model to
+read a file. `--fs-root` exists to *narrow* that (or to expose a tree sessions may not run in);
+with neither flag the routes 404, because "a session may run anywhere" is a statement about paths
+you type at a keyboard, not a licence to serve `/` to the network.
+
+**Writing is the part that isn't implied**, hence `--fs-write`: an agent's edits go through the
+permission flow and a `PUT` does not. Writes are still always conditional — a client sends the hash
+of what it read, and a file the agent changed in the meantime is a 409 rather than a silent
+clobber.
+
+A root is the whole trust boundary either way. The agent writes into these directories, so
+containment is decided on the resolved real path — a symlink pointing at `~/.ssh` is refused, not
+followed — but everything genuinely *inside* a root is readable. Point it at your projects, not
+your home directory.
+
 ## Options
 
 | Flag | Env | Default |
@@ -73,6 +99,8 @@ flag and the origin check computes `http://` where the browser says `https://`.
 | `--host <addr>` | `WORKERDECK_HOST` | `127.0.0.1` |
 | `--auth-key <secret>` | `WORKERDECK_AUTH_KEY` | none — no auth on loopback, generated elsewhere |
 | `--cwd-root <path>` (repeatable) | `WORKERDECK_CWD_ROOTS` (`:`-separated) | unrestricted |
+| `--fs-root <path>` (repeatable) | `WORKERDECK_FS_ROOTS` (`:`-separated) | narrows `/v1/fs`; unset, reading follows `--cwd-root` |
+| `--fs-write` | — | off (read-only) |
 | `--profile <name=dir>` (repeatable) | — | auto-detected from `~/.claude` |
 | `--state-dir <path>` | `WORKERDECK_STATE_DIR` | beside the config file, else `~/.workerdeck` |
 | `--trust-proxy` | — | off |

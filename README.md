@@ -60,6 +60,11 @@ quickstart, embedding, permissions, profiles, job queue, protocol reference.
   watchdog, and webhooks.
 - **Work that outlives the turn.** A session can park on something nothing here is doing — a batch
   job, a human approving on Monday — and wake days later, mid-turn, as itself.
+- **The host's files, in the trees sessions already run in.** `/v1/fs` serves browse, read and
+  fuzzy search over your `--cwd-root` directories — a remote client gets a real file tree instead
+  of guessing at paths. Reading needs no extra grant (you could already have the agent print those
+  files); `--fs-write` opts into saving, which is the part a `PUT` wouldn't otherwise ask
+  permission for.
 
 ## Embed it in your app
 
@@ -233,7 +238,7 @@ run. Each package has its own README.
 | [`@workerdeck/core`](packages/core) | The engines. `SessionRunner` (Agent SDK) and `AiSdkRunner` (any provider) behind one `Runner` interface, with tool execution on a swappable `ToolExecutor` seam and `park()`/`restore`. No transport. |
 | [`@workerdeck/sandbox`](packages/sandbox) | The untrusted-code boundary: QuickJS-NG WASM guest, in-memory scratch VFS, by-value host bridge, interpreter-enforced memory and time limits. Runs server-side or in a tab. |
 | [`@workerdeck/queue`](packages/queue) | The job queue: concurrency, token budgets, retries, watchdog, retention, webhooks. Pluggable `QueueAdapter` (in-memory bundled). |
-| [`@workerdeck/server`](packages/server) | The gateway: HTTP + WebSocket, session registry, auth hook, profiles, job routes, session notifications, browser tool bridge, parked-session storage. |
+| [`@workerdeck/server`](packages/server) | The gateway: HTTP + WebSocket, session registry, auth hook, profiles, job routes, session notifications, browser tool bridge, parked-session storage, opt-in host-file routes. |
 | [`@workerdeck/client`](packages/client) | Typed client for browsers and Node: REST + WS attach with auto-reconnect and replay-from-last-seq. Zero runtime deps. |
 | [`@workerdeck/react`](packages/react) | Headless React: `useClaudeSession` + a pure transcript reducer. No styling opinion. |
 | [`@workerdeck/ui`](packages/ui) | Styled agent-control components: session panel, transcript, tool-call cards, permission prompts, composer. Tailwind v4 + Base UI + cva. |

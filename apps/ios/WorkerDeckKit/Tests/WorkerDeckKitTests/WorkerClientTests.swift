@@ -195,6 +195,113 @@ struct WorkerClientTests {
     #expect(request.url?.path == "/v1/sessions/sess_1/permissions/req_1")
   }
 
+  // MARK: - Host filesystem
+
+  @Test func percentEncodesTheHostPathQuery() async throws {
+    StubStore.shared.install { _ in
+      StubResponse(body: Data(#"{"path":"/repo/src","entries":[]}"#.utf8))
+    }
+    let client = makeStubClient()
+
+    _ = try await client.listHostDir(path: "/repo/my src")
+
+    let request = try #require(StubStore.shared.requests.first)
+    #expect(
+      request.url?.absoluteString
+        == "http://127.0.0.1:8787/v1/fs/list?path=%2Frepo%2Fmy%20src")
+  }
+
+  @Test func searchesForFilesUnderADirectory() async throws {
+    StubStore.shared.install { _ in
+      StubResponse(
+        body: Data(
+          #"{"base":"/repo","truncated":false,"matches":[{"path":"/repo/src/a.ts","relative":"src/a.ts"}]}"#
+            .utf8))
+    }
+    let client = makeStubClient()
+
+    let found = try await client.findHostFiles(in: "/repo", matching: "a t", limit: 8)
+
+    #expect(found.matches.first?.relative == "src/a.ts")
+    let request = try #require(StubStore.shared.requests.first)
+    #expect(
+      request.url?.absoluteString
+        == "http://127.0.0.1:8787/v1/fs/find?path=%2Frepo&q=a%20t&limit=8")
+  }
+
+  @Test func decodesADirectoryListing() async throws {
+    StubStore.shared.install { _ in
+      StubResponse(
+        body: Data(
+          """
+          {"path":"/repo","truncated":true,"entries":[
+            {"name":"src","path":"/repo/src","type":"dir"},
+            {"name":"README.md","path":"/repo/README.md","type":"file","bytes":8,
+             "modifiedAt":1722300000000},
+            {"name":"link","path":"/repo/link","type":"symlink"},
+            {"name":"sock","path":"/repo/sock","type":"newkind"}]}
+          """.utf8))
+    }
+    let client = makeStubClient()
+
+    let listing = try await client.listHostDir(path: "/repo")
+
+    #expect(listing.path == "/repo")
+    #expect(listing.truncated == true)
+    #expect(listing.entries.map(\.type) == [.dir, .file, .symlink, .other])
+    #expect(listing.entries[1].bytes == 8)
+    // A category this build has never heard of degrades to `.other` rather than
+    // failing the whole listing — the server may be newer than the app.
+    #expect(listing.entries[3].name == "sock")
+  }
+
+  @Test func exposesTextOnlyForUtf8Reads() async throws {
+    StubStore.shared.install { request in
+      let binary = request.url?.query?.contains("blob") == true
+      let json =
+        binary
+        ? #"{"path":"/repo/blob.bin","content":"//4=","encoding":"base64","bytes":2,"hash":"h","modifiedAt":1}"#
+        : #"{"path":"/repo/a.txt","content":"hi","encoding":"utf8","bytes":2,"hash":"h","modifiedAt":1}"#
+      return StubResponse(body: Data(json.utf8))
+    }
+    let client = makeStubClient()
+
+    #expect(try await client.readHostFile(path: "/repo/a.txt").text == "hi")
+    // base64 is the server saying "this is not text" — the editor must not treat
+    // the payload as content it can round-trip.
+    #expect(try await client.readHostFile(path: "/repo/blob.bin").text == nil)
+  }
+
+  @Test func writesConditionallyOverPut() async throws {
+    StubStore.shared.install { _ in
+      StubResponse(body: Data(#"{"path":"/repo/a.txt","bytes":3,"hash":"h2","modifiedAt":2}"#.utf8))
+    }
+    let client = makeStubClient()
+
+    let result = try await client.writeHostFile(
+      WriteHostFileRequest(path: "/repo/a.txt", text: "bye", expectedHash: "h1"))
+
+    #expect(result.hash == "h2")
+    let request = try #require(StubStore.shared.requests.first)
+    #expect(request.httpMethod == "PUT")
+    #expect(request.url?.path == "/v1/fs/write")
+  }
+
+  @Test func surfacesAWriteConflictWithItsStatus() async throws {
+    StubStore.shared.install { _ in
+      StubResponse(status: 409, body: Data(#"{"error":"file changed on disk since it was read"}"#.utf8))
+    }
+    let client = makeStubClient()
+
+    // 409 is the signal the editor branches on: the edit has to be rebased, and
+    // there is deliberately no way to force it.
+    await #expect(throws: WorkerClientError(
+      message: "file changed on disk since it was read", statusCode: 409)) {
+      _ = try await client.writeHostFile(
+        WriteHostFileRequest(path: "/repo/a.txt", text: "x", expectedHash: "stale"))
+    }
+  }
+
   @Test func derivesTheWebSocketURLFromTheRestBase() throws {
     let insecure = WorkerClient(baseURL: URL(string: "http://host:8787/v1")!)
     #expect(

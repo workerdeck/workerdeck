@@ -63,6 +63,30 @@ export default {
   },
 
   /**
+   * Where sessions may run — and, with that, what the host-file routes
+   * (`/v1/fs/*`) will serve. The iOS app's Files browser and its `@file`
+   * completion read through those routes.
+   *
+   * One policy, not two: a caller holding the auth key can already start a
+   * session in any of these directories and have the agent read whatever is in
+   * them, so `/fs` reading the same trees adds no authority. Point this at a
+   * projects directory rather than `~` — it is the whole trust boundary, and
+   * symlinks pointing out of it are refused, not followed.
+   */
+  allowedCwdRoots: ['/Users/atomic/projects'],
+
+  /**
+   * Writing is the part that is NOT already implied: an agent's edits go through
+   * the permission flow, and a `PUT /v1/fs/write` does not. Hence its own switch.
+   * Delete this key for a read-only file surface; `roots: []` turns `/fs` off
+   * entirely. Writes are still conditional on the hash the client read, so a file
+   * the agent changed first is a 409, not a silent clobber.
+   */
+  hostFiles: {
+    write: true,
+  },
+
+  /**
    * Push notifications for the iOS app. Delete this key entirely to turn the
    * forwarder off — with it absent, `/apns/devices` 404s, which is how the app
    * learns a gateway does not push.

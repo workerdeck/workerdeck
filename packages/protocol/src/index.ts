@@ -767,6 +767,131 @@ export type CreateProfileRequest = ProfileInfo
  * the route, not the body; pass `null` to clear an optional field. */
 export type UpdateProfileRequest = Omit<Partial<ProfileInfo>, 'name'>
 
+// ---------------------------------------------------------------------------
+// Host filesystem (`{basePath}/fs/*`)
+// ---------------------------------------------------------------------------
+
+/**
+ * The **host's real project tree**, not a session's in-memory VFS — the two are
+ * unrelated despite both being "files". {@link SessionFileInfo} is a deliverable
+ * the agent produced inside a session; these routes read and write the operator's
+ * actual disk.
+ *
+ * That makes them **operator-privileged**: they are authorized by the server's auth
+ * key alone and deliberately sit outside the agent permission flow, because the
+ * caller *is* the operator, not the model. A client holding the key can already
+ * start a session with any allowed cwd; browsing that same tree grants it nothing
+ * new. Writing does, which is why writes are separately enabled server-side.
+ *
+ * The whole surface is opt-in and root-scoped: with no roots configured every route
+ * below 404s. There is no "unset means anything" default here — a phone on a tailnet
+ * must never be one request away from `~/.ssh`.
+ */
+export type HostFileRoot = {
+  /** Absolute, canonical (symlinks resolved) path of the root. */
+  path: string
+  /** Last path segment, for display — roots are not named by the operator. */
+  name: string
+}
+
+/** `GET {basePath}/fs/roots` — where a client may start browsing. Empty `roots`
+ * never happens: the routes are absent entirely when none are configured. */
+export type ListHostRootsResponse = {
+  roots: HostFileRoot[]
+  /** Whether `PUT /fs/write` is enabled here; lets a UI hide an editor it can't save from. */
+  canWrite: boolean
+}
+
+/** One entry in a host directory listing. Classified with `lstat` semantics, so a
+ * `symlink` is reported as itself and never silently resolved — following it is the
+ * *next* request's problem, and that request is refused if it escapes the roots. */
+export type HostDirEntry = {
+  name: string
+  /** Absolute path, ready to pass back as `?path=`. */
+  path: string
+  type: 'file' | 'dir' | 'symlink' | 'other'
+  /** Regular files only. */
+  bytes?: number
+  /** Epoch ms mtime. */
+  modifiedAt?: number
+}
+
+/** `GET {basePath}/fs/list?path=<abs>` — one directory, not recursive. */
+export type ListHostDirResponse = {
+  /** Canonical path actually listed (the request's path after symlink resolution). */
+  path: string
+  /** Directories first, then files, each alphabetical. */
+  entries: HostDirEntry[]
+  /** Set when the directory held more entries than the server will return. */
+  truncated?: boolean
+}
+
+/** One hit from `GET {basePath}/fs/find`. */
+export type HostFileMatch = {
+  /** Absolute path, for a follow-up read. */
+  path: string
+  /** Path relative to the searched directory — what a picker shows and inserts. */
+  relative: string
+}
+
+/**
+ * `GET {basePath}/fs/find?path=<dir>&q=<query>&limit=<n>` — recursive fuzzy file
+ * search under one directory, which is what an `@file` picker needs and
+ * `/fs/list` is not: listing answers "what is in this directory", this answers
+ * "which file in this tree did you mean".
+ *
+ * Subsequence matching (`seslist` finds `SessionListView.swift`), filename hits
+ * ranked above path hits, shallow files above deep ones. An empty `q` returns the
+ * shallowest files. Build directories (`.git`, `node_modules`, …) are skipped, as
+ * is anything behind a symlink — so every path returned is one `/fs/read` will
+ * accept.
+ */
+export type FindHostFilesResponse = {
+  /** Canonical directory the search ran under; `relative` paths are relative to it. */
+  base: string
+  matches: HostFileMatch[]
+  /** More matched, or the tree was larger than the server would walk. */
+  truncated: boolean
+}
+
+/** `GET {basePath}/fs/read?path=<abs>` — one file's contents. Binary files come back
+ * base64; 413 rather than a truncated read when the file exceeds the server's cap. */
+export type ReadHostFileResponse = {
+  path: string
+  content: string
+  encoding: 'utf8' | 'base64'
+  bytes: number
+  /** sha256 (hex) of the bytes on disk. Pass it back as `expectedHash` to write. */
+  hash: string
+  modifiedAt: number
+}
+
+/**
+ * `PUT {basePath}/fs/write` — replace or create one file.
+ *
+ * The agent is editing this same tree, so a write is **conditional, always**:
+ * `expectedHash` must be the hash from the read this edit is based on, and the
+ * server 409s if the file has changed since. Omitting it means "create" and 409s
+ * if the path already exists — there is no unconditional overwrite, by design.
+ * Directories are never created implicitly: writing under a missing parent is a 404.
+ */
+export type WriteHostFileRequest = {
+  path: string
+  content: string
+  /** Default 'utf8'. */
+  encoding?: 'utf8' | 'base64'
+  /** Required to overwrite; omit only to create a new file. */
+  expectedHash?: string
+}
+
+export type WriteHostFileResponse = {
+  path: string
+  bytes: number
+  /** Hash of what was just written — carry it into the next edit. */
+  hash: string
+  modifiedAt: number
+}
+
 export type SaveProfileResponse = { profile: ProfileInfo }
 /** `GET {basePath}/profiles/:name` — the profile plus a fresh config snapshot. */
 export type GetProfileResponse = { profile: ProfileInfo; config: ProfileConfigSnapshot }

@@ -221,6 +221,50 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   synchronously, a `session_closed` notification reports `status: 'starting'`. Seq and ts still
   come from the event, so identity and ordering are untouched.
 
+## Host filesystem (`/v1/fs/*`)
+
+- **`cwdAllowed` is not the containment check for these routes, and reusing it would be a hole.**
+  It resolves `..` and compares prefixes, which is sound for its own job — vetting a cwd the
+  *operator* typed. The `/fs` routes walk paths the *agent* may have authored, so a symlink
+  planted inside an allowed root (`root/notes → ~/.ssh`) defeats any lexical check. `host-files.ts`
+  decides containment only on `realpath` output, and canonicalizes the roots themselves at
+  startup — a root that is itself a symlink (`/tmp` → `/private/tmp` on macOS) otherwise contains
+  nothing. Requests go to `realpath` **whole**, never lexically collapsed first: `root/link/..` is
+  lexically `root` and physically the link target's parent, and only the physical answer is true.
+- **Every filesystem refusal is an identical `404 'not found'`** — outside the roots, escaped via
+  symlink, dangling link, and genuinely absent are byte-identical. Anything finer turns the API
+  into an existence oracle for paths outside the roots (a planted link answering 403 iff
+  `~/.ssh/id_rsa` exists). `403` is reserved for verdicts that leak nothing beyond the roots:
+  malformed requests, and in-root targets of the wrong kind. Don't "improve" these messages.
+- **Resolve and open are two halves of one discipline.** Resolution's guarantees hold at resolve
+  time only, so callers open exactly `ResolveOutcome.path` through `readContained`/`writeContained`:
+  `O_NOFOLLOW` turns a final-component swap into `ELOOP`, `O_NONBLOCK` makes a swapped-in fifo open
+  instantly rather than parking the request forever, the `fstat` gate refuses non-regular files
+  before a byte moves (`/dev/zero` would otherwise be an unbounded read), and truncation happens
+  only after that gate. A *parent* directory swapped inside the window can still redirect the
+  open — that needs `openat2(RESOLVE_BENEATH)`, which Node does not expose; accepted, documented.
+- **Reading follows `allowedCwdRoots`; writing does not.** `hostFiles.roots` is a *narrowing*, not
+  the enabling grant — a caller holding the auth key can already start a session in any allowed
+  root and have the agent read what's in it, so serving those trees over `/fs` adds no authority
+  it didn't have. Writing keeps its own switch precisely because it *isn't* implied: an agent's
+  writes go through the permission flow and a `PUT /fs/write` does not. Two boundary cases are
+  load-bearing: with neither `hostFiles.roots` nor `allowedCwdRoots` the routes 404 (the
+  permissive "unset means anywhere" cwd default is about paths the operator types, never a licence
+  to serve `/`), and an explicit `roots: []` disables them rather than falling through to the cwd
+  roots — hence `??` and not `||` at the resolution site.
+- **Writes are conditional, always.** `expectedHash` (sha256 of what was read) or nothing, and
+  nothing means "create" — a path that already exists then 409s. There is no unconditional
+  overwrite, because the agent is editing the same tree; a client that lost track of its base can
+  only re-read, never force. The response's own hash chains into the next write.
+- **`/fs/find` walks, so it must not follow.** The recursive search (`host-file-search.ts`) skips
+  symlinks as files *and* as directories: as directories that is the difference between a bounded
+  walk and a cycle, and as files it guarantees every path it offers is one `/fs/read` will accept.
+  It never resolves a path of its own — it is handed an already-contained directory — which is why
+  it lives beside the containment core rather than inside it.
+- These routes are **operator-privileged**: authorized by the auth key alone, deliberately outside
+  the agent permission flow. That is not the trust story of a tool call — which is exactly why the
+  bypass that matters (writing) is its own flag.
+
 ## APNs push (the CLI's forwarder)
 
 - **Sandbox and production are different token *namespaces*, not just different URLs.** A build

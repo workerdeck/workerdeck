@@ -160,6 +160,56 @@ public struct WorkerClient: Sendable {
     return try decode(ListSdkSessionsResponse.self, from: data).sdkSessions
   }
 
+  // MARK: - Host filesystem
+
+  /// The host directories this server will let this client browse, and whether it
+  /// accepts writes.
+  ///
+  /// Throws a 404 `WorkerClientError` when the server has no host-file roots
+  /// configured — that is the normal answer, not a malfunction, and the caller
+  /// should treat it as "no file browser on this host" the same way it treats a
+  /// pre-profiles server 404ing `/profiles`.
+  public func listHostRoots() async throws -> ListHostRootsResponse {
+    let data = try await call("GET", "/fs/roots")
+    return try decode(ListHostRootsResponse.self, from: data)
+  }
+
+  /// One host directory, not recursive. Symlinks come back as symlinks; reading one
+  /// is what discovers whether it resolves somewhere this server allows.
+  public func listHostDir(path: String) async throws -> ListHostDirResponse {
+    let data = try await call("GET", "/fs/list?path=\(Self.encodeQueryValue(path))")
+    return try decode(ListHostDirResponse.self, from: data)
+  }
+
+  /// Recursive fuzzy file search under one host directory — what backs `@file`
+  /// completion in the composer. Subsequence matching, filename hits first. Cheap
+  /// enough to call per keystroke: the server skips build directories and bounds
+  /// the walk, truncating rather than failing.
+  public func findHostFiles(in directory: String, matching query: String = "", limit: Int? = nil)
+    async throws -> FindHostFilesResponse
+  {
+    var suffix =
+      "?path=\(Self.encodeQueryValue(directory))&q=\(Self.encodeQueryValue(query))"
+    if let limit { suffix += "&limit=\(limit)" }
+    let data = try await call("GET", "/fs/find\(suffix)")
+    return try decode(FindHostFilesResponse.self, from: data)
+  }
+
+  /// Read one host file. Binary content arrives base64-encoded; the returned `hash`
+  /// is what a later `writeHostFile` needs as its `expectedHash`.
+  public func readHostFile(path: String) async throws -> ReadHostFileResponse {
+    let data = try await call("GET", "/fs/read?path=\(Self.encodeQueryValue(path))")
+    return try decode(ReadHostFileResponse.self, from: data)
+  }
+
+  /// Write one host file. A 409 means the file changed since it was read — the
+  /// agent edits this same tree, so the edit has to be rebased, never forced.
+  @discardableResult
+  public func writeHostFile(_ request: WriteHostFileRequest) async throws -> WriteHostFileResponse {
+    let data = try await call("PUT", "/fs/write", body: request)
+    return try decode(WriteHostFileResponse.self, from: data)
+  }
+
   // MARK: - Live attach
 
   /// Open a live connection to a session's event stream.

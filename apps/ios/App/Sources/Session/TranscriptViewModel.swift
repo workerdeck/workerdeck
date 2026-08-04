@@ -84,6 +84,15 @@ final class TranscriptViewModel {
 
   var cwd: String? { state.cwd ?? session?.cwd }
 
+  /// Host-file access scoped to this session's working directory, or nil until the
+  /// cwd is known. Browsing is deliberately session-scoped: the server's roots are
+  /// the security boundary, but what a person wants on a phone is *this* project's
+  /// tree, so the app never offers the roots list.
+  var hostFiles: HostFileScope? {
+    guard let cwd else { return nil }
+    return HostFileScope(client: client, cwd: cwd)
+  }
+
   /// Engine gate for the permission-mode menu. The snapshot is the only source
   /// (no event carries it); absent reads as claude, per the protocol.
   var engine: ProfileEngine { session?.resolvedEngine ?? state.engine ?? .claude }

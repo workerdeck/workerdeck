@@ -6,9 +6,15 @@ import type {
   CreateSessionRequest,
   JobEvent,
   JobInfo,
+  FindHostFilesResponse,
   GetProfileResponse,
+  ListHostDirResponse,
+  ListHostRootsResponse,
   ListProfilesResponse,
   ListSessionFilesResponse,
+  ReadHostFileResponse,
+  WriteHostFileRequest,
+  WriteHostFileResponse,
   PermissionMode,
   ProfileInfo,
   QueueServerFrame,
@@ -464,6 +470,55 @@ export class WorkerDeckClient {
     const qs = search.size > 0 ? `?${search.toString()}` : ''
     const body = await this.#call('GET', `/sdk-sessions${qs}`)
     return (body as { sdkSessions: SdkSessionSummary[] }).sdkSessions
+  }
+
+  // -- Host filesystem (requires the server to be configured with `hostFiles`) -
+
+  /**
+   * The host directories this server will let a client browse, and whether it
+   * accepts writes. Servers without host-file access configured 404 here — catch
+   * and treat as "no file browser", the same way `listProfiles` handles an older
+   * server.
+   *
+   * These are operator-privileged routes: the auth key is the whole authorization
+   * story, and they bypass the agent permission flow entirely. See the protocol
+   * package's `HostFileRoot` for why that framing is deliberate.
+   */
+  async listHostRoots(): Promise<ListHostRootsResponse> {
+    return (await this.#call('GET', '/fs/roots')) as ListHostRootsResponse
+  }
+
+  /** One host directory, not recursive. Symlinks are reported as symlinks, never
+   * followed here — read one to find out whether it resolves somewhere allowed. */
+  async listHostDir(path: string): Promise<ListHostDirResponse> {
+    const qs = `?path=${encodeURIComponent(path)}`
+    return (await this.#call('GET', `/fs/list${qs}`)) as ListHostDirResponse
+  }
+
+  /** Recursive fuzzy file search under one host directory — the `@file` picker's
+   * query. Cheap enough to call per keystroke: build directories are skipped and
+   * the walk is bounded, truncating rather than erroring. */
+  async findHostFiles(path: string, query = '', limit?: number): Promise<FindHostFilesResponse> {
+    const search = new URLSearchParams({ path, q: query })
+    if (limit !== undefined) search.set('limit', String(limit))
+    return (await this.#call('GET', `/fs/find?${search.toString()}`)) as FindHostFilesResponse
+  }
+
+  /** Read one host file. Binary content comes back base64-encoded; the returned
+   * `hash` is what a later `writeHostFile` needs as its `expectedHash`. */
+  async readHostFile(path: string): Promise<ReadHostFileResponse> {
+    const qs = `?path=${encodeURIComponent(path)}`
+    return (await this.#call('GET', `/fs/read${qs}`)) as ReadHostFileResponse
+  }
+
+  /**
+   * Write one host file, conditionally — always. Pass the `hash` from the read this
+   * edit is based on; a 409 means the agent (or anything else) changed the file
+   * underneath you, and the edit must be rebased rather than forced. Omit
+   * `expectedHash` only to create a file that does not exist yet.
+   */
+  async writeHostFile(request: WriteHostFileRequest): Promise<WriteHostFileResponse> {
+    return (await this.#call('PUT', '/fs/write', request)) as WriteHostFileResponse
   }
 
   // -- Job queue (requires the server to be configured with `queue`) ----------

@@ -148,6 +148,40 @@ describe('resolveInstanceConfig', () => {
     expect(config.options.allowedCwdRoots).toEqual([resolve('/tmp/a'), resolve('/tmp/b')])
   })
 
+  it('leaves hostFiles unset when nothing narrows it — the server inherits the cwd roots', () => {
+    // --fs-root narrows file access; --cwd-root is what enables reading it, and
+    // that inheritance lives in the server rather than being baked in here.
+    const config = resolveInstanceConfig(parseArgs(['--cwd-root', '/tmp/a']), noConfig, {})
+    expect(config.options.allowedCwdRoots).toEqual([resolve('/tmp/a')])
+    expect(config.options.hostFiles).toBeUndefined()
+  })
+
+  it('takes fs roots from flags or a colon-separated env var, and --fs-write is its own switch', () => {
+    const flagged = resolveInstanceConfig(
+      parseArgs(['--fs-root', '/tmp/a', '--fs-root', '/tmp/b', '--fs-write']),
+      noConfig,
+      {},
+    )
+    expect(flagged.options.hostFiles).toEqual({
+      roots: [resolve('/tmp/a'), resolve('/tmp/b')],
+      write: true,
+    })
+
+    const fromEnv = resolveInstanceConfig(parseArgs([]), noConfig, {
+      WORKERDECK_FS_ROOTS: '/tmp/a:/tmp/b',
+    })
+    expect(fromEnv.options.hostFiles).toEqual({ roots: [resolve('/tmp/a'), resolve('/tmp/b')] })
+  })
+
+  it('lets --fs-write turn on writes for roots the config file declared', () => {
+    const config = resolveInstanceConfig(
+      parseArgs(['--fs-write']),
+      { path: '/x/c.mjs', options: { hostFiles: { roots: ['/srv/projects'] } } },
+      {},
+    )
+    expect(config.options.hostFiles).toEqual({ roots: ['/srv/projects'], write: true })
+  })
+
   it('puts state beside the config file when there is one', () => {
     expect(defaultStateDir('/srv/worker/workerdeck.config.mjs')).toBe('/srv/worker/.workerdeck')
   })

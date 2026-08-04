@@ -126,6 +126,18 @@ boundary: anything a client needs must be expressible as protocol events and com
   adapts to like any other tool failure. A session someone is watching stays live and parks
   shortly after the last client leaves; attaching to a parked one wakes it, so a reconnect after
   a network blip finds its session rather than a 404.
+  The gateway also serves the **host filesystem** — `GET /fs/roots`, `/fs/list`, `/fs/find`,
+  `/fs/read` and (behind the `hostFiles.write` flag) `PUT /fs/write` — so a remote client can
+  browse and edit the operator's real project tree instead of only a session's in-memory VFS.
+  Reading follows `allowedCwdRoots`, on the reasoning that a caller who may start a session in a
+  tree can already read that tree through the agent; `hostFiles.roots` narrows it, and writing is
+  a separate opt-in because a `PUT` skips the permission flow an agent's edits go through. These
+  are *operator-privileged*: authorized by the auth key alone. The trees they expose are written
+  by the agent, so containment cannot be the lexical prefix check `cwdAllowed` uses for cwds:
+  `host-files.ts` canonicalizes both roots and targets and decides on the realpath, opens through
+  `O_NOFOLLOW` + an `fstat` gate, and answers every filesystem refusal with one indistinguishable
+  404 so a planted symlink can't become an existence oracle. Writes carry the hash they replace,
+  which is what keeps a phone edit from clobbering the agent mid-run.
 - **`packages/client`** — typed protocol client on platform `fetch`/`WebSocket`: REST session
   and job management, WS attach with auto-reconnect and replay-from-last-seq, `attachQueue()`
   for the live queue stream. Zero runtime deps; browser and Node.

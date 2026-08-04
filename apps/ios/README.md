@@ -2,10 +2,11 @@
 
 Native iOS remote control for a self-hosted [WorkerDeck](../../README.md) server: watch and
 drive Claude Code sessions from your phone — streaming transcript, permission prompts, session
-creation/resume, context + rate-limit HUD — over your own network (typically Tailscale). No
-relay, no cloud: the app is a plain HTTP/WS client to the gateway you already run.
+creation/resume, context + rate-limit HUD, and a browser/editor for the host's project tree —
+over your own network (typically Tailscale). No relay, no cloud: the app is a plain HTTP/WS
+client to the gateway you already run.
 
-Plan and research: `_docs/plans/mobile-client.md` (gitignored, local).
+Plan and research: `_docs/plans/MOBILE-CLIENT.md` (gitignored, local).
 
 ## Layout
 
@@ -24,6 +25,8 @@ Plan and research: `_docs/plans/mobile-client.md` (gitignored, local).
   - `MarkdownBlocks.swift` — splits assistant text into prose and fenced code blocks, tolerating
     the unterminated fence that streaming produces. Pure, so it lives here (this package is the
     only part of the app under test); the SwiftUI rendering stays in `App/`.
+  - `FileToken.swift` — finds and replaces the trailing `@token` in a composer draft. Here for
+    the same reason as `MarkdownBlocks`: pure string logic whose interesting cases are all edges.
 - `App/` — the SwiftUI app (hosts, sessions, transcript, permissions, HUD). Hosts + auth keys
   are stored in the Keychain.
   - `App/Assets.xcassets/AppIcon.appiconset` — the app icon, three 1024 renditions (opaque,
@@ -39,6 +42,24 @@ Plan and research: `_docs/plans/mobile-client.md` (gitignored, local).
     why that distinction is expensive to get wrong. A `permission_requested` push carries
     Approve/Deny actions that answer over REST without opening the app; tapping the body deep-links
     to the session. A gateway with no forwarder configured answers 404 and the app stops asking.
+  - `App/Sources/Files/` — the host file browser, reached from the folder button in an open
+    session's toolbar. **Scoped to that session's `cwd`**: rooted there, with no roots list and no
+    way up, because what you want on a phone is this project's tree, not an inventory of what the
+    gateway exposes. (The server's `--fs-root` roots are still the security boundary; this scope
+    is only what's offered.) Directory per navigation level so the stack *is* the path, a
+    monospaced `TextEditor` for text files, base64 content refused rather than opened. Three
+    server facts drive the UI: `/fs/roots` 404s on a gateway with no `--cwd-root` and no
+    `--fs-root`, which renders as "no file access" with the flag to add; a cwd outside those roots
+    404s its listing, which gets its own screen because the fix is different (it should be rare —
+    reading follows the cwd roots, so a session that was allowed to start is normally browsable);
+    and `canWrite` is false without `--fs-write`, which hides Save. Saving sends the hash the read returned, so a 409 means the
+    agent edited the file first — the alert offers Reload, never a force.
+  - `App/Sources/Session/FileCompletion.swift` — `@file` completion in the composer, over
+    `GET /fs/find`. Debounced and single-flight; a 404 turns it off for the session rather than
+    re-asking per keystroke. The text half is `FileToken` in the kit, where it is unit-tested: the
+    token is read off the *end* of the draft (SwiftUI's `TextField` exposes no cursor), must start
+    a word so `toby@example.com` isn't a file picker, and accepting appends a space, which is also
+    what closes the list.
 - `project.yml` — [XcodeGen](https://github.com/yonaskolb/XcodeGen) spec; the `.xcodeproj` is
   generated, not checked in. So are `Info.plist` and `WorkerDeckApp.entitlements` — declare
   capabilities here, because Xcode's "+ Capability" button edits the generated project and is

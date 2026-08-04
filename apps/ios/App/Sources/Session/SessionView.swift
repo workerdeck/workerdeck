@@ -14,7 +14,11 @@ struct SessionView: View {
   @State private var vm: TranscriptViewModel
   @State private var draft = ""
   @State private var showDetails = false
+  @State private var showFiles = false
   @State private var showCloseConfirmation = false
+  /// Built once the session's cwd is known, and rebuilt if it changes — both the
+  /// browser and `@file` completion are scoped to that directory.
+  @State private var completion: FileCompletionModel?
   /// Owns the share sheet for files tapped in the transcript. The details sheet
   /// has its own — a sheet can't raise another sheet from underneath itself.
   @State private var downloader = FileDownloader()
@@ -38,6 +42,16 @@ struct SessionView: View {
       }
       .onChange(of: scenePhase) { _, phase in
         if phase == .active { vm.reconnectNow() }
+      }
+      // The cwd arrives with the session snapshot, which lands after this view
+      // does — and changes on a resume into a different directory.
+      .task(id: vm.cwd) {
+        completion = vm.hostFiles.map { FileCompletionModel(scope: $0) }
+      }
+      .sheet(isPresented: $showFiles) {
+        if let scope = vm.hostFiles {
+          HostFilesView(scope: scope)
+        }
       }
       .sheet(isPresented: $showDetails) {
         SessionDetailSheet(
@@ -94,6 +108,7 @@ struct SessionView: View {
         text: $draft,
         isBusy: vm.state.status == .running,
         isEnabled: vm.state.status != .closed,
+        completion: completion,
         onSend: {
           vm.send(draft)
           draft = ""
@@ -125,6 +140,15 @@ struct SessionView: View {
 
   @ToolbarContentBuilder
   private var toolbarMenu: some ToolbarContent {
+    // Only once the cwd is known — the browser is rooted at it, so there is
+    // nothing to open before then.
+    if vm.hostFiles != nil {
+      ToolbarItem(placement: .topBarTrailing) {
+        Button { showFiles = true } label: {
+          Label("Files", systemImage: "folder")
+        }
+      }
+    }
     ToolbarItem(placement: .topBarTrailing) {
       Menu {
         if let models = vm.state.models, !models.isEmpty {

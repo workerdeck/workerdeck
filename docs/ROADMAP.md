@@ -70,6 +70,19 @@ What's shipped, what's next, and what's still undecided. Status as of 2026-08-04
   registry's `onRegister`, so a session rebuilt after a park is covered too. Deliberately
   transport-agnostic: the server holds no push credentials, and turning a notification into an
   APNs push is a forwarder's job.
+- **Host filesystem access** (post-0.6.0, unreleased) — `/v1/fs/*`: roots, directory listing,
+  recursive fuzzy search, file read, and conditional write. The first *operator-privileged*
+  surface in the project, authorized by the auth key alone rather than through the agent
+  permission flow. Reading follows `allowedCwdRoots` on the reasoning that a caller who may start
+  a session in a tree can already read it through the agent; `hostFiles.roots` / `--fs-root`
+  narrows, and writing opts in separately (`--fs-write`) because a `PUT` skips the permission flow
+  an agent's edits go through. Containment is decided on realpath rather than string prefixes
+  (`host-files.ts`), every filesystem refusal is one indistinguishable 404, and opens go through
+  `O_NOFOLLOW` + an `fstat` gate: the trees on offer are written by the agent, so a planted
+  symlink is the threat model, not an edge case. Writes carry the sha256 they replace. The iOS
+  app browses and edits over it, scoped to the open session's cwd, and completes `@file` in the
+  composer against `/fs/find`. Covered by tests on both halves; not yet exercised against a live
+  gateway from a phone.
 
 ## Next
 

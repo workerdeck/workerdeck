@@ -45,6 +45,8 @@ port. `--insecure` overrides that, for when something in front is doing the auth
 | `--host <addr>` | `WORKERDECK_HOST` | `127.0.0.1` |
 | `--auth-key <secret>` | `WORKERDECK_AUTH_KEY` | none (no auth) |
 | `--cwd-root <path>` (repeatable) | `WORKERDECK_CWD_ROOTS` (`:`-separated) | unrestricted |
+| `--fs-root <path>` (repeatable) | `WORKERDECK_FS_ROOTS` (`:`-separated) | narrows `/v1/fs`; unset, reading follows `--cwd-root` |
+| `--fs-write` | — | off (browse and read only) |
 | `--profile <name=dir>` (repeatable) | — | auto-detected from `~/.claude` |
 | `--state-dir <path>` | `WORKERDECK_STATE_DIR` | beside the config file, else `~/.workerdeck` |
 | `--no-parking-store` | — | durable parking on |

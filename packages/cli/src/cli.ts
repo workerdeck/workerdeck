@@ -37,6 +37,15 @@ Options
       --profile <name=dir>  Claude config dir a session may run under (repeatable)
       --cwd-root <path>     restrict session cwds to this root (repeatable,
                             WORKERDECK_CWD_ROOTS as a ':'-separated list)
+      --fs-root <path>      narrow which host directories /v1/fs serves
+                            (repeatable, WORKERDECK_FS_ROOTS as a ':'-separated
+                            list). Reading otherwise follows --cwd-root: a caller
+                            who may start a session in a tree can already read it
+                            through the agent. With neither, the routes 404.
+      --fs-write            also accept writes over /v1/fs. Its own switch because
+                            an agent's writes go through the permission flow and a
+                            PUT does not. Every write is still conditional on the
+                            hash the client last read.
       --state-dir <path>    where parked sessions are persisted
                             (default: beside the config file, else ~/.workerdeck)
       --no-parking-store    keep parked sessions in memory only; a restart drops them

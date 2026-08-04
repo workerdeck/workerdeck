@@ -288,6 +288,100 @@ public struct SessionFileInfo: Decodable, Sendable, Equatable, Identifiable {
   public var id: String { path }
 }
 
+// MARK: - Host filesystem (`/fs/*`)
+
+/// One of the host directories this server will let a client browse.
+///
+/// Unrelated to `SessionFileInfo` despite both being "files": that is a
+/// deliverable inside one session's in-memory VFS, this is the operator's real
+/// disk. These routes are **operator-privileged** — the auth key authorizes them
+/// outright, and they sit outside the agent permission flow on purpose. They are
+/// also opt-in server-side: a server without roots configured 404s the whole
+/// surface, which is what `HostFileAccess.unavailable` records.
+public struct HostFileRoot: Decodable, Sendable, Equatable, Identifiable {
+  /// Absolute, canonical (symlinks already resolved) path.
+  public let path: String
+  /// Last path segment, for display.
+  public let name: String
+
+  public var id: String { path }
+}
+
+/// One entry in a host directory listing.
+///
+/// Classified with `lstat` semantics: a `symlink` is reported as itself and never
+/// resolved here. Whether it *can* be followed is the next request's answer — the
+/// server refuses one that escapes its roots.
+public struct HostDirEntry: Decodable, Sendable, Equatable, Identifiable {
+  public enum Kind: String, Decodable, Sendable, Equatable {
+    case file, dir, symlink, other
+  }
+
+  public let name: String
+  /// Absolute path, ready to pass straight back to `listHostDir`/`readHostFile`.
+  public let path: String
+  public let type: Kind
+  /// Regular files only.
+  public let bytes: Int?
+  /// Epoch ms mtime.
+  public let modifiedAt: Double?
+
+  public var id: String { path }
+
+  /// Unknown `type` strings decode as `.other` rather than failing the listing —
+  /// a newer server adding a category must not blank the browser.
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    name = try container.decode(String.self, forKey: .name)
+    path = try container.decode(String.self, forKey: .path)
+    type = Kind(rawValue: try container.decode(String.self, forKey: .type)) ?? .other
+    bytes = try container.decodeIfPresent(Int.self, forKey: .bytes)
+    modifiedAt = try container.decodeIfPresent(Double.self, forKey: .modifiedAt)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case name, path, type, bytes, modifiedAt
+  }
+}
+
+/// One hit from `GET /fs/find` — the `@file` picker's unit.
+public struct HostFileMatch: Decodable, Sendable, Equatable, Identifiable {
+  /// Absolute path, for a follow-up read.
+  public let path: String
+  /// Path relative to the searched directory — what the picker shows and inserts.
+  public let relative: String
+
+  public var id: String { path }
+}
+
+/// Body of `PUT /fs/write`.
+///
+/// Always conditional: `expectedHash` is the hash from the read this edit is based
+/// on, and its absence means "create". The server has no unconditional overwrite,
+/// because the agent is editing the same tree.
+public struct WriteHostFileRequest: Encodable, Sendable, Equatable {
+  public let path: String
+  public let content: String
+  public let encoding: String?
+  public let expectedHash: String?
+
+  /// Write text. Pass the `hash` from the `ReadHostFileResponse` this edit started
+  /// from; omit it only when creating a file that does not exist yet.
+  public init(path: String, text: String, expectedHash: String?) {
+    self.path = path
+    self.content = text
+    self.encoding = "utf8"
+    self.expectedHash = expectedHash
+  }
+
+  public init(path: String, base64: String, expectedHash: String?) {
+    self.path = path
+    self.content = base64
+    self.encoding = "base64"
+    self.expectedHash = expectedHash
+  }
+}
+
 // MARK: - Permission resolution over REST
 
 /// Body of `POST /sessions/:id/permissions/:requestId` — the REST counterpart of
@@ -332,6 +426,52 @@ public struct ListSessionFilesResponse: Decodable, Sendable {
 
 public struct ListSdkSessionsResponse: Decodable, Sendable {
   public let sdkSessions: [SdkSessionSummary]
+}
+
+public struct ListHostRootsResponse: Decodable, Sendable, Equatable {
+  public let roots: [HostFileRoot]
+  /// Whether `PUT /fs/write` is enabled — hide the editor's save when false.
+  public let canWrite: Bool
+}
+
+public struct ListHostDirResponse: Decodable, Sendable, Equatable {
+  /// Canonical path actually listed, which may differ from the one requested.
+  public let path: String
+  /// Directories first, then files, each alphabetical.
+  public let entries: [HostDirEntry]
+  /// Set when the directory held more entries than the server returns.
+  public let truncated: Bool?
+}
+
+public struct FindHostFilesResponse: Decodable, Sendable, Equatable {
+  /// Canonical directory the search ran under; `relative` paths hang off it.
+  public let base: String
+  public let matches: [HostFileMatch]
+  /// More matched, or the tree was larger than the server would walk.
+  public let truncated: Bool
+}
+
+public struct ReadHostFileResponse: Decodable, Sendable, Equatable {
+  public let path: String
+  public let content: String
+  /// `utf8` or `base64` — binary files come back base64 so an editor can decline
+  /// to open them rather than corrupt them on save.
+  public let encoding: String
+  public let bytes: Int
+  /// sha256 (hex) of the bytes on disk; carry it into the write that follows.
+  public let hash: String
+  public let modifiedAt: Double
+
+  /// The contents as text, or nil when the server sent base64.
+  public var text: String? { encoding == "utf8" ? content : nil }
+}
+
+public struct WriteHostFileResponse: Decodable, Sendable, Equatable {
+  public let path: String
+  public let bytes: Int
+  /// Hash of what was just written — the `expectedHash` for the next edit.
+  public let hash: String
+  public let modifiedAt: Double
 }
 
 public struct ListProfilesResponse: Decodable, Sendable {
