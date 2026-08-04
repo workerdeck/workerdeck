@@ -119,7 +119,7 @@ one — the fake harness can't validate those payloads. Model-agnostic smokes li
 - test: `pnpm test`
 - push: yes — branch `master`, repo is public, and every push deploys the docs site.
 - version_bump: yes — `pnpm version:set <x.y.z> && pnpm install --lockfile-only` (the 10 packages
-  only; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.6.0 published.
+  only; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.7.0 published.
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees

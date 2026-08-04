@@ -302,12 +302,15 @@ Dev never builds: apps and tests resolve packages straight to TS source via the
 
 ## Status
 
-**0.6.0** — early but real. Both engines, the protocol, server, client, headless React layer,
+**0.7.0** — early but real. Both engines, the protocol, server, client, headless React layer,
 styled UI, dashboard, job queue, sandbox, and deferred execution are all in and tested. 0.5 added
 the turnkey `npx workerdeck` instance, the dashboard as a published package, and durable parks;
-0.6 added server-wide session notifications and is the first release under this name — the
+0.6 added server-wide session notifications and was the first release under this name — the
 project published as `claude-worker` / `@claude-worker/*` through 0.5, and those packages remain
-on npm, deprecated and frozen there. Expect the protocol to keep evolving — `PROTOCOL_VERSION`
-guards breaking changes and is at 4. See the [roadmap](docs/ROADMAP.md) for what's next.
+on npm, deprecated and frozen there. 0.7 adds the host-filesystem routes (`/v1/fs`) and, alongside
+them, the iOS remote's file browser and APNs push. Both of those last two are covered by tests but
+have not yet been exercised against a live gateway from a physical phone — treat them as new, not
+as settled. Expect the protocol to keep evolving — `PROTOCOL_VERSION` guards breaking changes and
+is at 4. See the [roadmap](docs/ROADMAP.md) for what's next.
 
 MIT © Tobias Strebitzer

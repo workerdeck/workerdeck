@@ -1,6 +1,6 @@
 # Roadmap & open questions
 
-What's shipped, what's next, and what's still undecided. Status as of 2026-08-04 (0.6.0).
+What's shipped, what's next, and what's still undecided. Status as of 2026-08-04 (0.7.0).
 
 ## Shipped
 
@@ -70,7 +70,7 @@ What's shipped, what's next, and what's still undecided. Status as of 2026-08-04
   registry's `onRegister`, so a session rebuilt after a park is covered too. Deliberately
   transport-agnostic: the server holds no push credentials, and turning a notification into an
   APNs push is a forwarder's job.
-- **Host filesystem access** (post-0.6.0, unreleased) — `/v1/fs/*`: roots, directory listing,
+- **Host filesystem access** (0.7.0) — `/v1/fs/*`: roots, directory listing,
   recursive fuzzy search, file read, and conditional write. The first *operator-privileged*
   surface in the project, authorized by the auth key alone rather than through the agent
   permission flow. Reading follows `allowedCwdRoots` on the reasoning that a caller who may start
@@ -86,15 +86,17 @@ What's shipped, what's next, and what's still undecided. Status as of 2026-08-04
 
 ## Next
 
-0. **APNs push for the iOS app — built, not yet proven on a device.** The forwarder half is in
+0. **APNs push for the iOS app — released in 0.7.0, not yet proven on a device.** The forwarder half is in
    (`packages/cli/src/apns/`: hand-rolled HTTP/2 client, device registry at `/apns/devices`,
    in-process hook onto the session notifications above) and so is the app half (entitlement,
    registration per gateway, Approve/Deny actions, deep link). Verified so far: the credential
    path end to end against real APNs (a bogus token gets `BadDeviceToken`, which only a valid JWT
    and topic can earn) and presentation on the simulator via `xcrun simctl push`. **Not** yet
    verified: a real device token, an actual push arriving from a running gateway, or the
-   Approve/Deny buttons resolving a live permission request. Until that happens this is not
-   Shipped, and the README does not claim it.
+   Approve/Deny buttons resolving a live permission request. It ships in 0.7.0 rather than waiting
+   — the code is tested and the alternative was holding the host-filesystem release behind it —
+   but it stays here rather than under Shipped until a push has actually reached a phone, and the
+   README says as much. The same caveat covers the iOS file browser released alongside it.
 1. **Shared-backend `QueueAdapter`** (BullMQ or plain redis) — the reason the adapter contract
    exists. `claimNext` must stay atomic (BullMQ free; raw redis needs LMOVE/Lua) and honor
    `nextRunAt` (BullMQ delayed jobs); daily counters map to `INCRBY` on a dated key with TTL.
