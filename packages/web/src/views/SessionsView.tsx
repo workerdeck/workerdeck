@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import type { PermissionMode, SdkSessionSummary } from '@claude-worker/protocol'
+import type { PermissionMode, SdkSessionSummary } from '@workerdeck/protocol'
 import {
   Button,
   Card,
@@ -14,7 +14,7 @@ import {
   Textarea,
   formatRelativeTime,
   toast,
-} from '@claude-worker/ui'
+} from '@workerdeck/ui'
 import { History, Plus, RefreshCw } from 'lucide-react'
 import { ModelPicker } from '@/components/ModelPicker.tsx'
 import { ProfileSelect } from '@/components/ProfileSelect.tsx'
@@ -24,7 +24,7 @@ import { getDefaultModel, getDefaultPermissionMode } from '@/lib/settings.ts'
 import { useProfileChoice } from '@/lib/useProfiles.ts'
 import { useSessions } from '@/lib/useSessions.ts'
 
-const CWD_KEY = 'claude-worker.last-cwd'
+const CWD_KEY = 'workerdeck.last-cwd'
 
 function CreateSessionCard({ onCreated }: { onCreated: (id: string) => void }) {
   const [cwd, setCwd] = useState(() => localStorage.getItem(CWD_KEY) ?? '')

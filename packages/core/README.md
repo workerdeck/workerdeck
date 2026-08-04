@@ -1,31 +1,31 @@
-# @claude-worker/core
+# @workerdeck/core
 
-The claude-worker engines, behind one `Runner` interface: `SessionRunner` wraps the Agent SDK's
+The WorkerDeck engines, behind one `Runner` interface: `SessionRunner` wraps the Agent SDK's
 `query()` with a push-based input queue, promotes `canUseTool` calls into pending approvals,
 normalizes SDK messages into wire-protocol events, and keeps a seq-numbered event log for
 attach/replay; `AiSdkRunner` does the same for any provider the AI SDK supports. Pure library, no
 transport.
 
-Part of [claude-worker](https://github.com/tobiasstrebitzer/claude-worker). A `SessionRunner`
+Part of [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck). A `SessionRunner`
 behaves like Claude Code launched in the session's directory — same skills, same `CLAUDE.md`, same
 permission system — and both runners emit
-[`@claude-worker/protocol`](https://www.npmjs.com/package/@claude-worker/protocol) events.
-[`@claude-worker/server`](https://www.npmjs.com/package/@claude-worker/server) bridges runners to
+[`@workerdeck/protocol`](https://www.npmjs.com/package/@workerdeck/protocol) events.
+[`@workerdeck/server`](https://www.npmjs.com/package/@workerdeck/server) bridges runners to
 HTTP + WebSocket; use core directly when you want sessions in-process with no server.
 
 ## Install
 
 ```bash
-npm install @claude-worker/core
+npm install @workerdeck/core
 ```
 
 Depends on `@anthropic-ai/claude-agent-sdk`, which spawns the official Claude Code CLI. Needs
-Node ≥ 22 and a real filesystem. claude-worker implements no Anthropic auth: the SDK/CLI resolves
+Node ≥ 22 and a real filesystem. WorkerDeck implements no Anthropic auth: the SDK/CLI resolves
 credentials from the operator's environment (`ANTHROPIC_API_KEY`, Bedrock/Vertex, or a personal
 `claude login`).
 
 The provider engine additionally wants `ai` (AI SDK v7), your provider package, and — for
-`eval_script` — [`@claude-worker/sandbox`](https://www.npmjs.com/package/@claude-worker/sandbox);
+`eval_script` — [`@workerdeck/sandbox`](https://www.npmjs.com/package/@workerdeck/sandbox);
 all optional, and unused if you only run Claude sessions.
 
 ## Usage
@@ -34,7 +34,7 @@ all optional, and unused if you only run Claude sessions.
 `extraOptions`, `defaultApprovalTimeoutMs`, injectable `queryFn`/`historyFn` for tests):
 
 ```ts
-import { SessionRunner } from '@claude-worker/core'
+import { SessionRunner } from '@workerdeck/core'
 
 const runner = new SessionRunner({
   cwd: '/srv/checkouts/my-repo',
@@ -88,7 +88,7 @@ supports — no CLI process, no config directory. `createEngineSession()` assemb
 the capability-scoped tool set, and the executor that runs tool calls.
 
 ```ts
-import { createEngineSession, QuickJsExecutor } from '@claude-worker/core'
+import { createEngineSession, QuickJsExecutor } from '@workerdeck/core'
 
 const runner = createEngineSession({
   config: { ...createSessionRequest, languageModel: anthropic('claude-sonnet-5') },
@@ -105,7 +105,7 @@ Two seams matter here:
   files a session sees are an in-memory scratch VFS. Every tool is typed `sandboxed` or
   `authoritative`, and only sandboxed calls may leave the server.
 - **`ToolExecutor` decides where code runs.** `QuickJsExecutor` runs it in-process in the
-  [QuickJS guest](https://www.npmjs.com/package/@claude-worker/sandbox); `BrowserBridgeExecutor`
+  [QuickJS guest](https://www.npmjs.com/package/@workerdeck/sandbox); `BrowserBridgeExecutor`
   ships it to the user's own tab, so client-held documents never reach the server; and
   `DeferredExecutor` hands the call off to something that will answer later.
 
@@ -123,7 +123,7 @@ selectExecutor: () => new DeferredExecutor({
 })
 ```
 
-[`@claude-worker/server`](https://www.npmjs.com/package/@claude-worker/server) drives both halves
+[`@workerdeck/server`](https://www.npmjs.com/package/@workerdeck/server) drives both halves
 for you — a `SessionStore` plus `POST /executions/:id/result` — but the mechanism is here, and works
 with no server at all.
 
@@ -137,4 +137,4 @@ prompt), `normalizeSdkMessage`/`toApiMessage` (SDKMessage → protocol event nor
 ## License
 
 MIT © Tobias Strebitzer —
-[LICENSE](https://github.com/tobiasstrebitzer/claude-worker/blob/master/LICENSE)
+[LICENSE](https://github.com/tobiasstrebitzer/workerdeck/blob/master/LICENSE)

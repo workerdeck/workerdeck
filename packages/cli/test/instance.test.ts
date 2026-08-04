@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { ServerFrame } from '@claude-worker/protocol'
+import type { ServerFrame } from '@workerdeck/protocol'
 import { parseArgs, resolveInstanceConfig, type ResolvedConfig } from '../src/config.ts'
 import { startInstance, type Instance } from '../src/instance.ts'
 
@@ -203,7 +203,7 @@ describe('an instance with --auth-key', () => {
 
   it('accepts the secret as a header for services', async () => {
     const { base } = await start(['--auth-key', SECRET])
-    const res = await fetch(`${base}/v1/sessions`, { headers: { 'x-claude-worker-key': SECRET } })
+    const res = await fetch(`${base}/v1/sessions`, { headers: { 'x-workerdeck-key': SECRET } })
     expect(res.status).toBe(200)
   })
 
@@ -263,7 +263,7 @@ describe('an instance that generates its own key', () => {
     expect((await fetch(`${base}/v1/sessions`)).status).toBe(401)
     // The stored key is the live secret on both transports.
     expect(
-      (await fetch(`${base}/v1/sessions`, { headers: { 'x-claude-worker-key': key } })).status,
+      (await fetch(`${base}/v1/sessions`, { headers: { 'x-workerdeck-key': key } })).status,
     ).toBe(200)
   })
 
@@ -275,7 +275,7 @@ describe('an instance that generates its own key', () => {
 
     const second = await start(routable, { ...bindLoopback, stateDir: first.stateDir })
     const res = await fetch(`${second.base}/v1/sessions`, {
-      headers: { 'x-claude-worker-key': key },
+      headers: { 'x-workerdeck-key': key },
     })
     expect(res.status).toBe(200)
   })

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { CreateProfileRequest, ProfileEngine, SessionCapability } from '@claude-worker/protocol'
+import type { CreateProfileRequest, ProfileEngine, SessionCapability } from '@workerdeck/protocol'
 import {
   Button,
   Card,
@@ -15,7 +15,7 @@ import {
   SelectValue,
   Spinner,
   toast,
-} from '@claude-worker/ui'
+} from '@workerdeck/ui'
 import { Plus } from 'lucide-react'
 import { client } from '@/lib/client.ts'
 

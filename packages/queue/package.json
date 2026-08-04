@@ -1,8 +1,8 @@
 {
-  "name": "@claude-worker/queue",
+  "name": "@workerdeck/queue",
   "version": "0.6.0",
   "type": "module",
-  "description": "Job queue over the claude-worker session runner: remote services schedule one-shot runs; the queue executes them as sessions with bounded concurrency and token budgets, delivering progress and completion via webhooks. Pluggable adapter interface (in-memory bundled; redis/bullmq/pubsub adapters can implement the same contract).",
+  "description": "Job queue over the WorkerDeck session runner: remote services schedule one-shot runs; the queue executes them as sessions with bounded concurrency and token budgets, delivering progress and completion via webhooks. Pluggable adapter interface (in-memory bundled; redis/bullmq/pubsub adapters can implement the same contract).",
   "license": "MIT",
   "main": "./build/index.mjs",
   "types": "./build/index.d.mts",
@@ -11,7 +11,7 @@
   ],
   "exports": {
     ".": {
-      "@claude-worker/source": "./src/index.ts",
+      "@workerdeck/source": "./src/index.ts",
       "types": "./build/index.d.mts",
       "default": "./build/index.mjs"
     }
@@ -24,8 +24,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@claude-worker/core": "workspace:*",
-    "@claude-worker/protocol": "workspace:*"
+    "@workerdeck/core": "workspace:*",
+    "@workerdeck/protocol": "workspace:*"
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.217",
@@ -37,11 +37,11 @@
   "author": "Tobias Strebitzer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobiasstrebitzer/claude-worker.git",
+    "url": "git+https://github.com/tobiasstrebitzer/workerdeck.git",
     "directory": "packages/queue"
   },
-  "homepage": "https://tobiasstrebitzer.github.io/claude-worker/",
-  "bugs": "https://github.com/tobiasstrebitzer/claude-worker/issues",
+  "homepage": "https://tobiasstrebitzer.github.io/workerdeck/",
+  "bugs": "https://github.com/tobiasstrebitzer/workerdeck/issues",
   "keywords": [
     "claude",
     "claude-code",

@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react'
-import type { SlashCommandInfo } from '@claude-worker/protocol'
+import type { SlashCommandInfo } from '@workerdeck/protocol'
 import { ArrowUp, Square } from 'lucide-react'
 import { Button } from '../ui/Button.tsx'
 import { PromptArea } from '../prompt-area/prompt-area.tsx'

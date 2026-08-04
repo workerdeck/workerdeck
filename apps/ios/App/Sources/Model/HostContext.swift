@@ -1,4 +1,4 @@
-import ClaudeWorkerKit
+import WorkerDeckKit
 import Foundation
 import Observation
 
@@ -45,6 +45,6 @@ final class HostContext {
   }
 
   private nonisolated static func recentKey(_ id: UUID) -> String {
-    "dev.claudeworker.ios.recentCwds.\(id.uuidString)"
+    "bi.atomic.workerdeck.ios.recentCwds.\(id.uuidString)"
   }
 }

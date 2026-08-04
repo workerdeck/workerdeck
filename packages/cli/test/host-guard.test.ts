@@ -88,7 +88,7 @@ describe('resolveInstanceConfig and the host guard', () => {
   })
 
   it('treats an empty auth key as unset, not as auth', () => {
-    const config = resolveInstanceConfig(parseArgs([]), noConfig, { CLAUDE_WORKER_AUTH_KEY: '' })
+    const config = resolveInstanceConfig(parseArgs([]), noConfig, { WORKERDECK_AUTH_KEY: '' })
     expect(config.authKey).toBeUndefined()
     expect(config.allowedHosts).not.toBeNull()
   })

@@ -9,7 +9,7 @@ import type {
   RunnerSnapshot,
   SessionRunnerConfig,
   ToolExecutionResult,
-} from '@claude-worker/core'
+} from '@workerdeck/core'
 import type {
   JobEvent,
   JobInfo,
@@ -17,7 +17,7 @@ import type {
   SessionEvent,
   SessionEventBody,
   SessionInfo,
-} from '@claude-worker/protocol'
+} from '@workerdeck/protocol'
 import {
   createFileSessionStore,
   createWorkerServer,

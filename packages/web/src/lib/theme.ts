@@ -1,6 +1,6 @@
 export type Theme = 'light' | 'dark'
 
-const KEY = 'claude-worker.theme'
+const KEY = 'workerdeck.theme'
 
 export function getTheme(): Theme {
   try {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionEvent, SessionEventBody, SessionInfo } from '@claude-worker/protocol'
+import type { SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
 import {
   applyEvent,
   initialTranscriptState,

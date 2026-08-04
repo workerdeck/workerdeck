@@ -1,6 +1,6 @@
 import type { LanguageModel, ToolSet } from 'ai'
-import type { McpServerConfigWire, ProfileInfo, SessionCapability } from '@claude-worker/protocol'
-import { createVfs } from '@claude-worker/sandbox'
+import type { McpServerConfigWire, ProfileInfo, SessionCapability } from '@workerdeck/protocol'
+import { createVfs } from '@workerdeck/sandbox'
 import { AiSdkRunner, type AiSdkRunnerConfig } from './ai-sdk-runner.ts'
 import { createToolContext, withMcpTools, type ToolContextOptions } from './tools.ts'
 import type { ToolExecutor } from './tool-executor.ts'

@@ -26,7 +26,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @claude-worker/docs build
+      - run: pnpm --filter @workerdeck/docs build
       - uses: actions/upload-pages-artifact@v5
         with:
           path: apps/docs/dist

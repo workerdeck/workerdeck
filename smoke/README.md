@@ -49,7 +49,7 @@ Run it against two providers to satisfy the PRD's SM-1 (same workflow, config sw
 `smoke:live` drives the runner in-process; `bridge-e2e.test.ts` drives the real server and
 client with a stubbed model. This smoke is the combination neither covers:
 
-    real model → AiSdkRunner on createWorkerServer → HTTP/WS → ClaudeWorkerClient
+    real model → AiSdkRunner on createWorkerServer → HTTP/WS → WorkerDeckClient
     → createToolCallHost executing in a real QuickJS guest
 
 The server has **no QuickJS executor at all** here — every `eval_script` call must travel the

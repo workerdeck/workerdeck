@@ -1,11 +1,11 @@
-# @claude-worker/react
+# @workerdeck/react
 
-Headless React layer for claude-worker: the `useClaudeSession` hook plus a pure transcript
+Headless React layer for WorkerDeck: the `useClaudeSession` hook plus a pure transcript
 reducer. No styling opinion — bring your own rendering, or use
-[`@claude-worker/ui`](https://www.npmjs.com/package/@claude-worker/ui), the styled layer on top.
+[`@workerdeck/ui`](https://www.npmjs.com/package/@workerdeck/ui), the styled layer on top.
 
-Part of [claude-worker](https://github.com/tobiasstrebitzer/claude-worker). It sits between
-[`@claude-worker/client`](https://www.npmjs.com/package/@claude-worker/client) (REST + WebSocket
+Part of [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck). It sits between
+[`@workerdeck/client`](https://www.npmjs.com/package/@workerdeck/client) (REST + WebSocket
 attach) and your components: the hook attaches to a session, folds the event stream through the
 reducer, and hands back live state plus the control surface (send, approve/deny, interrupt,
 permission mode, model).
@@ -13,7 +13,7 @@ permission mode, model).
 ## Install
 
 ```bash
-npm install @claude-worker/react @claude-worker/client
+npm install @workerdeck/react @workerdeck/client
 ```
 
 `react` is a peer dependency (`^18 || ^19`).
@@ -21,10 +21,10 @@ npm install @claude-worker/react @claude-worker/client
 ## Usage
 
 ```tsx
-import { ClaudeWorkerClient } from '@claude-worker/client'
-import { useClaudeSession } from '@claude-worker/react'
+import { WorkerDeckClient } from '@workerdeck/client'
+import { useClaudeSession } from '@workerdeck/react'
 
-const client = new ClaudeWorkerClient({ baseUrl: 'http://127.0.0.1:8787/v1' })
+const client = new WorkerDeckClient({ baseUrl: 'http://127.0.0.1:8787/v1' })
 
 function Panel({ sessionId }: { sessionId: string }) {
   const { state, connected, send, approve, deny, interrupt } = useClaudeSession(client, sessionId)
@@ -57,7 +57,7 @@ The state machine is framework-free and exported directly — usable in tests, w
 non-React consumer of the event stream:
 
 ```ts
-import { applyEvent, initialTranscriptState, seedFromSessionInfo } from '@claude-worker/react'
+import { applyEvent, initialTranscriptState, seedFromSessionInfo } from '@workerdeck/react'
 
 let state = initialTranscriptState
 state = seedFromSessionInfo(state, sessionInfo) // optional: seed from the attach snapshot
@@ -88,7 +88,7 @@ unit-tested. Keep rendering logic out of it.
 A provider-engine session can ask the *browser* to execute a sandboxed tool call, so documents the
 user holds locally never reach the server. `useToolCallHost` answers those requests from a mounted
 component, running the code in a QuickJS guest
-([`@claude-worker/sandbox`](https://www.npmjs.com/package/@claude-worker/sandbox), loaded on
+([`@workerdeck/sandbox`](https://www.npmjs.com/package/@workerdeck/sandbox), loaded on
 demand):
 
 ```tsx
@@ -108,4 +108,4 @@ input by construction: fine for the user's own data, never a source of server-au
 ## License
 
 MIT © Tobias Strebitzer — see
-[LICENSE](https://github.com/tobiasstrebitzer/claude-worker/blob/master/LICENSE).
+[LICENSE](https://github.com/tobiasstrebitzer/workerdeck/blob/master/LICENSE).

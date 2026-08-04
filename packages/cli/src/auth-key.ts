@@ -42,7 +42,7 @@ export async function materializeAuthKey(
   options: { warn?: (message: string) => void } = {},
 ): Promise<MaterializedAuthKey> {
   const warn =
-    options.warn ?? ((message: string) => process.stderr.write(`[claude-worker] ${message}\n`))
+    options.warn ?? ((message: string) => process.stderr.write(`[workerdeck] ${message}\n`))
   if (stateDir === null) return { key: generateKey(), source: 'ephemeral', path: null }
 
   const path = join(stateDir, 'auth-key')

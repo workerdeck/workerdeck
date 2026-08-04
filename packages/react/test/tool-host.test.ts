@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { SessionHandle } from '@claude-worker/client'
-import type { ToolCallRequestFrame } from '@claude-worker/protocol'
-import type { RunScriptResult } from '@claude-worker/sandbox'
+import type { SessionHandle } from '@workerdeck/client'
+import type { ToolCallRequestFrame } from '@workerdeck/protocol'
+import type { RunScriptResult } from '@workerdeck/sandbox'
 import { createToolCallHost, type ToolCallHostOptions } from '../src/tool-host.ts'
 
 /** Drives the framework-free host through a fake handle — no renderer needed. */

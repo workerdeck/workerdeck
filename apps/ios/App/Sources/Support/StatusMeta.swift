@@ -1,4 +1,4 @@
-import ClaudeWorkerKit
+import WorkerDeckKit
 import SwiftUI
 
 /// Presentation for `SessionStatus`, mirroring the web dashboard's `STATUS_META`

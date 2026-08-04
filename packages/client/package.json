@@ -1,8 +1,8 @@
 {
-  "name": "@claude-worker/client",
+  "name": "@workerdeck/client",
   "version": "0.6.0",
   "type": "module",
-  "description": "Typed claude-worker protocol client for browsers and Node: REST session management plus a WebSocket attach with auto-reconnect and replay-from-last-seq. Uses the platform's fetch and WebSocket; zero runtime deps.",
+  "description": "Typed WorkerDeck protocol client for browsers and Node: REST session management plus a WebSocket attach with auto-reconnect and replay-from-last-seq. Uses the platform's fetch and WebSocket; zero runtime deps.",
   "license": "MIT",
   "main": "./build/index.mjs",
   "types": "./build/index.d.mts",
@@ -11,7 +11,7 @@
   ],
   "exports": {
     ".": {
-      "@claude-worker/source": "./src/index.ts",
+      "@workerdeck/source": "./src/index.ts",
       "types": "./build/index.d.mts",
       "default": "./build/index.mjs"
     }
@@ -24,11 +24,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@claude-worker/protocol": "workspace:*"
+    "@workerdeck/protocol": "workspace:*"
   },
   "devDependencies": {
-    "@claude-worker/core": "workspace:*",
-    "@claude-worker/server": "workspace:*",
+    "@workerdeck/core": "workspace:*",
+    "@workerdeck/server": "workspace:*",
     "@types/node": "^22.10.0",
     "@types/ws": "^8.18.1",
     "rimraf": "^6.1.3",
@@ -39,11 +39,11 @@
   "author": "Tobias Strebitzer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobiasstrebitzer/claude-worker.git",
+    "url": "git+https://github.com/tobiasstrebitzer/workerdeck.git",
     "directory": "packages/client"
   },
-  "homepage": "https://tobiasstrebitzer.github.io/claude-worker/",
-  "bugs": "https://github.com/tobiasstrebitzer/claude-worker/issues",
+  "homepage": "https://tobiasstrebitzer.github.io/workerdeck/",
+  "bugs": "https://github.com/tobiasstrebitzer/workerdeck/issues",
   "keywords": [
     "claude",
     "claude-code",

@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
-import { Badge, Button, toast } from '@claude-worker/ui'
+import { Badge, Button, toast } from '@workerdeck/ui'
 import { Code, Eye, FolderCog, Trash2, UserRound } from 'lucide-react'
 import { CreateProfileCard } from '@/components/CreateProfileCard.tsx'
 import { client } from '@/lib/client.ts'

@@ -1,10 +1,10 @@
 @import 'tailwindcss';
-@import '@claude-worker/ui/theme.css';
+@import '@workerdeck/ui/theme.css';
 
 /* Monorepo dev: scan the ui package source for classnames (external consumers point this at
- * node_modules/@claude-worker/ui — see the ui README). */
+ * node_modules/@workerdeck/ui — see the ui README). */
 @source '../../../../packages/ui/src';
-/* streamdown (markdown renderer inside @claude-worker/ui) styles itself with Tailwind
+/* streamdown (markdown renderer inside @workerdeck/ui) styles itself with Tailwind
  * classes — scan its whole dist dir (components are split across chunk files). pnpm
  * nests it under the ui package, not the workspace root. */
 @source '../../../../packages/ui/node_modules/streamdown/dist';

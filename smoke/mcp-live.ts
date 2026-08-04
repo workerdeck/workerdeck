@@ -14,8 +14,8 @@
  * (server-side execute, never bridged), and the turn completes on their output.
  */
 import type { LanguageModel } from 'ai'
-import type { SessionEvent, ToolUseBlock } from '@claude-worker/protocol'
-import { connectMcpTools, createEngineSession, type ToolExecutor } from '@claude-worker/core'
+import type { SessionEvent, ToolUseBlock } from '@workerdeck/protocol'
+import { connectMcpTools, createEngineSession, type ToolExecutor } from '@workerdeck/core'
 
 const DEEPWIKI_URL = 'https://mcp.deepwiki.com/mcp'
 

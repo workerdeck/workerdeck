@@ -1,4 +1,4 @@
-import type { ModelOption } from '@claude-worker/protocol'
+import type { ModelOption } from '@workerdeck/protocol'
 import {
   Select,
   SelectContent,

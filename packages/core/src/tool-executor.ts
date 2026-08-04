@@ -1,5 +1,5 @@
-import type { ToolExecutionBackend } from '@claude-worker/protocol'
-import type { SandboxVfs } from '@claude-worker/sandbox'
+import type { ToolExecutionBackend } from '@workerdeck/protocol'
+import type { SandboxVfs } from '@workerdeck/sandbox'
 
 /**
  * Result of one tool execution, whenever it arrives. `failed` is a normal

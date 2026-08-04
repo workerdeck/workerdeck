@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import Base from '../layouts/Base.astro'
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '')
-const repo = 'https://github.com/tobiasstrebitzer/claude-worker'
+const repo = 'https://github.com/tobiasstrebitzer/workerdeck'
 
 // Read at build time so the hero badge can never drift from what's published.
 const cliPkg = fileURLToPath(new URL('../../../../packages/cli/package.json', import.meta.url))
@@ -46,21 +46,21 @@ const features = [
 ]
 
 const packages = [
-  ['claude-worker', 'the turnkey instance: gateway + dashboard, one port'],
-  ['@claude-worker/protocol', 'wire protocol types — events, commands, REST shapes'],
-  ['@claude-worker/core', 'both engines behind one Runner interface'],
-  ['@claude-worker/sandbox', 'QuickJS-NG guest for untrusted code'],
-  ['@claude-worker/queue', 'one-shot jobs, budgets, webhooks'],
-  ['@claude-worker/server', 'HTTP + WebSocket gateway'],
-  ['@claude-worker/client', 'typed client for browsers and Node'],
-  ['@claude-worker/react', 'headless hook + transcript reducer'],
-  ['@claude-worker/ui', 'styled agent-control components'],
-  ['@claude-worker/web', 'the dashboard as prebuilt static files'],
+  ['workerdeck', 'the turnkey instance: gateway + dashboard, one port'],
+  ['@workerdeck/protocol', 'wire protocol types — events, commands, REST shapes'],
+  ['@workerdeck/core', 'both engines behind one Runner interface'],
+  ['@workerdeck/sandbox', 'QuickJS-NG guest for untrusted code'],
+  ['@workerdeck/queue', 'one-shot jobs, budgets, webhooks'],
+  ['@workerdeck/server', 'HTTP + WebSocket gateway'],
+  ['@workerdeck/client', 'typed client for browsers and Node'],
+  ['@workerdeck/react', 'headless hook + transcript reducer'],
+  ['@workerdeck/ui', 'styled agent-control components'],
+  ['@workerdeck/web', 'the dashboard as prebuilt static files'],
 ]
 ---
 
 <Base
-  title="claude-worker · embed, watch, and control Claude Code sessions"
+  title="WorkerDeck · embed, watch, and control Claude Code sessions"
   description="Run a close-to-real Claude Code session programmatically via the Anthropic Agent SDK, and embed it in your app: session server, typed wire protocol, and panel components."
 >
   <main>
@@ -74,14 +74,14 @@ const packages = [
         Claude Code sessions your app can embed, watch, and control
       </h1>
       <p class="mx-auto mt-5 max-w-2xl text-pretty text-lg leading-relaxed text-fg-3">
-        claude-worker runs a close-to-real Claude Code session via the Agent SDK and exposes it to
+        WorkerDeck runs a close-to-real Claude Code session via the Agent SDK and exposes it to
         your host app — a session server, a typed wire protocol, and embeddable panel components
         with approve/deny controls.
       </p>
       <div
         class="mx-auto mt-9 w-fit rounded-lg border border-border bg-code-bg px-5 py-3 font-mono text-[13px] text-fg-2"
       >
-        npx claude-worker
+        npx workerdeck
       </div>
       <p class="mx-auto mt-3 text-[13px] text-fg-4">
         Gateway and dashboard on one port. Nothing to clone.

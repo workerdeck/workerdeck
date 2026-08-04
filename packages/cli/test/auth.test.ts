@@ -125,9 +125,9 @@ describe('secret validation', () => {
 describe('header transport', () => {
   const auth = createCliAuth({ secret: SECRET })
 
-  it('accepts x-claude-worker-key without any Origin, even on POST', async () => {
+  it('accepts x-workerdeck-key without any Origin, even on POST', async () => {
     const principal = (await auth.authenticate(
-      fakeReq({ method: 'POST', headers: { 'x-claude-worker-key': SECRET, origin: 'https://evil.example' } }),
+      fakeReq({ method: 'POST', headers: { 'x-workerdeck-key': SECRET, origin: 'https://evil.example' } }),
     )) as CliPrincipal
     // Not ambient authority: the sender chose to attach the secret, so a
     // foreign Origin is irrelevant.
@@ -140,7 +140,7 @@ describe('header transport', () => {
   })
 
   it('rejects wrong keys and never falls through to other transports', async () => {
-    expect(await auth.authenticate(fakeReq({ headers: { 'x-claude-worker-key': 'wrong' } }))).toBeNull()
+    expect(await auth.authenticate(fakeReq({ headers: { 'x-workerdeck-key': 'wrong' } }))).toBeNull()
     expect(await auth.authenticate(fakeReq({ headers: { authorization: 'Bearer wrong' } }))).toBeNull()
     expect(await auth.authenticate(fakeReq({ headers: { authorization: 'Basic abc' } }))).toBeNull()
     expect(await auth.authenticate(fakeReq({}))).toBeNull()
@@ -148,7 +148,7 @@ describe('header transport', () => {
 
   it('works on a WS-upgrade-shaped request', async () => {
     const principal = await auth.authenticate(
-      fakeReq({ headers: { 'x-claude-worker-key': SECRET, upgrade: 'websocket' } }),
+      fakeReq({ headers: { 'x-workerdeck-key': SECRET, upgrade: 'websocket' } }),
     )
     expect(principal).toBeTruthy()
   })
@@ -161,7 +161,7 @@ describe('login and cookie flow', () => {
     expect(res.status).toBe(303)
     expect(res.headers.location).toBe('/')
     const cookie = res.setCookies[0]
-    expect(cookie).toMatch(/^claude_worker_session=[A-Za-z0-9_-]+; /)
+    expect(cookie).toMatch(/^workerdeck_session=[A-Za-z0-9_-]+; /)
     expect(cookie).toContain('HttpOnly')
     expect(cookie).toContain('SameSite=Lax')
     expect(cookie).toContain('Path=/')
@@ -211,7 +211,7 @@ describe('login and cookie flow', () => {
   it('rejects garbage cookies, unknown content types, and missing fields', async () => {
     const base = await startHost(createCliAuth({ secret: SECRET }))
     const forged = await request(`${base}/v1/sessions`, {
-      headers: { cookie: 'claude_worker_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' },
+      headers: { cookie: 'workerdeck_session=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' },
     })
     expect(forged.status).toBe(401)
     const wrongType = await request(`${base}/auth/login`, {

@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
-import { createFileSessionStore, createWorkerServer, type WorkerServer } from '@claude-worker/server'
-import { dashboardDir } from '@claude-worker/web'
+import { createFileSessionStore, createWorkerServer, type WorkerServer } from '@workerdeck/server'
+import { dashboardDir } from '@workerdeck/web'
 import { materializeAuthKey, type MaterializedAuthKey } from './auth-key.ts'
 import { createCliAuth, type CliAuth } from './auth.ts'
 import { hostnameOf, isLoopbackHostname, type ResolvedConfig } from './config.ts'
@@ -19,7 +19,7 @@ export type Instance = {
 }
 
 /**
- * The dashboard comes from `@claude-worker/web`, which ships it prebuilt and
+ * The dashboard comes from `@workerdeck/web`, which ships it prebuilt and
  * exports the path to it. Depending on the package rather than vendoring a copy
  * means one dashboard, versioned in lockstep with everything else.
  *
@@ -31,7 +31,7 @@ export function resolveWebRoot(): string {
   if (existsSync(join(dashboardDir, 'index.html'))) return dashboardDir
   throw new Error(
     `no dashboard build at ${dashboardDir}\n` +
-      `  in a checkout: pnpm --filter @claude-worker/web run build`,
+      `  in a checkout: pnpm --filter @workerdeck/web run build`,
   )
 }
 
@@ -167,7 +167,7 @@ export async function startInstance(
       dir: join(config.stateDir, 'parked'),
       onError: (error, context) => {
         process.stderr.write(
-          `[claude-worker] parked-session store ${context.op} failed for ${context.path}: ` +
+          `[workerdeck] parked-session store ${context.op} failed for ${context.path}: ` +
             `${error instanceof Error ? error.message : String(error)}\n`,
         )
       },
@@ -206,7 +206,7 @@ export async function startInstance(
   if (!options.quiet) {
     const line = (text: string): void => void process.stdout.write(`${text}\n`)
     line('')
-    line(`  claude-worker  ${url}`)
+    line(`  workerdeck  ${url}`)
     if (config.hostAuthenticates) line('  auth: the config file supplies its own `authenticate`')
     else if (generated?.source === 'created') {
       // Printed exactly once, at creation — later starts reuse the file and

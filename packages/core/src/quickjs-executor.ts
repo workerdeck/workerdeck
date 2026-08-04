@@ -1,4 +1,4 @@
-import { runScript, type SandboxEngine } from '@claude-worker/sandbox'
+import { runScript, type SandboxEngine } from '@workerdeck/sandbox'
 import type {
   ToolExecutionCall,
   ToolExecutionDispatch,

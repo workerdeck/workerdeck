@@ -99,7 +99,7 @@ server-side, never bridged to the tab.
 ## 6. Compare with the Claude engine
 
 On **Profiles** you can also create one yourself: this dev server wires a file-backed profile
-store at `.claude-worker/profiles.json` and marks every caller as able to manage profiles, so the
+store at `.workerdeck/profiles.json` and marks every caller as able to manage profiles, so the
 New profile card is live. The three profiles above are declared in `provider-server.ts` and stay
 read-only — only the ones you create here can be edited or deleted.
 

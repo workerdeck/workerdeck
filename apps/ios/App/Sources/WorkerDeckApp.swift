@@ -6,7 +6,7 @@ import SwiftUI
 /// and a root that either shows the host manager or scopes everything below it to
 /// the selected host.
 @main
-struct ClaudeWorkerApp: App {
+struct WorkerDeckApp: App {
   @State private var hosts = HostStore()
 
   var body: some Scene {

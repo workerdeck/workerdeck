@@ -4,7 +4,7 @@ description: The wire protocol — events, commands, REST shapes, queue frames, 
 order: 2
 ---
 
-[`@claude-worker/protocol`](https://www.npmjs.com/package/@claude-worker/protocol) is the wire
+[`@workerdeck/protocol`](https://www.npmjs.com/package/@workerdeck/protocol) is the wire
 protocol shared by the server and every client: typed session events, commands, and REST shapes.
 Dependency-free, browser-safe, and type-only for most consumers — the single runtime export is
 `PROTOCOL_VERSION`. Anthropic API message content is modeled structurally (`ApiMessage`,
@@ -24,7 +24,7 @@ shapes. The server reports it in the `attached` (and `queue_attached`) frame so 
 detect skew:
 
 ```ts
-import { PROTOCOL_VERSION, type ServerFrame } from '@claude-worker/protocol'
+import { PROTOCOL_VERSION, type ServerFrame } from '@workerdeck/protocol'
 
 ws.onmessage = ({ data }) => {
   const frame = JSON.parse(data) as ServerFrame
@@ -50,7 +50,7 @@ ws.onmessage = ({ data }) => {
 | `assistant_message` / `user_message` | An `ApiMessage` (plain Anthropic content blocks) plus `parentToolUseId`, `replay` (resumed-history backfill), and for user messages `synthetic` (tool results). |
 | `stream_delta` | Raw Anthropic streaming event; emitted only with `includePartialMessages`. |
 | `turn_result` | End of a turn: subtype, `isError`, `durationMs`, `numTurns`, `totalCostUsd` (both session-cumulative), `result` text, per-turn `usage`. |
-| `permission_requested` / `permission_resolved` | The pending-approval flow — see [Permissions](/claude-worker/docs/guides/permissions/). |
+| `permission_requested` / `permission_resolved` | The pending-approval flow — see [Permissions](/workerdeck/docs/guides/permissions/). |
 | `execution_dispatched` / `execution_result` / `execution_failed` | Tool-execution lifecycle, correlated by `executionId`. `deferred: true` on dispatch means the execution may outlive the runner (the session parks); `expiresAt` is when the host's watchdog fires. A failure is fed back as tool output, not a session error. |
 | `file_delivered` | The agent handed over a file from its scratch filesystem (`deliver_file`); download it under `GET /sessions/:id/files/<path>`. |
 | `sdk_event` | Forward-compatible passthrough for any SDK message this protocol version doesn't model first-class (task progress, compaction boundaries, auth status, …). |
@@ -87,16 +87,16 @@ bare `SessionCommand`s.
   channel for a person who isn't attached (`permission_requested`, `turn_completed`,
   `session_error`, `session_closed`), carrying the `SessionInfo` snapshot, the event's `seq`, a
   one-line `preview`, and — on a permission — the full request to answer over REST. See
-  [Notifications](/claude-worker/docs/guides/notifications/).
+  [Notifications](/workerdeck/docs/guides/notifications/).
 
 ## Queue frames
 
-Used when the server mounts the [`@claude-worker/queue`](https://www.npmjs.com/package/@claude-worker/queue)
+Used when the server mounts the [`@workerdeck/queue`](https://www.npmjs.com/package/@workerdeck/queue)
 routes: `CreateJobRequest` / `JobInfo` (with `JobStatus`, `JobUsage`, `JobResult`) /
 `JobEvent` (`job_submitted`, `job_started`, `job_progress` + `JobProgress`, `job_parked`,
 `job_resumed`, `job_retrying`, `job_completed`) / `QueueStats`, and the `QueueServerFrame` union for the one-way queue
 WebSocket (`queue_attached`, `job_event`, `queue_stats`). Details in
-[Job queue](/claude-worker/docs/guides/job-queue/).
+[Job queue](/workerdeck/docs/guides/job-queue/).
 
 ## Forward compatibility
 

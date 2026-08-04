@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { SessionInfo, SessionNotification } from '@claude-worker/protocol'
+import type { SessionInfo, SessionNotification } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 /** The SDK stand-in: tests push messages in and hold `canUseTool` to raise a

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { PermissionRequest } from '@claude-worker/protocol'
+import type { PermissionRequest } from '@workerdeck/protocol'
 import { ShieldAlert } from 'lucide-react'
 import { Button } from '../ui/Button.tsx'
 import { cn } from '../../lib/utils.ts'

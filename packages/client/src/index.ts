@@ -25,7 +25,7 @@ import type {
   ToolCallRequestFrame,
   ToolExecutionOutput,
   UpdateProfileRequest,
-} from '@claude-worker/protocol'
+} from '@workerdeck/protocol'
 
 export type ClientOptions = {
   /** REST base, e.g. "http://127.0.0.1:8787/v1". The ws:// URL is derived from it. */
@@ -73,7 +73,7 @@ type Listener<T> = (payload: T) => void
 
 export class SessionHandle {
   readonly sessionId: string
-  #client: ClaudeWorkerClient
+  #client: WorkerDeckClient
   #options: Required<Pick<AttachOptions, 'reconnect'>> & AttachOptions
   #ws: WebSocket | undefined
   #listeners = new Map<keyof SessionHandleEvents, Set<Listener<never>>>()
@@ -83,7 +83,7 @@ export class SessionHandle {
   #outbox: string[] = []
   #connectTimer: ReturnType<typeof setTimeout> | undefined
 
-  constructor(client: ClaudeWorkerClient, sessionId: string, options: AttachOptions = {}) {
+  constructor(client: WorkerDeckClient, sessionId: string, options: AttachOptions = {}) {
     this.#client = client
     this.sessionId = sessionId
     this.#options = { reconnect: true, ...options }
@@ -234,7 +234,7 @@ export type QueueHandleEvents = {
  * (re)connect, re-list jobs and treat the stream as updates from there.
  */
 export class QueueHandle {
-  #client: ClaudeWorkerClient
+  #client: WorkerDeckClient
   #reconnect: boolean
   #ws: WebSocket | undefined
   #listeners = new Map<keyof QueueHandleEvents, Set<Listener<never>>>()
@@ -242,7 +242,7 @@ export class QueueHandle {
   #retries = 0
   #connectTimer: ReturnType<typeof setTimeout> | undefined
 
-  constructor(client: ClaudeWorkerClient, options: { reconnect?: boolean } = {}) {
+  constructor(client: WorkerDeckClient, options: { reconnect?: boolean } = {}) {
     this.#client = client
     this.#reconnect = options.reconnect ?? true
     // Deferred a tick for the same StrictMode reason as SessionHandle.
@@ -312,7 +312,7 @@ export class QueueHandle {
   }
 }
 
-export class ClaudeWorkerClient {
+export class WorkerDeckClient {
   #options: ClientOptions
   #fetch: typeof fetch
   #WebSocketImpl: typeof WebSocket

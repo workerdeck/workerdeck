@@ -1,5 +1,5 @@
 @import 'tailwindcss';
-@import '@claude-worker/ui/theme.css';
+@import '@workerdeck/ui/theme.css';
 
 @import '@fontsource/inter/400.css';
 @import '@fontsource/inter/500.css';

@@ -1,4 +1,4 @@
-import ClaudeWorkerKit
+import WorkerDeckKit
 import SwiftUI
 import UIKit
 

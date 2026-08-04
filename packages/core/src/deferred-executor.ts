@@ -1,4 +1,4 @@
-import type { ToolExecutionBackend } from '@claude-worker/protocol'
+import type { ToolExecutionBackend } from '@workerdeck/protocol'
 import type {
   ToolExecutionCall,
   ToolExecutionDispatch,

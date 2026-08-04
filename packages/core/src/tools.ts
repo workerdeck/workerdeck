@@ -1,6 +1,6 @@
 import { tool, type Tool, type ToolSet } from 'ai'
 import { z } from 'zod'
-import { createVfs, type SandboxVfs } from '@claude-worker/sandbox'
+import { createVfs, type SandboxVfs } from '@workerdeck/sandbox'
 import type { ToolExecutionResult, ToolExecutor } from './tool-executor.ts'
 import type { WebFetchFn } from './web-fetch.ts'
 

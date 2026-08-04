@@ -1,4 +1,4 @@
-import type { TranscriptItem } from '@claude-worker/react'
+import type { TranscriptItem } from '@workerdeck/react'
 import { Download, FileText } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
 import { formatBytes } from '../../lib/format.ts'

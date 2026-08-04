@@ -6,18 +6,18 @@ import { fileURLToPath } from 'node:url'
 import { ConfigError, loadConfigFile, parseArgs, resolveInstanceConfig } from './config.ts'
 import { startInstance } from './instance.ts'
 
-const HELP = `claude-worker — run a claude-worker instance: session gateway + dashboard, one port.
+const HELP = `workerdeck — run a workerdeck instance: session gateway + dashboard, one port.
 
 Usage
-  claude-worker [options]
-  claude-worker guard [options]     check whether it is safe to restart an instance
+  workerdeck [options]
+  workerdeck guard [options]     check whether it is safe to restart an instance
 
 Options
-  -p, --port <n>            port to listen on (default 8787, CLAUDE_WORKER_PORT)
-      --host <addr>         interface to bind (default 127.0.0.1, CLAUDE_WORKER_HOST)
+  -p, --port <n>            port to listen on (default 8787, WORKERDECK_PORT)
+      --host <addr>         interface to bind (default 127.0.0.1, WORKERDECK_HOST)
       --auth-key <secret>   shared secret, min 12 chars; browsers log in with it,
-                            services send it as x-claude-worker-key
-                            (CLAUDE_WORKER_AUTH_KEY). Unset = no auth on loopback;
+                            services send it as x-workerdeck-key
+                            (WORKERDECK_AUTH_KEY). Unset = no auth on loopback;
                             on any other interface a key is generated instead,
                             printed once, and stored in <state-dir>/auth-key for
                             later starts to reuse.
@@ -36,11 +36,11 @@ Options
                             insecureHosts). Names the host alone, no port.
       --profile <name=dir>  Claude config dir a session may run under (repeatable)
       --cwd-root <path>     restrict session cwds to this root (repeatable,
-                            CLAUDE_WORKER_CWD_ROOTS as a ':'-separated list)
+                            WORKERDECK_CWD_ROOTS as a ':'-separated list)
       --state-dir <path>    where parked sessions are persisted
-                            (default: beside the config file, else ~/.claude-worker)
+                            (default: beside the config file, else ~/.workerdeck)
       --no-parking-store    keep parked sessions in memory only; a restart drops them
-  -c, --config <path>       config file (default: ./claude-worker.config.mjs)
+  -c, --config <path>       config file (default: ./workerdeck.config.mjs)
       --insecure            allow no-auth on a non-loopback address. Only when
                             something in front is doing the authenticating.
       --open                open the dashboard in a browser once it is up
@@ -49,13 +49,13 @@ Options
 
 Config file
   Options that cannot fit on a command line — \`authenticate\`, \`buildRunnerConfig\`,
-  \`createEngineRunner\` are functions — live in claude-worker.config.mjs, which
+  \`createEngineRunner\` are functions — live in workerdeck.config.mjs, which
   default-exports the createWorkerServer options (or a function returning them).
   Flags and env override it. Supplying your own \`authenticate\` turns the built-in
   shared-secret auth off entirely.
 
 Credentials
-  claude-worker implements no Anthropic auth of its own: the official SDK/CLI
+  workerdeck implements no Anthropic auth of its own: the official SDK/CLI
   resolves credentials from the environment, per profile. --auth-key protects this
   gateway, nothing else.
 `
@@ -111,7 +111,7 @@ async function main(argv: string[]): Promise<number> {
   if (config.open) openInBrowser(instance.url)
 
   const shutdown = (signal: string): void => {
-    process.stdout.write(`\n[claude-worker] ${signal} — shutting down\n`)
+    process.stdout.write(`\n[workerdeck] ${signal} — shutting down\n`)
     // Parked sessions are already on disk; this is about letting in-flight
     // requests finish rather than dropping sockets on the floor.
     instance
@@ -133,11 +133,11 @@ main(process.argv.slice(2))
   })
   .catch((error: unknown) => {
     if (error instanceof ConfigError) {
-      process.stderr.write(`[claude-worker] ${error.message}\n`)
+      process.stderr.write(`[workerdeck] ${error.message}\n`)
       process.exit(2)
     }
     process.stderr.write(
-      `[claude-worker] ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
+      `[workerdeck] ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
     )
     process.exit(1)
   })

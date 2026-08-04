@@ -1,4 +1,4 @@
-import ClaudeWorkerKit
+import WorkerDeckKit
 import SwiftUI
 
 /// Start a session. Everything past cwd has a sane default, so the fast path is

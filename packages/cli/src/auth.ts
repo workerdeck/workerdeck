@@ -1,11 +1,11 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { Authenticator } from '@claude-worker/server'
+import type { Authenticator } from '@workerdeck/server'
 
 /**
  * Gateway auth for the turnkey CLI: one shared operator secret, two transports.
  *
- * Services present the secret itself on every request (`x-claude-worker-key`,
+ * Services present the secret itself on every request (`x-workerdeck-key`,
  * or `Authorization: Bearer`). The dashboard cannot: the SPA is prebuilt to
  * call `location.origin + '/v1'` with no headers, and a browser WebSocket
  * handshake carries no custom headers at all. So browsers POST the secret once
@@ -28,7 +28,7 @@ export type CliAuthOptions = {
    * 12 characters throws rather than standing up a guessable gateway.
    */
   secret?: string
-  /** Default 'claude_worker_session'. No `__Host-` prefix — it requires
+  /** Default 'workerdeck_session'. No `__Host-` prefix — it requires
    * `Secure`, and plain-HTTP localhost is the primary deployment. */
   cookieName?: string
   /**
@@ -90,7 +90,7 @@ export type CliAuth = {
 }
 
 const MIN_SECRET_LENGTH = 12
-const DEFAULT_COOKIE_NAME = 'claude_worker_session'
+const DEFAULT_COOKIE_NAME = 'workerdeck_session'
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const DEFAULT_THROTTLE_WINDOW_MS = 15 * 60 * 1000
 const DEFAULT_MAX_FAILURES_PER_IP = 10
@@ -238,7 +238,7 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
   }
 
   const headerSecret = (req: IncomingMessage): string | undefined => {
-    const key = req.headers['x-claude-worker-key']
+    const key = req.headers['x-workerdeck-key']
     if (typeof key === 'string' && key !== '') return key
     const authorization = req.headers.authorization
     if (typeof authorization === 'string') {

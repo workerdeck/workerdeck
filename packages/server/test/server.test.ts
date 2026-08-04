@@ -13,7 +13,7 @@ import type {
   QueueStats,
   ServerFrame,
   SessionInfo,
-} from '@claude-worker/protocol'
+} from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 function fakeHarness() {

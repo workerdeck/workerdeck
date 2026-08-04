@@ -1,8 +1,8 @@
 {
-  "name": "@claude-worker/protocol",
+  "name": "@workerdeck/protocol",
   "version": "0.6.0",
   "type": "module",
-  "description": "The claude-worker wire protocol: typed session events, commands, and REST shapes shared by server and clients. Dependency-free, browser-safe. This protocol is the product boundary — versioned from day one.",
+  "description": "The WorkerDeck wire protocol: typed session events, commands, and REST shapes shared by server and clients. Dependency-free, browser-safe. This protocol is the product boundary — versioned from day one.",
   "license": "MIT",
   "main": "./build/index.mjs",
   "types": "./build/index.d.mts",
@@ -11,7 +11,7 @@
   ],
   "exports": {
     ".": {
-      "@claude-worker/source": "./src/index.ts",
+      "@workerdeck/source": "./src/index.ts",
       "types": "./build/index.d.mts",
       "default": "./build/index.mjs"
     }
@@ -30,11 +30,11 @@
   "author": "Tobias Strebitzer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobiasstrebitzer/claude-worker.git",
+    "url": "git+https://github.com/tobiasstrebitzer/workerdeck.git",
     "directory": "packages/protocol"
   },
-  "homepage": "https://tobiasstrebitzer.github.io/claude-worker/",
-  "bugs": "https://github.com/tobiasstrebitzer/claude-worker/issues",
+  "homepage": "https://tobiasstrebitzer.github.io/workerdeck/",
+  "bugs": "https://github.com/tobiasstrebitzer/workerdeck/issues",
   "keywords": [
     "claude",
     "claude-code",

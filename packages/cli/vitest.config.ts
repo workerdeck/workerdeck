@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   resolve: {
-    conditions: ['@claude-worker/source'],
+    conditions: ['@workerdeck/source'],
     // vite-node externalizes workspace deps to their (unbuilt) build/ entries; alias
     // them to TS source so tests run without a build step.
     alias: [
@@ -10,11 +10,11 @@ export default defineConfig({
       // below to find. Its entry is a hand-written path helper, so point at that
       // directly — and keep it first, since aliases match in order.
       {
-        find: '@claude-worker/web',
+        find: '@workerdeck/web',
         replacement: `${import.meta.dirname}/../web/entry.mjs`,
       },
       {
-        find: /^@claude-worker\/([a-z-]+)$/,
+        find: /^@workerdeck\/([a-z-]+)$/,
         replacement: `${import.meta.dirname}/../$1/src/index.ts`,
       },
     ],

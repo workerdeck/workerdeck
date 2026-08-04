@@ -1,9 +1,9 @@
 {
-  "name": "@claude-worker/docs",
+  "name": "@workerdeck/docs",
   "version": "0.1.1",
   "private": true,
   "type": "module",
-  "description": "Documentation site for claude-worker (Astro, deployed to GitHub Pages).",
+  "description": "Documentation site for WorkerDeck (Astro, deployed to GitHub Pages).",
   "scripts": {
     "dev": "astro dev --port 5192",
     "build": "astro build",
@@ -11,7 +11,7 @@
     "clean": "rimraf dist .astro"
   },
   "dependencies": {
-    "@claude-worker/ui": "workspace:*",
+    "@workerdeck/ui": "workspace:*",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8"
   },

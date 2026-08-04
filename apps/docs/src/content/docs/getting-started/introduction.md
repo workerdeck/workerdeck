@@ -1,24 +1,24 @@
 ---
 title: Introduction
-description: What claude-worker is, why it exists, and what it deliberately does not try to be.
+description: What WorkerDeck is, why it exists, and what it deliberately does not try to be.
 order: 1
 ---
 
-claude-worker runs a **close-to-real Claude Code session** programmatically via the
+WorkerDeck runs a **close-to-real Claude Code session** programmatically via the
 [Anthropic Agent SDK](https://code.claude.com/docs/en/agent-sdk), and exposes it to a host
 application as something it can **embed, watch, and control** — a side-panel that brings Claude
 Code into your app.
 
-It comes in two shapes. `npx claude-worker` is a
-[turnkey instance](/claude-worker/docs/getting-started/run-an-instance/): gateway plus the full
-dashboard on one port, nothing to clone. The `@claude-worker/*` packages are the libraries behind
-it, for [embedding](/claude-worker/docs/guides/embedding/) the same machinery in your own product.
+It comes in two shapes. `npx workerdeck` is a
+[turnkey instance](/workerdeck/docs/getting-started/run-an-instance/): gateway plus the full
+dashboard on one port, nothing to clone. The `@workerdeck/*` packages are the libraries behind
+it, for [embedding](/workerdeck/docs/guides/embedding/) the same machinery in your own product.
 
 ## Why it exists
 
 Claude Code is a terminal program. The Agent SDK lets you run the same engine from Node, but it
 hands you a raw message stream with no hosting layer: no server your web app can talk to, no wire
-protocol, no way to render a transcript or approve a tool call from a browser. claude-worker adds
+protocol, no way to render a transcript or approve a tool call from a browser. WorkerDeck adds
 exactly that missing layer:
 
 - a **session server** your web app can talk to (HTTP + WebSocket),
@@ -40,7 +40,7 @@ repo's skills and `CLAUDE.md` — a prompt can be plain text or a skill invocati
 
 ## Two engines, one protocol
 
-A [profile](/claude-worker/docs/guides/profiles/) decides what a session runs as, including which
+A [profile](/workerdeck/docs/guides/profiles/) decides what a session runs as, including which
 **engine** it runs on:
 
 - **`claude`** (the default) — Claude Code via the Agent SDK, everything described above: a real
@@ -55,14 +55,14 @@ the panel and the job queue are unchanged either way. One worker can serve both.
 
 ## Beyond the live session
 
-- [**Permissions**](/claude-worker/docs/guides/permissions/) — a tool call the session's mode
+- [**Permissions**](/workerdeck/docs/guides/permissions/) — a tool call the session's mode
   doesn't cover becomes a pending approval, and the tool blocks until a client decides.
-- [**Job queue**](/claude-worker/docs/guides/job-queue/) — unattended one-shot runs with bounded
+- [**Job queue**](/workerdeck/docs/guides/job-queue/) — unattended one-shot runs with bounded
   concurrency, token budgets, retries, a watchdog, and webhooks.
 - **Deferred execution** — a session can *park* on work nothing here is doing (a batch job, a
   human approving on Monday) and resume days later, mid-turn, as itself. See
-  [job queue](/claude-worker/docs/guides/job-queue/#deferred-execution) and
-  [deployment](/claude-worker/docs/guides/deployment/#restarts-parked-sessions-and-the-deploy-guard).
+  [job queue](/workerdeck/docs/guides/job-queue/#deferred-execution) and
+  [deployment](/workerdeck/docs/guides/deployment/#restarts-parked-sessions-and-the-deploy-guard).
 
 ## The stack at a glance
 
@@ -70,19 +70,19 @@ Nine libraries, one instance, one dependency rule:
 
 | Package | What it is |
 | --- | --- |
-| `claude-worker` | The turnkey instance: gateway + dashboard on one port, shared-secret auth, durable parking, restart guard. |
-| `@claude-worker/protocol` | The wire protocol: session events, commands, REST shapes. Dependency-free, browser-safe. The product boundary. |
-| `@claude-worker/core` | The engines — `SessionRunner` (Agent SDK) and `AiSdkRunner` (any provider) behind one `Runner` interface. No transport. |
-| `@claude-worker/sandbox` | The untrusted-code boundary: a QuickJS-NG WASM guest with interpreter-enforced limits. Runs server-side or in a tab. |
-| `@claude-worker/queue` | Job queue: one-shot unattended runs with concurrency limits, token budgets, and webhooks. |
-| `@claude-worker/server` | HTTP + WebSocket gateway: session registry, pluggable auth hook, profiles, optional job routes. |
-| `@claude-worker/client` | Typed protocol client for browsers and Node. Zero runtime deps. |
-| `@claude-worker/react` | Headless React layer: `useClaudeSession` + a pure transcript reducer. |
-| `@claude-worker/ui` | Styled agent-control components: `SessionPanel`, transcript, permission prompts, composer. |
-| `@claude-worker/web` | The dashboard as prebuilt static files, for serving from your own host. |
+| `workerdeck` | The turnkey instance: gateway + dashboard on one port, shared-secret auth, durable parking, restart guard. |
+| `@workerdeck/protocol` | The wire protocol: session events, commands, REST shapes. Dependency-free, browser-safe. The product boundary. |
+| `@workerdeck/core` | The engines — `SessionRunner` (Agent SDK) and `AiSdkRunner` (any provider) behind one `Runner` interface. No transport. |
+| `@workerdeck/sandbox` | The untrusted-code boundary: a QuickJS-NG WASM guest with interpreter-enforced limits. Runs server-side or in a tab. |
+| `@workerdeck/queue` | Job queue: one-shot unattended runs with concurrency limits, token budgets, and webhooks. |
+| `@workerdeck/server` | HTTP + WebSocket gateway: session registry, pluggable auth hook, profiles, optional job routes. |
+| `@workerdeck/client` | Typed protocol client for browsers and Node. Zero runtime deps. |
+| `@workerdeck/react` | Headless React layer: `useClaudeSession` + a pure transcript reducer. |
+| `@workerdeck/ui` | Styled agent-control components: `SessionPanel`, transcript, permission prompts, composer. |
+| `@workerdeck/web` | The dashboard as prebuilt static files, for serving from your own host. |
 
 The browser side never imports the server side; the protocol is the only bridge. See
-[Packages](/claude-worker/docs/reference/packages/) for the full map.
+[Packages](/workerdeck/docs/reference/packages/) for the full map.
 
 ## Honest constraints
 
@@ -95,16 +95,16 @@ The browser side never imports the server side; the protocol is the only bridge.
 - **The server trusts its host app.** `CreateSessionRequest` accepts `mcpServers` and tool
   policy; gate session creation behind your own auth and use `allowedCwdRoots` +
   `buildRunnerConfig` to clamp what clients may request. See
-  [Deployment](/claude-worker/docs/guides/deployment/).
+  [Deployment](/workerdeck/docs/guides/deployment/).
 - **No Anthropic auth of its own.** Credentials are resolved by the official SDK/CLI from the
-  operator's environment — see [Auth & Anthropic's terms](/claude-worker/docs/guides/auth/).
+  operator's environment — see [Auth & Anthropic's terms](/workerdeck/docs/guides/auth/).
 
 ## Where to go next
 
-- [Run an instance](/claude-worker/docs/getting-started/run-an-instance/) — `npx claude-worker`,
+- [Run an instance](/workerdeck/docs/getting-started/run-an-instance/) — `npx workerdeck`,
   the flags, and the config file.
-- [Quickstart](/claude-worker/docs/getting-started/quickstart/) — the workspace from source, a
+- [Quickstart](/workerdeck/docs/getting-started/quickstart/) — the workspace from source, a
   first session, a minimal embed.
-- [Embedding](/claude-worker/docs/guides/embedding/) — put the panel in your own app.
-- [Permissions](/claude-worker/docs/guides/permissions/) — the sharp edge that makes it safe to
+- [Embedding](/workerdeck/docs/guides/embedding/) — put the panel in your own app.
+- [Permissions](/workerdeck/docs/guides/permissions/) — the sharp edge that makes it safe to
   point at a real checkout.

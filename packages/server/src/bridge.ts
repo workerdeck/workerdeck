@@ -1,5 +1,5 @@
-import { BrowserBridgeExecutor, type BridgeAnswer, type ToolExecutionResult } from '@claude-worker/core'
-import type { ServerFrame, ToolCallRequestFrame } from '@claude-worker/protocol'
+import { BrowserBridgeExecutor, type BridgeAnswer, type ToolExecutionResult } from '@workerdeck/core'
+import type { ServerFrame, ToolCallRequestFrame } from '@workerdeck/protocol'
 
 type SessionBridge = {
   /** Every client currently attached to this session, in attach order. */

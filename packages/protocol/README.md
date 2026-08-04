@@ -1,21 +1,21 @@
-# @claude-worker/protocol
+# @workerdeck/protocol
 
-The claude-worker wire protocol: typed session events, commands, and REST shapes shared by the
+The WorkerDeck wire protocol: typed session events, commands, and REST shapes shared by the
 server and every client. Dependency-free, browser-safe. This protocol is the product boundary —
 versioned from day one.
 
-Part of [claude-worker](https://github.com/tobiasstrebitzer/claude-worker), the web-controlled
+Part of [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck), the web-controlled
 Agent SDK session runner. Everything else in the stack depends on this package; it depends on
-nothing. [`@claude-worker/core`](https://www.npmjs.com/package/@claude-worker/core) produces these
-events, [`@claude-worker/server`](https://www.npmjs.com/package/@claude-worker/server) puts them
-on the wire, and [`@claude-worker/client`](https://www.npmjs.com/package/@claude-worker/client)
+nothing. [`@workerdeck/core`](https://www.npmjs.com/package/@workerdeck/core) produces these
+events, [`@workerdeck/server`](https://www.npmjs.com/package/@workerdeck/server) puts them
+on the wire, and [`@workerdeck/client`](https://www.npmjs.com/package/@workerdeck/client)
 consumes them. Anthropic API message content is modeled structurally (`ApiMessage`,
 `ContentBlock`) so browsers can render transcripts without the Agent SDK.
 
 ## Install
 
 ```bash
-npm install @claude-worker/protocol
+npm install @workerdeck/protocol
 ```
 
 Type-only for most consumers; the runtime exports are `PROTOCOL_VERSION` and
@@ -32,7 +32,7 @@ import {
   PROTOCOL_VERSION,
   type ServerFrame,
   type SessionCommand,
-} from '@claude-worker/protocol'
+} from '@workerdeck/protocol'
 
 ws.onmessage = ({ data }) => {
   const frame = JSON.parse(data) as ServerFrame
@@ -76,7 +76,7 @@ deliverables, and `SubmitExecutionResultRequest` for delivering a deferred execu
 **Job queue** — `CreateJobRequest` / `JobInfo` / `JobEvent` (including `job_parked` /
 `job_resumed`) / `QueueStats` and the `QueueServerFrame` union for the one-way queue WebSocket,
 used when the server mounts the
-[`@claude-worker/queue`](https://www.npmjs.com/package/@claude-worker/queue) routes.
+[`@workerdeck/queue`](https://www.npmjs.com/package/@workerdeck/queue) routes.
 
 Two engines ride this one protocol: `SessionInfo.engine` says which (`claude` or `provider`), and
 `supportsPermissionMode(engine, mode)` — a real runtime export, the single source of truth for the
@@ -89,4 +89,4 @@ ride through as `sdk_event` rather than breaking older clients.
 ## License
 
 MIT © Tobias Strebitzer —
-[LICENSE](https://github.com/tobiasstrebitzer/claude-worker/blob/master/LICENSE)
+[LICENSE](https://github.com/tobiasstrebitzer/workerdeck/blob/master/LICENSE)

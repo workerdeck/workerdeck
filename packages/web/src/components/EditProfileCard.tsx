@@ -5,7 +5,7 @@ import {
   type ProfileInfo,
   type SessionCapability,
   type UpdateProfileRequest,
-} from '@claude-worker/protocol'
+} from '@workerdeck/protocol'
 import {
   Button,
   Card,
@@ -16,7 +16,7 @@ import {
   PermissionModeSelect,
   Spinner,
   toast,
-} from '@claude-worker/ui'
+} from '@workerdeck/ui'
 import { Save } from 'lucide-react'
 import { client } from '@/lib/client.ts'
 

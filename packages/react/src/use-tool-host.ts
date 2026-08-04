@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { SessionHandle } from '@claude-worker/client'
+import type { SessionHandle } from '@workerdeck/client'
 import {
   createToolCallHost,
   type ToolCallHostOptions,

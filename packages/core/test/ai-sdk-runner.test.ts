@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { tool } from 'ai'
 import { MockLanguageModelV3, convertArrayToReadableStream } from 'ai/test'
 import { z } from 'zod'
-import type { SessionEvent } from '@claude-worker/protocol'
+import type { SessionEvent } from '@workerdeck/protocol'
 import { AiSdkRunner, type AiSdkRunnerConfig } from '../src/index.ts'
 
 const USAGE = {

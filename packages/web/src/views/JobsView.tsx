@@ -6,7 +6,7 @@ import type {
   PermissionMode,
   QuestionBehavior,
   QueueStats,
-} from '@claude-worker/protocol'
+} from '@workerdeck/protocol'
 import {
   Badge,
   Button,
@@ -31,7 +31,7 @@ import {
   formatTokens,
   toast,
   type BadgeProps,
-} from '@claude-worker/ui'
+} from '@workerdeck/ui'
 import { CalendarClock, Eye, ListChecks, Plus, RefreshCw, X } from 'lucide-react'
 import { ModelPicker } from '@/components/ModelPicker.tsx'
 import { ProfileSelect } from '@/components/ProfileSelect.tsx'
@@ -42,7 +42,7 @@ import { useJobs } from '@/lib/useJobs.ts'
 import { useProfileChoice } from '@/lib/useProfiles.ts'
 import { useSessions } from '@/lib/useSessions.ts'
 
-const CWD_KEY = 'claude-worker.last-cwd'
+const CWD_KEY = 'workerdeck.last-cwd'
 
 const JOB_STATUS_META: Record<JobStatus, { label: string; variant: BadgeProps['variant']; busy?: boolean }> = {
   queued: { label: 'Queued', variant: 'neutral' },

@@ -1,7 +1,7 @@
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { ParkedExecution, RunnerSnapshot, SessionRunnerConfig } from '@claude-worker/core'
-import type { SessionInfo } from '@claude-worker/protocol'
+import type { ParkedExecution, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
+import type { SessionInfo } from '@workerdeck/protocol'
 
 /**
  * A session with its live runner torn down, waiting on deferred executions.
@@ -90,7 +90,7 @@ const FORMAT_VERSION = 1
 
 export type FileSessionStoreOptions = {
   /** Directory holding one JSON file per parked session.
-   * Default `<cwd>/.claude-worker/parked`. */
+   * Default `<cwd>/.workerdeck/parked`. */
   dir?: string
   /** A record that could not be read or written. Losing one is losing a session's
    * way back, so this is worth logging — the store itself stays quiet and skips it. */
@@ -118,7 +118,7 @@ export type FileSessionStoreOptions = {
  * — stays until `DELETE /sessions/:id`. Give deferred calls a deadline, or sweep.
  */
 export function createFileSessionStore(options: FileSessionStoreOptions = {}): SessionStore {
-  const dir = options.dir ?? join(process.cwd(), '.claude-worker', 'parked')
+  const dir = options.dir ?? join(process.cwd(), '.workerdeck', 'parked')
   // Encoded, not interpolated: an id is a runner-assigned string, and a '/' in one
   // would otherwise write outside `dir`.
   const fileFor = (id: string): string => join(dir, `${encodeURIComponent(id)}.json`)

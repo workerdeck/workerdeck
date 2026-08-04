@@ -2,8 +2,8 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { ProfileInfo } from '@claude-worker/protocol'
-import type { WorkerServerOptions } from '@claude-worker/server'
+import type { ProfileInfo } from '@workerdeck/protocol'
+import type { WorkerServerOptions } from '@workerdeck/server'
 import type { CliAuthOptions } from './auth.ts'
 
 /**
@@ -19,18 +19,18 @@ import type { CliAuthOptions } from './auth.ts'
  */
 
 const CONFIG_BASENAMES = [
-  'claude-worker.config.mjs',
-  'claude-worker.config.js',
-  'claude-worker.config.cjs',
+  'workerdeck.config.mjs',
+  'workerdeck.config.js',
+  'workerdeck.config.cjs',
 ]
 
 /**
- * What a `claude-worker.config.mjs` default-exports: the server options, plus
+ * What a `workerdeck.config.mjs` default-exports: the server options, plus
  * the few instance-level settings that aren't the server's business. Keeping
  * them in one object means a deployment is one file, not a file plus a
  * memorised command line.
  */
-export type ClaudeWorkerConfig = WorkerServerOptions & {
+export type WorkerDeckConfig = WorkerServerOptions & {
   port?: number
   host?: string
   /** Built-in shared-secret auth. Ignored entirely if you supply `authenticate`. */
@@ -88,7 +88,7 @@ function parsePort(raw: string, source: string): number {
 
 /**
  * Hand-rolled rather than a dependency: the CLI's whole value is that `npx
- * claude-worker` pulls down a small tree, and an arg parser is a hundred lines
+ * workerdeck` pulls down a small tree, and an arg parser is a hundred lines
  * of it.
  */
 export function parseArgs(argv: string[]): CliFlags {
@@ -191,7 +191,7 @@ export function parseArgs(argv: string[]): CliFlags {
 export type LoadedConfig = {
   /** Absolute path of the file that was loaded, or null if there wasn't one. */
   path: string | null
-  options: ClaudeWorkerConfig
+  options: WorkerDeckConfig
 }
 
 /**
@@ -229,7 +229,7 @@ export async function loadConfigFile(explicit?: string, cwd = process.cwd()): Pr
   if (typeof options !== 'object' || options === null) {
     throw new ConfigError(`${path} default export is not an options object`)
   }
-  return { path, options: options as ClaudeWorkerConfig }
+  return { path, options: options as WorkerDeckConfig }
 }
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost', '::ffff:127.0.0.1'])
@@ -279,7 +279,7 @@ export type ResolvedConfig = {
  * by design, which the single-port model already implies.
  */
 export function defaultStateDir(configPath: string | null): string {
-  return configPath ? join(dirname(configPath), '.claude-worker') : join(homedir(), '.claude-worker')
+  return configPath ? join(dirname(configPath), '.workerdeck') : join(homedir(), '.workerdeck')
 }
 
 /** Hostname out of a Host header, minus the port and any IPv6 brackets. */
@@ -332,16 +332,16 @@ export function resolveInstanceConfig(
   env: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
 ): ResolvedConfig {
-  const envPort = env.CLAUDE_WORKER_PORT
-    ? parsePort(env.CLAUDE_WORKER_PORT, 'CLAUDE_WORKER_PORT')
+  const envPort = env.WORKERDECK_PORT
+    ? parsePort(env.WORKERDECK_PORT, 'WORKERDECK_PORT')
     : undefined
   const port = flags.port ?? envPort ?? loaded.options.port ?? 8787
-  const host = flags.host ?? env.CLAUDE_WORKER_HOST ?? loaded.options.host ?? '127.0.0.1'
+  const host = flags.host ?? env.WORKERDECK_HOST ?? loaded.options.host ?? '127.0.0.1'
   // `?? undefined` would keep an empty string, and an empty secret is not a
-  // secret: CLAUDE_WORKER_AUTH_KEY= in an env file means "unset", not "no auth
+  // secret: WORKERDECK_AUTH_KEY= in an env file means "unset", not "no auth
   // but pretend otherwise".
   const authKey =
-    flags.authKey || env.CLAUDE_WORKER_AUTH_KEY || loaded.options.auth?.secret || undefined
+    flags.authKey || env.WORKERDECK_AUTH_KEY || loaded.options.auth?.secret || undefined
   const hostAuthenticates = typeof loaded.options.authenticate === 'function'
 
   const insecureHosts = new Set(
@@ -371,11 +371,11 @@ export function resolveInstanceConfig(
     flags.parking === false || loaded.options.stateDir === null
       ? null
       : (flags.stateDir ??
-        env.CLAUDE_WORKER_STATE_DIR ??
+        env.WORKERDECK_STATE_DIR ??
         loaded.options.stateDir ??
         defaultStateDir(loaded.path))
 
-  const envCwdRoots = env.CLAUDE_WORKER_CWD_ROOTS?.split(':')
+  const envCwdRoots = env.WORKERDECK_CWD_ROOTS?.split(':')
     .filter(Boolean)
     .map((p) => resolve(cwd, p))
   const cwdRoots = flags.cwdRoots.length ? flags.cwdRoots : envCwdRoots

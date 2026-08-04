@@ -1,8 +1,8 @@
 {
-  "name": "@claude-worker/server",
+  "name": "@workerdeck/server",
   "version": "0.6.0",
   "type": "module",
-  "description": "The claude-worker gateway: HTTP + WebSocket session server over @claude-worker/core. Session registry (create/list/attach/interrupt/kill), pluggable auth hook, replay-from-seq attach. Runs anywhere Node runs — needs a real filesystem (no serverless).",
+  "description": "The WorkerDeck gateway: HTTP + WebSocket session server over @workerdeck/core. Session registry (create/list/attach/interrupt/kill), pluggable auth hook, replay-from-seq attach. Runs anywhere Node runs — needs a real filesystem (no serverless).",
   "license": "MIT",
   "main": "./build/index.mjs",
   "types": "./build/index.d.mts",
@@ -11,7 +11,7 @@
   ],
   "exports": {
     ".": {
-      "@claude-worker/source": "./src/index.ts",
+      "@workerdeck/source": "./src/index.ts",
       "types": "./build/index.d.mts",
       "default": "./build/index.mjs"
     }
@@ -24,14 +24,14 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@claude-worker/core": "workspace:*",
-    "@claude-worker/protocol": "workspace:*",
-    "@claude-worker/queue": "workspace:*",
+    "@workerdeck/core": "workspace:*",
+    "@workerdeck/protocol": "workspace:*",
+    "@workerdeck/queue": "workspace:*",
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.217",
-    "@claude-worker/sandbox": "workspace:*",
+    "@workerdeck/sandbox": "workspace:*",
     "@swc-node/register": "^1.11.1",
     "@swc/core": "^1.15.41",
     "@types/node": "^22.10.0",
@@ -43,11 +43,11 @@
   "author": "Tobias Strebitzer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobiasstrebitzer/claude-worker.git",
+    "url": "git+https://github.com/tobiasstrebitzer/workerdeck.git",
     "directory": "packages/server"
   },
-  "homepage": "https://tobiasstrebitzer.github.io/claude-worker/",
-  "bugs": "https://github.com/tobiasstrebitzer/claude-worker/issues",
+  "homepage": "https://tobiasstrebitzer.github.io/workerdeck/",
+  "bugs": "https://github.com/tobiasstrebitzer/workerdeck/issues",
   "keywords": [
     "claude",
     "claude-code",

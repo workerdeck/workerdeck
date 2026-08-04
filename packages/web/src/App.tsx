@@ -1,5 +1,5 @@
 import { RouterProvider } from '@tanstack/react-router'
-import { Toaster } from '@claude-worker/ui'
+import { Toaster } from '@workerdeck/ui'
 import { router } from '@/router.tsx'
 
 export function App() {

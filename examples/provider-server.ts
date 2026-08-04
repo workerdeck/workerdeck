@@ -16,7 +16,7 @@
  *
  * Profiles can also be created and edited from the dashboard's Profiles view:
  * this server wires a file-backed profile store at
- * `.claude-worker/profiles.json` and marks every caller as able to manage them.
+ * `.workerdeck/profiles.json` and marks every caller as able to manage them.
  *
  * Provider sessions get the capability-scoped tool set with a scratch VFS
  * seeded with a demo document, and `eval_script` executes IN YOUR BROWSER TAB:
@@ -27,10 +27,10 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { LanguageModel } from 'ai'
-import type { ProfileInfo } from '@claude-worker/protocol'
-import { createVfs } from '@claude-worker/sandbox'
-import { connectMcpTools, createEngineSession, type ToolExecutor } from '@claude-worker/core'
-import { createFileProfileStore, createWorkerServer } from '@claude-worker/server'
+import type { ProfileInfo } from '@workerdeck/protocol'
+import { createVfs } from '@workerdeck/sandbox'
+import { connectMcpTools, createEngineSession, type ToolExecutor } from '@workerdeck/core'
+import { createFileProfileStore, createWorkerServer } from '@workerdeck/server'
 
 type ProviderSetup = {
   env: string
@@ -133,7 +133,7 @@ const { listen } = createWorkerServer({
   authenticate: () => ({ canManageProfiles: true }),
   profiles,
   // Managed profiles persist next to the repo, so one survives a restart.
-  profileStore: createFileProfileStore(join(process.cwd(), '.claude-worker', 'profiles.json')),
+  profileStore: createFileProfileStore(join(process.cwd(), '.workerdeck', 'profiles.json')),
   // A managed Claude profile may point anywhere under your home directory here;
   // a real deployment scopes this much more tightly.
   allowedConfigDirRoots: [homedir()],

@@ -4,10 +4,10 @@ description: createWorkerServer options, queue options, and the full route table
 order: 3
 ---
 
-[`@claude-worker/server`](https://www.npmjs.com/package/@claude-worker/server) is the gateway:
+[`@workerdeck/server`](https://www.npmjs.com/package/@workerdeck/server) is the gateway:
 HTTP + WebSocket over `node:http` + `ws`, a session registry, and optional job-queue routes.
 Node ≥ 22, real filesystem, no serverless — see
-[Deployment](/claude-worker/docs/guides/deployment/).
+[Deployment](/workerdeck/docs/guides/deployment/).
 
 ## createWorkerServer(options)
 
@@ -21,7 +21,7 @@ Returns a `WorkerServer`: `{ server, registry, queue?, listen(port, host?), clos
 | `authenticate` | — | `(req: IncomingMessage) => unknown \| Promise<unknown>`. Return a truthy principal to accept, null/undefined to reject with 401. Required unless `allowUnauthenticated: true` — the worker must never be exposed bare. Covers every route including WS upgrades. A principal object may carry `allowedProfiles: string[]` to scope which profiles the caller can use, and `canManageProfiles: true` to allow profile create/edit/delete (which also needs `profileStore`). |
 | `allowUnauthenticated` | `false` | Explicit opt-in to run without auth (local dev only). Without it and without `authenticate`, `createWorkerServer` throws. |
 | `allowedCwdRoots` | off | Session `cwd` (and job `session.cwd`) must resolve inside one of these roots, else 403. Also constrains the `dir` of `/sdk-sessions` (which becomes required). Strongly recommended. |
-| `profiles` | auto-detect | What sessions run as (`{ name, configDir?, engine?, provider?, description?, defaults? }[]`). A `claude` profile's `configDir` becomes the session's `CLAUDE_CONFIG_DIR`; an `engine: 'provider'` profile runs the model-agnostic engine instead and needs `createEngineRunner`. More than one declared → creates must name a `profile`; exactly one → implicit. Unset: a `default` profile is auto-created from `$CLAUDE_CONFIG_DIR`/`~/.claude` when present; `[]` disables. See [Profiles](/claude-worker/docs/guides/profiles/). |
+| `profiles` | auto-detect | What sessions run as (`{ name, configDir?, engine?, provider?, description?, defaults? }[]`). A `claude` profile's `configDir` becomes the session's `CLAUDE_CONFIG_DIR`; an `engine: 'provider'` profile runs the model-agnostic engine instead and needs `createEngineRunner`. More than one declared → creates must name a `profile`; exactly one → implicit. Unset: a `default` profile is auto-created from `$CLAUDE_CONFIG_DIR`/`~/.claude` when present; `[]` disables. See [Profiles](/workerdeck/docs/guides/profiles/). |
 | `profileStore` | — | Persistence for dashboard-managed profiles; setting it mounts `POST /profiles` and `PATCH`/`DELETE /profiles/:name`. `createMemoryProfileStore()` and `createFileProfileStore(path)` are bundled; the type is a three-method seam for anything else. Profiles declared in `profiles` are never stored and never editable over HTTP. |
 | `allowedConfigDirRoots` | off | Config-dir roots a *managed* Claude profile may point at (mirrors `allowedCwdRoots`). Unset means the management routes create provider profiles only — naming a config directory is choosing which credential store a session runs on. |
 | `createEngineRunner` | — | `(ctx: { config, profile, bridge }) => Runner \| Promise<Runner>` — build the runner for an `engine: 'provider'` profile. Required if any is declared (the server refuses to start otherwise). Kept as a host hook so the server imports no model SDK and never resolves provider credentials itself; may be async for assembly that has to await (a per-session MCP connect). |
@@ -29,11 +29,11 @@ Returns a `WorkerServer`: `{ server, registry, queue?, listen(port, host?), clos
 | `basePath` | `'/v1'` | URL prefix for all routes. |
 | `maxBodyBytes` | 1 MiB | Max JSON body size. |
 | `disableBypassPermissions` | `false` | Server-wide bypass policy: session/job creates requesting `permissionMode: 'bypassPermissions'` are rejected (403); the `allowDangerouslySkipPermissions` pre-authorization is stripped from requests, and the WS `set_permission_mode` command refuses the mode. Mirrors Claude Code's `permissions.disableBypassPermissionsMode`. |
-| `requireApiKey` | `false` | Fail closed on subscription credentials: a session initializing with `apiKeySource: 'oauth'` is terminated with a `session_error`. Recommended for services and unattended use; off, the server logs a one-time notice instead. See [Auth](/claude-worker/docs/guides/auth/). |
-| `checkCredentials` | `false` (CLI: `true`) | Launch-time credential sanity check: after `listen()` binds, each Claude profile's session environment is probed with the SDK-bundled CLI's `claude auth status` (concurrent, fire-and-forget) and a logged-out profile gets one console warning. Warn, never fail; a probe that can't run stays silent; only the logged-in/logged-out verdict is read. `boolean \| { probe?, timeoutMs? }`. See [Profiles](/claude-worker/docs/guides/profiles/#credentials). |
+| `requireApiKey` | `false` | Fail closed on subscription credentials: a session initializing with `apiKeySource: 'oauth'` is terminated with a `session_error`. Recommended for services and unattended use; off, the server logs a one-time notice instead. See [Auth](/workerdeck/docs/guides/auth/). |
+| `checkCredentials` | `false` (CLI: `true`) | Launch-time credential sanity check: after `listen()` binds, each Claude profile's session environment is probed with the SDK-bundled CLI's `claude auth status` (concurrent, fire-and-forget) and a logged-out profile gets one console warning. Warn, never fail; a probe that can't run stays silent; only the logged-in/logged-out verdict is read. `boolean \| { probe?, timeoutMs? }`. See [Profiles](/workerdeck/docs/guides/profiles/#credentials). |
 | `listSdkSessions` | SDK `listSessions` | Injectable lister for `GET /sdk-sessions` (tests). |
-| `parking` | in-memory store | Deferred execution: `{ store?, parkDelayMs?, expiredGraceMs?, onError? }`. A session that parks on an execution nothing here is running is snapshotted, its runner torn down, and its state kept in the `SessionStore`. Two ship: `MemorySessionStore` (default — a park survives a disconnect, not a restart) and `createFileSessionStore({ dir })` (one JSON file per park, adopted on `listen()`). `parkDelayMs` (2000) is the grace after the last client detaches; `expiredGraceMs` (60000) is the boot grace for a deadline that lapsed while the process was down. See [Deployment](/claude-worker/docs/guides/deployment/#restarts-parked-sessions-and-the-deploy-guard) and [Job queue](/claude-worker/docs/guides/job-queue/#deferred-execution). |
-| `notifications` | off | Out-of-band notification for interactive sessions: `{ webhook?: { url, headers?, events? }, onNotification?, attempts?, retryDelayMs? }`. The four moments a person away from the screen needs — `permission_requested`, `turn_completed`, `session_error`, `session_closed` — POSTed as a `SessionNotification` and/or handed to a local observer. Server-wide, unlike the queue's per-job webhook, and it covers every registry session including job runs and sessions rebuilt after a park. See [Notifications](/claude-worker/docs/guides/notifications/). |
+| `parking` | in-memory store | Deferred execution: `{ store?, parkDelayMs?, expiredGraceMs?, onError? }`. A session that parks on an execution nothing here is running is snapshotted, its runner torn down, and its state kept in the `SessionStore`. Two ship: `MemorySessionStore` (default — a park survives a disconnect, not a restart) and `createFileSessionStore({ dir })` (one JSON file per park, adopted on `listen()`). `parkDelayMs` (2000) is the grace after the last client detaches; `expiredGraceMs` (60000) is the boot grace for a deadline that lapsed while the process was down. See [Deployment](/workerdeck/docs/guides/deployment/#restarts-parked-sessions-and-the-deploy-guard) and [Job queue](/workerdeck/docs/guides/job-queue/#deferred-execution). |
+| `notifications` | off | Out-of-band notification for interactive sessions: `{ webhook?: { url, headers?, events? }, onNotification?, attempts?, retryDelayMs? }`. The four moments a person away from the screen needs — `permission_requested`, `turn_completed`, `session_error`, `session_closed` — POSTed as a `SessionNotification` and/or handed to a local observer. Server-wide, unlike the queue's per-job webhook, and it covers every registry session including job runs and sessions rebuilt after a park. See [Notifications](/workerdeck/docs/guides/notifications/). |
 | `queue` | off | Enable the job queue routes — see below. |
 
 ### QueueServerOptions
@@ -56,7 +56,7 @@ auth-provenance watcher as client sessions):
 | `webhookRetryDelayMs` | 500 | Base delay between webhook delivery retries. |
 | `onEvent` | — | Local observer for every `JobEvent`, in addition to per-job webhooks. |
 
-See [Job queue](/claude-worker/docs/guides/job-queue/) for semantics.
+See [Job queue](/workerdeck/docs/guides/job-queue/) for semantics.
 
 ## Routes
 
@@ -89,4 +89,4 @@ The server implements no Anthropic auth: the SDK/CLI resolves credentials from t
 environment (`ANTHROPIC_API_KEY`, Bedrock/Vertex, or a personal `claude login`). Each session's
 provenance surfaces as `apiKeySource` on `SessionInfo` and the `system_init` event — the full
 posture, including `requireApiKey` and the contributor red lines, is in
-[Auth & Anthropic's terms](/claude-worker/docs/guides/auth/).
+[Auth & Anthropic's terms](/workerdeck/docs/guides/auth/).

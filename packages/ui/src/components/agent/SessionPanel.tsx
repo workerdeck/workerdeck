@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { ClaudeWorkerClient } from '@claude-worker/client'
-import { PROVIDER_PERMISSION_MODES } from '@claude-worker/protocol'
-import { useClaudeSession, useToolCallHost } from '@claude-worker/react'
+import type { WorkerDeckClient } from '@workerdeck/client'
+import { PROVIDER_PERMISSION_MODES } from '@workerdeck/protocol'
+import { useClaudeSession, useToolCallHost } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
 import { Composer } from './Composer.tsx'
 import { ModelSelect } from './ModelSelect.tsx'
@@ -12,7 +12,7 @@ import { StatusBar } from './StatusBar.tsx'
 import { Transcript } from './Transcript.tsx'
 
 export interface SessionPanelProps {
-  client: ClaudeWorkerClient
+  client: WorkerDeckClient
   sessionId: string | undefined
   /** Optional slot rendered at the top, above the status bar. */
   header?: ReactNode

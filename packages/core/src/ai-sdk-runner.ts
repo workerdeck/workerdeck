@@ -17,8 +17,8 @@ import type {
   SessionInfo,
   SessionStatus,
   ToolExecutionBackend,
-} from '@claude-worker/protocol'
-import type { SandboxVfs } from '@claude-worker/sandbox'
+} from '@workerdeck/protocol'
+import type { SandboxVfs } from '@workerdeck/sandbox'
 import type {
   ParkedExecution,
   PermissionDecision,

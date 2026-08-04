@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { ListProfilesResponse, ProfileInfo } from '@claude-worker/protocol'
+import type { ListProfilesResponse, ProfileInfo } from '@workerdeck/protocol'
 import { client } from './client.ts'
 
 // Profiles change rarely (server config, plus whatever the Profiles view creates)
@@ -43,7 +43,7 @@ export function useProfiles(): ProfileInfo[] {
   return useProfileList().profiles
 }
 
-const CHOICE_KEY = 'claude-worker.last-profile'
+const CHOICE_KEY = 'workerdeck.last-profile'
 
 /** Profiles plus a persisted selection for the create forms. `profile` is always a
  * declared name (stored choice when still valid, else the first) — '' while none.

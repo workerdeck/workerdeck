@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { TranscriptState } from '@claude-worker/react'
-import type { ContextUsage, RateLimitInfo } from '@claude-worker/protocol'
+import type { TranscriptState } from '@workerdeck/react'
+import type { ContextUsage, RateLimitInfo } from '@workerdeck/protocol'
 import { WifiOff } from 'lucide-react'
 import { Badge } from '../ui/Badge.tsx'
 import { ProgressRing } from '../ui/ProgressRing.tsx'

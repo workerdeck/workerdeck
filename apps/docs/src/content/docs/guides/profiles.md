@@ -117,7 +117,7 @@ By default the profile set *is* startup config and the API only reads it. Pass a
 to let the dashboard create, edit, and delete profiles too:
 
 ```ts
-import { createFileProfileStore } from '@claude-worker/server'
+import { createFileProfileStore } from '@workerdeck/server'
 
 createWorkerServer({
   authenticate: async (req) => {
@@ -125,7 +125,7 @@ createWorkerServer({
     return user && { allowedProfiles: user.profiles, canManageProfiles: user.isAdmin }
   },
   profiles: [{ name: 'ada', configDir: '/home/ada/.claude' }], // still code, still immutable
-  profileStore: createFileProfileStore('/var/lib/claude-worker/profiles.json'),
+  profileStore: createFileProfileStore('/var/lib/workerdeck/profiles.json'),
   allowedConfigDirRoots: ['/Users'], // omit to allow managed provider profiles only
 })
 ```
@@ -155,7 +155,7 @@ session and job creation (403 otherwise) and filters `GET /profiles` to it, so p
 show what the caller may use. On a multi-operator machine this scoping is what keeps one worker
 serving several people from degrading into account sharing — give each caller their own
 profile(s) rather than a free choice. See
-[Auth & Anthropic's terms](/claude-worker/docs/guides/auth/) for why that line matters.
+[Auth & Anthropic's terms](/workerdeck/docs/guides/auth/) for why that line matters.
 
 ## Credentials
 
@@ -172,7 +172,7 @@ official CLI reads, via its own `CLAUDE_CONFIG_DIR` mechanism. Two consequences:
   why the default profile is never pinned, and why a profile pointing at any *other* directory
   needs credentials of its own: run `CLAUDE_CONFIG_DIR=<dir> claude auth login` there, or
   inject a long-lived `CLAUDE_CODE_OAUTH_TOKEN` via `buildRunnerConfig`. The server's
-  `checkCredentials` option (on by default in the `claude-worker` CLI) probes each profile
+  `checkCredentials` option (on by default in the `workerdeck` CLI) probes each profile
   with `claude auth status` at startup and warns — never fails — when a profile looks
   logged out. Only the logged-in/logged-out verdict is read; no credential or account
   material is touched.

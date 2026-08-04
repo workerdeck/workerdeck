@@ -1,4 +1,4 @@
-import ClaudeWorkerKit
+import WorkerDeckKit
 import SwiftUI
 
 /// The host's home screen: live sessions, plus a Resume tab over the Agent SDK's

@@ -13,7 +13,7 @@ Edge/serverless functions cannot host this. Realistic targets:
 - a container with min-instances (so the process and its disk survive between requests),
 - any Node ≥ 22 host with a real filesystem.
 
-Node ≥ 22 also matters for the client side of the stack: `@claude-worker/client` relies on
+Node ≥ 22 also matters for the client side of the stack: `@workerdeck/client` relies on
 platform `fetch` and `WebSocket` (global in Node ≥ 22), with `fetchImpl`/`WebSocketImpl`
 injectable for older runtimes.
 
@@ -28,7 +28,7 @@ Agent SDK's — the one you feed back as `resume`.
 
 Multi-host session storage is still on the roadmap: the bundled `SessionStore` implementations
 are both single-process (see below). If you need the queue to span hosts, the `QueueAdapter` seam
-is the supported path — see [Job queue](/claude-worker/docs/guides/job-queue/).
+is the supported path — see [Job queue](/workerdeck/docs/guides/job-queue/).
 
 ## Restarts, parked sessions, and the deploy guard
 
@@ -38,12 +38,12 @@ a deploy that restarts the process is how parked work actually gets lost — so 
 bundled file store:
 
 ```ts
-import { createFileSessionStore, createWorkerServer } from '@claude-worker/server'
+import { createFileSessionStore, createWorkerServer } from '@workerdeck/server'
 
 createWorkerServer({
   authenticate,
   parking: {
-    store: createFileSessionStore({ dir: '/var/lib/claude-worker/parked' }),
+    store: createFileSessionStore({ dir: '/var/lib/workerdeck/parked' }),
     // Boot grace for a deadline that lapsed while the process was down (default 60s):
     // the watchdog must not fail every parked execution at t=0.
     expiredGraceMs: 60_000,
@@ -63,14 +63,14 @@ before the server accepts a request. Three things to know:
   same sessions.
 
 Durability doesn't make a restart free. A turn actually in flight dies with the process, as does
-a pending permission request, and a running job is left claimed. `claude-worker guard` asks a live
+a pending permission request, and a running job is left claimed. `workerdeck guard` asks a live
 worker whether anything would be lost and exits non-zero while the answer is yes. It needs no
 checkout and doesn't care what started the worker:
 
 ```bash
 # 0 = safe to restart, 1 = still busy, 2 = could not tell (bad URL, auth, unexpected response)
-npx claude-worker guard --url https://worker.internal/v1 --token "$TOKEN" \
-  --wait 300 --allow-parked && systemctl restart claude-worker
+npx workerdeck guard --url https://worker.internal/v1 --token "$TOKEN" \
+  --wait 300 --allow-parked && systemctl restart workerdeck
 ```
 
 `--token` is sent as `Authorization: Bearer`; for a host whose `authenticate` hook reads something
@@ -101,7 +101,7 @@ use a ticket query param (`buildWsUrl` on the client) or cookies for socket auth
 Anthropic credentials are a separate concern entirely: the server implements no Anthropic auth;
 the SDK/CLI resolves credentials from the operator's environment. For services, set
 `ANTHROPIC_API_KEY` and consider `requireApiKey: true` to fail closed on subscription
-credentials — see [Auth & Anthropic's terms](/claude-worker/docs/guides/auth/).
+credentials — see [Auth & Anthropic's terms](/workerdeck/docs/guides/auth/).
 
 ## Clamp what clients may request
 
@@ -129,6 +129,6 @@ const worker = createWorkerServer({
 })
 ```
 
-See the [server reference](/claude-worker/docs/reference/server/) for every option, and
-[Permissions](/claude-worker/docs/guides/permissions/) for the approval flow those clamps feed
+See the [server reference](/workerdeck/docs/reference/server/) for every option, and
+[Permissions](/workerdeck/docs/guides/permissions/) for the approval flow those clamps feed
 into.

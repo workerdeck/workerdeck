@@ -9,9 +9,9 @@ import Observation
 @MainActor
 @Observable
 final class HostStore {
-  private static let service = "dev.claudeworker.ios.hosts"
+  private static let service = "bi.atomic.workerdeck.ios.hosts"
   private static let account = "hosts"
-  private static let selectionKey = "dev.claudeworker.ios.selectedHostID"
+  private static let selectionKey = "bi.atomic.workerdeck.ios.selectedHostID"
 
   private(set) var hosts: [Host] = []
   private(set) var selectedHostID: UUID?

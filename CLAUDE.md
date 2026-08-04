@@ -1,4 +1,4 @@
-# claude-worker
+# WorkerDeck
 
 Web-controlled Agent SDK session runner: embed, watch, and control a close-to-real Claude Code
 session from a host app; a second, model-agnostic engine runs any AI SDK provider on the same
@@ -54,8 +54,8 @@ protocol. Read these before changing scope or structure:
   `dist/`, so every one of them is a devDep; the entry (`entry.mjs`, hand-written, never bundled) is
   a path to `dist/`, not a component. Two constraints are baked in at build time: no vite `base`, so
   it must mount at a domain root, and `location.origin + '/v1'`, so the gateway must be same-origin.
-- `packages/cli` — published unscoped as **`claude-worker`**, the turnkey instance (`npx
-  claude-worker`): gateway + dashboard on ONE port via the server's `fallback` hook. Single-origin
+- `packages/cli` — published unscoped as **`workerdeck`**, the turnkey instance (`npx
+  WorkerDeck`): gateway + dashboard on ONE port via the server's `fallback` hook. Single-origin
   is load-bearing, not cosmetic — a tab can't put a header on a WS handshake, so a cookie is the
   only credential it can present on an attach, and cookies are per-origin. `--auth-key` is one
   secret over two transports (login-page cookie for browsers, header for services); a config file
@@ -64,9 +64,9 @@ protocol. Read these before changing scope or structure:
   `<stateDir>/auth-key`, 0600), and only an explicit `--insecure` / `insecureHosts` declaration
   serves unauthenticated — `insecureHosts` entries double as accepted Host headers. The
   resolve/materialize seam has an assert that must stay: see `docs/gotchas.md`. The web
-  dashboard is a real runtime dep on `@claude-worker/web` — `resolveWebRoot()` is just its exported
+  dashboard is a real runtime dep on `@workerdeck/web` — `resolveWebRoot()` is just its exported
   `dashboardDir` — so there is one dashboard, versioned in lockstep, not a vendored copy. Also
-  hosts `claude-worker guard`.
+  hosts `workerdeck guard`.
 - `apps/docs` — Astro site → Pages via `docs.yml`. `examples` — dev entries with root-level deps
   the packages must not take, plus `dev-server.config.mjs`, which is what `pnpm server` runs: dev
   goes through the real CLI, so there is no second server entry point to keep in sync (config
@@ -74,7 +74,7 @@ protocol. Read these before changing scope or structure:
   brand assets (rules in `BRAND.md`); the mark is inlined in `BrandMark.tsx`, `Header.astro` and
   both favicons — keep geometry identical.
 - `apps/ios` — native iOS remote control (SwiftUI + XcodeGen; invisible to pnpm/turbo — no
-  package.json). `ClaudeWorkerKit/` is a hand-written Swift mirror of `packages/protocol` plus a
+  package.json). `WorkerDeckKit/` is a hand-written Swift mirror of `packages/protocol` plus a
   client and a port of the react transcript reducer — protocol or transcript changes must be
   mirrored there (`WorkerProtocol.version` tracks `PROTOCOL_VERSION`); see `apps/ios/README.md`.
   Zero third-party Swift deps; auth is the header transport (no cookie machinery).
@@ -89,8 +89,8 @@ the build-graph cycle turbo refuses.
 pnpm workspace + turbo (`pnpm typecheck|test|build|lint`); typecheck is `tsgo` (TS 7 preview) and
 covers `smoke/` + `examples/` too via `typecheck:extras` (they have tsconfigs but aren't packages,
 so turbo never ran them); lint oxlint; `build/` via tsdown only on `prepack`/CI. Dev never builds
-— the `@claude-worker/source` export condition resolves packages to `src/index.ts` (Node runs with
-`--conditions=@claude-worker/source` + swc-node; Vite/vitest set `resolve.conditions`, vitest also
+— the `@workerdeck/source` export condition resolves packages to `src/index.ts` (Node runs with
+`--conditions=@workerdeck/source` + swc-node; Vite/vitest set `resolve.conditions`, vitest also
 aliases). In-package imports use explicit `.ts` extensions. Releases go through **pnpm only** —
 `npm publish` would ship `workspace:*` verbatim; see the packaging section of `docs/gotchas.md`
 before touching versioning or the publish workflow.
@@ -110,7 +110,7 @@ one — the fake harness can't validate those payloads. Model-agnostic smokes li
 - push: yes — branch `master`, repo is public, and every push deploys the docs site.
 - version_bump: yes — `pnpm version:set <x.y.z> && pnpm install --lockfile-only` (the 10 packages
   only; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.5.0 published.
-- publish: yes — npm `@claude-worker` org, always through pnpm. Push a `v<x.y.z>` tag:
+- publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
   with `packages/*/package.json`, and skipping versions already on the registry — a half-failed
@@ -122,7 +122,7 @@ one — the fake harness can't validate those payloads. Model-agnostic smokes li
 
 ## Auth red lines (non-negotiable)
 
-claude-worker implements NO Anthropic auth: credentials are resolved by the official SDK/CLI from
+WorkerDeck implements NO Anthropic auth: credentials are resolved by the official SDK/CLI from
 the operator's environment. Never add — and reject any PR that adds — claude.ai OAuth flows or
 login UI, subscription-token extraction/storage/forwarding, Claude Code client-identity spoofing,
 or multi-account pooling / rate-limit circumvention. Policy enforcement lives in configuration

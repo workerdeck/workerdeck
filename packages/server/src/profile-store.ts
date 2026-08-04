@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { ProfileInfo } from '@claude-worker/protocol'
+import type { ProfileInfo } from '@workerdeck/protocol'
 
 /**
  * Where dashboard-managed profiles live. The seam exists for the same reason
@@ -37,13 +37,13 @@ export function createMemoryProfileStore(seed: ProfileInfo[] = []): ProfileStore
 
 /**
  * JSON-file store: one array of profiles at `path` (default
- * `<cwd>/.claude-worker/profiles.json`). Writes go through a temp file and a
+ * `<cwd>/.workerdeck/profiles.json`). Writes go through a temp file and a
  * rename so a crash mid-write cannot truncate the operator's profile list.
  *
  * Single-process by design, exactly like the bundled queue adapter — two servers
  * sharing one file would race. That is what the seam is for.
  */
-export function createFileProfileStore(path = join(process.cwd(), '.claude-worker', 'profiles.json')): ProfileStore {
+export function createFileProfileStore(path = join(process.cwd(), '.workerdeck', 'profiles.json')): ProfileStore {
   const read = (): Map<string, ProfileInfo> => {
     try {
       const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown

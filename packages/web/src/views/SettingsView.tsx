@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle, PermissionModeSelect } from '@claude-worker/ui'
+import { Card, CardContent, CardHeader, CardTitle, PermissionModeSelect } from '@workerdeck/ui'
 import { ModelPicker } from '@/components/ModelPicker.tsx'
 import { ThemeToggle } from '@/components/shell/ThemeToggle.tsx'
 import {

@@ -4,12 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>claude-worker</title>
+    <title>workerdeck</title>
     <script>
       ;(function () {
         var el = document.documentElement
         try {
-          var t = localStorage.getItem('claude-worker.theme')
+          var t = localStorage.getItem('workerdeck.theme')
           var dark =
             t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
           el.setAttribute('data-theme', dark ? 'dark' : 'light')

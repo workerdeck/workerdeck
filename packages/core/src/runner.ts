@@ -18,7 +18,7 @@ import type {
   SessionEventBody,
   SessionInfo,
   SessionStatus,
-} from '@claude-worker/protocol'
+} from '@workerdeck/protocol'
 import { InputQueue } from './input-queue.ts'
 import { normalizeSdkMessage, toApiMessage } from './normalize.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from './runner-interface.ts'

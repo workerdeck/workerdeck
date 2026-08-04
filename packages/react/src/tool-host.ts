@@ -1,6 +1,6 @@
-import type { SessionHandle } from '@claude-worker/client'
-import type { RunScriptResult, SandboxEngine, SandboxVfs } from '@claude-worker/sandbox'
-import type { ToolCallRequestFrame } from '@claude-worker/protocol'
+import type { SessionHandle } from '@workerdeck/client'
+import type { RunScriptResult, SandboxEngine, SandboxVfs } from '@workerdeck/sandbox'
+import type { ToolCallRequestFrame } from '@workerdeck/protocol'
 
 /** What the host was asked to do and how it went (for UI/telemetry). */
 export type ToolHostExecution = {
@@ -32,7 +32,7 @@ export type ToolCallHostOptions = {
   /**
    * Load the WASM guest engine. Called at most once, on the first bridged call
    * — nothing is downloaded or parsed until a session actually bridges one.
-   * Defaults to `@claude-worker/sandbox` with the single-file browser build.
+   * Defaults to `@workerdeck/sandbox` with the single-file browser build.
    */
   loadEngine?: () => Promise<SandboxEngine>
   /**
@@ -97,7 +97,7 @@ export function createToolCallHost(
     track({ executionId: frame.executionId, toolName: frame.toolName, status: 'running', startedAt })
 
     try {
-      const sandbox = await import('@claude-worker/sandbox')
+      const sandbox = await import('@workerdeck/sandbox')
       const vfs = sandbox.createVfs(frame.vfsSeed)
       // Never exceed what the server asked for: it owns the deadline it will
       // give up at, and answering after that is wasted work.
@@ -188,7 +188,7 @@ export function createToolCallHost(
  * .wasm fetch, and nothing at all until the first bridged call. */
 async function defaultLoadEngine(): Promise<SandboxEngine> {
   const [sandbox, variant] = await Promise.all([
-    import('@claude-worker/sandbox'),
+    import('@workerdeck/sandbox'),
     import('@jitl/quickjs-singlefile-browser-release-asyncify'),
   ])
   return sandbox.loadEngine(variant as never)

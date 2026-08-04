@@ -1,27 +1,27 @@
-# @claude-worker/web
+# @workerdeck/web
 
-The [claude-worker](https://github.com/tobiasstrebitzer/claude-worker) dashboard, **prebuilt**:
+The [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck) dashboard, **prebuilt**:
 session list, create/resume flow, live transcript panel with approve/deny controls, jobs, profiles,
 settings. TanStack Router, React 19, Tailwind v4.
 
 This package ships static files and **no runtime dependencies** — React, the router and the rest
 are compiled into `dist/`, not installed by you.
 
-> Most people want [`claude-worker`](https://www.npmjs.com/package/claude-worker) instead:
-> `npx claude-worker` serves this dashboard *and* the gateway on one port, already wired — it
+> Most people want [`workerdeck`](https://www.npmjs.com/package/workerdeck) instead:
+> `npx workerdeck` serves this dashboard *and* the gateway on one port, already wired — it
 > depends on this package to do it. Reach for this one directly when you want to serve the
 > dashboard from your own host.
 
 ## Serving it
 
 ```js
-import { dashboardDir } from '@claude-worker/web'
+import { dashboardDir } from '@workerdeck/web'
 // -> absolute path to a directory containing index.html + assets/
 ```
 
 ```js
 import express from 'express'
-import { dashboardDir, dashboardIndexHtml } from '@claude-worker/web'
+import { dashboardDir, dashboardIndexHtml } from '@workerdeck/web'
 
 const app = express()
 // Hashed filenames — safe to cache forever.
@@ -49,11 +49,11 @@ Cache headers matter: hashed assets `immutable`, `index.html` `no-cache`.
 The dist is a plain vite build, so a fork can change any of the above:
 
 ```bash
-git clone https://github.com/tobiasstrebitzer/claude-worker
-cd claude-worker && pnpm install
-pnpm --filter @claude-worker/web run build   # -> packages/web/dist
+git clone https://github.com/tobiasstrebitzer/workerdeck
+cd workerdeck && pnpm install
+pnpm --filter @workerdeck/web run build   # -> packages/web/dist
 ```
 
-`claude-worker` will serve a custom build if you point its config at one (`webRoot`).
+`workerdeck` will serve a custom build if you point its config at one (`webRoot`).
 
 MIT

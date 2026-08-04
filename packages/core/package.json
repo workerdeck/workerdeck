@@ -1,8 +1,8 @@
 {
-  "name": "@claude-worker/core",
+  "name": "@workerdeck/core",
   "version": "0.6.0",
   "type": "module",
-  "description": "The claude-worker session runner: wraps the Agent SDK's query() with a push-based input queue, promotes canUseTool calls into pending approvals, normalizes SDKMessages into wire-protocol events, and keeps a seq-numbered event log for attach/replay. Pure library, no transport.",
+  "description": "The WorkerDeck session runner: wraps the Agent SDK's query() with a push-based input queue, promotes canUseTool calls into pending approvals, normalizes SDKMessages into wire-protocol events, and keeps a seq-numbered event log for attach/replay. Pure library, no transport.",
   "license": "MIT",
   "main": "./build/index.mjs",
   "types": "./build/index.d.mts",
@@ -11,7 +11,7 @@
   ],
   "exports": {
     ".": {
-      "@claude-worker/source": "./src/index.ts",
+      "@workerdeck/source": "./src/index.ts",
       "types": "./build/index.d.mts",
       "default": "./build/index.mjs"
     }
@@ -29,8 +29,8 @@
     "@ai-sdk/moonshotai": "^3.0.18",
     "@ai-sdk/openai": "^4.0.21",
     "@anthropic-ai/claude-agent-sdk": "^0.3.217",
-    "@claude-worker/protocol": "workspace:*",
-    "@claude-worker/sandbox": "workspace:*",
+    "@workerdeck/protocol": "workspace:*",
+    "@workerdeck/sandbox": "workspace:*",
     "ai": "^7.0.38"
   },
   "devDependencies": {
@@ -44,11 +44,11 @@
   "author": "Tobias Strebitzer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobiasstrebitzer/claude-worker.git",
+    "url": "git+https://github.com/tobiasstrebitzer/workerdeck.git",
     "directory": "packages/core"
   },
-  "homepage": "https://tobiasstrebitzer.github.io/claude-worker/",
-  "bugs": "https://github.com/tobiasstrebitzer/claude-worker/issues",
+  "homepage": "https://tobiasstrebitzer.github.io/workerdeck/",
+  "bugs": "https://github.com/tobiasstrebitzer/workerdeck/issues",
   "keywords": [
     "claude",
     "claude-code",

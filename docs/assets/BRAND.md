@@ -1,4 +1,4 @@
-# claude-worker brand
+# WorkerDeck brand
 
 ## The mark — "Session Stack"
 

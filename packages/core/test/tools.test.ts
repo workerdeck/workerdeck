@@ -3,8 +3,8 @@ import { MockLanguageModelV3, convertArrayToReadableStream } from 'ai/test'
 import { tool } from 'ai'
 import { z } from 'zod'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
-import { createVfs, loadEngine, type SandboxEngine } from '@claude-worker/sandbox'
-import type { SessionEvent } from '@claude-worker/protocol'
+import { createVfs, loadEngine, type SandboxEngine } from '@workerdeck/sandbox'
+import type { SessionEvent } from '@workerdeck/protocol'
 import {
   AiSdkRunner,
   QuickJsExecutor,

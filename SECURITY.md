@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report security issues privately through GitHub's
-[private vulnerability reporting](https://github.com/tobiasstrebitzer/claude-worker/security/advisories/new)
+[private vulnerability reporting](https://github.com/tobiasstrebitzer/workerdeck/security/advisories/new)
 (the **Security** tab → *Report a vulnerability*) rather than as a public issue. Include what an
 attacker gains, how to reproduce it, and the affected version.
 
@@ -16,7 +16,7 @@ disclosing publicly.
 Only the latest published minor is supported. Fixes land on `master` and go out as a new patch
 release; there are no long-lived maintenance branches yet.
 
-## Threat model — what claude-worker assumes
+## Threat model — what WorkerDeck assumes
 
 A worker runs tool-wielding agent sessions against real directories. Anyone who can reach the
 gateway, and is authorized by it, can effectively run code on the host. That is the point of the
@@ -51,10 +51,10 @@ Out of scope, because they are documented properties rather than defects:
   identity-aware proxy in front if you need to know who is on the other end.
 - Anything requiring **operator-level access** to the host or its environment variables.
 
-## What claude-worker never touches
+## What WorkerDeck never touches
 
 It performs no Anthropic authentication of its own: the official SDK/CLI resolves credentials from
 the operator's environment. It never implements claude.ai OAuth, never reads, stores, or proxies
-tokens, and never touches `~/.claude` credentials. A report that claude-worker mishandles Anthropic
+tokens, and never touches `~/.claude` credentials. A report that WorkerDeck mishandles Anthropic
 credentials is very much in scope — see
-[Auth & Anthropic's terms](https://tobiasstrebitzer.github.io/claude-worker/docs/guides/auth/).
+[Auth & Anthropic's terms](https://tobiasstrebitzer.github.io/workerdeck/docs/guides/auth/).

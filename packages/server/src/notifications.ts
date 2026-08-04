@@ -1,5 +1,5 @@
-import type { SessionNotification, SessionWebhookConfig } from '@claude-worker/protocol'
-import type { Runner } from '@claude-worker/core'
+import type { SessionNotification, SessionWebhookConfig } from '@workerdeck/protocol'
+import type { Runner } from '@workerdeck/core'
 
 export type SessionNotificationOptions = {
   /** POST target for every notification. */

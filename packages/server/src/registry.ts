@@ -1,5 +1,5 @@
-import { SessionRunner, type Runner, type SessionRunnerConfig } from '@claude-worker/core'
-import type { SessionInfo } from '@claude-worker/protocol'
+import { SessionRunner, type Runner, type SessionRunnerConfig } from '@workerdeck/core'
+import type { SessionInfo } from '@workerdeck/protocol'
 
 export type SessionRegistryOptions = {
   /**

@@ -45,7 +45,7 @@ export function renderLoginPage(options: LoginPageOptions): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>claude-worker</title>
+<title>workerdeck</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -86,7 +86,7 @@ export function renderLoginPage(options: LoginPageOptions): string {
 </head>
 <body>
   <form method="post" action="${escapeHtml(action)}">
-    <h1>claude-worker</h1>
+    <h1>workerdeck</h1>
     <p class="sub">This instance is protected. Enter its access key to continue.</p>
     ${alert}
     <label for="key">Access key</label>

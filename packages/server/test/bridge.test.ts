@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { ServerFrame, SessionInfo, ToolCallRequestFrame } from '@claude-worker/protocol'
-import type { ToolExecutionResult } from '@claude-worker/core'
+import type { ServerFrame, SessionInfo, ToolCallRequestFrame } from '@workerdeck/protocol'
+import type { ToolExecutionResult } from '@workerdeck/core'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 /** Minimal stand-in for the SDK: the bridge tests never drive the model. */

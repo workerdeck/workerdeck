@@ -1,6 +1,6 @@
 import Testing
 
-@testable import ClaudeWorkerKit
+@testable import WorkerDeckKit
 
 @Suite("MarkdownBlocks")
 struct MarkdownBlocksTests {

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Options, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { ClaudeAuthStatus } from '@claude-worker/core'
+import type { ClaudeAuthStatus } from '@workerdeck/core'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 /**

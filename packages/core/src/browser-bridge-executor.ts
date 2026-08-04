@@ -1,4 +1,4 @@
-import type { ToolCallRequestFrame, ToolExecutionOutput } from '@claude-worker/protocol'
+import type { ToolCallRequestFrame, ToolExecutionOutput } from '@workerdeck/protocol'
 import { PendingRequestRegistry, type PendingOutcome } from './pending-registry.ts'
 import type {
   ToolExecutionCall,

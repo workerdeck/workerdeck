@@ -1,4 +1,4 @@
-import type { PermissionMode } from '@claude-worker/protocol'
+import type { PermissionMode } from '@workerdeck/protocol'
 import {
   Select,
   SelectContent,

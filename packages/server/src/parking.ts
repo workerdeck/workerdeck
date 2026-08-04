@@ -3,8 +3,8 @@ import type {
   Runner,
   SessionRunnerConfig,
   ToolExecutionResult,
-} from '@claude-worker/core'
-import type { SessionInfo } from '@claude-worker/protocol'
+} from '@workerdeck/core'
+import type { SessionInfo } from '@workerdeck/protocol'
 import type { SessionRegistry } from './registry.ts'
 import type { ParkedSessionRecord, SessionStore } from './session-store.ts'
 

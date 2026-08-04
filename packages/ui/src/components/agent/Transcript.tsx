@@ -1,4 +1,4 @@
-import type { TranscriptItem, TranscriptState } from '@claude-worker/react'
+import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
 import { formatCost, formatDuration } from '../../lib/format.ts'
 import { Conversation, ConversationContent, ConversationScrollButton } from './Conversation.tsx'

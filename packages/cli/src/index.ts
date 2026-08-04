@@ -16,7 +16,7 @@ export {
   resolveInstanceConfig,
 } from './config.ts'
 export type {
-  ClaudeWorkerConfig,
+  WorkerDeckConfig,
   CliFlags,
   LoadedConfig,
   ResolvedConfig,

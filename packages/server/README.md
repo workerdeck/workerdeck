@@ -1,26 +1,26 @@
-# @claude-worker/server
+# @workerdeck/server
 
-The claude-worker gateway: HTTP + WebSocket session server over
-[`@claude-worker/core`](https://www.npmjs.com/package/@claude-worker/core). Session registry
+The WorkerDeck gateway: HTTP + WebSocket session server over
+[`@workerdeck/core`](https://www.npmjs.com/package/@workerdeck/core). Session registry
 (create/list/attach/interrupt/kill), pluggable auth hook, replay-from-seq attach, profiles,
 parked-session storage, optional job-queue routes. Runs anywhere Node runs — needs a real
 filesystem (no serverless).
 
-Want the whole thing running rather than embedded? [`claude-worker`](https://www.npmjs.com/package/claude-worker)
-wraps this package and the dashboard into one command: `npx claude-worker`.
+Want the whole thing running rather than embedded? [`workerdeck`](https://www.npmjs.com/package/workerdeck)
+wraps this package and the dashboard into one command: `npx workerdeck`.
 
-Part of [claude-worker](https://github.com/tobiasstrebitzer/claude-worker). It speaks the
-[`@claude-worker/protocol`](https://www.npmjs.com/package/@claude-worker/protocol) wire format;
-pair it with [`@claude-worker/client`](https://www.npmjs.com/package/@claude-worker/client) in the
-host app and [`@claude-worker/ui`](https://www.npmjs.com/package/@claude-worker/ui) for embeddable
+Part of [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck). It speaks the
+[`@workerdeck/protocol`](https://www.npmjs.com/package/@workerdeck/protocol) wire format;
+pair it with [`@workerdeck/client`](https://www.npmjs.com/package/@workerdeck/client) in the
+host app and [`@workerdeck/ui`](https://www.npmjs.com/package/@workerdeck/ui) for embeddable
 panels. Job scheduling comes from
-[`@claude-worker/queue`](https://www.npmjs.com/package/@claude-worker/queue), mounted via the
+[`@workerdeck/queue`](https://www.npmjs.com/package/@workerdeck/queue), mounted via the
 `queue` option.
 
 ## Install
 
 ```bash
-npm install @claude-worker/server
+npm install @workerdeck/server
 ```
 
 Node ≥ 22. The Agent SDK spawns the Claude Code CLI as a long-running subprocess with filesystem
@@ -35,7 +35,7 @@ reject with 401. `createWorkerServer` refuses to start without `authenticate` un
 explicitly pass `allowUnauthenticated: true` (loopback dev only — never expose that):
 
 ```ts
-import { createWorkerServer } from '@claude-worker/server'
+import { createWorkerServer } from '@workerdeck/server'
 
 const worker = createWorkerServer({
   authenticate: async (req) => verifyMyAppToken(req.headers.authorization),
@@ -109,12 +109,12 @@ store is in-memory (a park survives a client disconnect, not a restart); the bun
 survives both, on one host:
 
 ```ts
-import { createFileSessionStore, createWorkerServer } from '@claude-worker/server'
+import { createFileSessionStore, createWorkerServer } from '@workerdeck/server'
 
 createWorkerServer({
   authenticate,
   // Adopted by hydrate() inside listen(): executions re-indexed, watchdogs re-armed.
-  parking: { store: createFileSessionStore({ dir: '/var/lib/claude-worker/parked' }) },
+  parking: { store: createFileSessionStore({ dir: '/var/lib/workerdeck/parked' }) },
 })
 ```
 
@@ -177,11 +177,11 @@ Each session's credential provenance surfaces as `apiKeySource` on `SessionInfo`
 `system_init` event; `'oauth'` means claude.ai subscription credentials. With
 `requireApiKey: true` such sessions are terminated with a `session_error` — recommended for
 services and any unattended use. Without it the server logs a one-time notice instead
-(appropriate only for personal single-user deployments). claude-worker never implements claude.ai
+(appropriate only for personal single-user deployments). WorkerDeck never implements claude.ai
 OAuth, never reads or forwards tokens — see the repo README's
-["Auth & Anthropic's terms"](https://github.com/tobiasstrebitzer/claude-worker#auth--anthropics-terms).
+["Auth & Anthropic's terms"](https://github.com/tobiasstrebitzer/workerdeck#auth--anthropics-terms).
 
 ## License
 
 MIT © Tobias Strebitzer —
-[LICENSE](https://github.com/tobiasstrebitzer/claude-worker/blob/master/LICENSE)
+[LICENSE](https://github.com/tobiasstrebitzer/workerdeck/blob/master/LICENSE)

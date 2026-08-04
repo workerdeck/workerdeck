@@ -1,11 +1,11 @@
 /*
- * @claude-worker/ui theme — design tokens + Tailwind v4 theme mapping.
+ * @workerdeck/ui theme — design tokens + Tailwind v4 theme mapping.
  *
  * Consumer wiring (the app's tailwind entry CSS):
  *
  *   @import 'tailwindcss';
- *   @import '@claude-worker/ui/theme.css';
- *   @source '../node_modules/@claude-worker/ui';   (or the package src path in a monorepo)
+ *   @import '@workerdeck/ui/theme.css';
+ *   @source '../node_modules/@workerdeck/ui';   (or the package src path in a monorepo)
  *
  * Do NOT import tailwindcss here — the consumer owns that. Theme switching is driven by
  * <html data-theme="light|dark"> (set it before first paint to avoid a flash).

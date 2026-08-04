@@ -1,4 +1,4 @@
-import type { SessionStatus } from '@claude-worker/protocol'
+import type { SessionStatus } from '@workerdeck/protocol'
 import type { BadgeProps } from '../ui/Badge.tsx'
 
 export const STATUS_META: Record<

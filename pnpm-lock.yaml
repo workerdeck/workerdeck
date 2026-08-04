@@ -17,22 +17,22 @@ importers:
       '@ai-sdk/openai':
         specifier: ^4.0.21
         version: 4.0.21(zod@4.4.3)
-      '@claude-worker/client':
+      '@workerdeck/client':
         specifier: workspace:*
         version: link:packages/client
-      '@claude-worker/core':
+      '@workerdeck/core':
         specifier: workspace:*
         version: link:packages/core
-      '@claude-worker/protocol':
+      '@workerdeck/protocol':
         specifier: workspace:*
         version: link:packages/protocol
-      '@claude-worker/react':
+      '@workerdeck/react':
         specifier: workspace:*
         version: link:packages/react
-      '@claude-worker/sandbox':
+      '@workerdeck/sandbox':
         specifier: workspace:*
         version: link:packages/sandbox
-      '@claude-worker/server':
+      '@workerdeck/server':
         specifier: workspace:*
         version: link:packages/server
       '@jitl/quickjs-ng-wasmfile-release-asyncify':
@@ -56,7 +56,7 @@ importers:
       ai:
         specifier: ^7.0.38
         version: 7.0.38(zod@4.4.3)
-      claude-worker:
+      workerdeck:
         specifier: workspace:*
         version: link:packages/cli
       oxlint:
@@ -83,7 +83,7 @@ importers:
 
   apps/docs:
     dependencies:
-      '@claude-worker/ui':
+      '@workerdeck/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       '@fontsource/inter':
@@ -108,17 +108,17 @@ importers:
 
   packages/cli:
     dependencies:
-      '@claude-worker/server':
+      '@workerdeck/server':
         specifier: workspace:*
         version: link:../server
-      '@claude-worker/web':
+      '@workerdeck/web':
         specifier: workspace:*
         version: link:../web
     devDependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.217
         version: 0.3.217(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
-      '@claude-worker/protocol':
+      '@workerdeck/protocol':
         specifier: workspace:*
         version: link:../protocol
       '@swc-node/register':
@@ -148,14 +148,14 @@ importers:
 
   packages/client:
     dependencies:
-      '@claude-worker/protocol':
+      '@workerdeck/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
-      '@claude-worker/core':
+      '@workerdeck/core':
         specifier: workspace:*
         version: link:../core
-      '@claude-worker/server':
+      '@workerdeck/server':
         specifier: workspace:*
         version: link:../server
       '@types/node':
@@ -194,10 +194,10 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.217
         version: 0.3.217(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
-      '@claude-worker/protocol':
+      '@workerdeck/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@claude-worker/sandbox':
+      '@workerdeck/sandbox':
         specifier: workspace:*
         version: link:../sandbox
       ai:
@@ -237,10 +237,10 @@ importers:
 
   packages/queue:
     dependencies:
-      '@claude-worker/core':
+      '@workerdeck/core':
         specifier: workspace:*
         version: link:../core
-      '@claude-worker/protocol':
+      '@workerdeck/protocol':
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
@@ -262,20 +262,20 @@ importers:
 
   packages/react:
     dependencies:
-      '@claude-worker/client':
+      '@workerdeck/client':
         specifier: workspace:*
         version: link:../client
-      '@claude-worker/protocol':
+      '@workerdeck/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@claude-worker/sandbox':
+      '@workerdeck/sandbox':
         specifier: workspace:*
         version: link:../sandbox
     devDependencies:
-      '@claude-worker/core':
+      '@workerdeck/core':
         specifier: workspace:*
         version: link:../core
-      '@claude-worker/server':
+      '@workerdeck/server':
         specifier: workspace:*
         version: link:../server
       '@jitl/quickjs-ng-wasmfile-release-asyncify':
@@ -333,13 +333,13 @@ importers:
 
   packages/server:
     dependencies:
-      '@claude-worker/core':
+      '@workerdeck/core':
         specifier: workspace:*
         version: link:../core
-      '@claude-worker/protocol':
+      '@workerdeck/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@claude-worker/queue':
+      '@workerdeck/queue':
         specifier: workspace:*
         version: link:../queue
       ws:
@@ -349,7 +349,7 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.217
         version: 0.3.217(@anthropic-ai/sdk@0.93.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
-      '@claude-worker/sandbox':
+      '@workerdeck/sandbox':
         specifier: workspace:*
         version: link:../sandbox
       '@swc-node/register':
@@ -379,13 +379,13 @@ importers:
       '@base-ui/react':
         specifier: ^1.6.0
         version: 1.6.0(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@claude-worker/client':
+      '@workerdeck/client':
         specifier: workspace:*
         version: link:../client
-      '@claude-worker/protocol':
+      '@workerdeck/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@claude-worker/react':
+      '@workerdeck/react':
         specifier: workspace:*
         version: link:../react
       class-variance-authority:
@@ -434,16 +434,16 @@ importers:
 
   packages/web:
     devDependencies:
-      '@claude-worker/client':
+      '@workerdeck/client':
         specifier: workspace:*
         version: link:../client
-      '@claude-worker/protocol':
+      '@workerdeck/protocol':
         specifier: workspace:*
         version: link:../protocol
-      '@claude-worker/react':
+      '@workerdeck/react':
         specifier: workspace:*
         version: link:../react
-      '@claude-worker/ui':
+      '@workerdeck/ui':
         specifier: workspace:*
         version: link:../ui
       '@fontsource/inter':

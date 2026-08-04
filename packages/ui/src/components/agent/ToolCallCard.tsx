@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { TranscriptItem } from '@claude-worker/react'
+import type { TranscriptItem } from '@workerdeck/react'
 import { ChevronDown, Clock, Wrench } from 'lucide-react'
 import { Badge } from '../ui/Badge.tsx'
 import { CodeBlock } from '../ui/CodeBlock.tsx'

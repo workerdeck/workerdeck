@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
-import { createVfs } from '@claude-worker/sandbox'
-import type { Runner, SessionRunnerConfig, ToolExecutionResult } from '@claude-worker/core'
-import type { ProfileInfo, SessionInfo } from '@claude-worker/protocol'
+import { createVfs } from '@workerdeck/sandbox'
+import type { Runner, SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
+import type { ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type EngineRunnerContext, type WorkerServer } from '../src/index.ts'
 
 /** Minimal Runner implementation — engine selection is what's under test, not the engine. */

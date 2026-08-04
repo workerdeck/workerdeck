@@ -1,6 +1,6 @@
 import Foundation
 
-/// Swift mirror of `@claude-worker/protocol` (packages/protocol/src/index.ts).
+/// Swift mirror of `@workerdeck/protocol` (packages/protocol/src/index.ts).
 ///
 /// Kept in lockstep with the TypeScript source of truth — when the wire protocol
 /// changes there, `PROTOCOL_VERSION` bumps and this file must follow. Decoding is
@@ -8,7 +8,7 @@ import Foundation
 /// model becomes `.unknown` instead of failing the stream, matching the protocol's
 /// "extend the protocol, don't parse client-side" contract.
 ///
-/// Keys are spelled explicitly per type: claude-worker's own types use camelCase,
+/// Keys are spelled explicitly per type: workerdeck's own types use camelCase,
 /// while Anthropic API mirrors (`ApiMessage`, content blocks) use snake_case.
 /// Never decode with a global key-conversion strategy.
 public enum WorkerProtocol {

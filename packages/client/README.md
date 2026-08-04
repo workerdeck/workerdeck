@@ -1,31 +1,31 @@
-# @claude-worker/client
+# @workerdeck/client
 
-Typed claude-worker protocol client for browsers and Node: REST session management plus a
+Typed WorkerDeck protocol client for browsers and Node: REST session management plus a
 WebSocket attach with auto-reconnect and replay-from-last-seq. Uses the platform's `fetch` and
 `WebSocket`; zero runtime dependencies beyond the wire types.
 
-Part of [claude-worker](https://github.com/tobiasstrebitzer/claude-worker). It speaks the
-[`@claude-worker/protocol`](https://www.npmjs.com/package/@claude-worker/protocol) wire format to a
-running [`@claude-worker/server`](https://www.npmjs.com/package/@claude-worker/server) gateway.
+Part of [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck). It speaks the
+[`@workerdeck/protocol`](https://www.npmjs.com/package/@workerdeck/protocol) wire format to a
+running [`@workerdeck/server`](https://www.npmjs.com/package/@workerdeck/server) gateway.
 Layers above build on it:
-[`@claude-worker/react`](https://www.npmjs.com/package/@claude-worker/react) (headless hook +
-transcript reducer) and [`@claude-worker/ui`](https://www.npmjs.com/package/@claude-worker/ui)
+[`@workerdeck/react`](https://www.npmjs.com/package/@workerdeck/react) (headless hook +
+transcript reducer) and [`@workerdeck/ui`](https://www.npmjs.com/package/@workerdeck/ui)
 (styled session panel).
 
 ## Install
 
 ```bash
-npm install @claude-worker/client
+npm install @workerdeck/client
 ```
 
-Pairs with a running `@claude-worker/server` — the client is just the typed caller.
+Pairs with a running `@workerdeck/server` — the client is just the typed caller.
 
 ## Usage
 
 ```ts
-import { ClaudeWorkerClient } from '@claude-worker/client'
+import { WorkerDeckClient } from '@workerdeck/client'
 
-const client = new ClaudeWorkerClient({
+const client = new WorkerDeckClient({
   baseUrl: 'http://127.0.0.1:8787/v1', // ws:// URL is derived from it
   headers: { authorization: 'Bearer …' }, // REST auth; use buildWsUrl/cookies for WS auth
 })
@@ -79,7 +79,7 @@ The queue stream has no replay: on (re)connect, re-list jobs and treat the strea
 
 - **Browsers and Node** — built on platform `fetch` and `WebSocket` (global in Node ≥22). Both are
   injectable (`fetchImpl`, `WebSocketImpl`) for older runtimes, polyfills, and tests.
-- **Zero runtime dependencies** — the only dependency is `@claude-worker/protocol`, which is
+- **Zero runtime dependencies** — the only dependency is `@workerdeck/protocol`, which is
   itself dependency-free wire types.
 - Browsers cannot set WS headers: authenticate the socket with a ticket query param via
   `buildWsUrl(sessionId, afterSeq)` (and `buildQueueWsUrl`) or with cookies.
@@ -87,4 +87,4 @@ The queue stream has no replay: on (re)connect, re-list jobs and treat the strea
 ## License
 
 MIT © Tobias Strebitzer — see
-[LICENSE](https://github.com/tobiasstrebitzer/claude-worker/blob/master/LICENSE).
+[LICENSE](https://github.com/tobiasstrebitzer/workerdeck/blob/master/LICENSE).

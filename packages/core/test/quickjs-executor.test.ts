@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
-import { createVfs, loadEngine, type SandboxEngine } from '@claude-worker/sandbox'
+import { createVfs, loadEngine, type SandboxEngine } from '@workerdeck/sandbox'
 import { QuickJsExecutor, isHostAllowed, type ToolExecutionCall } from '../src/index.ts'
 
 let engine: SandboxEngine

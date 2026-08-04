@@ -1,11 +1,11 @@
-# @claude-worker/ui
+# @workerdeck/ui
 
-Styled agent-control component library for claude-worker hosts: `SessionPanel` (status bar +
+Styled agent-control component library for WorkerDeck hosts: `SessionPanel` (status bar +
 streaming transcript + tool-call cards + permission prompts + composer), `SessionList`, and the
 underlying primitives (Button, Badge, Card, Select, AlertDialog, …). Built on **Tailwind v4 +
 Base UI + cva**, themed by CSS tokens with light/dark via `<html data-theme>`.
 
-The headless layer (`useClaudeSession`, transcript reducer) lives in `@claude-worker/react`;
+The headless layer (`useClaudeSession`, transcript reducer) lives in `@workerdeck/react`;
 this package is the styling opinion on top.
 
 ## Consumer wiring (Tailwind v4)
@@ -17,13 +17,13 @@ them. Three steps:
 
 ```css
 @import 'tailwindcss';
-@import '@claude-worker/ui/theme.css';
+@import '@workerdeck/ui/theme.css';
 /* Let Tailwind see this package's classnames (node_modules is not scanned by default). */
-@source '../node_modules/@claude-worker/ui';
+@source '../node_modules/@workerdeck/ui';
 /* streamdown (the markdown renderer) also styles itself with Tailwind classes, split across
  * chunk files — scan its whole dist dir. With npm/yarn it's hoisted to node_modules/streamdown;
  * with pnpm it's nested under this package: */
-@source '../node_modules/@claude-worker/ui/node_modules/streamdown/dist';
+@source '../node_modules/@workerdeck/ui/node_modules/streamdown/dist';
 ```
 
 Inside this monorepo, point `@source` at the package source instead:
@@ -49,10 +49,10 @@ fallbacks. Import `@fontsource/inter/{400,500,600,700}.css` and
 ## Usage
 
 ```tsx
-import { ClaudeWorkerClient } from '@claude-worker/client'
-import { SessionPanel } from '@claude-worker/ui'
+import { WorkerDeckClient } from '@workerdeck/client'
+import { SessionPanel } from '@workerdeck/ui'
 
-const client = new ClaudeWorkerClient({ baseUrl: `${location.origin}/v1` })
+const client = new WorkerDeckClient({ baseUrl: `${location.origin}/v1` })
 
 <SessionPanel key={sessionId} client={client} sessionId={sessionId} />
 ```

@@ -1,5 +1,5 @@
 /**
- * @claude-worker/protocol — the wire protocol between a claude-worker server and its clients.
+ * @workerdeck/protocol — the wire protocol between a workerdeck server and its clients.
  *
  * One session = one ordered stream of {@link SessionEvent}s (each stamped with a monotonically
  * increasing `seq`) plus a small command set ({@link SessionCommand}). Clients attach over

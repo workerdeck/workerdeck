@@ -78,8 +78,8 @@ describe('resolveInstanceConfig', () => {
 
   it('lets flags beat env', () => {
     const config = resolveInstanceConfig(parseArgs(['--port', '1234']), noConfig, {
-      CLAUDE_WORKER_PORT: '9999',
-      CLAUDE_WORKER_AUTH_KEY: 'from-env',
+      WORKERDECK_PORT: '9999',
+      WORKERDECK_AUTH_KEY: 'from-env',
     })
     expect(config.port).toBe(1234)
     expect(config.authKey).toBe('from-env')
@@ -130,7 +130,7 @@ describe('resolveInstanceConfig', () => {
   })
 
   it('accepts a config file that authenticates for itself', () => {
-    const loaded = { path: '/x/claude-worker.config.mjs', options: { authenticate: () => ({}) } }
+    const loaded = { path: '/x/workerdeck.config.mjs', options: { authenticate: () => ({}) } }
     const config = resolveInstanceConfig(parseArgs(['--host', '0.0.0.0']), loaded, {})
     expect(config.hostAuthenticates).toBe(true)
     expect(config.generateAuthKey).toBe(false)
@@ -143,13 +143,13 @@ describe('resolveInstanceConfig', () => {
 
   it('reads cwd roots from a colon-separated env var', () => {
     const config = resolveInstanceConfig(parseArgs([]), noConfig, {
-      CLAUDE_WORKER_CWD_ROOTS: '/tmp/a:/tmp/b',
+      WORKERDECK_CWD_ROOTS: '/tmp/a:/tmp/b',
     })
     expect(config.options.allowedCwdRoots).toEqual([resolve('/tmp/a'), resolve('/tmp/b')])
   })
 
   it('puts state beside the config file when there is one', () => {
-    expect(defaultStateDir('/srv/worker/claude-worker.config.mjs')).toBe('/srv/worker/.claude-worker')
+    expect(defaultStateDir('/srv/worker/workerdeck.config.mjs')).toBe('/srv/worker/.workerdeck')
   })
 })
 
@@ -259,7 +259,7 @@ describe('loadConfigFile', () => {
   it('loads a default-exported object', async () => {
     const dir = await tempConfigDir()
     await writeFile(
-      join(dir, 'claude-worker.config.mjs'),
+      join(dir, 'workerdeck.config.mjs'),
       'export default { basePath: "/api", allowUnauthenticated: true }\n',
     )
     const loaded = await loadConfigFile(undefined, dir)
@@ -269,7 +269,7 @@ describe('loadConfigFile', () => {
   it('loads a default-exported function, including an async one', async () => {
     const dir = await tempConfigDir()
     await writeFile(
-      join(dir, 'claude-worker.config.mjs'),
+      join(dir, 'workerdeck.config.mjs'),
       'export default async () => ({ basePath: "/late" })\n',
     )
     const loaded = await loadConfigFile(undefined, dir)
@@ -277,12 +277,12 @@ describe('loadConfigFile', () => {
   })
 
   it('fails loudly on an explicit path that does not exist', async () => {
-    await expect(loadConfigFile('/nope/claude-worker.config.mjs')).rejects.toThrow(/no config file/)
+    await expect(loadConfigFile('/nope/workerdeck.config.mjs')).rejects.toThrow(/no config file/)
   })
 
   it('fails on a config file with no default export', async () => {
     const dir = await tempConfigDir()
-    await writeFile(join(dir, 'claude-worker.config.mjs'), 'export const port = 1\n')
+    await writeFile(join(dir, 'workerdeck.config.mjs'), 'export const port = 1\n')
     await expect(loadConfigFile(undefined, dir)).rejects.toThrow(/no default export/)
   })
 })

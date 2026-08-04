@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { Runner, SessionRunnerConfig } from '@claude-worker/core'
+import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
 import type {
   ApiMessage,
   CreateJobRequest,
@@ -9,7 +9,7 @@ import type {
   JobProgress,
   QueueStats,
   SessionEvent,
-} from '@claude-worker/protocol'
+} from '@workerdeck/protocol'
 import { InMemoryQueueAdapter, type JobRecord, type QueueAdapter } from './adapter.ts'
 
 export type JobQueueOptions = {

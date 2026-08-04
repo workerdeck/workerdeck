@@ -1,4 +1,4 @@
-import type { ProfileInfo } from '@claude-worker/protocol'
+import type { ProfileInfo } from '@workerdeck/protocol'
 import {
   Select,
   SelectContent,
@@ -6,7 +6,7 @@ import {
   SelectItemText,
   SelectTrigger,
   SelectValue,
-} from '@claude-worker/ui'
+} from '@workerdeck/ui'
 
 /** Profile picker for the create forms. Renders nothing when the server declares no
  * profiles; with exactly one it still shows (informational) but the choice is moot. */

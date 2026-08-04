@@ -1,6 +1,6 @@
 import Foundation
 
-/// A claude-worker gateway this app can drive.
+/// A workerdeck gateway this app can drive.
 ///
 /// `baseURL` is stored exactly as the user typed it — the server's *root*, e.g.
 /// `http://your-mac.tailnet-name.ts.net:8787`. The `/v1` API prefix is an

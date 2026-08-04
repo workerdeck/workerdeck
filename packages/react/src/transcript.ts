@@ -13,7 +13,7 @@ import type {
   ToolExecutionBackend,
   ToolExecutionOutput,
   ToolResultBlock,
-} from '@claude-worker/protocol'
+} from '@workerdeck/protocol'
 
 /**
  * Pure transcript state machine over the wire-protocol event stream. Framework-free

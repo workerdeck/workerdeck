@@ -1,8 +1,8 @@
 {
-  "name": "@claude-worker/web",
+  "name": "@workerdeck/web",
   "version": "0.6.0",
   "type": "module",
-  "description": "The claude-worker dashboard as prebuilt static files: session list, create/resume flow, live panel, jobs, profiles, settings. Ships dist/ plus the path to it — serve it from the same origin as the gateway. Zero runtime dependencies.",
+  "description": "The WorkerDeck dashboard as prebuilt static files: session list, create/resume flow, live panel, jobs, profiles, settings. Ships dist/ plus the path to it — serve it from the same origin as the gateway. Zero runtime dependencies.",
   "license": "MIT",
   "main": "./entry.mjs",
   "types": "./entry.d.mts",
@@ -28,10 +28,10 @@
     "typecheck": "tsgo -p tsconfig.json"
   },
   "devDependencies": {
-    "@claude-worker/client": "workspace:*",
-    "@claude-worker/protocol": "workspace:*",
-    "@claude-worker/react": "workspace:*",
-    "@claude-worker/ui": "workspace:*",
+    "@workerdeck/client": "workspace:*",
+    "@workerdeck/protocol": "workspace:*",
+    "@workerdeck/react": "workspace:*",
+    "@workerdeck/ui": "workspace:*",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@jitl/quickjs-singlefile-browser-release-asyncify": "^0.31.0",
@@ -51,11 +51,11 @@
   "author": "Tobias Strebitzer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobiasstrebitzer/claude-worker.git",
+    "url": "git+https://github.com/tobiasstrebitzer/workerdeck.git",
     "directory": "packages/web"
   },
-  "homepage": "https://tobiasstrebitzer.github.io/claude-worker/",
-  "bugs": "https://github.com/tobiasstrebitzer/claude-worker/issues",
+  "homepage": "https://tobiasstrebitzer.github.io/workerdeck/",
+  "bugs": "https://github.com/tobiasstrebitzer/workerdeck/issues",
   "keywords": [
     "claude",
     "claude-code",

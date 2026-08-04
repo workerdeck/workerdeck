@@ -8,7 +8,7 @@
  * rather than a pile of PASS lines.
  */
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
-import { createVfs, loadEngine, runScript, type RunScriptResult } from '@claude-worker/sandbox'
+import { createVfs, loadEngine, runScript, type RunScriptResult } from '@workerdeck/sandbox'
 
 const engine = await loadEngine(variant)
 

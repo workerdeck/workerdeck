@@ -65,7 +65,7 @@ Two modes have extra conditions the CLI enforces:
 Sessions can be constrained with `allowedTools` / `disallowedTools` on `CreateSessionRequest`,
 and the server clamps where sessions may run with `allowedCwdRoots`. Use `buildRunnerConfig` on
 the server to enforce policy regardless of what clients request — see
-[Embedding](/claude-worker/docs/guides/embedding/).
+[Embedding](/workerdeck/docs/guides/embedding/).
 
 ## The REST resolve endpoint
 
@@ -95,7 +95,7 @@ tool's convention the first option of each question is the model's recommended c
 `questionBehavior` on `CreateSessionRequest` policy-resolves it for unattended runs:
 
 - **`'ask'`** (default) — a pending permission like any other. Interactive UIs render the
-  question form; under the [job queue](/claude-worker/docs/guides/job-queue/), webhooks carry
+  question form; under the [job queue](/workerdeck/docs/guides/job-queue/), webhooks carry
   the full request on `job_progress` so a remote controller can answer over the REST resolve
   endpoint.
 - **`'auto'`** — resolved immediately with each question's first (recommended) option.

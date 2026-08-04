@@ -1,4 +1,4 @@
-import ClaudeWorkerKit
+import WorkerDeckKit
 import SwiftUI
 
 /// A tool call: icon, name, one-line input summary and a status chip when

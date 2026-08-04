@@ -1,17 +1,17 @@
-# @claude-worker/sandbox
+# @workerdeck/sandbox
 
 Execution sandbox for untrusted, LLM-generated scripts: a QuickJS-NG guest compiled to
 WebAssembly, an in-memory scratch filesystem, and a hardened by-value host bridge. Deny-by-default
 — the guest has no filesystem, network, timers, or host access except the capabilities you grant.
 
-Part of [claude-worker](https://github.com/tobiasstrebitzer/claude-worker). Leaf package: it
+Part of [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck). Leaf package: it
 depends on neither `core`/`server` nor any model SDK, so the same guest engine runs server-side
 (Node) and in a browser tab.
 
 ## Install
 
 ```bash
-npm install @claude-worker/sandbox @jitl/quickjs-ng-wasmfile-release-asyncify
+npm install @workerdeck/sandbox @jitl/quickjs-ng-wasmfile-release-asyncify
 ```
 
 The WASM engine variant is injected rather than bundled, so you pick the build that fits your
@@ -23,7 +23,7 @@ Use an **asyncify** variant — it lets guest code `await` a host function.
 
 ```ts
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
-import { createVfs, loadEngine, runScript } from '@claude-worker/sandbox'
+import { createVfs, loadEngine, runScript } from '@workerdeck/sandbox'
 
 // Load once and reuse; the module is stateless.
 const engine = await loadEngine(variant)

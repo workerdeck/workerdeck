@@ -1,18 +1,18 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="claude-worker — Claude Code sessions your app can embed, watch, and control" width="100%" />
+  <img src="docs/assets/banner.png" alt="WorkerDeck — Claude Code sessions your app can embed, watch, and control" width="100%" />
 </p>
 
-# claude-worker
+# WorkerDeck
 
 <p>
-  <a href="https://github.com/tobiasstrebitzer/claude-worker/actions/workflows/ci.yml"><img src="https://github.com/tobiasstrebitzer/claude-worker/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://www.npmjs.com/package/claude-worker"><img src="https://img.shields.io/npm/v/claude-worker?label=npm" alt="npm version" /></a>
+  <a href="https://github.com/tobiasstrebitzer/workerdeck/actions/workflows/ci.yml"><img src="https://github.com/tobiasstrebitzer/workerdeck/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://www.npmjs.com/package/workerdeck"><img src="https://img.shields.io/npm/v/workerdeck?label=npm" alt="npm version" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-black.svg" alt="MIT license" /></a>
-  <a href="https://tobiasstrebitzer.github.io/claude-worker/"><img src="https://img.shields.io/badge/docs-github%20pages-black.svg" alt="Documentation" /></a>
+  <a href="https://tobiasstrebitzer.github.io/workerdeck/"><img src="https://img.shields.io/badge/docs-github%20pages-black.svg" alt="Documentation" /></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A522-black.svg" alt="Node >= 22" />
 </p>
 
-**Claude Code sessions your app can embed, watch, and control.** claude-worker runs a
+**Claude Code sessions your app can embed, watch, and control.** WorkerDeck runs a
 close-to-real Claude Code session via the
 [Anthropic Agent SDK](https://code.claude.com/docs/en/agent-sdk) and puts a session server, a
 typed wire protocol, and an approve/deny UI around it — so a browser can drive an agent working
@@ -21,7 +21,7 @@ in a real checkout.
 ## Run it
 
 ```bash
-npx claude-worker
+npx workerdeck
 ```
 
 Gateway **and** dashboard on one port at `http://127.0.0.1:8787` — nothing to clone, no config.
@@ -30,18 +30,18 @@ deny the tool calls it wants to make.
 
 ```bash
 # Reachable, protected, and scoped to a directory tree:
-npx claude-worker --host 0.0.0.0 --auth-key "$SECRET" --cwd-root ~/projects
+npx workerdeck --host 0.0.0.0 --auth-key "$SECRET" --cwd-root ~/projects
 ```
 
 `--auth-key` is one secret over two transports: browsers get a login page and an `HttpOnly`
-cookie, services send the same secret as `x-claude-worker-key`. Off loopback without a key, the
+cookie, services send the same secret as `x-workerdeck-key`. Off loopback without a key, the
 instance generates one rather than serving open — printed once, kept in `<state-dir>/auth-key`,
 reused across restarts. Options that are *functions* — `authenticate`,
-`buildRunnerConfig`, `createEngineRunner` — go in a `claude-worker.config.mjs`
-([example](examples/claude-worker.config.mjs)). Full flag surface:
-[Run an instance](https://tobiasstrebitzer.github.io/claude-worker/docs/getting-started/run-an-instance/).
+`buildRunnerConfig`, `createEngineRunner` — go in a `workerdeck.config.mjs`
+([example](examples/workerdeck.config.mjs)). Full flag surface:
+[Run an instance](https://tobiasstrebitzer.github.io/workerdeck/docs/getting-started/run-an-instance/).
 
-**Docs: [tobiasstrebitzer.github.io/claude-worker](https://tobiasstrebitzer.github.io/claude-worker/)** —
+**Docs: [tobiasstrebitzer.github.io/workerdeck](https://tobiasstrebitzer.github.io/workerdeck/)** —
 quickstart, embedding, permissions, profiles, job queue, protocol reference.
 
 ## What it actually gives you
@@ -64,7 +64,7 @@ quickstart, embedding, permissions, profiles, job queue, protocol reference.
 ## Embed it in your app
 
 ```ts
-import { createWorkerServer } from '@claude-worker/server'
+import { createWorkerServer } from '@workerdeck/server'
 
 const worker = createWorkerServer({
   authenticate: async (req) => verifyMyAppToken(req.headers.authorization),
@@ -75,10 +75,10 @@ await worker.listen(8787)
 ```
 
 ```tsx
-import { ClaudeWorkerClient } from '@claude-worker/client'
-import { SessionPanel } from '@claude-worker/ui' // Tailwind v4 host: see packages/ui/README.md
+import { WorkerDeckClient } from '@workerdeck/client'
+import { SessionPanel } from '@workerdeck/ui' // Tailwind v4 host: see packages/ui/README.md
 
-const client = new ClaudeWorkerClient({ baseUrl: 'https://my-app/worker/v1', headers: { … } })
+const client = new WorkerDeckClient({ baseUrl: 'https://my-app/worker/v1', headers: { … } })
 const session = await client.createSession({
   cwd: '/srv/checkouts/my-repo',
   prompt: '/verify-content 42',
@@ -90,8 +90,8 @@ const session = await client.createSession({
 
 There's a rung for every level of control: the styled `SessionPanel`, the headless
 `useClaudeSession` hook, the raw event stream (`client.attach(id).on('event', …)`), or
-`SessionRunner` from `@claude-worker/core` in-process with no server at all. See the
-[embedding guide](https://tobiasstrebitzer.github.io/claude-worker/docs/guides/embedding/).
+`SessionRunner` from `@workerdeck/core` in-process with no server at all. See the
+[embedding guide](https://tobiasstrebitzer.github.io/workerdeck/docs/guides/embedding/).
 
 ## Two engines: Claude Code, and any provider
 
@@ -136,7 +136,7 @@ Both engines implement one `Runner` interface and speak the same protocol, so cl
 panel and queue are unchanged either way. Profiles also scope *who may run as what*:
 `allowedProfiles` on the authenticate principal, because each person under their own profile is
 each person using their own account. See
-[Profiles](https://tobiasstrebitzer.github.io/claude-worker/docs/guides/profiles/).
+[Profiles](https://tobiasstrebitzer.github.io/workerdeck/docs/guides/profiles/).
 
 ## Unattended runs, and runs that park
 
@@ -186,17 +186,17 @@ curl -X POST $SERVER/v1/executions/$EXECUTION_ID/result \
 A parked job frees its concurrency slot and stops its wall-clock budget, so one worker can have a
 hundred runs waiting on the world and still only run three at a time. Failed results (the
 watchdog's timeout included) are ordinary tool output the agent adapts to, not a crashed session,
-and delivery is idempotent by `executionId`. `npx claude-worker` parks durably under
-`~/.claude-worker` by default; embedded hosts opt in with
+and delivery is idempotent by `executionId`. `npx workerdeck` parks durably under
+`~/.workerdeck` by default; embedded hosts opt in with
 `parking: { store: createFileSessionStore({ dir }) }` — that directory holds whole transcripts in
 plaintext, so treat it like `~/.claude/projects`, not like a cache.
 
 A restart is still not free: a turn in flight dies with the process, as does a pending approval.
-`claude-worker guard` asks a live instance whether anything would be lost and exits non-zero while
+`workerdeck guard` asks a live instance whether anything would be lost and exits non-zero while
 the answer is yes:
 
 ```bash
-npx claude-worker guard --wait 300 --allow-parked && systemctl restart claude-worker
+npx workerdeck guard --wait 300 --allow-parked && systemctl restart workerdeck
 ```
 
 ## Reaching a person who isn't watching
@@ -223,25 +223,25 @@ push credentials and knows nothing about APNs or Slack; it speaks HTTP to your U
 
 ## Packages
 
-Two tiers: `@claude-worker/*` are the libraries you embed, `claude-worker` is the instance you
+Two tiers: `@workerdeck/*` are the libraries you embed, `workerdeck` is the instance you
 run. Each package has its own README.
 
 | Package | What it is |
 | --- | --- |
-| [`claude-worker`](packages/cli) | The turnkey instance: gateway + dashboard on one port, shared-secret auth, durable parking, restart guard. |
-| [`@claude-worker/protocol`](packages/protocol) | The wire protocol — events, commands, REST shapes. Dependency-free, browser-safe. **The product boundary**, versioned from day one. |
-| [`@claude-worker/core`](packages/core) | The engines. `SessionRunner` (Agent SDK) and `AiSdkRunner` (any provider) behind one `Runner` interface, with tool execution on a swappable `ToolExecutor` seam and `park()`/`restore`. No transport. |
-| [`@claude-worker/sandbox`](packages/sandbox) | The untrusted-code boundary: QuickJS-NG WASM guest, in-memory scratch VFS, by-value host bridge, interpreter-enforced memory and time limits. Runs server-side or in a tab. |
-| [`@claude-worker/queue`](packages/queue) | The job queue: concurrency, token budgets, retries, watchdog, retention, webhooks. Pluggable `QueueAdapter` (in-memory bundled). |
-| [`@claude-worker/server`](packages/server) | The gateway: HTTP + WebSocket, session registry, auth hook, profiles, job routes, session notifications, browser tool bridge, parked-session storage. |
-| [`@claude-worker/client`](packages/client) | Typed client for browsers and Node: REST + WS attach with auto-reconnect and replay-from-last-seq. Zero runtime deps. |
-| [`@claude-worker/react`](packages/react) | Headless React: `useClaudeSession` + a pure transcript reducer. No styling opinion. |
-| [`@claude-worker/ui`](packages/ui) | Styled agent-control components: session panel, transcript, tool-call cards, permission prompts, composer. Tailwind v4 + Base UI + cva. |
-| [`@claude-worker/web`](packages/web) | The dashboard as prebuilt static files, for serving from your own host. Zero runtime deps. |
+| [`workerdeck`](packages/cli) | The turnkey instance: gateway + dashboard on one port, shared-secret auth, durable parking, restart guard. |
+| [`@workerdeck/protocol`](packages/protocol) | The wire protocol — events, commands, REST shapes. Dependency-free, browser-safe. **The product boundary**, versioned from day one. |
+| [`@workerdeck/core`](packages/core) | The engines. `SessionRunner` (Agent SDK) and `AiSdkRunner` (any provider) behind one `Runner` interface, with tool execution on a swappable `ToolExecutor` seam and `park()`/`restore`. No transport. |
+| [`@workerdeck/sandbox`](packages/sandbox) | The untrusted-code boundary: QuickJS-NG WASM guest, in-memory scratch VFS, by-value host bridge, interpreter-enforced memory and time limits. Runs server-side or in a tab. |
+| [`@workerdeck/queue`](packages/queue) | The job queue: concurrency, token budgets, retries, watchdog, retention, webhooks. Pluggable `QueueAdapter` (in-memory bundled). |
+| [`@workerdeck/server`](packages/server) | The gateway: HTTP + WebSocket, session registry, auth hook, profiles, job routes, session notifications, browser tool bridge, parked-session storage. |
+| [`@workerdeck/client`](packages/client) | Typed client for browsers and Node: REST + WS attach with auto-reconnect and replay-from-last-seq. Zero runtime deps. |
+| [`@workerdeck/react`](packages/react) | Headless React: `useClaudeSession` + a pure transcript reducer. No styling opinion. |
+| [`@workerdeck/ui`](packages/ui) | Styled agent-control components: session panel, transcript, tool-call cards, permission prompts, composer. Tailwind v4 + Base UI + cva. |
+| [`@workerdeck/web`](packages/web) | The dashboard as prebuilt static files, for serving from your own host. Zero runtime deps. |
 
 ## Auth & Anthropic's terms
 
-**claude-worker performs no Anthropic authentication of its own — by design.** It spawns the
+**WorkerDeck performs no Anthropic authentication of its own — by design.** It spawns the
 official Agent SDK, which spawns the official CLI, which resolves whatever credentials the
 *operator's* environment provides: `ANTHROPIC_API_KEY`, Bedrock/Vertex, or the operator's own
 stored `claude login`. It never implements claude.ai OAuth, never reads, stores or proxies tokens,
@@ -256,7 +256,7 @@ your own single-user use (the equivalent of running `claude -p` yourself) is the
 those may be appropriate; the server allows it with a one-time notice, and every session reports
 its provenance as `apiKeySource`. **The compliance and legal posture of this project is still
 under review** — with our own specialists and, where appropriate, Anthropic — so do your own
-diligence. [Full discussion](https://tobiasstrebitzer.github.io/claude-worker/docs/guides/auth/).
+diligence. [Full discussion](https://tobiasstrebitzer.github.io/workerdeck/docs/guides/auth/).
 
 **Red lines for contributors** (PRs crossing these are rejected): no claude.ai OAuth flows or
 login UI, no extraction/storage/forwarding of subscription tokens, no spoofing of Claude Code's
@@ -289,7 +289,7 @@ pnpm lint        # oxlint
 ```
 
 Dev never builds: apps and tests resolve packages straight to TS source via the
-`@claude-worker/source` export condition, and `build/` exists only for publishing. Start with
+`@workerdeck/source` export condition, and `build/` exists only for publishing. Start with
 [`docs/architecture.md`](docs/architecture.md) for the package map and dependency rule, and
 [`docs/gotchas.md`](docs/gotchas.md) for the invariants that bite.
 [`CONTRIBUTING.md`](CONTRIBUTING.md) has the rest; security reports go through
@@ -299,7 +299,7 @@ Dev never builds: apps and tests resolve packages straight to TS source via the
 
 **0.5.0** — early but real. Both engines, the protocol, server, client, headless React layer,
 styled UI, dashboard, job queue, sandbox, and deferred execution are all in and tested. 0.5 added
-the turnkey `npx claude-worker` instance, the dashboard as a published package, and durable parks.
+the turnkey `npx workerdeck` instance, the dashboard as a published package, and durable parks.
 Expect the protocol to keep evolving — `PROTOCOL_VERSION` guards breaking changes and is at 4. See
 the [roadmap](docs/roadmap.md) for what's next.
 

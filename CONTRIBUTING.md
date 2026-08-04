@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for looking. claude-worker is early, so the most useful contributions right now are bug
+Thanks for looking. WorkerDeck is early, so the most useful contributions right now are bug
 reports with a reproduction, and PRs that stay inside one package's boundary.
 
 ## Getting set up
@@ -11,9 +11,9 @@ pnpm server   # gateway + dashboard on http://127.0.0.1:8787, no auth (loopback 
 pnpm web      # optional: vite dashboard on :5191 with HMR, proxying /v1 to the gateway
 ```
 
-`pnpm server` is the real `claude-worker` CLI pointed at
+`pnpm server` is the real `workerdeck` CLI pointed at
 [`examples/dev-server.config.mjs`](examples/dev-server.config.mjs) — there is no separate dev
-entry point, so what you develop against and what `npx claude-worker` ships are one code path.
+entry point, so what you develop against and what `npx workerdeck` ships are one code path.
 Edit that config directly; flags still win (`pnpm server --port 9000`). The dashboard is the one
 thing that must be compiled, so the script builds it first (`pnpm dashboard`, turbo-cached); run
 `pnpm web` alongside when you want HMR.
@@ -33,7 +33,7 @@ trusted network, declare the bind host (`--insecure-host <name>`, config `insecu
 declared name doubles as an accepted Host header.
 
 Nothing else needs building: apps and tests resolve packages straight to TypeScript source
-through the `@claude-worker/source` export condition, and `build/` output exists only for
+through the `@workerdeck/source` export condition, and `build/` output exists only for
 publishing. In-package imports use explicit `.ts` extensions.
 
 ```bash
@@ -62,15 +62,15 @@ Two rules the review will hold you to:
   side must never import core, server, the Agent SDK, or any model SDK; the wire protocol is the
   only bridge. Anything a client needs must be expressible as protocol events and commands.
 - **Breaking the wire means bumping the wire.** A breaking change to
-  `@claude-worker/protocol` bumps `PROTOCOL_VERSION`, and new client-visible frames need matching
-  `SessionHandle` surface in `@claude-worker/client`.
+  `@workerdeck/protocol` bumps `PROTOCOL_VERSION`, and new client-visible frames need matching
+  `SessionHandle` surface in `@workerdeck/client`.
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/)
 (`feat(server): …`, `fix(core): …`, `docs: …`).
 
 ## Auth red lines
 
-claude-worker implements **no Anthropic authentication of its own**, by design: credentials are
+WorkerDeck implements **no Anthropic authentication of its own**, by design: credentials are
 resolved by the official SDK/CLI from the operator's environment. PRs that cross these lines will
 be rejected regardless of quality:
 
@@ -81,7 +81,7 @@ be rejected regardless of quality:
 
 Policy enforcement lives in configuration (`requireApiKey`, the one-time subscription notice,
 `apiKeySource` on `SessionInfo`), never in tampering with the credential chain. Background:
-[Auth & Anthropic's terms](https://tobiasstrebitzer.github.io/claude-worker/docs/guides/auth/).
+[Auth & Anthropic's terms](https://tobiasstrebitzer.github.io/workerdeck/docs/guides/auth/).
 
 ## Out of scope
 

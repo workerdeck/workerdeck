@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
-import { createWorkerServer, type WorkerServer } from '@claude-worker/server'
-import type { ToolExecutionResult } from '@claude-worker/core'
-import { ClaudeWorkerClient, type SessionHandle } from '../src/index.ts'
+import { createWorkerServer, type WorkerServer } from '@workerdeck/server'
+import type { ToolExecutionResult } from '@workerdeck/core'
+import { WorkerDeckClient, type SessionHandle } from '../src/index.ts'
 
 /**
  * The bridge tests never drive the model — the session just needs to exist.
@@ -45,7 +45,7 @@ async function start(bridgeTimeoutMs?: number) {
     },
   })
   const { port } = await running.listen(0, '127.0.0.1')
-  const client = new ClaudeWorkerClient({
+  const client = new WorkerDeckClient({
     baseUrl: `http://127.0.0.1:${port}/v1`,
     // Node has no global WebSocket in every supported version — inject ws.
     WebSocketImpl: WebSocket as unknown as typeof globalThis.WebSocket,

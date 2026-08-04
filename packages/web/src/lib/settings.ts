@@ -1,7 +1,7 @@
 /** Client-side preferences persisted in localStorage (see SettingsView). */
 
-import type { ModelOption, PermissionMode } from '@claude-worker/protocol'
-import { PERMISSION_MODES } from '@claude-worker/ui'
+import type { ModelOption, PermissionMode } from '@workerdeck/protocol'
+import { PERMISSION_MODES } from '@workerdeck/ui'
 
 /** Pre-session model choices: aliases the CLI resolves to current model ids, mirroring
  * its supportedModels shape (a 'default' sentinel row first). Live sessions get the
@@ -19,8 +19,8 @@ export const MODEL_OPTIONS: ModelOption[] = [
 export type DefaultsKind = 'session' | 'job'
 
 const MODEL_KEYS: Record<DefaultsKind, string> = {
-  session: 'claude-worker.default-session-model',
-  job: 'claude-worker.default-job-model',
+  session: 'workerdeck.default-session-model',
+  job: 'workerdeck.default-job-model',
 }
 
 /** Default model pre-filled in the new-session / schedule-job forms. '' = CLI default. */
@@ -35,8 +35,8 @@ export function setDefaultModel(kind: DefaultsKind, model: string): void {
 }
 
 const PERMISSION_MODE_KEYS: Record<DefaultsKind, string> = {
-  session: 'claude-worker.default-session-permission-mode',
-  job: 'claude-worker.default-job-permission-mode',
+  session: 'workerdeck.default-session-permission-mode',
+  job: 'workerdeck.default-job-permission-mode',
 }
 
 /** Built-in fallbacks: interactive sessions ask by default; unattended jobs

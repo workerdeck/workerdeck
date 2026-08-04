@@ -1,5 +1,5 @@
-import type { ModelOption } from '@claude-worker/protocol'
-import { ModelSelect } from '@claude-worker/ui'
+import type { ModelOption } from '@workerdeck/protocol'
+import { ModelSelect } from '@workerdeck/ui'
 import { MODEL_OPTIONS } from '@/lib/settings.ts'
 
 /** Form-styled model dropdown. '' = the engine's default model — the CLI's for a

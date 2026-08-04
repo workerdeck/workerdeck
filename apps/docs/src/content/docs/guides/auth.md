@@ -1,13 +1,13 @@
 ---
 title: Auth & Anthropic's terms
-description: claude-worker performs no Anthropic authentication of its own — what that means for operators and contributors.
+description: WorkerDeck performs no Anthropic authentication of its own — what that means for operators and contributors.
 order: 7
 ---
 
-**claude-worker performs no Anthropic authentication of its own — by design.** It spawns the
+**WorkerDeck performs no Anthropic authentication of its own — by design.** It spawns the
 official Agent SDK, which spawns the official Claude Code CLI, which resolves whatever
 credentials the *operator's* environment provides: `ANTHROPIC_API_KEY`, Bedrock/Vertex platform
-auth, or the operator's own stored `claude login`. claude-worker never implements claude.ai
+auth, or the operator's own stored `claude login`. WorkerDeck never implements claude.ai
 OAuth, never reads, stores, or proxies tokens, and never touches `~/.claude` credentials. Which
 credentials your deployment uses — and whether that use complies with
 [Anthropic's terms](https://www.anthropic.com/legal/consumer-terms) — is the operator's
@@ -47,7 +47,7 @@ one-time notice instead — appropriate only for personal single-user deployment
 
 ## Profiles on shared machines
 
-[Profiles](/claude-worker/docs/guides/profiles/) let one worker serve several operators, each
+[Profiles](/workerdeck/docs/guides/profiles/) let one worker serve several operators, each
 under their own Claude Code config dir — selected via the CLI's own `CLAUDE_CONFIG_DIR`
 mechanism, never by touching the credential chain. The auth-relevant part: **scope profiles per
 caller** with `allowedProfiles` on the `authenticate` principal. A shared dashboard where anyone
@@ -62,12 +62,12 @@ reach it at all — is your own concern, and the two never mix.
 
 For an embedded deployment that is the `authenticate` hook: it gets the raw request and returns a
 principal or nothing, and it guards REST **and** the WebSocket upgrade. For the turnkey
-[`claude-worker`](https://www.npmjs.com/package/claude-worker) instance it is `--auth-key`, one
+[`workerdeck`](https://www.npmjs.com/package/workerdeck) instance it is `--auth-key`, one
 shared secret over two transports — a login page trades it for an `HttpOnly` cookie for browsers,
 while services send it as a header. Bound off loopback with no key supplied, the instance
 generates one and stores it under its state dir rather than serving open; the explicit opt-outs
 (`--insecure`, `insecureHosts`) are covered in
-[Run an instance](/claude-worker/docs/getting-started/run-an-instance/#protecting-it).
+[Run an instance](/workerdeck/docs/getting-started/run-an-instance/#protecting-it).
 
 That split isn't arbitrary. **A browser cannot set a header on a WebSocket handshake**; the
 constructor takes a URL and subprotocols and nothing else. So a browser-facing deployment has
@@ -104,7 +104,7 @@ credential chain.
 
 ## Related
 
-- [Deployment](/claude-worker/docs/guides/deployment/) — the host-app auth hook
+- [Deployment](/workerdeck/docs/guides/deployment/) — the host-app auth hook
   (`authenticate`), which is a separate concern from Anthropic credentials.
-- [Server reference](/claude-worker/docs/reference/server/) — `requireApiKey` and the rest of
+- [Server reference](/workerdeck/docs/reference/server/) — `requireApiKey` and the rest of
   the options.

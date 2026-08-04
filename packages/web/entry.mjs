@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url'
  * and `index.html` with `no-cache`, or a deployed update never reaches a browser
  * that already has the old one.
  *
- * If you just want this served correctly, the `claude-worker` package already
+ * If you just want this served correctly, the `workerdeck` package already
  * does all of the above.
  *
  * @type {string}

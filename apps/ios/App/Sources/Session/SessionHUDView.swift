@@ -1,4 +1,4 @@
-import ClaudeWorkerKit
+import WorkerDeckKit
 import SwiftUI
 
 /// The top bar of a live session: status, connectivity, and the compact usage HUD.

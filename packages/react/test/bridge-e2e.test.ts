@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
-import { createWorkerServer, type WorkerServer } from '@claude-worker/server'
-import { createVfs, loadEngine, type SandboxEngine } from '@claude-worker/sandbox'
-import type { ToolExecutionResult } from '@claude-worker/core'
-import { ClaudeWorkerClient, type SessionHandle } from '@claude-worker/client'
+import { createWorkerServer, type WorkerServer } from '@workerdeck/server'
+import { createVfs, loadEngine, type SandboxEngine } from '@workerdeck/sandbox'
+import type { ToolExecutionResult } from '@workerdeck/core'
+import { WorkerDeckClient, type SessionHandle } from '@workerdeck/client'
 import { createToolCallHost } from '../src/tool-host.ts'
 
 /**
@@ -55,7 +55,7 @@ async function start(bridgeTimeoutMs?: number) {
     },
   })
   const { port } = await running.listen(0, '127.0.0.1')
-  const client = new ClaudeWorkerClient({
+  const client = new WorkerDeckClient({
     baseUrl: `http://127.0.0.1:${port}/v1`,
     WebSocketImpl: WebSocket as unknown as typeof globalThis.WebSocket,
   })

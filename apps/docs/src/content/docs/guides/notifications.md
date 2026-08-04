@@ -37,7 +37,7 @@ const worker = createWorkerServer({
 })
 ```
 
-The config is **server-wide**, unlike the [job queue](/claude-worker/docs/guides/job-queue/)'s
+The config is **server-wide**, unlike the [job queue](/workerdeck/docs/guides/job-queue/)'s
 per-job `webhook` — the whole point is hearing about sessions you did not create and are not
 attached to. Every registry session qualifies, job runs included, so a job carrying its own
 webhook is reported on both channels.
@@ -65,7 +65,7 @@ POST /v1/sessions/:sessionId/permissions/:requestId
 ```
 
 — which is what makes an Approve/Deny action on a lock-screen notification, or a button in a
-Slack message, work at all. See [Permissions](/claude-worker/docs/guides/permissions/).
+Slack message, work at all. See [Permissions](/workerdeck/docs/guides/permissions/).
 
 `turn_completed` carries `result` (`isError`, `durationMs`, `numTurns`, `totalCostUsd`);
 `session_closed` carries `reason`.

@@ -2,7 +2,7 @@ import { chmod, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from '
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SessionRunnerConfig } from '@claude-worker/core'
+import type { SessionRunnerConfig } from '@workerdeck/core'
 import { createFileSessionStore, toDurableRecord, type ParkedSessionRecord } from '../src/index.ts'
 
 let dir: string

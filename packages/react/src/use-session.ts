@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import type { ClaudeWorkerClient, SessionHandle } from '@claude-worker/client'
-import type { AttachedFrame, PermissionMode, SessionEvent } from '@claude-worker/protocol'
+import type { WorkerDeckClient, SessionHandle } from '@workerdeck/client'
+import type { AttachedFrame, PermissionMode, SessionEvent } from '@workerdeck/protocol'
 import {
   applyEvent,
   initialTranscriptState,
@@ -42,7 +42,7 @@ export type UseClaudeSessionResult = {
 
 /** Attach to a session and maintain live transcript state. Detaches on unmount. */
 export function useClaudeSession(
-  client: ClaudeWorkerClient,
+  client: WorkerDeckClient,
   sessionId: string | undefined,
   options?: UseClaudeSessionOptions,
 ): UseClaudeSessionResult {

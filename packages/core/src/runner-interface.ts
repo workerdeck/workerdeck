@@ -4,8 +4,8 @@ import type {
   ProfileEngine,
   SessionEvent,
   SessionInfo,
-} from '@claude-worker/protocol'
-import type { SandboxVfs } from '@claude-worker/sandbox'
+} from '@workerdeck/protocol'
+import type { SandboxVfs } from '@workerdeck/sandbox'
 import type { ToolExecutionResult } from './tool-executor.ts'
 
 export type SessionEventListener = (event: SessionEvent) => void

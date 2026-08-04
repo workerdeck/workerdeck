@@ -1,8 +1,8 @@
 {
-  "name": "@claude-worker/react",
+  "name": "@workerdeck/react",
   "version": "0.6.0",
   "type": "module",
-  "description": "Headless React layer for claude-worker: useClaudeSession hook + pure transcript reducer. No styling opinion — @claude-worker/ui is the styled layer on top.",
+  "description": "Headless React layer for WorkerDeck: useClaudeSession hook + pure transcript reducer. No styling opinion — @workerdeck/ui is the styled layer on top.",
   "license": "MIT",
   "main": "./build/index.mjs",
   "types": "./build/index.d.mts",
@@ -11,7 +11,7 @@
   ],
   "exports": {
     ".": {
-      "@claude-worker/source": "./src/index.ts",
+      "@workerdeck/source": "./src/index.ts",
       "types": "./build/index.d.mts",
       "default": "./build/index.mjs"
     }
@@ -24,9 +24,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@claude-worker/client": "workspace:*",
-    "@claude-worker/protocol": "workspace:*",
-    "@claude-worker/sandbox": "workspace:*"
+    "@workerdeck/client": "workspace:*",
+    "@workerdeck/protocol": "workspace:*",
+    "@workerdeck/sandbox": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
@@ -38,8 +38,8 @@
     }
   },
   "devDependencies": {
-    "@claude-worker/core": "workspace:*",
-    "@claude-worker/server": "workspace:*",
+    "@workerdeck/core": "workspace:*",
+    "@workerdeck/server": "workspace:*",
     "@jitl/quickjs-ng-wasmfile-release-asyncify": "^0.31.0",
     "@jitl/quickjs-singlefile-browser-release-asyncify": "^0.31.0",
     "@types/node": "^22.10.0",
@@ -54,11 +54,11 @@
   "author": "Tobias Strebitzer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobiasstrebitzer/claude-worker.git",
+    "url": "git+https://github.com/tobiasstrebitzer/workerdeck.git",
     "directory": "packages/react"
   },
-  "homepage": "https://tobiasstrebitzer.github.io/claude-worker/",
-  "bugs": "https://github.com/tobiasstrebitzer/claude-worker/issues",
+  "homepage": "https://tobiasstrebitzer.github.io/workerdeck/",
+  "bugs": "https://github.com/tobiasstrebitzer/workerdeck/issues",
   "keywords": [
     "claude",
     "claude-code",

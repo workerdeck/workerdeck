@@ -5,7 +5,7 @@ import type {
   SDKMessage,
   SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk'
-import type { SessionEvent } from '@claude-worker/protocol'
+import type { SessionEvent } from '@workerdeck/protocol'
 import { SessionRunner, type SessionRunnerConfig } from '../src/index.ts'
 
 type HarnessCapabilities = {

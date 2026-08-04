@@ -27,7 +27,7 @@ describe('materializeAuthKey', () => {
   })
 
   it('creates the state dir itself when missing', async () => {
-    const dir = join(await tempStateDir(), 'nested', '.claude-worker')
+    const dir = join(await tempStateDir(), 'nested', '.workerdeck')
     const result = await materializeAuthKey(dir)
     expect(result.source).toBe('created')
     expect((await readFile(join(dir, 'auth-key'), 'utf8')).trim()).toBe(result.key)

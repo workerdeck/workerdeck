@@ -1,4 +1,4 @@
-import type { SessionInfo } from '@claude-worker/protocol'
+import type { SessionInfo } from '@workerdeck/protocol'
 import { Trash2 } from 'lucide-react'
 import { Badge } from '../ui/Badge.tsx'
 import { Button } from '../ui/Button.tsx'

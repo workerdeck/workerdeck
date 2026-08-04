@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util'
  * Restart guard for a deploy: ask a running instance whether anything would be
  * lost by stopping it, and exit non-zero while the answer is yes.
  *
- *   claude-worker guard --wait 300 --allow-parked && launchctl kickstart -k …
+ *   workerdeck guard --wait 300 --allow-parked && launchctl kickstart -k …
  *
  * What a restart costs, and why this is policy and not a server route: an
  * in-flight turn dies with the process (the CLI subprocess and the provider
@@ -26,7 +26,7 @@ import { parseArgs } from 'node:util'
 
 const BUSY_STATUSES = new Set(['starting', 'running', 'awaiting_approval'])
 
-const HELP = `usage: claude-worker guard [--url URL] [--token TOKEN] [--header name=value]
+const HELP = `usage: workerdeck guard [--url URL] [--token TOKEN] [--header name=value]
                            [--wait SECONDS] [--interval SECONDS]
                            [--allow-parked] [--allow-queued] [--json]
 
@@ -67,9 +67,9 @@ export async function runGuard(argv: string[]): Promise<number> {
       options: {
         url: {
           type: 'string',
-          default: process.env.CLAUDE_WORKER_URL ?? 'http://127.0.0.1:8787/v1',
+          default: process.env.WORKERDECK_URL ?? 'http://127.0.0.1:8787/v1',
         },
-        token: { type: 'string', default: process.env.CLAUDE_WORKER_TOKEN },
+        token: { type: 'string', default: process.env.WORKERDECK_TOKEN },
         header: { type: 'string', multiple: true, default: [] },
         wait: { type: 'string', default: '0' },
         interval: { type: 'string', default: '5' },

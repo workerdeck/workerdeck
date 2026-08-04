@@ -188,7 +188,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   two profiles collapse into one identity. A profile whose dir is NOT the default needs its own
   credentials: run `CLAUDE_CONFIG_DIR=<dir> claude auth login` (writes `<dir>/.credentials.json`),
   or inject a long-lived `CLAUDE_CODE_OAUTH_TOKEN` via `buildRunnerConfig` (the launchd pattern
-  in `examples/claude-worker.config.mjs`). The `checkCredentials` preflight probes each profile's
+  in `examples/workerdeck.config.mjs`). The `checkCredentials` preflight probes each profile's
   exact session env with `claude auth status` at `listen()` and warns on a logged-out verdict —
   warn-only, silent on "couldn't check", off by default in the library, on in the CLI, and it
   reads nothing but the `loggedIn` boolean (never credential material or account identity).
@@ -224,7 +224,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 ## Build, test & packaging
 
 - A package that imports a workspace sibling needs the vitest workspace-source alias (see
-  `packages/core/vitest.config.ts`) — the `@claude-worker/source` condition alone isn't enough,
+  `packages/core/vitest.config.ts`) — the `@workerdeck/source` condition alone isn't enough,
   vite-node externalizes siblings to their unbuilt `build/` entries.
 - Inter-package deps are `workspace:*`, and **pnpm must be what packs them**: `pnpm publish`/`pnpm
   pack` rewrite the protocol to the concrete version, `npm publish` does not — npm can't resolve
@@ -262,7 +262,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   would therefore ship while being invisible to both the version bump and the tag check: a stale
   version, silently, on every release. This is why the dashboard is `packages/web` and not
   `apps/web` — it is published, so all three have to agree about it.
-- The root package is `claude-worker-monorepo`, not `claude-worker`. The unscoped npm name belongs
+- The root package is `workerdeck-monorepo`, not `workerdeck`. The unscoped npm name belongs
   to `packages/cli`, and two packages with one name in a pnpm workspace is a conflict. The root is
   private, so its name is cosmetic — but don't "fix" it back.
 - `packages/web` is published as **static files with zero runtime dependencies** — everything it
@@ -270,10 +270,10 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   all ends up compiled into `dist/`. Declaring any of them a dependency would make consumers
   install a toolchain to obtain files. Its entry (`entry.mjs`) is hand-written and outside vite's
   graph, so the published entry can never drift from the published `dist/`.
-- `packages/cli` gets the dashboard from a **runtime dependency** on `@claude-worker/web`, not a
+- `packages/cli` gets the dashboard from a **runtime dependency** on `@workerdeck/web`, not a
   vendored copy: `resolveWebRoot()` is that package's exported `dashboardDir`. Two consequences.
   In a checkout it resolves to `packages/web/dist`, which only exists once the app has been built
-  — dev never builds, so `pnpm --filter @claude-worker/web run build` is a prerequisite for
+  — dev never builds, so `pnpm --filter @workerdeck/web run build` is a prerequisite for
   running the CLI from source (`resolveWebRoot()` throws with that instruction). And in
   `packages/cli/vitest.config.ts` the workspace-source alias needs an explicit entry for `web`
   *before* the general rule: `web` is an app with no `src/index.ts` for the regex to find.
@@ -285,7 +285,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `.woff2` (`scripts/trim-fonts.mjs`, ~660 KB). The generated `@font-face` lists `woff2` first, so
   any browser that can run the app never requests them. It happens in the *producing* package so
   every consumer gets one payload.
-- The CLI loads `claude-worker.config.mjs` through a dynamic `import()` of a *runtime* path on
+- The CLI loads `workerdeck.config.mjs` through a dynamic `import()` of a *runtime* path on
   purpose: it is the operator's code, not part of our module graph. Keep the specifier
   non-literal so no bundler tries to resolve it — and note vitest cannot load a config fixture from
   outside the project root, which is why `packages/cli/test` writes them under the package.

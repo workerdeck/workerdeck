@@ -16,7 +16,7 @@ struct HostListView: View {
         ContentUnavailableView {
           Label("No servers", systemImage: "server.rack")
         } description: {
-          Text("Add the claude-worker gateway you run — typically over Tailscale.")
+          Text("Add the workerdeck gateway you run — typically over Tailscale.")
         } actions: {
           Button("Add server") { editing = Host() }
             .buttonStyle(.borderedProminent)

@@ -1,4 +1,4 @@
-/** The claude-worker "Session Stack" mark — see docs/assets/BRAND.md. */
+/** The workerdeck "Session Stack" mark — see docs/assets/BRAND.md. */
 export function BrandMark({ className }: { className?: string }) {
   return (
     <svg

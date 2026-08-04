@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from '@tanstack/react-router'
-import type { SessionInfo } from '@claude-worker/protocol'
+import type { SessionInfo } from '@workerdeck/protocol'
 import {
   AlertDialog,
   AlertDialogClose,
@@ -12,7 +12,7 @@ import {
   CopyButton,
   SessionPanel,
   toast,
-} from '@claude-worker/ui'
+} from '@workerdeck/ui'
 import { ArrowLeft, Trash2 } from 'lucide-react'
 import { client } from '@/lib/client.ts'
 

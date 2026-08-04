@@ -2,7 +2,7 @@
  * Manual smoke for the FULL consumer stack against a real provider:
  *
  *   real model → AiSdkRunner on a real createWorkerServer → HTTP/WS →
- *   ClaudeWorkerClient → createToolCallHost executing in a real QuickJS guest
+ *   WorkerDeckClient → createToolCallHost executing in a real QuickJS guest
  *
  * Spends tokens — never part of `pnpm test`.
  *
@@ -19,13 +19,13 @@
  */
 import WebSocket from 'ws'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
-import { createVfs, loadEngine, type SandboxVfs } from '@claude-worker/sandbox'
-import { createEngineSession, type ToolExecutor } from '@claude-worker/core'
-import { createWorkerServer } from '@claude-worker/server'
-import { ClaudeWorkerClient } from '@claude-worker/client'
-import { createToolCallHost } from '@claude-worker/react'
+import { createVfs, loadEngine, type SandboxVfs } from '@workerdeck/sandbox'
+import { createEngineSession, type ToolExecutor } from '@workerdeck/core'
+import { createWorkerServer } from '@workerdeck/server'
+import { WorkerDeckClient } from '@workerdeck/client'
+import { createToolCallHost } from '@workerdeck/react'
 import type { LanguageModel } from 'ai'
-import type { SessionEvent } from '@claude-worker/protocol'
+import type { SessionEvent } from '@workerdeck/protocol'
 
 type ProviderName = 'moonshot' | 'openai' | 'anthropic'
 
@@ -122,13 +122,13 @@ console.log(`\nServer listening on 127.0.0.1:${port}`)
 
 // ---------------------------------------------------------------- client ----
 
-const client = new ClaudeWorkerClient({
+const client = new WorkerDeckClient({
   baseUrl: `http://127.0.0.1:${port}/v1`,
   WebSocketImpl: WebSocket as unknown as typeof globalThis.WebSocket,
 })
 
 const session = await client.createSession({
-  cwd: '/tmp/claude-worker-smoke',
+  cwd: '/tmp/workerdeck-smoke',
   profile: providerName,
 })
 console.log(`Session ${session.id} created over REST (profile '${session.profile}')`)
@@ -137,7 +137,7 @@ const handle = client.attach(session.id)
 await new Promise<void>((resolve) => handle.on('attached', () => resolve()))
 console.log('Attached over WS')
 
-// The "browser" side: the real tool host from @claude-worker/react, running the
+// The "browser" side: the real tool host from @workerdeck/react, running the
 // real guest. Attached BEFORE the prompt — bridged dispatch fails fast otherwise.
 const host = createToolCallHost(handle, { loadEngine: async () => engine })
 

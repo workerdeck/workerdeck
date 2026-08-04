@@ -4,7 +4,7 @@ import Foundation
   import FoundationNetworking
 #endif
 
-/// A failed claude-worker call.
+/// A failed workerdeck call.
 ///
 /// Mirrors the reference client's `#call`: when the server answered with a JSON
 /// body carrying `{"error": "..."}` that message is used verbatim, otherwise the
@@ -23,9 +23,9 @@ public struct WorkerClientError: Error, LocalizedError, Equatable, Sendable {
   public var errorDescription: String? { message }
 }
 
-/// REST + WebSocket client for a claude-worker gateway.
+/// REST + WebSocket client for a workerdeck gateway.
 ///
-/// Swift port of `ClaudeWorkerClient` (packages/client/src/index.ts). The job
+/// Swift port of `WorkerDeckClient` (packages/client/src/index.ts). The job
 /// queue surface (`/jobs`, `/queue`) is deliberately not mirrored yet — it is a
 /// later phase of the mobile plan.
 ///
@@ -228,7 +228,7 @@ public struct WorkerClient: Sendable {
 
   private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
     // Never a key-conversion strategy: the protocol types own their key spelling
-    // (camelCase for claude-worker's own shapes, snake_case for API mirrors).
+    // (camelCase for workerdeck's own shapes, snake_case for API mirrors).
     try JSONDecoder().decode(type, from: data)
   }
 

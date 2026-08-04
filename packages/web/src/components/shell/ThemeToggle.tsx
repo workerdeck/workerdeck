@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
-import { Button } from '@claude-worker/ui'
+import { Button } from '@workerdeck/ui'
 import { getTheme, toggleTheme, type Theme } from '@/lib/theme.ts'
 
 export function ThemeToggle() {

@@ -1,4 +1,4 @@
-import type { CreateJobRequest, JobInfo } from '@claude-worker/protocol'
+import type { CreateJobRequest, JobInfo } from '@workerdeck/protocol'
 
 /** A job as the adapter stores it: the wire-visible info plus the original request. */
 export type JobRecord = {

@@ -21,6 +21,9 @@ _docs/
 
 # Dev-server state: the profile store (examples/provider-server.ts) and the default
 # parked-session directory (createFileSessionStore) — the latter holds transcripts.
+.workerdeck/
+# Pre-rebrand name. Nothing writes here any more, but existing checkouts still have
+# the directory — and it holds provider API keys, so it must stay ignored.
 .claude-worker/
 
 # The CLI's on-disk test fixtures (config files, fake dashboard roots).

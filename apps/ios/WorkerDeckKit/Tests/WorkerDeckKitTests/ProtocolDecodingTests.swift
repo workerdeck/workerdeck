@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import ClaudeWorkerKit
+@testable import WorkerDeckKit
 
 @Suite("Protocol decoding")
 struct ProtocolDecodingTests {

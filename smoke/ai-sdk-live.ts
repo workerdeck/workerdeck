@@ -16,9 +16,9 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
-import { createVfs, loadEngine } from '@claude-worker/sandbox'
-import { AiSdkRunner, QuickJsExecutor } from '@claude-worker/core'
-import type { SessionEvent } from '@claude-worker/protocol'
+import { createVfs, loadEngine } from '@workerdeck/sandbox'
+import { AiSdkRunner, QuickJsExecutor } from '@workerdeck/core'
+import type { SessionEvent } from '@workerdeck/protocol'
 
 type ProviderName = 'moonshot' | 'openai' | 'anthropic'
 

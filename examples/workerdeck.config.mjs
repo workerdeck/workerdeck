@@ -1,12 +1,12 @@
 /**
- * Advanced `claude-worker` configuration — the shape a real deployment needs.
+ * Advanced `workerdeck` configuration — the shape a real deployment needs.
  *
- * `npx claude-worker` needs none of this: with no config file it serves the
+ * `npx workerdeck` needs none of this: with no config file it serves the
  * gateway and the dashboard on 127.0.0.1:8787, unauthenticated, with durable
- * parking under ~/.claude-worker. This file is for the cases flags cannot
+ * parking under ~/.workerdeck. This file is for the cases flags cannot
  * express, because the options are functions.
  *
- * Run it with:  claude-worker --config ./claude-worker.config.mjs
+ * Run it with:  workerdeck --config ./workerdeck.config.mjs
  *
  * Precedence is narrowest-wins: flags > env > this file > defaults.
  */
@@ -19,7 +19,7 @@
  * credential the browser can actually present (a cookie your own middleware
  * sets, typically). Use `--auth-key` instead unless you need this.
  */
-/** @type {import('claude-worker').ClaudeWorkerConfig['authenticate']} */
+/** @type {import('workerdeck').WorkerDeckConfig['authenticate']} */
 const authenticate = (req) => {
   const key = req.headers['x-agent-proxy-key']
   if (typeof key !== 'string' || key !== process.env.AGENT_PROXY_KEY) return null
@@ -28,7 +28,7 @@ const authenticate = (req) => {
   return { id: 'gtm' }
 }
 
-/** @type {import('claude-worker').ClaudeWorkerConfig} */
+/** @type {import('workerdeck').WorkerDeckConfig} */
 export default {
   authenticate,
 

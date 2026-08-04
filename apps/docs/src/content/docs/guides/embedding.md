@@ -1,6 +1,6 @@
 ---
 title: Embedding
-description: Host claude-worker in your own app, from the styled SessionPanel down to an in-process SessionRunner.
+description: Host WorkerDeck in your own app, from the styled SessionPanel down to an in-process SessionRunner.
 order: 1
 ---
 
@@ -11,7 +11,7 @@ reject with 401. `createWorkerServer` refuses to start without `authenticate` un
 explicitly pass `allowUnauthenticated: true` (loopback dev only — never expose that):
 
 ```ts
-import { createWorkerServer } from '@claude-worker/server'
+import { createWorkerServer } from '@workerdeck/server'
 
 const worker = createWorkerServer({
   authenticate: async (req) => verifyMyAppToken(req.headers.authorization),
@@ -28,14 +28,14 @@ const { port } = await worker.listen(8787)
   inject `env`, tool policy, per-skill constraints. The server trusts its host app, so this hook
   plus your auth is where you clamp what clients may request.
 
-The full options reference lives at [Server](/claude-worker/docs/reference/server/).
+The full options reference lives at [Server](/workerdeck/docs/reference/server/).
 
 ## Client side
 
 ```ts
-import { ClaudeWorkerClient } from '@claude-worker/client'
+import { WorkerDeckClient } from '@workerdeck/client'
 
-const client = new ClaudeWorkerClient({
+const client = new WorkerDeckClient({
   baseUrl: 'http://127.0.0.1:8787/v1', // ws:// URL is derived from it
   headers: { authorization: 'Bearer …' }, // REST auth; use buildWsUrl/cookies for WS auth
 })
@@ -60,19 +60,19 @@ param via `buildWsUrl(sessionId, afterSeq)` or with cookies.
 
 Four levels, from most batteries-included to most raw:
 
-1. **`SessionPanel`** (`@claude-worker/ui`) — status bar, streaming transcript, tool-call cards,
+1. **`SessionPanel`** (`@workerdeck/ui`) — status bar, streaming transcript, tool-call cards,
    permission prompts, composer. `<SessionPanel client={client} sessionId={session.id} />`.
-2. **Headless `useClaudeSession`** (`@claude-worker/react`) — the hook attaches to a session,
+2. **Headless `useClaudeSession`** (`@workerdeck/react`) — the hook attaches to a session,
    folds the event stream through a pure transcript reducer, and hands back live state plus the
    control surface (send, approve/deny, interrupt, permission mode, model). Bring your own
    rendering.
 3. **Raw client stream** — `client.attach(sessionId).on('event', …)` with your own state
    handling; the framework-free reducer (`applyEvent`, `initialTranscriptState`) is exported
-   from `@claude-worker/react` if you want it without React.
-4. **In-process `SessionRunner`** (`@claude-worker/core`) — no server at all: subscribe to
+   from `@workerdeck/react` if you want it without React.
+4. **In-process `SessionRunner`** (`@workerdeck/core`) — no server at all: subscribe to
    events, `sendMessage()`, `resolvePermission()` directly in your Node process.
 
-## Tailwind v4 wiring for @claude-worker/ui
+## Tailwind v4 wiring for @workerdeck/ui
 
 The package ships **source styles + source classnames** — your app's Tailwind build compiles
 them. Three steps:
@@ -81,13 +81,13 @@ them. Three steps:
 
 ```css
 @import 'tailwindcss';
-@import '@claude-worker/ui/theme.css';
+@import '@workerdeck/ui/theme.css';
 /* Let Tailwind see this package's classnames (node_modules is not scanned by default). */
-@source '../node_modules/@claude-worker/ui';
+@source '../node_modules/@workerdeck/ui';
 /* streamdown (the markdown renderer) also styles itself with Tailwind classes, split across
  * chunk files — scan its whole dist dir. With npm/yarn it's hoisted to node_modules/streamdown;
  * with pnpm it's nested under this package: */
-@source '../node_modules/@claude-worker/ui/node_modules/streamdown/dist';
+@source '../node_modules/@workerdeck/ui/node_modules/streamdown/dist';
 ```
 
 2. Set the theme attribute before first paint (no-flash), e.g. in `index.html`:

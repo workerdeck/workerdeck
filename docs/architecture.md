@@ -1,6 +1,6 @@
 # Architecture
 
-How claude-worker is put together: ten packages, a docs site, one dependency rule. Scope
+How WorkerDeck is put together: ten packages, a docs site, one dependency rule. Scope
 guards behind this shape: no serverless hosting, no multi-tenant SaaS, no claude.ai auth. For
 what's deliberately not built yet, see the [roadmap](./roadmap.md).
 
@@ -21,7 +21,7 @@ what's deliberately not built yet, see the [roadmap](./roadmap.md).
                prebuilt dashboard)
 ```
 
-`@claude-worker/protocol` depends on nothing and everything depends on it. The browser side
+`@workerdeck/protocol` depends on nothing and everything depends on it. The browser side
 (client / react / ui / apps) must never import core, server, or the Agent SDK — the wire
 protocol is the only bridge. This rule is what keeps the protocol honest as the product
 boundary: anything a client needs must be expressible as protocol events and commands.
@@ -151,15 +151,15 @@ boundary: anything a client needs must be expressible as protocol events and com
   the session panel are engine-aware: they offer only the permission modes and models the
   selected profile's engine actually runs, and hide the CLI-only affordances (resumable SDK
   sessions, setting sources, the bypass pre-authorization) for provider profiles.
-- **`packages/cli`** — published as the unscoped **`claude-worker`**: the turnkey instance, the
+- **`packages/cli`** — published as the unscoped **`workerdeck`**: the turnkey instance, the
   one package that is a service rather than a library. It runs `createWorkerServer` and serves the
-  dashboard — `@claude-worker/web`'s exported `dashboardDir`, a runtime dependency rather than a
+  dashboard — `@workerdeck/web`'s exported `dashboardDir`, a runtime dependency rather than a
   vendored copy — from the *same* `node:http` server via the server's `fallback` option. Single-origin is not a convenience here: a browser cannot set a header on a
   WebSocket handshake, so the only credential a tab can present on a session attach is a cookie,
   and a cookie only rides requests to the origin that set it. That is why the dashboard and `/v1`
   share a port, and why `--auth-key` can protect both with one shared secret — a login page trades
   it for an `HttpOnly` cookie for browsers, while services keep sending it as a header. Also hosts
-  `claude-worker guard`, the restart guard.
+  `workerdeck guard`, the restart guard.
 - (A minimal second consumer, `apps/demo`, proved `client` + `ui` portability for the V1
   acceptance scope; it was removed once that was established — see git history.)
 
@@ -218,7 +218,7 @@ With `createFileSessionStore()` the boundary survives the process too: `hydrate(
 `listen()`, re-indexes every stored record's executions, and re-arms their watchdogs — with a
 floor (`parking.expiredGraceMs`, default 60s) under any deadline that passed during the outage,
 since nothing could have been delivered while the process was down. What durability does *not*
-cover is a turn in flight at the moment of the restart; `claude-worker guard` (`packages/cli`) is
+cover is a turn in flight at the moment of the restart; `workerdeck guard` (`packages/cli`) is
 the other half, refusing the restart while any session is mid-turn, awaiting an approval, or
 (unless `--allow-parked`) parked without a durable store behind it.
 
@@ -226,8 +226,8 @@ the other half, refusing the restart while any session is mid-turn, awaiting an 
 
 pnpm workspace + turbo; TS 7 native preview (`tsgo`) for typecheck; oxlint; tsdown builds
 `build/` only on `prepack`/CI. Dev never builds: every package exposes a
-`@claude-worker/source` export condition pointing at `src/index.ts` — Node entrypoints run with
-`node --conditions=@claude-worker/source --import @swc-node/register/esm-register`, Vite and
+`@workerdeck/source` export condition pointing at `src/index.ts` — Node entrypoints run with
+`node --conditions=@workerdeck/source --import @swc-node/register/esm-register`, Vite and
 vitest set `resolve.conditions` (vitest configs additionally alias workspace deps to source).
 Imports within a package use explicit `.ts` extensions.
 

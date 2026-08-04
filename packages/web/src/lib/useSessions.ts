@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { SessionInfo } from '@claude-worker/protocol'
+import type { SessionInfo } from '@workerdeck/protocol'
 import { client } from './client.ts'
 
 /** Poll the server's session registry. */

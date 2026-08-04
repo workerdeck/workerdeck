@@ -28,7 +28,7 @@ const worker = createWorkerServer({
 })
 ```
 
-All queue options are documented in the [server reference](/claude-worker/docs/reference/server/).
+All queue options are documented in the [server reference](/workerdeck/docs/reference/server/).
 
 ## Scheduling jobs
 
@@ -64,7 +64,7 @@ job_started → job_progress (per assistant message / permission request)
 POST response. `job_progress` carries a `JobProgress` with a preview and, for
 `permission_requested`, the full request (including `AskUserQuestion` input) so webhook
 consumers can answer via `POST /v1/sessions/:sessionId/permissions/:requestId` — see
-[Permissions](/claude-worker/docs/guides/permissions/) and `questionBehavior` for the
+[Permissions](/workerdeck/docs/guides/permissions/) and `questionBehavior` for the
 unattended-run policies.
 
 ## Budgets, watchdog, retries, retention
@@ -138,8 +138,8 @@ result completes it. `QueueStats.parked` counts the waiting runs; `JobInfo.parke
 cancelling a parked job discards its snapshot so nothing can wake it. A `failed` result — or the
 execution watchdog's timeout — reaches the agent as ordinary tool output, which it adapts to,
 rather than failing the run. Wiring the executor side is in
-[the server reference](/claude-worker/docs/reference/server/).
+[the server reference](/workerdeck/docs/reference/server/).
 
 A park that may outlive the process needs a durable store —
 `parking: { store: createFileSessionStore({ dir }) }`, plus the restart guard, in
-[Deployment](/claude-worker/docs/guides/deployment/#restarts-parked-sessions-and-the-deploy-guard).
+[Deployment](/workerdeck/docs/guides/deployment/#restarts-parked-sessions-and-the-deploy-guard).

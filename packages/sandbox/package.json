@@ -1,8 +1,8 @@
 {
-  "name": "@claude-worker/sandbox",
+  "name": "@workerdeck/sandbox",
   "version": "0.6.0",
   "type": "module",
-  "description": "The claude-worker execution sandbox: QuickJS-NG-in-WASM guest for untrusted, LLM-generated scripts with an in-memory scratch VFS, a hardened by-value host bridge (capability host functions only — no ambient fs/network), and interpreter-enforced memory + wall-clock limits. Engine-variant-injected so server (Node asyncify) and browser (singlefile asyncify) share one guest engine. Leaf package: depends on neither core/server nor any model SDK.",
+  "description": "The WorkerDeck execution sandbox: QuickJS-NG-in-WASM guest for untrusted, LLM-generated scripts with an in-memory scratch VFS, a hardened by-value host bridge (capability host functions only — no ambient fs/network), and interpreter-enforced memory + wall-clock limits. Engine-variant-injected so server (Node asyncify) and browser (singlefile asyncify) share one guest engine. Leaf package: depends on neither core/server nor any model SDK.",
   "license": "MIT",
   "main": "./build/index.mjs",
   "types": "./build/index.d.mts",
@@ -11,7 +11,7 @@
   ],
   "exports": {
     ".": {
-      "@claude-worker/source": "./src/index.ts",
+      "@workerdeck/source": "./src/index.ts",
       "types": "./build/index.d.mts",
       "default": "./build/index.mjs"
     }
@@ -36,11 +36,11 @@
   "author": "Tobias Strebitzer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobiasstrebitzer/claude-worker.git",
+    "url": "git+https://github.com/tobiasstrebitzer/workerdeck.git",
     "directory": "packages/sandbox"
   },
-  "homepage": "https://tobiasstrebitzer.github.io/claude-worker/",
-  "bugs": "https://github.com/tobiasstrebitzer/claude-worker/issues",
+  "homepage": "https://tobiasstrebitzer.github.io/workerdeck/",
+  "bugs": "https://github.com/tobiasstrebitzer/workerdeck/issues",
   "keywords": [
     "claude",
     "sandbox",

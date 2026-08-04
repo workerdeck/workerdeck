@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { JobInfo, QueueStats } from '@claude-worker/protocol'
+import type { JobInfo, QueueStats } from '@workerdeck/protocol'
 import { client } from './client.ts'
 
 /**

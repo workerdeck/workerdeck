@@ -7,14 +7,14 @@ order: 3
 ## Prerequisites
 
 - Node ≥ 22 and pnpm.
-- Anthropic credentials in your environment — claude-worker implements no auth of its own; the
+- Anthropic credentials in your environment — WorkerDeck implements no auth of its own; the
   Agent SDK resolves whatever the operator's environment provides (`ANTHROPIC_API_KEY`,
   Bedrock/Vertex, or your own `claude login`). See
-  [Auth & Anthropic's terms](/claude-worker/docs/guides/auth/).
+  [Auth & Anthropic's terms](/workerdeck/docs/guides/auth/).
 
-If you only want claude-worker *running*, you don't need this page at all: `npx claude-worker`
+If you only want WorkerDeck *running*, you don't need this page at all: `npx workerdeck`
 serves the gateway and the dashboard together, covered in
-[Run an instance](/claude-worker/docs/getting-started/run-an-instance/). What follows is for
+[Run an instance](/workerdeck/docs/getting-started/run-an-instance/). What follows is for
 developing against the source, or embedding the libraries in your own app.
 
 ## Run the workspace
@@ -22,14 +22,14 @@ developing against the source, or embedding the libraries in your own app.
 To develop against the source, or to embed the libraries:
 
 ```bash
-git clone https://github.com/tobiasstrebitzer/claude-worker
-cd claude-worker
+git clone https://github.com/tobiasstrebitzer/workerdeck
+cd workerdeck
 pnpm install
 pnpm server   # gateway + dashboard on http://127.0.0.1:8787, no auth (loopback only!)
 pnpm web      # optional: vite dashboard on :5191 with HMR, proxying /v1 to the gateway
 ```
 
-`pnpm server` is the same `claude-worker` CLI as above, pointed at
+`pnpm server` is the same `workerdeck` CLI as above, pointed at
 `examples/dev-server.config.mjs` — there is no separate dev entry point, so the thing you develop
 against and the thing you ship are one code path. Edit that config directly; flags still win
 (`pnpm server --port 9000`). It runs without auth, which the CLI only permits on loopback: bind
@@ -54,7 +54,7 @@ the prior transcript as replay events.
 Server side — the host app supplies the authenticator; the worker has no auth story of its own:
 
 ```ts
-import { createWorkerServer } from '@claude-worker/server'
+import { createWorkerServer } from '@workerdeck/server'
 
 const worker = createWorkerServer({
   authenticate: async (req) => verifyMyAppToken(req.headers.authorization),
@@ -67,10 +67,10 @@ await worker.listen(8787)
 Client side:
 
 ```tsx
-import { ClaudeWorkerClient } from '@claude-worker/client'
-import { SessionPanel } from '@claude-worker/ui' // Tailwind v4 host: see the embedding guide
+import { WorkerDeckClient } from '@workerdeck/client'
+import { SessionPanel } from '@workerdeck/ui' // Tailwind v4 host: see the embedding guide
 
-const client = new ClaudeWorkerClient({ baseUrl: 'https://my-app/worker/v1', headers: { ... } })
+const client = new WorkerDeckClient({ baseUrl: 'https://my-app/worker/v1', headers: { ... } })
 const session = await client.createSession({
   cwd: '/srv/checkouts/my-repo',
   prompt: '/verify-content 42',
@@ -80,13 +80,13 @@ const session = await client.createSession({
 <SessionPanel client={client} sessionId={session.id} />
 ```
 
-`@claude-worker/ui` ships source styles that your app's Tailwind v4 build compiles — the wiring
+`@workerdeck/ui` ships source styles that your app's Tailwind v4 build compiles — the wiring
 (theme import, `@source` directives, theme attribute) is covered in
-[Embedding](/claude-worker/docs/guides/embedding/).
+[Embedding](/workerdeck/docs/guides/embedding/).
 
 ## Next steps
 
-- [Embedding](/claude-worker/docs/guides/embedding/) — the full options ladder, from styled
+- [Embedding](/workerdeck/docs/guides/embedding/) — the full options ladder, from styled
   panel down to in-process `SessionRunner`.
-- [Permissions](/claude-worker/docs/guides/permissions/) — approvals, modes, tool allowlists.
-- [Job queue](/claude-worker/docs/guides/job-queue/) — unattended one-shot runs with webhooks.
+- [Permissions](/workerdeck/docs/guides/permissions/) — approvals, modes, tool allowlists.
+- [Job queue](/workerdeck/docs/guides/job-queue/) — unattended one-shot runs with webhooks.

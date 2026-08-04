@@ -1,6 +1,6 @@
-# claude-worker for iOS
+# WorkerDeck for iOS
 
-Native iOS remote control for a self-hosted [claude-worker](../../README.md) server: watch and
+Native iOS remote control for a self-hosted [WorkerDeck](../../README.md) server: watch and
 drive Claude Code sessions from your phone — streaming transcript, permission prompts, session
 creation/resume, context + rate-limit HUD — over your own network (typically Tailscale). No
 relay, no cloud: the app is a plain HTTP/WS client to the gateway you already run.
@@ -9,10 +9,10 @@ Plan and research: `_docs/plans/mobile-client.md` (gitignored, local).
 
 ## Layout
 
-- `ClaudeWorkerKit/` — SwiftPM package, the platform-agnostic core (builds on iOS + macOS, unit
+- `WorkerDeckKit/` — SwiftPM package, the platform-agnostic core (builds on iOS + macOS, unit
   tests run with plain `swift test` on a Mac):
   - `ProtocolTypes.swift` / `RestTypes.swift` / `JSONValue.swift` — hand-written Swift mirror of
-    `@claude-worker/protocol` (see `WorkerProtocol.version`, kept in lockstep with
+    `@workerdeck/protocol` (see `WorkerProtocol.version`, kept in lockstep with
     `PROTOCOL_VERSION`). Decoding is lenient by contract: unknown event/frame/block types degrade
     to `.unknown`, never a stream error.
   - `WorkerClient.swift` / `SessionHandle.swift` — REST client + WebSocket session handle
@@ -33,12 +33,12 @@ Plan and research: `_docs/plans/mobile-client.md` (gitignored, local).
 
 ```sh
 # Kit tests (no Xcode project needed)
-cd apps/ios/ClaudeWorkerKit && swift test
+cd apps/ios/WorkerDeckKit && swift test
 
 # App
-cd apps/ios && xcodegen generate && open ClaudeWorkerApp.xcodeproj
+cd apps/ios && xcodegen generate && open WorkerDeckApp.xcodeproj
 # or headless:
-xcodebuild -project ClaudeWorkerApp.xcodeproj -scheme ClaudeWorkerApp \
+xcodebuild -project WorkerDeckApp.xcodeproj -scheme WorkerDeckApp \
   -destination 'platform=iOS Simulator,name=iPhone 17' build
 ```
 

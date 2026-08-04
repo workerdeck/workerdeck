@@ -1,4 +1,4 @@
-import ClaudeWorkerKit
+import WorkerDeckKit
 import SwiftUI
 
 /// The live session: one `SessionHandle`, one `TranscriptState`, and the three

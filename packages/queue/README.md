@@ -1,22 +1,22 @@
-# @claude-worker/queue
+# @workerdeck/queue
 
-Job queue over the claude-worker session runner: remote services schedule one-shot runs; the queue
+Job queue over the WorkerDeck session runner: remote services schedule one-shot runs; the queue
 executes them as ordinary sessions with bounded concurrency and token budgets, delivering progress
 and completion via webhooks. Pluggable adapter interface — in-memory bundled; redis/bullmq/pubsub
 adapters can implement the same contract.
 
-Part of [claude-worker](https://github.com/tobiasstrebitzer/claude-worker). It runs jobs through
-[`@claude-worker/core`](https://www.npmjs.com/package/@claude-worker/core)'s `SessionRunner` and is
+Part of [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck). It runs jobs through
+[`@workerdeck/core`](https://www.npmjs.com/package/@workerdeck/core)'s `SessionRunner` and is
 usually consumed indirectly: pass the `queue` option to
-[`@claude-worker/server`](https://www.npmjs.com/package/@claude-worker/server) and it mounts
+[`@workerdeck/server`](https://www.npmjs.com/package/@workerdeck/server) and it mounts
 `/jobs` + `/queue` REST routes plus a `/queue/ws` live stream, with
-[`@claude-worker/client`](https://www.npmjs.com/package/@claude-worker/client) as the caller.
+[`@workerdeck/client`](https://www.npmjs.com/package/@workerdeck/client) as the caller.
 Use this package directly to embed the queue in a custom host or to write a shared-backend adapter.
 
 ## Install
 
 ```bash
-npm install @claude-worker/queue
+npm install @workerdeck/queue
 ```
 
 ## Usage
@@ -25,8 +25,8 @@ A job is **one unattended run**: the session executes `session.prompt`, the firs
 completes the job (result, cumulative usage, cost), and the session is closed.
 
 ```ts
-import { JobQueue } from '@claude-worker/queue'
-import { SessionRunner } from '@claude-worker/core'
+import { JobQueue } from '@workerdeck/queue'
+import { SessionRunner } from '@workerdeck/core'
 
 const queue = new JobQueue({
   // Typically the server registry's create(), so job sessions are ordinary
@@ -103,4 +103,4 @@ progress deliveries, and free-form `meta`.
 ## License
 
 MIT © Tobias Strebitzer — see
-[LICENSE](https://github.com/tobiasstrebitzer/claude-worker/blob/master/LICENSE).
+[LICENSE](https://github.com/tobiasstrebitzer/workerdeck/blob/master/LICENSE).

@@ -5,15 +5,15 @@ import type { Duplex } from 'node:stream'
 import { join, resolve as resolvePath, sep } from 'node:path'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { listSessions as sdkListSessions } from '@anthropic-ai/claude-agent-sdk'
-import { checkClaudeAuth } from '@claude-worker/core'
+import { checkClaudeAuth } from '@workerdeck/core'
 import type {
   ClaudeAuthProbe,
   Runner,
   RunnerSnapshot,
   SessionRunnerConfig,
   ToolExecutionResult,
-} from '@claude-worker/core'
-import { JobQueue, type QueueAdapter } from '@claude-worker/queue'
+} from '@workerdeck/core'
+import { JobQueue, type QueueAdapter } from '@workerdeck/queue'
 import {
   PROTOCOL_VERSION,
   PROVIDER_PERMISSION_MODES,
@@ -31,7 +31,7 @@ import {
   type ServerFrame,
   type SubmitExecutionResultRequest,
   type UpdateProfileRequest,
-} from '@claude-worker/protocol'
+} from '@workerdeck/protocol'
 import { SessionRegistry } from './registry.ts'
 import { SessionNotifier, type SessionNotificationOptions } from './notifications.ts'
 import { BridgeHub, type BridgeHubOptions } from './bridge.ts'
@@ -843,7 +843,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         subscriptionNoticeShown.add(profileName)
         const scope = profileName ? `Sessions under profile '${profileName}'` : 'Sessions'
         console.warn(
-          `[claude-worker] ${scope} are using claude.ai subscription credentials ` +
+          `[workerdeck] ${scope} are using claude.ai subscription credentials ` +
             "(apiKeySource 'oauth'), not an API key. That is only appropriate for personal, " +
             'single-user use of your own account. Unattended/scheduled or multi-user use ' +
             "requires an API key under Anthropic's terms — set ANTHROPIC_API_KEY in the " +
@@ -879,7 +879,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         .then((status) => {
           if (status !== 'logged_out') return
           console.warn(
-            `[claude-worker] Profile '${profile.name}' (${profile.configDir}) has no usable ` +
+            `[workerdeck] Profile '${profile.name}' (${profile.configDir}) has no usable ` +
               'Claude credentials: `claude auth status` reports logged out for the environment ' +
               'its sessions run with, so they will fail with "Not logged in". Log in under ' +
               `that dir (CLAUDE_CONFIG_DIR=${profile.configDir} claude auth login), inject a ` +

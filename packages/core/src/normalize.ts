@@ -1,5 +1,5 @@
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { ApiMessage, ContentBlock, SessionEventBody } from '@claude-worker/protocol'
+import type { ApiMessage, ContentBlock, SessionEventBody } from '@workerdeck/protocol'
 
 export function toApiMessage(message: unknown): ApiMessage {
   const m = message as {

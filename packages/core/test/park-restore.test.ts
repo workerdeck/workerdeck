@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { tool } from 'ai'
 import { MockLanguageModelV3, convertArrayToReadableStream } from 'ai/test'
 import { z } from 'zod'
-import { createVfs } from '@claude-worker/sandbox'
-import type { SessionEvent } from '@claude-worker/protocol'
+import { createVfs } from '@workerdeck/sandbox'
+import type { SessionEvent } from '@workerdeck/protocol'
 import {
   AiSdkRunner,
   DeferredExecutor,

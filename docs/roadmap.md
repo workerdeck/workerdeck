@@ -8,8 +8,8 @@ What's shipped, what's next, and what's still undecided. Status as of 2026-07-30
   approve/deny from the panel, resume after a reload, and a second consumer proving
   embeddability. One ordered stream of seq-numbered events; `PROTOCOL_VERSION` guards breaking
   changes.
-- **Styled UI layer + web dashboard** — `@claude-worker/ui`, the dashboard, headless
-  `@claude-worker/react` (hook + pure transcript reducer), resume backfill, `SessionInfo`
+- **Styled UI layer + web dashboard** — `@workerdeck/ui`, the dashboard, headless
+  `@workerdeck/react` (hook + pure transcript reducer), resume backfill, `SessionInfo`
   rollups.
 - **Model switching, slash commands, prompt-area composer.**
 - **Job queue + hardening** — token budgets, retries with backoff, a wall-clock watchdog,
@@ -49,12 +49,12 @@ What's shipped, what's next, and what's still undecided. Status as of 2026-07-30
   rename writes, adopted by `hydrate()` inside `listen()` so a restart re-indexes the executions
   and re-arms their watchdogs (no sooner than `parking.expiredGraceMs`, since nothing could have
   been delivered while the process was down). The record deliberately excludes credentials,
-  injected functions and SDK options. The other half of a safe restart is `claude-worker guard`,
+  injected functions and SDK options. The other half of a safe restart is `workerdeck guard`,
   which exits non-zero while a session is mid-turn, awaiting an approval, or parked without
   durability behind it — a durable store still cannot preserve an in-flight turn.
-- **Turnkey instance** — `npx claude-worker` runs the gateway *and* the dashboard on one port,
-  durable parking on by default, a `claude-worker.config.mjs` for the options that are functions,
-  and `claude-worker guard`. Single-origin is the load-bearing part: a tab cannot put a header on
+- **Turnkey instance** — `npx workerdeck` runs the gateway *and* the dashboard on one port,
+  durable parking on by default, a `workerdeck.config.mjs` for the options that are functions,
+  and `workerdeck guard`. Single-origin is the load-bearing part: a tab cannot put a header on
   a WebSocket handshake, so a same-origin cookie is the only credential it can present on an
   attach — hence `--auth-key`, one secret over two transports, with an explicit `Origin` check
   (upgrades are exempt from CORS) and a Host allowlist against DNS rebinding on the
@@ -98,5 +98,5 @@ with filesystem state), multi-tenant SaaS, and claude.ai authentication of any k
 ## Open questions
 
 - **Compliance posture.** Legal/compliance review of the auth stance is in progress — see
-  [Auth & Anthropic's terms](https://tobiasstrebitzer.github.io/claude-worker/docs/guides/auth/).
+  [Auth & Anthropic's terms](https://tobiasstrebitzer.github.io/workerdeck/docs/guides/auth/).
   That section stays honest as things settle.

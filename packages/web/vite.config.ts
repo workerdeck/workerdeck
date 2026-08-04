@@ -3,13 +3,13 @@ import { defineConfig, defaultClientConditions } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import tailwindcss from '@tailwindcss/vite'
 
-// Proxy /v1 (REST + WS) to the local claude-worker dev server (`pnpm server`).
+// Proxy /v1 (REST + WS) to the local workerdeck dev server (`pnpm server`).
 const workerUrl = process.env.WORKER_URL ?? 'http://127.0.0.1:8787'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
-    conditions: ['@claude-worker/source', ...defaultClientConditions],
+    conditions: ['@workerdeck/source', ...defaultClientConditions],
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
   build: { target: 'es2022' },

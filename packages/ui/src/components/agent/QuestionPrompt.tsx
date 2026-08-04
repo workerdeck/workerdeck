@@ -4,7 +4,7 @@ import type {
   QuestionBehavior,
   UserQuestion,
   UserQuestionOption,
-} from '@claude-worker/protocol'
+} from '@workerdeck/protocol'
 import { MessageCircleQuestion, X } from 'lucide-react'
 import { Badge } from '../ui/Badge.tsx'
 import { Button } from '../ui/Button.tsx'

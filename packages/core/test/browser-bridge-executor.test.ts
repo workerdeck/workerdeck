@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ToolCallRequestFrame } from '@claude-worker/protocol'
-import { createVfs } from '@claude-worker/sandbox'
+import type { ToolCallRequestFrame } from '@workerdeck/protocol'
+import { createVfs } from '@workerdeck/sandbox'
 import { BrowserBridgeExecutor, type ToolExecutionCall, type ToolExecutionResult } from '../src/index.ts'
 
 function harness(options: { send?: () => boolean; timeoutMs?: number } = {}) {

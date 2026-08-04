@@ -11,7 +11,7 @@ import {
   type ModelOption,
   type PermissionMode,
   type ProfileInfo,
-} from '@claude-worker/protocol'
+} from '@workerdeck/protocol'
 import { MODEL_OPTIONS } from './settings.ts'
 
 export type EngineFormOptions = {

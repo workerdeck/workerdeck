@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { ListChecks, PanelLeftClose, PanelLeftOpen, Settings, SquareTerminal, UsersRound } from 'lucide-react'
-import { cn } from '@claude-worker/ui'
+import { cn } from '@workerdeck/ui'
 import { BrandMark } from './BrandMark.tsx'
 import { ThemeToggle } from './ThemeToggle.tsx'
 
@@ -12,7 +12,7 @@ const NAV = [
   { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
 ] as const
 
-const COLLAPSED_KEY = 'claude-worker.sidebar-collapsed'
+const COLLAPSED_KEY = 'workerdeck.sidebar-collapsed'
 
 export function AppShell({ children }: { children?: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -44,7 +44,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
           <BrandMark className='size-4 shrink-0 text-fg-1' />
           {!collapsed && (
             <span className='text-body-sm font-semibold tracking-tight text-fg-1'>
-              claude-worker
+              workerdeck
             </span>
           )}
         </div>

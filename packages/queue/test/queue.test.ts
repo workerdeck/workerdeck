@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { SessionRunner } from '@claude-worker/core'
-import type { CreateJobRequest, JobEvent, SessionEvent, SessionEventBody } from '@claude-worker/protocol'
+import type { SessionRunner } from '@workerdeck/core'
+import type { CreateJobRequest, JobEvent, SessionEvent, SessionEventBody } from '@workerdeck/protocol'
 import { InMemoryQueueAdapter, JobQueue, type JobQueueOptions } from '../src/index.ts'
 
 /** Stand-in for a SessionRunner: the queue only subscribes, closes, and interrupts. */

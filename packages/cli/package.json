@@ -1,20 +1,20 @@
 {
-  "name": "claude-worker",
+  "name": "workerdeck",
   "version": "0.6.0",
   "type": "module",
-  "description": "Turnkey claude-worker instance: `npx claude-worker` runs the session gateway and the full dashboard on one port. The @claude-worker/* packages are the libraries you embed; this is the service you run.",
+  "description": "Turnkey WorkerDeck instance: `npx workerdeck` runs the session gateway and the full dashboard on one port. The @workerdeck/* packages are the libraries you embed; this is the service you run.",
   "license": "MIT",
   "main": "./build/index.mjs",
   "types": "./build/index.d.mts",
   "bin": {
-    "claude-worker": "./build/cli.mjs"
+    "workerdeck": "./build/cli.mjs"
   },
   "files": [
     "build"
   ],
   "exports": {
     ".": {
-      "@claude-worker/source": "./src/index.ts",
+      "@workerdeck/source": "./src/index.ts",
       "types": "./build/index.d.mts",
       "default": "./build/index.mjs"
     }
@@ -25,15 +25,15 @@
     "prepack": "pnpm clean && pnpm build",
     "typecheck": "tsgo -p tsconfig.json",
     "test": "vitest run",
-    "dev": "node --conditions=@claude-worker/source --import @swc-node/register/esm-register src/cli.ts"
+    "dev": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register src/cli.ts"
   },
   "dependencies": {
-    "@claude-worker/server": "workspace:*",
-    "@claude-worker/web": "workspace:*"
+    "@workerdeck/server": "workspace:*",
+    "@workerdeck/web": "workspace:*"
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.217",
-    "@claude-worker/protocol": "workspace:*",
+    "@workerdeck/protocol": "workspace:*",
     "@types/ws": "^8.5.13",
     "@swc-node/register": "^1.11.1",
     "@swc/core": "^1.15.41",
@@ -46,11 +46,11 @@
   "author": "Tobias Strebitzer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobiasstrebitzer/claude-worker.git",
+    "url": "git+https://github.com/tobiasstrebitzer/workerdeck.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://tobiasstrebitzer.github.io/claude-worker/",
-  "bugs": "https://github.com/tobiasstrebitzer/claude-worker/issues",
+  "homepage": "https://tobiasstrebitzer.github.io/workerdeck/",
+  "bugs": "https://github.com/tobiasstrebitzer/workerdeck/issues",
   "keywords": [
     "claude",
     "claude-code",
