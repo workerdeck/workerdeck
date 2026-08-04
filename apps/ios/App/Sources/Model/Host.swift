@@ -1,4 +1,5 @@
 import Foundation
+import WorkerDeckKit
 
 /// A workerdeck gateway this app can drive.
 ///
@@ -31,6 +32,25 @@ struct Host: Codable, Identifiable, Hashable, Sendable {
     if !text.contains("://") { text = "http://" + text }
     if !text.hasSuffix("/v1") { text += "/v1" }
     return URL(string: text)
+  }
+
+  /// Where this gateway takes APNs device-token registrations. Deliberately
+  /// *not* under `/v1`: push is the turnkey CLI's forwarder, not part of the
+  /// protocol the OSS server implements, so it mounts beside the dashboard
+  /// rather than inside the API.
+  var pushRegistrationURL: URL? {
+    apiURL?.deletingLastPathComponent().appendingPathComponent("apns/devices")
+  }
+
+  /// A client for this gateway, or nil when the address does not parse.
+  ///
+  /// Shared by `HostContext` and `PushCoordinator` — the latter needs a client
+  /// for a host that is *not* the selected one, because a push can name any
+  /// gateway the app is registered with.
+  func makeClient() -> WorkerClient? {
+    guard let url = apiURL else { return nil }
+    let key = authKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    return WorkerClient(baseURL: url, authKey: key.isEmpty ? nil : key)
   }
 
   /// Non-empty display label, falling back to the address when unnamed.

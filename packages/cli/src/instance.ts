@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
 import { createFileSessionStore, createWorkerServer, type WorkerServer } from '@workerdeck/server'
 import { dashboardDir } from '@workerdeck/web'
+import { createApnsForwarder } from './apns/forwarder.ts'
 import { materializeAuthKey, type MaterializedAuthKey } from './auth-key.ts'
 import { createCliAuth, type CliAuth } from './auth.ts'
 import { hostnameOf, isLoopbackHostname, type ResolvedConfig } from './config.ts'
@@ -62,11 +63,17 @@ export function createHostGuard(allowedHosts: Set<string> | null): (req: Incomin
  * ungated — they are the app's own code, hold no secrets, and gating them would
  * only mean the login page could not be styled by the app it gates. Documents
  * come last, and that is the single place the auth decision is made.
+ *
+ * The APNs device route sits between auth and assets: it does its own
+ * authentication (header only — it is never called by a browser), and it must
+ * not fall through to the SPA's catch-all, which would answer a failed
+ * registration with a 200 and an HTML document.
  */
 function createFallback(
   auth: CliAuth,
   webRoot: string,
   hostAllowed: (req: IncomingMessage) => boolean,
+  apnsRoute?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   return async (req, res) => {
     if (!hostAllowed(req)) {
@@ -80,6 +87,7 @@ function createFallback(
       return
     }
     if (await auth.handleAuthRequest(req, res)) return
+    if (apnsRoute !== undefined && (await apnsRoute(req, res))) return
 
     const pathname = new URL(req.url ?? '/', 'http://internal').pathname
 
@@ -159,7 +167,23 @@ export async function startInstance(
     )
   }
   const hostAllowed = createHostGuard(config.allowedHosts)
-  const fallback = createFallback(auth, webRoot, hostAllowed)
+
+  // The only push credential in the project, and it is here rather than in
+  // `packages/server` by design: the OSS gateway emits notifications and holds
+  // nothing that could deliver one. A bad key path throws before we listen —
+  // better a refusal at launch than a phone that never buzzes and never says why.
+  const apns =
+    config.apns === undefined
+      ? undefined
+      : await createApnsForwarder({
+          config: config.apns,
+          stateDir: config.stateDir,
+          // The same principal check as everything else on this origin, so the
+          // app registers with the key it already holds.
+          authenticate: (req) => (hostAllowed(req) ? auth.authenticate(req) : null),
+        })
+
+  const fallback = createFallback(auth, webRoot, hostAllowed, apns?.handleRequest)
 
   const parking = { ...config.options.parking }
   if (config.stateDir && !parking.store) {
@@ -181,6 +205,15 @@ export async function startInstance(
     // "Not logged in" error. A config file can set `checkCredentials: false`.
     checkCredentials: config.options.checkCredentials ?? true,
     parking,
+    // Composed, not replaced: a config file may already have a webhook and its
+    // own observer, and turning push on must not silently unhook either.
+    notifications: apns === undefined ? config.options.notifications : {
+      ...config.options.notifications,
+      onNotification: (notification) => {
+        config.options.notifications?.onNotification?.(notification)
+        apns.onNotification(notification)
+      },
+    },
     fallback,
     // A config file's own `authenticate` wins outright — mixing two auth schemes
     // on one hook is how you end up with a bypass nobody meant to write. The
@@ -225,6 +258,13 @@ export async function startInstance(
         ? `  parked sessions persist in ${join(config.stateDir, 'parked')}`
         : '  parked sessions are in memory only — a restart drops them',
     )
+    if (apns) {
+      const count = apns.deviceCount()
+      line(
+        `  push: APNs forwarder on ${config.apns?.topic} — ` +
+          `${count === 0 ? 'no devices registered yet' : `${count} device(s)`}`,
+      )
+    }
     if (config.configPath) line(`  config ${config.configPath}`)
     line('')
   }
@@ -236,6 +276,7 @@ export async function startInstance(
     closed,
     close: async () => {
       await server.close()
+      apns?.close()
       resolveClosed()
     },
   }

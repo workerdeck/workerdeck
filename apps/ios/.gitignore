@@ -5,6 +5,8 @@
 *.xcodeproj
 # Generated from project.yml's `info.properties` — edit that, not this
 App/Info.plist
+# Likewise from `entitlements.properties`
+App/WorkerDeckApp.entitlements
 # Xcode user state
 xcuserdata/
 .swiftpm/

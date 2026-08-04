@@ -6,6 +6,7 @@ import SwiftUI
 struct SessionListView: View {
   @Environment(HostContext.self) private var context
   @Environment(HostStore.self) private var hosts
+  @Environment(PushCoordinator.self) private var push
   @Environment(\.scenePhase) private var scenePhase
 
   @State private var model: SessionListModel?
@@ -44,12 +45,31 @@ struct SessionListView: View {
       if !live.hasLoaded { await live.refresh() }
     }
     .onChange(of: scenePhase) { _, phase in
-      guard phase == .active, let model, path.isEmpty else { return }
+      guard phase == .active else { return }
+      // The token can change while the app is away, and a gateway restart forgets
+      // nothing — but a *first* launch after adding a host might have failed.
+      Task { await push.syncRegistrations() }
+      guard let model, path.isEmpty else { return }
       Task { await model.refreshCurrentTab() }
     }
+    // Both an appear and a change: this subtree is rebuilt wholesale when a push
+    // switches hosts, and after that rebuild there is no change left to observe.
+    .task(id: push.pendingRoute) { consumePushRoute() }
     .sheet(isPresented: $showHostSwitcher) {
       NavigationStack { HostListView() }
     }
+  }
+
+  /// Open the session a notification was tapped for. A route naming a *different*
+  /// gateway is left alone: `RootView` is mid-switch and this subtree is about to
+  /// be replaced by the one that should handle it.
+  private func consumePushRoute() {
+    guard let route = push.pendingRoute else { return }
+    if let hostId = route.hostId, hostId != context.host.id { return }
+    // Replaces rather than appends, so Back from a pushed-to session lands on
+    // the list however deep the stack happened to be.
+    path = [.session(route.sessionId)]
+    push.clearRoute()
   }
 
   // MARK: - Content

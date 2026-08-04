@@ -38,5 +38,6 @@ apps/ios/**/.build-*/
 apps/ios/**/.swiftpm/
 apps/ios/*.xcodeproj/
 apps/ios/App/Info.plist
+apps/ios/App/WorkerDeckApp.entitlements
 DerivedData/
 xcuserdata/

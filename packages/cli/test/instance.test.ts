@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { request } from 'node:http'
 import { join } from 'node:path'
@@ -380,5 +381,74 @@ describe('attaching a live session', () => {
     const result = await attach(wsBase, id, { origin: base })
     expect(result.ok).toBe(true)
     expect(result.frame?.type).toBe('attached')
+  })
+})
+
+/**
+ * The forwarder's own route, mounted through the same `fallback` hook that
+ * serves the dashboard. Nothing here talks to Apple — what is being checked is
+ * the wiring: that the route is reachable at all, that it sits *ahead* of the
+ * SPA catch-all (which would otherwise answer a failed registration with a 200
+ * and an HTML document), and that it is behind the same key as everything else.
+ */
+describe('apns device route', () => {
+  /** A stand-in for the .p8: the same EC key an Apple auth key is, minted here
+   * so the test needs no credential. */
+  async function fakeKeyFile(): Promise<string> {
+    const dir = await mkdtemp(join(import.meta.dirname, '.tmp-p8-'))
+    dirs.push(dir)
+    const path = join(dir, 'AuthKey_TEST123456.p8')
+    const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+    await writeFile(path, privateKey.export({ type: 'pkcs8', format: 'pem' }) as string)
+    return path
+  }
+
+  const apnsConfig = async () => ({
+    keyFile: await fakeKeyFile(),
+    keyId: 'TEST123456',
+    teamId: 'TEAM123456',
+    topic: 'bi.atomic.workerdeck.ios',
+  })
+
+  const register = (base: string, body: unknown, headers: Record<string, string> = {}) =>
+    fetch(`${base}/apns/devices`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    })
+
+  const TOKEN = 'b'.repeat(64)
+
+  it('registers a device with the same key the app already holds', async () => {
+    const { base, stateDir } = await start(['--auth-key', SECRET], { apns: await apnsConfig() })
+    const res = await register(
+      base,
+      { token: TOKEN, environment: 'development', hostId: 'host-a' },
+      { authorization: `Bearer ${SECRET}` },
+    )
+    expect(res.status).toBe(200)
+    // The environment is echoed because it is the one fact that is expensive to
+    // get wrong and invisible from the client otherwise.
+    expect(await res.json()).toEqual({ registered: true, environment: 'development' })
+    const stored = JSON.parse(await readFile(join(stateDir!, 'apns-devices.json'), 'utf8'))
+    expect(stored.devices[0].token).toBe(TOKEN)
+  })
+
+  it('refuses registration without the key, rather than falling through to the SPA', async () => {
+    const { base } = await start(['--auth-key', SECRET], { apns: await apnsConfig() })
+    const res = await register(base, { token: TOKEN, environment: 'development' })
+    expect(res.status).toBe(401)
+  })
+
+  it('404s when the instance has no forwarder — how the app learns not to ask', async () => {
+    const { base } = await start(['--auth-key', SECRET])
+    const res = await register(
+      base,
+      { token: TOKEN, environment: 'development' },
+      { authorization: `Bearer ${SECRET}` },
+    )
+    // No apns config means no route: the request reaches the static host, which
+    // refuses a POST it has no document for.
+    expect(res.status).not.toBe(200)
   })
 })

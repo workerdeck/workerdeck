@@ -61,4 +61,32 @@ export default {
     maxJobDurationMs: 30 * 60 * 1000,
     retention: { maxAgeMs: 24 * 60 * 60 * 1000 },
   },
+
+  /**
+   * Push notifications for the iOS app. Delete this key entirely to turn the
+   * forwarder off — with it absent, `/apns/devices` 404s, which is how the app
+   * learns a gateway does not push.
+   *
+   * This is the only place in the project that holds a push credential;
+   * `packages/server` emits the notifications and knows nothing about Apple.
+   * `keyFile` is a path and never key contents, resolved relative to this file.
+   * It points into `.workerdeck/`, which is gitignored as a whole — and `*.p8`
+   * is ignored too, but neither is the actual plan: the p8 belongs in the
+   * password manager, because it downloads exactly once, Apple deletes their
+   * copy on download, and a team only gets two of them.
+   *
+   * The environment is deliberately *not* set here. It is a property of each
+   * device token: the app registers as `development` (built from Xcode) or
+   * `production` (TestFlight), and the forwarder routes each token to the
+   * endpoint it belongs to. They are different namespaces, not just different
+   * URLs — cross them and Apple answers `BadDeviceToken`.
+   */
+  apns: {
+    keyFile: './.workerdeck/AuthKey_DD89249M52.p8',
+    keyId: 'DD89249M52',
+    teamId: 'TT5SR2JM9L',
+    // The APNs topic is the app's bundle id, and must match
+    // `PRODUCT_BUNDLE_IDENTIFIER` in apps/ios/project.yml.
+    topic: 'bi.atomic.workerdeck.ios',
+  },
 }

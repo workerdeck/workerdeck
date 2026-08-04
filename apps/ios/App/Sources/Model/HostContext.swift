@@ -26,10 +26,9 @@ final class HostContext {
   init(host: Host, defaults: UserDefaults = .standard) {
     self.host = host
     self.defaults = defaults
-    let key = host.authKey.trimmingCharacters(in: .whitespacesAndNewlines)
-    client = WorkerClient(
-      baseURL: host.apiURL ?? Self.invalidBase ?? URL(fileURLWithPath: "/"),
-      authKey: key.isEmpty ? nil : key)
+    client =
+      host.makeClient()
+      ?? WorkerClient(baseURL: Self.invalidBase ?? URL(fileURLWithPath: "/"))
     recentCwds = defaults.stringArray(forKey: Self.recentKey(host.id)) ?? []
   }
 

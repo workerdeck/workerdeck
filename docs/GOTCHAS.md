@@ -221,6 +221,33 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   synchronously, a `session_closed` notification reports `status: 'starting'`. Seq and ts still
   come from the event, so identity and ordering are untouched.
 
+## APNs push (the CLI's forwarder)
+
+- **Sandbox and production are different token *namespaces*, not just different URLs.** A build
+  run from Xcode gets a sandbox token; a TestFlight or App Store build gets a production one.
+  Same key, same phone, different token — push one at the wrong endpoint and Apple answers
+  `BadDeviceToken` forever. So the environment is a property of *each registered device*, never a
+  server-wide flag: the app reads `aps-environment` out of its embedded provisioning profile,
+  sends it with the token, and the forwarder routes each token to its own host. A `#if DEBUG`
+  guess is wrong for a Release build run from Xcode, which is exactly when you'd be debugging.
+- **The provider JWT must carry a raw `r||s` signature, not DER.** `crypto.sign('sha256', …)`
+  produces a DER SEQUENCE unless given `dsaEncoding: 'ieee-p1363'`, and Apple's answer to the
+  difference is a bare 403 with nothing to debug from.
+- **Do not re-sign the provider token per push.** Apple rejects one older than an hour *and*
+  rate-limits refreshing it (`TooManyProviderTokenUpdates`); the client caches for 40 minutes,
+  which sits in the middle of that window.
+- **Apple throttles a provider that repeatedly pushes to invalid device tokens** — connections
+  start dying with GOAWAY and cancelled streams that look like a network fault. One probe with a
+  bogus token is a legitimate credential check (a good JWT gets `BadDeviceToken`, a bad one gets
+  `InvalidProviderToken`); a loop of them is self-inflicted. Relatedly, a stream that never left
+  the queue reports only "the pending stream has been canceled", so the client keeps the
+  *session's* error and reports that instead — otherwise DNS failure, TLS failure and Apple
+  hanging up are indistinguishable.
+- `fetch`/undici will not do: APNs is HTTP/2 only, hence `node:http2` directly.
+- The APNs key's **environment and restriction scope cannot be changed after the key is created**
+  (the portal now forces the choice at creation, and a team gets only two active keys). WorkerDeck's
+  is "Sandbox & Production" + "Team Scoped", which is what lets one key serve both endpoints.
+
 ## Build, test & packaging
 
 - A package that imports a workspace sibling needs the vitest workspace-source alias (see

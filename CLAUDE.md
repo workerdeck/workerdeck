@@ -66,7 +66,13 @@ protocol. Read these before changing scope or structure:
   resolve/materialize seam has an assert that must stay: see `docs/GOTCHAS.md`. The web
   dashboard is a real runtime dep on `@workerdeck/web` — `resolveWebRoot()` is just its exported
   `dashboardDir` — so there is one dashboard, versioned in lockstep, not a vendored copy. Also
-  hosts `workerdeck guard`.
+  hosts `workerdeck guard`, and `src/apns/` — the **only push credential in the project**: a
+  hand-rolled APNs client (`node:http2` + ES256 JWT, zero deps), a device registry mounted at
+  `POST/DELETE /apns/devices` through the same `fallback` seam that serves the dashboard, and a
+  forwarder hooked to `notifications.onNotification` in-process. It lives here and not in
+  `server` so the OSS gateway stays credential-free; absent an `apns` config the routes 404 and
+  the forwarder does not exist. Environment is per device token, never a flag —
+  `docs/GOTCHAS.md` §APNs.
 - `apps/docs` — Astro site → Pages via `docs.yml`. `examples` — dev entries with root-level deps
   the packages must not take, plus `dev-server.config.mjs`, which is what `pnpm server` runs: dev
   goes through the real CLI, so there is no second server entry point to keep in sync (config

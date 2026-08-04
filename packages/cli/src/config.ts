@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { ProfileInfo } from '@workerdeck/protocol'
 import type { WorkerServerOptions } from '@workerdeck/server'
+import type { ApnsConfig } from './apns/client.ts'
 import type { CliAuthOptions } from './auth.ts'
 
 /**
@@ -55,6 +56,17 @@ export type WorkerDeckConfig = WorkerServerOptions & {
   insecureHosts?: string[]
   /** Serve a dashboard build from here instead of the bundled one. */
   webRoot?: string
+  /**
+   * Forward session notifications to Apple Push Notification service, for the
+   * iOS app. Absent turns the forwarder off entirely — including its
+   * `/apns/devices` route, so a gateway without this answers 404 there and the
+   * app quietly stops asking.
+   *
+   * Lives here rather than in `packages/server` on purpose: this is the only
+   * place in the project that holds a push credential, and the OSS gateway
+   * stays credential-free. `keyFile` is a path, never key contents.
+   */
+  apns?: ApnsConfig
 }
 
 export type CliFlags = {
@@ -266,6 +278,9 @@ export type ResolvedConfig = {
   allowedHosts: Set<string> | null
   /** Dashboard build to serve; resolved from the package when unset. */
   webRoot?: string
+  /** APNs forwarder settings with `keyFile` made absolute, or undefined for an
+   * instance that does not push. */
+  apns?: ApnsConfig
   open: boolean
   options: WorkerServerOptions
 }
@@ -423,6 +438,7 @@ export function resolveInstanceConfig(
     allowedHosts: _ah,
     insecureHosts: _ih,
     webRoot: _w,
+    apns: _ap,
     ...serverOptions
   } = loaded.options
   const options: WorkerServerOptions = { ...serverOptions }
@@ -442,7 +458,27 @@ export function resolveInstanceConfig(
     generateAuthKey,
     allowedHosts,
     webRoot: loaded.options.webRoot,
+    apns: resolveApns(loaded),
     open: flags.open ?? false,
     options,
   }
+}
+
+/**
+ * A relative `keyFile` resolves against the config file's own directory, not the
+ * cwd — the same convention `defaultStateDir` uses, and the one that makes a
+ * deployment directory self-contained. Missing required fields throw here rather
+ * than at the first push, since a half-configured forwarder is a notification
+ * that silently never arrives.
+ */
+function resolveApns(loaded: LoadedConfig): ApnsConfig | undefined {
+  const apns = loaded.options.apns
+  if (!apns) return undefined
+  for (const field of ['keyFile', 'keyId', 'teamId', 'topic'] as const) {
+    if (typeof apns[field] !== 'string' || apns[field] === '') {
+      throw new ConfigError(`apns.${field} is required when apns is configured`)
+    }
+  }
+  const base = loaded.path ? dirname(loaded.path) : process.cwd()
+  return { ...apns, keyFile: resolve(base, apns.keyFile) }
 }

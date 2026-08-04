@@ -26,8 +26,20 @@ Plan and research: `_docs/plans/mobile-client.md` (gitignored, local).
     only part of the app under test); the SwiftUI rendering stays in `App/`.
 - `App/` — the SwiftUI app (hosts, sessions, transcript, permissions, HUD). Hosts + auth keys
   are stored in the Keychain.
+  - `App/Sources/Push/` — remote notifications, which exist because iOS will not hold a WebSocket
+    open in the background: the WS is for while you're looking at the screen, APNs is the resume
+    signal for every other moment. The token is registered **per gateway** (`POST /apns/devices`
+    on the server's own origin, behind the same auth key), tagged with the app's own `hostId` so
+    a push can say which server sent it, and with the APNs environment read out of the embedded
+    provisioning profile rather than guessed from `#if DEBUG` — see `docs/GOTCHAS.md` §APNs for
+    why that distinction is expensive to get wrong. A `permission_requested` push carries
+    Approve/Deny actions that answer over REST without opening the app; tapping the body deep-links
+    to the session. A gateway with no forwarder configured answers 404 and the app stops asking.
 - `project.yml` — [XcodeGen](https://github.com/yonaskolb/XcodeGen) spec; the `.xcodeproj` is
-  generated, not checked in.
+  generated, not checked in. So are `Info.plist` and `WorkerDeckApp.entitlements` — declare
+  capabilities here, because Xcode's "+ Capability" button edits the generated project and is
+  erased by the next `xcodegen generate`. `aps-environment` stays `development` in the file:
+  that is what an Xcode build needs, and Xcode rewrites it on export for TestFlight.
 
 ## Building
 
