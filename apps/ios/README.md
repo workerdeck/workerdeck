@@ -26,6 +26,10 @@ Plan and research: `_docs/plans/mobile-client.md` (gitignored, local).
     only part of the app under test); the SwiftUI rendering stays in `App/`.
 - `App/` — the SwiftUI app (hosts, sessions, transcript, permissions, HUD). Hosts + auth keys
   are stored in the Keychain.
+  - `App/Assets.xcassets/AppIcon.appiconset` — the app icon, three 1024 renditions (opaque,
+    plus the transparent-ground Dark and Tinted appearances iOS 18 asks for). The PNGs are
+    generated from `docs/assets/app-icon-apple-{master,layer}.svg`; regenerate with the command
+    in `docs/assets/BRAND.md` §"Regenerating the iOS app icon" rather than editing them.
   - `App/Sources/Push/` — remote notifications, which exist because iOS will not hold a WebSocket
     open in the background: the WS is for while you're looking at the screen, APNs is the resume
     signal for every other moment. The token is registered **per gateway** (`POST /apns/devices`
@@ -62,6 +66,41 @@ Point the app at your server's base URL (e.g. `http://your-mac.tailnet-name.ts.n
 paste the `--auth-key`. The app talks to `<base>/v1`. Plain-`http` hosts on a tailnet are
 allowed via an ATS exception in the app — tighten this if you ever distribute beyond personal
 use.
+
+## Push on the Simulator
+
+The Simulator has no APNs connection — `deviceToken` is nil there forever — but `simctl push`
+injects a payload locally, which is enough to check the part that is easy to get wrong: that the
+category identifier matches and the Approve/Deny actions actually appear. Install the app, launch
+it once and tap **Allow** on the notification prompt, then:
+
+```sh
+cat > /tmp/perm.json <<'JSON'
+{
+  "aps": {
+    "alert": { "title": "Approval needed — my-repo", "body": "Bash · pnpm test --filter content-gate" },
+    "sound": "default",
+    "category": "PERMISSION_REQUEST",
+    "thread-id": "sess_demo"
+  },
+  "type": "permission_requested",
+  "sessionId": "sess_demo",
+  "seq": 42,
+  "hostId": "host_demo",
+  "requestId": "req_demo"
+}
+JSON
+xcrun simctl push booted bi.atomic.workerdeck.ios /tmp/perm.json
+```
+
+**Long-press the banner.** Swiping it only ever offers "Open" — the Approve/Deny buttons live
+under the expanded notification, and mistaking that for a missing category is the trap here. The
+payload above is the shape `buildPush` emits (`packages/cli/src/apns/forwarder.ts`); keep it in
+step with that function, and with `PushCategory` in `App/Sources/Push/PushPayload.swift`.
+
+Approve/Deny answer over REST, so on the Simulator they will fail against `host_demo` — what this
+proves is the notification surface, not the round trip. The round trip needs a real device against
+the sandbox gateway.
 
 ## Protocol lockstep
 

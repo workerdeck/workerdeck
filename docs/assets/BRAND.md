@@ -39,19 +39,22 @@ theme tokens — don't conflate them.
 | --- | --- |
 | `icon.svg` | Canonical mark. Theme-adaptive (`prefers-color-scheme`), favicon-ready. |
 | `app-icon-apple-dark.svg` / `-light.svg` | iOS/macOS tile render (512, ~22.4% corner radius baked in for preview). |
+| `app-icon-apple-master.svg` | Square 1024 master, **no** baked mask — what the shipped iOS icon is built from. |
+| `app-icon-apple-layer.svg` | Same glyph, transparent ground — feeds the iOS 18 Dark/Tinted appearances. |
 | `app-icon-android-dark.svg` / `-light.svg` | Android adaptive-icon render (512 circle, glyph inside the 66/108 safe zone). |
 | `banner.html` | Source for the README/docs banner. |
 | `banner.png` | Rendered banner, 3200×1040. |
 
-Full platform asset packages (Apple's square 1024 master without the baked
-mask, Android foreground/background layers, PNG size ramps) are deliberately
-deferred — derive them from these renders when an app ships.
+The remaining platform assets (Android foreground/background layers, PNG size
+ramps) are deliberately deferred — derive them from these renders when an app
+ships.
 
 ## Where the mark is deployed
 
 - `packages/web/public/favicon.svg` and `apps/docs/public/favicon.svg` — copies of `icon.svg`
 - `packages/web/src/components/shell/BrandMark.tsx` — inline mark in the dashboard sidebar
 - `apps/docs/src/components/Header.astro` — inline mark in the docs header
+- `apps/ios/App/Assets.xcassets/AppIcon.appiconset` — the iOS app icon (rendered PNGs, checked in)
 
 Keep all of these byte-identical in geometry to `icon.svg` — the mark has no
 per-surface variants besides stroke color (`currentColor` inline, adaptive in
@@ -64,6 +67,28 @@ the favicon).
   --disable-gpu --force-device-scale-factor=2 --window-size=1600,520 \
   --screenshot=docs/assets/banner.png "file://$PWD/docs/assets/banner.html"
 ```
+
+## Regenerating the iOS app icon
+
+Three renditions, all 1024: the opaque tile, plus the transparent-ground layer
+that iOS 18 uses for the Dark and Tinted home-screen appearances. Alpha is
+mandatory on the variants and forbidden on the opaque one (App Store validation
+rejects an app icon with an alpha channel), which is what the `-alpha remove`
+and `PNG32:` flags are for. Run from the repo root:
+
+```sh
+D=apps/ios/App/Assets.xcassets/AppIcon.appiconset
+rsvg-convert -w 1024 -h 1024 docs/assets/app-icon-apple-master.svg -o /tmp/icon.png
+magick /tmp/icon.png -background black -alpha remove -alpha off PNG24:"$D/icon-1024.png"
+rsvg-convert -w 1024 -h 1024 docs/assets/app-icon-apple-layer.svg -o "$D/icon-1024-dark.png"
+magick "$D/icon-1024-dark.png" -colorspace Gray -set colorspace sRGB PNG32:"$D/icon-1024-tinted.png"
+```
+
+Never round the corners yourself — iOS masks the icon, and the pre-rounded
+512 preview tiles would come out double-masked. The catalog is wired through
+`apps/ios/project.yml` (`sources` + `ASSETCATALOG_COMPILER_APPICON_NAME`), not
+through Xcode's UI: the `.xcodeproj` is generated and any UI edit is lost on the
+next `xcodegen generate`.
 
 ## Usage rules
 

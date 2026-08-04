@@ -1,0 +1,22 @@
+<!--
+  Apple square 1024 master: the SAME tile as app-icon-apple-dark.svg with the
+  ~22.4% corner radius (and the hairline that traced it) removed. iOS masks the
+  icon itself, so shipping the pre-rounded preview would get double-masked.
+  This is the file that feeds apps/ios AppIcon "Any Appearance".
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#18181b" />
+      <stop offset="1" stop-color="#09090b" />
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)" />
+  <g transform="translate(512 512) scale(32) translate(-12 -12)" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 3.5h9A3.5 3.5 0 0 1 20.5 7v9" stroke="#7c7c82" />
+    <rect width="13.5" height="13.5" x="3.5" y="7" rx="3.5" stroke="#e8e8e8" />
+    <path d="m7 16.5 2.5-2.5L7 11.5" stroke="#e8e8e8" />
+    <circle cx="13.2" cy="14" r="3.2" fill="#2fbf71" opacity="0.18" />
+    <circle cx="13.2" cy="14" r="1.7" fill="#2fbf71" />
+  </g>
+</svg>

@@ -1,0 +1,15 @@
+<!--
+  Glyph-only 1024 layer on a transparent ground, for iOS 18+ alternate icon
+  appearances: the system supplies the background for the Dark variant, and
+  desaturates + tints this artwork for the Tinted variant. Same geometry and
+  scale as app-icon-apple-master.svg — only the ground is gone.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <g transform="translate(512 512) scale(32) translate(-12 -12)" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 3.5h9A3.5 3.5 0 0 1 20.5 7v9" stroke="#7c7c82" />
+    <rect width="13.5" height="13.5" x="3.5" y="7" rx="3.5" stroke="#e8e8e8" />
+    <path d="m7 16.5 2.5-2.5L7 11.5" stroke="#e8e8e8" />
+    <circle cx="13.2" cy="14" r="3.2" fill="#2fbf71" opacity="0.18" />
+    <circle cx="13.2" cy="14" r="1.7" fill="#2fbf71" />
+  </g>
+</svg>
