@@ -12,18 +12,8 @@ name: Publish
 # --access public` from its directory, which is also what rewrites `workspace:*`),
 # and only then does it join this workflow.
 #
-# THE REBRAND RESET THIS. Every name below is new to npm as of the
-# claude-worker → workerdeck rename, so the trusted-publisher configuration that
-# existed on the old names does NOT carry over — it lives on the package, and
-# these are different packages. Before 0.6.0 can go out through this workflow:
-#
-#   * `workerdeck` (unscoped) already exists — the 0.0.0 placeholder — so it can
-#     be configured now, no manual publish needed.
-#   * The 9 `@workerdeck/*` scoped packages do NOT exist yet. Each needs one
-#     by-hand `pnpm publish --access public` first, then the trusted publisher
-#     configured, before a tag push can release it.
-#
-# Until that is done a `v0.6.0` tag will fail on the scoped packages. The old
+# All 10 names were bootstrapped this way at 0.6.0, the first release under the
+# workerdeck name; trusted publishing is configured on every one of them. The old
 # `claude-worker` / `@claude-worker/*` packages stay published (deprecated, not
 # unpublished) and are no longer released from here.
 #

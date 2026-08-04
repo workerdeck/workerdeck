@@ -1,6 +1,6 @@
 # Roadmap & open questions
 
-What's shipped, what's next, and what's still undecided. Status as of 2026-07-30 (0.5.0).
+What's shipped, what's next, and what's still undecided. Status as of 2026-08-04 (0.6.0).
 
 ## Shipped
 

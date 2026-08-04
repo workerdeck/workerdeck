@@ -2,7 +2,7 @@
 
 Things that cost someone a debugging session. Each one is load-bearing: the obvious-looking
 change is the wrong one. Grouped by where they bite. Architecture lives in
-[architecture.md](./architecture.md); this is the list of ways to get it wrong.
+[ARCHITECTURE.md](./ARCHITECTURE.md); this is the list of ways to get it wrong.
 
 ## Claude engine (Agent SDK / CLI)
 
@@ -248,11 +248,27 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   public. A re-publish attempt answering `E403 "cannot publish over the previously published
   versions"` is proof the first one worked — do not mistake the 404 for a failed publish and
   re-run. `npm cache clean --force` clears the negative cache locally.
-- npm trusted publishing needs npm ≥ 11.5.1 / Node ≥ 22.14, and pnpm's own OIDC support needs
-  pnpm ≥ 11.1.0: `actions/setup-node` writes an unresolved `${NODE_AUTH_TOKEN}` into `.npmrc`,
-  and 11.0.8 sent that placeholder as auth (404s). A trusted publisher is configured per package
-  on npmjs.com against the workflow *filename*, and a tag runs the workflow from the TAGGED
+- **Configuring a trusted publisher needs npm ≥ 12**, and the CLI will not tell you why. The call
+  is `npm trust github <pkg> --file publish.yml --repo <owner>/<repo> --allow-publish`; the
+  registry rejects any config with no `permissions` field, and npm 11 has no concept of one (it
+  sends `{type, claims}` only), so every call 400s no matter what you pass. npm 12's
+  `--allow-publish` / `--allow-stage-publish` are what become `permissions: ["createPackage"]` /
+  `["createStagedPackage"]`, and at least one is mandatory. What makes this expensive to diagnose
+  is that npm **drops the registry's explanation**: npm-registry-fetch's `HttpErrorGeneral`
+  appends only `body.error`, while the trust endpoint answers with `body.message` — so you get a
+  bare `400 Bad Request` and no reason (npm/cli#9377). Anything built on this CLI inherits that
+  blindness; read the response body yourself. Two more traps in the same command: `--repo` must
+  match the real remote **case-sensitively** or OIDC rejects the token later at publish time, and
+  `--file` takes the workflow *filename*, never its path.
+- *Running* a trusted publish is a different version floor: npm ≥ 11.5.1 / Node ≥ 22.14, and
+  pnpm's own OIDC support needs pnpm ≥ 11.1.0 — `actions/setup-node` writes an unresolved
+  `${NODE_AUTH_TOKEN}` into `.npmrc`, and 11.0.8 sent that placeholder as auth (404s). A trusted
+  publisher is bound to the workflow *filename*, and a tag runs the workflow from the TAGGED
   commit — so a tag that predates `publish.yml` publishes nothing.
+- **A throttled registry read is indistinguishable from a 404.** Under rapid repeated calls
+  `npm view <pkg>` answers as though the package does not exist. Any script that branches on
+  "is this published yet?" has to retry before believing the negative, or it silently skips
+  packages that are in fact on the registry.
 - streamdown (ui's markdown renderer) needs its whole `dist` dir `@source`-scanned; under pnpm it
   lives at `packages/ui/node_modules/streamdown`, not the workspace root.
 - **Everything publishable lives under `packages/`, and that is load-bearing.** Three release

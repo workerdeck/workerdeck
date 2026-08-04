@@ -290,17 +290,19 @@ pnpm lint        # oxlint
 
 Dev never builds: apps and tests resolve packages straight to TS source via the
 `@workerdeck/source` export condition, and `build/` exists only for publishing. Start with
-[`docs/architecture.md`](docs/architecture.md) for the package map and dependency rule, and
-[`docs/gotchas.md`](docs/gotchas.md) for the invariants that bite.
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the package map and dependency rule, and
+[`docs/GOTCHAS.md`](docs/GOTCHAS.md) for the invariants that bite.
 [`CONTRIBUTING.md`](CONTRIBUTING.md) has the rest; security reports go through
 [`SECURITY.md`](SECURITY.md), not public issues.
 
 ## Status
 
-**0.5.0** — early but real. Both engines, the protocol, server, client, headless React layer,
+**0.6.0** — early but real. Both engines, the protocol, server, client, headless React layer,
 styled UI, dashboard, job queue, sandbox, and deferred execution are all in and tested. 0.5 added
-the turnkey `npx workerdeck` instance, the dashboard as a published package, and durable parks.
-Expect the protocol to keep evolving — `PROTOCOL_VERSION` guards breaking changes and is at 4. See
-the [roadmap](docs/roadmap.md) for what's next.
+the turnkey `npx workerdeck` instance, the dashboard as a published package, and durable parks;
+0.6 added server-wide session notifications and is the first release under this name — the
+project published as `claude-worker` / `@claude-worker/*` through 0.5, and those packages remain
+on npm, deprecated and frozen there. Expect the protocol to keep evolving — `PROTOCOL_VERSION`
+guards breaking changes and is at 4. See the [roadmap](docs/ROADMAP.md) for what's next.
 
 MIT © Tobias Strebitzer

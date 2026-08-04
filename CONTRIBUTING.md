@@ -50,8 +50,8 @@ cannot validate those payloads.
 
 ## Before you open a PR
 
-Read [`docs/architecture.md`](docs/architecture.md) for the package map and the dependency rule,
-and skim the relevant headings of [`docs/gotchas.md`](docs/gotchas.md) — it documents the
+Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the package map and the dependency rule,
+and skim the relevant headings of [`docs/GOTCHAS.md`](docs/GOTCHAS.md) — it documents the
 invariants that bite, which is usually the difference between a patch that works and a patch that
 looks like it works.
 
@@ -87,7 +87,7 @@ Policy enforcement lives in configuration (`requireApiKey`, the one-time subscri
 
 Settled non-goals — please don't open PRs re-litigating them: serverless hosting (the SDK spawns a
 long-running subprocess with filesystem state), multi-tenant SaaS, and claude.ai authentication.
-See the [roadmap](docs/roadmap.md) for what *is* wanted next.
+See the [roadmap](docs/ROADMAP.md) for what *is* wanted next.
 
 ## Security
 

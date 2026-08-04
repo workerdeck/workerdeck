@@ -2,7 +2,7 @@
 
 How WorkerDeck is put together: ten packages, a docs site, one dependency rule. Scope
 guards behind this shape: no serverless hosting, no multi-tenant SaaS, no claude.ai auth. For
-what's deliberately not built yet, see the [roadmap](./roadmap.md).
+what's deliberately not built yet, see the [roadmap](./ROADMAP.md).
 
 ## The dependency rule
 

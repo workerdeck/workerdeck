@@ -4,10 +4,10 @@ Web-controlled Agent SDK session runner: embed, watch, and control a close-to-re
 session from a host app; a second, model-agnostic engine runs any AI SDK provider on the same
 protocol. Read these before changing scope or structure:
 
-- `docs/gotchas.md` — **the invariants that bite.** Skim the headings for whatever you're about
+- `docs/GOTCHAS.md` — **the invariants that bite.** Skim the headings for whatever you're about
   to touch: engine, permission, parking, bridge, packaging.
-- `docs/architecture.md` — package map, dependency rule, session/job/parking lifecycles.
-- `docs/roadmap.md` — shipped / next / open questions. Non-goals (don't relitigate): serverless
+- `docs/ARCHITECTURE.md` — package map, dependency rule, session/job/parking lifecycles.
+- `docs/ROADMAP.md` — shipped / next / open questions. Non-goals (don't relitigate): serverless
   hosting, multi-tenant SaaS, claude.ai auth.
 
 ## Layout
@@ -37,7 +37,7 @@ protocol. Read these before changing scope or structure:
   (`session-store.ts`: memory + JSON-file, the file one durable across restarts). Imports no model
   SDK — a provider profile is built by the host's `createEngineRunner` hook. A Claude profile pins
   `CLAUDE_CONFIG_DIR` *except* when that would be a no-op — setting it at all moves the CLI off the
-  macOS Keychain, so pinning the default dir breaks a working login (`docs/gotchas.md`);
+  macOS Keychain, so pinning the default dir breaks a working login (`docs/GOTCHAS.md`);
   `checkCredentials` probes each profile at launch and warns.
 - `packages/client` — REST + WS client on platform `fetch`/`WebSocket`; zero runtime deps. Owns
   the WS frame surface, so new frames need `SessionHandle` methods/events here.
@@ -63,7 +63,7 @@ protocol. Read these before changing scope or structure:
   runs keyless; off loopback the CLI *generates* a key rather than serving open (persisted at
   `<stateDir>/auth-key`, 0600), and only an explicit `--insecure` / `insecureHosts` declaration
   serves unauthenticated — `insecureHosts` entries double as accepted Host headers. The
-  resolve/materialize seam has an assert that must stay: see `docs/gotchas.md`. The web
+  resolve/materialize seam has an assert that must stay: see `docs/GOTCHAS.md`. The web
   dashboard is a real runtime dep on `@workerdeck/web` — `resolveWebRoot()` is just its exported
   `dashboardDir` — so there is one dashboard, versioned in lockstep, not a vendored copy. Also
   hosts `workerdeck guard`.
@@ -92,7 +92,7 @@ so turbo never ran them); lint oxlint; `build/` via tsdown only on `prepack`/CI.
 — the `@workerdeck/source` export condition resolves packages to `src/index.ts` (Node runs with
 `--conditions=@workerdeck/source` + swc-node; Vite/vitest set `resolve.conditions`, vitest also
 aliases). In-package imports use explicit `.ts` extensions. Releases go through **pnpm only** —
-`npm publish` would ship `workspace:*` verbatim; see the packaging section of `docs/gotchas.md`
+`npm publish` would ship `workspace:*` verbatim; see the packaging section of `docs/GOTCHAS.md`
 before touching versioning or the publish workflow.
 
 ## Testing
@@ -109,7 +109,7 @@ one — the fake harness can't validate those payloads. Model-agnostic smokes li
 - test: `pnpm test`
 - push: yes — branch `master`, repo is public, and every push deploys the docs site.
 - version_bump: yes — `pnpm version:set <x.y.z> && pnpm install --lockfile-only` (the 10 packages
-  only; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.5.0 published.
+  only; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.6.0 published.
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
