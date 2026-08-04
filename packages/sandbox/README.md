@@ -4,7 +4,7 @@ Execution sandbox for untrusted, LLM-generated scripts: a QuickJS-NG guest compi
 WebAssembly, an in-memory scratch filesystem, and a hardened by-value host bridge. Deny-by-default
 — the guest has no filesystem, network, timers, or host access except the capabilities you grant.
 
-Part of [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck). Leaf package: it
+Part of [WorkerDeck](https://github.com/workerdeck/workerdeck). Leaf package: it
 depends on neither `core`/`server` nor any model SDK, so the same guest engine runs server-side
 (Node) and in a browser tab.
 

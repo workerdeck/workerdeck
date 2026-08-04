@@ -4,7 +4,7 @@ Typed WorkerDeck protocol client for browsers and Node: REST session management 
 WebSocket attach with auto-reconnect and replay-from-last-seq. Uses the platform's `fetch` and
 `WebSocket`; zero runtime dependencies beyond the wire types.
 
-Part of [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck). It speaks the
+Part of [WorkerDeck](https://github.com/workerdeck/workerdeck). It speaks the
 [`@workerdeck/protocol`](https://www.npmjs.com/package/@workerdeck/protocol) wire format to a
 running [`@workerdeck/server`](https://www.npmjs.com/package/@workerdeck/server) gateway.
 Layers above build on it:
@@ -87,4 +87,4 @@ The queue stream has no replay: on (re)connect, re-list jobs and treat the strea
 ## License
 
 MIT © Tobias Strebitzer — see
-[LICENSE](https://github.com/tobiasstrebitzer/workerdeck/blob/master/LICENSE).
+[LICENSE](https://github.com/workerdeck/workerdeck/blob/master/LICENSE).

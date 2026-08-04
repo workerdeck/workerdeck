@@ -1,6 +1,6 @@
 # @workerdeck/web
 
-The [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck) dashboard, **prebuilt**:
+The [WorkerDeck](https://github.com/workerdeck/workerdeck) dashboard, **prebuilt**:
 session list, create/resume flow, live transcript panel with approve/deny controls, jobs, profiles,
 settings. TanStack Router, React 19, Tailwind v4.
 
@@ -49,7 +49,7 @@ Cache headers matter: hashed assets `immutable`, `index.html` `no-cache`.
 The dist is a plain vite build, so a fork can change any of the above:
 
 ```bash
-git clone https://github.com/tobiasstrebitzer/workerdeck
+git clone https://github.com/workerdeck/workerdeck
 cd workerdeck && pnpm install
 pnpm --filter @workerdeck/web run build   # -> packages/web/dist
 ```

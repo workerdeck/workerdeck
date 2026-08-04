@@ -81,7 +81,7 @@ be rejected regardless of quality:
 
 Policy enforcement lives in configuration (`requireApiKey`, the one-time subscription notice,
 `apiKeySource` on `SessionInfo`), never in tampering with the credential chain. Background:
-[Auth & Anthropic's terms](https://tobiasstrebitzer.github.io/workerdeck/docs/guides/auth/).
+[Auth & Anthropic's terms](https://workerdeck.github.io/workerdeck/docs/guides/auth/).
 
 ## Out of scope
 

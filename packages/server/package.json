@@ -43,11 +43,11 @@
   "author": "Tobias Strebitzer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobiasstrebitzer/workerdeck.git",
+    "url": "git+https://github.com/workerdeck/workerdeck.git",
     "directory": "packages/server"
   },
-  "homepage": "https://tobiasstrebitzer.github.io/workerdeck/",
-  "bugs": "https://github.com/tobiasstrebitzer/workerdeck/issues",
+  "homepage": "https://workerdeck.github.io/workerdeck/",
+  "bugs": "https://github.com/workerdeck/workerdeck/issues",
   "keywords": [
     "claude",
     "claude-code",

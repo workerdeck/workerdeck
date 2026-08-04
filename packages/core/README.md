@@ -6,7 +6,7 @@ normalizes SDK messages into wire-protocol events, and keeps a seq-numbered even
 attach/replay; `AiSdkRunner` does the same for any provider the AI SDK supports. Pure library, no
 transport.
 
-Part of [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck). A `SessionRunner`
+Part of [WorkerDeck](https://github.com/workerdeck/workerdeck). A `SessionRunner`
 behaves like Claude Code launched in the session's directory — same skills, same `CLAUDE.md`, same
 permission system — and both runners emit
 [`@workerdeck/protocol`](https://www.npmjs.com/package/@workerdeck/protocol) events.
@@ -137,4 +137,4 @@ prompt), `normalizeSdkMessage`/`toApiMessage` (SDKMessage → protocol event nor
 ## License
 
 MIT © Tobias Strebitzer —
-[LICENSE](https://github.com/tobiasstrebitzer/workerdeck/blob/master/LICENSE)
+[LICENSE](https://github.com/workerdeck/workerdeck/blob/master/LICENSE)

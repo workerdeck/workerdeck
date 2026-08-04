@@ -29,7 +29,7 @@ name: Publish
 #
 # One-time setup, per package, at npmjs.com → package → Settings → Trusted
 # publisher (all fields are exact and case-sensitive):
-#   Organization or user: tobiasstrebitzer
+#   Organization or user: workerdeck
 #   Repository:           workerdeck
 #   Workflow filename:    publish.yml     <- filename only, NOT .github/workflows/publish.yml
 #   Environment:          (leave blank)   <- if you set one here, add `environment:` to the job below

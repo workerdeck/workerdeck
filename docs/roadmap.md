@@ -98,5 +98,5 @@ with filesystem state), multi-tenant SaaS, and claude.ai authentication of any k
 ## Open questions
 
 - **Compliance posture.** Legal/compliance review of the auth stance is in progress — see
-  [Auth & Anthropic's terms](https://tobiasstrebitzer.github.io/workerdeck/docs/guides/auth/).
+  [Auth & Anthropic's terms](https://workerdeck.github.io/workerdeck/docs/guides/auth/).
   That section stays honest as things settle.

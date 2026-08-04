@@ -1,6 +1,6 @@
 # WorkerDeck
 
-The turnkey [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck) instance: the
+The turnkey [WorkerDeck](https://github.com/workerdeck/workerdeck) instance: the
 session gateway **and** the full dashboard, on one port, with nothing to clone.
 
 ```bash
@@ -57,7 +57,7 @@ Precedence is narrowest-wins: flags > env > config file > defaults.
 
 `authenticate`, `buildRunnerConfig` and `createEngineRunner` are functions, so they can't come from
 a flag. `workerdeck.config.mjs` default-exports the
-[`createWorkerServer` options](https://tobiasstrebitzer.github.io/workerdeck/docs/reference/server/)
+[`createWorkerServer` options](https://workerdeck.github.io/workerdeck/docs/reference/server/)
 (or a function, sync or async, returning them):
 
 ```js
@@ -72,7 +72,7 @@ export default {
 Supplying your own `authenticate` turns the built-in shared-secret auth **off entirely** — one
 hook, one scheme, rather than two paths where only one got audited. If you take it over, you own
 finding a credential the browser can actually present. There's a fuller example in
-[`examples/workerdeck.config.mjs`](https://github.com/tobiasstrebitzer/workerdeck/blob/master/examples/workerdeck.config.mjs).
+[`examples/workerdeck.config.mjs`](https://github.com/workerdeck/workerdeck/blob/master/examples/workerdeck.config.mjs).
 
 ## Restart guard
 
@@ -91,7 +91,7 @@ and authenticate with `--token` or `--header name=value`.
 WorkerDeck implements **no Anthropic auth**. The official SDK/CLI resolves credentials from the
 operator's environment, per profile — `--auth-key` protects this gateway and nothing else. See the
 project's
-[Auth & Anthropic's terms](https://github.com/tobiasstrebitzer/workerdeck#auth--anthropics-terms).
+[Auth & Anthropic's terms](https://github.com/workerdeck/workerdeck#auth--anthropics-terms).
 
 ## Mounting
 

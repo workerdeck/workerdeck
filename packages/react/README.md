@@ -4,7 +4,7 @@ Headless React layer for WorkerDeck: the `useClaudeSession` hook plus a pure tra
 reducer. No styling opinion — bring your own rendering, or use
 [`@workerdeck/ui`](https://www.npmjs.com/package/@workerdeck/ui), the styled layer on top.
 
-Part of [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck). It sits between
+Part of [WorkerDeck](https://github.com/workerdeck/workerdeck). It sits between
 [`@workerdeck/client`](https://www.npmjs.com/package/@workerdeck/client) (REST + WebSocket
 attach) and your components: the hook attaches to a session, folds the event stream through the
 reducer, and hands back live state plus the control surface (send, approve/deny, interrupt,
@@ -108,4 +108,4 @@ input by construction: fine for the user's own data, never a source of server-au
 ## License
 
 MIT © Tobias Strebitzer — see
-[LICENSE](https://github.com/tobiasstrebitzer/workerdeck/blob/master/LICENSE).
+[LICENSE](https://github.com/workerdeck/workerdeck/blob/master/LICENSE).

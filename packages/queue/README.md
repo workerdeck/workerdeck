@@ -5,7 +5,7 @@ executes them as ordinary sessions with bounded concurrency and token budgets, d
 and completion via webhooks. Pluggable adapter interface — in-memory bundled; redis/bullmq/pubsub
 adapters can implement the same contract.
 
-Part of [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck). It runs jobs through
+Part of [WorkerDeck](https://github.com/workerdeck/workerdeck). It runs jobs through
 [`@workerdeck/core`](https://www.npmjs.com/package/@workerdeck/core)'s `SessionRunner` and is
 usually consumed indirectly: pass the `queue` option to
 [`@workerdeck/server`](https://www.npmjs.com/package/@workerdeck/server) and it mounts
@@ -103,4 +103,4 @@ progress deliveries, and free-form `meta`.
 ## License
 
 MIT © Tobias Strebitzer — see
-[LICENSE](https://github.com/tobiasstrebitzer/workerdeck/blob/master/LICENSE).
+[LICENSE](https://github.com/workerdeck/workerdeck/blob/master/LICENSE).

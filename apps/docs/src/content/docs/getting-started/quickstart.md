@@ -22,7 +22,7 @@ developing against the source, or embedding the libraries in your own app.
 To develop against the source, or to embed the libraries:
 
 ```bash
-git clone https://github.com/tobiasstrebitzer/workerdeck
+git clone https://github.com/workerdeck/workerdeck
 cd workerdeck
 pnpm install
 pnpm server   # gateway + dashboard on http://127.0.0.1:8787, no auth (loopback only!)

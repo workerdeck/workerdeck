@@ -5,10 +5,10 @@
 # WorkerDeck
 
 <p>
-  <a href="https://github.com/tobiasstrebitzer/workerdeck/actions/workflows/ci.yml"><img src="https://github.com/tobiasstrebitzer/workerdeck/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/workerdeck/workerdeck/actions/workflows/ci.yml"><img src="https://github.com/workerdeck/workerdeck/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://www.npmjs.com/package/workerdeck"><img src="https://img.shields.io/npm/v/workerdeck?label=npm" alt="npm version" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-black.svg" alt="MIT license" /></a>
-  <a href="https://tobiasstrebitzer.github.io/workerdeck/"><img src="https://img.shields.io/badge/docs-github%20pages-black.svg" alt="Documentation" /></a>
+  <a href="https://workerdeck.github.io/workerdeck/"><img src="https://img.shields.io/badge/docs-github%20pages-black.svg" alt="Documentation" /></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A522-black.svg" alt="Node >= 22" />
 </p>
 
@@ -39,9 +39,9 @@ instance generates one rather than serving open — printed once, kept in `<stat
 reused across restarts. Options that are *functions* — `authenticate`,
 `buildRunnerConfig`, `createEngineRunner` — go in a `workerdeck.config.mjs`
 ([example](examples/workerdeck.config.mjs)). Full flag surface:
-[Run an instance](https://tobiasstrebitzer.github.io/workerdeck/docs/getting-started/run-an-instance/).
+[Run an instance](https://workerdeck.github.io/workerdeck/docs/getting-started/run-an-instance/).
 
-**Docs: [tobiasstrebitzer.github.io/workerdeck](https://tobiasstrebitzer.github.io/workerdeck/)** —
+**Docs: [workerdeck.github.io/workerdeck](https://workerdeck.github.io/workerdeck/)** —
 quickstart, embedding, permissions, profiles, job queue, protocol reference.
 
 ## What it actually gives you
@@ -91,7 +91,7 @@ const session = await client.createSession({
 There's a rung for every level of control: the styled `SessionPanel`, the headless
 `useClaudeSession` hook, the raw event stream (`client.attach(id).on('event', …)`), or
 `SessionRunner` from `@workerdeck/core` in-process with no server at all. See the
-[embedding guide](https://tobiasstrebitzer.github.io/workerdeck/docs/guides/embedding/).
+[embedding guide](https://workerdeck.github.io/workerdeck/docs/guides/embedding/).
 
 ## Two engines: Claude Code, and any provider
 
@@ -136,7 +136,7 @@ Both engines implement one `Runner` interface and speak the same protocol, so cl
 panel and queue are unchanged either way. Profiles also scope *who may run as what*:
 `allowedProfiles` on the authenticate principal, because each person under their own profile is
 each person using their own account. See
-[Profiles](https://tobiasstrebitzer.github.io/workerdeck/docs/guides/profiles/).
+[Profiles](https://workerdeck.github.io/workerdeck/docs/guides/profiles/).
 
 ## Unattended runs, and runs that park
 
@@ -256,7 +256,7 @@ your own single-user use (the equivalent of running `claude -p` yourself) is the
 those may be appropriate; the server allows it with a one-time notice, and every session reports
 its provenance as `apiKeySource`. **The compliance and legal posture of this project is still
 under review** — with our own specialists and, where appropriate, Anthropic — so do your own
-diligence. [Full discussion](https://tobiasstrebitzer.github.io/workerdeck/docs/guides/auth/).
+diligence. [Full discussion](https://workerdeck.github.io/workerdeck/docs/guides/auth/).
 
 **Red lines for contributors** (PRs crossing these are rejected): no claude.ai OAuth flows or
 login UI, no extraction/storage/forwarding of subscription tokens, no spoofing of Claude Code's

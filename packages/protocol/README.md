@@ -4,7 +4,7 @@ The WorkerDeck wire protocol: typed session events, commands, and REST shapes sh
 server and every client. Dependency-free, browser-safe. This protocol is the product boundary —
 versioned from day one.
 
-Part of [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck), the web-controlled
+Part of [WorkerDeck](https://github.com/workerdeck/workerdeck), the web-controlled
 Agent SDK session runner. Everything else in the stack depends on this package; it depends on
 nothing. [`@workerdeck/core`](https://www.npmjs.com/package/@workerdeck/core) produces these
 events, [`@workerdeck/server`](https://www.npmjs.com/package/@workerdeck/server) puts them
@@ -89,4 +89,4 @@ ride through as `sdk_event` rather than breaking older clients.
 ## License
 
 MIT © Tobias Strebitzer —
-[LICENSE](https://github.com/tobiasstrebitzer/workerdeck/blob/master/LICENSE)
+[LICENSE](https://github.com/workerdeck/workerdeck/blob/master/LICENSE)

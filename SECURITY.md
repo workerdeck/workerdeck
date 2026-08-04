@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report security issues privately through GitHub's
-[private vulnerability reporting](https://github.com/tobiasstrebitzer/workerdeck/security/advisories/new)
+[private vulnerability reporting](https://github.com/workerdeck/workerdeck/security/advisories/new)
 (the **Security** tab → *Report a vulnerability*) rather than as a public issue. Include what an
 attacker gains, how to reproduce it, and the affected version.
 
@@ -57,4 +57,4 @@ It performs no Anthropic authentication of its own: the official SDK/CLI resolve
 the operator's environment. It never implements claude.ai OAuth, never reads, stores, or proxies
 tokens, and never touches `~/.claude` credentials. A report that WorkerDeck mishandles Anthropic
 credentials is very much in scope — see
-[Auth & Anthropic's terms](https://tobiasstrebitzer.github.io/workerdeck/docs/guides/auth/).
+[Auth & Anthropic's terms](https://workerdeck.github.io/workerdeck/docs/guides/auth/).

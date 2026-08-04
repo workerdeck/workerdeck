@@ -9,7 +9,7 @@ filesystem (no serverless).
 Want the whole thing running rather than embedded? [`workerdeck`](https://www.npmjs.com/package/workerdeck)
 wraps this package and the dashboard into one command: `npx workerdeck`.
 
-Part of [WorkerDeck](https://github.com/tobiasstrebitzer/workerdeck). It speaks the
+Part of [WorkerDeck](https://github.com/workerdeck/workerdeck). It speaks the
 [`@workerdeck/protocol`](https://www.npmjs.com/package/@workerdeck/protocol) wire format;
 pair it with [`@workerdeck/client`](https://www.npmjs.com/package/@workerdeck/client) in the
 host app and [`@workerdeck/ui`](https://www.npmjs.com/package/@workerdeck/ui) for embeddable
@@ -179,9 +179,9 @@ Each session's credential provenance surfaces as `apiKeySource` on `SessionInfo`
 services and any unattended use. Without it the server logs a one-time notice instead
 (appropriate only for personal single-user deployments). WorkerDeck never implements claude.ai
 OAuth, never reads or forwards tokens — see the repo README's
-["Auth & Anthropic's terms"](https://github.com/tobiasstrebitzer/workerdeck#auth--anthropics-terms).
+["Auth & Anthropic's terms"](https://github.com/workerdeck/workerdeck#auth--anthropics-terms).
 
 ## License
 
 MIT © Tobias Strebitzer —
-[LICENSE](https://github.com/tobiasstrebitzer/workerdeck/blob/master/LICENSE)
+[LICENSE](https://github.com/workerdeck/workerdeck/blob/master/LICENSE)
