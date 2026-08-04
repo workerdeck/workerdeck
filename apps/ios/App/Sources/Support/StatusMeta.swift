@@ -48,6 +48,30 @@ extension PermissionMode {
     case .auto: return "Auto"
     }
   }
+
+  /// The chip form, for the status bar — where the label shares a line with three
+  /// other things and "Bypass permissions" would eat half of it.
+  var shortLabel: String {
+    switch self {
+    case .default: return "Default"
+    case .acceptEdits: return "Edits"
+    case .bypassPermissions: return "Bypass"
+    case .plan: return "Plan"
+    case .dontAsk: return "Don't ask"
+    case .auto: return "Auto"
+    }
+  }
+
+  /// How much of the approval gate this mode gives away — the chip is the only
+  /// place a bypassing session announces itself mid-run.
+  var tint: Color {
+    switch self {
+    case .default, .auto: return .secondary
+    case .plan: return .blue
+    case .acceptEdits, .dontAsk: return .orange
+    case .bypassPermissions: return .red
+    }
+  }
 }
 
 extension Color {

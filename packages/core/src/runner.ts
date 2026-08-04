@@ -20,7 +20,12 @@ import type {
   SessionStatus,
 } from '@workerdeck/protocol'
 import { InputQueue } from './input-queue.ts'
-import { normalizeSdkMessage, toApiMessage } from './normalize.ts'
+import {
+  type UsageRateLimits,
+  normalizeSdkMessage,
+  rateLimitEventsFromUsage,
+  toApiMessage,
+} from './normalize.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from './runner-interface.ts'
 
 export type QueryFn = (params: {
@@ -241,12 +246,14 @@ export class SessionRunner implements Runner {
       // Without an initial prompt the CLI stays silent (no init handshake) until the
       // first message arrives, so 'starting' would never resolve — the session is
       // already accepting input, which is what 'idle' means. The control channel
-      // does answer before init, though — fetch capabilities and a context baseline
-      // now so promptless sessions aren't blank until their first turn.
+      // does answer before init, though — fetch capabilities, a context baseline and
+      // the plan's usage now so promptless sessions aren't blank until their first
+      // turn. A session opened only to be watched may never have one.
       if (!this.#config.prompt) {
         this.#setStatus('idle')
         void this.#fetchCapabilities()
         void this.#fetchContextUsage()
+        void this.#fetchRateLimits()
       }
       for await (const message of this.#query) {
         this.#handleMessage(message)
@@ -361,6 +368,7 @@ export class SessionRunner implements Runner {
       this.#setStatus('running')
       void this.#fetchCapabilities()
       void this.#fetchContextUsage()
+      void this.#fetchRateLimits()
       return
     }
     if (msg.type === 'system' && msg.subtype === 'session_state_changed') {
@@ -381,6 +389,7 @@ export class SessionRunner implements Runner {
         if (this.#pending.size === 0) this.#setStatus('idle')
         // Context usage moves every turn; the poll is a cheap control request.
         void this.#fetchContextUsage()
+        void this.#fetchRateLimits()
       }
     }
   }
@@ -446,6 +455,32 @@ export class SessionRunner implements Runner {
       })
     } catch {
       // Usage is best-effort decoration; the session works without it.
+    }
+  }
+
+  /**
+   * Snapshot the plan's rate-limit windows and surface them as `rate_limit`
+   * events — the same event a live `rate_limit_event` produces, so clients need
+   * nothing new to render it.
+   *
+   * The CLI only *pushes* a window when it changes, which for a session being
+   * watched rather than driven can be never; polling is what makes usage show up
+   * at all. The control request is marked experimental in the SDK, name included,
+   * so it is probed for by name and every failure is silent — one more reason
+   * this can only ever be decoration.
+   */
+  async #fetchRateLimits(): Promise<void> {
+    const query = this.#query as
+      | { usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<unknown> }
+      | undefined
+    const fetchUsage = query?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET
+    if (typeof fetchUsage !== 'function') return
+    try {
+      const usage = (await fetchUsage.call(query)) as UsageRateLimits
+      if (this.#closed) return
+      for (const body of rateLimitEventsFromUsage(usage)) this.#emit(body)
+    } catch {
+      // Best-effort, and experimental on top of that.
     }
   }
 

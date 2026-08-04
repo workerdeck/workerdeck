@@ -23,7 +23,8 @@ Sessions are single-host in V1. Transcripts live on the server's local disk (the
 and resume works across process restarts **on the same host**: pass `resume: sdkSessionId` on
 `CreateSessionRequest`, and the server backfills the prior transcript as `replay: true` events.
 `GET /v1/sdk-sessions?dir=…` lists the SDK's on-disk sessions so hosts can offer "resume" after
-a restart. Note the two ids: `SessionInfo.id` is the server-assigned id; `sdkSessionId` is the
+a restart. `dir` names **one** project directory (and its worktrees), not everything beneath it —
+so a client with no directory in hand should omit it and let the server apply `allowedCwdRoots`. Note the two ids: `SessionInfo.id` is the server-assigned id; `sdkSessionId` is the
 Agent SDK's — the one you feed back as `resume`.
 
 Multi-host session storage is still on the roadmap: the bundled `SessionStore` implementations
@@ -108,8 +109,9 @@ credentials — see [Auth & Anthropic's terms](/workerdeck/docs/guides/auth/).
 The server trusts its host app: `CreateSessionRequest` accepts `mcpServers`, tool policy, model,
 and more. Three levers keep that safe:
 
-- **`allowedCwdRoots`** — session `cwd` (and job `session.cwd`, and the `dir` of
-  `/sdk-sessions` listings) must resolve inside one of these roots. Strongly recommended.
+- **`allowedCwdRoots`** — session `cwd` (and job `session.cwd`) must resolve inside one of these
+  roots. `/sdk-sessions` follows the same policy: a `dir` must be inside the roots, and a listing
+  without one is filtered down to the sessions whose `cwd` is. Strongly recommended.
 - **`buildRunnerConfig`** — map/patch every incoming `CreateSessionRequest` (client sessions and
   queue jobs alike) into the actual runner config: inject `env`, strip or override
   `mcpServers`, force `allowedTools`/`disallowedTools`, pin `permissionMode`.

@@ -581,25 +581,45 @@ describe('createWorkerServer', () => {
   })
 
   it('lists SDK on-disk sessions via GET /sdk-sessions', async () => {
-    const lister = vi.fn(async () => [
-      {
-        sessionId: 'sdk-1',
-        summary: 'earlier session',
-        lastModified: 1000,
-        cwd: '/tmp/project',
-      },
-    ])
+    const inProject = {
+      sessionId: 'sdk-1',
+      summary: 'earlier session',
+      lastModified: 1000,
+      cwd: '/tmp/project',
+    }
+    // Stands in for the SDK: `dir` narrows to one project directory, and a bare
+    // call spans the whole host — including a project outside the roots and one
+    // whose cwd it cannot report.
+    const lister = vi.fn(async (options: { dir?: string; limit?: number; offset?: number }) =>
+      options.dir
+        ? [inProject]
+        : [
+            inProject,
+            { sessionId: 'sdk-elsewhere', summary: 'other', lastModified: 2000, cwd: '/etc/x' },
+            { sessionId: 'sdk-unknown', summary: 'no cwd', lastModified: 3000 },
+          ],
+    )
     running = createWorkerServer({
       allowUnauthenticated: true,
-      allowedCwdRoots: ['/tmp'],
+      allowedCwdRoots: ['/tmp', '/var'],
       listSdkSessions: lister,
     })
     const { port } = await running.listen(0, '127.0.0.1')
     const base = `http://127.0.0.1:${port}/v1`
 
-    // dir required when roots are configured; must be inside them
-    expect((await fetch(`${base}/sdk-sessions`)).status).toBe(400)
+    // A dir must be inside the roots…
     expect((await fetch(`${base}/sdk-sessions?dir=/etc`)).status).toBe(403)
+
+    // …and no dir at all lists everything, then drops what is outside them —
+    // including a session the server cannot place, which fails closed. Asking per
+    // root instead would miss all of these: `dir` means one project directory, not
+    // everything beneath it.
+    const all = await fetch(`${base}/sdk-sessions`)
+    expect(all.status).toBe(200)
+    const listed = (await all.json()) as { sdkSessions: Array<{ sessionId: string }> }
+    expect(listed.sdkSessions.map((s) => s.sessionId)).toEqual(['sdk-1'])
+    expect(lister).toHaveBeenCalledWith({})
+    lister.mockClear()
 
     const res = await fetch(`${base}/sdk-sessions?dir=/tmp/project&limit=10`)
     expect(res.status).toBe(200)

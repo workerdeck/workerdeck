@@ -59,7 +59,10 @@ private struct UserBubble: View {
   var body: some View {
     HStack {
       Spacer(minLength: 44)
-      Text(text)
+      // Literal text, not markdown — what was typed is what was sent. The one
+      // pass over it is token styling, so a message reads the same after sending
+      // as it did in the composer.
+      Text(PromptTokenStyle.styled(text))
         .font(.body)
         .textSelection(.enabled)
         .padding(.horizontal, 12)

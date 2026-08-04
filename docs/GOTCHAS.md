@@ -23,6 +23,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `value: 'default'` sentinel (→ `set_model` undefined); `getContextUsage().categories[].color`
   holds CLI theme token names, not CSS; rate_limit events can omit `utilization` — render
   unknown, never 0%.
+- The CLI **pushes** a `rate_limit_event` only when a window *changes*, so a session that is
+  watched rather than driven would show no plan usage at all. The runner therefore polls the
+  structured `/usage` control request after init and after every turn and re-emits the windows as
+  ordinary `rate_limit` events (`rateLimitEventsFromUsage` in `core/src/normalize.ts`) — clients
+  need nothing new, and replay covers late attachers. That control request is marked experimental
+  in the SDK, method name included, so it is probed for by name and every failure is silent: if
+  it disappears, usage goes back to change-only, and nothing else breaks.
 
 ## Permissions
 

@@ -14,9 +14,10 @@ final class TranscriptViewModel {
   let sessionId: String
 
   private(set) var state = TranscriptState.initial
-  /// WS connectivity, from `connectionChange`. Distinct from session status:
-  /// a running session can be temporarily unreachable.
-  private(set) var isConnected = false
+  /// WS connectivity, from `connectionChange` and the handle's retry counter.
+  /// Distinct from session status: a running session can be temporarily
+  /// unreachable — and while it is, the status the app holds is stale.
+  private(set) var connection = ConnectionState.reconnecting
   /// Snapshot from the most recent `attached` frame.
   private(set) var session: SessionInfo?
   /// Server `PROTOCOL_VERSION` when it disagrees with the mirror in the kit.
@@ -54,7 +55,7 @@ final class TranscriptViewModel {
   func detach() {
     handle?.detach()
     handle = nil
-    isConnected = false
+    connection = .reconnecting
   }
 
   private func apply(_ event: SessionHandle.Event) {
@@ -66,7 +67,13 @@ final class TranscriptViewModel {
       state = applyEvent(state, sessionEvent)
       revision &+= 1
     case .connectionChange(let connected):
-      isConnected = connected
+      connection = connected ? .live : .reconnecting
+    case .reconnectAttempt(let attempts):
+      // The handle retries forever, so "offline" is a judgement about how long
+      // it has been failing, not a state it reports. Three in a row is ~3.5s of
+      // backoff — past a blip, and the point where "Reconnecting…" stops being
+      // the honest word.
+      connection = attempts >= 3 ? .offline : .reconnecting
     case .protocolError(let message):
       lastProtocolError = message
     case .protocolMismatch(let serverVersion):
@@ -110,6 +117,24 @@ final class TranscriptViewModel {
         let data = try await client.fetchSessionFile(sessionId: sessionId, path: path)
         return try SessionFileAccess.writeTemporary(data, named: Fmt.lastComponent(path))
       })
+  }
+
+  /// The status bar's usage rings, in reading order: the session window, the
+  /// weekly window, then whichever per-model weekly windows this session reports.
+  ///
+  /// Discovered rather than hardcoded — the SDK's set of windows is an open union
+  /// and has grown before — but ordered, so the first two rings always mean the
+  /// same thing. Three is the cap: it is what a subscription session reports today
+  /// and what fits a phone-width bar beside the model and permission chips. A
+  /// session reporting none of them (an API-key session, or one before its first
+  /// turn) gets no rings at all, and the bar shows cost instead.
+  var hudRateLimits: [(key: String, info: RateLimitInfo)] {
+    let windows = rateLimitWindows
+    let named = ["five_hour", "seven_day"].compactMap { key in
+      windows.first { $0.key == key }
+    }
+    let perModel = windows.filter { $0.key.hasPrefix("seven_day_") }
+    return Array((named + perModel).prefix(3))
   }
 
   var rateLimitWindows: [(key: String, info: RateLimitInfo)] {

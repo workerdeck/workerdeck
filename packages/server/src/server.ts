@@ -1292,21 +1292,44 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     const url = new URL(req.url ?? '/', 'http://internal')
     const dir = url.searchParams.get('dir') ?? undefined
     const roots = options.allowedCwdRoots
+    const limit = Number(url.searchParams.get('limit') ?? '') || undefined
+    const offset = Number(url.searchParams.get('offset') ?? '') || undefined
     if (roots && roots.length > 0) {
-      // Without a dir the SDK lists sessions across ALL projects — never wider than
-      // the cwd policy this server enforces on session creation.
-      if (!dir) {
-        json(res, 400, { error: 'dir is required when allowedCwdRoots is set' })
-        return
-      }
-      if (!cwdAllowed(dir, roots)) {
-        json(res, 403, { error: 'dir is outside the allowed roots' })
+      if (dir) {
+        if (!cwdAllowed(dir, roots)) {
+          json(res, 403, { error: 'dir is outside the allowed roots' })
+          return
+        }
+      } else {
+        // A bare listing spans ALL projects on the host, which is wider than the
+        // cwd policy. Rather than refuse — a client with no directory to name (the
+        // iOS session list) has no other way to ask — list them and drop the ones
+        // outside the roots.
+        //
+        // Filtering, not fanning out over the roots: `dir` selects one project
+        // directory and its worktrees, not everything beneath it, so asking for
+        // `/Users/me/projects` finds nothing when the sessions belong to
+        // `/Users/me/projects/some-app`. Pagination is applied after the filter for
+        // the same reason, which is why the underlying call takes neither bound.
+        json(res, 200, { sdkSessions: withinRoots(await listSdkSessions({}), roots, limit, offset) })
         return
       }
     }
-    const limit = Number(url.searchParams.get('limit') ?? '') || undefined
-    const offset = Number(url.searchParams.get('offset') ?? '') || undefined
     json(res, 200, { sdkSessions: await listSdkSessions({ dir, limit, offset }) })
+  }
+
+  /** The sessions whose `cwd` is inside the roots, newest first, then paged. A
+   * summary with no `cwd` cannot be shown to be inside them, so it is dropped. */
+  const withinRoots = (
+    sessions: SdkSessionSummary[],
+    roots: string[],
+    limit?: number,
+    offset = 0,
+  ): SdkSessionSummary[] => {
+    const allowed = sessions
+      .filter((s) => s.cwd !== undefined && cwdAllowed(s.cwd, roots))
+      .sort((a, b) => b.lastModified - a.lastModified)
+    return limit === undefined ? allowed.slice(offset) : allowed.slice(offset, offset + limit)
   }
 
   const handleJobs = async (

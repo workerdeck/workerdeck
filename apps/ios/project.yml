@@ -7,9 +7,10 @@ options:
     iOS: "17.0"
   groupSortPosition: top
 
-# The only dependency, and it is local: the app is a thin SwiftUI shell over the
-# WorkerDeckKit package (protocol mirror + REST/WS client + transcript reducer).
-# Zero third-party packages by design.
+# The only dependency, and it is local: the app is a SwiftUI shell over the
+# WorkerDeckKit package (protocol mirror + REST/WS client + transcript reducer),
+# with one UIKit bridge in it — `RichTextEditor`, which the composer needs for
+# attributed text and a caret position. Zero third-party packages by design.
 packages:
   WorkerDeckKit:
     path: WorkerDeckKit

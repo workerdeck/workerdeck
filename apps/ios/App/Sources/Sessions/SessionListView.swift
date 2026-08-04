@@ -44,6 +44,13 @@ struct SessionListView: View {
       model = live
       if !live.hasLoaded { await live.refresh() }
     }
+    // Back from a session (or from create) means the list has been out of date for
+    // as long as that session was open — the registry moved on without us. The
+    // `.task` above only fires once, so this is what makes the list current.
+    .onChange(of: path) { _, stack in
+      guard stack.isEmpty, let model else { return }
+      Task { await model.refreshCurrentTab() }
+    }
     .onChange(of: scenePhase) { _, phase in
       guard phase == .active else { return }
       // The token can change while the app is away, and a gateway restart forgets
@@ -100,9 +107,10 @@ struct SessionListView: View {
       case .resume: resumeList(model)
       }
     }
-    .onChange(of: model.tab) { _, tab in
-      guard tab == .resume, model.sdkSessions.isEmpty else { return }
-      Task { await model.refreshSdkSessions() }
+    // Every switch, not just the first: the other tab's rows are as old as the last
+    // time it was on screen, and both lists move without us.
+    .onChange(of: model.tab) { _, _ in
+      Task { await model.refreshCurrentTab() }
     }
     .confirmationDialog(
       "Close this session?",
@@ -151,7 +159,9 @@ struct SessionListView: View {
   @ViewBuilder
   private func resumeList(_ model: SessionListModel) -> some View {
     List {
-      if model.sdkSessions.isEmpty {
+      // Not while the load failed: "nothing to resume" under an error banner reads
+      // as a fact about the server's disk, and it isn't one.
+      if model.sdkSessions.isEmpty, model.hasLoadedSdkSessions, model.errorMessage == nil {
         ContentUnavailableView {
           Label("Nothing to resume", systemImage: "clock.arrow.circlepath")
         } description: {

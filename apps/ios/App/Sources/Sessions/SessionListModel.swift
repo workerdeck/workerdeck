@@ -25,6 +25,7 @@ final class SessionListModel {
   private(set) var errorMessage: String?
   private(set) var isLoading = false
   private(set) var hasLoaded = false
+  private(set) var hasLoadedSdkSessions = false
 
   private let client: WorkerClient
 
@@ -52,6 +53,7 @@ final class SessionListModel {
   }
 
   func refreshSdkSessions() async {
+    defer { hasLoadedSdkSessions = true }
     do {
       sdkSessions = try await client.listSdkSessions(limit: 50)
       errorMessage = nil

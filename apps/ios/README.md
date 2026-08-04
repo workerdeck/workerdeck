@@ -25,10 +25,44 @@ Plan and research: `_docs/plans/MOBILE-CLIENT.md` (gitignored, local).
   - `MarkdownBlocks.swift` — splits assistant text into prose and fenced code blocks, tolerating
     the unterminated fence that streaming produces. Pure, so it lives here (this package is the
     only part of the app under test); the SwiftUI rendering stays in `App/`.
-  - `FileToken.swift` — finds and replaces the trailing `@token` in a composer draft. Here for
-    the same reason as `MarkdownBlocks`: pure string logic whose interesting cases are all edges.
+  - `PromptToken.swift` — the `@file` and `/command` rules in one place: which words are tokens,
+    which are being typed, which are finished, and how one is replaced. Here for the same reason
+    as `MarkdownBlocks` — pure string logic whose interesting cases are all edges — and shared, so
+    a token looks the same in the composer as it does once sent. Both need a word boundary and
+    nothing more — so `toby@example.com` isn't a file picker, and a command completes mid-draft
+    as well as at the front (the CLI only *runs* one from the front, but the picker is an editing
+    aid). What keeps an absolute path from reading as a command is the charset: a command name
+    may not contain a slash.
 - `App/` — the SwiftUI app (hosts, sessions, transcript, permissions, HUD). Hosts + auth keys
   are stored in the Keychain.
+  - `App/Sources/Session/SessionStatusBar.swift` — the mini status bar, one glass line floating
+    just above the composer where a thumb reaches it: status, model, permission mode, usage. The
+    status slot is **shared with connectivity, and connectivity wins it** — while the socket is
+    down the session status the app holds is stale, so "Reconnecting…"/"Offline" replaces it
+    rather than sitting beside it. (The handle retries forever; "Offline" is the app's judgement
+    after three failed attempts, not a state the handle reports.) Model and permission mode are
+    chips that open their own menus — the two settings worth changing mid-run, so they are not in
+    the toolbar. Usage is per-window presence, not a mode flag: a radial gauge for each rate-limit
+    window the session reports — session, weekly, then whichever per-model window it has — and the
+    session's `$` cost only when it reports none. Window labels and reset countdowns live in
+    `SessionDetailSheet`, which the usage cluster opens.
+  - `App/Sources/Session/ComposerView.swift` — the input card, in two shapes. At rest it is the
+    field and nothing else; once it has focus, a draft, or a turn to stop, an action row unfolds
+    underneath (attach, dictate, hide keyboard, send). One send button does both jobs: a draft
+    always sends — messages queue behind a running turn — and stop takes the slot only while a
+    turn is live *and* there is nothing to send. Tapping the transcript puts the keyboard away.
+  - `App/Sources/Session/PromptSuggestionList.swift` — the `/` and `@` picker, filling everything
+    the header and the floating stack leave. It is a **`ZStack` sibling of the transcript, not an
+    overlay on it**: an overlay on a `ScrollView` is proposed the scroll content's *ideal* size
+    (measured at 305×616 on a 402×874 screen), so the panel came out neither full width nor full
+    height. Inside the stack the frame is already safe-area-inset, so the only offset it needs is
+    the floating stack's own measured height. The status bar steps aside while it is open, and the
+    panel's height is fixed rather than fitted to the rows — a list that shrank as the filter
+    narrowed would move the row you were reaching for.
+  - `App/Sources/Support/GlassPanel.swift` — the one translucency decision, in one place.
+    `glassEffect` on iOS 26, a blurred material with a hairline border below it. Nothing in the
+    session screen is docked: the navigation bar and the bottom stack (warnings, approval, status
+    bar, composer) both float, and the transcript scrolls under them.
   - `App/Assets.xcassets/AppIcon.appiconset` — the app icon, three 1024 renditions (opaque,
     plus the transparent-ground Dark and Tinted appearances iOS 18 asks for). The PNGs are
     generated from `docs/assets/app-icon-apple-{master,layer}.svg`; regenerate with the command
@@ -54,12 +88,18 @@ Plan and research: `_docs/plans/MOBILE-CLIENT.md` (gitignored, local).
     reading follows the cwd roots, so a session that was allowed to start is normally browsable);
     and `canWrite` is false without `--fs-write`, which hides Save. Saving sends the hash the read returned, so a 409 means the
     agent edited the file first — the alert offers Reload, never a force.
-  - `App/Sources/Session/FileCompletion.swift` — `@file` completion in the composer, over
-    `GET /fs/find`. Debounced and single-flight; a 404 turns it off for the session rather than
-    re-asking per keystroke. The text half is `FileToken` in the kit, where it is unit-tested: the
-    token is read off the *end* of the draft (SwiftUI's `TextField` exposes no cursor), must start
-    a word so `toby@example.com` isn't a file picker, and accepting appends a space, which is also
-    what closes the list.
+  - `App/Sources/Session/PromptCompletion.swift` — one suggestion list, two tokens. `/commands`
+    come from the `capabilities` event, so filtering is local, synchronous and complete;
+    `@files` are a search over `GET /fs/find`, debounced and single-flight, and a 404 turns file
+    completion off for the session rather than re-asking per keystroke. The text half is
+    `PromptTokens` in the kit. Accepting appends a space, which is also what closes the list.
+  - `App/Sources/Session/RichTextEditor.swift` — the app's **only UIKit bridge**: a
+    `UIViewRepresentable` over `UITextView`. On the 17.0 deployment target SwiftUI can neither
+    style part of a draft nor say where the caret is, and both wants have the same fix — so the
+    bridge buys styled tokens *and* mid-message completion at once. Styling goes through
+    `textStorage` attributes (the undo stack and selection survive), skips while `markedTextRange`
+    is non-nil (IME composition), and only paints *confirmed* tokens — the word still being typed
+    stays plain. Everything else in `App/` remains plain SwiftUI.
 - `project.yml` — [XcodeGen](https://github.com/yonaskolb/XcodeGen) spec; the `.xcodeproj` is
   generated, not checked in. So are `Info.plist` and `WorkerDeckApp.entitlements` — declare
   capabilities here, because Xcode's "+ Capability" button edits the generated project and is

@@ -1,8 +1,13 @@
 import WorkerDeckKit
 import SwiftUI
 
-/// The live session: one `SessionHandle`, one `TranscriptState`, and the three
-/// bands that sit on top of them — HUD, transcript, composer.
+/// The live session: one `SessionHandle`, one `TranscriptState`, and the two
+/// bands over them — the transcript, and the floating glass stack (status bar,
+/// approval, composer) that rides above its bottom edge.
+///
+/// Nothing is docked. The navigation bar and the bottom stack are both
+/// translucent and the transcript scrolls under them, so the screen reads as one
+/// surface with controls floating on it rather than three stacked strips.
 ///
 /// The handle's lifetime is exactly the `.task`: attach on appear, detach when the
 /// task is cancelled (navigating back). Returning to the foreground skips the
@@ -16,23 +21,42 @@ struct SessionView: View {
   @State private var showDetails = false
   @State private var showFiles = false
   @State private var showCloseConfirmation = false
-  /// Built once the session's cwd is known, and rebuilt if it changes — both the
-  /// browser and `@file` completion are scoped to that directory.
-  @State private var completion: FileCompletionModel?
+  /// Lives as long as the view: both halves of it arrive late and independently —
+  /// the command list with `capabilities`, the file scope with the cwd — and a
+  /// model rebuilt under the composer would drop the draft's suggestion state.
+  @State private var completion = PromptCompletionModel()
   /// Owns the share sheet for files tapped in the transcript. The details sheet
   /// has its own — a sheet can't raise another sheet from underneath itself.
   @State private var downloader = FileDownloader()
+  /// The caret, and whether the keyboard is up. Here rather than in the composer
+  /// because the picker overlay edits the same draft it does.
+  @State private var selection = NSRange(location: 0, length: 0)
+  @State private var isComposerFocused = false
+  /// How much of the bottom the floating stack occupies — the picker sits on top
+  /// of it, so it needs the number the layout actually produced.
+  @State private var footerHeight: CGFloat = 0
 
   init(sessionId: String, client: WorkerClient) {
     _vm = State(initialValue: TranscriptViewModel(sessionId: sessionId, client: client))
   }
 
   var body: some View {
-    TranscriptListView(items: vm.state.items, revision: vm.revision)
-      .safeAreaInset(edge: .top, spacing: 0) { header }
-      .safeAreaInset(edge: .bottom, spacing: 0) { footer }
-      .navigationTitle(vm.title)
-      .navigationBarTitleDisplayMode(.inline)
+    // A `ZStack`, not `.overlay` on the transcript: an overlay on a `ScrollView`
+    // is proposed the scroll *content's* ideal size, so the picker came out
+    // neither full width nor full height. A stack child is proposed the
+    // container's size, which is what the picker needs to fill it.
+    ZStack(alignment: .top) {
+      TranscriptListView(items: vm.state.items, revision: vm.revision)
+        // Tapping the transcript puts the keyboard away. Simultaneous, so a tap
+        // that lands on a tool card still expands it — dismissing on the way is
+        // what you'd want there too.
+        .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
+        .safeAreaInset(edge: .bottom, spacing: 0) { measuredFooter }
+      picker
+    }
+    .onPreferenceChange(FooterHeight.self) { footerHeight = $0 }
+    .navigationTitle(vm.title)
+    .navigationBarTitleDisplayMode(.inline)
       .toolbar { toolbarMenu }
       .environment(\.fileDownloader, downloader)
       .fileDownloadPresentation(downloader)
@@ -46,7 +70,12 @@ struct SessionView: View {
       // The cwd arrives with the session snapshot, which lands after this view
       // does — and changes on a resume into a different directory.
       .task(id: vm.cwd) {
-        completion = vm.hostFiles.map { FileCompletionModel(scope: $0) }
+        completion.scope = vm.hostFiles
+      }
+      // Slash commands come from `capabilities`, which the server sends once the
+      // engine is up — later than the first draft keystroke, in a cold session.
+      .task(id: vm.state.commands) {
+        completion.commands = vm.state.commands ?? []
       }
       .sheet(isPresented: $showFiles) {
         if let scope = vm.hostFiles {
@@ -71,19 +100,10 @@ struct SessionView: View {
       }
   }
 
-  // MARK: - Bands
+  // MARK: - The floating stack
 
-  private var header: some View {
-    VStack(spacing: 0) {
-      SessionHUDView(
-        status: vm.state.status,
-        pendingCount: vm.state.pendingApprovals.count,
-        isConnected: vm.isConnected,
-        contextUsage: vm.state.contextUsage,
-        rateLimits: vm.rateLimitWindows
-      ) {
-        showDetails = true
-      }
+  private var footer: some View {
+    VStack(spacing: 8) {
       if let serverVersion = vm.protocolMismatch {
         WarningStrip(
           text:
@@ -92,29 +112,90 @@ struct SessionView: View {
       if let message = vm.lastProtocolError {
         WarningStrip(text: message) { vm.dismissProtocolError() }
       }
-      Divider()
-    }
-  }
-
-  private var footer: some View {
-    VStack(spacing: 0) {
-      if let request = vm.pendingApproval {
+      if let request = vm.pendingApproval, !isPickerOpen {
         approvalBanner(request)
-          .padding(.horizontal, 12)
-          .padding(.top, 8)
-          .background(.bar)
+          .padding(12)
+          .glassPanel(cornerRadius: 20)
+      }
+      // The picker gets the screen while it is open: it is a list you are reading,
+      // and the status bar is not something you consult mid-completion.
+      if !isPickerOpen {
+        statusBar
       }
       ComposerView(
         text: $draft,
+        selection: $selection,
+        isFocused: $isComposerFocused,
         isBusy: vm.state.status == .running,
         isEnabled: vm.state.status != .closed,
-        completion: completion,
-        onSend: {
-          vm.send(draft)
-          draft = ""
+        onEdit: { text, caret in
+          completion.update(for: text, cursor: Range(caret, in: text)?.lowerBound)
         },
+        onSend: send,
         onStop: { vm.interrupt() })
     }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 8)
+  }
+
+  private var measuredFooter: some View {
+    footer.background(
+      GeometryReader { proxy in
+        Color.clear.preference(key: FooterHeight.self, value: proxy.size.height)
+      })
+  }
+
+  /// The suggestion panel, filling everything the header and the floating stack
+  /// leave. It is a sibling of the transcript rather than part of the composer so
+  /// that it can claim that area; the insets come from the reader (those are
+  /// reliable) and the stack's own height from what the layout produced.
+  @ViewBuilder
+  private var picker: some View {
+    if isPickerOpen {
+      PromptSuggestionList(suggestions: completion.suggestions, onAccept: accept)
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, footerHeight + 8)
+    }
+  }
+
+  private var isPickerOpen: Bool {
+    completion.isActive && !completion.suggestions.isEmpty
+  }
+
+  private func accept(_ suggestion: PromptCompletionModel.Suggestion) {
+    let cursor = Range(selection, in: draft)?.lowerBound
+    let result = completion.accept(suggestion, in: draft, cursor: cursor)
+    draft = result.text
+    selection = NSRange(location: result.cursor.utf16Offset(in: result.text), length: 0)
+  }
+
+  private func send() {
+    // A half-typed token is not a completion the user declined; sending closes
+    // the list either way.
+    completion.cancel()
+    vm.send(draft)
+    draft = ""
+    selection = NSRange(location: 0, length: 0)
+    // Keep the keyboard up: a remote control is used in bursts.
+    isComposerFocused = true
+  }
+
+  private var statusBar: some View {
+    SessionStatusBar(
+      status: vm.state.status,
+      pendingCount: vm.state.pendingApprovals.count,
+      connection: vm.connection,
+      contextUsage: vm.state.contextUsage,
+      rateLimits: vm.hudRateLimits,
+      totalCostUsd: vm.state.totalCostUsd,
+      model: vm.state.model,
+      models: vm.state.models ?? [],
+      permissionMode: vm.state.permissionMode,
+      permissionModes: permissionModes,
+      onSelectModel: { vm.setModel($0) },
+      onSelectPermissionMode: { vm.setPermissionMode($0) },
+      onOpenDetails: { showDetails = true })
   }
 
   @ViewBuilder
@@ -138,6 +219,9 @@ struct SessionView: View {
 
   // MARK: - Toolbar
 
+  /// Model and permission mode used to live here; they are on the status bar now,
+  /// within thumb reach, and so is stopping a turn (the composer's send button
+  /// becomes stop). What is left is what you reach for rarely.
   @ToolbarContentBuilder
   private var toolbarMenu: some ToolbarContent {
     // Only once the cwd is known — the browser is rooted at it, so there is
@@ -151,33 +235,8 @@ struct SessionView: View {
     }
     ToolbarItem(placement: .topBarTrailing) {
       Menu {
-        if let models = vm.state.models, !models.isEmpty {
-          Menu("Model") {
-            ForEach(models) { option in
-              Button {
-                vm.setModel(option.value)
-              } label: {
-                CheckedLabel(option.displayName, isChecked: option.value == vm.state.model)
-              }
-            }
-            Divider()
-            Button("Server default") { vm.setModel(nil) }
-          }
-        }
-
-        Menu("Permissions") {
-          ForEach(permissionModes, id: \.self) { mode in
-            Button {
-              vm.setPermissionMode(mode)
-            } label: {
-              CheckedLabel(mode.label, isChecked: mode == vm.state.permissionMode)
-            }
-          }
-        }
-
+        Button("Session details", systemImage: "info.circle") { showDetails = true }
         Divider()
-        Button("Session details") { showDetails = true }
-        Button("Interrupt", systemImage: "stop.circle") { vm.interrupt() }
         Button("Close session", systemImage: "xmark.circle", role: .destructive) {
           showCloseConfirmation = true
         }
@@ -194,27 +253,7 @@ struct SessionView: View {
   }
 }
 
-/// Menu row with a checkmark for the current choice. An `Image` is only emitted
-/// when checked — an empty `systemImage` would log a missing-symbol warning.
-private struct CheckedLabel: View {
-  private let title: String
-  private let isChecked: Bool
-
-  init(_ title: String, isChecked: Bool) {
-    self.title = title
-    self.isChecked = isChecked
-  }
-
-  var body: some View {
-    if isChecked {
-      Label(title, systemImage: "checkmark")
-    } else {
-      Text(title)
-    }
-  }
-}
-
-/// A one-line, dismissible advisory strip under the HUD.
+/// A one-line, dismissible advisory strip, floating with the rest of the stack.
 private struct WarningStrip: View {
   let text: String
   var onDismiss: (() -> Void)?
@@ -236,9 +275,9 @@ private struct WarningStrip: View {
     }
     .font(.caption2)
     .foregroundStyle(.orange)
-    .padding(.horizontal, 14)
-    .padding(.vertical, 5)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 7)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(Color.orange.opacity(0.12))
+    .glassPanel(cornerRadius: 14)
   }
 }

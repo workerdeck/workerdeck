@@ -33,7 +33,7 @@ struct MarkdownText: View {
       ForEach(Array(MarkdownBlocks.parse(text).enumerated()), id: \.offset) { _, block in
         switch block {
         case .prose(let prose):
-          Text(Markdown.inline(prose))
+          Text(PromptTokenStyle.apply(to: Markdown.inline(prose)))
             .font(.body)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)

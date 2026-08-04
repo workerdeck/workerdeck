@@ -153,6 +153,13 @@ public final class SessionHandle {
     case event(SessionEvent)
     /// WS connectivity: true on open, false on close.
     case connectionChange(Bool)
+    /// A connection attempt failed and another is scheduled; the value is how many
+    /// have failed in a row (1 for the first). Reset to 0 by a successful open.
+    ///
+    /// The handle never gives up, so "offline" is not a state it can report —
+    /// but a UI can tell a blip from an outage by how far this has climbed, which
+    /// is the only honest distinction available.
+    case reconnectAttempt(Int)
     /// The server rejected a command frame. The socket stays up.
     case protocolError(String)
     /// The server speaks a different `PROTOCOL_VERSION` than `WorkerProtocol.version`.
@@ -273,6 +280,10 @@ public final class SessionHandle {
   public func reconnectNow() {
     guard !detached, !connected else { return }
     retries = 0
+    // Coming back to the foreground restarts the count, so a UI that had
+    // escalated to "offline" goes back to "reconnecting" rather than staying
+    // pessimistic while a fresh attempt is in flight.
+    continuation.yield(.reconnectAttempt(0))
     backoff?.cancel()
   }
 
@@ -291,6 +302,7 @@ public final class SessionHandle {
         }
         let delay = min(0.5 * pow(2, Double(self.retries)), 10)
         self.retries += 1
+        self.continuation.yield(.reconnectAttempt(self.retries))
         await self.sleepBackoff(delay)
       }
     }

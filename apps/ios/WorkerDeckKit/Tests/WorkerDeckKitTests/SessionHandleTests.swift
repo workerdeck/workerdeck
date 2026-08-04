@@ -367,12 +367,32 @@ struct SessionHandleTests {
     try await waitUntil("event") { handle.lastSeq == 4 }
 
     first.close()  // the server drops the socket
-    try await waitUntil("disconnect") { log.events.last == .connectionChange(false) }
+    // `contains`, not `last`: the retry counter is emitted right behind the drop.
+    try await waitUntil("disconnect") { log.events.contains(.connectionChange(false)) }
     handle.reconnectNow()  // skip the backoff, as foregrounding does
 
     try await waitUntil("resume") { factory.afterSeqs.count == 2 }
     #expect(factory.afterSeqs == [0, 4])
     try await waitUntil("reconnected") { log.events.last == .connectionChange(true) }
+  }
+
+  @Test func countsFailedReconnectAttemptsSoTheUiCanEscalate() async throws {
+    // A socket that never opens: the handle keeps retrying forever, so the only
+    // honest signal for "offline" is how far the counter has climbed.
+    let handle = SessionHandle(sessionId: "s1", reconnect: true) { _ in
+      throw FakeSocketError.closed
+    }
+    let log = EventLog(handle)
+    defer { handle.detach() }
+
+    try await waitUntil("second attempt") { log.events.contains(.reconnectAttempt(2)) }
+    // Nothing ever opened, so there is no connectionChange to pair it with —
+    // which is exactly why the counter is its own event.
+    #expect(!log.events.contains(.connectionChange(true)))
+
+    // Foregrounding restarts the count rather than leaving the UI pessimistic.
+    handle.reconnectNow()
+    try await waitUntil("counter reset") { log.events.contains(.reconnectAttempt(0)) }
   }
 
   @Test func closeSessionSendsCloseThenDetaches() async throws {

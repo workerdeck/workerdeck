@@ -75,13 +75,17 @@ enum Fmt {
     return String(flattened.prefix(limit)) + "…"
   }
 
-  /// Human label for a rate-limit window key ('five_hour' → "5h").
+  /// Human label for a rate-limit window key ('five_hour' → "5h",
+  /// 'seven_day_opus' → "7d opus"). The per-model suffix is open — the CLI adds
+  /// buckets as plans gain them — so it is rewritten rather than enumerated.
   static func rateLimitWindow(_ key: String) -> String {
     switch key {
     case "five_hour": return "5h"
     case "seven_day": return "7d"
-    case "seven_day_opus": return "7d opus"
-    default: return key.replacingOccurrences(of: "_", with: " ")
+    default:
+      let spaced = key.replacingOccurrences(of: "_", with: " ")
+      guard key.hasPrefix("seven_day_") else { return spaced }
+      return "7d " + spaced.dropFirst("seven day ".count)
     }
   }
 }
