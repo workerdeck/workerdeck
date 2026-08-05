@@ -1,3 +1,4 @@
+import type { MessageAttachment } from '@workerdeck/protocol'
 import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
 import { formatCost, formatDuration } from '../../lib/format.ts'
@@ -40,15 +41,21 @@ function NoticeRow({ item }: { item: Extract<TranscriptItem, { kind: 'notice' }>
 function TranscriptItemView({
   item,
   fileUrl,
+  attachmentUrl,
 }: {
   item: TranscriptItem
   fileUrl?: (path: string) => string
+  attachmentUrl?: (attachmentId: string) => string
 }) {
   switch (item.kind) {
     case 'user':
       return (
         <Message from='user'>
-          <MessageContent>{item.text}</MessageContent>
+          {item.attachments?.length ? (
+            <SentAttachments attachments={item.attachments} attachmentUrl={attachmentUrl} />
+          ) : null}
+          {/* A photo can be the whole message — an empty bubble under it says nothing. */}
+          {item.text ? <MessageContent>{item.text}</MessageContent> : null}
         </Message>
       )
     case 'assistant_text':
@@ -85,15 +92,51 @@ function showLoader(state: TranscriptState): boolean {
   return last.kind !== 'turn_result' || state.status === 'running'
 }
 
+/** Files sent with a message: thumbnails for images, named chips for the rest.
+ * References only — the bytes are fetched from the gateway. */
+function SentAttachments({
+  attachments,
+  attachmentUrl,
+}: {
+  attachments: MessageAttachment[]
+  attachmentUrl?: (attachmentId: string) => string
+}) {
+  return (
+    <div className='mb-1 flex flex-wrap justify-end gap-1.5'>
+      {attachments.map((attachment) => {
+        const href = attachmentUrl?.(attachment.id)
+        return attachment.mediaType.startsWith('image/') && href ? (
+          <img
+            key={attachment.id}
+            src={href}
+            alt={attachment.name}
+            className='size-20 rounded-md border border-border object-cover'
+          />
+        ) : (
+          <span
+            key={attachment.id}
+            className='rounded-full border border-border bg-surface px-2.5 py-1 text-body-xs text-fg-3'>
+            {attachment.name}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
 export interface TranscriptProps {
   state: TranscriptState
   /** Builds the download URL for a delivered file (see FileCard). Typically
    * `(path) => client.sessionFileUrl(sessionId, path)`. */
   fileUrl?: (path: string) => string
+  /** Builds the URL for an uploaded attachment. Typically
+   * `(id) => client.attachmentUrl(sessionId, id)`. Same-origin and
+   * cookie-authenticated, which is what lets an `<img src>` render one. */
+  attachmentUrl?: (attachmentId: string) => string
   className?: string
 }
 
-export function Transcript({ state, fileUrl, className }: TranscriptProps) {
+export function Transcript({ state, fileUrl, attachmentUrl, className }: TranscriptProps) {
   return (
     <Conversation className={className}>
       <ConversationContent>
@@ -101,7 +144,12 @@ export function Transcript({ state, fileUrl, className }: TranscriptProps) {
           <div className='py-12 text-center text-body-sm text-fg-4'>No messages yet.</div>
         ) : (
           state.items.map((item) => (
-            <TranscriptItemView key={`${item.kind}:${item.id}`} item={item} fileUrl={fileUrl} />
+            <TranscriptItemView
+              key={`${item.kind}:${item.id}`}
+              item={item}
+              fileUrl={fileUrl}
+              attachmentUrl={attachmentUrl}
+            />
           ))
         )}
         {showLoader(state) ? (

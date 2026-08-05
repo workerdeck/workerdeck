@@ -1,4 +1,5 @@
 import type {
+  McpServerStatusInfo,
   PermissionMode,
   PermissionRequest,
   ProfileEngine,
@@ -6,6 +7,7 @@ import type {
   SessionInfo,
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
+import type { AttachmentInput } from './attachments.ts'
 import type { ToolExecutionResult } from './tool-executor.ts'
 
 export type SessionEventListener = (event: SessionEvent) => void
@@ -73,8 +75,18 @@ export interface Runner {
   info(): SessionInfo
   /** Replay buffered events with seq > afterSeq, then deliver live events. Returns unsubscribe. */
   subscribe(listener: SessionEventListener, afterSeq?: number): () => void
-  /** Queue a user message for the session (starts the next turn when idle). */
-  sendMessage(text: string): void
+  /** Queue a user message for the session (starts the next turn when idle).
+   * `attachments` carry their bytes to the engine and their reference to the
+   * event log (see {@link AttachmentInput}). */
+  sendMessage(text: string, attachments?: readonly AttachmentInput[]): void
+  /** Live MCP server status. Resolves undefined when the engine cannot answer
+   * (no MCP surface, or a fake query in tests); omitted entirely by engines that
+   * have no MCP at all. */
+  mcpServers?(): Promise<McpServerStatusInfo[] | undefined>
+  /** Reconnect one MCP server by name. Throws if it fails. */
+  reconnectMcpServer?(name: string): Promise<void>
+  /** Enable or disable one MCP server by name. Throws if it fails. */
+  setMcpServerEnabled?(name: string, enabled: boolean): Promise<void>
   /** Resolve a pending permission request. Returns false if the id is unknown (e.g. timed out). */
   resolvePermission(requestId: string, decision: PermissionDecision): boolean
   interrupt(): Promise<void>

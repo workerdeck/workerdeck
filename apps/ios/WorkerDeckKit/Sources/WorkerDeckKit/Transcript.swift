@@ -88,7 +88,7 @@ public enum NoticeLevel: String, Sendable, Equatable {
 }
 
 public enum TranscriptItem: Sendable, Equatable, Identifiable {
-  case user(id: String, text: String)
+  case user(id: String, text: String, attachments: [MessageAttachment]? = nil)
   case assistantText(id: String, text: String, streaming: Bool, parentToolUseId: String?)
   case thinking(id: String, text: String, parentToolUseId: String?)
   case toolCall(ToolCallItem)
@@ -103,7 +103,7 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
 
   public var id: String {
     switch self {
-    case .user(let id, _): return id
+    case .user(let id, _, _): return id
     case .assistantText(let id, _, _, _): return id
     case .thinking(let id, _, _): return id
     case .toolCall(let call): return call.id
@@ -381,7 +381,8 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
             .notice(id: id, level: local.stream == "stderr" ? .error : .info,
               text: trimmed(local.body)))
         } else {
-          items = upsert(items, .user(id: id, text: text))
+          // References, not bytes — the view fetches each one to render it.
+          items = upsert(items, .user(id: id, text: text, attachments: payload.attachments))
         }
       default:
         break

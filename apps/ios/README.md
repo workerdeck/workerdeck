@@ -101,10 +101,30 @@ Plan and research: `_docs/plans/MOBILE-CLIENT.md` (gitignored, local).
     marker. The plan capsule says "Max", not "Max 20x" — `subscription_type` is a tier, and the
     multiplier a subscription page shows is not in the data.
   - `App/Sources/Session/ComposerView.swift` — the input card, in two shapes. At rest it is the
-    field and nothing else; once it has focus, a draft, or a turn to stop, an action row unfolds
-    underneath (attach, dictate, hide keyboard, send). One send button does both jobs: a draft
-    always sends — messages queue behind a running turn — and stop takes the slot only while a
-    turn is live *and* there is nothing to send. Tapping the transcript puts the keyboard away.
+    field and nothing else; once it has focus, a draft, a staged photo, or a turn to stop, an
+    action row unfolds underneath: attach on the left, hide-keyboard and send on the right. There
+    is deliberately **no dictate button** — iOS puts a microphone on the keyboard itself, under
+    the thumb that is already there, and a second one would only compete with it. One send button
+    does both jobs: a draft always sends — messages queue behind a running turn — and stop takes
+    the slot only while a turn is live *and* there is nothing to send. Tapping the transcript puts
+    the keyboard away.
+  - `App/Sources/Session/{AddMediaSheet,ComposerAttachments,AttachmentThumbnail}.swift` — the plus
+    button's three sources (Camera / Photos / Files) and everything behind them. Files are
+    **uploaded as they are picked**, not at send time, so by the time a message is typed its
+    photos are already on the gateway and the command carries three short ids; the chip shows the
+    thumbnail the phone already has, so nothing waits on the network to appear. `AttachmentNormalizer`
+    is the load-bearing part: an iPhone shoots HEIC, which no model accepts, so a photo is
+    transcoded to JPEG here rather than refused by the gateway with a media type the user never
+    chose — and downscaled to 1568px, roughly what a vision model resizes to anyway. A failed
+    upload blocks the send (tap the chip to retry) instead of being silently dropped from it.
+    Transcript thumbnails go through `AttachmentLoader`, because the gateway authenticates with a
+    header and an `AsyncImage` pointed at the URL would 401.
+  - `App/Sources/Session/McpServersView.swift` — the `/mcp` screens, four levels deep like the
+    CLI's own picker (servers → server → tools → tool), grouped by config scope. Reachable from
+    the actions menu, and by typing `/mcp`, which the composer **answers locally** rather than
+    sending: the CLI's `/mcp` is an interactive picker, not a prompt, so forwarding it would spend
+    a turn on a model reading the word "/mcp". One thing the CLI shows that this cannot is a
+    tool's parameters — the engine's status payload carries no input schema.
   - `App/Sources/Session/PromptSuggestionList.swift` — the `/` and `@` picker, filling everything
     the header and the floating stack leave. It is a **`ZStack` sibling of the transcript, not an
     overlay on it**: an overlay on a `ScrollView` is proposed the scroll content's *ideal* size

@@ -138,6 +138,15 @@ boundary: anything a client needs must be expressible as protocol events and com
   `O_NOFOLLOW` + an `fstat` gate, and answers every filesystem refusal with one indistinguishable
   404 so a planted symlink can't become an existence oracle. Writes carry the hash they replace,
   which is what keeps a phone edit from clobbering the agent mid-run.
+  Two smaller session routes round it out. **Attachments**
+  (`POST/GET /sessions/:id/attachments`) hold the photos and files a client sends with a message:
+  the upload is a plain raw-body request (no multipart, so a phone and a browser both manage it in
+  one call), the bytes live in a per-session in-memory `AttachmentStore`, and the `user_message`
+  command names them by id — which is what keeps base64 out of the replayed event log and out of
+  parking snapshots. **MCP** (`GET /sessions/:id/mcp`, `POST /sessions/:id/mcp/:name`) reports the
+  session's servers and their tools straight from the engine and performs the CLI's own three
+  actions on one (reconnect, enable, disable); `mcpStatusInfo` in `core` strips each server's
+  `env` and `headers` on the way out, so reading it is never a way to read the operator's tokens.
 - **`packages/client`** — typed protocol client on platform `fetch`/`WebSocket`: REST session
   and job management, WS attach with auto-reconnect and replay-from-last-seq, `attachQueue()`
   for the live queue stream. Zero runtime deps; browser and Node.

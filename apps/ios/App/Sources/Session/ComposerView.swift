@@ -5,8 +5,8 @@ import SwiftUI
 ///
 /// It has two shapes. At rest it is the field and nothing else, so a session being
 /// read is not competing with a row of buttons. Once it has focus, a draft, or a
-/// turn to stop, an action row unfolds underneath: attach, dictate, dismiss the
-/// keyboard, and the one send/stop button.
+/// turn to stop, an action row unfolds underneath: attach on the left, dismiss the
+/// keyboard and the one send/stop button on the right.
 ///
 /// The draft, the caret and the focus flag are all the caller's: the `/command`
 /// and `@file` picker is a screen-level overlay (`PromptSuggestionList`), and it
@@ -19,12 +19,20 @@ struct ComposerView: View {
   @Binding var isFocused: Bool
   let isBusy: Bool
   let isEnabled: Bool
+  /// Files staged for the next message. Owned by the session view, because they
+  /// outlive the composer's focus and are cleared on send.
+  let attachments: ComposerAttachmentStore
   let onEdit: (String, NSRange) -> Void
   let onSend: () -> Void
   let onStop: () -> Void
+  let onAddMedia: () -> Void
 
   var body: some View {
     VStack(spacing: 6) {
+      // Above the field, like the picture you are talking about should be.
+      if !attachments.isEmpty {
+        AttachmentStrip(store: attachments)
+      }
       // At rest the field is the entire card: collapsed means no focus, no draft
       // and no turn running, so there is nothing a button could do here.
       field
@@ -39,9 +47,10 @@ struct ComposerView: View {
   }
 
   /// Expanded whenever there is something to act on: the keyboard is up, a draft
-  /// is waiting, or a turn is running and stopping it must stay one tap away.
+  /// is waiting, a photo is staged, or a turn is running and stopping it must stay
+  /// one tap away.
   private var isExpanded: Bool {
-    isFocused || !text.isEmpty || isBusy
+    isFocused || !text.isEmpty || isBusy || !attachments.isEmpty
   }
 
   private var field: some View {
@@ -64,21 +73,19 @@ struct ComposerView: View {
     }
   }
 
-  /// Attach, dictate, dismiss — and send. The first two are placeholders for work
-  /// that needs an upload path and a speech permission; they are shown disabled
-  /// rather than hidden so the row's shape is the one it will keep.
+  /// Attach on the left; dismiss and send on the right. There is deliberately no
+  /// dictate button — iOS puts a microphone on the keyboard itself, right where a
+  /// thumb already is, and a second one here would only compete with it.
   private var actionRow: some View {
     HStack(spacing: 8) {
-      CircleButton(systemImage: "plus", label: "Add media") {}
-        .disabled(true)
+      CircleButton(systemImage: "plus", label: "Add media", action: onAddMedia)
+        .disabled(!isEnabled)
+      Spacer(minLength: 0)
       if isFocused {
         CircleButton(systemImage: "keyboard.chevron.compact.down", label: "Hide keyboard") {
           dismissKeyboard()
         }
       }
-      Spacer(minLength: 0)
-      CircleButton(systemImage: "mic", label: "Dictate") {}
-        .disabled(true)
       sendButton
     }
     .padding(.horizontal, 4)
@@ -114,16 +121,19 @@ struct ComposerView: View {
     }
   }
 
+  /// A photo on its own is a message — the send button does not wait for text.
+  /// It does wait for the upload, so an id that hasn't landed can't be named.
   private var canSend: Bool {
-    isEnabled && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    guard isEnabled, !attachments.isUploading, !attachments.hasFailure else { return false }
+    return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
   }
 }
 
 /// The action row's shape: a glass circle around an SF Symbol.
 ///
 /// `.plain` keeps the glass from being repainted by the button style, and takes
-/// the automatic disabled dimming with it — hence the explicit opacity, which the
-/// two stubs rely on to read as not-yet-wired rather than broken.
+/// the automatic disabled dimming with it — hence the explicit opacity, so a
+/// closed session's buttons read as unavailable rather than broken.
 private struct CircleButton: View {
   let systemImage: String
   let label: String
@@ -143,5 +153,103 @@ private struct CircleButton: View {
     .buttonStyle(.plain)
     .opacity(isEnabled ? 1 : 0.45)
     .accessibilityLabel(label)
+  }
+}
+
+/// The staged files, as a scrolling row of chips above the field.
+///
+/// Each chip shows the thumbnail the phone already has, so nothing here waits on
+/// the network; the upload's state rides on top of it (a spinner while in flight,
+/// a warning badge if the gateway refused it) and the ✕ takes it back off.
+private struct AttachmentStrip: View {
+  let store: ComposerAttachmentStore
+
+  var body: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 8) {
+        ForEach(store.items) { item in
+          AttachmentChip(item: item, onRetry: { store.retry(item) }, onRemove: { store.remove(item) })
+        }
+      }
+      .padding(.horizontal, 6)
+      .padding(.top, 2)
+    }
+    .frame(height: 62)
+  }
+}
+
+private struct AttachmentChip: View {
+  let item: ComposerAttachment
+  let onRetry: () -> Void
+  let onRemove: () -> Void
+
+  var body: some View {
+    ZStack(alignment: .topTrailing) {
+      content
+        .frame(width: 54, height: 54)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.secondary.opacity(0.25)))
+        .overlay(alignment: .center) { statusOverlay }
+        // Tap to retry, and only when there is something to retry.
+        .onTapGesture { if item.failure != nil { onRetry() } }
+      Button(action: onRemove) {
+        Image(systemName: "xmark.circle.fill")
+          .font(.footnote)
+          .symbolRenderingMode(.palette)
+          .foregroundStyle(Color.white, Color.black.opacity(0.55))
+      }
+      .buttonStyle(.plain)
+      .offset(x: 5, y: -5)
+      .accessibilityLabel("Remove \(item.name)")
+    }
+    .padding(.top, 5)
+    .padding(.trailing, 5)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(item.failure.map { "\(item.name), failed: \($0). Tap to retry." } ?? item.name)
+  }
+
+  @ViewBuilder
+  private var content: some View {
+    if let thumbnail = item.thumbnail {
+      Image(uiImage: thumbnail)
+        .resizable()
+        .scaledToFill()
+    } else {
+      VStack(spacing: 2) {
+        Image(systemName: "doc")
+          .font(.footnote)
+        Text(fileExtension)
+          .font(.system(size: 9, weight: .semibold))
+          .lineLimit(1)
+      }
+      .foregroundStyle(.secondary)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(Color.secondary.opacity(0.16))
+    }
+  }
+
+  @ViewBuilder
+  private var statusOverlay: some View {
+    switch item.state {
+    case .uploading:
+      ZStack {
+        Color.black.opacity(0.35)
+        ProgressView().controlSize(.small).tint(.white)
+      }
+    case .failed:
+      ZStack {
+        Color.black.opacity(0.45)
+        Image(systemName: "exclamationmark.triangle.fill")
+          .font(.footnote)
+          .foregroundStyle(.orange)
+      }
+    case .ready:
+      EmptyView()
+    }
+  }
+
+  private var fileExtension: String {
+    let ext = (item.name as NSString).pathExtension.uppercased()
+    return ext.isEmpty ? "FILE" : ext
   }
 }

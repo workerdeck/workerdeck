@@ -175,12 +175,38 @@ final class TranscriptViewModel {
 
   // MARK: - Commands
 
-  func send(_ text: String) {
+  /// Send a turn. `attachmentIds` come from the composer's staging area, which
+  /// uploaded them as they were picked — a message may be attachments alone.
+  func send(_ text: String, attachmentIds: [String] = []) {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return }
+    guard !trimmed.isEmpty || !attachmentIds.isEmpty else { return }
     // Nothing is appended locally: the server echoes a `user_message` event and
     // the reducer owns the transcript. Optimistic rows would duplicate.
-    handle?.send(trimmed)
+    handle?.send(trimmed, attachmentIds: attachmentIds)
+  }
+
+  /// Upload one file for the next message; the returned id is what `send` names.
+  func uploadAttachment(name: String, mediaType: String, data: Data) async throws
+    -> MessageAttachment
+  {
+    try await client.uploadAttachment(
+      sessionId: sessionId, name: name, mediaType: mediaType, data: data)
+  }
+
+  /// Bytes for an attachment already in the transcript (thumbnails).
+  func attachmentData(_ attachmentId: String) async throws -> Data {
+    try await client.fetchAttachment(sessionId: sessionId, attachmentId: attachmentId)
+  }
+
+  /// The session's MCP servers, live from the engine.
+  func mcpServers() async throws -> [McpServerStatusInfo] {
+    try await client.listMcpServers(sessionId: sessionId)
+  }
+
+  func mcpAction(_ serverName: String, _ action: McpServerActionRequest.Action) async throws
+    -> [McpServerStatusInfo]
+  {
+    try await client.mcpServerAction(sessionId: sessionId, serverName: serverName, action: action)
   }
 
   func interrupt() { handle?.interrupt() }

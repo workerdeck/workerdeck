@@ -287,6 +287,50 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   the agent permission flow. That is not the trust story of a tool call — which is exactly why the
   bypass that matters (writing) is its own flag.
 
+## Message attachments (`/v1/sessions/:id/attachments`)
+
+- **The bytes never ride the protocol, and that is the whole design.** A session's event log is an
+  unbounded in-memory array replayed to *every* attaching client and captured verbatim into
+  parking snapshots. Base64-inlining a phone photo into `user_message` would be paid for on every
+  attach, forever, and written to disk by the file session store. So an attachment is uploaded
+  first, the command names it by id, and what lands in the log is a `MessageAttachment` reference.
+  `SessionRunner.sendMessage` is the seam: it builds the content blocks from the bytes and emits
+  the refs. If you ever find yourself putting `data` on a `SessionEvent`, this is why not.
+- **An unknown attachment id fails the whole command.** Not "send the message without it" — a
+  message that quietly lost its picture reads as the model ignoring it, which is far worse to
+  debug than a `protocol_error`.
+- **Only three shapes reach a model, and the fourth is refused at the door.** Images (jpeg / png /
+  gif / webp) become image blocks, PDFs document blocks, anything textual is inlined in a
+  `<attachment name=… type=…>` envelope, and everything else is a 415 at upload. All three are
+  verified against the real CLI by `pnpm smoke:media` — the fake `queryFn` harness proves the
+  server *builds* the blocks, never that the CLI accepts them on streamed input.
+- **`image/heic` is not on that list, and it is what an iPhone shoots.** The transcoding is the
+  client's job (`AttachmentNormalizer` in the iOS app), not the gateway's — the gateway would have
+  to grow an image pipeline to do it, and the client already has the pixels decoded. It also
+  downscales to 1568px, which is roughly what a vision model resizes to anyway.
+- **The store is memory, for the session's lifetime, exactly like `/files`.** An attachment 404s
+  after a restart and a client then renders a placeholder; the *message* is unaffected, because
+  the model saw the bytes at send time. Durability here would mean the gateway looking after a
+  photo library nobody asked it to keep.
+- **A text attachment's name is put in front of the model.** `safeName` strips path separators,
+  control characters and the envelope's own `<`/`"` delimiters — it is client-supplied text
+  crossing into both a response header and a prompt.
+
+## MCP status (`/v1/sessions/:id/mcp`)
+
+- **`mcpStatusInfo` drops `env` and `headers`, and must keep doing so.** The SDK's
+  `McpServerStatus.config` carries a stdio server's environment and an HTTP server's headers
+  verbatim — routinely API tokens. This route exists so a phone can answer "why is my MCP server
+  down"; it must never become a way to read the operator's credentials off their own machine.
+  `args` *is* forwarded (the operator's own client shows it, and hiding it would only mislead),
+  so keep secrets out of argv, not out of this response. A server test asserts both omissions.
+- **Tool parameters are not available.** The status payload names and describes each tool and
+  carries no input schema, so the CLI's own "Parameters:" block cannot be mirrored. The iOS tool
+  screen says so rather than leaving a suspicious gap.
+- **The three actions are session-scoped.** `reconnect`/`enable`/`disable` go to the running CLI;
+  nothing is written to a `.mcp.json`. The iOS screen's footer says this, because "Disable" on a
+  server list otherwise reads as an edit to config.
+
 ## APNs push (the CLI's forwarder)
 
 - **Sandbox and production are different token *namespaces*, not just different URLs.** A build

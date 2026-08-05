@@ -19,7 +19,7 @@ with commands.
 
 ## Versioning and skew detection
 
-`PROTOCOL_VERSION` (currently `4`) is bumped on any breaking change to events, commands, or REST
+`PROTOCOL_VERSION` (currently `5`) is bumped on any breaking change to events, commands, or REST
 shapes. The server reports it in the `attached` (and `queue_attached`) frame so clients can
 detect skew:
 
@@ -48,7 +48,7 @@ ws.onmessage = ({ data }) => {
 | `context_usage` | Context-window snapshot (`ContextUsage`), polled after each turn. |
 | `rate_limit` | Subscription rate-limit window update (`RateLimitInfo`). API-key sessions may never emit one — render nothing, not 0%, and treat an absent `utilization` as unknown. |
 | `plan_info` | Which claude.ai plan those windows belong to (`subscriptionType`: 'pro', 'max', …). Emitted from the same poll as `rate_limit`, once per change, and never for an API-key session. |
-| `assistant_message` / `user_message` | An `ApiMessage` (plain Anthropic content blocks) plus `parentToolUseId`, `replay` (resumed-history backfill), and for user messages `synthetic` (tool results). |
+| `assistant_message` / `user_message` | An `ApiMessage` (plain Anthropic content blocks) plus `parentToolUseId`, `replay` (resumed-history backfill), and for user messages `synthetic` (tool results) and `attachments`. The last is deliberately a list of **references** (`MessageAttachment`: id, name, media type, size) and never the bytes: this log is replayed to every attaching client and captured into parking snapshots, so an inlined photo would be paid for on every attach, forever. Fetch `GET /v1/sessions/:id/attachments/:id` to render one. |
 | `stream_delta` | Raw Anthropic streaming event; emitted only with `includePartialMessages`. |
 | `turn_result` | End of a turn: subtype, `isError`, `durationMs`, `numTurns`, `totalCostUsd` (both session-cumulative), `result` text, per-turn `usage`. |
 | `permission_requested` / `permission_resolved` | The pending-approval flow — see [Permissions](/workerdeck/docs/guides/permissions/). |
@@ -59,7 +59,8 @@ ws.onmessage = ({ data }) => {
 
 ## Commands (client → server)
 
-`SessionCommand` variants: `user_message` (text), `permission_decision` (`requestId`,
+`SessionCommand` variants: `user_message` (`text`, plus optional `attachmentIds` naming files
+uploaded ahead of it), `permission_decision` (`requestId`,
 `behavior: 'allow' | 'deny'`, allow-only `updatedInput`, deny-only `message`/`interrupt`),
 `interrupt`, `set_permission_mode`, `set_model` (omit `model` for the default), `close`.
 

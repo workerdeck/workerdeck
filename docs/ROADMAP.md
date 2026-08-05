@@ -1,6 +1,7 @@
 # Roadmap & open questions
 
-What's shipped, what's next, and what's still undecided. Status as of 2026-08-04 (0.7.0).
+What's shipped, what's next, and what's still undecided. Status as of 2026-08-05 (0.8.0 on
+master; 0.7.0 is the latest published).
 
 ## Shipped
 
@@ -83,6 +84,18 @@ What's shipped, what's next, and what's still undecided. Status as of 2026-08-04
   app browses and edits over it, scoped to the open session's cwd, and completes `@file` in the
   composer against `/fs/find`. Covered by tests on both halves; not yet exercised against a live
   gateway from a phone.
+- **Message attachments + MCP screens** (`PROTOCOL_VERSION` 5) — a session can be sent photos,
+  PDFs and text files. The bytes never ride the protocol: an upload
+  (`POST /sessions/:id/attachments`) is held per session and the `user_message` command names it
+  by id, so the replayed event log and every parking snapshot carry a `MessageAttachment`
+  reference rather than base64 that would be paid for on every attach. The gateway turns the
+  three supported kinds into image / document / inlined-text content blocks, refusing anything
+  else at the door with a 415; `pnpm smoke:media` proves all three actually reach the model
+  through the real CLI, which no fake harness can. Alongside it, `/sessions/:id/mcp` reports a
+  session's MCP servers and tools and performs the CLI's own reconnect / enable / disable —
+  with each server's `env` and HTTP `headers` stripped on the way out, so the route can never
+  become a way to read the operator's tokens. The iOS app gained an Add Media sheet (camera /
+  photos / files, HEIC transcoded and photos downscaled on device) and the four `/mcp` screens.
 
 ## Next
 
@@ -97,18 +110,33 @@ What's shipped, what's next, and what's still undecided. Status as of 2026-08-04
    — the code is tested and the alternative was holding the host-filesystem release behind it —
    but it stays here rather than under Shipped until a push has actually reached a phone, and the
    README says as much. The same caveat covers the iOS file browser released alongside it.
-1. **Shared-backend `QueueAdapter`** (BullMQ or plain redis) — the reason the adapter contract
+1. **Bespoke provider adapters, and Codex as a first-class engine.** Today the second engine is a
+   thin pass-through to whatever `@ai-sdk/*` package the *host* dynamically imports, which leaves
+   nowhere to put per-provider behaviour, no way for a client to ask what a profile can do, and no
+   difference between "misconfigured" and "working" until a session fails. The plan is adapters in
+   this repo — each declaring its own capabilities and its own hard-coded model catalog, and each
+   reporting itself unavailable when its credentials are absent — plus **Codex
+   (`@openai/codex-sdk`, which drives a local binary exactly as the Agent SDK drives the Claude
+   Code CLI) as a peer of the Claude engine**, streamlined behind one capability record so the two
+   are interchangeable to a client. The `@ai-sdk` providers are temporarily disabled rather than
+   removed. Two consequences worth stating up front: model lists stop being discovered at runtime
+   (the `capabilities`-learned map goes away in favour of static catalogs shipped with releases),
+   and whether a Codex turn can *ask* for approval and wait decides whether `PermissionRequest` is
+   a Claude-only concept — verify that before designing around it. Credentials stay the official
+   SDK/binary's business either way; WorkerDeck implements no login flow for Codex any more than
+   it does for Anthropic.
+2. **Shared-backend `QueueAdapter`** (BullMQ or plain redis) — the reason the adapter contract
    exists. `claimNext` must stay atomic (BullMQ free; raw redis needs LMOVE/Lua) and honor
    `nextRunAt` (BullMQ delayed jobs); daily counters map to `INCRBY` on a dated key with TTL.
    Caveat: `JobQueue` assumes the claiming process runs the job — multi-worker deployments need a
    claim-lease/heartbeat so a dead worker doesn't strand jobs in `running`, and webhook ordering
    is per-process.
-2. **Promote the remaining `sdk_event` passthroughs** UIs care about: tool progress,
+3. **Promote the remaining `sdk_event` passthroughs** UIs care about: tool progress,
    task/subagent events, todo lists.
-3. **Managed sandbox tier-2** — a hosted execution backend (Vercel/E2B) behind the existing
+4. **Managed sandbox tier-2** — a hosted execution backend (Vercel/E2B) behind the existing
    `ToolExecutor` seam. Deliberately after deferred execution: if a third backend needs no
    runner-loop or protocol change, the seam held.
-4. **Multi-host sessions** — the durable half landed (`createFileSessionStore`), but it is
+5. **Multi-host sessions** — the durable half landed (`createFileSessionStore`), but it is
    single-process by construction: two servers over one directory would both hydrate and both
    rebuild. What's left is a shared-backend store (redis/sqlite/a table) with a claim on rebuild
    and, for Claude-engine sessions, cross-host resume over the SDK's on-disk transcripts. Also

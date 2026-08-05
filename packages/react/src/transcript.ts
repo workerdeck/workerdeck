@@ -1,6 +1,7 @@
 import type {
   ContentBlock,
   ContextUsage,
+  MessageAttachment,
   ModelOption,
   PermissionMode,
   PermissionRequest,
@@ -21,7 +22,7 @@ import type {
  */
 
 export type TranscriptItem =
-  | { kind: 'user'; id: string; text: string }
+  | { kind: 'user'; id: string; text: string; attachments?: MessageAttachment[] }
   | {
       kind: 'assistant_text'
       id: string
@@ -243,6 +244,9 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
               kind: 'user',
               id: event.uuid ?? `user-${event.seq}`,
               text,
+              // References, not bytes — render them by fetching
+              // `/sessions/:id/attachments/:attachmentId`.
+              attachments: event.attachments,
             })
           }
         }

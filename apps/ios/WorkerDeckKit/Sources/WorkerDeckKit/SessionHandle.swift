@@ -212,9 +212,13 @@ public final class SessionHandle {
 
   // MARK: Commands
 
-  /// Send a user turn.
-  public func send(_ text: String) {
-    enqueue(.userMessage(text: text))
+  /// Send a user turn, optionally naming attachments uploaded ahead of it with
+  /// `WorkerClient.uploadAttachment` (ids in the order they should reach the
+  /// model). An unknown id fails the command — the server refuses to send a
+  /// message that quietly lost its picture.
+  public func send(_ text: String, attachmentIds: [String]? = nil) {
+    enqueue(
+      .userMessage(text: text, attachmentIds: (attachmentIds?.isEmpty ?? true) ? nil : attachmentIds))
   }
 
   /// Approve a pending permission request, optionally rewriting the tool input.

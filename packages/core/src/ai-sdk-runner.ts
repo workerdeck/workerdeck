@@ -19,6 +19,7 @@ import type {
   ToolExecutionBackend,
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
+import { type AttachmentInput, attachmentRef, normalizeMediaType } from './attachments.ts'
 import type {
   ParkedExecution,
   PermissionDecision,
@@ -325,14 +326,29 @@ export class AiSdkRunner implements Runner {
     return snapshot
   }
 
-  sendMessage(text: string): void {
+  sendMessage(text: string, attachments?: readonly AttachmentInput[]): void {
     if (this.#parked) throw new Error('session is parked')
     if (this.#closed) throw new Error('session is closed')
-    this.#messages.push({ role: 'user', content: text })
+    // AI SDK v7 has one part type for attached bytes: `file`, with the media type
+    // telling the provider what it is. Parts lead, text follows — same order the
+    // Claude engine uses, for the same reason.
+    const content = attachments?.length
+      ? [
+          ...attachments.map((attachment) => ({
+            type: 'file' as const,
+            data: attachment.data,
+            mediaType: normalizeMediaType(attachment.mediaType),
+            filename: attachment.name,
+          })),
+          ...(text ? [{ type: 'text' as const, text }] : []),
+        ]
+      : text
+    this.#messages.push({ role: 'user', content })
     this.#emit({
       type: 'user_message',
       message: { role: 'user', content: text },
       parentToolUseId: null,
+      attachments: attachments?.length ? attachments.map(attachmentRef) : undefined,
       uuid: randomUUID(),
     })
     this.#scheduleTurn()

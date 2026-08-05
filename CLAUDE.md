@@ -38,6 +38,9 @@ protocol. Read these before changing scope or structure:
   remembers each profile's model list off the `capabilities` events its sessions emit, so
   `GET /profiles` can hand a create form a picker without spawning a CLI to ask), auth hook,
   optional `/jobs` + `/queue` routes, profiles (+ `profileStore` CRUD), `GET /sessions/:id/files`,
+  message attachments (`attachments.ts` — bytes held per session so the event log carries only
+  `MessageAttachment` refs; **never** inline base64 into an event) and `/sessions/:id/mcp`
+  (status + reconnect/enable/disable, with each server's `env`/`headers` stripped),
   the host-filesystem routes (`/fs/*`, `host-files.ts` + `host-file-search.ts` — operator
   privilege; reads follow `allowedCwdRoots` and `hostFiles.roots` only narrows, writes opt in
   separately; realpath-based containment and uniform-404 disclosure, so **do not** reuse
@@ -128,7 +131,8 @@ before touching versioning or the publish workflow.
 job routes + webhook receiver; queue: fake runner; react: reducer + bridge e2e. Real-SDK smokes
 cost tokens and never run in `pnpm test`, but permission-path or CLI-control-request changes need
 one — the fake harness can't validate those payloads. Model-agnostic smokes live in `smoke/`:
-`smoke:sandbox` is free, `smoke:live` and `smoke:sdk` are not.
+`smoke:sandbox` is free, `smoke:live`, `smoke:sdk` and `smoke:media` (the only check that the CLI
+accepts image/PDF/text attachment blocks at all) are not.
 
 ## Wrapup Config
 

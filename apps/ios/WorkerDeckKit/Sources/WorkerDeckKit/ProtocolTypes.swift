@@ -13,7 +13,7 @@ import Foundation
 /// Never decode with a global key-conversion strategy.
 public enum WorkerProtocol {
   /// Mirror of PROTOCOL_VERSION. Compare against `AttachedFrame.protocolVersion`.
-  public static let version = 4
+  public static let version = 5
 }
 
 // MARK: - Session lifecycle
@@ -547,18 +547,45 @@ public struct UserMessageEvent: Decodable, Sendable, Equatable {
   public let replay: Bool?
   /// True for tool results and other synthetic user-role messages.
   public let synthetic: Bool?
+  /// Files sent with this message, by reference. `message` carries the typed text
+  /// alone — the bytes went to the model, not into the event log.
+  public let attachments: [MessageAttachment]?
   public let uuid: String?
 
   public init(
     message: ApiMessage, parentToolUseId: String? = nil, replay: Bool? = nil,
-    synthetic: Bool? = nil, uuid: String? = nil
+    synthetic: Bool? = nil, attachments: [MessageAttachment]? = nil, uuid: String? = nil
   ) {
     self.message = message
     self.parentToolUseId = parentToolUseId
     self.replay = replay
     self.synthetic = synthetic
+    self.attachments = attachments
     self.uuid = uuid
   }
+}
+
+/// A file the user attached to a message.
+///
+/// The bytes never ride the protocol: an attachment is uploaded first
+/// (`POST /sessions/:id/attachments`), the message names it by id, and this
+/// reference is what lands in the replayed event log. Fetch
+/// `GET /sessions/:id/attachments/:id` to render it.
+public struct MessageAttachment: Codable, Sendable, Equatable, Identifiable {
+  public let id: String
+  public let name: String
+  public let mediaType: String
+  public let bytes: Int
+
+  public init(id: String, name: String, mediaType: String, bytes: Int) {
+    self.id = id
+    self.name = name
+    self.mediaType = mediaType
+    self.bytes = bytes
+  }
+
+  /// Images render as a thumbnail; everything else gets a named chip.
+  public var isImage: Bool { mediaType.hasPrefix("image/") }
 }
 
 /// Raw Anthropic streaming event; only the fields the transcript needs are modeled.
@@ -774,7 +801,7 @@ extension SessionEvent: Decodable {
 // MARK: - Commands (client -> server)
 
 public enum SessionCommand: Sendable, Equatable {
-  case userMessage(text: String)
+  case userMessage(text: String, attachmentIds: [String]? = nil)
   case permissionDecision(
     requestId: String, behavior: PermissionBehavior,
     updatedInput: [String: JSONValue]? = nil, message: String? = nil, interrupt: Bool? = nil)
@@ -790,15 +817,16 @@ public enum SessionCommand: Sendable, Equatable {
 extension SessionCommand: Encodable {
   private enum CodingKeys: String, CodingKey {
     case type, text, requestId, behavior, updatedInput, message, interrupt, mode, model
-    case executionId, output, logs, reason, error
+    case executionId, output, logs, reason, error, attachmentIds
   }
 
   public func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     switch self {
-    case .userMessage(let text):
+    case .userMessage(let text, let attachmentIds):
       try container.encode("user_message", forKey: .type)
       try container.encode(text, forKey: .text)
+      try container.encodeIfPresent(attachmentIds, forKey: .attachmentIds)
     case .permissionDecision(let requestId, let behavior, let updatedInput, let message, let interrupt):
       try container.encode("permission_decision", forKey: .type)
       try container.encode(requestId, forKey: .requestId)

@@ -12,6 +12,7 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 import type {
   CreateSessionRequest,
+  McpServerStatusInfo,
   PermissionMode,
   PermissionRequest,
   SessionEvent,
@@ -19,10 +20,16 @@ import type {
   SessionInfo,
   SessionStatus,
 } from '@workerdeck/protocol'
+import {
+  type AttachmentInput,
+  attachmentContentBlocks,
+  attachmentRef,
+} from './attachments.ts'
 import { InputQueue } from './input-queue.ts'
 import {
   type UsageRateLimits,
   defaultModelFromSdk,
+  mcpStatusInfo,
   modelOptionsFromSdk,
   normalizeSdkMessage,
   rateLimitEventsFromUsage,
@@ -171,12 +178,20 @@ export class SessionRunner implements Runner {
     return this.#runPromise
   }
 
-  /** Queue a user message for the session (starts the next turn when idle). */
-  sendMessage(text: string): void {
+  /** Queue a user message for the session (starts the next turn when idle).
+   *
+   * `attachments` carry their own bytes; they reach the CLI as content blocks and
+   * are logged as references. A message may be attachments alone — an empty text
+   * block is not valid API input, so the text is only added when there is some. */
+  sendMessage(text: string, attachments?: readonly AttachmentInput[]): void {
     if (this.#closed) throw new Error('session is closed')
+    const blocks = attachments?.length ? attachmentContentBlocks(attachments) : []
+    const content = blocks.length
+      ? ([...blocks, ...(text ? [{ type: 'text', text }] : [])] as unknown as SDKUserMessage['message']['content'])
+      : text
     this.#input.push({
       type: 'user',
-      message: { role: 'user', content: text },
+      message: { role: 'user', content },
       parent_tool_use_id: null,
       session_id: this.#sdkSessionId,
     })
@@ -186,8 +201,34 @@ export class SessionRunner implements Runner {
       type: 'user_message',
       message: { role: 'user', content: text },
       parentToolUseId: null,
+      attachments: attachments?.length ? attachments.map(attachmentRef) : undefined,
       uuid: randomUUID(),
     })
+  }
+
+  /** Live MCP server status, straight from the CLI. Undefined when the engine
+   * can't answer (an injected fake query in tests) — the caller 501s rather than
+   * pretending the session has no servers. */
+  async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
+    const query = this.#query
+    if (typeof query?.mcpServerStatus !== 'function') return undefined
+    return (await query.mcpServerStatus()).map(mcpStatusInfo)
+  }
+
+  async reconnectMcpServer(name: string): Promise<void> {
+    const query = this.#query
+    if (typeof query?.reconnectMcpServer !== 'function') {
+      throw new Error('this session cannot reconnect MCP servers')
+    }
+    await query.reconnectMcpServer(name)
+  }
+
+  async setMcpServerEnabled(name: string, enabled: boolean): Promise<void> {
+    const query = this.#query
+    if (typeof query?.toggleMcpServer !== 'function') {
+      throw new Error('this session cannot enable or disable MCP servers')
+    }
+    await query.toggleMcpServer(name, enabled)
   }
 
   /** Resolve a pending permission request. Returns false if the id is unknown (e.g. timed out). */

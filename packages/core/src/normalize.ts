@@ -1,7 +1,8 @@
-import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { McpServerStatus, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type {
   ApiMessage,
   ContentBlock,
+  McpServerStatusInfo,
   ModelOption,
   SessionEventBody,
 } from '@workerdeck/protocol'
@@ -88,6 +89,42 @@ export function rateLimitEventsFromUsage(usage: UsageRateLimits): SessionEventBo
     if (slug) push(`seven_day_${slug}`, bucket)
   }
   return events
+}
+
+/**
+ * The CLI's MCP status, as `McpServerStatusInfo`.
+ *
+ * The narrowing is the point: the SDK's config object carries `env` for stdio
+ * servers and `headers` for HTTP ones, and both routinely hold API tokens. This
+ * is the one place they are dropped, so no client — dashboard, phone, or a host
+ * app reading the REST route — can turn "show me my MCP servers" into a
+ * credential dump. Only the connection's identity survives.
+ */
+export function mcpStatusInfo(status: McpServerStatus): McpServerStatusInfo {
+  const config = status.config as
+    | { type?: string; command?: string; args?: string[]; url?: string }
+    | undefined
+  // stdio is the CLI's implicit default: a config with a command and no type.
+  const transport = config?.type ?? (config?.command ? 'stdio' : undefined)
+  return {
+    name: status.name,
+    status: status.status,
+    scope: status.scope,
+    error: status.error,
+    serverInfo: status.serverInfo,
+    transport:
+      transport === 'stdio' || transport === 'http' || transport === 'sse' || transport === 'sdk'
+        ? transport
+        : undefined,
+    command: config?.command,
+    args: config?.args,
+    url: config?.url,
+    tools: status.tools?.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      annotations: tool.annotations,
+    })),
+  }
 }
 
 /** The half of the SDK's `ModelInfo` this package forwards. Structurally typed so

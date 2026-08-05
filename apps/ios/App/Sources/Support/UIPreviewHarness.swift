@@ -25,6 +25,8 @@ enum UIPreview: String {
   case modelPicker
   case modePicker
   case empty
+  case addMedia
+  case mcp
 
   static var active: UIPreview? {
     ProcessInfo.processInfo.environment["UIPREVIEW"].flatMap(UIPreview.init(rawValue:))
@@ -57,6 +59,32 @@ struct UIPreviewHarness: View {
     ModelOption(
       value: "claude-opus-4-8", resolvedModel: "claude-opus-4-8", displayName: "Opus 4.8",
       description: "The previous Opus", primary: false),
+  ]
+
+  static let mcpServers: [McpServerStatusInfo] = [
+    McpServerStatusInfo(
+      name: "chrome-devtools", status: "connected", scope: "project", error: nil,
+      serverInfo: .init(name: "chrome-devtools", version: "0.6.1"), transport: "stdio",
+      command: "npx", args: ["chrome-devtools-mcp@latest", "--isolated"], url: nil,
+      tools: [
+        McpServerToolInfo(
+          name: "click", description: "Clicks on the provided element", annotations: nil),
+        McpServerToolInfo(name: "close_page", description: "Closes a page", annotations: nil),
+        McpServerToolInfo(
+          name: "evaluate_script", description: "Evaluates a script in the page",
+          annotations: .init(readOnly: false, destructive: true, openWorld: nil)),
+      ]),
+    McpServerStatusInfo(
+      name: "roam-code", status: "connected", scope: "user", error: nil, serverInfo: nil,
+      transport: "stdio", command: "roam-code", args: ["mcp"], url: nil,
+      tools: [McpServerToolInfo(name: "roam_ask", description: nil, annotations: nil)]),
+    McpServerStatusInfo(
+      name: "deepwiki", status: "failed", scope: "user", error: "connection refused",
+      serverInfo: nil, transport: "http", command: nil, args: nil,
+      url: "https://mcp.deepwiki.com/mcp", tools: nil),
+    McpServerStatusInfo(
+      name: "computer-use", status: "disabled", scope: nil, error: nil, serverInfo: nil,
+      transport: nil, command: nil, args: nil, url: nil, tools: nil),
   ]
 
   var body: some View {
@@ -148,6 +176,17 @@ struct UIPreviewHarness: View {
         }
         .padding(.vertical, 60)
       }
+    case .addMedia:
+      // Presented over something, because a detent sheet has no shape on its own.
+      Color.black.sheet(isPresented: .constant(true)) {
+        AddMediaSheet(onChoose: { _ in })
+      }
+    case .mcp:
+      // A shape copied off a real `/mcp`: two scopes, a healthy stdio server, a
+      // failed remote one, and one the session has disabled.
+      McpServersView(
+        load: { Self.mcpServers },
+        act: { _, _ in Self.mcpServers })
     case .folders:
       let root = "/Users/you/projects"
       FolderPickerView(

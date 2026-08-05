@@ -17,8 +17,8 @@ struct TranscriptItemView: View {
 
   var body: some View {
     switch item {
-    case .user(_, let text):
-      UserBubble(text: text)
+    case .user(_, let text, let attachments):
+      UserBubble(text: text, attachments: attachments ?? [])
     case .assistantText(_, let text, let streaming, let parentToolUseId):
       AssistantText(text: text, streaming: streaming)
         .nested(parentToolUseId != nil)
@@ -55,21 +55,32 @@ extension View {
 
 private struct UserBubble: View {
   let text: String
+  /// Sent with the message; references only, so the thumbnails are fetched.
+  let attachments: [MessageAttachment]
 
   var body: some View {
     HStack {
       Spacer(minLength: 44)
-      // Literal text, not markdown — what was typed is what was sent. The one
-      // pass over it is token styling, so a message reads the same after sending
-      // as it did in the composer.
-      Text(PromptTokenStyle.styled(text))
-        .font(.body)
-        .textSelection(.enabled)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.accentColor.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
-        .frame(maxWidth: .infinity, alignment: .trailing)
-        .multilineTextAlignment(.leading)
+      VStack(alignment: .trailing, spacing: 6) {
+        if !attachments.isEmpty {
+          SentAttachmentsView(attachments: attachments)
+        }
+        // A photo can be the whole message: an empty bubble under it would be a
+        // rectangle saying nothing.
+        if !text.isEmpty {
+          // Literal text, not markdown — what was typed is what was sent. The one
+          // pass over it is token styling, so a message reads the same after sending
+          // as it did in the composer.
+          Text(PromptTokenStyle.styled(text))
+            .font(.body)
+            .textSelection(.enabled)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.accentColor.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+            .multilineTextAlignment(.leading)
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .trailing)
     }
   }
 }

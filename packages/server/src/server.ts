@@ -35,6 +35,7 @@ import {
   type ProfileConfigSnapshot,
   type ProfileInfo,
   type QueueServerFrame,
+  type McpServerActionRequest,
   type ResolvePermissionRequest,
   type SdkSessionSummary,
   type ServerFrame,
@@ -51,6 +52,7 @@ import {
   resolveForWrite,
   writeContained,
 } from './host-files.ts'
+import { AttachmentStore } from './attachments.ts'
 import { SessionRegistry } from './registry.ts'
 import { SessionNotifier, type SessionNotificationOptions } from './notifications.ts'
 import { BridgeHub, type BridgeHubOptions } from './bridge.ts'
@@ -140,6 +142,22 @@ export type WorkerServerOptions = {
      * `DEFAULT_IGNORED_DIRS` (`.git`, `node_modules`, build output…) — the thing
      * that keeps a per-keystroke search cheap on a real source tree. */
     ignore?: string[]
+  }
+  /**
+   * Message attachments (`{basePath}/sessions/:id/attachments`) — the photos and
+   * files a client sends alongside a message. Always on; these knobs only size it.
+   *
+   * There is no grant to make here the way `hostFiles.write` is one: an upload
+   * lands in the session's own in-memory hold and reaches the model as message
+   * content, which is exactly what typing does. What it *can* do is cost memory,
+   * so both caps default low enough that a phone camera roll cannot fill the
+   * gateway.
+   */
+  attachments?: {
+    /** Largest single upload; over it is a 413. Default 10 MiB. */
+    maxFileBytes?: number
+    /** Ceiling on what one session holds at once. Default 64 MiB. */
+    maxSessionBytes?: number
   }
   /**
    * Named Claude Code config directories sessions can run under (each becomes the
@@ -367,6 +385,19 @@ async function readJsonBody(
   }
   if (size === 0) return {}
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>
+}
+
+/** Body as bytes, refusing anything over `maxBytes`. Attachments are the one
+ * thing this server takes that isn't JSON. */
+async function readRawBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  let size = 0
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length
+    if (size > maxBytes) throw new Error('request body too large')
+    chunks.push(chunk as Buffer)
+  }
+  return Buffer.concat(chunks)
 }
 
 /**
@@ -855,6 +886,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       })
     },
   })
+  const attachmentStore = new AttachmentStore(options.attachments)
   const bridge = new BridgeHub({
     ...options.bridge,
     onResult: (sessionId, executionId, result) => {
@@ -1018,10 +1050,21 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     }
   }
 
-  // Route pattern: {basePath}/sessions[/:id[/ws | /permissions/:requestId | /files[/<path>]]]
+  // Route pattern: {basePath}/sessions[/:id[/ws | /permissions/:requestId |
+  //   /files[/<path>] | /attachments[/:attachmentId] | /mcp[/:serverName]]]
   const parseRoute = (
     url: string,
-  ): { id?: string; ws?: boolean; permissionId?: string; files?: boolean; filePath?: string } | null => {
+  ): {
+    id?: string
+    ws?: boolean
+    permissionId?: string
+    files?: boolean
+    filePath?: string
+    attachments?: boolean
+    attachmentId?: string
+    mcp?: boolean
+    mcpServer?: string
+  } | null => {
     const pathname = new URL(url, 'http://internal').pathname
     if (!pathname.startsWith(basePath + '/sessions')) return null
     const rest = pathname.slice((basePath + '/sessions').length)
@@ -1033,6 +1076,22 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     }
     if (parts.length === 3 && parts[1] === 'permissions') {
       return { id: decodeURIComponent(parts[0]!), permissionId: decodeURIComponent(parts[2]!) }
+    }
+    if (parts.length <= 3 && parts[1] === 'attachments') {
+      return {
+        id: decodeURIComponent(parts[0]!),
+        attachments: true,
+        attachmentId: parts[2] === undefined ? undefined : decodeURIComponent(parts[2]),
+      }
+    }
+    if (parts.length <= 3 && parts[1] === 'mcp') {
+      // Server names are opaque and may contain ':' (plugin:gtm:gtm) — one segment,
+      // decoded whole.
+      return {
+        id: decodeURIComponent(parts[0]!),
+        mcp: true,
+        mcpServer: parts[2] === undefined ? undefined : decodeURIComponent(parts[2]),
+      }
     }
     if (parts.length >= 2 && parts[1] === 'files') {
       // The remainder is a VFS path — slashes are its separators, so segments
@@ -1059,6 +1118,124 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const hostFilesWritable = options.hostFiles?.write === true
   const maxHostFileBytes = options.hostFiles?.maxFileBytes ?? 1024 * 1024
   const maxHostDirEntries = options.hostFiles?.maxEntries ?? 5000
+
+  /**
+   * `{basePath}/sessions/:id/attachments` — the files a client sends with a message.
+   *
+   * `POST ?name=<name>` takes the raw bytes as the body and the media type from
+   * the `content-type` header; there is no multipart parsing here on purpose, so
+   * a phone and a browser both upload with one plain request and this file stays
+   * dependency-free. `GET /:attachmentId` hands the bytes back for thumbnails.
+   *
+   * The download always answers `content-disposition: attachment` and `nosniff`,
+   * the same as `/files`: an upload is client-supplied content served from the
+   * gateway's own origin, and it must never render as a document there. (An
+   * `<img src>` is unaffected — disposition does not apply to subresources.)
+   */
+  const handleAttachments = async (
+    req: IncomingMessage,
+    res: ServerResponse,
+    sessionId: string,
+    attachmentId?: string,
+  ): Promise<void> => {
+    if (req.method === 'POST' && attachmentId === undefined) {
+      const url = new URL(req.url ?? '/', 'http://internal')
+      const mediaType = req.headers['content-type']
+      if (!mediaType) {
+        json(res, 400, { error: 'content-type header is required' })
+        return
+      }
+      let body: Buffer
+      try {
+        body = await readRawBody(req, attachmentStore.maxFileBytes)
+      } catch {
+        json(res, 413, { error: 'attachment is larger than the limit' })
+        return
+      }
+      const result = attachmentStore.put(
+        sessionId,
+        url.searchParams.get('name') ?? 'attachment',
+        mediaType,
+        body,
+      )
+      if (!result.ok) {
+        const status =
+          result.error.code === 'unsupported_type'
+            ? 415
+            : result.error.code === 'empty'
+              ? 400
+              : 413
+        json(res, status, { error: result.error.message })
+        return
+      }
+      json(res, 201, { attachment: result.attachment })
+      return
+    }
+    if (req.method === 'GET' && attachmentId !== undefined) {
+      const found = attachmentStore.get(sessionId, attachmentId)
+      if (!found) {
+        json(res, 404, { error: 'attachment not found' })
+        return
+      }
+      const bytes = Buffer.from(found.data, 'base64')
+      res.writeHead(200, {
+        'content-type': found.mediaType,
+        'content-length': bytes.length,
+        'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(found.name)}`,
+        'x-content-type-options': 'nosniff',
+      })
+      res.end(bytes)
+      return
+    }
+    json(res, 405, { error: 'method not allowed' })
+  }
+
+  /**
+   * `{basePath}/sessions/:id/mcp` — the session's MCP servers, and the three
+   * things the CLI's own `/mcp` screen can do to one (reconnect, enable, disable).
+   *
+   * Every answer goes through `mcpStatusInfo`, which is where the servers' `env`
+   * and `headers` are dropped: reading this route must not be a way to read the
+   * operator's API tokens.
+   */
+  const handleMcp = async (
+    req: IncomingMessage,
+    res: ServerResponse,
+    runner: Runner,
+    serverName?: string,
+  ): Promise<void> => {
+    const listServers = async (): Promise<boolean> => {
+      const servers = await runner.mcpServers?.()
+      if (!servers) {
+        json(res, 501, { error: 'this session does not report MCP servers' })
+        return false
+      }
+      json(res, 200, { servers })
+      return true
+    }
+    if (req.method === 'GET' && serverName === undefined) {
+      await listServers()
+      return
+    }
+    if (req.method === 'POST' && serverName !== undefined) {
+      const body = (await readJsonBody(req, maxBodyBytes)) as McpServerActionRequest
+      if (body?.action !== 'reconnect' && body?.action !== 'enable' && body?.action !== 'disable') {
+        json(res, 400, { error: "action must be 'reconnect', 'enable' or 'disable'" })
+        return
+      }
+      try {
+        if (body.action === 'reconnect') await runner.reconnectMcpServer?.(serverName)
+        else await runner.setMcpServerEnabled?.(serverName, body.action === 'enable')
+      } catch (error) {
+        // The CLI's own message ("No MCP server found named x") is the useful one.
+        json(res, 400, { error: error instanceof Error ? error.message : 'MCP action failed' })
+        return
+      }
+      await listServers()
+      return
+    }
+    json(res, 405, { error: 'method not allowed' })
+  }
 
   /**
    * `{basePath}/fs/*` — the operator's real tree. Authorized by the auth key alone
@@ -1704,6 +1881,18 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       json(res, 404, { error: 'session not found' })
       return
     }
+    if (route.attachments) {
+      await handleAttachments(req, res, route.id, route.attachmentId)
+      return
+    }
+    if (route.mcp) {
+      if (!runner) {
+        json(res, 409, { error: 'session is parked (wake it before asking about MCP)' })
+        return
+      }
+      await handleMcp(req, res, runner, route.mcpServer)
+      return
+    }
     if (route.files) {
       // Deliverables live in the session's in-memory VFS — downloadable while
       // the session lives (durability is a persistence-tier concern, not ours).
@@ -1776,6 +1965,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       // And drop any parked state, so a late execution result can't wake a session
       // the client just ended.
       await parking.discard(route.id)
+      // The session is gone; so is anything it was holding for it.
+      attachmentStore.drop(route.id)
       json(res, 200, {
         session: runner?.info() ?? { ...parked!.info, status: 'closed' as const },
       })
@@ -1887,9 +2078,20 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
 
   const handleCommand = async (frame: ClientFrame, runner: Runner): Promise<void> => {
     switch (frame.type) {
-      case 'user_message':
-        runner.sendMessage(frame.text)
+      case 'user_message': {
+        if (!frame.attachmentIds?.length) {
+          runner.sendMessage(frame.text)
+          return
+        }
+        // The bytes live server-side; this is where a reference becomes content.
+        // A missing id throws rather than sending a message that lost its picture.
+        const resolved = attachmentStore.resolve(runner.id, frame.attachmentIds)
+        if (!resolved.ok) {
+          throw new Error(`unknown attachment(s): ${resolved.missing.join(', ')}`)
+        }
+        runner.sendMessage(frame.text, resolved.attachments)
         return
+      }
       case 'permission_decision':
         if (frame.behavior === 'allow') {
           runner.resolvePermission(frame.requestId, {

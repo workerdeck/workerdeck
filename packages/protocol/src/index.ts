@@ -10,7 +10,7 @@
  */
 
 /** Bumped on any breaking change to events, commands, or REST shapes. */
-export const PROTOCOL_VERSION = 4
+export const PROTOCOL_VERSION = 5
 
 // ---------------------------------------------------------------------------
 // Session lifecycle
@@ -62,6 +62,32 @@ export type ToolResultBlock = {
 export type UnknownBlock = { type: string; [key: string]: unknown }
 
 export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock | UnknownBlock
+
+/**
+ * A file the user attached to a message — a photo, a screenshot, a document.
+ *
+ * The bytes never travel on this protocol. An attachment is uploaded first
+ * (`POST {basePath}/sessions/:id/attachments`), and the command that sends the
+ * message names it by id; what lands in the seq-numbered event log is this
+ * reference. That is deliberate: the log is replayed to every attaching client
+ * and captured into parking snapshots, so a few phone photos inlined as base64
+ * would be paid for on every attach, forever. Clients render a thumbnail by
+ * fetching `GET {basePath}/sessions/:id/attachments/:attachmentId`.
+ *
+ * Lifetime is the session's, like `/files` — the store is in-memory and an
+ * attachment 404s after a server restart. The message itself is unaffected: the
+ * model saw the bytes at send time.
+ */
+export type MessageAttachment = {
+  /** Server-assigned; the path segment of the download URL. */
+  id: string
+  /** Display name from the file the user picked. A leaf name, never a path. */
+  name: string
+  /** IANA media type, e.g. 'image/jpeg'. The server decides how it reaches the
+   * model (image block, document block, or inlined text) from this. */
+  mediaType: string
+  bytes: number
+}
 
 export type ApiMessage = {
   role: 'user' | 'assistant'
@@ -301,6 +327,10 @@ export type SessionEventBody =
       replay?: boolean
       /** True for tool results and other synthetic user-role messages. */
       synthetic?: boolean
+      /** Files sent with this message, by reference (see {@link MessageAttachment}).
+       * `message.content` carries the typed text only — the attachment bytes went
+       * to the model, not into this log. */
+      attachments?: MessageAttachment[]
       uuid?: string
     }
   /** Raw Anthropic streaming event (message_start/content_block_delta/...); emitted only
@@ -392,7 +422,14 @@ export type SessionEvent = SessionEventBody & {
 // ---------------------------------------------------------------------------
 
 export type SessionCommand =
-  | { type: 'user_message'; text: string }
+  | {
+      type: 'user_message'
+      text: string
+      /** Ids from `POST {basePath}/sessions/:id/attachments`, in the order they
+       * should reach the model. Unknown ids fail the command rather than sending
+       * a message that quietly lost its picture. */
+      attachmentIds?: string[]
+    }
   | {
       type: 'permission_decision'
       requestId: string
@@ -645,6 +682,57 @@ export type McpServerConfigWire =
   | { type?: 'stdio'; command: string; args?: string[]; env?: Record<string, string> }
   | { type: 'http'; url: string; headers?: Record<string, string> }
   | { type: 'sse'; url: string; headers?: Record<string, string> }
+
+/** One tool an MCP server exposes, as the session's engine reports it.
+ * Parameters are deliberately absent: the CLI's status payload names and
+ * describes each tool but does not carry its input schema. */
+export type McpServerToolInfo = {
+  name: string
+  description?: string
+  annotations?: { readOnly?: boolean; destructive?: boolean; openWorld?: boolean }
+}
+
+/**
+ * Live status of one MCP server on a session — what `GET
+ * {basePath}/sessions/:id/mcp` answers with, and what the `/mcp` screens render.
+ *
+ * The connection *identity* is here (transport, command, url, scope) but never
+ * its secrets: the engine's config carries `env` for stdio servers and `headers`
+ * for HTTP/SSE ones, and both are dropped on the way out. A client that can read
+ * this is not thereby entitled to the tokens the operator configured.
+ */
+export type McpServerStatusInfo = {
+  name: string
+  /** 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled' — kept open,
+   * the engine's set may grow. */
+  status: string
+  /** Where the server was configured: 'project' | 'user' | 'local' | 'dynamic' | … */
+  scope?: string
+  /** Present when `status` is 'failed'. */
+  error?: string
+  /** Name and version the server announced on connect. */
+  serverInfo?: { name: string; version: string }
+  transport?: 'stdio' | 'http' | 'sse' | 'sdk'
+  /** stdio only. */
+  command?: string
+  /** stdio only. Secrets do occasionally ride argv; the operator's own client
+   * shows them, and hiding them here would only mislead. `env` is not exposed. */
+  args?: string[]
+  /** http/sse only. */
+  url?: string
+  /** Present when connected. */
+  tools?: McpServerToolInfo[]
+}
+
+export type McpServersResponse = { servers: McpServerStatusInfo[] }
+
+/** `POST {basePath}/sessions/:id/mcp/:name` — answers with the refreshed status. */
+export type McpServerActionRequest = { action: 'reconnect' | 'enable' | 'disable' }
+
+/** `POST {basePath}/sessions/:id/attachments?name=<name>` — the body is the raw
+ * file, the `content-type` header its media type. Answers with the reference to
+ * name on the next `user_message`. */
+export type UploadAttachmentResponse = { attachment: MessageAttachment }
 
 export type CreateSessionRequest = {
   /** Directory the session is rooted at. Required: `cwd` is per-query in the SDK

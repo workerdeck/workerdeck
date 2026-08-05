@@ -90,6 +90,7 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
       <Transcript
         state={state}
         fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
+        attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
       />
       {state.pendingApprovals.length > 0 ? (
         <div className='px-3 pb-2'>

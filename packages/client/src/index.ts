@@ -12,7 +12,12 @@ import type {
   ListHostRootsResponse,
   ListProfilesResponse,
   ListSessionFilesResponse,
+  McpServerActionRequest,
+  McpServersResponse,
+  McpServerStatusInfo,
+  MessageAttachment,
   ReadHostFileResponse,
+  UploadAttachmentResponse,
   WriteHostFileRequest,
   WriteHostFileResponse,
   PermissionMode,
@@ -32,6 +37,11 @@ import type {
   ToolExecutionOutput,
   UpdateProfileRequest,
 } from '@workerdeck/protocol'
+
+/** Whatever the ambient `fetch` accepts as a body — `Blob`/`File` in a browser,
+ * `Uint8Array` or a string in Node. Derived rather than named (`BodyInit` is a
+ * DOM-lib type, and this package compiles against both). */
+export type FetchBody = NonNullable<NonNullable<Parameters<typeof fetch>[1]>['body']>
 
 export type ClientOptions = {
   /** REST base, e.g. "http://127.0.0.1:8787/v1". The ws:// URL is derived from it. */
@@ -117,8 +127,16 @@ export class SessionHandle {
     return () => set.delete(listener as Listener<never>)
   }
 
-  send(text: string): void {
-    this.#sendFrame({ type: 'user_message', text })
+  /** Send a message, optionally naming attachments uploaded ahead of it with
+   * {@link WorkerDeckClient.uploadAttachment} (ids in the order they should reach
+   * the model). An unknown id fails the whole command — the server will not send a
+   * message that quietly lost its picture. */
+  send(text: string, attachmentIds?: string[]): void {
+    this.#sendFrame({
+      type: 'user_message',
+      text,
+      attachmentIds: attachmentIds?.length ? attachmentIds : undefined,
+    })
   }
 
   approve(requestId: string, updatedInput?: Record<string, unknown>): void {
@@ -367,6 +385,57 @@ export class WorkerDeckClient {
       throw new Error(payload.error ?? `GET file failed with ${res.status}`)
     }
     return await res.text()
+  }
+
+  /**
+   * Upload one file for the session, ahead of the message that will carry it.
+   * The returned `id` goes to {@link SessionHandle.send}.
+   *
+   * The body is the raw bytes — no multipart — so anything `fetch` accepts as a
+   * body works: a `File`/`Blob` from a picker, a `Uint8Array`, a string.
+   */
+  async uploadAttachment(
+    sessionId: string,
+    file: { name: string; mediaType: string; data: FetchBody },
+  ): Promise<MessageAttachment> {
+    const url = `${this.#options.baseUrl}/sessions/${encodeURIComponent(sessionId)}/attachments?name=${encodeURIComponent(file.name)}`
+    const res = await this.#fetch(url, {
+      method: 'POST',
+      headers: { ...this.#options.headers, 'content-type': file.mediaType },
+      body: file.data,
+    })
+    if (!res.ok) {
+      const payload = (await res.json().catch(() => ({}))) as { error?: string }
+      throw new Error(payload.error ?? `upload failed with ${res.status}`)
+    }
+    return ((await res.json()) as UploadAttachmentResponse).attachment
+  }
+
+  /** Direct URL for an uploaded attachment — an `<img src>` on a cookie-authenticated
+   * same-origin server. Header-authenticated clients must fetch it themselves. */
+  attachmentUrl(sessionId: string, attachmentId: string): string {
+    return `${this.#options.baseUrl}/sessions/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(attachmentId)}`
+  }
+
+  /** The session's MCP servers and their tools, live from the engine. 501 when the
+   * session's engine has no MCP surface; 409 while the session is parked. */
+  async listMcpServers(sessionId: string): Promise<McpServerStatusInfo[]> {
+    const body = await this.#call('GET', `/sessions/${encodeURIComponent(sessionId)}/mcp`)
+    return (body as McpServersResponse).servers
+  }
+
+  /** Reconnect, enable or disable one MCP server; answers with the refreshed list. */
+  async mcpServerAction(
+    sessionId: string,
+    serverName: string,
+    action: McpServerActionRequest['action'],
+  ): Promise<McpServerStatusInfo[]> {
+    const body = await this.#call(
+      'POST',
+      `/sessions/${encodeURIComponent(sessionId)}/mcp/${encodeURIComponent(serverName)}`,
+      { action },
+    )
+    return (body as McpServersResponse).servers
   }
 
   /** Direct download URL for a session file (e.g. an <a download> href). Carries

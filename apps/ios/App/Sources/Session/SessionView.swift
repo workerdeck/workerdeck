@@ -1,3 +1,4 @@
+import PhotosUI
 import WorkerDeckKit
 import SwiftUI
 
@@ -16,7 +17,7 @@ struct SessionView: View {
   /// The modal screens over a session. `Identifiable` so one `.sheet(item:)`
   /// presents all of them.
   enum Sheet: String, Identifiable {
-    case context, usage, info, files, model, mode
+    case context, usage, info, files, model, mode, addMedia, mcp
     var id: String { rawValue }
   }
 
@@ -44,6 +45,18 @@ struct SessionView: View {
   /// How much of the bottom the floating stack occupies — the picker sits on top
   /// of it, so it needs the number the layout actually produced.
   @State private var footerHeight: CGFloat = 0
+  /// Files staged for the next message. Outlives the composer's focus and is
+  /// cleared on send; uploads start as soon as something is picked.
+  @State private var attachments = ComposerAttachmentStore()
+  /// Fetches (and caches) transcript thumbnails, which need the auth header.
+  @State private var attachmentLoader = AttachmentLoader()
+  /// The two system pickers the Add Media sheet hands off to. Separate flags
+  /// rather than `Sheet` cases: iOS presents both full screen and neither can be
+  /// raised from underneath the half-height sheet that chose it.
+  @State private var showCamera = false
+  @State private var showFileImporter = false
+  @State private var photoSelection: [PhotosPickerItem] = []
+  @State private var photoPickerRequested = false
 
   init(sessionId: String, client: WorkerClient) {
     _vm = State(initialValue: TranscriptViewModel(sessionId: sessionId, client: client))
@@ -69,9 +82,14 @@ struct SessionView: View {
     .navigationBarTitleDisplayMode(.inline)
       .toolbar { toolbarMenu }
       .environment(\.fileDownloader, downloader)
+      .environment(\.attachmentLoader, attachmentLoader)
       .fileDownloadPresentation(downloader)
       .task {
         downloader.access = vm.fileAccess
+        attachments.upload = { [vm] name, mediaType, data in
+          try await vm.uploadAttachment(name: name, mediaType: mediaType, data: data)
+        }
+        attachmentLoader.fetch = { [vm] id in try await vm.attachmentData(id) }
         await vm.run()
       }
       .onChange(of: scenePhase) { _, phase in
@@ -121,6 +139,12 @@ struct SessionView: View {
             current: vm.effectiveModel,
             defaultModel: vm.defaultModel,
             onSelect: { vm.setModel($0) })
+        case .addMedia:
+          AddMediaSheet(onChoose: choose)
+        case .mcp:
+          McpServersView(
+            load: { try await vm.mcpServers() },
+            act: { name, action in try await vm.mcpAction(name, action) })
         case .mode:
           ModePickerSheet(
             modes: permissionModes,
@@ -129,6 +153,38 @@ struct SessionView: View {
             canBypass: vm.session?.canBypassPermissions,
             onSelect: { vm.setPermissionMode($0) })
         }
+      }
+      .fullScreenCover(isPresented: $showCamera) {
+        CameraPicker { image in
+          if let picked = AttachmentNormalizer.image(image, name: "photo.jpg", mediaType: nil) {
+            attachments.add(picked)
+          }
+        }
+        .ignoresSafeArea()
+      }
+      // `maxSelectionCount` is not set: several screenshots at once is the normal
+      // case, and the session's byte ceiling is the real bound.
+      .photosPicker(isPresented: $photoPickerRequested, selection: $photoSelection, matching: .images)
+      .onChange(of: photoSelection) { _, items in
+        guard !items.isEmpty else { return }
+        photoSelection = []
+        for item in items { loadPhoto(item) }
+      }
+      .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+        switch result {
+        case .success(let urls): for url in urls { loadFile(url) }
+        case .failure(let error): attachments.errorText = error.localizedDescription
+        }
+      }
+      .alert(
+        "Attachment failed",
+        isPresented: Binding(
+          get: { attachments.errorText != nil },
+          set: { if !$0 { attachments.errorText = nil } })
+      ) {
+        Button("OK", role: .cancel) {}
+      } message: {
+        Text(attachments.errorText ?? "")
       }
       .confirmationDialog(
         "Close this session?", isPresented: $showCloseConfirmation, titleVisibility: .visible
@@ -171,11 +227,13 @@ struct SessionView: View {
         isFocused: $isComposerFocused,
         isBusy: vm.state.status == .running,
         isEnabled: vm.state.status != .closed,
+        attachments: attachments,
         onEdit: { text, caret in
           completion.update(for: text, cursor: Range(caret, in: text)?.lowerBound)
         },
         onSend: send,
-        onStop: { vm.interrupt() })
+        onStop: { vm.interrupt() },
+        onAddMedia: { sheet = .addMedia })
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
@@ -253,11 +311,73 @@ struct SessionView: View {
     // A half-typed token is not a completion the user declined; sending closes
     // the list either way.
     completion.cancel()
-    vm.send(draft)
+    // `/mcp` is answered here rather than sent. The CLI's own `/mcp` is an
+    // interactive picker, not a prompt — forwarding it would spend a turn on a
+    // model reading the words "/mcp", so the app opens its own screens instead.
+    if draft.trimmingCharacters(in: .whitespaces) == "/mcp" {
+      draft = ""
+      selection = NSRange(location: 0, length: 0)
+      dismissKeyboard()
+      sheet = .mcp
+      return
+    }
+    vm.send(draft, attachmentIds: attachments.readyIds)
+    // The bytes are the server's now, and the echoed event carries the
+    // references — so the staging area empties rather than being re-sent.
+    attachments.clear()
     draft = ""
     selection = NSRange(location: 0, length: 0)
     // Keep the keyboard up: a remote control is used in bursts.
     isComposerFocused = true
+  }
+
+  // MARK: - Add Media
+
+  private func choose(_ source: AddMediaSheet.Source) {
+    switch source {
+    case .camera: showCamera = true
+    case .photos: photoPickerRequested = true
+    case .files: showFileImporter = true
+    }
+  }
+
+  /// Photos hands back bytes plus the type it stored them as — usually HEIC on an
+  /// iPhone, which no model accepts, so everything goes through the normalizer.
+  private func loadPhoto(_ item: PhotosPickerItem) {
+    Task {
+      guard let data = try? await item.loadTransferable(type: Data.self) else {
+        attachments.errorText = "Could not read that photo."
+        return
+      }
+      let mediaType = item.supportedContentTypes.first?.preferredMIMEType ?? "image/jpeg"
+      let name = item.itemIdentifier.map { "photo-\($0.prefix(8)).jpg" } ?? "photo.jpg"
+      guard let picked = AttachmentNormalizer.file(data: data, name: name, mediaType: mediaType)
+      else {
+        attachments.errorText = "Could not read that photo."
+        return
+      }
+      attachments.add(picked)
+    }
+  }
+
+  /// A file from the Files app arrives as a security-scoped URL: the bytes have
+  /// to be read inside the access window, not lazily afterwards.
+  private func loadFile(_ url: URL) {
+    let scoped = url.startAccessingSecurityScopedResource()
+    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+    guard let data = try? Data(contentsOf: url) else {
+      attachments.errorText = "Could not read \(url.lastPathComponent)."
+      return
+    }
+    guard
+      let picked = AttachmentNormalizer.file(
+        data: data, name: url.lastPathComponent,
+        mediaType: AttachmentNormalizer.mediaType(for: url))
+    else {
+      attachments.errorText = "Could not read \(url.lastPathComponent)."
+      return
+    }
+    attachments.add(picked)
   }
 
   private var statusBar: some View {
@@ -320,6 +440,7 @@ struct SessionView: View {
         Button("Context", systemImage: "chart.pie") { sheet = .context }
         Button("Usage", systemImage: "gauge") { sheet = .usage }
         Button("Session info", systemImage: "info.circle") { sheet = .info }
+        Button("MCP servers", systemImage: "puzzlepiece.extension") { sheet = .mcp }
         Divider()
         Button("Close session", systemImage: "xmark.circle", role: .destructive) {
           showCloseConfirmation = true

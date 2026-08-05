@@ -31,7 +31,8 @@ export type UseClaudeSessionResult = {
    * so a host on a second handle would never see the requests. Undefined until
    * attached and after unmount. */
   handle: SessionHandle | undefined
-  send: (text: string) => void
+  /** Attachment ids come from `client.uploadAttachment`, in send order. */
+  send: (text: string, attachmentIds?: string[]) => void
   approve: (requestId: string, updatedInput?: Record<string, unknown>) => void
   deny: (requestId: string, message?: string) => void
   interrupt: () => void
@@ -83,7 +84,7 @@ export function useClaudeSession(
       state,
       connected,
       handle: handleState,
-      send: (text) => handleRef.current?.send(text),
+      send: (text, attachmentIds) => handleRef.current?.send(text, attachmentIds),
       approve: (requestId, updatedInput) => handleRef.current?.approve(requestId, updatedInput),
       deny: (requestId, message) => handleRef.current?.deny(requestId, message),
       interrupt: () => handleRef.current?.interrupt(),

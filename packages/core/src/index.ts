@@ -43,4 +43,12 @@ export type {
   SettledBy,
 } from './pending-registry.ts'
 export { InputQueue } from './input-queue.ts'
-export { modelOptionsFromSdk, normalizeSdkMessage, toApiMessage } from './normalize.ts'
+export {
+  SUPPORTED_ATTACHMENT_TYPES,
+  attachmentContentBlocks,
+  attachmentKind,
+  attachmentRef,
+  normalizeMediaType,
+} from './attachments.ts'
+export type { AttachmentInput, AttachmentKind } from './attachments.ts'
+export { mcpStatusInfo, modelOptionsFromSdk, normalizeSdkMessage, toApiMessage } from './normalize.ts'

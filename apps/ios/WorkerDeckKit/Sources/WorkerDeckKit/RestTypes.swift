@@ -304,6 +304,101 @@ public struct SessionFileInfo: Decodable, Sendable, Equatable, Identifiable {
   public var id: String { path }
 }
 
+// MARK: - MCP (`/sessions/:id/mcp`)
+
+/// One tool an MCP server exposes.
+///
+/// No parameter list: the CLI's status payload names and describes each tool but
+/// does not carry its input schema, so the tool screen shows what it is, not how
+/// to call it.
+public struct McpServerToolInfo: Decodable, Sendable, Equatable, Identifiable {
+  public let name: String
+  public let description: String?
+  public let annotations: Annotations?
+
+  public var id: String { name }
+
+  public init(name: String, description: String? = nil, annotations: Annotations? = nil) {
+    self.name = name
+    self.description = description
+    self.annotations = annotations
+  }
+
+  public struct Annotations: Decodable, Sendable, Equatable {
+    public let readOnly: Bool?
+    public let destructive: Bool?
+    public let openWorld: Bool?
+
+    public init(readOnly: Bool? = nil, destructive: Bool? = nil, openWorld: Bool? = nil) {
+      self.readOnly = readOnly
+      self.destructive = destructive
+      self.openWorld = openWorld
+    }
+  }
+}
+
+/// Live status of one MCP server on a session.
+///
+/// The connection's identity only: the gateway drops the server's `env` and
+/// HTTP `headers` before answering, so this can never become a way to read the
+/// operator's API tokens off their own machine.
+public struct McpServerStatusInfo: Decodable, Sendable, Equatable, Identifiable {
+  public let name: String
+  /// 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled' — open set.
+  public let status: String
+  /// Where it was configured: 'project' | 'user' | 'local' | 'dynamic' | …
+  public let scope: String?
+  public let error: String?
+  public let serverInfo: ServerInfo?
+  /// 'stdio' | 'http' | 'sse' | 'sdk'
+  public let transport: String?
+  public let command: String?
+  public let args: [String]?
+  public let url: String?
+  public let tools: [McpServerToolInfo]?
+
+  public var id: String { name }
+
+  public init(
+    name: String, status: String, scope: String? = nil, error: String? = nil,
+    serverInfo: ServerInfo? = nil, transport: String? = nil, command: String? = nil,
+    args: [String]? = nil, url: String? = nil, tools: [McpServerToolInfo]? = nil
+  ) {
+    self.name = name
+    self.status = status
+    self.scope = scope
+    self.error = error
+    self.serverInfo = serverInfo
+    self.transport = transport
+    self.command = command
+    self.args = args
+    self.url = url
+    self.tools = tools
+  }
+
+  public struct ServerInfo: Decodable, Sendable, Equatable {
+    public let name: String
+    public let version: String
+
+    public init(name: String, version: String) {
+      self.name = name
+      self.version = version
+    }
+  }
+
+  public var isConnected: Bool { status == "connected" }
+  public var isDisabled: Bool { status == "disabled" }
+  public var toolCount: Int { tools?.count ?? 0 }
+}
+
+/// `POST /sessions/:id/mcp/:name`.
+public struct McpServerActionRequest: Encodable, Sendable, Equatable {
+  public enum Action: String, Encodable, Sendable { case reconnect, enable, disable }
+  public let action: Action
+
+  public init(action: Action) { self.action = action }
+}
+
 // MARK: - Host filesystem (`/fs/*`)
 
 /// One of the host directories this server will let a client browse.
@@ -453,6 +548,14 @@ public struct SessionResponse: Decodable, Sendable {
 
 public struct ListSessionFilesResponse: Decodable, Sendable {
   public let files: [SessionFileInfo]
+}
+
+public struct McpServersResponse: Decodable, Sendable {
+  public let servers: [McpServerStatusInfo]
+}
+
+public struct UploadAttachmentResponse: Decodable, Sendable {
+  public let attachment: MessageAttachment
 }
 
 public struct ListSdkSessionsResponse: Decodable, Sendable {

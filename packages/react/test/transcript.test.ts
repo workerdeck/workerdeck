@@ -293,6 +293,43 @@ describe('transcript reducer', () => {
     ])
   })
 
+  it('carries a message’s attachments as references on the user item', () => {
+    seq = 0
+    const attachments = [
+      { id: 'att-1', name: 'shot.png', mediaType: 'image/png', bytes: 1024 },
+      { id: 'att-2', name: 'notes.txt', mediaType: 'text/plain', bytes: 12 },
+    ]
+    const state = run(initialTranscriptState, [
+      {
+        type: 'user_message',
+        message: { role: 'user', content: 'what is this?' },
+        parentToolUseId: null,
+        attachments,
+        uuid: 'u-att',
+      },
+    ])
+    expect(state.items).toEqual([
+      { kind: 'user', id: 'u-att', text: 'what is this?', attachments },
+    ])
+  })
+
+  it('keeps the user item for a message that is attachments alone', () => {
+    seq = 0
+    const attachments = [{ id: 'att-1', name: 'shot.png', mediaType: 'image/png', bytes: 1024 }]
+    const state = run(initialTranscriptState, [
+      {
+        type: 'user_message',
+        message: { role: 'user', content: '' },
+        parentToolUseId: null,
+        attachments,
+        uuid: 'u-only',
+      },
+    ])
+    // Empty text, but still a row — the photo is the message, and the view
+    // renders the thumbnail without a bubble under it.
+    expect(state.items).toEqual([{ kind: 'user', id: 'u-only', text: '', attachments }])
+  })
+
   it('tracks capabilities and model changes', () => {
     seq = 0
     const state = run(initialTranscriptState, [

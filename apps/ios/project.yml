@@ -96,6 +96,11 @@ targets:
         # gateway) before distributing beyond personal use.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        # The Add Media sheet's Camera tile. Photos and Files need no string:
+        # `PhotosPicker` and `fileImporter` both run out of process and hand back
+        # only what was chosen, so neither is a library-access grant.
+        NSCameraUsageDescription:
+          Take a photo to send to the session.
     # Hot reload, opt-in per build. InjectionNext's own script copies its
     # injection bundle (and the XCTest frameworks it needs) into the app and
     # codesigns them — worth ~10s and a fatter .app, so a normal build must not

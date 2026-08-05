@@ -8,6 +8,7 @@ Things `pnpm test` deliberately cannot check. Run these by hand.
 | Live model loop | `<KEY>=... pnpm smoke:live [provider] [model]` | **Yes — real tokens** |
 | Full SDK-client stack | `<KEY>=... pnpm smoke:sdk [provider] [model]` | **Yes — real tokens** |
 | Live MCP | `pnpm smoke:mcp --probe` / `<KEY>=... pnpm smoke:mcp [provider] [model]` | Probe: no. Full: **yes** |
+| Message attachments | `pnpm smoke:media [image\|pdf\|text]` | **Yes — real tokens** |
 
 ## `smoke:sandbox` — the untrusted-code boundary
 
@@ -83,3 +84,22 @@ ANTHROPIC_API_KEY=... pnpm smoke:mcp anthropic   # full loop — costs tokens
 Hard failures: no tools (server unreachable or protocol drift), tools not namespaced, turn
 doesn't complete, or the model answered without a single `deepwiki__*` call. Verified against
 `claude-sonnet-5`.
+
+## `smoke:media` — attachments the model can actually see
+
+The only thing that can validate the attachment wire. `pnpm test` proves the server turns an
+uploaded file into the right content blocks; it cannot prove the **CLI accepts them on streamed
+input**, and a CLI that dropped non-text blocks would look exactly like a model ignoring the
+picture. So this drives the shipped path end to end — generated file → `POST
+/sessions/:id/attachments` → `user_message(attachmentIds)` → real Claude Code — and asks a
+question whose answer exists only inside the attachment.
+
+```bash
+pnpm smoke:media              # image, pdf and text
+pnpm smoke:media image        # one kind
+```
+
+The three fixtures are generated, not committed: a PNG built chunk by chunk (so the repo carries
+no binaries) and a one-page PDF with computed xref offsets — a hand-guessed xref is the usual
+reason a minimal PDF is rejected. Hard failures: an answer that doesn't name the colour, the two
+words on the PDF page, or the passphrase in the text file. Verified against `claude-opus-5`.

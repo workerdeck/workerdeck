@@ -115,6 +115,72 @@ public struct WorkerClient: Sendable {
     try makeURL("/sessions/\(Self.encodeComponent(sessionId))/files/\(Self.encodeFilePath(path))")
   }
 
+  // MARK: - Attachments
+
+  /// Upload one file for a session, ahead of the message that will carry it.
+  /// The returned attachment's `id` goes to `SessionHandle.send`.
+  ///
+  /// The body is the raw bytes — there is no multipart here, which is why this is
+  /// a plain upload task and not a hand-rolled form encoder.
+  public func uploadAttachment(
+    sessionId: String, name: String, mediaType: String, data: Data
+  ) async throws -> MessageAttachment {
+    var components = URLComponents(
+      url: try makeURL("/sessions/\(Self.encodeComponent(sessionId))/attachments"),
+      resolvingAgainstBaseURL: false)
+    components?.queryItems = [URLQueryItem(name: "name", value: name)]
+    guard let url = components?.url else {
+      throw WorkerClientError(message: "Invalid attachment upload URL")
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue(mediaType, forHTTPHeaderField: "content-type")
+    applyAuth(&request)
+    let (body, response) = try await urlSession.upload(for: request, from: data)
+    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+    guard (200..<300).contains(status) else {
+      throw Self.error(from: body, status: status, summary: "POST attachment")
+    }
+    return try decode(UploadAttachmentResponse.self, from: body).attachment
+  }
+
+  /// Download an attachment's bytes. Header auth means the phone fetches these
+  /// itself rather than pointing an image view at a URL.
+  public func fetchAttachment(sessionId: String, attachmentId: String) async throws -> Data {
+    var request = URLRequest(
+      url: try makeURL(
+        "/sessions/\(Self.encodeComponent(sessionId))/attachments/\(Self.encodeComponent(attachmentId))"
+      ))
+    request.httpMethod = "GET"
+    applyAuth(&request)
+    let (data, response) = try await urlSession.data(for: request)
+    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+    guard (200..<300).contains(status) else {
+      throw Self.error(from: data, status: status, summary: "GET attachment")
+    }
+    return data
+  }
+
+  // MARK: - MCP
+
+  /// The session's MCP servers and their tools, live from the engine. Throws 501
+  /// when the engine has no MCP surface, 409 while the session is parked.
+  public func listMcpServers(sessionId: String) async throws -> [McpServerStatusInfo] {
+    let data = try await call("GET", "/sessions/\(Self.encodeComponent(sessionId))/mcp")
+    return try decode(McpServersResponse.self, from: data).servers
+  }
+
+  /// Reconnect, enable or disable one server; answers with the refreshed list.
+  public func mcpServerAction(
+    sessionId: String, serverName: String, action: McpServerActionRequest.Action
+  ) async throws -> [McpServerStatusInfo] {
+    let data = try await call(
+      "POST",
+      "/sessions/\(Self.encodeComponent(sessionId))/mcp/\(Self.encodeComponent(serverName))",
+      body: McpServerActionRequest(action: action))
+    return try decode(McpServersResponse.self, from: data).servers
+  }
+
   /// Resolve a pending permission over REST — the counterpart of the WS
   /// `permission_decision` command, for answering from a push notification or
   /// any context without a live attach. Throws when the request is unknown,
