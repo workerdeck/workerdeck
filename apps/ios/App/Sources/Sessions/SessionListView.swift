@@ -145,9 +145,21 @@ struct SessionListView: View {
         NavigationLink(value: SessionRoute.session(session.id)) {
           SessionRowView(session: session)
         }
+        // Two different actions wearing one gesture. Closing a *live* session
+        // terminates a run someone may be relying on, so it asks first; removing
+        // an already-closed one only drops a finished record off the list, and
+        // a confirmation for that is noise.
         .swipeActions(edge: .trailing) {
-          Button(role: .destructive) { pendingClose = session } label: {
-            Label("Close", systemImage: "xmark.circle")
+          if session.status == .closed {
+            Button(role: .destructive) {
+              Task { await model.close(session) }
+            } label: {
+              Label("Remove", systemImage: "trash")
+            }
+          } else {
+            Button(role: .destructive) { pendingClose = session } label: {
+              Label("Close", systemImage: "xmark.circle")
+            }
           }
         }
       }

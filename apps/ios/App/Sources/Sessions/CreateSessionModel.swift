@@ -42,6 +42,11 @@ final class CreateSessionModel {
     self.client = client
   }
 
+  /// The gateway this form posts to, for the folder picker — which browses the
+  /// same host filesystem an open session does, only from the roots down rather
+  /// than from a cwd that doesn't exist yet.
+  var fileClient: WorkerClient { client }
+
   var selectedProfile: ProfileInfo? {
     profiles.first { $0.name == profileName }
   }
@@ -58,10 +63,30 @@ final class CreateSessionModel {
     PermissionMode.allCases.filter { supportsPermissionMode(engine: engine, mode: $0) }
   }
 
-  /// Model ids the chosen profile advertises. Empty → free-text field (the Claude
-  /// engine only reports its options once a session is live, via `capabilities`).
+  /// Model ids the chosen profile advertises. Empty → free-text field.
   var modelOptions: [String] {
     selectedProfile?.provider?.models ?? []
+  }
+
+  /// Named models for a *claude* profile, which the server remembers from the
+  /// last session that ran on it. Empty on a server that has run none, and the
+  /// form falls back to a text field — the ids here all come from the CLI, so
+  /// there is nothing to offer until it has said them once.
+  var claudeModels: [ModelOption] {
+    guard selectedProfile?.resolvedEngine != .provider else { return [] }
+    return selectedProfile?.models ?? []
+  }
+
+  /// What the profile's default resolves to, for the picker's DEFAULT tag.
+  var defaultModel: String? { selectedProfile?.defaultModel }
+
+  /// The chosen model, named. Empty selection is the profile's own default,
+  /// which is a legitimate answer here in a way it never is mid-session: this
+  /// form is where "default" is a choice.
+  var modelLabel: String {
+    let trimmed = model.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return "Profile default" }
+    return claudeModels.first { $0.matches(trimmed) }?.displayName ?? trimmed
   }
 
   /// Hidden when the server offers exactly one profile — there is no choice to make.

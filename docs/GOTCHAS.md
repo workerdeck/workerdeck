@@ -19,10 +19,23 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - Promptless sessions emit no `system_init` until the first message, but the CLI answers control
   requests immediately — the runner fetches capabilities/context eagerly; `useClaudeSession`
   seeds mode/model/status from the `attached` frame's SessionInfo.
-- CLI telemetry quirks (smoke-verified, SDK 0.3.217): `supportedModels()` leads with a
-  `value: 'default'` sentinel (→ `set_model` undefined); `getContextUsage().categories[].color`
+- CLI telemetry quirks (smoke-verified, SDK 0.3.221): `getContextUsage().categories[].color`
   holds CLI theme token names, not CSS; rate_limit events can omit `utilization` — render
   unknown, never 0%.
+- **The model list needs shaping, and it happens once, in `core/src/normalize.ts`**
+  (`modelOptionsFromSdk`) so no client invents its own. Three traps, all live:
+  `supportedModels()` leads with a `value: 'default'` sentinel that is a *choice*, not a model —
+  a session running on it reports something else, so a picker row for it can never be checked and
+  a status bar naming it says "Default" for a session answering as Opus. It is dropped, and its
+  `resolvedModel` is forwarded as `capabilities.defaultModel` instead, which is the only way to
+  name a promptless session's model before its first turn. `displayName` is the family alone
+  ("Opus") or carries a variant instead of a version ("Opus (1M context)"), so rows are renamed
+  from their resolved id. And the list is flat: `primary` (newest of each family) is derived here,
+  because the CLI reports no grouping and every UI would otherwise guess differently.
+- The model list is **only ever current models** — the older versions Claude Code's own picker
+  files under "more models" are in neither `supportedModels()` nor `initializationResult()`
+  (checked directly against the SDK). Which model names you get is a function of the pinned SDK
+  version, nothing else: 0.3.217 reported Opus 4.8, 0.3.221 reports Opus 5.
 - The CLI **pushes** a `rate_limit_event` only when a window *changes*, so a session that is
   watched rather than driven would show no plan usage at all. The runner therefore polls the
   structured `/usage` control request after init and after every turn and re-emits the windows as
@@ -36,7 +49,9 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - Allowing a permission MUST echo the tool input as `updatedInput` (undefined → ZodError → tool
   errors). The fake harness can't catch this class of bug — permission changes need a smoke.
 - Switching a live session into `bypassPermissions` needs `allowDangerouslySkipPermissions` at
-  spawn (smoke-verified CLI refusal otherwise); `auto` mode is gated CLI-side (model/plan
+  spawn (smoke-verified CLI refusal otherwise), which is fixed for the session's lifetime and so
+  is reported as `SessionInfo.canBypassPermissions` — a picker disables the mode instead of
+  offering a switch the engine will refuse; `auto` mode is gated CLI-side (model/plan
   support, settings opt-out). Rejected `set_permission_mode` = `protocol_error` frame —
   `useClaudeSession` exposes it via `onProtocolError`; SessionPanel toasts it.
 - `AskUserQuestion` rides canUseTool; answers = allow with `updatedInput.answers` (question →

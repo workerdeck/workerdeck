@@ -290,18 +290,79 @@ public enum QuestionBehavior: String, Codable, Sendable {
 
 // MARK: - Capabilities (models / slash commands)
 
-public struct ModelOption: Decodable, Sendable, Equatable, Identifiable {
+public struct ModelOption: Codable, Sendable, Equatable, Identifiable {
   /// Model id for createSession.model / set_model.
   public let value: String
+  /// Wire id this row resolves to ('sonnet' → 'claude-sonnet-5'). A session
+  /// reports the *resolved* model, so this is how the running model is matched
+  /// back to the row that names it. Absent on an older server.
+  public let resolvedModel: String?
   public let displayName: String
   public let description: String?
+  /// Whether this belongs in a picker's main list rather than behind "more
+  /// models" — the newest model of each family. Grouped server-side so every
+  /// client splits the list identically; absent (an older server) reads as
+  /// primary, which shows everything rather than hiding it.
+  public let primary: Bool?
 
   public var id: String { value }
 
-  public init(value: String, displayName: String, description: String? = nil) {
+  /// The chip form of the name: `displayName` without a trailing parenthetical,
+  /// so "Opus (1M context)" fits a status bar as "Opus" while the picker still
+  /// shows the CLI's full string.
+  public var shortDisplayName: String {
+    guard let paren = displayName.firstIndex(of: "("), paren > displayName.startIndex else {
+      return displayName
+    }
+    return String(displayName[displayName.startIndex..<paren])
+      .trimmingCharacters(in: .whitespaces)
+  }
+
+  public init(
+    value: String, resolvedModel: String? = nil, displayName: String, description: String? = nil,
+    primary: Bool? = nil
+  ) {
     self.value = value
+    self.resolvedModel = resolvedModel
     self.displayName = displayName
     self.description = description
+    self.primary = primary
+  }
+
+  /// Whether this row is the one naming `model`.
+  ///
+  /// Three passes, narrowest first, because the CLI's rows and the id a session
+  /// *reports* are written differently: the rows are aliases ('opus[1m]',
+  /// 'sonnet', 'claude-fable-5[1m]') and the session reports a resolved wire id
+  /// ('claude-opus-4-8[1m]'). `resolvedModel` is the server's own answer to this
+  /// and wins when present; the family fallback covers a CLI that doesn't send
+  /// it, which is the difference between the chip reading "Opus" and reading
+  /// `claude-opus-4-8[1m]`.
+  public func matches(_ model: String) -> Bool {
+    if model == value || model == resolvedModel { return true }
+    let stripped = Self.dropVariant(model)
+    // A row that declares what it resolves to is *authoritative*, including when
+    // it disagrees: two rows of the same family ("Opus 5" and "Opus 4.8") differ
+    // only here, so falling through to the family would check both.
+    if let resolvedModel { return stripped == Self.dropVariant(resolvedModel) }
+    // Only for a row that doesn't say: the family token, so 'claude-opus-5'
+    // finds the row 'opus' on a server too old to send `resolvedModel`.
+    let family = Self.family(stripped)
+    return !family.isEmpty && family == Self.family(Self.dropVariant(value))
+  }
+
+  /// Everything before a '[1m]'-style context-window suffix.
+  private static func dropVariant(_ id: String) -> String {
+    guard let bracket = id.firstIndex(of: "[") else { return id }
+    return String(id[id.startIndex..<bracket])
+  }
+
+  /// 'claude-opus-4-8' → "opus", 'sonnet' → "sonnet". The vendor prefix and the
+  /// version tail are dropped; what is left is the name a person would say.
+  private static func family(_ id: String) -> String {
+    var parts = id.lowercased().split(separator: "-").map(String.init)
+    if parts.first == "claude" { parts.removeFirst() }
+    return parts.first ?? ""
   }
 }
 
@@ -565,12 +626,16 @@ public struct TurnResultEvent: Decodable, Sendable, Equatable {
 public enum SessionEventBody: Sendable, Equatable {
   case systemInit(SystemInitEvent)
   case statusChanged(status: SessionStatus, detail: String?)
-  case capabilities(models: [ModelOption], commands: [SlashCommandInfo])
+  case capabilities(
+    models: [ModelOption], commands: [SlashCommandInfo], defaultModel: String?)
   /// `model` nil = back to the server default.
   case modelChanged(model: String?)
   case permissionModeChanged(mode: PermissionMode)
   case contextUsage(ContextUsage)
   case rateLimit(RateLimitInfo)
+  /// Which claude.ai plan the rate-limit windows belong to ('pro', 'max', ...).
+  /// Never sent for an API-key session, which has no plan.
+  case planInfo(subscriptionType: String)
   case assistantMessage(AssistantMessageEvent)
   case userMessage(UserMessageEvent)
   case streamDelta(StreamDeltaEvent)
@@ -613,6 +678,7 @@ public struct SessionEvent: Sendable, Equatable {
 extension SessionEvent: Decodable {
   private enum CodingKeys: String, CodingKey {
     case seq, ts, type, status, detail, models, commands, model, mode, usage, info
+    case subscriptionType, defaultModel
     case requestId, behavior, resolvedBy, message, request
     case executionId, toolName, backend, deferred, expiresAt, output, logs, durationMs
     case reason, error, path, bytes, description, payload
@@ -634,7 +700,8 @@ extension SessionEvent: Decodable {
       case "capabilities":
         body = .capabilities(
           models: try container.decode([ModelOption].self, forKey: .models),
-          commands: try container.decode([SlashCommandInfo].self, forKey: .commands))
+          commands: try container.decode([SlashCommandInfo].self, forKey: .commands),
+          defaultModel: try container.decodeIfPresent(String.self, forKey: .defaultModel))
       case "model_changed":
         body = .modelChanged(model: try container.decodeIfPresent(String.self, forKey: .model))
       case "permission_mode_changed":
@@ -643,6 +710,9 @@ extension SessionEvent: Decodable {
         body = .contextUsage(try container.decode(ContextUsage.self, forKey: .usage))
       case "rate_limit":
         body = .rateLimit(try container.decode(RateLimitInfo.self, forKey: .info))
+      case "plan_info":
+        body = .planInfo(
+          subscriptionType: try container.decode(String.self, forKey: .subscriptionType))
       case "assistant_message":
         body = .assistantMessage(try AssistantMessageEvent(from: decoder))
       case "user_message":

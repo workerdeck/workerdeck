@@ -22,6 +22,8 @@ import type {
 import { InputQueue } from './input-queue.ts'
 import {
   type UsageRateLimits,
+  defaultModelFromSdk,
+  modelOptionsFromSdk,
   normalizeSdkMessage,
   rateLimitEventsFromUsage,
   toApiMessage,
@@ -89,6 +91,9 @@ export class SessionRunner implements Runner {
   #input = new InputQueue()
   #query: Query | undefined
   #capabilitiesEmitted = false
+  /** Last plan reported by the usage poll, so `plan_info` is emitted on change
+   * rather than once per turn. */
+  #subscriptionType: string | undefined
   #started = false
   #closed = false
   #runPromise: Promise<void> | undefined
@@ -131,6 +136,12 @@ export class SessionRunner implements Runner {
       engine: 'claude',
       model: this.#model ?? this.#config.model,
       permissionMode: this.#permissionMode,
+      // Fixed at spawn: the CLI refuses to switch into bypass unless it was
+      // launched for it (see #buildOptions). Reported so a client can disable
+      // the mode rather than offer a switch that will be refused.
+      canBypassPermissions:
+        this.#config.permissionMode === 'bypassPermissions' ||
+        this.#config.allowDangerouslySkipPermissions === true,
       apiKeySource: this.#apiKeySource,
       createdAt: this.createdAt,
       lastSeq: this.#seq,
@@ -414,11 +425,8 @@ export class SessionRunner implements Runner {
       this.#capabilitiesEmitted = true
       this.#emit({
         type: 'capabilities',
-        models: models.map((m) => ({
-          value: m.value,
-          displayName: m.displayName,
-          description: m.description,
-        })),
+        models: modelOptionsFromSdk(models),
+        defaultModel: defaultModelFromSdk(models),
         commands: commands.map((c) => ({
           name: c.name,
           description: c.description,
@@ -478,6 +486,14 @@ export class SessionRunner implements Runner {
     try {
       const usage = (await fetchUsage.call(query)) as UsageRateLimits
       if (this.#closed) return
+      // The plan names the windows, so it goes out ahead of them — and only when
+      // it changes, since this is polled after every turn and the answer is the
+      // same one all session long.
+      const subscriptionType = usage.subscription_type
+      if (subscriptionType && subscriptionType !== this.#subscriptionType) {
+        this.#subscriptionType = subscriptionType
+        this.#emit({ type: 'plan_info', subscriptionType })
+      }
       for (const body of rateLimitEventsFromUsage(usage)) this.#emit(body)
     } catch {
       // Best-effort, and experimental on top of that.

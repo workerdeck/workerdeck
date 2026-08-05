@@ -12,6 +12,8 @@ type HarnessCapabilities = {
   models?: Array<{ value: string; displayName: string; description: string }>
   commands?: Array<{ name: string; description: string; argumentHint: string }>
   contextUsage?: Record<string, unknown>
+  /** Stands in for the CLI's experimental structured `/usage` control request. */
+  usage?: Record<string, unknown>
 }
 
 /** Controllable stand-in for the SDK: emit SDKMessages, capture options + streamed input.
@@ -67,6 +69,13 @@ function fakeHarness(capabilities?: HarnessCapabilities) {
       : {}),
     ...(capabilities?.contextUsage
       ? { getContextUsage: vi.fn(async () => capabilities.contextUsage) }
+      : {}),
+    ...(capabilities?.usage
+      ? {
+          usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: vi.fn(
+            async () => capabilities.usage,
+          ),
+        }
       : {}),
   } as unknown as Query
 
@@ -478,6 +487,35 @@ describe('SessionRunner', () => {
     // SDK-only fields stay off the wire.
     expect((rateLimit as { info: Record<string, unknown> }).info.overageStatus).toBeUndefined()
     expect(events.some((e) => e.type === 'sdk_event')).toBe(false)
+  })
+
+  it('polls the plan usage, naming the plan once and re-reporting the windows', async () => {
+    const { harness, runner, events } = makeRunner(
+      {},
+      {
+        usage: {
+          subscription_type: 'max',
+          rate_limits_available: true,
+          rate_limits: { five_hour: { utilization: 6, resets_at: '2026-08-05T11:00:00Z' } },
+        },
+      },
+    )
+    void runner.start()
+    harness.emit(initMessage)
+    harness.emit(resultMessage)
+    await tick()
+    harness.emit(resultMessage)
+    await tick()
+
+    // The plan is a session-long fact — polled every turn, emitted on change.
+    expect(events.filter((e) => e.type === 'plan_info')).toEqual([
+      expect.objectContaining({ type: 'plan_info', subscriptionType: 'max' }),
+    ])
+    // The windows are not: every poll re-reports them.
+    expect(events.filter((e) => e.type === 'rate_limit').length).toBeGreaterThan(1)
+    expect(events.find((e) => e.type === 'rate_limit')).toMatchObject({
+      info: { rateLimitType: 'five_hour', utilization: 6, status: 'allowed' },
+    })
   })
 
   it('emits capabilities after init when the query reports models/commands', async () => {

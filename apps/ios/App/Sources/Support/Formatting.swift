@@ -88,4 +88,49 @@ enum Fmt {
       return "7d " + spaced.dropFirst("seven day ".count)
     }
   }
+
+  /// The same key spelled out, for the usage sheet where there is room:
+  /// 'five_hour' → "5-hour session", 'seven_day_fable' → "Weekly · Fable".
+  static func rateLimitWindowLong(_ key: String) -> String {
+    switch key {
+    case "five_hour": return "5-hour session"
+    case "seven_day": return "Weekly"
+    case "seven_day_oauth_apps": return "Weekly · apps"
+    default:
+      guard key.hasPrefix("seven_day_") else {
+        return key.replacingOccurrences(of: "_", with: " ").capitalized
+      }
+      let model = key.dropFirst("seven_day_".count).replacingOccurrences(of: "_", with: " ")
+      return "Weekly · " + model.capitalized
+    }
+  }
+
+  /// How long a rate-limit window is, in seconds — the denominator behind the
+  /// pace marker. Derived from the key rather than reported: the CLI sends a
+  /// reset time and a percentage, never a duration. Unknown for a window whose
+  /// key doesn't say (the marker is then simply not drawn).
+  static func rateLimitWindowSeconds(_ key: String) -> Double? {
+    if key == "five_hour" { return 5 * 3600 }
+    if key.hasPrefix("seven_day") { return 7 * 86_400 }
+    return nil
+  }
+
+  /// Long-form reset line for the usage sheet: "Resets in 2h 57m".
+  static func resets(epochSeconds: Double, now: Date = Date()) -> String? {
+    guard let until = until(epochSeconds: epochSeconds, now: now) else { return nil }
+    return "Resets " + until
+  }
+
+  /// "8 secs ago" / "3 mins ago" — the usage sheet's freshness line, which is
+  /// finer-grained than `ago` (a poll that just landed should say so).
+  static func agoPrecise(_ date: Date, now: Date = Date()) -> String {
+    let seconds = max(0, now.timeIntervalSince(date))
+    if seconds < 60 { return "\(Int(seconds)) sec\(Int(seconds) == 1 ? "" : "s") ago" }
+    if seconds < 3600 {
+      let minutes = Int(seconds / 60)
+      return "\(minutes) min\(minutes == 1 ? "" : "s") ago"
+    }
+    let hours = Int(seconds / 3600)
+    return "\(hours) hour\(hours == 1 ? "" : "s") ago"
+  }
 }

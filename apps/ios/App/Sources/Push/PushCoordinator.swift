@@ -24,6 +24,15 @@ final class PushCoordinator {
   /// and a gateway without a forwarder is a perfectly normal state.
   private(set) var lastError: String?
 
+  /// The session on screen right now, while the app is in the foreground.
+  ///
+  /// Set by `SessionView` and cleared the moment it leaves or the app is
+  /// backgrounded — a session you are *watching* must not also be announced to
+  /// you. Everything else still gets a banner: a request raised by a different
+  /// session is exactly as invisible in the foreground as it is in the
+  /// background, since the app holds a socket only for the one on screen.
+  var visibleSessionId: String?
+
   private var hosts: HostStore?
   /// `hostId|token` pairs already accepted, so re-syncing on every foreground is
   /// a no-op instead of a burst of POSTs.
@@ -89,6 +98,17 @@ final class PushCoordinator {
   }
 
   // MARK: - Delivery
+
+  /// Whether a notification arriving *now* should be shown, given what the user
+  /// is already looking at. Nothing to show for the session on screen — its
+  /// events are arriving over the socket and rendering in the transcript, which
+  /// is a better version of the same news.
+  func presentationOptions(for payload: PushPayload?) -> UNNotificationPresentationOptions {
+    guard let payload, payload.sessionId == visibleSessionId else {
+      return [.banner, .sound, .list]
+    }
+    return []
+  }
 
   /// A tap or an action on a notification, reduced by the delegate to the two
   /// Sendable things that matter — the `UN…` types themselves cannot cross onto

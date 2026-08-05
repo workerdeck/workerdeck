@@ -44,8 +44,62 @@ Plan and research: `_docs/plans/MOBILE-CLIENT.md` (gitignored, local).
     chips that open their own menus — the two settings worth changing mid-run, so they are not in
     the toolbar. Usage is per-window presence, not a mode flag: a radial gauge for each rate-limit
     window the session reports — session, weekly, then whichever per-model window it has — and the
-    session's `$` cost only when it reports none. Window labels and reset countdowns live in
-    `SessionDetailSheet`, which the usage cluster opens.
+    session's `$` cost only when it reports none. Each ring carries its own label *inside* it —
+    0–99 for the context percentage, then S (session), W (weekly) and the model's initial for a
+    per-model window — because four rings and four adjacent percentages is more line than a phone
+    has. Three tap targets, not one: the status opens `SessionInfoSheet`, the context ring
+    `ContextSheet`, the usage rings `UsageSheet`, with a wider gap between the two ring groups so
+    a thumb can find the seam. The rings are hand-drawn (`Circle().trim()`) rather than stock:
+    `ProgressView`'s `.circular` style is indeterminate-only on iOS, and a `Gauge` with
+    `.accessoryCircular` is sized for a watch complication and goes hairline when scaled to fit
+    here.
+    Neither chip ever says "Default": a running session has a concrete model and permission
+    mode, and naming them is the point of the bar. "Default" is a *choice you make when starting
+    a session*, so it survives only as a DEFAULT tag on one row of each picker — which row, the
+    app learns from `system_init` (the CLI resolves the default; nothing lets you ask what it
+    would pick, so the answer is what it did pick). A promptless session has no `system_init`
+    until its first message, so until then the model chip reads "Model" rather than claiming a
+    value — except that it usually does know: `capabilities` carries `defaultModel` (what the
+    CLI's own `default` row points at), which lands seconds after the session starts and long
+    before any `system_init`, so the chip names the model from the first frame. The permission
+    mode named `default` on the wire is shown as **Manual**, which is what
+    Claude Code calls it — the two readings of the word ("ask me every time" and "whatever the
+    server picked") are exactly what the bar must not conflate.
+  - `App/Sources/Session/SelectionSheets.swift` — the model and mode pickers, shaped like the
+    CLI's own selectors: a title, a close button, one rounded card of rows with what each choice
+    *does*, coloured icons for the modes, a blue check on what is in force and a blue DEFAULT tag
+    on what the session started with. Sheets rather than `Menu`s because a `Menu` is rendered by
+    UIKit and gives you a title, a subtitle and an image per row — no descriptions worth reading,
+    no icon colour, no styled tag. Every model row comes from the CLI, including its own
+    "Default (recommended)" entry — which the **server** drops, along with naming and grouping
+    the rest (`modelOptionsFromSdk` in core, so the dashboard and the phone agree). Matching the
+    model a session *reports* (`claude-opus-5[1m]`) to the row that names it (`opus[1m]`) is
+    `ModelOption.matches` in the kit: exact, then `resolvedModel` — **authoritatively**, including
+    when it disagrees, or "Opus 4.8" would check itself alongside "Opus 5" — and only for a row
+    that declares none, the family token, which is what keeps the chip readable against an older
+    server. The chip drops a trailing parenthetical, so "Opus (1M context)" fits as "Opus".
+  - `App/Sources/Session/SessionEmptyState.swift` — what a session shows before it has said
+    anything: which directory the agent is in, and that the composer takes `/commands` and
+    `@files` (each hint conditional on the thing actually being available). **It is sized from
+    the height it is offered and sheds parts rather than pushing**: icon first, then the path,
+    then everything. The space it decorates halves when the keyboard opens and is small to begin
+    with in landscape, and a decorative panel must never be the reason the composer ends up
+    underneath the keyboard. The measurement is a `GeometryReader`, floored by the composer's
+    focus state — belt and braces, because whether SwiftUI shrinks this particular stack for the
+    keyboard is not something to bet a layout on.
+  - The New Session form opens the *same* model and mode pickers as a live session. Its model
+    list comes from `ProfileInfo.models`, which the server remembers from the last session that
+    ran on that profile — so a server that has never run one still shows a text field.
+  - `App/Sources/Session/{ContextSheet,UsageSheet,SessionInfoSheet}.swift` — the three sheets
+    that were one "Session details" list. They answer different questions at different moments
+    (what is in the window / how much plan is left / what is this session), so scrolling past
+    two of them to reach the third was the whole problem. Each is also in the toolbar menu.
+    `UsageSheet` draws a **pace marker** on every window: a tick at the elapsed share of the
+    window's duration, so "17% used" can be read against how far into the week you are. The
+    duration comes from the key (`five_hour` → 5h, `seven_day*` → 7d) because the CLI reports a
+    reset time and a percentage and never a duration; a window whose key doesn't say gets no
+    marker. The plan capsule says "Max", not "Max 20x" — `subscription_type` is a tier, and the
+    multiplier a subscription page shows is not in the data.
   - `App/Sources/Session/ComposerView.swift` — the input card, in two shapes. At rest it is the
     field and nothing else; once it has focus, a draft, or a turn to stop, an action row unfolds
     underneath (attach, dictate, hide keyboard, send). One send button does both jobs: a draft
@@ -67,6 +121,11 @@ Plan and research: `_docs/plans/MOBILE-CLIENT.md` (gitignored, local).
     plus the transparent-ground Dark and Tinted appearances iOS 18 asks for). The PNGs are
     generated from `docs/assets/app-icon-apple-{master,layer}.svg`; regenerate with the command
     in `docs/assets/BRAND.md` §"Regenerating the iOS app icon" rather than editing them.
+    `ClaudeCode.imageset` is the exception to everything in `BRAND.md`: it is **Anthropic's**
+    mark, not ours, copied from `docs/assets/claude-code.svg` and kept at its own colour. It
+    labels the plan line in `UsageSheet` — the one place the app names whose limits it is
+    showing — and is used nowhere else. The catalog vectors the SVG
+    (`preserves-vector-representation`), so there is no PNG rendition to regenerate.
   - `App/Sources/Push/` — remote notifications, which exist because iOS will not hold a WebSocket
     open in the background: the WS is for while you're looking at the screen, APNs is the resume
     signal for every other moment. The token is registered **per gateway** (`POST /apns/devices`
@@ -76,6 +135,12 @@ Plan and research: `_docs/plans/MOBILE-CLIENT.md` (gitignored, local).
     why that distinction is expensive to get wrong. A `permission_requested` push carries
     Approve/Deny actions that answer over REST without opening the app; tapping the body deep-links
     to the session. A gateway with no forwarder configured answers 404 and the app stops asking.
+    **The session on screen is never announced**: `PushCoordinator.visibleSessionId` is claimed by
+    `SessionView` and released when it leaves or the app backgrounds, and `willPresent` returns no
+    options for it. Every other session still banners in the foreground — the app holds a socket
+    only for the one you are looking at, so those are as invisible as they are in the background.
+    (The server-side alternative — have `SessionNotifier` skip sessions with an attached client —
+    would fix this for the dashboard too, at the cost of coupling the notifier to the registry.)
   - `App/Sources/Files/` — the host file browser, reached from the folder button in an open
     session's toolbar. **Scoped to that session's `cwd`**: rooted there, with no roots list and no
     way up, because what you want on a phone is this project's tree, not an inventory of what the
@@ -88,6 +153,12 @@ Plan and research: `_docs/plans/MOBILE-CLIENT.md` (gitignored, local).
     reading follows the cwd roots, so a session that was allowed to start is normally browsable);
     and `canWrite` is false without `--fs-write`, which hides Save. Saving sends the hash the read returned, so a 409 means the
     agent edited the file first — the alert offers Reload, never a force.
+    `FolderPickerView` is the same tree asked a different question: the New Session form's cwd
+    picker, which starts at the **roots** (there is no cwd yet — that is what is being chosen),
+    lists directories only, and makes every level selectable as well as enterable. Those roots
+    are the server's read roots, so a folder picked here is one the gateway will also start a
+    session in. Typing a path by hand still works, which is what a gateway with no roots leaves
+    you.
   - `App/Sources/Session/PromptCompletion.swift` — one suggestion list, two tokens. `/commands`
     come from the `capabilities` event, so filtering is local, synchronous and complete;
     `@files` are a search over `GET /fs/find`, debounced and single-flight, and a 404 turns file
@@ -127,6 +198,104 @@ Point the app at your server's base URL (e.g. `http://your-mac.tailnet-name.ts.n
 paste the `--auth-key`. The app talks to `<base>/v1`. Plain-`http` hosts on a tailnet are
 allowed via an ATS exception in the app — tighten this if you ever distribute beyond personal
 use.
+
+## Pushing a build to your phone
+
+```sh
+apps/ios/scripts/deploy.sh              # generate, build, install, launch
+apps/ios/scripts/deploy.sh --no-launch  # install only — works on a locked phone
+```
+
+This is the loop to run while working on the app, so a change can be looked at on the real
+device rather than in a simulator screenshot. It works over Wi-Fi with no cable: CoreDevice
+reaches a paired phone on the same network (`transportType: localNetwork`).
+
+Configuration is machine-local, in `apps/ios/.deploy.env` (gitignored) or the environment:
+
+```sh
+IOS_DEVELOPMENT_TEAM=XXXXXXXXXX   # device signing; project.yml deliberately pins no team
+IOS_DEVICE="Your iPhone"          # optional when exactly one device is available
+```
+
+Three facts the script exists to encode, each of which costs a build to rediscover:
+
+- **Build with `generic/platform=iOS`, never `id=<udid>`.** A device-targeted build wants to talk
+  to the phone ("may need to be unlocked to recover from previously reported preparation errors")
+  and fails when it is locked. A generic build never touches it.
+- **Installing to a locked phone works; launching does not** — `FBSOpenApplicationErrorDomain
+  error 7`. The script reports that as a sentence and exits 3, so an agent can install
+  continuously and only ask for an unlock when it wants the app in the foreground. (`devicectl
+  device info lockState` does *not* answer this: it reports `passcodeRequired` and
+  `unlockedSinceBoot`, not whether the screen is locked right now.)
+- **Device signing needs an explicit team** on the command line, since `project.yml` pins none.
+
+The pragmatic answer to "can it relaunch while the phone is locked" is no; a longer auto-lock
+window during a work session is the workaround.
+
+## Hot reload (InjectionNext)
+
+Debug builds are wired for [InjectionNext](https://github.com/johnno1962/InjectionNext): edit a
+view, and the running app swaps in the new code with its navigation stack and state intact —
+no rebuild, no relaunch, no losing your place. Three pieces, all Debug-only:
+
+- `project.yml` links Debug with `-Xlinker -interposable` (function implementations become
+  replaceable) and sets `EMIT_FRONTEND_COMMAND_LINES=YES` (how InjectionNext learns to recompile
+  one file the way this project compiles it).
+- A `--hot` build phase copies InjectionNext's prebuilt bundle into the app and codesigns it.
+  Opt-in per build because it also copies the XCTest frameworks and costs seconds:
+  `scripts/deploy.sh --hot`. The **Simulator needs none of this** — it reads the bundle straight
+  out of `/Applications/InjectionNext.app`.
+- `App/Sources/Support/HotReload.swift` loads the bundle at launch and provides `@HotReloaded`.
+
+**`@HotReloaded` is not optional.** Add it as a stored property to any view you want to
+hot-reload:
+
+```swift
+struct UsageSheet: View {
+  @HotReloaded private var hot
+  ...
+}
+```
+
+A single observer at the root does not work, and it is worth knowing why: injection replaces the
+implementations, but SwiftUI only re-runs a `body` whose *inputs* changed — a redrawing parent
+hands its child the same struct value as before, and the child is skipped. Measured, not
+assumed: a root-only observer logged "Rebound 5 symbols" and left the old pixels on screen. This
+is the same reason the [Inject](https://github.com/krzysztofzablocki/Inject) package's API is a
+per-view `@ObserveInjection` — `@HotReloaded` is that idea in a dozen lines, so the app keeps its
+zero-third-party-Swift-dependencies rule. Swapping in `Inject` would be a fair trade if this ever
+needs maintaining; it also handles UIKit view controllers, which this app has one of.
+
+**Running it:** install `InjectionNext.app` in `/Applications`, launch it, and use its own menu
+to open Xcode on this project — its supervised mode is the reliable one. Injection into a
+headless `xcodebuild` loop half-works: the app connects and injects via the "builtin" fallback,
+but the log-scanning path that finds the real compiler command is brittle against a custom
+`-derivedDataPath`. Set `INJECTION_PROJECT_ROOT=<apps/ios>` in the environment (or
+`SIMCTL_CHILD_INJECTION_PROJECT_ROOT` for a simulator launch) to make it file-watch this project.
+
+For a **device**, InjectionNext additionally needs "Enable Devices" turned on in its menu, a
+network port opened, and the expanded codesigning identity selected — GUI steps, done once.
+
+What it cannot do: add or remove stored properties, change a function's signature, or introduce a
+new file. Those still need `scripts/deploy.sh`.
+
+## Looking at a screen without a gateway
+
+Most screens need a live session against a real server before they render anything. Set
+`UIPREVIEW` to render one of them from canned data instead of the app —
+`App/Sources/Support/UIPreviewHarness.swift`, which is where the variants and their fixtures
+live:
+
+```sh
+SIMCTL_CHILD_UIPREVIEW=usage xcrun simctl launch --terminate-running-process booted \
+  bi.atomic.workerdeck.ios
+xcrun simctl io booted screenshot /tmp/usage.png
+```
+
+Two things that don't work and are worth not re-trying: driving the simulator's UI with System
+Events (clicking needs an Accessibility grant a CLI shell doesn't have), and guessing a layout
+bug from pixels — when a SwiftUI layout misbehaves, render the geometry numbers into the view
+and screenshot those.
 
 ## Push on the Simulator
 

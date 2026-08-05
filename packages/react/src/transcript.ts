@@ -82,6 +82,10 @@ export type TranscriptState = {
   models?: ModelOption[]
   /** Slash commands the CLI accepts (from the `capabilities` event). */
   commands?: SlashCommandInfo[]
+  /** What this session's default model resolves to (from `capabilities`). Known
+   * before the first turn, which `model` is not — a promptless session has no
+   * `system_init` until it is spoken to. */
+  defaultModel?: string
   /** Seeded from `system_init`, updated on `permission_mode_changed`. */
   permissionMode?: PermissionMode
   /** Latest context-window snapshot; absent until the first turn completes. */
@@ -89,6 +93,9 @@ export type TranscriptState = {
   /** Latest rate-limit snapshot per window ('five_hour', 'seven_day', ...).
    * Absent for API-key sessions — render nothing, not 0%. */
   rateLimits?: Record<string, RateLimitInfo>
+  /** claude.ai plan the rate-limit windows belong to ('pro', 'max', ...), from
+   * `plan_info`. Absent for API-key sessions, like the windows themselves. */
+  subscriptionType?: string
   items: TranscriptItem[]
   pendingApprovals: PermissionRequest[]
   totalCostUsd: number
@@ -179,7 +186,12 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
       return { ...base, status: event.status, statusDetail: event.detail }
 
     case 'capabilities':
-      return { ...base, models: event.models, commands: event.commands }
+      return {
+        ...base,
+        models: event.models,
+        commands: event.commands,
+        defaultModel: event.defaultModel ?? base.defaultModel,
+      }
 
     case 'model_changed':
       // undefined = reset to the server default; keep showing the last known model.
@@ -197,6 +209,9 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
       if (!key) return base
       return { ...base, rateLimits: { ...base.rateLimits, [key]: event.info } }
     }
+
+    case 'plan_info':
+      return { ...base, subscriptionType: event.subscriptionType }
 
     case 'user_message': {
       let items = base.items

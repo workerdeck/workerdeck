@@ -141,6 +141,10 @@ public struct TranscriptState: Sendable, Equatable {
   public var models: [ModelOption]?
   /// Slash commands the CLI accepts (from the `capabilities` event).
   public var commands: [SlashCommandInfo]?
+  /// What this session's default model resolves to (from `capabilities`).
+  /// Known before the first turn, which `model` is not — a promptless session
+  /// has no `system_init` until it is spoken to.
+  public var defaultModel: String?
   /// Seeded from `system_init`, updated on `permission_mode_changed`.
   public var permissionMode: PermissionMode?
   /// Latest context-window snapshot; absent until the first turn completes.
@@ -148,6 +152,9 @@ public struct TranscriptState: Sendable, Equatable {
   /// Latest rate-limit snapshot per window ('five_hour', 'seven_day', ...).
   /// Absent for API-key sessions — render nothing, not 0%.
   public var rateLimits: [String: RateLimitInfo]?
+  /// claude.ai plan the rate-limit windows belong to ('pro', 'max', ...), from
+  /// `plan_info`. Absent for API-key sessions, like the windows themselves.
+  public var subscriptionType: String?
   public var items: [TranscriptItem]
   public var pendingApprovals: [PermissionRequest]
   public var totalCostUsd: Double
@@ -157,8 +164,10 @@ public struct TranscriptState: Sendable, Equatable {
     status: SessionStatus = .starting, statusDetail: String? = nil, model: String? = nil,
     cwd: String? = nil, sdkSessionId: String? = nil, engine: ProfileEngine? = nil,
     models: [ModelOption]? = nil, commands: [SlashCommandInfo]? = nil,
+    defaultModel: String? = nil,
     permissionMode: PermissionMode? = nil, contextUsage: ContextUsage? = nil,
-    rateLimits: [String: RateLimitInfo]? = nil, items: [TranscriptItem] = [],
+    rateLimits: [String: RateLimitInfo]? = nil, subscriptionType: String? = nil,
+    items: [TranscriptItem] = [],
     pendingApprovals: [PermissionRequest] = [], totalCostUsd: Double = 0, lastSeq: Int = 0
   ) {
     self.status = status
@@ -169,9 +178,11 @@ public struct TranscriptState: Sendable, Equatable {
     self.engine = engine
     self.models = models
     self.commands = commands
+    self.defaultModel = defaultModel
     self.permissionMode = permissionMode
     self.contextUsage = contextUsage
     self.rateLimits = rateLimits
+    self.subscriptionType = subscriptionType
     self.items = items
     self.pendingApprovals = pendingApprovals
     self.totalCostUsd = totalCostUsd
@@ -324,9 +335,10 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
     next.status = status
     next.statusDetail = detail
 
-  case .capabilities(let models, let commands):
+  case .capabilities(let models, let commands, let defaultModel):
     next.models = models
     next.commands = commands
+    if let defaultModel { next.defaultModel = defaultModel }
 
   case .modelChanged(let model):
     // nil = reset to the server default; keep showing the last known model.
@@ -344,6 +356,9 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
     var limits = next.rateLimits ?? [:]
     limits[key] = info
     next.rateLimits = limits
+
+  case .planInfo(let subscriptionType):
+    next.subscriptionType = subscriptionType
 
   case .userMessage(let payload):
     var items = next.items

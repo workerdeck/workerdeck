@@ -51,6 +51,11 @@ quietly coercing:
   fails `createWorkerServer` at startup.
 - Provider engines have no equivalent of the CLI's `supportedModels()`, so the model list is
   whatever the operator declared in `provider.models` (falling back to `provider.model` alone).
+  A **claude** profile's list can only come from a running CLI, so the server remembers it from
+  the `capabilities` of the last session that ran on that profile and reports it back as
+  `ProfileInfo.models` / `defaultModel` — enough for a create form to offer a picker rather than
+  a text field, without spawning a CLI to ask. Absent until this server has run one session on
+  the profile.
 - `SessionInfo.engine` reports which engine a live session is actually on, so a dashboard can
   hide affordances that only exist on one side. The bundled one does: resumable SDK sessions,
   setting sources, and the bypass pre-authorization disappear for provider profiles.

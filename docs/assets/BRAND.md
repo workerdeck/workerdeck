@@ -44,6 +44,13 @@ theme tokens — don't conflate them.
 | `app-icon-android-dark.svg` / `-light.svg` | Android adaptive-icon render (512 circle, glyph inside the 66/108 safe zone). |
 | `banner.html` | Source for the README/docs banner. |
 | `banner.png` | Rendered banner, 3200×1040. |
+| `claude-code.svg` | **Not ours.** Anthropic's Claude Code mark, in its own colour (`#D97757`). |
+
+`claude-code.svg` is here because a UI that reports a claude.ai plan's limits has
+to say whose plan it is: it labels the plan line in the iOS `UsageSheet` (copied
+into `ClaudeCode.imageset`) and nothing else. It is not subject to any rule below
+— don't recolour it, don't compose it with the WorkerDeck mark, and don't use it
+anywhere the product itself is being named.
 
 The remaining platform assets (Android foreground/background layers, PNG size
 ramps) are deliberately deferred — derive them from these renders when an app

@@ -20,6 +20,26 @@ settings:
     SWIFT_VERSION: "6.0"
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
+  configs:
+    Debug:
+      # Hot reload (InjectionNext). `-interposable` makes every function's
+      # implementation replaceable at runtime, which is what lets an edited file
+      # be swapped into a running app. Debug only — it is a linker-level
+      # indirection and has no business in a shipped binary.
+      #
+      # It costs nothing when injection isn't running, so it stays on rather than
+      # behind the WORKERDECK_HOT_RELOAD switch: needing a *rebuild* to start
+      # hot-reloading would defeat the point.
+      OTHER_LDFLAGS: [-Xlinker, -interposable]
+      # How InjectionNext learns to recompile one file the way this project
+      # compiles it. Without it, it guesses ("builtin" mode) and only manages
+      # files in the main module — and stops managing even those as soon as the
+      # build logs it was reading move.
+      EMIT_FRONTEND_COMMAND_LINES: YES
+      # The injection copy phase writes into the built .app and codesigns what it
+      # copies, neither of which a sandboxed script may do. Scoped to Debug so
+      # the release path keeps the stricter setting.
+      ENABLE_USER_SCRIPT_SANDBOXING: NO
 
 targets:
   WorkerDeckApp:
@@ -76,6 +96,23 @@ targets:
         # gateway) before distributing beyond personal use.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+    # Hot reload, opt-in per build. InjectionNext's own script copies its
+    # injection bundle (and the XCTest frameworks it needs) into the app and
+    # codesigns them — worth ~10s and a fatter .app, so a normal build must not
+    # pay for it. `scripts/deploy.sh --hot` sets the variable; nothing else does,
+    # and without InjectionNext.app installed the phase is a no-op either way.
+    postBuildScripts:
+      - name: Copy injection bundle (hot reload)
+        script: |
+          [ "$WORKERDECK_HOT_RELOAD" = "YES" ] || exit 0
+          RESOURCES="/Applications/InjectionNext.app/Contents/Resources"
+          if [ ! -f "$RESOURCES/copy_bundle.sh" ]; then
+            echo "warning: WORKERDECK_HOT_RELOAD is set but InjectionNext.app is not installed"
+            exit 0
+          fi
+          export RESOURCES
+          "$RESOURCES/copy_bundle.sh"
+        basedOnDependencyAnalysis: false
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

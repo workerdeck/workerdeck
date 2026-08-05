@@ -84,6 +84,13 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
   public let description: String?
   public let defaults: ProfileDefaults?
   public let session: ProfileSessionDefaults?
+  /// Response-only: models a claude profile's CLI reported on an earlier
+  /// session, so a create form can offer a picker rather than a text field.
+  /// Absent until this server has run one (and always for a provider profile,
+  /// whose ids are in `provider.models`).
+  public let models: [ModelOption]?
+  /// Response-only: what that profile's default model resolves to.
+  public let defaultModel: String?
   /// Response-only: store-backed and editable through the API.
   public let managed: Bool?
 
@@ -94,6 +101,7 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
     name: String, engine: ProfileEngine? = nil, configDir: String? = nil,
     provider: ProviderConfig? = nil, description: String? = nil,
     defaults: ProfileDefaults? = nil, session: ProfileSessionDefaults? = nil,
+    models: [ModelOption]? = nil, defaultModel: String? = nil,
     managed: Bool? = nil
   ) {
     self.name = name
@@ -103,6 +111,8 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
     self.description = description
     self.defaults = defaults
     self.session = session
+    self.models = models
+    self.defaultModel = defaultModel
     self.managed = managed
   }
 }
@@ -144,6 +154,10 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   public let engine: ProfileEngine?
   public let model: String?
   public let permissionMode: PermissionMode?
+  /// Whether this session may be switched into `bypassPermissions` — decided when
+  /// it was created and fixed for its lifetime. Absent (an older server) reads as
+  /// unknown, and the picker offers the mode rather than hiding it.
+  public let canBypassPermissions: Bool?
   /// 'oauth' = claude.ai subscription credentials. Kept as String.
   public let apiKeySource: String?
   /// Epoch ms.
@@ -164,7 +178,8 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   public init(
     id: String, sdkSessionId: String? = nil, status: SessionStatus, cwd: String,
     profile: String? = nil, engine: ProfileEngine? = nil, model: String? = nil,
-    permissionMode: PermissionMode? = nil, apiKeySource: String? = nil,
+    permissionMode: PermissionMode? = nil, canBypassPermissions: Bool? = nil,
+    apiKeySource: String? = nil,
     createdAt: Double, lastSeq: Int, pendingPermissionCount: Int,
     meta: [String: JSONValue]? = nil, title: String? = nil, totalCostUsd: Double? = nil,
     numTurns: Int? = nil, lastActivityAt: Double? = nil
@@ -177,6 +192,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.engine = engine
     self.model = model
     self.permissionMode = permissionMode
+    self.canBypassPermissions = canBypassPermissions
     self.apiKeySource = apiKeySource
     self.createdAt = createdAt
     self.lastSeq = lastSeq
@@ -305,6 +321,11 @@ public struct HostFileRoot: Decodable, Sendable, Equatable, Identifiable {
   public let name: String
 
   public var id: String { path }
+
+  public init(path: String, name: String) {
+    self.path = path
+    self.name = name
+  }
 }
 
 /// One entry in a host directory listing.
@@ -327,6 +348,16 @@ public struct HostDirEntry: Decodable, Sendable, Equatable, Identifiable {
   public let modifiedAt: Double?
 
   public var id: String { path }
+
+  public init(
+    name: String, path: String, type: Kind, bytes: Int? = nil, modifiedAt: Double? = nil
+  ) {
+    self.name = name
+    self.path = path
+    self.type = type
+    self.bytes = bytes
+    self.modifiedAt = modifiedAt
+  }
 
   /// Unknown `type` strings decode as `.other` rather than failing the listing —
   /// a newer server adding a category must not blank the browser.

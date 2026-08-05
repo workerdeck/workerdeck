@@ -55,6 +55,11 @@ final class PromptCompletionModel {
     }
   }
 
+  /// Whether `@file` completion is on offer: the session's cwd is known and this
+  /// gateway hasn't already 404'd the search. Read by the empty state, which must
+  /// not advertise a feature this server doesn't serve.
+  var hasFileSearch: Bool { scope != nil && !filesUnsupported }
+
   private var task: Task<Void, Never>?
   private var filesUnsupported = false
   private var lastQuery: String?

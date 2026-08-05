@@ -13,13 +13,22 @@ import SwiftUI
 /// task is cancelled (navigating back). Returning to the foreground skips the
 /// reconnect backoff instead of waiting it out.
 struct SessionView: View {
+  /// The modal screens over a session. `Identifiable` so one `.sheet(item:)`
+  /// presents all of them.
+  enum Sheet: String, Identifiable {
+    case context, usage, info, files, model, mode
+    var id: String { rawValue }
+  }
+
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.dismiss) private var dismiss
+  @Environment(PushCoordinator.self) private var push
 
   @State private var vm: TranscriptViewModel
   @State private var draft = ""
-  @State private var showDetails = false
-  @State private var showFiles = false
+  /// One sheet at a time, by identity: the session screen has four of them and
+  /// a bag of booleans would let two open at once.
+  @State private var sheet: Sheet?
   @State private var showCloseConfirmation = false
   /// Lives as long as the view: both halves of it arrive late and independently —
   /// the command list with `capabilities`, the file scope with the cwd — and a
@@ -52,6 +61,7 @@ struct SessionView: View {
         // what you'd want there too.
         .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
         .safeAreaInset(edge: .bottom, spacing: 0) { measuredFooter }
+      emptyState
       picker
     }
     .onPreferenceChange(FooterHeight.self) { footerHeight = $0 }
@@ -66,6 +76,17 @@ struct SessionView: View {
       }
       .onChange(of: scenePhase) { _, phase in
         if phase == .active { vm.reconnectNow() }
+        // Backgrounding stops this session being "on screen": that is exactly
+        // when its notifications become useful again.
+        push.visibleSessionId = phase == .active ? vm.sessionId : nil
+      }
+      // Claimed on appear and released on disappear, so notifications for the
+      // session you are watching stay silent and nothing else does.
+      .task {
+        push.visibleSessionId = vm.sessionId
+      }
+      .onDisappear {
+        if push.visibleSessionId == vm.sessionId { push.visibleSessionId = nil }
       }
       // The cwd arrives with the session snapshot, which lands after this view
       // does — and changes on a resume into a different directory.
@@ -77,15 +98,37 @@ struct SessionView: View {
       .task(id: vm.state.commands) {
         completion.commands = vm.state.commands ?? []
       }
-      .sheet(isPresented: $showFiles) {
-        if let scope = vm.hostFiles {
-          HostFilesView(scope: scope)
+      .sheet(item: $sheet) { sheet in
+        switch sheet {
+        case .context:
+          ContextSheet(usage: vm.state.contextUsage)
+        case .usage:
+          UsageSheet(
+            rateLimits: vm.rateLimitWindows,
+            subscriptionType: vm.state.subscriptionType,
+            engine: vm.engine,
+            totalCostUsd: vm.state.totalCostUsd,
+            updatedAt: vm.rateLimitsUpdatedAt)
+        case .info:
+          SessionInfoSheet(state: vm.state, session: vm.session, fileAccess: vm.fileAccess)
+        case .files:
+          if let scope = vm.hostFiles {
+            HostFilesView(scope: scope)
+          }
+        case .model:
+          ModelPickerSheet(
+            models: vm.state.models ?? [],
+            current: vm.effectiveModel,
+            defaultModel: vm.defaultModel,
+            onSelect: { vm.setModel($0) })
+        case .mode:
+          ModePickerSheet(
+            modes: permissionModes,
+            current: vm.state.permissionMode,
+            defaultMode: vm.defaultPermissionMode,
+            canBypass: vm.session?.canBypassPermissions,
+            onSelect: { vm.setPermissionMode($0) })
         }
-      }
-      .sheet(isPresented: $showDetails) {
-        SessionDetailSheet(
-          state: vm.state, session: vm.session, rateLimits: vm.rateLimitWindows,
-          fileAccess: vm.fileAccess)
       }
       .confirmationDialog(
         "Close this session?", isPresented: $showCloseConfirmation, titleVisibility: .visible
@@ -145,6 +188,42 @@ struct SessionView: View {
       })
   }
 
+  /// Shown until the session says something. A `ZStack` sibling for the same
+  /// reason the picker is one — an overlay on the `ScrollView` would be sized to
+  /// its (empty) content — and it steps aside the moment a completion list opens.
+  @ViewBuilder
+  private var emptyState: some View {
+    if vm.state.items.isEmpty, !isPickerOpen {
+      // Measured, not assumed. The area left over is the screen minus the
+      // floating stack minus whatever the keyboard took, and the empty state
+      // decides what it can afford from the number rather than from the device.
+      // The top inset keeps it clear of the floating navigation bar, which the
+      // transcript is allowed to scroll under but a centred panel is not.
+      GeometryReader { proxy in
+        VStack {
+          Spacer(minLength: 0)
+          SessionEmptyState(
+            cwd: vm.cwd,
+            hasCommands: !(vm.state.commands ?? []).isEmpty,
+            canBrowseFiles: completion.hasFileSearch,
+            // Belt and braces: the reader already reports a smaller box when the
+            // keyboard pushes the safe area up, but whether it does depends on
+            // how SwiftUI resolves this stack — and a panel that overlaps the
+            // composer is the exact failure being fixed. Focus is a fact we
+            // hold, so it caps the budget regardless.
+            availableHeight: isComposerFocused
+              ? min(proxy.size.height, 240) : proxy.size.height)
+          Spacer(minLength: 0)
+        }
+        .frame(width: proxy.size.width, height: proxy.size.height)
+      }
+      .padding(.top, 44)
+      .padding(.bottom, footerHeight)
+      .allowsHitTesting(false)
+      .transition(.opacity)
+    }
+  }
+
   /// The suggestion panel, filling everything the header and the floating stack
   /// leave. It is a sibling of the transcript rather than part of the composer so
   /// that it can claim that area; the insets come from the reader (those are
@@ -189,13 +268,14 @@ struct SessionView: View {
       contextUsage: vm.state.contextUsage,
       rateLimits: vm.hudRateLimits,
       totalCostUsd: vm.state.totalCostUsd,
-      model: vm.state.model,
+      model: vm.effectiveModel,
       models: vm.state.models ?? [],
       permissionMode: vm.state.permissionMode,
-      permissionModes: permissionModes,
-      onSelectModel: { vm.setModel($0) },
-      onSelectPermissionMode: { vm.setPermissionMode($0) },
-      onOpenDetails: { showDetails = true })
+      onOpenModel: { sheet = .model },
+      onOpenMode: { sheet = .mode },
+      onOpenContext: { sheet = .context },
+      onOpenUsage: { sheet = .usage },
+      onOpenInfo: { sheet = .info })
   }
 
   @ViewBuilder
@@ -228,14 +308,18 @@ struct SessionView: View {
     // nothing to open before then.
     if vm.hostFiles != nil {
       ToolbarItem(placement: .topBarTrailing) {
-        Button { showFiles = true } label: {
+        Button { sheet = .files } label: {
           Label("Files", systemImage: "folder")
         }
       }
     }
     ToolbarItem(placement: .topBarTrailing) {
       Menu {
-        Button("Session details", systemImage: "info.circle") { showDetails = true }
+        // Three questions, three screens — and each one is also reachable by
+        // tapping the thing that summarises it on the status bar.
+        Button("Context", systemImage: "chart.pie") { sheet = .context }
+        Button("Usage", systemImage: "gauge") { sheet = .usage }
+        Button("Session info", systemImage: "info.circle") { sheet = .info }
         Divider()
         Button("Close session", systemImage: "xmark.circle", role: .destructive) {
           showCloseConfirmation = true

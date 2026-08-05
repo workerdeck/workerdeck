@@ -402,7 +402,8 @@ struct TranscriptTests {
         2,
         .capabilities(
           models: [ModelOption(value: "opus", displayName: "Opus")],
-          commands: [SlashCommandInfo(name: "wrapup")])),
+          commands: [SlashCommandInfo(name: "wrapup")],
+          defaultModel: "claude-opus-5[1m]")),
       event(3, .permissionModeChanged(mode: .plan)),
       event(
         4,
@@ -413,6 +414,8 @@ struct TranscriptTests {
     #expect(state.statusDetail == "waiting")
     #expect(state.models?.count == 1)
     #expect(state.commands?.first?.name == "wrapup")
+    // Known from `capabilities`, which lands long before any `system_init`.
+    #expect(state.defaultModel == "claude-opus-5[1m]")
     #expect(state.permissionMode == .plan)
     #expect(state.contextUsage?.percentage == 10)
   }

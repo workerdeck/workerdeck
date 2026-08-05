@@ -11,3 +11,7 @@ App/WorkerDeckApp.entitlements
 xcuserdata/
 .swiftpm/
 DerivedData/
+# scripts/deploy.sh builds here; the -sim suffix is the simulator counterpart
+DerivedData-*/
+# Local device/team for scripts/deploy.sh — machine-specific, never committed
+.deploy.env

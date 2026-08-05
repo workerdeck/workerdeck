@@ -43,4 +43,4 @@ export type {
   SettledBy,
 } from './pending-registry.ts'
 export { InputQueue } from './input-queue.ts'
-export { normalizeSdkMessage, toApiMessage } from './normalize.ts'
+export { modelOptionsFromSdk, normalizeSdkMessage, toApiMessage } from './normalize.ts'

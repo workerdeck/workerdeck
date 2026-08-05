@@ -90,6 +90,40 @@ struct ProtocolDecodingTests {
     #expect(info.rateLimitType == "five_hour")
   }
 
+  /// The CLI names its rows with aliases and reports a resolved wire id; the chip
+  /// is only useful if those meet.
+  @Test func matchesTheModelASessionReports() throws {
+    let opus = ModelOption(
+      value: "opus[1m]", resolvedModel: "claude-opus-5[1m]", displayName: "Opus (1M context)")
+    #expect(opus.matches("opus[1m]"))
+    #expect(opus.matches("claude-opus-5[1m]"))
+    #expect(opus.matches("claude-opus-5"))
+    #expect(!opus.matches("claude-sonnet-5"))
+
+    // Same family, older version: it must NOT also read as checked, which is the
+    // whole reason a declared `resolvedModel` outranks the family heuristic.
+    let previousOpus = ModelOption(
+      value: "claude-opus-4-8", resolvedModel: "claude-opus-4-8", displayName: "Opus 4.8")
+    #expect(!previousOpus.matches("claude-opus-5[1m]"))
+    #expect(previousOpus.matches("claude-opus-4-8"))
+
+    // No `resolvedModel` (an older server, or a CLI that omits it): the family
+    // token still gets the name right.
+    let sonnet = ModelOption(value: "sonnet", displayName: "Sonnet")
+    #expect(sonnet.matches("claude-sonnet-5[1m]"))
+    #expect(!sonnet.matches("claude-haiku-4-5"))
+  }
+
+  @Test func decodesPlanInfo() throws {
+    let event = try decodeEvent(
+      #"{"type":"plan_info","subscriptionType":"max","seq":12,"ts":1}"#)
+    guard case .planInfo(let subscriptionType) = event.body else {
+      Issue.record("expected plan_info, got \(event.body)")
+      return
+    }
+    #expect(subscriptionType == "max")
+  }
+
   @Test func encodesPermissionDecisionCommand() throws {
     let command = SessionCommand.permissionDecision(
       requestId: "r1", behavior: .deny, message: "no", interrupt: true)

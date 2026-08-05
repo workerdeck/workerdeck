@@ -11,14 +11,26 @@ struct WorkerDeckApp: App {
   @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
   @State private var hosts = HostStore()
 
+  init() {
+    // Debug-only, and silent unless InjectionNext is set up — see HotReload.swift.
+    HotReload.start()
+  }
+
   var body: some Scene {
     WindowGroup {
-      RootView()
-        .environment(hosts)
-        .environment(delegate.push)
-        // The delegate is built by UIKit before any of this exists, so the two
-        // are introduced here rather than at either one's construction.
-        .task { delegate.push.attach(hosts: hosts) }
+      // Set UIPREVIEW to render one screen from canned data instead of the app —
+      // see UIPreviewHarness. Absent (always, outside a simulator check) this is
+      // one environment lookup at launch.
+      if let preview = UIPreview.active {
+        UIPreviewHarness(variant: preview)
+      } else {
+        RootView()
+          .environment(hosts)
+          .environment(delegate.push)
+          // The delegate is built by UIKit before any of this exists, so the two
+          // are introduced here rather than at either one's construction.
+          .task { delegate.push.attach(hosts: hosts) }
+      }
     }
   }
 }

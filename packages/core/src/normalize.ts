@@ -1,5 +1,10 @@
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { ApiMessage, ContentBlock, SessionEventBody } from '@workerdeck/protocol'
+import type {
+  ApiMessage,
+  ContentBlock,
+  ModelOption,
+  SessionEventBody,
+} from '@workerdeck/protocol'
 
 export function toApiMessage(message: unknown): ApiMessage {
   const m = message as {
@@ -23,6 +28,8 @@ export function toApiMessage(message: unknown): ApiMessage {
  * method name says so out loud, so the runner probes for it at runtime and this
  * describes only the fields it needs. */
 export type UsageRateLimits = {
+  /** 'pro' | 'max' | 'team' | 'enterprise', or null for API-key / 3P sessions. */
+  subscription_type?: string | null
   rate_limits_available?: boolean
   rate_limits?: {
     five_hour?: UsageWindow
@@ -81,6 +88,122 @@ export function rateLimitEventsFromUsage(usage: UsageRateLimits): SessionEventBo
     if (slug) push(`seven_day_${slug}`, bucket)
   }
   return events
+}
+
+/** The half of the SDK's `ModelInfo` this package forwards. Structurally typed so
+ * the mapping can be unit-tested without a live query. */
+export type SdkModelInfo = {
+  value: string
+  resolvedModel?: string
+  displayName: string
+  description?: string
+}
+
+/**
+ * The CLI's model list, as `ModelOption[]`.
+ *
+ * Two decisions live here rather than in each client:
+ *
+ * - **`default` is dropped.** The CLI offers a row whose id is literally
+ *   `default` ("Default (recommended)"), meaning "whatever I would have picked".
+ *   It is a legal id to send, but it is not a model: a session running on it
+ *   reports a real model, so a picker showing it has a row that can never be
+ *   checked, and a status bar naming it would say "Default" for a session
+ *   answering as Opus. Which model the default resolved to is a different
+ *   question, and `system_init` answers it.
+ * - **`primary` is derived.** The CLI reports one flat list; Claude Code's own
+ *   picker shows the newest of each family and files the rest under "more
+ *   models". The list arrives newest-first, so the first row of each family is
+ *   the primary one. A heuristic, but a stable one — and doing it once here
+ *   means the dashboard and the phone group identically.
+ */
+/** What the CLI's `default` row resolves to — the model a session will answer as
+ * before it has answered anything. Dropped from the list, kept as this. */
+export function defaultModelFromSdk(models: readonly SdkModelInfo[]): string | undefined {
+  return models.find((model) => model.value === 'default')?.resolvedModel
+}
+
+export function modelOptionsFromSdk(models: readonly SdkModelInfo[]): ModelOption[] {
+  const rows = models.filter((model) => model.value !== 'default')
+  // A derived name is only used when it is unambiguous. Two rows of one model
+  // (a 1M-context variant beside a plain one) would derive the same string, and
+  // there the CLI's own names are the ones that tell them apart.
+  const derivedCounts = new Map<string, number>()
+  for (const model of rows) {
+    const derived = friendlyModelName(model.resolvedModel ?? model.value)
+    if (derived) derivedCounts.set(derived, (derivedCounts.get(derived) ?? 0) + 1)
+  }
+
+  const seenFamilies = new Set<string>()
+  const options: ModelOption[] = rows.map((model) => {
+    const family = modelFamily(model.resolvedModel ?? model.value)
+    const primary = !seenFamilies.has(family)
+    seenFamilies.add(family)
+    const derived = friendlyModelName(model.resolvedModel ?? model.value)
+    return {
+      value: model.value,
+      // Carried through so a client can match the model a session *reports*
+      // ('claude-opus-5[1m]') against the row that names it ('opus[1m]').
+      resolvedModel: model.resolvedModel,
+      displayName: derived && derivedCounts.get(derived) === 1 ? derived : model.displayName,
+      description: model.description,
+      primary,
+    }
+  })
+
+  // Capability order, which is what a person picking a model is choosing along
+  // and what the CLI's own selector shows. The CLI reports its list in a
+  // different order and gives no ranking field, so it is declared here — a
+  // family this list has never heard of sorts after the known ones rather than
+  // to the top, and ties keep the CLI's order.
+  return options
+    .map((option, index) => ({ option, index }))
+    .sort((a, b) => {
+      const rankA = familyRank(a.option)
+      const rankB = familyRank(b.option)
+      return rankA === rankB ? a.index - b.index : rankA - rankB
+    })
+    .map(({ option }) => option)
+}
+
+const FAMILY_ORDER = ['fable', 'opus', 'sonnet', 'haiku']
+
+function familyRank(option: ModelOption): number {
+  const rank = FAMILY_ORDER.indexOf(modelFamily(option.resolvedModel ?? option.value))
+  return rank === -1 ? FAMILY_ORDER.length : rank
+}
+
+/**
+ * The name a person says, from a wire model id: 'claude-opus-5[1m]' → "Opus 5",
+ * 'claude-haiku-4-5-20251001' → "Haiku 4.5".
+ *
+ * The CLI's own `displayName` is the family alone ("Opus", "Haiku") or carries a
+ * variant instead of a version ("Opus (1M context)"), and the version is the part
+ * that answers "is this the current one". It is only ever in the id, so it is
+ * read from there. Returns null when the id has no version to read — a bare
+ * alias like 'sonnet' — and the CLI's name stands.
+ */
+export function friendlyModelName(id: string): string | null {
+  const withoutVariant = id.split('[')[0] ?? id
+  const parts = withoutVariant.toLowerCase().split('-').filter(Boolean)
+  if (parts[0] === 'claude') parts.shift()
+  const family = parts.shift()
+  if (!family) return null
+  // Trailing snapshot date ('20251001') is a build, not a version.
+  const version = parts.filter((part) => !/^\d{8}$/.test(part))
+  if (version.length === 0 || version.some((part) => !/^\d+$/.test(part))) return null
+  return `${family.charAt(0).toUpperCase()}${family.slice(1)} ${version.join('.')}`
+}
+
+/** 'claude-opus-4-8[1m]' → "opus". The vendor prefix, the context-window suffix
+ * and the version tail are all dropped; what is left is the family a person
+ * names. Unrecognisable ids become their own family, so a model this rule has
+ * never seen lands in the main list rather than being hidden. */
+function modelFamily(id: string): string {
+  const withoutVariant = id.split('[')[0] ?? id
+  const parts = withoutVariant.toLowerCase().split('-')
+  if (parts[0] === 'claude') parts.shift()
+  return parts[0] ?? withoutVariant
 }
 
 /**

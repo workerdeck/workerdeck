@@ -146,8 +146,16 @@ export type QuestionBehavior = 'ask' | 'auto' | 'deny'
 export type ModelOption = {
   /** Model id for createSession.model / set_model. */
   value: string
+  /** Wire model id this row resolves to ('sonnet' → 'claude-sonnet-5'). What a
+   * session actually reports as its model is the resolved form, so this is how a
+   * client matches the running model back to the row that names it. */
+  resolvedModel?: string
   displayName: string
   description?: string
+  /** Whether this belongs in a picker's main list rather than behind a "more
+   * models" step: the newest model of each family. Derived server-side — the CLI
+   * reports one flat list — so that every client groups it the same way. */
+  primary?: boolean
 }
 
 /** A slash command the CLI accepts as user-message text (SDK SlashCommand mirror). */
@@ -252,7 +260,16 @@ export type SessionEventBody =
   | { type: 'status_changed'; status: SessionStatus; detail?: string }
   /** Models and slash commands available to this session; fetched from the CLI after
    * init. Late attachers get it via replay like any other event. */
-  | { type: 'capabilities'; models: ModelOption[]; commands: SlashCommandInfo[] }
+  | {
+      type: 'capabilities'
+      models: ModelOption[]
+      commands: SlashCommandInfo[]
+      /** Wire id the session's *default* resolves to, from the CLI's own `default`
+       * row. Answers "what will this session answer as" before it has answered
+       * anything — `system_init` carries the model, but a promptless session gets
+       * no `system_init` until its first message. */
+      defaultModel?: string
+    }
   /** The session's model changed via `set_model`. `model` undefined = back to default. */
   | { type: 'model_changed'; model?: string }
   /** The session's permission mode changed via `set_permission_mode`. */
@@ -261,6 +278,12 @@ export type SessionEventBody =
   | { type: 'context_usage'; usage: ContextUsage }
   /** Subscription rate-limit update for one window (see {@link RateLimitInfo}). */
   | { type: 'rate_limit'; info: RateLimitInfo }
+  /** Which claude.ai plan the rate-limit windows belong to: 'pro' | 'max' | 'team' |
+   * 'enterprise' — kept as string, the set may grow. Emitted from the same poll as
+   * `rate_limit`, once per change, and never for an API-key session (which has no
+   * plan). It names the windows; it does not size them — the tier suffix a
+   * subscription page shows ("Max 20x") is not in the data. */
+  | { type: 'plan_info'; subscriptionType: string }
   | {
       type: 'assistant_message'
       message: ApiMessage
@@ -569,6 +592,16 @@ export type ProfileInfo = {
   defaults?: ProfileDefaults
   /** Provider-engine session grants (capabilities, MCP servers, instructions). */
   session?: ProfileSessionDefaults
+  /** Response-only: models a *claude* profile's CLI reported, so a create form
+   * can offer a picker instead of a text field. Remembered from the last session
+   * that ran on this profile rather than probed — asking the CLI costs a process,
+   * and a server that has run anything already knows the answer. Absent until
+   * then (and always, for a provider profile, whose ids are in `provider.models`).
+   * Ignored on the way in. */
+  models?: ModelOption[]
+  /** Response-only: what this profile's default model resolves to, from the same
+   * source as {@link ProfileInfo.models}. */
+  defaultModel?: string
   /** Response-only, computed by the server: this profile came from the profile
    * store and can be edited or deleted through the API. Profiles declared in
    * server options are absent/false — they are code. Ignored on the way in. */
@@ -670,6 +703,12 @@ export type SessionInfo = {
   engine?: ProfileEngine
   model?: string
   permissionMode?: PermissionMode
+  /** Whether this session may be switched into `bypassPermissions`. The CLI only
+   * allows it when the process was spawned for it, so it is decided at creation
+   * and never changes: a session that did not ask for bypass up front cannot
+   * gain it later. Lets a picker disable the mode instead of offering a switch
+   * the engine will refuse. Absent = unknown (an older server). */
+  canBypassPermissions?: boolean
   /** See the `system_init` event; 'oauth' = claude.ai subscription credentials. */
   apiKeySource?: string
   createdAt: number

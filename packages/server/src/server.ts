@@ -30,6 +30,7 @@ import {
   type CreateJobRequest,
   type CreateSessionRequest,
   type JobEvent,
+  type ModelOption,
   type PermissionMode,
   type ProfileConfigSnapshot,
   type ProfileInfo,
@@ -601,6 +602,14 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const withManagedFlag = (p: ProfileInfo): ProfileInfo =>
     declaredByName.has(p.name) ? p : { ...p, managed: true }
 
+  /** Response shape for a profile: the managed marker, plus whatever models a
+   * session on it has reported. Read-only decoration — never persisted. */
+  const forResponse = (p: ProfileInfo): ProfileInfo => {
+    const seen = profileModels.get(p.name)
+    const base = withManagedFlag(p)
+    return seen ? { ...base, models: seen.models, defaultModel: seen.defaultModel } : base
+  }
+
   /** Declared profiles first: a name collision means the code wins, and the stored
    * one is unreachable rather than silently overriding server options. */
   const allProfiles = (): ProfileInfo[] => [
@@ -826,7 +835,26 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   // session that most needs to reach a phone may be one that parked and was
   // rebuilt — and that path never goes near `createRunner`.
   const notifier = new SessionNotifier(options.notifications ?? {})
-  const registry = new SessionRegistry({ onRegister: (runner) => notifier.watch(runner) })
+  /** Models each claude profile's CLI last reported, so `GET /profiles` can offer
+   * a create form a picker rather than a text box.
+   *
+   * Learned from sessions rather than probed: `supportedModels()` needs a live
+   * CLI, and spawning one per profile to fill a dropdown is a poor trade when
+   * any session that has ever run already answered the question. The cost is
+   * that a server which has run nothing yet still offers a text field.
+   */
+  const profileModels = new Map<string, { models: ModelOption[]; defaultModel?: string }>()
+  const registry = new SessionRegistry({
+    onRegister: (runner) => {
+      notifier.watch(runner)
+      const profile = runner.info().profile
+      if (!profile) return
+      runner.subscribe((event) => {
+        if (event.type !== 'capabilities' || event.models.length === 0) return
+        profileModels.set(profile, { models: event.models, defaultModel: event.defaultModel })
+      })
+    },
+  })
   const bridge = new BridgeHub({
     ...options.bridge,
     onResult: (sessionId, executionId, result) => {
@@ -1524,7 +1552,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
             ? allProfiles().filter((p) => auth.allowedProfiles!.includes(p.name))
             : allProfiles()
           json(res, 200, {
-            profiles: visible.map(withManagedFlag),
+            profiles: visible.map(forResponse),
             canManage: manageGuard(auth) === null,
           })
           return

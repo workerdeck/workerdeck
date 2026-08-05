@@ -16,7 +16,10 @@ import type {
 } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
-function fakeHarness() {
+/** `models` makes the fake query answer `supportedModels`, which is what makes a
+ * runner emit `capabilities` — the event the server learns a profile's models
+ * from. */
+function fakeHarness(models?: Array<Record<string, unknown>>) {
   const messages: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
   let done = false
@@ -56,6 +59,12 @@ function fakeHarness() {
     interrupt,
     setModel,
     close: end,
+    ...(models
+      ? {
+          supportedModels: vi.fn(async () => models),
+          supportedCommands: vi.fn(async () => []),
+        }
+      : {}),
   } as unknown as Query
 
   const queryFn = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => {
@@ -863,6 +872,47 @@ describe('createWorkerServer', () => {
     await vi.waitFor(() => {
       expect(harness.captured.options?.allowDangerouslySkipPermissions).toBe(true)
     })
+  })
+
+  it('remembers a profile’s models from a session, so GET /profiles can offer a picker', async () => {
+    const harness = fakeHarness([
+      { value: 'default', resolvedModel: 'claude-opus-5[1m]', displayName: 'Default (recommended)' },
+      { value: 'opus[1m]', resolvedModel: 'claude-opus-5[1m]', displayName: 'Opus (1M context)' },
+      { value: 'sonnet', resolvedModel: 'claude-sonnet-5', displayName: 'Sonnet' },
+    ])
+    const dir = mkdtempSync(join(tmpdir(), 'cw-profile-models-'))
+    try {
+      running = createWorkerServer({
+        allowUnauthenticated: true,
+        allowedCwdRoots: ['/tmp'],
+        profiles: [{ name: 'main', configDir: dir }],
+        buildRunnerConfig: (req) => ({ ...req, queryFn: harness.queryFn }),
+      })
+      const { port } = await running.listen(0, '127.0.0.1')
+      const base = `http://127.0.0.1:${port}/v1`
+
+      // Nothing has run: there is nothing to offer, and the form falls back to
+      // a text field rather than an empty picker.
+      const before = (await (await fetch(`${base}/profiles`)).json()) as { profiles: ProfileInfo[] }
+      expect(before.profiles[0]!.models).toBeUndefined()
+
+      await fetch(`${base}/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ cwd: '/tmp/project', profile: 'main' }),
+      })
+
+      await vi.waitFor(async () => {
+        const after = (await (await fetch(`${base}/profiles`)).json()) as { profiles: ProfileInfo[] }
+        const profile = after.profiles[0]!
+        // Named, grouped, and without the CLI's 'default' row — the same shaping
+        // the live `capabilities` event gets.
+        expect(profile.models?.map((m) => m.displayName)).toEqual(['Opus 5', 'Sonnet 5'])
+        expect(profile.defaultModel).toBe('claude-opus-5[1m]')
+      })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('serves a curated config snapshot on GET /profiles/:name', async () => {

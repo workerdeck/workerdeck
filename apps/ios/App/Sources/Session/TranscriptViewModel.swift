@@ -27,6 +27,28 @@ final class TranscriptViewModel {
   /// Bumped on every applied event — a cheap change signal for auto-scroll that
   /// also fires for streaming deltas (which don't change `items.count`).
   private(set) var revision = 0
+  /// When a rate-limit window last arrived. Local receipt time, not the event's
+  /// `ts`: what the usage sheet's freshness line answers is "how stale is what
+  /// I'm looking at", and replayed events would date that to the session's start.
+  private(set) var rateLimitsUpdatedAt: Date?
+  /// What "default" actually resolved to for this session, captured from
+  /// `system_init` — which the CLI sends once, before any `set_model` of ours can
+  /// have moved it. This is the only way to *name* the default: nothing asks the
+  /// CLI "which model would you pick", so the answer is the one it did pick.
+  /// Nil until init, which for a promptless session is until the first message.
+  private(set) var initModel: String?
+  private(set) var defaultPermissionMode: PermissionMode?
+
+  /// What the session's default resolves to. `capabilities` knows it before the
+  /// first turn (the CLI's own `default` row says what it points at); the model
+  /// reported at `system_init` is the same answer arriving later, and is the
+  /// fallback for a server too old to send the first.
+  var defaultModel: String? { state.defaultModel ?? initModel }
+
+  /// The model this session answers as — the one it reported, or, before it has
+  /// reported anything, the default it will use. A running session always has a
+  /// concrete model; this is what makes that true from the first frame.
+  var effectiveModel: String? { state.model ?? defaultModel }
 
   private let client: WorkerClient
   private var handle: SessionHandle?
@@ -66,6 +88,11 @@ final class TranscriptViewModel {
     case .event(let sessionEvent):
       state = applyEvent(state, sessionEvent)
       revision &+= 1
+      if case .rateLimit = sessionEvent.body { rateLimitsUpdatedAt = Date() }
+      if case .systemInit(let info) = sessionEvent.body, initModel == nil {
+        initModel = info.model
+        defaultPermissionMode = info.permissionMode
+      }
     case .connectionChange(let connected):
       connection = connected ? .live : .reconnecting
     case .reconnectAttempt(let attempts):

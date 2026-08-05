@@ -14,7 +14,13 @@ protocol. Read these before changing scope or structure:
 
 - `packages/protocol` — wire types (events/commands/REST). Dependency-free, browser-safe, depends
   on nothing and everything depends on it. Breaking → bump `PROTOCOL_VERSION`.
-- `packages/core` — the engines. `SessionRunner` (Claude, over the SDK's `query()`) and
+- `packages/core` — the engines. The **model list clients see is shaped here**, not by each UI:
+  `modelOptionsFromSdk` (`src/normalize.ts`) drops the CLI's `default` row (a choice, not a
+  model), names each row from its resolved id (`claude-haiku-4-5-20251001` → "Haiku 4.5" — the
+  CLI's own `displayName` is the family alone), marks the newest of each family `primary`, and
+  sorts by family. The CLI reports **only current models**; the older versions Claude Code's own
+  picker lists under "more models" are not in `supportedModels()` or `initializationResult()`.
+  `SessionRunner` (Claude, over the SDK's `query()`) and
   `AiSdkRunner` (provider, over AI SDK v7), both behind `Runner` (`src/runner-interface.ts`),
   which is what server and queue type against. No transport. Tool execution rides the
   `ToolExecutor` seam (`QuickJsExecutor` in-process, `BrowserBridgeExecutor` to a tab,
@@ -28,7 +34,9 @@ protocol. Read these before changing scope or structure:
 - `packages/queue` — `JobQueue` + `QueueAdapter` (in-memory bundled; `claimNext` must stay atomic
   and skip future `nextRunAt`). Concurrency, token budgets, webhooks, retries, watchdog, retention.
   Jobs are one-shot, but a run that parks frees its slot and stops its duration clock.
-- `packages/server` — HTTP + WS gateway (`node:http` + `ws`): session registry, auth hook,
+- `packages/server` — HTTP + WS gateway (`node:http` + `ws`): session registry (which also
+  remembers each profile's model list off the `capabilities` events its sessions emit, so
+  `GET /profiles` can hand a create form a picker without spawning a CLI to ask), auth hook,
   optional `/jobs` + `/queue` routes, profiles (+ `profileStore` CRUD), `GET /sessions/:id/files`,
   the host-filesystem routes (`/fs/*`, `host-files.ts` + `host-file-search.ts` — operator
   privilege; reads follow `allowedCwdRoots` and `hostFiles.roots` only narrows, writes opt in
@@ -87,7 +95,16 @@ protocol. Read these before changing scope or structure:
   package.json). `WorkerDeckKit/` is a hand-written Swift mirror of `packages/protocol` plus a
   client and a port of the react transcript reducer — protocol or transcript changes must be
   mirrored there (`WorkerProtocol.version` tracks `PROTOCOL_VERSION`); see `apps/ios/README.md`.
-  Zero third-party Swift deps; auth is the header transport (no cookie machinery).
+  Zero third-party Swift deps — including for hot reload, where InjectionNext is wired in
+  through its prebuilt bundle and a dozen lines of `HotReload.swift` rather than a package;
+  auth is the header transport (no cookie machinery).
+  **When you change the app, push it to the phone**: `apps/ios/scripts/deploy.sh` (build +
+  install + launch, over Wi-Fi, no cable) — the point is that Tobias can follow along on the real
+  device rather than read about a simulator screenshot. Add `--no-launch` and it works on a
+  locked phone; launching needs it unlocked, and the script says so rather than dumping
+  CoreDevice errors. For a screen that needs a live session to render at all, the `UIPREVIEW`
+  harness renders it from canned data in the simulator. Both are documented in
+  `apps/ios/README.md`.
 
 Dependency direction: `protocol ← core ← queue ← server ← cli`, `protocol ← client ← react ← ui ← web`,
 `sandbox` a leaf either side may use. The browser side (client/react/ui/apps) must never import

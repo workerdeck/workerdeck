@@ -7,8 +7,15 @@ struct CreateSessionView: View {
   @Environment(HostContext.self) private var context
   @Environment(\.dismiss) private var dismiss
 
+  /// The form's modal pickers, one at a time.
+  private enum Sheet: String, Identifiable {
+    case folder, model, mode
+    var id: String { rawValue }
+  }
+
   @State private var model: CreateSessionModel
   @State private var showAdvanced = false
+  @State private var sheet: Sheet?
   private let onCreated: (SessionInfo) -> Void
 
   init(seed: CreateSessionSeed, client: WorkerClient, onCreated: @escaping (SessionInfo) -> Void) {
@@ -28,10 +35,23 @@ struct CreateSessionView: View {
       }
 
       Section {
-        TextField("/Users/you/projects/app", text: $model.cwd)
-          .textInputAutocapitalization(.never)
-          .autocorrectionDisabled()
-          .font(.callout.monospaced())
+        HStack(spacing: 8) {
+          TextField("/Users/you/projects/app", text: $model.cwd)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .font(.callout.monospaced())
+          // Typing an absolute path on a phone is the worst part of this form.
+          // The picker browses the server's roots; the field stays authoritative,
+          // so a path that isn't browsable can still be entered by hand.
+          Button {
+            sheet = .folder
+          } label: {
+            Image(systemName: "folder")
+          }
+          .buttonStyle(.plain)
+          .foregroundStyle(.tint)
+          .accessibilityLabel("Browse folders")
+        }
         if !context.recentCwds.isEmpty {
           RecentCwdChips(paths: context.recentCwds) { model.cwd = $0 }
         }
@@ -50,17 +70,20 @@ struct CreateSessionView: View {
         }
       }
 
+      // Both of these open the same pickers the session screen uses, so a mode
+      // means the same thing (and looks the same) before a session exists as
+      // after one does.
       Section("Permissions") {
-        Picker("Mode", selection: $model.permissionMode) {
-          ForEach(model.availableModes, id: \.self) { mode in
-            Text(mode.label).tag(mode)
-          }
-        }
+        PickerRow(label: "Mode", value: model.permissionMode.label) { sheet = .mode }
       }
 
       Section("Model") {
-        if model.modelOptions.isEmpty {
-          TextField("Server default", text: $model.model)
+        if !model.claudeModels.isEmpty {
+          PickerRow(label: "Model", value: model.modelLabel) { sheet = .model }
+        } else if model.modelOptions.isEmpty {
+          // No list to offer: a claude profile this server has never run, or an
+          // engine that reports none. The id still has to be typeable.
+          TextField("Profile default", text: $model.model)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
         } else {
@@ -123,12 +146,63 @@ struct CreateSessionView: View {
         }
       }
     }
+    .sheet(item: $sheet) { sheet in
+      switch sheet {
+      case .folder:
+        FolderPickerView(client: model.fileClient) { path in
+          model.cwd = path
+        }
+      case .model:
+        ModelPickerSheet(
+          models: model.claudeModels,
+          current: model.model.isEmpty ? nil : model.model,
+          defaultModel: model.defaultModel,
+          onSelect: { model.model = $0 ?? "" })
+      case .mode:
+        ModePickerSheet(
+          modes: model.availableModes,
+          current: model.permissionMode,
+          defaultMode: model.selectedProfile?.defaults?.permissionMode ?? .default,
+          // Creating a session is exactly when bypass *can* be chosen — the CLI
+          // only refuses to switch into it later. A server that forbids it
+          // outright says so when the request lands.
+          canBypass: true,
+          onSelect: { model.permissionMode = $0 })
+      }
+    }
     .task {
       await model.loadProfiles()
       // Arriving from Resume: the advanced section holds the pre-filled ids, so
       // open it rather than hide what the user is about to act on.
       if !model.resume.isEmpty { showAdvanced = true }
     }
+  }
+}
+
+/// A form row that opens a picker sheet: label, current value, chevron. Shaped
+/// like a `Picker` row so the form reads as one thing.
+private struct PickerRow: View {
+  let label: String
+  let value: String
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      HStack {
+        Text(label)
+          .foregroundStyle(.primary)
+        Spacer(minLength: 8)
+        Text(value)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.middle)
+        Image(systemName: "chevron.right")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.tertiary)
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
   }
 }
 

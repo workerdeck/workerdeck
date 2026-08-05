@@ -28,7 +28,7 @@
     "@ai-sdk/mcp": "^2.0.17",
     "@ai-sdk/moonshotai": "^3.0.18",
     "@ai-sdk/openai": "^4.0.21",
-    "@anthropic-ai/claude-agent-sdk": "^0.3.217",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.221",
     "@workerdeck/protocol": "workspace:*",
     "@workerdeck/sandbox": "workspace:*",
     "ai": "^7.0.38"

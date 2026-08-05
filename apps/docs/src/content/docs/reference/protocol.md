@@ -42,11 +42,12 @@ ws.onmessage = ({ data }) => {
 | --- | --- |
 | `system_init` | SDK init handshake: `sdkSessionId`, `model`, `cwd`, `apiKeySource`, tools, skills, slash commands, `permissionMode`, CLI version, MCP servers. |
 | `status_changed` | `SessionStatus` transition (`starting`, `running`, `awaiting_approval`, `idle`, `parked`, `failed`, `closed`) with optional detail. `parked` means the session is waiting on a deferred execution — non-terminal, and the host's cue to snapshot it. |
-| `capabilities` | Models (`ModelOption[]`) and slash commands (`SlashCommandInfo[]`) available to the session, fetched from the CLI after init. |
+| `capabilities` | Models (`ModelOption[]`) and slash commands (`SlashCommandInfo[]`) available to the session, fetched from the CLI after init, plus `defaultModel` — the wire id this session's default resolves to, which is how a client can name the running model before the first turn. The model list is shaped server-side: the CLI's own `default` row is dropped (it is a choice, not a model), each row is named from its resolved id, and `primary` marks the newest of each family so a picker can file the rest under "more models". |
 | `model_changed` | Model switched via `set_model`; `model` undefined = back to default. |
 | `permission_mode_changed` | Mode switched via `set_permission_mode`. |
 | `context_usage` | Context-window snapshot (`ContextUsage`), polled after each turn. |
 | `rate_limit` | Subscription rate-limit window update (`RateLimitInfo`). API-key sessions may never emit one — render nothing, not 0%, and treat an absent `utilization` as unknown. |
+| `plan_info` | Which claude.ai plan those windows belong to (`subscriptionType`: 'pro', 'max', …). Emitted from the same poll as `rate_limit`, once per change, and never for an API-key session. |
 | `assistant_message` / `user_message` | An `ApiMessage` (plain Anthropic content blocks) plus `parentToolUseId`, `replay` (resumed-history backfill), and for user messages `synthetic` (tool results). |
 | `stream_delta` | Raw Anthropic streaming event; emitted only with `includePartialMessages`. |
 | `turn_result` | End of a turn: subtype, `isError`, `durationMs`, `numTurns`, `totalCostUsd` (both session-cumulative), `result` text, per-turn `usage`. |
@@ -73,6 +74,8 @@ bare `SessionCommand`s.
   `settingSources`, `model`, `maxTurns`, `maxBudgetUsd`, `resume`/`forkSession`,
   `includePartialMessages`, `approvalTimeoutMs`, `questionBehavior`, `meta`.
 - `SessionInfo` — server id (≠ `sdkSessionId`), status, cwd, model, permission mode,
+  `canBypassPermissions` (fixed at creation: the CLI refuses to *switch into* bypass unless the
+  process was spawned for it, so a picker can disable the mode rather than offer a refusal),
   `apiKeySource`, `lastSeq`, `pendingPermissionCount`, `title`, cumulative `totalCostUsd` /
   `numTurns`, `lastActivityAt`.
 - `ResolvePermissionRequest` — the REST counterpart of the `permission_decision` command.

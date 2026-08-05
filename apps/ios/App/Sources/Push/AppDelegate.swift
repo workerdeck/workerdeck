@@ -41,15 +41,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
   // off the main actor here and reduces the notification to Sendable facts
   // before hopping — which is all `PushCoordinator` ever wanted anyway.
 
-  /// Show the banner even when the app is foregrounded. The app holds a WebSocket
-  /// only for the session on screen, so a permission request raised by a
-  /// *different* session is exactly as invisible in the foreground as it is in
-  /// the background.
+  /// Show the banner in the foreground too — except for the session already on
+  /// screen, whose news is arriving over the socket. `PushCoordinator` owns that
+  /// judgement; this only reduces the notification to something Sendable first.
   nonisolated func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     willPresent notification: UNNotification
   ) async -> UNNotificationPresentationOptions {
-    [.banner, .sound, .list]
+    let payload = PushPayload(userInfo: notification.request.content.userInfo)
+    return await MainActor.run { self.push.presentationOptions(for: payload) }
   }
 
   nonisolated func userNotificationCenter(

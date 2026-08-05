@@ -38,9 +38,13 @@ extension SessionStatus {
 }
 
 extension PermissionMode {
+  /// The names Claude Code itself uses. Notably `default` is **"Manual"** — the
+  /// wire value is `default`, but calling it that in the UI conflates a real mode
+  /// (ask me every time) with "whatever the server picked", which is the one
+  /// confusion the status bar exists to avoid.
   var label: String {
     switch self {
-    case .default: return "Default"
+    case .default: return "Manual"
     case .acceptEdits: return "Accept edits"
     case .bypassPermissions: return "Bypass permissions"
     case .plan: return "Plan"
@@ -53,12 +57,54 @@ extension PermissionMode {
   /// other things and "Bypass permissions" would eat half of it.
   var shortLabel: String {
     switch self {
-    case .default: return "Default"
+    case .default: return "Manual"
     case .acceptEdits: return "Edits"
     case .bypassPermissions: return "Bypass"
     case .plan: return "Plan"
     case .dontAsk: return "Don't ask"
     case .auto: return "Auto"
+    }
+  }
+
+  /// What the mode actually does, for the picker — the same one-liners the CLI's
+  /// own mode selector shows.
+  var summary: String {
+    switch self {
+    case .default: return "Always ask before making changes"
+    case .acceptEdits: return "Automatically accept all file edits"
+    case .bypassPermissions: return "Skip every approval — the agent is unsupervised"
+    case .plan: return "Create a plan before making changes"
+    // The CLI's own definition, and the opposite of bypass: it never prompts,
+    // and anything not already permitted is denied rather than allowed.
+    case .dontAsk: return "Never ask — deny anything not pre-approved"
+    case .auto: return "Claude handles permission decisions"
+    }
+  }
+
+  /// Picker icon. Matched to the CLI's selector where it has one, so the two
+  /// surfaces are recognisably the same list.
+  var symbol: String {
+    switch self {
+    case .default: return "hand.raised.fill"
+    case .acceptEdits: return "chevron.left.forwardslash.chevron.right"
+    case .bypassPermissions: return "exclamationmark.triangle.fill"
+    case .plan: return "list.bullet.rectangle.portrait.fill"
+    case .dontAsk: return "checkmark.shield.fill"
+    case .auto: return "bolt.fill"
+    }
+  }
+
+  /// Icon colour in the picker. Distinct from `tint`, which is the chip's
+  /// severity ramp — here it is identity, so `default` gets a colour rather than
+  /// the chip's deliberately-quiet grey.
+  var symbolTint: Color {
+    switch self {
+    case .default: return .primary
+    case .acceptEdits: return .indigo
+    case .plan: return .blue
+    case .auto: return .orange
+    case .dontAsk: return .orange
+    case .bypassPermissions: return .red
     }
   }
 

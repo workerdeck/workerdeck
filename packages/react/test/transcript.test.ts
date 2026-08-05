@@ -367,6 +367,28 @@ describe('transcript reducer', () => {
     expect(Object.keys(state.rateLimits ?? {})).toHaveLength(2)
   })
 
+  it('learns the default model from capabilities, before any system_init', () => {
+    const state = run(initialTranscriptState, [
+      {
+        type: 'capabilities',
+        models: [{ value: 'opus[1m]', displayName: 'Opus 5' }],
+        commands: [],
+        defaultModel: 'claude-opus-5[1m]',
+      },
+    ])
+    expect(state.defaultModel).toBe('claude-opus-5[1m]')
+    // A promptless session has no model of its own yet; this is what a status
+    // bar shows in the meantime.
+    expect(state.model).toBeUndefined()
+  })
+
+  it('records the plan the rate-limit windows belong to', () => {
+    const state = run(initialTranscriptState, [{ type: 'plan_info', subscriptionType: 'max' }])
+    expect(state.subscriptionType).toBe('max')
+    // Absent until it arrives — an API-key session never sends one.
+    expect(initialTranscriptState.subscriptionType).toBeUndefined()
+  })
+
   it('seeds from the attach snapshot without overriding event-derived state', () => {
     seq = 0
     const info: SessionInfo = {
