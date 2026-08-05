@@ -81,8 +81,8 @@ struct CreateSessionView: View {
         if !model.claudeModels.isEmpty {
           PickerRow(label: "Model", value: model.modelLabel) { sheet = .model }
         } else if model.modelOptions.isEmpty {
-          // No list to offer: a claude profile this server has never run, or an
-          // engine that reports none. The id still has to be typeable.
+          // No list to offer: an engine that ships no catalog and a profile
+          // that declares no ids. The id still has to be typeable.
           TextField("Profile default", text: $model.model)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
@@ -91,6 +91,16 @@ struct CreateSessionView: View {
             Text("Profile default").tag("")
             ForEach(model.modelOptions, id: \.self) { option in
               Text(option).tag(option)
+            }
+          }
+        }
+        // Present exactly when the record (or the chosen catalog row) offers
+        // efforts — never a control that silently does nothing.
+        if !model.effortOptions.isEmpty {
+          Picker("Effort", selection: $model.reasoningEffort) {
+            Text("Default").tag("")
+            ForEach(model.effortOptions, id: \.self) { effort in
+              Text(effort).tag(effort)
             }
           }
         }
@@ -107,26 +117,36 @@ struct CreateSessionView: View {
 
       Section {
         DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
-          Toggle("User settings", isOn: $model.useUserSettings)
-          Toggle("Project settings", isOn: $model.useProjectSettings)
-          Toggle("Local settings", isOn: $model.useLocalSettings)
+          // Sections the capability record forswears are hidden, not disabled:
+          // an affordance the engine has no meaning for is not a choice.
+          if model.capabilities.settingSources {
+            Toggle("User settings", isOn: $model.useUserSettings)
+            Toggle("Project settings", isOn: $model.useProjectSettings)
+            Toggle("Local settings", isOn: $model.useLocalSettings)
+          }
           Toggle("Stream partial messages", isOn: $model.includePartialMessages)
-          LabeledContent("Max turns") {
-            TextField("unlimited", text: $model.maxTurns)
-              .keyboardType(.numberPad)
-              .multilineTextAlignment(.trailing)
+          if model.capabilities.budgets {
+            LabeledContent("Max turns") {
+              TextField("unlimited", text: $model.maxTurns)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.trailing)
+            }
+            LabeledContent("Max budget (USD)") {
+              TextField("unlimited", text: $model.maxBudgetUsd)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+            }
           }
-          LabeledContent("Max budget (USD)") {
-            TextField("unlimited", text: $model.maxBudgetUsd)
-              .keyboardType(.decimalPad)
-              .multilineTextAlignment(.trailing)
+          if model.capabilities.resume {
+            TextField("Resume session id", text: $model.resume)
+              .textInputAutocapitalization(.never)
+              .autocorrectionDisabled()
+              .font(.caption.monospaced())
+            if model.engine == .claude {
+              Toggle("Fork instead of continue", isOn: $model.forkSession)
+                .disabled(model.resume.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
           }
-          TextField("Resume SDK session id", text: $model.resume)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .font(.caption.monospaced())
-          Toggle("Fork instead of continue", isOn: $model.forkSession)
-            .disabled(model.resume.trimmingCharacters(in: .whitespaces).isEmpty)
         }
       }
     }
@@ -241,9 +261,17 @@ private struct ProfileLabel: View {
   var body: some View {
     HStack(spacing: 6) {
       Text(profile.name)
+        .foregroundStyle(profile.isUnavailable ? .secondary : .primary)
       Text(profile.resolvedEngine.rawValue)
         .font(.caption2)
         .foregroundStyle(.secondary)
+      // Greyed, never hidden: availability is display-only and the probe can
+      // be stale — the row stays selectable.
+      if profile.isUnavailable {
+        Text("unavailable")
+          .font(.caption2)
+          .foregroundStyle(.orange)
+      }
     }
   }
 }

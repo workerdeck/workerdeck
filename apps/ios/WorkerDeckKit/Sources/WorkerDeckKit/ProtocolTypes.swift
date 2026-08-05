@@ -13,7 +13,7 @@ import Foundation
 /// Never decode with a global key-conversion strategy.
 public enum WorkerProtocol {
   /// Mirror of PROTOCOL_VERSION. Compare against `AttachedFrame.protocolVersion`.
-  public static let version = 5
+  public static let version = 6
 }
 
 // MARK: - Session lifecycle
@@ -304,6 +304,9 @@ public struct ModelOption: Codable, Sendable, Equatable, Identifiable {
   /// client splits the list identically; absent (an older server) reads as
   /// primary, which shows everything rather than hiding it.
   public let primary: Bool?
+  /// Reasoning efforts this model supports at create time (codex catalogs carry
+  /// them). Absent = the engine's default set applies. Open strings.
+  public let reasoningEfforts: [String]?
 
   public var id: String { value }
 
@@ -320,13 +323,14 @@ public struct ModelOption: Codable, Sendable, Equatable, Identifiable {
 
   public init(
     value: String, resolvedModel: String? = nil, displayName: String, description: String? = nil,
-    primary: Bool? = nil
+    primary: Bool? = nil, reasoningEfforts: [String]? = nil
   ) {
     self.value = value
     self.resolvedModel = resolvedModel
     self.displayName = displayName
     self.description = description
     self.primary = primary
+    self.reasoningEfforts = reasoningEfforts
   }
 
   /// Whether this row is the one naming `model`.

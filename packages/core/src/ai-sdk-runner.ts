@@ -7,16 +7,17 @@ import {
   type ModelMessage,
   type ToolSet,
 } from 'ai'
-import type {
-  ContentBlock,
-  CreateSessionRequest,
-  PermissionMode,
-  PermissionRequest,
-  SessionEvent,
-  SessionEventBody,
-  SessionInfo,
-  SessionStatus,
-  ToolExecutionBackend,
+import {
+  ENGINE_CAPABILITIES,
+  type ContentBlock,
+  type CreateSessionRequest,
+  type PermissionMode,
+  type PermissionRequest,
+  type SessionEvent,
+  type SessionEventBody,
+  type SessionInfo,
+  type SessionStatus,
+  type ToolExecutionBackend,
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import { type AttachmentInput, attachmentRef, normalizeMediaType } from './attachments.ts'
@@ -247,6 +248,7 @@ export class AiSdkRunner implements Runner {
       cwd: this.#config.cwd ?? process.cwd(),
       profile: this.#config.profile,
       engine: 'provider',
+      capabilities: ENGINE_CAPABILITIES.provider,
       model: this.#modelId(),
       permissionMode: this.#permissionMode,
       createdAt: this.createdAt,

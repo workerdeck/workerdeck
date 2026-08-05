@@ -9,6 +9,7 @@ Things `pnpm test` deliberately cannot check. Run these by hand.
 | Full SDK-client stack | `<KEY>=... pnpm smoke:sdk [provider] [model]` | **Yes — real tokens** |
 | Live MCP | `pnpm smoke:mcp --probe` / `<KEY>=... pnpm smoke:mcp [provider] [model]` | Probe: no. Full: **yes** |
 | Message attachments | `pnpm smoke:media [image\|pdf\|text]` | **Yes — real tokens** |
+| Codex engine | `pnpm smoke:codex --canary` / `pnpm smoke:codex [model]` | Canary: no. Full: **yes — plan/API usage** |
 
 ## `smoke:sandbox` — the untrusted-code boundary
 
@@ -103,3 +104,30 @@ The three fixtures are generated, not committed: a PNG built chunk by chunk (so 
 no binaries) and a one-page PDF with computed xref offsets — a hand-guessed xref is the usual
 reason a minimal PDF is rejected. Hard failures: an answer that doesn't name the colour, the two
 words on the PDF page, or the passphrase in the text file. Verified against `claude-opus-5`.
+
+## `smoke:codex` — the Codex engine against the real binary
+
+The codex unit tests drive a scripted exec, so they cannot validate the real
+`--experimental-json` vocabulary (a pre-1.0 SDK whose flag name promises drift), the spawn
+options, or the auth chain. This is the drift alarm: **any change to `CodexRunner`'s spawn
+options or event mapping requires a run** — it is to Codex what the permission smoke is to
+Claude.
+
+```bash
+pnpm smoke:codex --canary       # FREE (network only): the auth-drift canaries
+pnpm smoke:codex                # full run — needs codex auth, costs plan/API usage
+pnpm smoke:codex gpt-5.6-sol    # full run on a specific model (default gpt-5.6-luna)
+```
+
+The free canaries pin the verified auth matrix with fake keys against a scratch `CODEX_HOME`:
+`OPENAI_API_KEY` alone is still ignored by `codex exec` ("Missing bearer" — the day this flips to
+`invalid_api_key`, the availability probe's OPENAI_API_KEY hint is stale), `CODEX_API_KEY` still
+reaches exec as a bearer, and `codex login status` still exit-codes its verdict.
+
+The paid part needs one of the two supported auth routes — `codex login` **run in your own
+terminal**, or `CODEX_API_KEY` in the environment / repo `.env` — and covers: a real command
+execution mapped to `CodexCommand` with its output and exit code, the §9.5 usage-relation asserts
+on a cache-heavy resume turn, resume continuity across spawns, interrupt killing cleanly *and*
+the thread staying resumable after, `default` mode's read-only sandbox actually refusing a write,
+and an image attachment answered correctly. Before a first release, run it once under **each**
+auth route.

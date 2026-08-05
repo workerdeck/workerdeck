@@ -1,6 +1,6 @@
 {
   "name": "workerdeck",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "type": "module",
   "description": "Turnkey WorkerDeck instance: `npx workerdeck` runs the session gateway and the full dashboard on one port. The @workerdeck/* packages are the libraries you embed; this is the service you run.",
   "license": "MIT",
@@ -28,6 +28,7 @@
     "dev": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register src/cli.ts"
   },
   "dependencies": {
+    "@openai/codex-sdk": "~0.146.0",
     "@workerdeck/server": "workspace:*",
     "@workerdeck/web": "workspace:*"
   },

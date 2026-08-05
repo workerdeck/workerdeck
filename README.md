@@ -54,8 +54,11 @@ quickstart, embedding, permissions, profiles, job queue, protocol reference.
 - **Attach, replay, resume.** One ordered stream of seq-numbered events. Clients reconnect and
   replay from their last seen seq; closed sessions resume from the SDK's on-disk store with the
   prior transcript backfilled.
-- **Two engines on one protocol.** Claude Code, or any provider the [AI SDK](https://ai-sdk.dev)
-  supports — same client, same panel, same queue.
+- **Three engines on one protocol.** Claude Code, **OpenAI Codex** (the codex CLI, driven the
+  same way the Agent SDK drives Claude Code), or any provider the [AI SDK](https://ai-sdk.dev)
+  supports through a host hook — same client, same panel, same queue. Clients render from each
+  engine's **capability record**, so an affordance an engine lacks is hidden, never a control
+  that silently does nothing.
 - **Unattended runs.** A job queue with bounded concurrency, token budgets, retries, a wall-clock
   watchdog, and webhooks.
 - **Work that outlives the turn.** A session can park on something nothing here is doing — a batch
@@ -98,16 +101,19 @@ There's a rung for every level of control: the styled `SessionPanel`, the headle
 `SessionRunner` from `@workerdeck/core` in-process with no server at all. See the
 [embedding guide](https://workerdeck.github.io/workerdeck/docs/guides/embedding/).
 
-## Two engines: Claude Code, and any provider
+## Three engines: Claude Code, Codex, and any provider
 
 A **profile** is what a session runs as — and it picks the engine. The default is Claude Code via
-the Agent SDK. `engine: 'provider'` runs the model-agnostic engine instead: no CLI process, no
-config directory, any AI SDK provider.
+the Agent SDK. `engine: 'codex'` runs OpenAI Codex the same way — `@openai/codex-sdk` driving the
+local codex binary, which resolves its own auth (`codex login` in your terminal, or
+`CODEX_API_KEY`) exactly as the Claude CLI resolves its own. `engine: 'provider'` runs the
+model-agnostic engine through a host hook: no CLI process, any AI SDK provider.
 
 ```ts
 createWorkerServer({
   profiles: [
     { name: 'ada', configDir: '/home/ada/.claude' },                 // Claude Code
+    { name: 'codex', engine: 'codex' },                              // OpenAI Codex (~/.codex)
     {
       name: 'kimi',
       engine: 'provider',
@@ -116,11 +122,20 @@ createWorkerServer({
       session: { capabilities: ['web_fetch', 'deliver_file'], mcpServers: ['deepwiki'] },
     },
   ],
-  // The one place a model SDK and its credentials are resolved — the server package imports
-  // neither. May be async, e.g. for a per-session MCP connect.
+  // Provider profiles only — the one place a model SDK and its credentials are resolved
+  // (claude and codex ship as in-repo adapters and need no hook). May be async.
   createEngineRunner: ({ config, profile, bridge }) => createEngineSession({ /* … */ }),
 })
 ```
+
+Every profile answers `GET /profiles` with its engine's **capability record** (approvals, modes,
+resume, telemetry, attachments, reasoning efforts…), a **model catalog** shipped with the release
+— a real picker from the first request, no warm-up session — and whether its credentials
+currently **probe as usable** (`available`, with an actionable reason when not; display-only, so
+a stale probe can never block a create). Codex has no ask-channel in exec mode, so its record
+declares `interactiveApprovals: false` and every client hides the approval UI instead of
+rendering one that never fires; its permission modes map onto the codex sandbox (`default` →
+read-only, `acceptEdits` → workspace-write, `bypassPermissions` → full access).
 
 The provider engine trades ambient authority for a sandbox:
 
@@ -135,9 +150,9 @@ The provider engine trades ambient authority for a sandbox:
   `dontAsk`; asking for `acceptEdits`/`plan`/`auto` is a 400 rather than a silent coercion. The
   model list is whatever the operator declared, and CLI-only affordances (resumable SDK sessions,
   context/rate-limit telemetry, setting sources) simply don't exist — the dashboard hides them,
-  keying off `SessionInfo.engine`.
+  keying off the capability record on `ProfileInfo`/`SessionInfo`.
 
-Both engines implement one `Runner` interface and speak the same protocol, so client, React layer,
+All engines implement one `Runner` interface and speak the same protocol, so client, React layer,
 panel and queue are unchanged either way. Profiles also scope *who may run as what*:
 `allowedProfiles` on the authenticate principal, because each person under their own profile is
 each person using their own account. See
@@ -235,7 +250,7 @@ run. Each package has its own README.
 | --- | --- |
 | [`workerdeck`](packages/cli) | The turnkey instance: gateway + dashboard on one port, shared-secret auth, durable parking, restart guard. |
 | [`@workerdeck/protocol`](packages/protocol) | The wire protocol — events, commands, REST shapes. Dependency-free, browser-safe. **The product boundary**, versioned from day one. |
-| [`@workerdeck/core`](packages/core) | The engines. `SessionRunner` (Agent SDK) and `AiSdkRunner` (any provider) behind one `Runner` interface, with tool execution on a swappable `ToolExecutor` seam and `park()`/`restore`. No transport. |
+| [`@workerdeck/core`](packages/core) | The engines, as adapters: `SessionRunner` (Agent SDK), `CodexRunner` (`@openai/codex-sdk`, an optional peer) and `AiSdkRunner` (any provider) behind one `Runner` interface — each with a capability record, a shipped model catalog and a credential probe — plus tool execution on a swappable `ToolExecutor` seam and `park()`/`restore`. No transport. |
 | [`@workerdeck/sandbox`](packages/sandbox) | The untrusted-code boundary: QuickJS-NG WASM guest, in-memory scratch VFS, by-value host bridge, interpreter-enforced memory and time limits. Runs server-side or in a tab. |
 | [`@workerdeck/queue`](packages/queue) | The job queue: concurrency, token budgets, retries, watchdog, retention, webhooks. Pluggable `QueueAdapter` (in-memory bundled). |
 | [`@workerdeck/server`](packages/server) | The gateway: HTTP + WebSocket, session registry, auth hook, profiles, job routes, session notifications, browser tool bridge, parked-session storage, opt-in host-file routes. |

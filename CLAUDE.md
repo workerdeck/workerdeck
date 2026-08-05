@@ -14,15 +14,21 @@ protocol. Read these before changing scope or structure:
 
 - `packages/protocol` — wire types (events/commands/REST). Dependency-free, browser-safe, depends
   on nothing and everything depends on it. Breaking → bump `PROTOCOL_VERSION`.
-- `packages/core` — the engines. The **model list clients see is shaped here**, not by each UI:
-  `modelOptionsFromSdk` (`src/normalize.ts`) drops the CLI's `default` row (a choice, not a
-  model), names each row from its resolved id (`claude-haiku-4-5-20251001` → "Haiku 4.5" — the
-  CLI's own `displayName` is the family alone), marks the newest of each family `primary`, and
-  sorts by family. The CLI reports **only current models**; the older versions Claude Code's own
-  picker lists under "more models" are not in `supportedModels()` or `initializationResult()`.
-  `SessionRunner` (Claude, over the SDK's `query()`) and
-  `AiSdkRunner` (provider, over AI SDK v7), both behind `Runner` (`src/runner-interface.ts`),
-  which is what server and queue type against. No transport. Tool execution rides the
+- `packages/core` — the engines, shipped as **adapters** (`src/engines/`): one `EngineAdapter`
+  per engine (capability record pinned by identity to protocol's `ENGINE_CAPABILITIES`, a model
+  catalog versioned with the release, a credential-availability probe, a runner factory), looked
+  up via `getEngineAdapter`. Three runners behind `Runner` (`src/runner-interface.ts`), which is
+  what server and queue type against: `SessionRunner` (Claude, over the SDK's `query()`),
+  `CodexRunner` (`engines/codex/` — `@openai/codex-sdk` as an **optional peer**, one
+  `codex exec --experimental-json` spawn per turn, JSONL folded into protocol events, complete
+  child env always — codex *replaces* env, never merges), and `AiSdkRunner` (provider, over AI
+  SDK v7, built by the host's `createEngineRunner` hook — its adapter is a pseudo-adapter). The
+  **model list clients see is shaped here**, not by each UI: catalogs apply
+  `modelOptionsFromSdk`'s rules (`src/normalize.ts`) at authoring time — no `default` sentinel
+  row, names derived from resolved ids (`claude-haiku-4-5-20251001` → "Haiku 4.5"), newest of
+  each family `primary` — and the live `capabilities` event still exists for the in-session
+  model switcher and slash commands (both truths are load-bearing, see `docs/GOTCHAS.md`).
+  No transport. Tool execution rides the
   `ToolExecutor` seam (`QuickJsExecutor` in-process, `BrowserBridgeExecutor` to a tab,
   `DeferredExecutor` for work outliving the runner); `createToolContext` builds the
   capability-scoped tool set with the `sandboxed`/`authoritative` trust split; `park()` →
@@ -34,9 +40,11 @@ protocol. Read these before changing scope or structure:
 - `packages/queue` — `JobQueue` + `QueueAdapter` (in-memory bundled; `claimNext` must stay atomic
   and skip future `nextRunAt`). Concurrency, token budgets, webhooks, retries, watchdog, retention.
   Jobs are one-shot, but a run that parks frees its slot and stops its duration clock.
-- `packages/server` — HTTP + WS gateway (`node:http` + `ws`): session registry (which also
-  remembers each profile's model list off the `capabilities` events its sessions emit, so
-  `GET /profiles` can hand a create form a picker without spawning a CLI to ask), auth hook,
+- `packages/server` — HTTP + WS gateway (`node:http` + `ws`): session registry, auth hook,
+  profiles served with their engine's **capability record, static model catalog, and
+  availability verdict** from the first request (`forResponse`; probes are adapter-run, gated on
+  `checkCredentials`, ~60s TTL, display-only — only the *default* model is still learned from
+  sessions, because it is the operator's CLI config),
   optional `/jobs` + `/queue` routes, profiles (+ `profileStore` CRUD), `GET /sessions/:id/files`,
   message attachments (`attachments.ts` — bytes held per session so the event log carries only
   `MessageAttachment` refs; **never** inline base64 into an event) and `/sessions/:id/mcp`
@@ -45,15 +53,21 @@ protocol. Read these before changing scope or structure:
   privilege; reads follow `allowedCwdRoots` and `hostFiles.roots` only narrows, writes opt in
   separately; realpath-based containment and uniform-404 disclosure, so **do not** reuse
   `cwdAllowed` there — see `docs/GOTCHAS.md` §Host filesystem),
+  capability-record request gating (`checkEngineGrants` 400s what the engine's record forswears;
+  `stripInertFields` drops `questionBehavior` where no approval channel exists),
   `SessionNotifier` (`notifications.ts`) — server-wide session webhooks for the four
   human-attention moments, subscribed through `SessionRegistry`'s `onRegister` so a rebuilt
   parked session is covered too; transport-agnostic on purpose (no push credentials here),
   `SessionParkManager` (`parking.ts`) owning deferred execution over the `SessionStore` seam
   (`session-store.ts`: memory + JSON-file, the file one durable across restarts). Imports no model
-  SDK — a provider profile is built by the host's `createEngineRunner` hook. A Claude profile pins
+  SDK — a provider profile is built by the host's `createEngineRunner` hook; claude and codex
+  profiles go through core's adapters. A Claude profile pins
   `CLAUDE_CONFIG_DIR` *except* when that would be a no-op — setting it at all moves the CLI off the
-  macOS Keychain, so pinning the default dir breaks a working login (`docs/GOTCHAS.md`);
-  `checkCredentials` probes each profile at launch and warns.
+  macOS Keychain, so pinning the default dir breaks a working login (`docs/GOTCHAS.md`). A codex
+  profile's `codexHome` pin has no such trap (the auth store is chosen by config *inside* the
+  home) and is applied by the runner, not `buildRunnerConfig`, because codex replaces the child
+  env wholesale. `checkCredentials` probes each profile at launch and on a ~60s TTL, and the
+  verdicts serve `GET /profiles` as `available`/`unavailableReason` — display-only by design.
 - `packages/client` — REST + WS client on platform `fetch`/`WebSocket`; zero runtime deps. Owns
   the WS frame surface, so new frames need `SessionHandle` methods/events here.
 - `packages/react` — headless: `useClaudeSession`, the pure transcript reducer
@@ -127,12 +141,15 @@ before touching versioning or the publish workflow.
 
 ## Testing
 
-`pnpm test` — core: fake `queryFn` harness (no CLI spawn); server: real HTTP+WS integration incl.
-job routes + webhook receiver; queue: fake runner; react: reducer + bridge e2e. Real-SDK smokes
-cost tokens and never run in `pnpm test`, but permission-path or CLI-control-request changes need
-one — the fake harness can't validate those payloads. Model-agnostic smokes live in `smoke/`:
-`smoke:sandbox` is free, `smoke:live`, `smoke:sdk` and `smoke:media` (the only check that the CLI
-accepts image/PDF/text attachment blocks at all) are not.
+`pnpm test` — core: fake `queryFn` harness (no CLI spawn) + scripted-exec `codexFn` harness for
+`CodexRunner`; server: real HTTP+WS integration incl. job routes + webhook receiver (codex via
+the test-only `engines` adapter override); queue: fake runner; react: reducer + bridge e2e.
+Real-SDK smokes cost tokens and never run in `pnpm test`, but permission-path or
+CLI-control-request changes need one — the fake harness can't validate those payloads — and **a
+new engine's process-spawn contract can't either**: any change to `CodexRunner`'s spawn options
+or event mapping needs `pnpm smoke:codex`. Smokes live in `smoke/`: `smoke:sandbox` and
+`smoke:codex --canary` are free; `smoke:live`, `smoke:sdk`, `smoke:media` (the only check that
+the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:codex` are not.
 
 ## Wrapup Config
 
@@ -140,8 +157,9 @@ accepts image/PDF/text attachment blocks at all) are not.
 - test: `pnpm test`
 - push: yes — branch `master`, repo is public, and every push deploys the docs site.
 - version_bump: yes — `pnpm version:set <x.y.z> && pnpm install --lockfile-only` (the 10 packages
-  only; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.8.0 on master,
-  0.7.0 is the latest published — tag `v0.8.0` to release it.
+  only; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.9.0 on master
+  (protocol 6 + the codex engine; it absorbed the never-published 0.8.0), 0.7.0 is the latest
+  published — tag `v0.9.0` to release it.
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
@@ -154,10 +172,17 @@ accepts image/PDF/text attachment blocks at all) are not.
 
 ## Auth red lines (non-negotiable)
 
-WorkerDeck implements NO Anthropic auth: credentials are resolved by the official SDK/CLI from
-the operator's environment. Never add — and reject any PR that adds — claude.ai OAuth flows or
-login UI, subscription-token extraction/storage/forwarding, Claude Code client-identity spoofing,
-or multi-account pooling / rate-limit circumvention. Policy enforcement lives in configuration
-(`requireApiKey`, the one-time 'oauth' notice, `apiKeySource` on SessionInfo/system_init), never
-in tampering with the credential chain. Compliance/legal review is in progress — keep the README
-"Auth & Anthropic's terms" section's status honest as things settle.
+WorkerDeck implements NO model-provider auth: credentials are resolved by the official SDK/CLI
+from the operator's environment. Never add — and reject any PR that adds — claude.ai OAuth flows
+or login UI, subscription-token extraction/storage/forwarding, Claude Code client-identity
+spoofing, or multi-account pooling / rate-limit circumvention. Policy enforcement lives in
+configuration (`requireApiKey`, the one-time 'oauth' notice, `apiKeySource` on
+SessionInfo/system_init), never in tampering with the credential chain. **The same principle
+binds the Codex engine**: `codex login` is the operator's job in their own terminal; WorkerDeck
+never invokes it, never reads `auth.json`, never wires `CodexOptions.apiKey` (the env route is
+`CODEX_API_KEY` in the operator's session env, passed through whole — presence checked for
+availability, value never read, logged, or forwarded), and the probe surfaces exit codes and
+fixed reason strings only, never `codex login status` output (it contains a masked key
+fragment). Compliance/legal review is in progress — keep the README "Auth & Anthropic's terms"
+section's status honest as things settle; whether OpenAI's terms restrict headless
+ChatGPT-subscription codex use the same way is unresolved and mirrors the same posture.

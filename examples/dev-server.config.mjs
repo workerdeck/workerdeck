@@ -35,21 +35,36 @@
 /** @type {import('workerdeck').WorkerDeckConfig} */
 export default {
   /**
-   * No `profiles` key on purpose: the server auto-detects a 'default' profile
-   * from `~/.claude`, exactly like plain `npx workerdeck`, and sessions run
-   * with whatever credentials the `claude` in your own terminal uses. That works
-   * because the default dir is never pinned as `CLAUDE_CONFIG_DIR` — setting the
+   * A claude profile from your own `~/.claude` (exactly what auto-detection
+   * would create), plus a codex profile — engine adapters ship in the box, so
+   * declaring one is all it takes. Codex auth is the binary's own: run
+   * `codex login` in YOUR terminal (or export CODEX_API_KEY) and the profile
+   * goes green; until then it lists as unavailable with the remedy, and
+   * creating a session against it simply fails with codex's own error.
+   *
+   * The claude default dir is never pinned as `CLAUDE_CONFIG_DIR` — setting the
    * variable at all would move the CLI's credential source to
-   * `<dir>/.credentials.json` and, on macOS, away from the login Keychain.
+   * `<dir>/.credentials.json` and, on macOS, away from the login Keychain. A
+   * profile pointing anywhere else IS pinned, and needs its own credentials in
+   * that directory (`CLAUDE_CONFIG_DIR=<dir> claude auth login`). The codex
+   * analogue is `codexHome` (unset = the binary's own `~/.codex`), which has no
+   * Keychain trap.
    *
-   * A profile pointing anywhere else IS pinned, and needs its own credentials in
-   * that directory (`CLAUDE_CONFIG_DIR=<dir> claude auth login`):
-   *
-   *   profiles: [{ name: 'work', configDir: '/Users/toby/work/.claude' }]
-   *
-   * Startup probes each profile with `claude auth status` and warns if one looks
-   * logged out; `checkCredentials: false` turns that off.
+   * Startup probes every profile's credentials and warns if one looks logged
+   * out; `checkCredentials: false` turns that off.
    */
+  profiles: [
+    {
+      name: 'claude',
+      configDir: `${process.env.HOME}/.claude`,
+      description: 'Claude Code via the Agent SDK (your own config dir)',
+    },
+    {
+      name: 'codex',
+      engine: 'codex',
+      description: 'OpenAI Codex via the codex CLI (your own ~/.codex)',
+    },
+  ],
 
   /**
    * The queue is on in dev so `/jobs` and the dashboard's Jobs view are live. The

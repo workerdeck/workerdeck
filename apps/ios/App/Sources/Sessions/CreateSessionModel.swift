@@ -24,6 +24,8 @@ final class CreateSessionModel {
   var maxBudgetUsd: String = ""
   var resume: String
   var forkSession = false
+  /// '' = the engine's default. Only sent when the capability record offers it.
+  var reasoningEffort: String = ""
 
   private(set) var profiles: [ProfileInfo] = []
   /// Set when `/profiles` 404s — a server predating profiles, not an error.
@@ -57,24 +59,40 @@ final class CreateSessionModel {
     selectedProfile?.resolvedEngine ?? .claude
   }
 
-  /// Only the modes this engine understands — the provider engine implements a
-  /// subset, and offering the rest would just produce a server-side rejection.
-  var availableModes: [PermissionMode] {
-    PermissionMode.allCases.filter { supportsPermissionMode(engine: engine, mode: $0) }
+  /// The capability record the form renders around — the server-stamped copy
+  /// when present, else the engine's static default. Never branch on the
+  /// engine name for an affordance this record answers.
+  var capabilities: EngineCapabilities {
+    selectedProfile?.resolvedCapabilities ?? engine.defaultCapabilities
   }
+
+  /// Only the modes this engine understands, in the record's order — offering
+  /// the rest would just produce a server-side rejection.
+  var availableModes: [PermissionMode] { capabilities.permissionModes }
 
   /// Model ids the chosen profile advertises. Empty → free-text field.
   var modelOptions: [String] {
     selectedProfile?.provider?.models ?? []
   }
 
-  /// Named models for a *claude* profile, which the server remembers from the
-  /// last session that ran on it. Empty on a server that has run none, and the
-  /// form falls back to a text field — the ids here all come from the CLI, so
-  /// there is nothing to offer until it has said them once.
+  /// The engine's model catalog, served with the profile from the server's
+  /// first response (claude and codex ship one with each release; provider
+  /// profiles list ids in `provider.models` instead).
   var claudeModels: [ModelOption] {
-    guard selectedProfile?.resolvedEngine != .provider else { return [] }
-    return selectedProfile?.models ?? []
+    selectedProfile?.models ?? []
+  }
+
+  /// Reasoning efforts offerable right now: the chosen catalog row's list when
+  /// it declares one, else the record's engine-wide set. Empty hides the
+  /// control — never a picker that does nothing.
+  var effortOptions: [String] {
+    let trimmed = model.trimmingCharacters(in: .whitespaces)
+    if !trimmed.isEmpty, let row = claudeModels.first(where: { $0.matches(trimmed) }),
+      let efforts = row.reasoningEfforts
+    {
+      return efforts
+    }
+    return capabilities.reasoningEfforts ?? []
   }
 
   /// What the profile's default resolves to, for the picker's DEFAULT tag.
@@ -112,20 +130,25 @@ final class CreateSessionModel {
     }
   }
 
-  /// Adopt the profile's declared defaults, and snap the permission mode back into
-  /// range if the new engine doesn't support the current one.
+  /// Adopt the profile's declared defaults, and snap out-of-range choices back
+  /// to the capability record's coercion targets — a sticky mode or effort from
+  /// another engine must not survive into a request this one would 400.
   func applyProfileDefaults() {
     guard let profile = selectedProfile else { return }
+    let capabilities = profile.resolvedCapabilities
     if let defaultModel = profile.defaults?.model, model.isEmpty { model = defaultModel }
     if let defaultMode = profile.defaults?.permissionMode,
-      supportsPermissionMode(engine: profile.resolvedEngine, mode: defaultMode)
+      capabilities.permissionModes.contains(defaultMode)
     {
       permissionMode = defaultMode
-    } else if !supportsPermissionMode(engine: profile.resolvedEngine, mode: permissionMode) {
-      permissionMode = .default
+    } else if !capabilities.permissionModes.contains(permissionMode) {
+      permissionMode = capabilities.defaultPermissionMode
     }
     if !modelOptions.isEmpty, !modelOptions.contains(model) {
       model = profile.provider?.model ?? modelOptions[0]
+    }
+    if !reasoningEffort.isEmpty, !effortOptions.contains(reasoningEffort) {
+      reasoningEffort = ""
     }
   }
 
@@ -152,6 +175,7 @@ final class CreateSessionModel {
     let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
     let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
     let trimmedResume = resume.trimmingCharacters(in: .whitespacesAndNewlines)
+    let capabilities = self.capabilities
 
     return CreateSessionRequest(
       cwd: cwd.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -161,12 +185,18 @@ final class CreateSessionModel {
       // Picking bypass up front also pre-authorizes switching back to it later —
       // without this the mode can be set once and never re-enabled mid-session.
       allowDangerouslySkipPermissions: permissionMode == .bypassPermissions ? true : nil,
-      settingSources: sources,
+      // Fields the record forswears are omitted, not sent-and-refused: the
+      // gateway 400s them, and the form should never build such a request.
+      settingSources: capabilities.settingSources ? sources : nil,
       model: trimmedModel.isEmpty ? nil : trimmedModel,
-      maxTurns: Int(maxTurns.trimmingCharacters(in: .whitespacesAndNewlines)),
-      maxBudgetUsd: Double(maxBudgetUsd.trimmingCharacters(in: .whitespacesAndNewlines)),
-      resume: trimmedResume.isEmpty ? nil : trimmedResume,
-      forkSession: trimmedResume.isEmpty ? nil : (forkSession ? true : nil),
+      maxTurns: capabilities.budgets
+        ? Int(maxTurns.trimmingCharacters(in: .whitespacesAndNewlines)) : nil,
+      maxBudgetUsd: capabilities.budgets
+        ? Double(maxBudgetUsd.trimmingCharacters(in: .whitespacesAndNewlines)) : nil,
+      resume: capabilities.resume && !trimmedResume.isEmpty ? trimmedResume : nil,
+      forkSession: engine == .claude && !trimmedResume.isEmpty && forkSession ? true : nil,
+      reasoningEffort: !reasoningEffort.isEmpty && effortOptions.contains(reasoningEffort)
+        ? reasoningEffort : nil,
       includePartialMessages: includePartialMessages)
   }
 }

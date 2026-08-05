@@ -107,6 +107,7 @@ function ScheduleJobCard({ onScheduled }: { onScheduled: () => void }) {
   const [mode, setMode] = useState<PermissionMode>(() => getDefaultPermissionMode('job'))
   const [questions, setQuestions] = useState<QuestionBehavior>('auto')
   const [model, setModel] = useState(() => getDefaultModel('job'))
+  const [effort, setEffort] = useState('')
   const { profiles, profile, selected, select: selectProfile } = useProfileChoice()
   const engine = engineFormOptions(selected, mode, model)
   const [allowBypass, setAllowBypass] = useState(false)
@@ -139,17 +140,20 @@ function ScheduleJobCard({ onScheduled }: { onScheduled: () => void }) {
           profile: profile || undefined,
           prompt: prompt.trim(),
           permissionMode: engine.mode,
-          questionBehavior: questions,
+          // Meaningless without an approval channel — the record decides.
+          questionBehavior: engine.capabilities.interactiveApprovals ? questions : undefined,
           model: engine.model.trim() || undefined,
-          // CLI-only. Opt-in per job: pre-authorize bypassPermissions so someone
-          // watching the run can switch it on mid-run. Off by default for
-          // unattended runs.
-          ...(engine.isProvider
-            ? {}
-            : {
+          reasoningEffort:
+            effort && engine.reasoningEfforts.includes(effort) ? effort : undefined,
+          // CLI spawn options, offered when the record says they apply. Opt-in
+          // per job: pre-authorize bypassPermissions so someone watching the
+          // run can switch it on mid-run. Off by default for unattended runs.
+          ...(engine.capabilities.settingSources
+            ? {
                 settingSources: ['user' as const, 'project' as const],
                 allowDangerouslySkipPermissions: allowBypass || undefined,
-              }),
+              }
+            : {}),
         },
         maxTokens: tokens,
         attempts: attemptCount,
@@ -207,24 +211,28 @@ function ScheduleJobCard({ onScheduled }: { onScheduled: () => void }) {
               className='min-w-44'
             />
           </label>
-          <label className='flex min-w-0 flex-col gap-1'>
-            <span className='text-label font-medium text-fg-3'>Questions</span>
-            <Select
-              items={QUESTION_BEHAVIORS.map((b) => ({ value: b.value, label: b.label }))}
-              value={questions}
-              onValueChange={(value) => setQuestions(value as QuestionBehavior)}>
-              <SelectTrigger className='min-w-36'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {QUESTION_BEHAVIORS.map((b) => (
-                  <SelectItem key={b.value} value={b.value}>
-                    <SelectItemText>{`${b.label} — ${b.description}`}</SelectItemText>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </label>
+          {/* Questions ride the approval channel; without one there is nothing
+              to configure. */}
+          {engine.capabilities.interactiveApprovals ? (
+            <label className='flex min-w-0 flex-col gap-1'>
+              <span className='text-label font-medium text-fg-3'>Questions</span>
+              <Select
+                items={QUESTION_BEHAVIORS.map((b) => ({ value: b.value, label: b.label }))}
+                value={questions}
+                onValueChange={(value) => setQuestions(value as QuestionBehavior)}>
+                <SelectTrigger className='min-w-36'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {QUESTION_BEHAVIORS.map((b) => (
+                    <SelectItem key={b.value} value={b.value}>
+                      <SelectItemText>{`${b.label} — ${b.description}`}</SelectItemText>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+          ) : null}
           <label className='flex min-w-0 flex-col gap-1'>
             <span className='text-label font-medium text-fg-3'>Model</span>
             <ModelPicker
@@ -234,6 +242,29 @@ function ScheduleJobCard({ onScheduled }: { onScheduled: () => void }) {
               className='min-w-40'
             />
           </label>
+          {engine.reasoningEfforts.length > 0 ? (
+            <label className='flex min-w-0 flex-col gap-1'>
+              <span className='text-label font-medium text-fg-3'>Effort</span>
+              <Select
+                items={[
+                  { value: 'default', label: 'Default' },
+                  ...engine.reasoningEfforts.map((e) => ({ value: e, label: e })),
+                ]}
+                value={effort || 'default'}
+                onValueChange={(value) => setEffort(value === 'default' ? '' : String(value))}>
+                <SelectTrigger className='min-w-28'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {['default', ...engine.reasoningEfforts].map((e) => (
+                    <SelectItem key={e} value={e}>
+                      <SelectItemText>{e}</SelectItemText>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+          ) : null}
           <label className='flex min-w-0 flex-col gap-1'>
             <span className='text-label font-medium text-fg-3'>Max tokens (optional)</span>
             <Input
@@ -269,8 +300,8 @@ function ScheduleJobCard({ onScheduled }: { onScheduled: () => void }) {
             Schedule
           </Button>
         </div>
-        {/* The capability is a CLI spawn flag; a provider session has no equivalent. */}
-        {engine.isProvider ? null : (
+        {/* The capability is a CLI spawn flag; the record says where it applies. */}
+        {!engine.capabilities.settingSources ? null : (
           <label
             className='flex w-fit cursor-pointer items-center gap-2 text-body-sm text-fg-2'
             title='Spawns the CLI with --dangerously-skip-permissions available, so the mode can be switched on while watching the run. The job still starts in the mode selected above.'>

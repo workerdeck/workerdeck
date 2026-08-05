@@ -9,6 +9,12 @@ import {
   CardTitle,
   Input,
   PermissionModeSelect,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectItemText,
+  SelectTrigger,
+  SelectValue,
   SessionList,
   Spinner,
   Textarea,
@@ -31,6 +37,7 @@ function CreateSessionCard({ onCreated }: { onCreated: (id: string) => void }) {
   const [prompt, setPrompt] = useState('')
   const [mode, setMode] = useState<PermissionMode>(() => getDefaultPermissionMode('session'))
   const [model, setModel] = useState(() => getDefaultModel('session'))
+  const [effort, setEffort] = useState('')
   const { profiles, profile, selected, select: selectProfile } = useProfileChoice()
   const engine = engineFormOptions(selected, mode, model)
   const [creating, setCreating] = useState(false)
@@ -54,13 +61,18 @@ function CreateSessionCard({ onCreated }: { onCreated: (id: string) => void }) {
         permissionMode: engine.mode,
         model: engine.model.trim() || undefined,
         resume: resume?.sessionId,
-        // CLI-only: setting sources, the SDK session store, and the bypass
-        // pre-authorization are all Claude Code concepts. Interactive sessions
-        // pre-authorize bypassPermissions because the operator is present — the
-        // CLI refuses to switch into it mid-session otherwise.
-        ...(engine.isProvider
-          ? {}
-          : { settingSources: ['user', 'project'], allowDangerouslySkipPermissions: true }),
+        // Only when the engine takes one, and only a value the current model
+        // offers — a sticky choice from another profile must not 400 here.
+        reasoningEffort:
+          effort && engine.reasoningEfforts.includes(effort) ? effort : undefined,
+        // Setting sources and the bypass pre-authorization are CLI spawn
+        // options — offered exactly when the capability record says they
+        // apply. Interactive sessions pre-authorize bypassPermissions because
+        // the operator is present — the CLI refuses the switch mid-session
+        // otherwise.
+        ...(engine.capabilities.settingSources
+          ? { settingSources: ['user', 'project'], allowDangerouslySkipPermissions: true }
+          : {}),
       })
       onCreated(session.id)
     } catch (e) {
@@ -136,15 +148,39 @@ function CreateSessionCard({ onCreated }: { onCreated: (id: string) => void }) {
               className='min-w-44'
             />
           </label>
+          {/* Present exactly when the record (or the chosen model's catalog
+              row) declares efforts — never a control that does nothing. */}
+          {engine.reasoningEfforts.length > 0 ? (
+            <label className='flex min-w-0 flex-col gap-1'>
+              <span className='text-label font-medium text-fg-3'>Effort</span>
+              <Select
+                items={[
+                  { value: 'default', label: 'Default' },
+                  ...engine.reasoningEfforts.map((e) => ({ value: e, label: e })),
+                ]}
+                value={effort || 'default'}
+                onValueChange={(value) => setEffort(value === 'default' ? '' : String(value))}>
+                <SelectTrigger className='min-w-28'>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {['default', ...engine.reasoningEfforts].map((e) => (
+                    <SelectItem key={e} value={e}>
+                      <SelectItemText>{e}</SelectItemText>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+          ) : null}
           <Button onClick={() => void create()} disabled={creating}>
             {creating ? <Spinner className='size-3.5 text-current' /> : <Plus className='size-4' />}
             Create
           </Button>
         </div>
 
-        {/* Resumable sessions come from the Agent SDK's on-disk session store —
-            there is no provider-engine equivalent to browse. */}
-        {engine.isProvider ? null : (
+        {/* The resume picker needs an engine with a browsable session store. */}
+        {!engine.capabilities.listSessions ? null : (
           <div className='mt-1 border-t border-border pt-3'>
             <div className='flex items-center justify-between'>
               <span className='text-label font-medium text-fg-3'>Resume a previous session</span>

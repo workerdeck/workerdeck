@@ -874,7 +874,7 @@ describe('createWorkerServer', () => {
     })
   })
 
-  it('remembers a profile’s models from a session, so GET /profiles can offer a picker', async () => {
+  it('serves the static catalog and capability record from the first request (cold start)', async () => {
     const harness = fakeHarness([
       { value: 'default', resolvedModel: 'claude-opus-5[1m]', displayName: 'Default (recommended)' },
       { value: 'opus[1m]', resolvedModel: 'claude-opus-5[1m]', displayName: 'Opus (1M context)' },
@@ -891,10 +891,17 @@ describe('createWorkerServer', () => {
       const { port } = await running.listen(0, '127.0.0.1')
       const base = `http://127.0.0.1:${port}/v1`
 
-      // Nothing has run: there is nothing to offer, and the form falls back to
-      // a text field rather than an empty picker.
+      // Nothing has run, and the picker is already real: the adapter's shipped
+      // catalog, plus the engine's capability record. This is the regression
+      // test for the deleted learned-models map (the iOS cold-start text-field
+      // bug that motivated the refactor).
       const before = (await (await fetch(`${base}/profiles`)).json()) as { profiles: ProfileInfo[] }
-      expect(before.profiles[0]!.models).toBeUndefined()
+      expect(before.profiles[0]!.models?.length).toBeGreaterThan(0)
+      expect(before.profiles[0]!.models?.some((m) => m.value === 'default')).toBe(false)
+      expect(before.profiles[0]!.capabilities?.interactiveApprovals).toBe(true)
+      // The default model is the one thing the catalog cannot know (it is the
+      // operator's CLI config) — absent until a session reports it.
+      expect(before.profiles[0]!.defaultModel).toBeUndefined()
 
       await fetch(`${base}/sessions`, {
         method: 'POST',
@@ -904,11 +911,7 @@ describe('createWorkerServer', () => {
 
       await vi.waitFor(async () => {
         const after = (await (await fetch(`${base}/profiles`)).json()) as { profiles: ProfileInfo[] }
-        const profile = after.profiles[0]!
-        // Named, grouped, and without the CLI's 'default' row — the same shaping
-        // the live `capabilities` event gets.
-        expect(profile.models?.map((m) => m.displayName)).toEqual(['Opus 5', 'Sonnet 5'])
-        expect(profile.defaultModel).toBe('claude-opus-5[1m]')
+        expect(after.profiles[0]!.defaultModel).toBe('claude-opus-5[1m]')
       })
     } finally {
       rmSync(dir, { recursive: true, force: true })

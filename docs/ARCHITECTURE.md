@@ -60,6 +60,23 @@ boundary: anything a client needs must be expressible as protocol events and com
   anywhere, results untrusted) or `authoritative` (server-side with server credentials — MCP and
   secret-bearing APIs, never bridged, since bridging would let a browser forge authoritative
   results). `createEngineSession` assembles provider model + tools + executor into a session.
+  **Engines ship as adapters** (`src/engines/`): one `EngineAdapter` per engine — its
+  `EngineCapabilities` record (pinned by identity to protocol's `ENGINE_CAPABILITIES`), a model
+  catalog versioned with the release, a credential-availability probe, and a runner factory —
+  looked up via `getEngineAdapter`. `claude/` wraps `SessionRunner` unchanged; `codex/` owns
+  `CodexRunner` over `@openai/codex-sdk` (an optional peer, dynamically imported — one
+  `codex exec --experimental-json` spawn per turn, JSONL folded into protocol events);
+  `provider/` is a pseudo-adapter whose runners the host's `createEngineRunner` hook builds.
+  Adapters live here and not in a new package because the dependency stance was never "server
+  touches no engine" — `server` already constructs `SessionRunner` from core. The real
+  invariants are: `server` imports no model SDK, the gateway process holds no credential
+  material, and provider credential resolution stays in host code. Codex violates none of them
+  (the binary resolves its own auth from the session env, exactly like the Claude CLI); a
+  separate `packages/adapters` would split the claude engine across two packages and buy nothing
+  until an adapter needs a dependency core must not carry — and even codex's doesn't (optional
+  peer). Routing codex through a CLI-supplied hook was considered and rejected: it would mean
+  the bare library cannot run a codex profile without host wiring, the exact "assembled outside
+  the repo" property this layer exists to remove.
 - **`packages/sandbox`** — the untrusted-code boundary: a QuickJS-NG WASM guest for
   LLM-generated scripts, an in-memory map-backed scratch VFS (browser-safe by construction —
   no node-fs emulation, no `Buffer`), and a by-value host bridge (values
@@ -168,10 +185,12 @@ boundary: anything a client needs must be expressible as protocol events and com
 - **`packages/web`** — the full session-control dashboard (TanStack Router, hash history): session
   list, create/resume flow, live panel, jobs view, profiles view, settings. Published as prebuilt
   static files with zero runtime deps (`dashboardDir` is a path, not a component tree) — it is an
-  application, so everything it builds with is a devDependency. The create forms and
-  the session panel are engine-aware: they offer only the permission modes and models the
-  selected profile's engine actually runs, and hide the CLI-only affordances (resumable SDK
-  sessions, setting sources, the bypass pre-authorization) for provider profiles.
+  application, so everything it builds with is a devDependency. The create forms and the session
+  panel render from the profile's **capability record** (`ProfileInfo.capabilities`, falling back
+  to protocol's `ENGINE_CAPABILITIES`) and its served model catalog — never from the engine name:
+  modes, the effort control, the resume browser, setting sources, and the questions/bypass
+  options each appear exactly when the record declares them, and unavailable profiles are greyed
+  with their reason (never hidden — availability is display-only).
 - **`packages/cli`** — published as the unscoped **`workerdeck`**: the turnkey instance, the
   one package that is a service rather than a library. It runs `createWorkerServer` and serves the
   dashboard — `@workerdeck/web`'s exported `dashboardDir`, a runtime dependency rather than a

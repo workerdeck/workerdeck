@@ -10,7 +10,7 @@
  */
 
 /** Bumped on any breaking change to events, commands, or REST shapes. */
-export const PROTOCOL_VERSION = 5
+export const PROTOCOL_VERSION = 6
 
 // ---------------------------------------------------------------------------
 // Session lifecycle
@@ -182,6 +182,11 @@ export type ModelOption = {
    * models" step: the newest model of each family. Derived server-side — the CLI
    * reports one flat list — so that every client groups it the same way. */
   primary?: boolean
+  /** Reasoning efforts this model supports at create time (codex catalogs carry
+   * them, from the binary's own per-model list). Absent = the engine's default
+   * set ({@link EngineCapabilities.reasoningEfforts}) applies. Open strings —
+   * the binary's vocabulary outruns its SDK's union. */
+  reasoningEfforts?: readonly string[]
 }
 
 /** A slash command the CLI accepts as user-message text (SDK SlashCommand mirror). */
@@ -534,23 +539,161 @@ export type ProfileDefaults = {
  * auto-created from the operator's own config dir) — the API only reads them.
  */
 /**
- * Which engine a profile runs on.
+ * Which engine a profile runs on. A **closed union, deliberately**: both clients
+ * switch exhaustively, the Swift mirror ships in lockstep, and a closed set is
+ * what lets this package carry per-engine capability defaults
+ * ({@link ENGINE_CAPABILITIES}) browser-safe, with no server round-trip. Adding a
+ * member is a versioned protocol event.
+ *
  * - `claude` (default) — Claude Code via the Agent SDK, configured by a config dir.
- * - `provider` — a model-agnostic provider (OpenAI-compatible, Anthropic, Moonshot),
- *   configured by provider id and credentials from the operator's environment.
+ * - `codex` — OpenAI Codex via `@openai/codex-sdk` driving the codex CLI binary,
+ *   configured by a CODEX_HOME (auth resolved by the binary itself, like claude).
+ * - `provider` — a model-agnostic provider over the AI SDK, assembled by the
+ *   host's `createEngineRunner` hook.
  */
-export type ProfileEngine = 'claude' | 'provider'
+export type ProfileEngine = 'claude' | 'codex' | 'provider'
 
 /**
- * Permission modes the model-agnostic provider engine understands. The rest of
- * {@link PermissionMode}'s vocabulary is Claude Code's: `acceptEdits`, `plan` and
- * `auto` name CLI-side behaviours a provider session has no equivalent of.
+ * What an engine does and does not do — one axis per real difference, each field
+ * answering a concrete UI or gateway question. Clients render from this record
+ * instead of switching on the engine name: an absent capability means the
+ * affordance is *hidden*, never a control that silently does nothing.
+ *
+ * Reaches clients in two places, same shape: `ProfileInfo.capabilities` (stamped
+ * by the server; the create form's source) and `SessionInfo.capabilities`
+ * (reported by the runner; the session surface's source). When the field is
+ * absent — an older server — {@link ENGINE_CAPABILITIES} keyed by the engine
+ * name is the browser-safe default.
  */
-export const PROVIDER_PERMISSION_MODES: readonly PermissionMode[] = [
-  'default',
-  'bypassPermissions',
-  'dontAsk',
-]
+export type EngineCapabilities = {
+  /** PermissionRequest / permission_resolved can occur; approval UI is live.
+   * False: hide approval affordances entirely (and `questionBehavior` on jobs). */
+  interactiveApprovals: boolean
+  /** Modes this engine can honor. A stored choice outside the set is coerced to
+   * {@link EngineCapabilities.defaultPermissionMode}, not submitted. */
+  permissionModes: readonly PermissionMode[]
+  /** Coercion target for a stored/unsupported mode choice (always ∈ permissionModes). */
+  defaultPermissionMode: PermissionMode
+  /** CreateSessionRequest.resume works (an engine session id continues). */
+  resume: boolean
+  /** Resume replays prior history into the transcript (Claude's backfill).
+   * False + resume: show a "history predates this attach" notice instead of
+   * treating an empty transcript as a bug. */
+  resumeBackfill: boolean
+  /** GET /sdk-sessions offers a resume picker for this engine. */
+  listSessions: boolean
+  /** context_usage events can occur. False: render nothing — never a 0% ring. */
+  contextUsage: boolean
+  /** rate_limit / plan_info events can occur. False: render nothing. */
+  rateLimits: boolean
+  /** GET/POST /sessions/:id/mcp works (else 501). */
+  mcpStatus: boolean
+  /** A session request may bring its own mcpServers. */
+  sessionMcpServers: boolean
+  /** capabilities events carry slash commands (composer popover). */
+  slashCommands: boolean
+  /** settingSources / allowDangerouslySkipPermissions-style CLI options apply. */
+  settingSources: boolean
+  /** maxTurns / maxBudgetUsd are honored (else the gateway 400s them). */
+  budgets: boolean
+  /** Attachment kinds sendMessage can deliver to the model. Filter the attach
+   * menu by kind; refuse locally before the server's 415. */
+  attachments: ReadonlyArray<'image' | 'pdf' | 'text'>
+  /** Efforts offerable at create time; absent = not settable (hide the control).
+   * Open strings — Codex's own binary already outruns its SDK's union. */
+  reasoningEfforts?: readonly string[]
+  /** Sessions expose a scratch VFS (GET /sessions/:id/files, deliverables panel). */
+  vfs: boolean
+  /** stream_delta granularity: per-token, coarse item updates (no typing
+   * cursor), or none. */
+  streaming: 'token' | 'item' | 'none'
+}
+
+/**
+ * The static capability record of each engine — the browser-safe default for
+ * `ProfileInfo.capabilities` / `SessionInfo.capabilities`, and the single place
+ * the values are written down. Core's adapters *reference* this record and a
+ * conformance test compares runner behaviour against it, so it cannot silently
+ * diverge from the code. When both a wire copy and this default exist, the wire
+ * copy wins.
+ */
+export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
+  claude: {
+    interactiveApprovals: true,
+    permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk', 'auto'],
+    defaultPermissionMode: 'default',
+    resume: true,
+    resumeBackfill: true,
+    listSessions: true,
+    contextUsage: true,
+    rateLimits: true,
+    mcpStatus: true,
+    sessionMcpServers: true,
+    slashCommands: true,
+    settingSources: true,
+    budgets: true,
+    attachments: ['image', 'pdf', 'text'],
+    // The engine-wide set (SDK Options.effort); per-model narrowing rides the
+    // catalog rows, and the CLI silently downgrades an effort a model lacks.
+    reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    vfs: false,
+    streaming: 'token',
+  },
+  codex: {
+    // Structural, not a gap: codex exec closes stdin after the prompt and its
+    // event union has no approval request — there is no channel to ask on.
+    interactiveApprovals: false,
+    // 'default' degrades honestly to the read-only sandbox ("would have asked"
+    // becomes "cannot act"); acceptEdits = workspace-write; bypass = full access.
+    // plan/dontAsk/auto name CLI workflows codex cannot deliver.
+    permissionModes: ['default', 'acceptEdits', 'bypassPermissions'],
+    defaultPermissionMode: 'default',
+    resume: true,
+    resumeBackfill: false,
+    listSessions: false,
+    contextUsage: false,
+    rateLimits: false,
+    mcpStatus: false,
+    // MCP belongs to CODEX_HOME's config.toml; a session request cannot add servers.
+    sessionMcpServers: false,
+    slashCommands: false,
+    settingSources: false,
+    budgets: false,
+    // local_image only; text is inlined into the prompt envelope by the gateway;
+    // pdf has no representation and 415s at upload.
+    attachments: ['image'],
+    // Seeded from the SDK union; per-model supersets ride ModelOption.reasoningEfforts.
+    reasoningEfforts: ['minimal', 'low', 'medium', 'high', 'xhigh'],
+    vfs: false,
+    streaming: 'item',
+  },
+  provider: {
+    interactiveApprovals: false,
+    permissionModes: ['default', 'bypassPermissions', 'dontAsk'],
+    defaultPermissionMode: 'default',
+    resume: false,
+    resumeBackfill: false,
+    listSessions: false,
+    contextUsage: false,
+    rateLimits: false,
+    mcpStatus: false,
+    sessionMcpServers: false,
+    slashCommands: false,
+    settingSources: false,
+    budgets: false,
+    attachments: ['image', 'pdf', 'text'],
+    vfs: true,
+    streaming: 'token',
+  },
+}
+
+/**
+ * Permission modes the model-agnostic provider engine understands.
+ * @deprecated Read `ENGINE_CAPABILITIES.provider.permissionModes` (this is an
+ * alias of it, kept for protocol-5 consumers).
+ */
+export const PROVIDER_PERMISSION_MODES: readonly PermissionMode[] =
+  ENGINE_CAPABILITIES.provider.permissionModes
 
 /**
  * Whether a profile's engine can run a permission mode. The single source of
@@ -561,7 +704,7 @@ export function supportsPermissionMode(
   engine: ProfileEngine | undefined,
   mode: PermissionMode,
 ): boolean {
-  return engine === 'provider' ? PROVIDER_PERMISSION_MODES.includes(mode) : true
+  return ENGINE_CAPABILITIES[engine ?? 'claude'].permissionModes.includes(mode)
 }
 
 /**
@@ -621,24 +764,39 @@ export type ProfileInfo = {
    * written before provider support keep working unchanged. */
   engine?: ProfileEngine
   /** Absolute path set as CLAUDE_CONFIG_DIR for the session's CLI process.
-   * Required for 'claude' profiles; meaningless for 'provider' ones. */
+   * Required for 'claude' profiles; meaningless for the other engines. */
   configDir?: string
+  /** Codex profiles: absolute path set as CODEX_HOME for the session's codex
+   * process (auth, config.toml, thread storage) — the `configDir` analogue,
+   * request-writable like it. Unset = the binary's own `~/.codex`. */
+  codexHome?: string
   /** Provider wiring for 'provider' profiles. */
   provider?: ProviderConfig
   description?: string
   defaults?: ProfileDefaults
   /** Provider-engine session grants (capabilities, MCP servers, instructions). */
   session?: ProfileSessionDefaults
-  /** Response-only: models a *claude* profile's CLI reported, so a create form
-   * can offer a picker instead of a text field. Remembered from the last session
-   * that ran on this profile rather than probed — asking the CLI costs a process,
-   * and a server that has run anything already knows the answer. Absent until
-   * then (and always, for a provider profile, whose ids are in `provider.models`).
-   * Ignored on the way in. */
+  /** Response-only: the engine's model catalog, shipped with the release and
+   * served from the first request (no process spawned, no warm-up session).
+   * For provider profiles the ids come from `provider.models` instead. Never
+   * contains a 'default' sentinel row — forms add their own "Profile default"
+   * row mapping to an unset model. Ignored on the way in. */
   models?: ModelOption[]
-  /** Response-only: what this profile's default model resolves to, from the same
-   * source as {@link ProfileInfo.models}. */
+  /** Response-only: what this profile's default model resolves to. For claude
+   * profiles this is the operator's CLI config — unknowable statically — so it
+   * is absent until a session on this profile reports it. */
   defaultModel?: string
+  /** Response-only: the engine's capability record (see {@link EngineCapabilities}).
+   * Absent = use ENGINE_CAPABILITIES[engine]. Ignored on the way in. */
+  capabilities?: EngineCapabilities
+  /** Response-only: whether the profile's credentials probe as usable right now.
+   * Absent = unknown/unchecked — treat as available. **Display-only**: create
+   * against an unavailable profile still proceeds and fails with the engine's
+   * own error (the probe can be stale in both directions). */
+  available?: boolean
+  /** Response-only: one operator-actionable line, present only when
+   * `available === false`. */
+  unavailableReason?: string
   /** Response-only, computed by the server: this profile came from the profile
    * store and can be edited or deleted through the API. Profiles declared in
    * server options are absent/false — they are code. Ignored on the way in. */
@@ -762,6 +920,10 @@ export type CreateSessionRequest = {
   resume?: string
   /** With `resume`: fork to a new session id instead of continuing. */
   forkSession?: boolean
+  /** Reasoning effort for the session's model (codex engine). Open string —
+   * offerable values come from the profile's catalog/capability record. The
+   * gateway 400s it when the engine's record declares no `reasoningEfforts`. */
+  reasoningEffort?: string
   /** Emit `stream_delta` events for token-by-token rendering. Default true. */
   includePartialMessages?: boolean
   /** Per-session override of the server's permission-request timeout (ms). */
@@ -789,6 +951,10 @@ export type SessionInfo = {
    * session surface gate CLI-only affordances (permission modes, context usage,
    * rate limits) without looking the profile back up. Absent = 'claude'. */
   engine?: ProfileEngine
+  /** The engine's capability record, reported by the runner like `engine`. The
+   * attach snapshot is the session-level source (no event carries it). Absent =
+   * ENGINE_CAPABILITIES[engine]. */
+  capabilities?: EngineCapabilities
   model?: string
   permissionMode?: PermissionMode
   /** Whether this session may be switched into `bypassPermissions`. The CLI only

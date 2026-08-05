@@ -25,13 +25,18 @@ createWorkerServer({
 ## Engines
 
 A profile also selects which **engine** runs the session. `engine: 'claude'` (the default, and
-what everything above describes) is Claude Code via the Agent SDK. `engine: 'provider'` runs the
-model-agnostic engine instead — no config directory, no CLI process; the server builds it through
+what everything above describes) is Claude Code via the Agent SDK. `engine: 'codex'` is OpenAI
+Codex via `@openai/codex-sdk` driving the local codex binary — the direct structural sibling: a
+local agent binary with sessions, sandboxing and resume, resolving its own credentials from the
+operator's environment (`codex login` in your own terminal, or `CODEX_API_KEY`; the optional
+`codexHome` pins a CODEX_HOME the way `configDir` pins a config dir). `engine: 'provider'` runs
+the model-agnostic engine — no config directory, no CLI process; the server builds it through
 the `createEngineRunner` hook, which is where the operator resolves the model and its credentials.
 
 ```ts
 profiles: [
   { name: 'ada', configDir: '/home/ada/.claude' },
+  { name: 'codex', engine: 'codex' },   // the binary's own ~/.codex
   {
     name: 'kimi',
     engine: 'provider',
@@ -42,23 +47,34 @@ profiles: [
 ]
 ```
 
-The two engines answer to different vocabularies, and the server holds that line rather than
-quietly coercing:
+The engines answer to different vocabularies, and the server holds that line rather than
+quietly coercing. Each engine declares an **`EngineCapabilities` record** — served on
+`ProfileInfo.capabilities` and `SessionInfo.capabilities`, with the protocol's
+`ENGINE_CAPABILITIES` as the browser-safe default — and clients render around it instead of
+switching on the engine name:
 
 - `permissionMode` is Claude Code's vocabulary. A provider session runs `default`,
-  `bypassPermissions` and `dontAsk`; asking for `acceptEdits`, `plan` or `auto` under a provider
-  profile is a **400**, and a provider profile whose `defaults.permissionMode` is one of those
-  fails `createWorkerServer` at startup.
-- Provider engines have no equivalent of the CLI's `supportedModels()`, so the model list is
-  whatever the operator declared in `provider.models` (falling back to `provider.model` alone).
-  A **claude** profile's list can only come from a running CLI, so the server remembers it from
-  the `capabilities` of the last session that ran on that profile and reports it back as
-  `ProfileInfo.models` / `defaultModel` — enough for a create form to offer a picker rather than
-  a text field, without spawning a CLI to ask. Absent until this server has run one session on
-  the profile.
-- `SessionInfo.engine` reports which engine a live session is actually on, so a dashboard can
-  hide affordances that only exist on one side. The bundled one does: resumable SDK sessions,
-  setting sources, and the bypass pre-authorization disappear for provider profiles.
+  `bypassPermissions` and `dontAsk`; a codex session runs `default`, `acceptEdits` and
+  `bypassPermissions`, mapped onto codex's own sandbox (read-only / workspace-write / full
+  access). Asking for a mode outside the record is a **400**, and a profile whose
+  `defaults.permissionMode` is outside it fails `createWorkerServer` at startup.
+- Codex has **no interactive approvals** — `codex exec` closes stdin after the prompt and its
+  event stream has no approval request, so the record declares `interactiveApprovals: false` and
+  clients hide the approval UI rather than render one that never fires.
+- The claude and codex engines ship a **model catalog** with each release, served as
+  `ProfileInfo.models` from the first request — a real picker on a cold server, with per-model
+  reasoning efforts where the engine takes them. Provider engines have no equivalent of a pinned
+  binary's model table, so their list stays whatever the operator declared in `provider.models`
+  (falling back to `provider.model` alone). Only `defaultModel` is still learned from sessions —
+  a claude profile's default is the operator's CLI config, unknowable statically.
+- With `checkCredentials` on, the server probes each profile's credentials (launch + ~60s TTL)
+  and stamps `available` / `unavailableReason` on `GET /profiles`. **Display-only**: an
+  unavailable profile is greyed with its remedy, but creating against it still proceeds and
+  fails with the engine's own error — a stale probe must never become an outage.
+- `SessionInfo.engine` and `SessionInfo.capabilities` report what a live session actually is, so
+  a dashboard can hide affordances that don't exist there. The bundled one does: resumable SDK
+  sessions, setting sources, budgets, the questions policy and the bypass pre-authorization each
+  appear exactly when the record declares them.
 
 ### Session grants
 

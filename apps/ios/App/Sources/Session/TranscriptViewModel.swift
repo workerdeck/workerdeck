@@ -131,6 +131,14 @@ final class TranscriptViewModel {
   /// (no event carries it); absent reads as claude, per the protocol.
   var engine: ProfileEngine { session?.resolvedEngine ?? state.engine ?? .claude }
 
+  /// The capability record the session surface renders around: the
+  /// runner-reported copy from the attach snapshot when present, else the
+  /// engine's static default. Gates the MCP screens, the usage/context menu
+  /// items, and the permission-mode list.
+  var capabilities: EngineCapabilities {
+    session?.resolvedCapabilities ?? engine.defaultCapabilities
+  }
+
   var pendingApproval: PermissionRequest? { state.pendingApprovals.first }
 
   /// File-store operations bound to this session. Downloads go through the

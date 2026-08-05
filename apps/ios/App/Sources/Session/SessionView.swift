@@ -436,11 +436,18 @@ struct SessionView: View {
     ToolbarItem(placement: .topBarTrailing) {
       Menu {
         // Three questions, three screens — and each one is also reachable by
-        // tapping the thing that summarises it on the status bar.
-        Button("Context", systemImage: "chart.pie") { sheet = .context }
-        Button("Usage", systemImage: "gauge") { sheet = .usage }
+        // tapping the thing that summarises it on the status bar. Screens the
+        // capability record forswears are absent, not present-and-empty.
+        if vm.capabilities.contextUsage {
+          Button("Context", systemImage: "chart.pie") { sheet = .context }
+        }
+        if vm.capabilities.rateLimits {
+          Button("Usage", systemImage: "gauge") { sheet = .usage }
+        }
         Button("Session info", systemImage: "info.circle") { sheet = .info }
-        Button("MCP servers", systemImage: "puzzlepiece.extension") { sheet = .mcp }
+        if vm.capabilities.mcpStatus {
+          Button("MCP servers", systemImage: "puzzlepiece.extension") { sheet = .mcp }
+        }
         Divider()
         Button("Close session", systemImage: "xmark.circle", role: .destructive) {
           showCloseConfirmation = true
@@ -451,10 +458,10 @@ struct SessionView: View {
     }
   }
 
-  /// Only the modes this session's engine implements — the provider engine
-  /// supports a subset, and the rest would be rejected server-side.
+  /// Only the modes this session's capability record declares — the rest
+  /// would be rejected server-side.
   private var permissionModes: [PermissionMode] {
-    PermissionMode.allCases.filter { supportsPermissionMode(engine: vm.engine, mode: $0) }
+    vm.capabilities.permissionModes
   }
 }
 

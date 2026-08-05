@@ -134,6 +134,9 @@ export type SdkModelInfo = {
   resolvedModel?: string
   displayName: string
   description?: string
+  /** Per-model reasoning efforts, when the SDK reports them (0.3.221+). */
+  supportedEffortLevels?: string[]
+  supportsEffort?: boolean
 }
 
 /**
@@ -185,6 +188,9 @@ export function modelOptionsFromSdk(models: readonly SdkModelInfo[]): ModelOptio
       displayName: derived && derivedCounts.get(derived) === 1 ? derived : model.displayName,
       description: model.description,
       primary,
+      // Explicit [] when the CLI reports no effort support, so clients don't
+      // fall back to the engine-wide default set for an effortless model.
+      reasoningEfforts: model.supportedEffortLevels ?? (model.supportsEffort === false ? [] : undefined),
     }
   })
 

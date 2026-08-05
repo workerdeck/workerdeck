@@ -38,20 +38,30 @@ Pass `settingSources: ['user', 'project']` when creating a session and it picks 
 repo's skills and `CLAUDE.md` — a prompt can be plain text or a skill invocation like
 `/verify-content 42`.
 
-## Two engines, one protocol
+## Three engines, one protocol
 
 A [profile](/workerdeck/docs/guides/profiles/) decides what a session runs as, including which
 **engine** it runs on:
 
 - **`claude`** (the default) — Claude Code via the Agent SDK, everything described above: a real
   CLI process against a real checkout, with the full permission system.
+- **`codex`** — OpenAI Codex via `@openai/codex-sdk`, driving the local codex binary the same
+  way the Agent SDK drives the Claude CLI. The binary resolves its own auth (`codex login` in
+  your terminal, or `CODEX_API_KEY`); permission modes map onto codex's own sandbox, and because
+  `codex exec` has no ask-channel, its capability record declares approvals off — clients hide
+  the approval UI instead of rendering one that never fires.
 - **`provider`** — a model-agnostic engine over the [AI SDK](https://ai-sdk.dev), for any provider
-  it supports. No CLI process and no config directory, and no ambient authority either: tools are
-  capability-scoped, the filesystem is an in-memory scratch VFS, and untrusted code runs in a
-  QuickJS sandbox that can execute **in the user's own browser tab** instead of on the server.
+  it supports, assembled by your own server hook. No CLI process and no config directory, and no
+  ambient authority either: tools are capability-scoped, the filesystem is an in-memory scratch
+  VFS, and untrusted code runs in a QuickJS sandbox that can execute **in the user's own browser
+  tab** instead of on the server.
 
-Both implement one `Runner` interface and speak the same protocol, so the client, the React layer,
-the panel and the job queue are unchanged either way. One worker can serve both.
+Every engine declares a **capability record** (approvals, modes, resume, telemetry, attachments,
+reasoning efforts) that clients render around, and ships a **model catalog** with each release,
+so `GET /profiles` answers a create form from the first request — including whether the
+profile's credentials currently probe as usable. All engines implement one `Runner` interface
+and speak the same protocol, so the client, the React layer, the panel and the job queue are
+unchanged either way. One worker can serve all three.
 
 ## Beyond the live session
 
@@ -72,7 +82,7 @@ Nine libraries, one instance, one dependency rule:
 | --- | --- |
 | `workerdeck` | The turnkey instance: gateway + dashboard on one port, shared-secret auth, durable parking, restart guard. |
 | `@workerdeck/protocol` | The wire protocol: session events, commands, REST shapes. Dependency-free, browser-safe. The product boundary. |
-| `@workerdeck/core` | The engines — `SessionRunner` (Agent SDK) and `AiSdkRunner` (any provider) behind one `Runner` interface. No transport. |
+| `@workerdeck/core` | The engines, as adapters — `SessionRunner` (Agent SDK), `CodexRunner` (`@openai/codex-sdk`) and `AiSdkRunner` (any provider) behind one `Runner` interface. No transport. |
 | `@workerdeck/sandbox` | The untrusted-code boundary: a QuickJS-NG WASM guest with interpreter-enforced limits. Runs server-side or in a tab. |
 | `@workerdeck/queue` | Job queue: one-shot unattended runs with concurrency limits, token budgets, and webhooks. |
 | `@workerdeck/server` | HTTP + WebSocket gateway: session registry, pluggable auth hook, profiles, optional job routes. |

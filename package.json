@@ -29,6 +29,7 @@
     "smoke:sdk": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/sdk-client.ts",
     "smoke:media": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/media.ts",
     "smoke:mcp": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/mcp-live.ts",
+    "smoke:codex": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/codex.ts",
     "example:server": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register examples/provider-server.ts"
   },
   "devDependencies": {
@@ -42,6 +43,7 @@
     "@workerdeck/sandbox": "workspace:*",
     "@workerdeck/server": "workspace:*",
     "@jitl/quickjs-ng-wasmfile-release-asyncify": "^0.31.0",
+    "@openai/codex-sdk": "~0.146.0",
     "@swc-node/register": "^1.11.1",
     "@swc/core": "^1.15.41",
     "@types/node": "^22.20.1",

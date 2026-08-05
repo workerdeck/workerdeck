@@ -36,6 +36,19 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   files under "more models" are in neither `supportedModels()` nor `initializationResult()`
   (checked directly against the SDK). Which model names you get is a function of the pinned SDK
   version, nothing else: 0.3.217 reported Opus 4.8, 0.3.221 reports Opus 5.
+- **Two model-list truths coexist; keep both.** The live `capabilities` event is the in-session
+  truth for the model *switcher* (and the only carrier of slash commands, and of what the
+  profile's default resolves to). The static catalog (`core/src/engines/*/catalog.ts`, served on
+  `ProfileInfo.models` from the first request) is the *create-form* truth — it is what fixed the
+  cold-start free-text picker, and it may list older models the CLI no longer reports. Someone
+  will eventually try to "simplify" one of them away; both sentences are load-bearing.
+  `defaultModel` cannot be static (it is the operator's CLI config), so it alone is still learned
+  from sessions and stays absent on a cold server.
+- `supportedModels()` reports **per-model reasoning efforts** (`supportedEffortLevels`, 0.3.221+),
+  forwarded as `ModelOption.reasoningEfforts`; `CreateSessionRequest.reasoningEffort` maps to the
+  SDK's `Options.effort`. Effort is an *open string* end to end — the CLI's vocabulary outruns
+  typed unions (its own list includes `max`), and the CLI silently downgrades an effort the
+  selected model lacks, so over-offering is safe and under-typing is not.
 - The CLI **pushes** a `rate_limit_event` only when a window *changes*, so a session that is
   watched rather than driven would show no plan usage at all. The runner therefore polls the
   structured `/usage` control request after init and after every turn and re-emits the windows as
@@ -57,12 +70,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - `AskUserQuestion` rides canUseTool; answers = allow with `updatedInput.answers` (question →
   label(s), comma-joined). `questionBehavior` policy-resolves it unattended ('auto' first option,
   'deny' model decides); under 'ask', job webhooks carry the request for remote answering.
-- `PermissionMode`'s vocabulary is Claude Code's; `AiSdkRunner` supports only
-  `default`/`bypassPermissions`/`dontAsk` and throws otherwise (surfacing as `protocol_error`).
-  `supportsPermissionMode(engine, mode)` in protocol is the ONE source of truth for that
-  restriction — create forms filter what they offer with it, the gateway 400s a session/job
-  create with it, startup refuses a provider profile whose `defaults.permissionMode` fails it.
-  Don't re-encode the list anywhere (the example used to coerce; it no longer does).
+- `PermissionMode`'s vocabulary is Claude Code's; the other engines honor subsets and throw
+  otherwise (surfacing as `protocol_error`). **`ENGINE_CAPABILITIES` in protocol is the ONE
+  source of truth** for per-engine restrictions — `supportsPermissionMode(engine, mode)` is now a
+  lookup into it, create forms filter what they offer from the record, the gateway 400s a
+  session/job create with it, startup refuses a profile whose `defaults.permissionMode` fails it.
+  Don't re-encode any per-engine list anywhere; a core test pins each adapter's `capabilities` to
+  the protocol record *by identity*, so drift is impossible rather than merely tested-for.
 
 ## Provider engine (AI SDK v7)
 
@@ -86,10 +100,100 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   (double-scheduled turns must not double-generate).
 - Provider engines have no `supportedModels()`: the model picker offers `provider.models` as the
   operator declared it on the profile, falling back to `provider.model` alone. Don't ship a
-  static per-provider model table — it goes stale and lies outright for openai-compatible
-  endpoints. `SessionInfo.engine` is reported by each runner itself (not looked up from the
-  profile) so any session surface can gate CLI-only affordances; no event carries it, the attach
-  snapshot is the only source.
+  static model table *for this engine* — it goes stale and lies outright for openai-compatible
+  endpoints (the claude/codex catalogs are the deliberate exception: those engines' model sets
+  are properties of a pinned binary, not of an operator's endpoint). `SessionInfo.engine` — and
+  now `SessionInfo.capabilities` — is reported by each runner itself (not looked up from the
+  profile) so any session surface can gate engine-specific affordances; no event carries them,
+  the attach snapshot is the only source.
+- The `'provider'` engine remains the **host-assembled escape hatch** behind `createEngineRunner`
+  — its adapter in core is a pseudo-adapter (capabilities, an `apiKeyEnv` presence probe, an
+  empty catalog) whose `createRunner` throws; the server routes provider creates to the hook.
+  The `@ai-sdk` provider profiles (openai, moonshotai) are not offered by default anywhere any
+  more, but `AiSdkRunner`, its tests, `smoke:live`/`smoke:sdk`, and `examples/provider-server.ts`
+  all stay green — they are the proof the path still works, and the route back if those providers
+  return as bespoke adapters.
+
+## Codex engine (`@openai/codex-sdk` / codex CLI)
+
+- **The process model explains everything else**: `Thread.runStreamed()` spawns one
+  `codex exec --experimental-json` child *per turn*, writes the whole prompt to stdin and closes
+  it, streams JSONL on stdout, exits. Follow-ups run `codex exec … resume <thread_id>`. So
+  between-turn mutability (model, mode, effort) is free — the next spawn just gets different
+  flags — and mid-turn mutability is impossible (`setModel`/`setPermissionMode` throw mid-turn).
+- **Interactive approvals are structurally impossible in exec mode** — closed event union with no
+  approval request, stdin already closed, `codex exec --help` says non-interactive. That is why
+  `ENGINE_CAPABILITIES.codex.interactiveApprovals` is false and every codex spawn passes
+  `approvalPolicy: 'never'`. The only route back is the experimental `codex app-server` JSON-RPC
+  surface — a future adapter, not a flag.
+- **`CodexOptions.env` replaces, never merges** (verified in the SDK source): pass a *complete*
+  environment always. A delta silently strands HOME/PATH — and the auth chain with them. The
+  profile's `codexHome` pin rides this env (`CODEX_HOME`), which is also why `buildRunnerConfig`
+  does NOT pin it the way claude profiles pin `CLAUDE_CONFIG_DIR`.
+- **The auth matrix is asymmetric** (verified 2026-08-05 against 0.146.0 by running the binary):
+  `CODEX_API_KEY` env works for exec but is invisible to `codex login status` (exit 1);
+  `OPENAI_API_KEY` env is a **no-op for exec** ("Missing bearer") yet `codex doctor` counts it as
+  credentials; `codex login` / `codex login --with-api-key` persist to `$CODEX_HOME/auth.json`
+  and make `login status` exit 0. The availability probe therefore mirrors *exec's* chain:
+  CODEX_API_KEY presence → `login status` exit code, with an actionable OPENAI_API_KEY hint on
+  failure and anything unparseable mapping to 'unknown'. The free `smoke:codex --canary` run is
+  the drift alarm for all three facts. Two probe details that bite: the "Not logged in" verdict
+  prints on **stderr**, and the success line includes a masked key fragment — surface exit codes
+  and fixed strings only.
+- **The Keychain trap does not transfer, but not for the reason you'd guess**: codex auth is NOT
+  always file-based (`auth_credentials_store_mode` can move it to the OS keyring — a home with no
+  `auth.json` can still be logged in). The trap still doesn't transfer because the store is
+  chosen by config *inside* the home, not by whether the CODEX_HOME env var is set — so pinning
+  the default home is harmless and there is no analogue of the `claudeSessionEnv` skip. Whether a
+  keyring-stored login is scoped per home or per user is unverified; multi-`codexHome` profiles
+  are verified for file-mode only.
+- `@openai/codex-sdk` is pinned to an exact minor (`~0.146.0`): pre-1.0, driving a flag literally
+  named `--experimental-json`. It is an **optional peer** of core (dynamic import inside the
+  adapter; absent → profiles report unavailable, creates throw the install message) and a real
+  dependency of the CLI so the turnkey instance has codex out of the box. Any change to
+  `CodexRunner`'s spawn options or event mapping requires a `smoke:codex` run — the fake exec
+  cannot validate the real JSONL vocabulary.
+- Usage arrives per turn in OpenAI convention; `CodexRunner` re-maps it to the Anthropic
+  convention the whole stack assumes: `input_tokens` minus the cached share (else queue token
+  budgets double-count cache-heavy runs), reasoning tokens folded into output. `totalCostUsd: 0`
+  = unknown, the AiSdkRunner precedent. The relation behind the subtraction is asserted in
+  `smoke:codex` (PRD open question 1).
+- Sandbox mapping is the honest degradation: `default` → `read-only` ("would have asked" becomes
+  "cannot act" — commands still run, writes are refused by the OS sandbox), `acceptEdits` →
+  `workspace-write`, `bypassPermissions` → `danger-full-access`. `plan`/`dontAsk`/`auto` are not
+  offered — they name CLI workflows codex cannot deliver, and a control that silently does
+  nothing is exactly what the capability record exists to prevent. Every spawn passes
+  `--skip-git-repo-check` (the gateway's cwd contract has no git requirement).
+- A failed *turn* is not a failed *session*: `turn.failed`, stream errors, and a dead child all
+  land as `turn_result: error_during_execution` and the session returns to idle — the thread
+  persists and the next message spawns fresh. Codex has no instructions surface
+  (`session.instructions` on a codex profile is refused at startup; codex reads the cwd's
+  AGENTS.md), no per-session MCP (CODEX_HOME's config.toml owns servers; `/mcp` 501s), images
+  only for attachments (host temp-file paths via `--image`; text inlines into the prompt
+  envelope; PDF 415s at upload).
+
+## Engine adapters & capability records
+
+- One engine = one `EngineAdapter` in `core/src/engines/` (capabilities, shipped model catalog,
+  availability probe, runner factory), looked up via `getEngineAdapter`. The server consumes
+  adapters directly — the invariant was never "server touches no engine"; it is (a) `server`
+  imports no model SDK, (b) the gateway process holds no credential material, (c) provider
+  credential resolution stays in host code. Codex satisfies all three the same way claude does:
+  the binary resolves its own auth from the session env.
+- `ProfileEngine` stays a **closed union** on purpose: both clients switch exhaustively, the
+  Swift mirror ships in lockstep, and a closed set is what lets protocol carry browser-safe
+  per-engine defaults. Adding an engine is a versioned protocol event, not a string.
+- The capability record is deliberately dual-sourced: `ENGINE_CAPABILITIES` in protocol
+  (browser-safe default) and the server-stamped `ProfileInfo.capabilities` /
+  `SessionInfo.capabilities` (wire truth — it wins when both exist). The conformance test pins
+  the adapters to the protocol record by identity; if per-profile variance ever arrives, the wire
+  copy is already authoritative by construction.
+- Catalogs are versioned with releases; the release checklist re-runs each catalog's extraction
+  (documented in the catalog file headers) and diffs. Availability probing is gated on
+  `checkCredentials` (a library must spawn nothing in tests), cached ~60s, refreshed lazily on
+  `GET /profiles`, and **display-only**: create against an unavailable profile still proceeds and
+  fails with the engine's own error — a stale probe must never become an outage. The `engines`
+  server option overrides adapters *for tests only*; it is not an extension point.
 - `createEngineRunner` may return a promise, so per-session assembly (an MCP connect, a
   credential lookup) can be awaited there, disposed via `AiSdkRunnerConfig.onClose`; a rejection
   fails the create (session POST 500s with the message, a job goes straight to `failed`). The

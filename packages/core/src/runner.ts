@@ -10,15 +10,16 @@ import {
   type SDKUserMessage,
   type SessionMessage,
 } from '@anthropic-ai/claude-agent-sdk'
-import type {
-  CreateSessionRequest,
-  McpServerStatusInfo,
-  PermissionMode,
-  PermissionRequest,
-  SessionEvent,
-  SessionEventBody,
-  SessionInfo,
-  SessionStatus,
+import {
+  ENGINE_CAPABILITIES,
+  type CreateSessionRequest,
+  type McpServerStatusInfo,
+  type PermissionMode,
+  type PermissionRequest,
+  type SessionEvent,
+  type SessionEventBody,
+  type SessionInfo,
+  type SessionStatus,
 } from '@workerdeck/protocol'
 import {
   type AttachmentInput,
@@ -141,6 +142,7 @@ export class SessionRunner implements Runner {
       cwd: this.#config.cwd,
       profile: this.#config.profile,
       engine: 'claude',
+      capabilities: ENGINE_CAPABILITIES.claude,
       model: this.#model ?? this.#config.model,
       permissionMode: this.#permissionMode,
       // Fixed at spawn: the CLI refuses to switch into bypass unless it was
@@ -382,6 +384,9 @@ export class SessionRunner implements Runner {
       maxBudgetUsd: c.maxBudgetUsd,
       resume: c.resume,
       forkSession: c.forkSession,
+      // Open string on the wire; the SDK's union lags the CLI's vocabulary and
+      // the CLI silently downgrades an effort the model doesn't support.
+      effort: c.reasoningEffort as Options['effort'],
       includePartialMessages: c.includePartialMessages ?? true,
       canUseTool: this.#canUseTool,
       env: c.env,

@@ -6,18 +6,149 @@ import Foundation
 
 // MARK: - Profiles
 
+/// A closed union, deliberately — adding a member is a versioned protocol event
+/// and the app ships in lockstep with the gateway (exact version compare).
 public enum ProfileEngine: String, Codable, Sendable {
   case claude
+  case codex
   case provider
 }
 
+/// What an engine does and does not do — mirror of the protocol's
+/// `EngineCapabilities`. Render from this record instead of switching on the
+/// engine name: a false/absent capability means the affordance is *hidden*,
+/// never a control that silently does nothing.
+///
+/// Lenient on the open-ended axes (`attachments`, `streaming`,
+/// `reasoningEfforts` stay strings; unknown permission modes are dropped), so a
+/// record from a slightly newer server degrades instead of failing the decode.
+public struct EngineCapabilities: Codable, Sendable, Equatable {
+  public let interactiveApprovals: Bool
+  public let permissionModes: [PermissionMode]
+  public let defaultPermissionMode: PermissionMode
+  public let resume: Bool
+  public let resumeBackfill: Bool
+  public let listSessions: Bool
+  public let contextUsage: Bool
+  public let rateLimits: Bool
+  public let mcpStatus: Bool
+  public let sessionMcpServers: Bool
+  public let slashCommands: Bool
+  public let settingSources: Bool
+  public let budgets: Bool
+  /// 'image' | 'pdf' | 'text' — open strings; filter the attach menu by the ones
+  /// this build knows.
+  public let attachments: [String]
+  /// Absent = the effort control is not offered.
+  public let reasoningEfforts: [String]?
+  public let vfs: Bool
+  /// 'token' | 'item' | 'none' — anything ≠ 'token' renders without a typing cursor.
+  public let streaming: String
+
+  public init(
+    interactiveApprovals: Bool, permissionModes: [PermissionMode],
+    defaultPermissionMode: PermissionMode, resume: Bool, resumeBackfill: Bool,
+    listSessions: Bool, contextUsage: Bool, rateLimits: Bool, mcpStatus: Bool,
+    sessionMcpServers: Bool, slashCommands: Bool, settingSources: Bool, budgets: Bool,
+    attachments: [String], reasoningEfforts: [String]? = nil, vfs: Bool, streaming: String
+  ) {
+    self.interactiveApprovals = interactiveApprovals
+    self.permissionModes = permissionModes
+    self.defaultPermissionMode = defaultPermissionMode
+    self.resume = resume
+    self.resumeBackfill = resumeBackfill
+    self.listSessions = listSessions
+    self.contextUsage = contextUsage
+    self.rateLimits = rateLimits
+    self.mcpStatus = mcpStatus
+    self.sessionMcpServers = sessionMcpServers
+    self.slashCommands = slashCommands
+    self.settingSources = settingSources
+    self.budgets = budgets
+    self.attachments = attachments
+    self.reasoningEfforts = reasoningEfforts
+    self.vfs = vfs
+    self.streaming = streaming
+  }
+
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    interactiveApprovals = try c.decode(Bool.self, forKey: .interactiveApprovals)
+    // Unknown mode strings are a newer server's vocabulary — drop them rather
+    // than fail the decode; this build could not offer them anyway.
+    let rawModes = try c.decode([String].self, forKey: .permissionModes)
+    permissionModes = rawModes.compactMap { PermissionMode(rawValue: $0) }
+    defaultPermissionMode =
+      PermissionMode(rawValue: try c.decode(String.self, forKey: .defaultPermissionMode))
+      ?? .default
+    resume = try c.decode(Bool.self, forKey: .resume)
+    resumeBackfill = try c.decode(Bool.self, forKey: .resumeBackfill)
+    listSessions = try c.decode(Bool.self, forKey: .listSessions)
+    contextUsage = try c.decode(Bool.self, forKey: .contextUsage)
+    rateLimits = try c.decode(Bool.self, forKey: .rateLimits)
+    mcpStatus = try c.decode(Bool.self, forKey: .mcpStatus)
+    sessionMcpServers = try c.decode(Bool.self, forKey: .sessionMcpServers)
+    slashCommands = try c.decode(Bool.self, forKey: .slashCommands)
+    settingSources = try c.decode(Bool.self, forKey: .settingSources)
+    budgets = try c.decode(Bool.self, forKey: .budgets)
+    attachments = try c.decode([String].self, forKey: .attachments)
+    reasoningEfforts = try c.decodeIfPresent([String].self, forKey: .reasoningEfforts)
+    vfs = try c.decode(Bool.self, forKey: .vfs)
+    streaming = try c.decode(String.self, forKey: .streaming)
+  }
+}
+
+/// Mirror of the protocol's ENGINE_CAPABILITIES — the browser-safe default when
+/// a `ProfileInfo`/`SessionInfo` carries no record of its own. When both exist,
+/// the wire copy wins.
+public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
+  .claude: EngineCapabilities(
+    interactiveApprovals: true,
+    permissionModes: [.default, .acceptEdits, .bypassPermissions, .plan, .dontAsk, .auto],
+    defaultPermissionMode: .default,
+    resume: true, resumeBackfill: true, listSessions: true,
+    contextUsage: true, rateLimits: true, mcpStatus: true, sessionMcpServers: true,
+    slashCommands: true, settingSources: true, budgets: true,
+    attachments: ["image", "pdf", "text"],
+    reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
+    vfs: false, streaming: "token"
+  ),
+  .codex: EngineCapabilities(
+    interactiveApprovals: false,
+    permissionModes: [.default, .acceptEdits, .bypassPermissions],
+    defaultPermissionMode: .default,
+    resume: true, resumeBackfill: false, listSessions: false,
+    contextUsage: false, rateLimits: false, mcpStatus: false, sessionMcpServers: false,
+    slashCommands: false, settingSources: false, budgets: false,
+    attachments: ["image"],
+    reasoningEfforts: ["minimal", "low", "medium", "high", "xhigh"],
+    vfs: false, streaming: "item"
+  ),
+  .provider: EngineCapabilities(
+    interactiveApprovals: false,
+    permissionModes: [.default, .bypassPermissions, .dontAsk],
+    defaultPermissionMode: .default,
+    resume: false, resumeBackfill: false, listSessions: false,
+    contextUsage: false, rateLimits: false, mcpStatus: false, sessionMcpServers: false,
+    slashCommands: false, settingSources: false, budgets: false,
+    attachments: ["image", "pdf", "text"], vfs: true, streaming: "token"
+  ),
+]
+
+extension ProfileEngine {
+  /// This engine's static capability record.
+  public var defaultCapabilities: EngineCapabilities { engineCapabilities[self]! }
+}
+
 /// Permission modes the model-agnostic provider engine understands.
-public let providerPermissionModes: [PermissionMode] = [.default, .bypassPermissions, .dontAsk]
+/// Deprecated spelling — read `ProfileEngine.provider.defaultCapabilities`.
+public let providerPermissionModes: [PermissionMode] =
+  engineCapabilities[.provider]!.permissionModes
 
 /// Whether a profile's engine can run a permission mode. An absent `engine`
 /// means 'claude' (every mode).
 public func supportsPermissionMode(engine: ProfileEngine?, mode: PermissionMode) -> Bool {
-  engine == .provider ? providerPermissionModes.contains(mode) : true
+  (engine ?? .claude).defaultCapabilities.permissionModes.contains(mode)
 }
 
 public enum SessionCapability: String, Codable, Sendable {
@@ -80,39 +211,62 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
   /// Defaults to 'claude' when absent.
   public let engine: ProfileEngine?
   public let configDir: String?
+  /// Codex profiles: CODEX_HOME for the session's codex process (the `configDir`
+  /// analogue). Unset = the binary's own `~/.codex`.
+  public let codexHome: String?
   public let provider: ProviderConfig?
   public let description: String?
   public let defaults: ProfileDefaults?
   public let session: ProfileSessionDefaults?
-  /// Response-only: models a claude profile's CLI reported on an earlier
-  /// session, so a create form can offer a picker rather than a text field.
-  /// Absent until this server has run one (and always for a provider profile,
-  /// whose ids are in `provider.models`).
+  /// Response-only: the engine's model catalog, served from the first request.
+  /// (For provider profiles the ids are in `provider.models` instead.)
   public let models: [ModelOption]?
-  /// Response-only: what that profile's default model resolves to.
+  /// Response-only: what that profile's default model resolves to. Claude
+  /// profiles: absent until a session on this profile reports it.
   public let defaultModel: String?
+  /// Response-only: the engine's capability record. Absent = the engine's
+  /// static default (`resolvedCapabilities` folds that in).
+  public let capabilities: EngineCapabilities?
+  /// Response-only: whether the profile's credentials probe as usable. Absent =
+  /// unknown/unchecked — treat as available. Display-only either way.
+  public let available: Bool?
+  /// Response-only: one operator-actionable line when `available == false`.
+  public let unavailableReason: String?
   /// Response-only: store-backed and editable through the API.
   public let managed: Bool?
 
   public var id: String { name }
   public var resolvedEngine: ProfileEngine { engine ?? .claude }
+  /// The record to render from: the wire copy when the server stamped one, else
+  /// the engine's static default.
+  public var resolvedCapabilities: EngineCapabilities {
+    capabilities ?? resolvedEngine.defaultCapabilities
+  }
+  /// Grey the row (and say why) only on an explicit false — absent is "unchecked".
+  public var isUnavailable: Bool { available == false }
 
   public init(
     name: String, engine: ProfileEngine? = nil, configDir: String? = nil,
+    codexHome: String? = nil,
     provider: ProviderConfig? = nil, description: String? = nil,
     defaults: ProfileDefaults? = nil, session: ProfileSessionDefaults? = nil,
     models: [ModelOption]? = nil, defaultModel: String? = nil,
-    managed: Bool? = nil
+    capabilities: EngineCapabilities? = nil, available: Bool? = nil,
+    unavailableReason: String? = nil, managed: Bool? = nil
   ) {
     self.name = name
     self.engine = engine
     self.configDir = configDir
+    self.codexHome = codexHome
     self.provider = provider
     self.description = description
     self.defaults = defaults
     self.session = session
     self.models = models
     self.defaultModel = defaultModel
+    self.capabilities = capabilities
+    self.available = available
+    self.unavailableReason = unavailableReason
     self.managed = managed
   }
 }
@@ -152,6 +306,9 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   public let profile: String?
   /// Engine actually running this session. Absent = 'claude'.
   public let engine: ProfileEngine?
+  /// The engine's capability record, reported by the runner like `engine`. The
+  /// attach snapshot is the session-level source — no event carries it.
+  public let capabilities: EngineCapabilities?
   public let model: String?
   public let permissionMode: PermissionMode?
   /// Whether this session may be switched into `bypassPermissions` — decided when
@@ -174,10 +331,16 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   public let lastActivityAt: Double?
 
   public var resolvedEngine: ProfileEngine { engine ?? .claude }
+  /// The record to render from: the runner-reported copy when present, else the
+  /// engine's static default.
+  public var resolvedCapabilities: EngineCapabilities {
+    capabilities ?? resolvedEngine.defaultCapabilities
+  }
 
   public init(
     id: String, sdkSessionId: String? = nil, status: SessionStatus, cwd: String,
-    profile: String? = nil, engine: ProfileEngine? = nil, model: String? = nil,
+    profile: String? = nil, engine: ProfileEngine? = nil,
+    capabilities: EngineCapabilities? = nil, model: String? = nil,
     permissionMode: PermissionMode? = nil, canBypassPermissions: Bool? = nil,
     apiKeySource: String? = nil,
     createdAt: Double, lastSeq: Int, pendingPermissionCount: Int,
@@ -190,6 +353,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.cwd = cwd
     self.profile = profile
     self.engine = engine
+    self.capabilities = capabilities
     self.model = model
     self.permissionMode = permissionMode
     self.canBypassPermissions = canBypassPermissions
@@ -235,6 +399,10 @@ public struct CreateSessionRequest: Encodable, Sendable {
   public var resume: String?
   /// With `resume`: fork to a new session id instead of continuing.
   public var forkSession: Bool?
+  /// Reasoning effort for the session's model (codex engine). Only send when the
+  /// profile's capability record declares `reasoningEfforts` — the gateway 400s
+  /// it otherwise.
+  public var reasoningEffort: String?
   /// Emit `stream_delta` events for token-by-token rendering. Server default true.
   public var includePartialMessages: Bool?
   public var approvalTimeoutMs: Double?
@@ -250,7 +418,8 @@ public struct CreateSessionRequest: Encodable, Sendable {
     allowedTools: [String]? = nil, disallowedTools: [String]? = nil,
     mcpServers: [String: JSONValue]? = nil, settingSources: [SettingSource]? = nil,
     model: String? = nil, maxTurns: Int? = nil, maxBudgetUsd: Double? = nil,
-    resume: String? = nil, forkSession: Bool? = nil, includePartialMessages: Bool? = nil,
+    resume: String? = nil, forkSession: Bool? = nil, reasoningEffort: String? = nil,
+    includePartialMessages: Bool? = nil,
     approvalTimeoutMs: Double? = nil, questionBehavior: QuestionBehavior? = nil,
     capabilities: [SessionCapability]? = nil, meta: [String: JSONValue]? = nil
   ) {
@@ -268,6 +437,7 @@ public struct CreateSessionRequest: Encodable, Sendable {
     self.maxBudgetUsd = maxBudgetUsd
     self.resume = resume
     self.forkSession = forkSession
+    self.reasoningEffort = reasoningEffort
     self.includePartialMessages = includePartialMessages
     self.approvalTimeoutMs = approvalTimeoutMs
     self.questionBehavior = questionBehavior

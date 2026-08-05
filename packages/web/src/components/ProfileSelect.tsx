@@ -34,9 +34,17 @@ export function ProfileSelect({
         </SelectTrigger>
         <SelectContent>
           {profiles.map((p) => (
+            // Greyed, never hidden: availability is display-only (the probe can
+            // be stale in both directions), so the row stays selectable and the
+            // reason travels as its tooltip.
             <SelectItem key={p.name} value={p.name}>
               <SelectItemText>
-                {p.description ? `${p.name} — ${p.description}` : p.name}
+                <span
+                  className={p.available === false ? 'text-fg-4' : undefined}
+                  title={p.unavailableReason}>
+                  {p.description ? `${p.name} — ${p.description}` : p.name}
+                  {p.available === false ? ' (unavailable)' : ''}
+                </span>
               </SelectItemText>
             </SelectItem>
           ))}

@@ -1,6 +1,6 @@
 # Roadmap & open questions
 
-What's shipped, what's next, and what's still undecided. Status as of 2026-08-05 (0.8.0 on
+What's shipped, what's next, and what's still undecided. Status as of 2026-08-05 (0.9.0 on
 master; 0.7.0 is the latest published).
 
 ## Shipped
@@ -84,6 +84,23 @@ master; 0.7.0 is the latest published).
   app browses and edits over it, scoped to the open session's cwd, and completes `@file` in the
   composer against `/fs/find`. Covered by tests on both halves; not yet exercised against a live
   gateway from a phone.
+- **Engine adapters, capability records, and Codex as a first-class engine**
+  (`PROTOCOL_VERSION` 6) — engines ship as in-repo adapters (`core/src/engines/`): each declares
+  its `EngineCapabilities` record (also in protocol as `ENGINE_CAPABILITIES`, the browser-safe
+  default clients render from instead of switching on the engine name), ships a model catalog
+  with the release (the learned-models map is gone — `GET /profiles` serves a real picker from
+  the first request, which fixed the iOS cold-start free-text bug), and probes its own
+  credentials (`available`/`unavailableReason` on `ProfileInfo`, display-only, ~60s TTL). Codex
+  (`@openai/codex-sdk` driving the codex CLI, one `codex exec --experimental-json` spawn per
+  turn) is a peer of the Claude engine: create/attach/watch/interrupt/resume, sandbox-mapped
+  permission modes, item-granularity streaming, images via `--image`, per-turn usage re-mapped to
+  the Anthropic accounting convention — with approvals declared structurally impossible in exec
+  mode (`interactiveApprovals: false`; the record is what keeps clients from rendering an
+  approval UI that never fires). Claude gained create-time `reasoningEffort` (SDK
+  `Options.effort`) with per-model efforts on catalog rows. The `@ai-sdk` provider profiles stop
+  being offered by default but the engine, its tests and its example stay green. `smoke:codex`
+  covers what the scripted exec cannot, including free auth-drift canaries pinning the verified
+  codex auth matrix.
 - **Message attachments + MCP screens** (`PROTOCOL_VERSION` 5) — a session can be sent photos,
   PDFs and text files. The bytes never ride the protocol: an upload
   (`POST /sessions/:id/attachments`) is held per session and the `user_message` command names it
@@ -110,33 +127,19 @@ master; 0.7.0 is the latest published).
    — the code is tested and the alternative was holding the host-filesystem release behind it —
    but it stays here rather than under Shipped until a push has actually reached a phone, and the
    README says as much. The same caveat covers the iOS file browser released alongside it.
-1. **Bespoke provider adapters, and Codex as a first-class engine.** Today the second engine is a
-   thin pass-through to whatever `@ai-sdk/*` package the *host* dynamically imports, which leaves
-   nowhere to put per-provider behaviour, no way for a client to ask what a profile can do, and no
-   difference between "misconfigured" and "working" until a session fails. The plan is adapters in
-   this repo — each declaring its own capabilities and its own hard-coded model catalog, and each
-   reporting itself unavailable when its credentials are absent — plus **Codex
-   (`@openai/codex-sdk`, which drives a local binary exactly as the Agent SDK drives the Claude
-   Code CLI) as a peer of the Claude engine**, streamlined behind one capability record so the two
-   are interchangeable to a client. The `@ai-sdk` providers are temporarily disabled rather than
-   removed. Two consequences worth stating up front: model lists stop being discovered at runtime
-   (the `capabilities`-learned map goes away in favour of static catalogs shipped with releases),
-   and whether a Codex turn can *ask* for approval and wait decides whether `PermissionRequest` is
-   a Claude-only concept — verify that before designing around it. Credentials stay the official
-   SDK/binary's business either way; WorkerDeck implements no login flow for Codex any more than
-   it does for Anthropic.
-2. **Shared-backend `QueueAdapter`** (BullMQ or plain redis) — the reason the adapter contract
+1. **Shared-backend `QueueAdapter`** (BullMQ or plain redis) — the reason the adapter contract
    exists. `claimNext` must stay atomic (BullMQ free; raw redis needs LMOVE/Lua) and honor
    `nextRunAt` (BullMQ delayed jobs); daily counters map to `INCRBY` on a dated key with TTL.
    Caveat: `JobQueue` assumes the claiming process runs the job — multi-worker deployments need a
    claim-lease/heartbeat so a dead worker doesn't strand jobs in `running`, and webhook ordering
    is per-process.
-3. **Promote the remaining `sdk_event` passthroughs** UIs care about: tool progress,
-   task/subagent events, todo lists.
-4. **Managed sandbox tier-2** — a hosted execution backend (Vercel/E2B) behind the existing
+2. **Promote the remaining `sdk_event` passthroughs** UIs care about: tool progress,
+   task/subagent events, todo lists — for both engines at once (Codex todo lists currently ride
+   `sdk_event` as `codex.todo_list`).
+3. **Managed sandbox tier-2** — a hosted execution backend (Vercel/E2B) behind the existing
    `ToolExecutor` seam. Deliberately after deferred execution: if a third backend needs no
    runner-loop or protocol change, the seam held.
-5. **Multi-host sessions** — the durable half landed (`createFileSessionStore`), but it is
+4. **Multi-host sessions** — the durable half landed (`createFileSessionStore`), but it is
    single-process by construction: two servers over one directory would both hydrate and both
    rebuild. What's left is a shared-backend store (redis/sqlite/a table) with a claim on rebuild
    and, for Claude-engine sessions, cross-host resume over the SDK's on-disk transcripts. Also
@@ -151,4 +154,13 @@ with filesystem state), multi-tenant SaaS, and claude.ai authentication of any k
 
 - **Compliance posture.** Legal/compliance review of the auth stance is in progress — see
   [Auth & Anthropic's terms](https://workerdeck.github.io/workerdeck/docs/guides/auth/).
-  That section stays honest as things settle.
+  That section stays honest as things settle. The same question now exists for Codex: whether
+  OpenAI's terms restrict headless/gateway use of ChatGPT-subscription codex auth the way
+  Anthropic's restrict claude.ai logins is unresolved — the posture mirrors the Anthropic one
+  (surface honestly, never circumvent) until answered.
+- **Codex approvals via `codex app-server`.** The experimental JSON-RPC surface the IDE
+  extension uses is the only route to `interactiveApprovals: true` for codex. The capability
+  record means flipping it on would need no protocol change; a spike ticket, not a plan.
+- **Returning `@ai-sdk` providers as bespoke adapters.** New union members (a versioned protocol
+  event) or per-profile capability overrides under `'provider'` — the record supports both, so
+  the choice stays deferred without penalty.

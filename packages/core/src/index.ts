@@ -52,3 +52,29 @@ export {
 } from './attachments.ts'
 export type { AttachmentInput, AttachmentKind } from './attachments.ts'
 export { mcpStatusInfo, modelOptionsFromSdk, normalizeSdkMessage, toApiMessage } from './normalize.ts'
+export { getEngineAdapter } from './engines/adapter.ts'
+export type {
+  EngineAdapter,
+  EngineAvailability,
+  EngineRunnerRequest,
+  ModelCatalog,
+} from './engines/adapter.ts'
+export { claudeAdapter } from './engines/claude/adapter.ts'
+export { CLAUDE_CATALOG } from './engines/claude/catalog.ts'
+export { codexAdapter, resolveBundledCodexExecutable } from './engines/codex/adapter.ts'
+export { CODEX_CATALOG } from './engines/codex/catalog.ts'
+export { CodexRunner } from './engines/codex/runner.ts'
+export type { CodexRunnerConfig } from './engines/codex/runner.ts'
+export type {
+  CodexFactory,
+  CodexLike,
+  CodexOptionsLike,
+  CodexStreamedTurn,
+  CodexThreadEvent,
+  CodexThreadItem,
+  CodexThreadLike,
+  CodexThreadOptions,
+  CodexUsage,
+  CodexUserInput,
+} from './engines/codex/types.ts'
+export { providerAdapter } from './engines/provider/adapter.ts'

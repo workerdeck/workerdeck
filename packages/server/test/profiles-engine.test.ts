@@ -486,7 +486,7 @@ describe('provider profiles and engine selection', () => {
       }),
     })
     expect(res.status).toBe(400)
-    expect(((await res.json()) as { error: string }).error).toMatch(/declared on the profile/)
+    expect(((await res.json()) as { error: string }).error).toMatch(/declared outside the session request/)
   })
 
   it('still lets claude sessions bring their own MCP servers', async () => {

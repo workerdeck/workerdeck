@@ -1,5 +1,12 @@
 /**
- * Dev server for trying the model-agnostic engine from the browser dashboard.
+ * The `'provider'`-engine example: how a HOST wires the model-agnostic engine
+ * through the `createEngineRunner` hook. This is the escape hatch for engines
+ * the repo does not ship as adapters — the `@ai-sdk` providers below (openai,
+ * moonshotai, anthropic-over-API) are not offered by default anywhere any
+ * more, but this example keeps the path compiling and runnable, and it is the
+ * route back if they return as bespoke adapters. Claude and codex profiles
+ * need none of this: their adapters ship in `@workerdeck/core`.
+ *
  * Drop-in replacement for `pnpm server` (same port, NO AUTH, loopback only). Unlike
  * `pnpm server` this is a bare gateway, not the CLI, so it serves no dashboard —
  * pair it with `pnpm web`:

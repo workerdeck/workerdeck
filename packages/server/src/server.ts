@@ -13,9 +13,11 @@ import type { Duplex } from 'node:stream'
 import { basename, join, resolve as resolvePath, sep } from 'node:path'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { listSessions as sdkListSessions } from '@anthropic-ai/claude-agent-sdk'
-import { checkClaudeAuth } from '@workerdeck/core'
+import { checkClaudeAuth, getEngineAdapter } from '@workerdeck/core'
 import type {
   ClaudeAuthProbe,
+  EngineAdapter,
+  EngineAvailability,
   Runner,
   RunnerSnapshot,
   SessionRunnerConfig,
@@ -24,14 +26,13 @@ import type {
 import { JobQueue, type QueueAdapter } from '@workerdeck/queue'
 import {
   PROTOCOL_VERSION,
-  PROVIDER_PERMISSION_MODES,
   supportsPermissionMode,
   type ClientFrame,
   type CreateJobRequest,
   type CreateSessionRequest,
   type JobEvent,
-  type ModelOption,
   type PermissionMode,
+  type ProfileEngine,
   type ProfileConfigSnapshot,
   type ProfileInfo,
   type QueueServerFrame,
@@ -297,6 +298,8 @@ export type WorkerServerOptions = {
    * Kept as a host hook so the server package neither imports a model SDK nor
    * decides how provider credentials are resolved: the factory reads them from
    * the operator's environment, exactly like the Claude credential chain.
+   * `claude` and `codex` profiles never come through here — those engines ship
+   * as in-repo adapters (`@workerdeck/core`'s `getEngineAdapter`).
    *
    * May be async: assembly that has to await — a per-session MCP connect, a
    * credential lookup — belongs here, with `AiSdkRunnerConfig.onClose` as the
@@ -304,6 +307,13 @@ export type WorkerServerOptions = {
    * the message, a job goes straight to `failed`.
    */
   createEngineRunner?: (context: EngineRunnerContext) => Runner | Promise<Runner>
+  /**
+   * Adapter overrides, keyed by engine — **for tests only** (the server
+   * integration suite injects a fake codex engine so `pnpm test` spawns no
+   * binary). Not a public extension point: third engines belong in core as
+   * adapters, or behind `createEngineRunner` as provider profiles.
+   */
+  engines?: Partial<Record<ProfileEngine, EngineAdapter>>
 }
 
 export type EngineRunnerContext = {
@@ -503,6 +513,11 @@ function isProviderProfile(profile: ProfileInfo): boolean {
   return profile.engine === 'provider'
 }
 
+/** The engine a profile runs, absent meaning 'claude' (pre-provider profiles). */
+function engineOf(profile: ProfileInfo | undefined): ProfileEngine {
+  return profile?.engine ?? 'claude'
+}
+
 /** Where the CLI's own resolution lands for a given environment: an explicit
  * CLAUDE_CONFIG_DIR, else ~/.claude. */
 function cliConfigDir(env: Record<string, string | undefined>): string {
@@ -565,6 +580,9 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const basePath = options.basePath ?? '/v1'
   const fallback = options.fallback
   const maxBodyBytes = options.maxBodyBytes ?? 1024 * 1024
+  /** The engine's adapter, honoring the test-only `engines` override. */
+  const adapterFor = (engine: ProfileEngine | undefined): EngineAdapter =>
+    options.engines?.[engine ?? 'claude'] ?? getEngineAdapter(engine)
   const hostBuildRunnerConfig =
     options.buildRunnerConfig ?? ((req: CreateSessionRequest): SessionRunnerConfig => req)
 
@@ -593,6 +611,20 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           '`createEngineRunner` was provided to build one'
         )
       }
+    } else if (p.engine === 'codex') {
+      // The codexHome pin mirrors the claude configDir rule: a declared dir
+      // must exist. Unset is fine — the binary's own ~/.codex.
+      if (p.codexHome && !existsSync(p.codexHome)) {
+        return `profile '${p.name}' codexHome does not exist: ${p.codexHome}`
+      }
+      // No instructions surface exists (codex reads AGENTS.md from the cwd);
+      // refusing beats silently dropping what the operator wrote.
+      if (p.session?.instructions) {
+        return (
+          `profile '${p.name}' declares session.instructions, which the codex engine cannot ` +
+          'deliver — put instructions in the target repo’s AGENTS.md instead'
+        )
+      }
     } else if (!p.configDir || !existsSync(p.configDir)) {
       return `profile '${p.name}' configDir does not exist: ${p.configDir}`
     }
@@ -605,7 +637,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     if (fallbackMode && !supportsPermissionMode(p.engine, fallbackMode)) {
       return (
         `profile '${p.name}' defaults to permission mode '${fallbackMode}', which engine ` +
-        `'${p.engine}' does not support (supported: ${PROVIDER_PERMISSION_MODES.join(', ')})`
+        `'${engineOf(p)}' does not support (supported: ` +
+        `${adapterFor(engineOf(p)).capabilities.permissionModes.join(', ')})`
       )
     }
     return null
@@ -633,12 +666,32 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const withManagedFlag = (p: ProfileInfo): ProfileInfo =>
     declaredByName.has(p.name) ? p : { ...p, managed: true }
 
-  /** Response shape for a profile: the managed marker, plus whatever models a
-   * session on it has reported. Read-only decoration — never persisted. */
+  /**
+   * Response shape for a profile: the managed marker, the engine's capability
+   * record, its static model catalog (correct from the first request — no
+   * warm-up session, no process spawned), the availability verdict when one
+   * has been probed, and the learned default model (the one thing a static
+   * catalog cannot know: a claude profile's default is the operator's CLI
+   * config, so it stays absent until a session on the profile reports it).
+   * Read-only decoration — never persisted.
+   */
   const forResponse = (p: ProfileInfo): ProfileInfo => {
-    const seen = profileModels.get(p.name)
-    const base = withManagedFlag(p)
-    return seen ? { ...base, models: seen.models, defaultModel: seen.defaultModel } : base
+    const adapter = adapterFor(p.engine)
+    const base: ProfileInfo = {
+      ...withManagedFlag(p),
+      capabilities: adapter.capabilities,
+    }
+    // Provider model ids are operator-declared (provider.models); an empty
+    // catalog must not shadow them with an empty picker.
+    if (adapter.catalog.models.length > 0) base.models = adapter.catalog.models
+    const defaultModel = profileDefaultModels.get(p.name)
+    if (defaultModel) base.defaultModel = defaultModel
+    const probed = availability.get(p.name)?.verdict
+    if (probed && probed.available !== 'unknown') {
+      base.available = probed.available
+      if (probed.available === false) base.unavailableReason = probed.reason
+    }
+    return base
   }
 
   /** Declared profiles first: a name collision means the code wins, and the stored
@@ -740,32 +793,54 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     if (mode === undefined || supportsPermissionMode(profile?.engine, mode)) return null
     return (
       `permission mode '${mode}' is not supported by profile '${profile!.name}' ` +
-      `(engine '${profile!.engine}') — supported: ${PROVIDER_PERMISSION_MODES.join(', ')}`
+      `(engine '${engineOf(profile)}') — supported: ` +
+      adapterFor(profile?.engine).capabilities.permissionModes.join(', ')
     )
   }
 
   /**
-   * Enforce the provider engine's grant rules on a create request. Two of them:
-   *
-   * - Capabilities narrow, never widen. A request may run with fewer than the
-   *   profile grants; naming one it doesn't is refused rather than quietly
-   *   downgraded, so a caller learns instead of wondering where the tool went.
-   * - MCP servers are the profile's to declare. MCP tools are authoritative —
-   *   server-side, with server credentials, never bridged — so honoring a
-   *   client-supplied server would let a caller point an authoritative tool
-   *   anywhere it liked. The profile names servers; the host holds their configs.
+   * Refuse the request fields the resolved profile's engine cannot honor —
+   * read off its capability record, so the create form's filtering and the
+   * API boundary can never disagree. Refusing beats coercing: a caller who
+   * asked for something the engine has no meaning for should be told, not
+   * left wondering where the option went. Also enforces the provider grant
+   * rules (capabilities narrow, never widen; MCP servers are the profile's to
+   * declare — MCP tools are authoritative, server-side, with server
+   * credentials, so honoring a client-supplied server would let a caller
+   * point an authoritative tool anywhere it liked).
    */
   const checkEngineGrants = (
     req: CreateSessionRequest,
     profile: ProfileInfo | undefined,
   ): string | null => {
-    if (!profile || !isProviderProfile(profile)) return null
-    if (req.mcpServers && Object.keys(req.mcpServers).length > 0) {
+    const engine = engineOf(profile)
+    const caps = adapterFor(profile?.engine).capabilities
+    const name = profile?.name ?? 'default'
+    if (!caps.sessionMcpServers && req.mcpServers && Object.keys(req.mcpServers).length > 0) {
       return (
-        `profile '${profile.name}' runs the provider engine, whose MCP servers are declared ` +
-        'on the profile (session.mcpServers) — a session request cannot add its own'
+        `profile '${name}' runs the ${engine} engine, whose MCP servers are declared ` +
+        'outside the session request — a request cannot add its own'
       )
     }
+    if (!caps.budgets && (req.maxTurns !== undefined || req.maxBudgetUsd !== undefined)) {
+      return `the ${engine} engine does not honor maxTurns/maxBudgetUsd`
+    }
+    if (!caps.settingSources && req.settingSources !== undefined) {
+      return `the ${engine} engine does not load settingSources`
+    }
+    if (!caps.resume && req.resume !== undefined) {
+      return `the ${engine} engine cannot resume a session`
+    }
+    if (req.forkSession && engine !== 'claude') {
+      return `the ${engine} engine cannot fork a resumed session`
+    }
+    if (
+      req.reasoningEffort !== undefined &&
+      (!caps.reasoningEfforts || caps.reasoningEfforts.length === 0)
+    ) {
+      return `the ${engine} engine does not take a reasoningEffort`
+    }
+    if (!profile || !isProviderProfile(profile)) return null
     const granted = profile.session?.capabilities
     if (!req.capabilities || !granted) return null
     const ungranted = req.capabilities.filter((c) => !granted.includes(c))
@@ -774,6 +849,15 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       `profile '${profile.name}' does not grant: ${ungranted.join(', ')} ` +
       `(granted: ${granted.join(', ') || 'none'}) — a request may narrow capabilities, not widen them`
     )
+  }
+
+  /** Drop request fields that are meaningless (not wrong) for the engine —
+   * today just `questionBehavior` where no approval channel exists, so job
+   * webhooks never grow phantom permission_requested expectations. */
+  const stripInertFields = (req: CreateSessionRequest, profile: ProfileInfo | undefined): void => {
+    if (!adapterFor(profile?.engine).capabilities.interactiveApprovals) {
+      delete req.questionBehavior
+    }
   }
 
   /** Profile-aware config hook: fill the profile's defaults into unset request fields,
@@ -788,9 +872,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       model: req.model ?? profile.defaults?.model ?? profile.provider?.model,
       permissionMode: req.permissionMode ?? profile.defaults?.permissionMode,
     })
-    // Provider profiles have no config dir to pin: their credentials come from
-    // the operator's environment through the engine factory.
-    if (isProviderProfile(profile)) return config
+    // Only claude profiles have a config dir to pin. Provider credentials come
+    // from the operator's environment through the engine factory; a codex
+    // profile's CODEX_HOME pin is applied by its adapter (the runner builds the
+    // child env, because CodexOptions.env replaces rather than merges).
+    if (engineOf(profile) !== 'claude') return config
     const base = config.env ?? process.env
     const env = claudeSessionEnv(profile, base)
     // A skipped pin returns `base` itself — leave the config alone so an unset
@@ -819,8 +905,9 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       // Guaranteed present: startup refuses provider profiles without a factory.
       return options.createEngineRunner!({ config, profile, bridge, restore })
     }
-    if (restore) throw new Error('the Claude engine cannot rebuild a parked session')
-    return new Promise<Runner>((resolve) => resolve(registry.prepare(config)))
+    // claude and codex ship as in-repo adapters; each refuses `restore` itself
+    // (neither engine can rebuild a parked session — the binary owns its state).
+    return adapterFor(profile?.engine).createRunner({ config, profile, restore })
   }
 
   const createRunner = async (config: SessionRunnerConfig): Promise<Runner> => {
@@ -866,23 +953,22 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   // session that most needs to reach a phone may be one that parked and was
   // rebuilt — and that path never goes near `createRunner`.
   const notifier = new SessionNotifier(options.notifications ?? {})
-  /** Models each claude profile's CLI last reported, so `GET /profiles` can offer
-   * a create form a picker rather than a text box.
-   *
-   * Learned from sessions rather than probed: `supportedModels()` needs a live
-   * CLI, and spawning one per profile to fill a dropdown is a poor trade when
-   * any session that has ever run already answered the question. The cost is
-   * that a server which has run nothing yet still offers a text field.
+  /**
+   * What each claude profile's *default* model resolves to, learned from the
+   * `capabilities` events of sessions that ran on it. The model *list* is the
+   * adapter's static catalog now; the default is the one thing a catalog
+   * cannot know (it is the operator's CLI config), so it alone is still
+   * learned — and still absent on a cold server, the accepted regression.
    */
-  const profileModels = new Map<string, { models: ModelOption[]; defaultModel?: string }>()
+  const profileDefaultModels = new Map<string, string>()
   const registry = new SessionRegistry({
     onRegister: (runner) => {
       notifier.watch(runner)
       const profile = runner.info().profile
       if (!profile) return
       runner.subscribe((event) => {
-        if (event.type !== 'capabilities' || event.models.length === 0) return
-        profileModels.set(profile, { models: event.models, defaultModel: event.defaultModel })
+        if (event.type !== 'capabilities' || !event.defaultModel) return
+        profileDefaultModels.set(profile, event.defaultModel)
       })
     },
   })
@@ -992,42 +1078,94 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   }
 
   /**
-   * Probe each Claude profile's credentials the way its sessions will actually
-   * experience them: the env the real assembly path produces, so anything the
-   * host hook injects (a CLAUDE_CODE_OAUTH_TOKEN, say) counts as logged in.
-   * Provider profiles resolve credentials in the engine factory and are not
-   * probed. Fire-and-forget by design — see the `checkCredentials` option doc.
+   * Availability, per profile: the adapter's probe run over the env the real
+   * assembly path produces (so anything the host hook injects — a
+   * CLAUDE_CODE_OAUTH_TOKEN, say — counts as logged in). Cached, and served on
+   * `GET /profiles` as `available`/`unavailableReason`.
+   *
+   * Gated on `checkCredentials` like the old claude-only preflight (this is a
+   * library; `pnpm test` must spawn nothing unless a test injects fake
+   * adapters or probes). 'unknown' stays out of the cache's answers: a probe
+   * that couldn't run is not evidence of a missing login. **Display-only**
+   * downstream — session create against an unavailable profile still proceeds
+   * and fails with the engine's own error, because the probe can be stale in
+   * both directions and refusing on it would turn a probe bug into an outage.
    */
-  const preflightCredentials = (): void => {
+  const availability = new Map<string, { verdict: EngineAvailability; at: number }>()
+  const AVAILABILITY_TTL_MS = 60_000
+  /** Profiles already warned about on the console, so re-probes don't spam. */
+  const availabilityWarned = new Set<string>()
+
+  const sessionEnvFor = (profile: ProfileInfo): Record<string, string | undefined> => {
+    try {
+      return buildRunnerConfig({ cwd: process.cwd(), profile: profile.name }).env ?? process.env
+    } catch {
+      // A host hook may choke on a probe-shaped request; fall back to the
+      // profile pin alone, applied exactly as the real path applies it.
+      return engineOf(profile) === 'claude' ? claudeSessionEnv(profile, process.env) : process.env
+    }
+  }
+
+  const probeProfile = (profile: ProfileInfo): void => {
     if (!options.checkCredentials) return
     const conf = options.checkCredentials === true ? {} : options.checkCredentials
-    const probe: ClaudeAuthProbe =
-      conf.probe ?? ((env) => checkClaudeAuth(env, { timeoutMs: conf.timeoutMs }))
-    for (const profile of allProfiles()) {
-      if (isProviderProfile(profile)) continue
-      let env: Record<string, string | undefined>
-      try {
-        env = buildRunnerConfig({ cwd: process.cwd(), profile: profile.name }).env ?? process.env
-      } catch {
-        // A host hook may choke on a probe-shaped request; fall back to the
-        // profile pin alone, applied exactly as the real path applies it.
-        env = claudeSessionEnv(profile, process.env)
-      }
-      void probe(env)
-        .then((status) => {
-          if (status !== 'logged_out') return
-          console.warn(
-            `[workerdeck] Profile '${profile.name}' (${profile.configDir}) has no usable ` +
-              'Claude credentials: `claude auth status` reports logged out for the environment ' +
-              'its sessions run with, so they will fail with "Not logged in". Log in under ' +
-              `that dir (CLAUDE_CONFIG_DIR=${profile.configDir} claude auth login), inject a ` +
-              'long-lived token via buildRunnerConfig (CLAUDE_CODE_OAUTH_TOKEN), or set ' +
-              'ANTHROPIC_API_KEY. `checkCredentials: false` disables this check.',
+    // Mark in-flight immediately so concurrent GET /profiles don't re-spawn.
+    availability.set(profile.name, {
+      verdict: availability.get(profile.name)?.verdict ?? { available: 'unknown' },
+      at: Date.now(),
+    })
+    const adapter = adapterFor(profile.engine)
+    // The injectable claude probe predates the adapter layer and is honored
+    // for claude profiles (existing tests and hosts wire it).
+    const claudeProbe: ClaudeAuthProbe | undefined =
+      engineOf(profile) !== 'claude'
+        ? undefined
+        : (conf.probe ??
+          (conf.timeoutMs !== undefined
+            ? (env) => checkClaudeAuth(env, { timeoutMs: conf.timeoutMs })
+            : undefined))
+    const run: Promise<EngineAvailability> =
+      claudeProbe
+        ? claudeProbe(sessionEnvFor(profile)).then(
+            (status): EngineAvailability =>
+              status === 'logged_in'
+                ? { available: true }
+                : status === 'logged_out'
+                  ? { available: false, reason: 'no usable Claude credentials for this profile' }
+                  : { available: 'unknown' },
           )
-        })
-        .catch(() => {
-          // a probe that breaks is 'unknown', and unknown stays silent
-        })
+        : adapter.checkAvailability(profile, sessionEnvFor(profile))
+    void run
+      .then((verdict) => {
+        availability.set(profile.name, { verdict, at: Date.now() })
+        if (verdict.available === false && !availabilityWarned.has(profile.name)) {
+          availabilityWarned.add(profile.name)
+          console.warn(
+            `[workerdeck] Profile '${profile.name}' is unavailable: ${verdict.reason} ` +
+              '(`checkCredentials: false` disables this check)',
+          )
+        }
+        if (verdict.available === true) availabilityWarned.delete(profile.name)
+      })
+      .catch(() => {
+        // a probe that breaks is 'unknown', and unknown stays silent
+      })
+  }
+
+  /** Launch-time sweep, concurrent and fire-and-forget. */
+  const preflightCredentials = (): void => {
+    for (const profile of allProfiles()) probeProfile(profile)
+  }
+
+  /** Lazy re-probe on reads, so an operator who just ran `codex login` (or
+   * exported a key) sees the profile go green without a restart. Serves the
+   * cached verdict now; the refreshed one lands on the next request. */
+  const refreshAvailability = (profiles: ProfileInfo[]): void => {
+    if (!options.checkCredentials) return
+    const now = Date.now()
+    for (const profile of profiles) {
+      const cached = availability.get(profile.name)
+      if (!cached || now - cached.at > AVAILABILITY_TTL_MS) probeProfile(profile)
     }
   }
 
@@ -1596,6 +1734,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           json(res, 400, { error: badRequest })
           return
         }
+        stripInertFields(body.session, resolved.profile)
         // Normalize to the resolved name so an implicit single profile still lands
         // on JobInfo.profile and reaches the runner config at claim time.
         body.session.profile = resolved.profile?.name
@@ -1728,6 +1867,9 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           const visible = auth.allowedProfiles
             ? allProfiles().filter((p) => auth.allowedProfiles!.includes(p.name))
             : allProfiles()
+          // Stale-while-revalidate: answer from the cache, re-probe anything
+          // older than the TTL so the next read reflects a fresh login.
+          refreshAvailability(visible)
           json(res, 200, {
             profiles: visible.map(forResponse),
             canManage: manageGuard(auth) === null,
@@ -1862,6 +2004,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           json(res, 400, { error: badRequest })
           return
         }
+        stripInertFields(body, resolved.profile)
         // Resolved name (even when implicit) so SessionInfo.profile is always set.
         body.profile = resolved.profile?.name
         const runner = await createRunner(buildRunnerConfig(body))
