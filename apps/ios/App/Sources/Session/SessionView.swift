@@ -136,7 +136,7 @@ struct SessionView: View {
           }
         case .model:
           ModelPickerSheet(
-            models: vm.state.models ?? [],
+            models: vm.availableModels,
             current: vm.effectiveModel,
             defaultModel: vm.defaultModel,
             onSelect: { vm.setModel($0) })
@@ -421,7 +421,7 @@ struct SessionView: View {
       rateLimits: vm.hudRateLimits,
       totalCostUsd: vm.state.totalCostUsd,
       model: vm.effectiveModel,
-      models: vm.state.models ?? [],
+      models: vm.availableModels,
       permissionMode: vm.state.permissionMode,
       onOpenModel: { sheet = .model },
       onOpenMode: { sheet = .mode },

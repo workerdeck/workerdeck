@@ -129,16 +129,22 @@ describe('CodexRunner event mapping', () => {
     expect(assistants[0]!.message.content).toEqual([{ type: 'thinking', thinking: 'thinking…' }])
 
     // Command execution: tool_use at start, paired tool_result at completion.
+    // Published ids are per-turn-namespaced (codex restarts item ids in every
+    // exec child), with the raw id surviving as the suffix.
     const commandUse = assistants.find(
       (e) => Array.isArray(e.message.content) && e.message.content[0]!.type === 'tool_use'
         && (e.message.content[0] as { name?: string }).name === 'CodexCommand',
     )!
-    expect(commandUse.message.content).toEqual([
-      { type: 'tool_use', id: 'c1', name: 'CodexCommand', input: { command: 'ls' } },
-    ])
+    const commandBlock = (commandUse.message.content as Array<{ id: string }>)[0]!
+    expect(commandBlock).toMatchObject({
+      type: 'tool_use',
+      name: 'CodexCommand',
+      input: { command: 'ls' },
+    })
+    expect(commandBlock.id).toMatch(/:c1$/)
     const results = ofType(events, 'user_message').filter((e) => e.synthetic)
     const commandResult = results.find(
-      (e) => (e.message.content as Array<{ tool_use_id?: string }>)[0]!.tool_use_id === 'c1',
+      (e) => (e.message.content as Array<{ tool_use_id?: string }>)[0]!.tool_use_id === commandBlock.id,
     )!
     expect((commandResult.message.content as Array<{ content?: string; is_error?: boolean }>)[0]).toMatchObject({
       content: 'file.txt\n',
@@ -149,7 +155,7 @@ describe('CodexRunner event mapping', () => {
       (e) => Array.isArray(e.message.content)
         && (e.message.content[0] as { name?: string }).name === 'CodexFileChange',
     )!
-    expect((fileUse.message.content as Array<{ id?: string }>)[0]!.id).toBe('f1')
+    expect((fileUse.message.content as Array<{ id?: string }>)[0]!.id).toMatch(/:f1$/)
 
     // MCP calls take Claude's naming so existing MCP-aware rendering applies.
     const mcpUse = assistants.find(
@@ -285,6 +291,51 @@ describe('CodexRunner event mapping', () => {
       'one',
       'two',
     ])
+  })
+
+  it('namespaces item ids per turn — two exec children never publish the same id', async () => {
+    // One codex child per turn, and item ids restart at item_0 in every child.
+    // Raw ids on the wire would make a client's upsert-by-id overwrite turn 1's
+    // bubble with turn N's answer (the reproduced "codex returned nothing" bug).
+    const turn = (text: string): ScriptedTurn => ({
+      events: [
+        { type: 'thread.started', thread_id: 't' },
+        item('item.started', { id: 'item_0', type: 'command_execution', command: 'ls', aggregated_output: '', status: 'in_progress' }),
+        item('item.completed', { id: 'item_0', type: 'command_execution', command: 'ls', aggregated_output: 'ok\n', exit_code: 0, status: 'completed' }),
+        item('item.completed', { id: 'item_1', type: 'agent_message', text }),
+        { type: 'turn.completed', usage: USAGE },
+      ],
+    })
+    const { codexFn } = scriptedCodex([turn('four'), turn('six')])
+    const runner = new CodexRunner({ cwd: '/tmp', codexFn })
+    const events = collect(runner)
+    void runner.start()
+    runner.sendMessage('2+2')
+    runner.sendMessage('3+3')
+    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
+
+    // Both answers survive as distinct items: distinct uuids, stable raw suffix.
+    const answers = ofType(events, 'assistant_message').filter(
+      (e) => Array.isArray(e.message.content) && e.message.content[0]!.type === 'text',
+    )
+    expect(answers.map((e) => (e.message.content as Array<{ text: string }>)[0]!.text)).toEqual([
+      'four',
+      'six',
+    ])
+    expect(answers[0]!.uuid).not.toBe(answers[1]!.uuid)
+    for (const answer of answers) expect(answer.uuid).toMatch(/:item_1$/)
+
+    // Tool ids: distinct across turns, and each turn's tool_result pairs with
+    // its own turn's tool_use (started → completed stays one item).
+    const uses = ofType(events, 'assistant_message')
+      .map((e) => (e.message.content as Array<{ type: string; id?: string }>)[0]!)
+      .filter((block) => block.type === 'tool_use')
+    expect(uses).toHaveLength(2)
+    expect(uses[0]!.id).not.toBe(uses[1]!.id)
+    const resultIds = ofType(events, 'user_message')
+      .filter((e) => e.synthetic)
+      .map((e) => (e.message.content as Array<{ tool_use_id: string }>)[0]!.tool_use_id)
+    expect(resultIds).toEqual([uses[0]!.id, uses[1]!.id])
   })
 
   it('applies model/mode/effort per spawn, mutable between turns, fixed mid-turn', async () => {

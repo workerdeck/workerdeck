@@ -121,6 +121,26 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   it, streams JSONL on stdout, exits. Follow-ups run `codex exec … resume <thread_id>`. So
   between-turn mutability (model, mode, effort) is free — the next spawn just gets different
   flags — and mid-turn mutability is impossible (`setModel`/`setPermissionMode` throw mid-turn).
+- **Codex item ids restart at `item_0` in every child**, i.e. every turn — they are unique only
+  within a turn, and both transcript reducers upsert by id (correct for streaming and
+  tool_result pairing), so publishing them raw makes turn N's answer overwrite turn 1's bubble
+  in place (reproduced live: "the model returned nothing"). `CodexRunner.#runTurn` therefore
+  mints a per-turn `randomUUID()` token and namespaces every item-derived id it publishes
+  (`<token>:<item.id>` — assistant/reasoning uuids, tool_use/tool_result ids, the todo_list
+  sdk_event id). Random, not a counter: a counter restarts with the process and would collide
+  with ids a client already holds. Keep any new item-derived id on the same token.
+- **There is no partial-text streaming, and `streaming: 'item'` is more generous than reality**
+  (verified 2026-08-05 against 0.146.0 by running the binary): a whole turn is four events —
+  `thread.started`, `turn.started`, `item.completed [agent_message]`, `turn.completed`. No
+  `item.started`, no `item.updated`, no deltas, under **both** `--experimental-json` and the
+  legacy `--json`; `codex exec` has no partial-message flag to pass. So a single-message turn
+  shows nothing until the entire answer lands at once — expected behavior in every client, not a
+  transport bug, and the visible difference from claude's `streaming: 'token'`.
+  `CodexRunner.#handleItemProgress` does synthesize deltas from `item.updated` growth, which
+  means **that path is correct but never executes today** — it is forward-looking, not tested by
+  anything. `smoke:codex` asserts the current four-event shape so the day codex starts emitting
+  `item.updated` is the day the smoke tells you, rather than the day someone notices the dead
+  branch woke up.
 - **Interactive approvals are structurally impossible in exec mode** — closed event union with no
   approval request, stdin already closed, `codex exec --help` says non-interactive. That is why
   `ENGINE_CAPABILITIES.codex.interactiveApprovals` is false and every codex spawn passes

@@ -332,7 +332,16 @@ export class CodexRunner implements Runner {
     const abort = new AbortController()
     this.#abort = abort
     const startedAt = Date.now()
-    /** Text growth already streamed per item id, for delta synthesis. */
+    // Codex item ids restart at `item_0` in every exec child — one child per
+    // turn — so raw ids collide across turns, and a client's upsert-by-id
+    // would overwrite turn 1's bubble with turn N's answer. Every
+    // item-derived id we publish is therefore namespaced with a per-turn
+    // nonce: unique for the life of the session, stable within the turn
+    // (progress, completion, and tool_result all mint the same id). A random
+    // nonce, not a counter — a counter would restart with the process and
+    // collide against ids a client already holds.
+    const turnToken = randomUUID()
+    /** Text growth already streamed per (namespaced) item id, for delta synthesis. */
     const streamed = new Map<string, string>()
     /** tool_use blocks already emitted, so completions pair with them. */
     const toolUseEmitted = new Set<string>()
@@ -355,10 +364,10 @@ export class CodexRunner implements Runner {
             break
           case 'item.started':
           case 'item.updated':
-            this.#handleItemProgress(event.item, streamed, toolUseEmitted)
+            this.#handleItemProgress(event.item, turnToken, streamed, toolUseEmitted)
             break
           case 'item.completed': {
-            const text = this.#handleItemCompleted(event.item, streamed, toolUseEmitted)
+            const text = this.#handleItemCompleted(event.item, turnToken, streamed, toolUseEmitted)
             if (text !== undefined) finalText = text
             break
           }
@@ -408,16 +417,18 @@ export class CodexRunner implements Runner {
    * (`streaming: 'item'`), fine for a transcript, not a typing cursor. */
   #handleItemProgress(
     item: CodexThreadItem,
+    turnToken: string,
     streamed: Map<string, string>,
     toolUseEmitted: Set<string>,
   ): void {
+    const id = `${turnToken}:${item.id}`
     if (item.type === 'agent_message' || item.type === 'reasoning') {
       if (this.#config.includePartialMessages === false) return
-      const previous = streamed.get(item.id) ?? ''
+      const previous = streamed.get(id) ?? ''
       const text = typeof item.text === 'string' ? item.text : ''
       if (!text.startsWith(previous) || text.length === previous.length) return
       const delta = text.slice(previous.length)
-      streamed.set(item.id, text)
+      streamed.set(id, text)
       this.#emit({
         type: 'stream_delta',
         event: {
@@ -432,18 +443,18 @@ export class CodexRunner implements Runner {
       })
       return
     }
-    if (item.type === 'command_execution' && !toolUseEmitted.has(item.id)) {
-      toolUseEmitted.add(item.id)
-      this.#emitToolUse(item.id, 'CodexCommand', { command: item.command })
+    if (item.type === 'command_execution' && !toolUseEmitted.has(id)) {
+      toolUseEmitted.add(id)
+      this.#emitToolUse(id, 'CodexCommand', { command: item.command })
       return
     }
-    if (item.type === 'mcp_tool_call' && !toolUseEmitted.has(item.id)) {
-      toolUseEmitted.add(item.id)
-      this.#emitToolUse(item.id, `mcp__${item.server}__${item.tool}`, item.arguments)
+    if (item.type === 'mcp_tool_call' && !toolUseEmitted.has(id)) {
+      toolUseEmitted.add(id)
+      this.#emitToolUse(id, `mcp__${item.server}__${item.tool}`, item.arguments)
       return
     }
     if (item.type === 'todo_list') {
-      this.#emit({ type: 'sdk_event', payload: { type: 'codex.todo_list', id: item.id, items: item.items } })
+      this.#emit({ type: 'sdk_event', payload: { type: 'codex.todo_list', id, items: item.items } })
     }
   }
 
@@ -451,27 +462,29 @@ export class CodexRunner implements Runner {
    * when the item carries it (agent_message). */
   #handleItemCompleted(
     item: CodexThreadItem,
+    turnToken: string,
     streamed: Map<string, string>,
     toolUseEmitted: Set<string>,
   ): string | undefined {
+    const id = `${turnToken}:${item.id}`
     switch (item.type) {
       case 'agent_message': {
-        streamed.delete(item.id)
+        streamed.delete(id)
         const text = typeof item.text === 'string' ? item.text : ''
-        this.#emitAssistant(item.id, [{ type: 'text', text }])
+        this.#emitAssistant(id, [{ type: 'text', text }])
         return text
       }
       case 'reasoning': {
-        streamed.delete(item.id)
+        streamed.delete(id)
         const thinking = typeof item.text === 'string' ? item.text : ''
         // Its own assistant_message, preceding the text — AiSdkRunner's block order.
-        if (thinking) this.#emitAssistant(item.id, [{ type: 'thinking', thinking }])
+        if (thinking) this.#emitAssistant(id, [{ type: 'thinking', thinking }])
         return undefined
       }
       case 'command_execution': {
-        if (!toolUseEmitted.has(item.id)) {
-          toolUseEmitted.add(item.id)
-          this.#emitToolUse(item.id, 'CodexCommand', { command: item.command })
+        if (!toolUseEmitted.has(id)) {
+          toolUseEmitted.add(id)
+          this.#emitToolUse(id, 'CodexCommand', { command: item.command })
         }
         const failed = item.status === 'failed' || (item.exit_code !== undefined && item.exit_code !== 0)
         const output =
@@ -479,39 +492,39 @@ export class CodexRunner implements Runner {
           (item.exit_code !== undefined && item.exit_code !== 0
             ? `\n(exit code ${item.exit_code})`
             : '')
-        this.#emitToolResult(item.id, output, failed)
+        this.#emitToolResult(id, output, failed)
         return undefined
       }
       case 'file_change': {
         // Post-hoc by design: the patch already succeeded or failed — there is
         // no proposal stage in exec mode.
-        this.#emitToolUse(item.id, 'CodexFileChange', { changes: item.changes })
+        this.#emitToolUse(id, 'CodexFileChange', { changes: item.changes })
         this.#emitToolResult(
-          item.id,
+          id,
           item.changes.map((change) => `${change.kind}: ${change.path}`).join('\n') || item.status,
           item.status === 'failed',
         )
         return undefined
       }
       case 'mcp_tool_call': {
-        if (!toolUseEmitted.has(item.id)) {
-          toolUseEmitted.add(item.id)
-          this.#emitToolUse(item.id, `mcp__${item.server}__${item.tool}`, item.arguments)
+        if (!toolUseEmitted.has(id)) {
+          toolUseEmitted.add(id)
+          this.#emitToolUse(id, `mcp__${item.server}__${item.tool}`, item.arguments)
         }
         const isError = item.error !== undefined || item.status === 'failed'
         this.#emitToolResult(
-          item.id,
+          id,
           item.error?.message ?? (item.result === undefined ? '' : JSON.stringify(item.result)),
           isError,
         )
         return undefined
       }
       case 'web_search':
-        this.#emitToolUse(item.id, 'CodexWebSearch', { query: item.query })
-        this.#emitToolResult(item.id, '', false)
+        this.#emitToolUse(id, 'CodexWebSearch', { query: item.query })
+        this.#emitToolResult(id, '', false)
         return undefined
       case 'todo_list':
-        this.#emit({ type: 'sdk_event', payload: { type: 'codex.todo_list', id: item.id, items: item.items } })
+        this.#emit({ type: 'sdk_event', payload: { type: 'codex.todo_list', id, items: item.items } })
         return undefined
       case 'error':
         this.#emit({ type: 'sdk_event', payload: { type: 'codex.error', message: item.message } })

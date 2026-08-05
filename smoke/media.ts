@@ -1,20 +1,31 @@
 /**
- * Manual smoke for MESSAGE ATTACHMENTS against the real Claude Code CLI:
+ * Manual smoke for MESSAGE ATTACHMENTS against a real engine:
  *
  *   generated file → POST /sessions/:id/attachments → user_message(attachmentIds)
- *   → SessionRunner → CLI → the model actually describing what it was shown
+ *   → Runner → CLI → the model actually describing what it was shown
  *
  * Spends tokens — never part of `pnpm test`.
  *
- *   pnpm smoke:media              # all three kinds
- *   pnpm smoke:media image        # just one
+ *   pnpm smoke:media                      # claude, all three kinds
+ *   pnpm smoke:media image                # claude, just one
+ *   pnpm smoke:media --engine codex       # codex: image + text through, PDF refused
+ *   pnpm smoke:media text --engine codex  # both filters
  *
  * This is the only thing that can validate the attachment wire. The fake
- * `queryFn` harness in `pnpm test` proves the server builds the right content
- * blocks, but not that the CLI *accepts* them on streamed input — a CLI that
- * dropped non-text blocks would look exactly like a model ignoring the picture.
- * Each case asks a question whose answer is only in the attachment, so a dropped
- * block fails loudly instead of producing a plausible sentence.
+ * harnesses in `pnpm test` prove the server builds the right content blocks, but
+ * not that the engine *accepts* them — a CLI that dropped non-text blocks would
+ * look exactly like a model ignoring the picture. Each case asks a question whose
+ * answer is only in the attachment, so a dropped block fails loudly instead of
+ * producing a plausible sentence.
+ *
+ * **The refusal is a case too, not a gap.** Which kinds an engine takes is the
+ * capability record's claim, so each case is checked against
+ * `ENGINE_CAPABILITIES[engine].attachments` rather than against a hard-coded
+ * engine name: a kind the record forswears must be refused by the upload route
+ * with **415** and a message naming the engine, and one it claims must reach the
+ * model. That way the same three cases prove claude takes all three and codex
+ * takes image + text but not PDF — and the day a record changes, this file needs
+ * no edit to keep testing the truth.
  *
  * The files are generated here, not committed: a PNG built byte by byte and a
  * one-page PDF with computed xref offsets, so the repo carries no binaries and
@@ -24,7 +35,7 @@ import { deflateSync } from 'node:zlib'
 import WebSocket from 'ws'
 import { WorkerDeckClient } from '@workerdeck/client'
 import { createWorkerServer } from '@workerdeck/server'
-import type { SessionEvent } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, type SessionEvent } from '@workerdeck/protocol'
 
 // ------------------------------------------------------------- fixtures ----
 
@@ -132,26 +143,48 @@ const CASES: Case[] = [
   },
 ]
 
-const only = process.argv[2]
+const argv = process.argv.slice(2)
+const engineFlag = argv.indexOf('--engine')
+const ENGINE = engineFlag === -1 ? 'claude' : (argv[engineFlag + 1] ?? '')
+if (!(ENGINE in ENGINE_CAPABILITIES)) {
+  console.error(`Unknown engine '${ENGINE}'. Use one of: ${Object.keys(ENGINE_CAPABILITIES).join(', ')}`)
+  process.exit(1)
+}
+const only = argv.find((a, i) => !a.startsWith('--') && argv[i - 1] !== '--engine')
 const cases = only ? CASES.filter((c) => c.kind === only) : CASES
 if (cases.length === 0) {
   console.error(`Unknown case '${only}'. Use one of: ${CASES.map((c) => c.kind).join(', ')}`)
   process.exit(1)
 }
 
+/** What this engine's record claims it can be sent. */
+const ACCEPTED: readonly string[] = ENGINE_CAPABILITIES[ENGINE as 'claude'].attachments
+
 // --------------------------------------------------------------- harness ----
 
-const server = createWorkerServer({ allowUnauthenticated: true, allowedCwdRoots: ['/tmp'] })
+// A single declared profile is implicit on create, so the codex leg needs no
+// profile name on the request — but it does need the profile to exist, because
+// the engine is a property of the profile, not of the session request.
+const server = createWorkerServer({
+  allowUnauthenticated: true,
+  allowedCwdRoots: ['/tmp'],
+  ...(ENGINE === 'claude' ? {} : { profiles: [{ name: ENGINE, engine: ENGINE as 'codex' }] }),
+})
 const { port } = await server.listen(0, '127.0.0.1')
 const client = new WorkerDeckClient({
   baseUrl: `http://127.0.0.1:${port}/v1`,
   WebSocketImpl: WebSocket as unknown as typeof globalThis.WebSocket,
 })
 
-console.log(`\nAttachment smoke — real CLI on 127.0.0.1:${port}`)
+console.log(`\nAttachment smoke — real ${ENGINE} engine on 127.0.0.1:${port}`)
+console.log(`accepts: ${ACCEPTED.join(', ')}`)
 console.log('='.repeat(60))
 
-const session = await client.createSession({ cwd: '/tmp' })
+const session = await client.createSession({
+  cwd: '/tmp',
+  // The cheap model of each lineup — this smoke tests the wire, not the model.
+  ...(ENGINE === 'codex' ? { model: 'gpt-5.6-luna' } : {}),
+})
 const handle = client.attach(session.id)
 
 /** Collected assistant text for the turn in flight, resolved on turn_result. */
@@ -186,10 +219,46 @@ async function ask(prompt: string, attachmentIds: string[]): Promise<string> {
   })
 }
 
+/**
+ * A kind the record forswears must die at the door. Uploaded with raw `fetch`
+ * rather than `client.uploadAttachment`, which throws away the status — and the
+ * status is half the claim: a 415 says "wrong kind", while a 400/500 would mean
+ * the route merely failed to cope with it.
+ */
+async function expectRefused(testCase: Case): Promise<string | null> {
+  const url = `http://127.0.0.1:${port}/v1/sessions/${session.id}/attachments?name=${encodeURIComponent(testCase.name)}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': testCase.mediaType },
+    body: new Uint8Array(testCase.data),
+  })
+  const payload = (await res.json().catch(() => ({}))) as { error?: string }
+  if (res.status !== 415) return `expected 415, got ${res.status} (${payload.error ?? 'no message'})`
+  // The remedy is only actionable if it says which engine refused.
+  if (!payload.error?.includes(ENGINE)) {
+    return `415 but the message does not name the engine: "${payload.error ?? ''}"`
+  }
+  return null
+}
+
 let failures = 0
 for (const testCase of cases) {
-  process.stdout.write(`\n${testCase.kind.padEnd(6)} ${testCase.name} (${testCase.data.length} bytes) ... `)
+  const refuses = !ACCEPTED.includes(testCase.kind)
+  process.stdout.write(
+    `\n${testCase.kind.padEnd(6)} ${testCase.name} (${testCase.data.length} bytes) ` +
+      `${refuses ? '— expected refusal ' : ''}... `,
+  )
   try {
+    if (refuses) {
+      const problem = await expectRefused(testCase)
+      if (problem) {
+        failures++
+        console.log(`❌  ${problem}`)
+      } else {
+        console.log(`✅  415, refused by name`)
+      }
+      continue
+    }
     const attachment = await client.uploadAttachment(session.id, {
       name: testCase.name,
       mediaType: testCase.mediaType,
@@ -214,8 +283,8 @@ await server.close()
 
 console.log('')
 if (failures > 0) {
-  console.error(`❌ ${failures} of ${cases.length} attachment kinds did not reach the model.\n`)
+  console.error(`❌ ${failures} of ${cases.length} attachment kinds behaved wrongly on ${ENGINE}.\n`)
   process.exit(1)
 }
-console.log(`✅ All ${cases.length} attachment kinds reached the model.\n`)
+console.log(`✅ All ${cases.length} attachment kinds behaved as ${ENGINE}'s record claims.\n`)
 process.exit(0)

@@ -203,6 +203,25 @@ async function paid(): Promise<void> {
     if (echoed) pass('command output', 'tool_result carries the echoed marker')
     else fail('command output', 'echo output did not reach a tool_result')
 
+    // Streaming granularity — a drift alarm in canary 1's shape, not a feature
+    // test. Verified 2026-08-05 against 0.146.0: a turn is exactly
+    // thread.started / turn.started / item.completed / turn.completed, with no
+    // item.updated under either --experimental-json or legacy --json, so
+    // CodexRunner's delta synthesis never fires and a turn lands as one wall of
+    // text. The day this fails, codex started streaming: #handleItemProgress
+    // has woken up, ENGINE_CAPABILITIES.codex.streaming may deserve better than
+    // 'item', and the GOTCHAS bullet is stale.
+    const deltas = events.filter((e) => e.type === 'stream_delta').length
+    if (deltas === 0) {
+      pass('no partial streaming', 'turn arrived as one item.completed, as mapped')
+    } else {
+      fail(
+        'no partial streaming',
+        `${deltas} stream_delta event(s) — codex now emits item.updated; re-check ` +
+          "ENGINE_CAPABILITIES.codex.streaming and the GOTCHAS §Codex streaming bullet",
+      )
+    }
+
     // §9.5 usage asserts — the mapping already subtracted, so recover the raw
     // relation from the normalized fields: raw input = input + cache_read.
     const usage = result.usage as Record<string, number> | undefined
@@ -304,7 +323,10 @@ async function paid(): Promise<void> {
     else fail('read-only sandbox', "'default' mode let a write through — §9.3's mapping is broken")
     readonly.runner.close()
 
-    // Turn 5: an image attachment reaches the model as --image.
+    // Turn 5: an image attachment reaches the model as --image. The pixel is
+    // RGBA(255,0,0,127) — decoded from these bytes, not assumed; the first
+    // paid run (2026-08-05) caught an "expected blue" assertion that had never
+    // executed. A model that never received the attachment cannot name it.
     const png =
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
     const vision = makeRunner(cwd, {})
@@ -321,12 +343,12 @@ async function paid(): Promise<void> {
       }, 250)
     })
     const [visionResult] = turnResults(vision.events)
-    if (visionResult?.subtype === 'success' && /blue/i.test(visionResult.result ?? '')) {
-      pass('image attachment', `the model saw the blue pixel ("${visionResult.result?.trim()}")`)
+    if (visionResult?.subtype === 'success' && /red/i.test(visionResult.result ?? '')) {
+      pass('image attachment', `the model saw the red pixel ("${visionResult.result?.trim()}")`)
     } else {
       fail(
         'image attachment',
-        `answer: ${visionResult?.result ?? visionResult?.errors?.join('; ') ?? 'none'} (expected blue)`,
+        `answer: ${visionResult?.result ?? visionResult?.errors?.join('; ') ?? 'none'} (expected red)`,
       )
     }
     vision.runner.close()

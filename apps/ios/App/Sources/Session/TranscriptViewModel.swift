@@ -50,6 +50,22 @@ final class TranscriptViewModel {
   /// concrete model; this is what makes that true from the first frame.
   var effectiveModel: String? { state.model ?? defaultModel }
 
+  /// The engine's static catalog for this session's profile, fetched once on
+  /// attach. Only a fallback, never an override — see {@link availableModels}.
+  private(set) var catalogModels: [ModelOption] = []
+
+  /// What the model picker offers.
+  ///
+  /// Two sources, and which one is authoritative depends on the engine. The
+  /// `capabilities` event is the CLI asked what it supports, so for claude it
+  /// wins. Codex never sends one — its models are a catalog shipped with the
+  /// release and served on the profile — so without this fallback its picker is
+  /// permanently empty and the session cannot be switched at all.
+  var availableModels: [ModelOption] {
+    if let reported = state.models, !reported.isEmpty { return reported }
+    return catalogModels
+  }
+
   private let client: WorkerClient
   private var handle: SessionHandle?
 
@@ -85,6 +101,7 @@ final class TranscriptViewModel {
     case .attached(let frame):
       session = frame.session
       state = seedFromSessionInfo(state, frame.session)
+      loadCatalogModels(for: frame.session.profile)
     case .event(let sessionEvent):
       state = applyEvent(state, sessionEvent)
       revision &+= 1
@@ -105,6 +122,21 @@ final class TranscriptViewModel {
       lastProtocolError = message
     case .protocolMismatch(let serverVersion):
       protocolMismatch = serverVersion
+    }
+  }
+
+  /// Fetch this session's profile catalog, once, and only when it could matter.
+  ///
+  /// Fire-and-forget on purpose: an empty catalog is exactly the state the picker
+  /// already handles, so a failed or 404'd `/profiles` (a server predating
+  /// profiles) degrades to today's behavior rather than surfacing an error about
+  /// a list the person may never open.
+  private func loadCatalogModels(for profileName: String?) {
+    guard catalogModels.isEmpty, let profileName else { return }
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      guard let response = try? await self.client.listProfiles() else { return }
+      self.catalogModels = response.profiles.first { $0.name == profileName }?.models ?? []
     }
   }
 
