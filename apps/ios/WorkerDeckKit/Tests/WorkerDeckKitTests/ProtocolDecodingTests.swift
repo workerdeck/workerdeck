@@ -148,7 +148,7 @@ struct ProtocolDecodingTests {
 
   @Test func decodesAttachedFrame() throws {
     let json = #"""
-      {"type":"attached","protocolVersion":5,"replayingFrom":0,
+      {"type":"attached","protocolVersion":6,"replayingFrom":0,
        "session":{"id":"s1","status":"idle","cwd":"/x","createdAt":1722300000000,
                   "lastSeq":12,"pendingPermissionCount":0}}
       """#

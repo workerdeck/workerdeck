@@ -659,9 +659,9 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     slashCommands: false,
     settingSources: false,
     budgets: false,
-    // local_image only; text is inlined into the prompt envelope by the gateway;
-    // pdf has no representation and 415s at upload.
-    attachments: ['image'],
+    // Images travel as local_image host paths, text is inlined into the prompt
+    // envelope; pdf has no representation and 415s at upload.
+    attachments: ['image', 'text'],
     // Seeded from the SDK union; per-model supersets ride ModelOption.reasoningEfforts.
     reasoningEfforts: ['minimal', 'low', 'medium', 'high', 'xhigh'],
     vfs: false,

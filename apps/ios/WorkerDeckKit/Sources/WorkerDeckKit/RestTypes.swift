@@ -120,7 +120,7 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     resume: true, resumeBackfill: false, listSessions: false,
     contextUsage: false, rateLimits: false, mcpStatus: false, sessionMcpServers: false,
     slashCommands: false, settingSources: false, budgets: false,
-    attachments: ["image"],
+    attachments: ["image", "text"],
     reasoningEfforts: ["minimal", "low", "medium", "high", "xhigh"],
     vfs: false, streaming: "item"
   ),

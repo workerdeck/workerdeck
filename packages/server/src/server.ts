@@ -13,7 +13,7 @@ import type { Duplex } from 'node:stream'
 import { basename, join, resolve as resolvePath, sep } from 'node:path'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { listSessions as sdkListSessions } from '@anthropic-ai/claude-agent-sdk'
-import { checkClaudeAuth, getEngineAdapter } from '@workerdeck/core'
+import { attachmentKind, checkClaudeAuth, getEngineAdapter } from '@workerdeck/core'
 import type {
   ClaudeAuthProbe,
   EngineAdapter,
@@ -25,6 +25,7 @@ import type {
 } from '@workerdeck/core'
 import { JobQueue, type QueueAdapter } from '@workerdeck/queue'
 import {
+  ENGINE_CAPABILITIES,
   PROTOCOL_VERSION,
   supportsPermissionMode,
   type ClientFrame,
@@ -40,6 +41,7 @@ import {
   type ResolvePermissionRequest,
   type SdkSessionSummary,
   type ServerFrame,
+  type SessionInfo,
   type SubmitExecutionResultRequest,
   type UpdateProfileRequest,
   type WriteHostFileRequest,
@@ -1274,6 +1276,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     req: IncomingMessage,
     res: ServerResponse,
     sessionId: string,
+    session: SessionInfo,
     attachmentId?: string,
   ): Promise<void> => {
     if (req.method === 'POST' && attachmentId === undefined) {
@@ -1281,6 +1284,18 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       const mediaType = req.headers['content-type']
       if (!mediaType) {
         json(res, 400, { error: 'content-type header is required' })
+        return
+      }
+      // The engine's capability record names the kinds its sendMessage can
+      // deliver ('document' is the record's 'pdf'). Refusing here keeps the
+      // contract at the door: an upload that succeeds is one the message can use.
+      const accepted = (session.capabilities ?? ENGINE_CAPABILITIES[session.engine ?? 'claude'])
+        .attachments
+      const kind = attachmentKind(mediaType)
+      if (kind && !accepted.includes(kind === 'document' ? 'pdf' : kind)) {
+        json(res, 415, {
+          error: `the ${session.engine ?? 'claude'} engine does not accept ${kind} attachments`,
+        })
         return
       }
       let body: Buffer
@@ -2025,7 +2040,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       return
     }
     if (route.attachments) {
-      await handleAttachments(req, res, route.id, route.attachmentId)
+      await handleAttachments(req, res, route.id, runner?.info() ?? parked!.info, route.attachmentId)
       return
     }
     if (route.mcp) {

@@ -182,6 +182,38 @@ describe('codex engine over the gateway', () => {
     })
   })
 
+  it('415s the attachment kinds the codex record forswears, at upload', async () => {
+    const { adapter } = fakeCodexAdapter({})
+    running = createWorkerServer({
+      allowUnauthenticated: true,
+      allowedCwdRoots: ['/tmp'],
+      profiles: [codexProfile()],
+      engines: { codex: adapter },
+    })
+    const { port } = await running.listen(0, '127.0.0.1')
+    const base = `http://127.0.0.1:${port}/v1`
+    const created = await fetch(`${base}/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/project', profile: 'codex' }),
+    })
+    const { session } = (await created.json()) as { session: { id: string } }
+    const upload = (name: string, mediaType: string) =>
+      fetch(`${base}/sessions/${session.id}/attachments?name=${name}`, {
+        method: 'POST',
+        headers: { 'content-type': mediaType },
+        body: 'payload',
+      })
+
+    // No codex representation for a PDF — refused at the door, before the bytes
+    // are held and a later send can trip over them.
+    const pdf = await upload('doc.pdf', 'application/pdf')
+    expect(pdf.status).toBe(415)
+    expect(((await pdf.json()) as { error: string }).error).toMatch(/codex engine does not accept document/)
+    // Text is in the record: it inlines into the prompt envelope.
+    expect((await upload('notes.txt', 'text/plain')).status).toBe(201)
+  })
+
   it('400s reasoningEffort on an engine whose record has none', async () => {
     running = createWorkerServer({
       allowUnauthenticated: true,

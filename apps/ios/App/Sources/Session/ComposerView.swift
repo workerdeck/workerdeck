@@ -22,6 +22,10 @@ struct ComposerView: View {
   /// Files staged for the next message. Owned by the session view, because they
   /// outlive the composer's focus and are cleared on send.
   let attachments: ComposerAttachmentStore
+  /// Whether the engine takes attachments at all (`capabilities.attachments`
+  /// non-empty). False hides the plus button — an attach affordance the engine
+  /// has no meaning for is not a choice.
+  let canAddMedia: Bool
   let onEdit: (String, NSRange) -> Void
   let onSend: () -> Void
   let onStop: () -> Void
@@ -78,8 +82,10 @@ struct ComposerView: View {
   /// thumb already is, and a second one here would only compete with it.
   private var actionRow: some View {
     HStack(spacing: 8) {
-      CircleButton(systemImage: "plus", label: "Add media", action: onAddMedia)
-        .disabled(!isEnabled)
+      if canAddMedia {
+        CircleButton(systemImage: "plus", label: "Add media", action: onAddMedia)
+          .disabled(!isEnabled)
+      }
       Spacer(minLength: 0)
       if isFocused {
         CircleButton(systemImage: "keyboard.chevron.compact.down", label: "Hide keyboard") {

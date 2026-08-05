@@ -1,4 +1,5 @@
 import PhotosUI
+import UniformTypeIdentifiers
 import WorkerDeckKit
 import SwiftUI
 
@@ -140,7 +141,7 @@ struct SessionView: View {
             defaultModel: vm.defaultModel,
             onSelect: { vm.setModel($0) })
         case .addMedia:
-          AddMediaSheet(onChoose: choose)
+          AddMediaSheet(acceptsImages: acceptedKinds.contains("image"), onChoose: choose)
         case .mcp:
           McpServersView(
             load: { try await vm.mcpServers() },
@@ -170,7 +171,7 @@ struct SessionView: View {
         photoSelection = []
         for item in items { loadPhoto(item) }
       }
-      .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+      .fileImporter(isPresented: $showFileImporter, allowedContentTypes: importableTypes, allowsMultipleSelection: true) { result in
         switch result {
         case .success(let urls): for url in urls { loadFile(url) }
         case .failure(let error): attachments.errorText = error.localizedDescription
@@ -228,6 +229,7 @@ struct SessionView: View {
         isBusy: vm.state.status == .running,
         isEnabled: vm.state.status != .closed,
         attachments: attachments,
+        canAddMedia: !acceptedKinds.isEmpty,
         onEdit: { text, caret in
           completion.update(for: text, cursor: Range(caret, in: text)?.lowerBound)
         },
@@ -264,6 +266,9 @@ struct SessionView: View {
             cwd: vm.cwd,
             hasCommands: !(vm.state.commands ?? []).isEmpty,
             canBrowseFiles: completion.hasFileSearch,
+            // An sdk session id on an *empty* transcript means resume: a fresh
+            // session only earns one alongside its first turn's events.
+            resumedWithoutHistory: vm.state.sdkSessionId != nil && !vm.capabilities.resumeBackfill,
             // Belt and braces: the reader already reports a smaller box when the
             // keyboard pushes the safe area up, but whether it does depends on
             // how SwiftUI resolves this stack — and a panel that overlaps the
@@ -314,7 +319,9 @@ struct SessionView: View {
     // `/mcp` is answered here rather than sent. The CLI's own `/mcp` is an
     // interactive picker, not a prompt — forwarding it would spend a turn on a
     // model reading the words "/mcp", so the app opens its own screens instead.
-    if draft.trimmingCharacters(in: .whitespaces) == "/mcp" {
+    // Only where the capability exists: elsewhere it is ordinary message text,
+    // like any other slash command on an engine without them.
+    if vm.capabilities.mcpStatus, draft.trimmingCharacters(in: .whitespaces) == "/mcp" {
       draft = ""
       selection = NSRange(location: 0, length: 0)
       dismissKeyboard()
@@ -332,6 +339,23 @@ struct SessionView: View {
   }
 
   // MARK: - Add Media
+
+  /// Attachment kinds this session's engine can deliver to its model, from the
+  /// capability record. Empty hides the attach affordance entirely.
+  private var acceptedKinds: Set<String> { Set(vm.capabilities.attachments) }
+
+  /// What the Files picker offers. The full set keeps today's open door
+  /// (`.item` — anything, gateway refuses the rest with a clear message); a
+  /// narrower record narrows the browsing too, so most refusals never happen.
+  private var importableTypes: [UTType] {
+    let kinds = acceptedKinds
+    if kinds.isSuperset(of: ["image", "pdf", "text"]) { return [.item] }
+    var types: [UTType] = []
+    if kinds.contains("image") { types.append(.image) }
+    if kinds.contains("pdf") { types.append(.pdf) }
+    if kinds.contains("text") { types.append(.text) }
+    return types.isEmpty ? [.item] : types
+  }
 
   private func choose(_ source: AddMediaSheet.Source) {
     switch source {
@@ -369,10 +393,18 @@ struct SessionView: View {
       attachments.errorText = "Could not read \(url.lastPathComponent)."
       return
     }
+    let mediaType = AttachmentNormalizer.mediaType(for: url)
+    // A kind the capability record forswears is refused here, with the engine
+    // named — before an upload the gateway would 415. A kind this build can't
+    // classify still goes through: the gateway's vocabulary is authoritative.
+    if let kind = AttachmentNormalizer.kind(of: mediaType), !acceptedKinds.contains(kind) {
+      attachments.errorText =
+        "The \(vm.engine.rawValue) engine does not take \(kind) attachments."
+      return
+    }
     guard
       let picked = AttachmentNormalizer.file(
-        data: data, name: url.lastPathComponent,
-        mediaType: AttachmentNormalizer.mediaType(for: url))
+        data: data, name: url.lastPathComponent, mediaType: mediaType)
     else {
       attachments.errorText = "Could not read \(url.lastPathComponent)."
       return

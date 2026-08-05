@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
-import type { SessionEvent } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, type SessionEvent } from '@workerdeck/protocol'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
 import type {
   CodexFactory,
@@ -408,6 +408,9 @@ describe('CodexRunner event mapping', () => {
         { id: 'a', name: 'doc.pdf', mediaType: 'application/pdf', bytes: 4, data: 'JVBERg==' },
       ]),
     ).toThrow(/unsupported attachment/)
+    // What `#buildInput` accepts (images as paths, text inlined) is exactly what
+    // the record promises — clients filter their attach menus by this list.
+    expect(ENGINE_CAPABILITIES.codex.attachments).toEqual(['image', 'text'])
   })
 
   it('passes a complete child env with the CODEX_HOME pin winning', () => {

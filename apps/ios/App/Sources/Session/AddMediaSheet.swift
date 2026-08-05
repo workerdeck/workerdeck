@@ -18,6 +18,10 @@ struct AddMediaSheet: View {
     var id: String { rawValue }
   }
 
+  /// Whether the session's engine takes images (`capabilities.attachments`).
+  /// Camera and Photos only ever produce images, so without it they are not
+  /// sources — Files stays, filtered to the kinds that remain.
+  let acceptsImages: Bool
   let onChoose: (Source) -> Void
 
   @Environment(\.dismiss) private var dismiss
@@ -30,10 +34,12 @@ struct AddMediaSheet: View {
     VStack(spacing: 16) {
       header
       HStack(spacing: 10) {
-        tile(.camera, "Camera", "camera")
-          .disabled(!cameraAvailable)
-          .opacity(cameraAvailable ? 1 : 0.4)
-        tile(.photos, "Photos", "photo")
+        if acceptsImages {
+          tile(.camera, "Camera", "camera")
+            .disabled(!cameraAvailable)
+            .opacity(cameraAvailable ? 1 : 0.4)
+          tile(.photos, "Photos", "photo")
+        }
         tile(.files, "Files", "doc.badge.arrow.up")
       }
       Spacer(minLength: 0)

@@ -183,6 +183,29 @@ enum AttachmentNormalizer {
     UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
   }
 
+  /// Textual types whose media type doesn't start with `text/` — mirror of
+  /// core's list, used only to *classify*, never to refuse: an unknown type
+  /// still goes to the gateway, whose vocabulary is authoritative.
+  private static let textTypes: Set<String> = [
+    "application/json", "application/xml", "application/yaml", "application/x-yaml",
+    "application/toml", "application/javascript", "application/typescript",
+    "application/x-sh", "application/x-httpd-php", "application/sql",
+  ]
+
+  /// The capability-record kind ('image' | 'pdf' | 'text') this media type
+  /// lands as, or nil when the classification is unknown here. Any `image/*`
+  /// counts as image — this normalizer transcodes what the API wouldn't take.
+  static func kind(of mediaType: String) -> String? {
+    let type =
+      mediaType.split(separator: ";").first.map {
+        $0.trimmingCharacters(in: .whitespaces).lowercased()
+      } ?? mediaType.lowercased()
+    if type.hasPrefix("image/") { return "image" }
+    if type == "application/pdf" { return "pdf" }
+    if type.hasPrefix("text/") || textTypes.contains(type) { return "text" }
+    return nil
+  }
+
   private static func downscaled(_ image: UIImage) -> UIImage {
     let longest = max(image.size.width, image.size.height)
     guard longest > maxImageEdge else { return image }

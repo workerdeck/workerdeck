@@ -168,9 +168,10 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   land as `turn_result: error_during_execution` and the session returns to idle — the thread
   persists and the next message spawns fresh. Codex has no instructions surface
   (`session.instructions` on a codex profile is refused at startup; codex reads the cwd's
-  AGENTS.md), no per-session MCP (CODEX_HOME's config.toml owns servers; `/mcp` 501s), images
-  only for attachments (host temp-file paths via `--image`; text inlines into the prompt
-  envelope; PDF 415s at upload).
+  AGENTS.md), no per-session MCP (CODEX_HOME's config.toml owns servers; `/mcp` 501s), and
+  image + text attachments only (images as host temp-file paths via `--image`, text inlined
+  into the prompt envelope; a PDF has no representation, and the upload route 415s any kind a
+  session's capability record forswears).
 
 ## Engine adapters & capability records
 

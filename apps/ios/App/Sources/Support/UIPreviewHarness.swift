@@ -170,7 +170,7 @@ struct UIPreviewHarness: View {
                 .foregroundStyle(.tertiary)
               SessionEmptyState(
                 cwd: "/Users/you/projects/workerdeck", hasCommands: true, canBrowseFiles: true,
-                availableHeight: height)
+                resumedWithoutHistory: height == 700, availableHeight: height)
             }
           }
         }
@@ -179,7 +179,7 @@ struct UIPreviewHarness: View {
     case .addMedia:
       // Presented over something, because a detent sheet has no shape on its own.
       Color.black.sheet(isPresented: .constant(true)) {
-        AddMediaSheet(onChoose: { _ in })
+        AddMediaSheet(acceptsImages: true, onChoose: { _ in })
       }
     case .mcp:
       // A shape copied off a real `/mcp`: two scopes, a healthy stdio server, a
