@@ -58,6 +58,23 @@ export type ClientOptions = {
   fetchImpl?: typeof fetch
 }
 
+/**
+ * A REST call the gateway refused, carrying the status alongside the message.
+ *
+ * An `Error` subclass on purpose: every existing `e instanceof Error` check and
+ * every `e.message` read keeps working unchanged. The status is what lets a
+ * caller tell "this server doesn't have that route" (404 — stop asking) from
+ * "that file was too big" (413 — tell the user), which a message string can't.
+ */
+export class WorkerDeckError extends Error {
+  readonly status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'WorkerDeckError'
+    this.status = status
+  }
+}
+
 export type AttachOptions = {
   /** Replay events with seq greater than this. Default 0 (full replay). */
   afterSeq?: number
@@ -73,6 +90,12 @@ export type SessionHandleEvents = {
   protocolError: string
   /** WS connectivity: true on open, false on close. */
   connectionChange: boolean
+  /**
+   * A reconnect has been scheduled, carrying how many have failed in a row (1 on
+   * the first). The handle retries forever, so "offline" is a judgement a UI makes
+   * about how long it has been failing rather than a state reported here.
+   */
+  reconnectAttempt: number
   /**
    * The server is asking this client to execute a tool call in its own sandbox.
    * Answer with {@link SessionHandle.sendToolCallResult} or
@@ -177,6 +200,16 @@ export class SessionHandle {
     this.detach()
   }
 
+  /** Skip the reconnect backoff and try again now — what a tab returning to the
+   * foreground should do, rather than sitting out the remaining delay. No-op
+   * while connected or after {@link SessionHandle.detach}. */
+  reconnectNow(): void {
+    if (this.#closed || (this.#ws && this.#ws.readyState === 1)) return
+    clearTimeout(this.#connectTimer)
+    this.#retries = 0
+    this.#connect()
+  }
+
   /** Disconnect this handle without touching the session. */
   detach(): void {
     this.#closed = true
@@ -233,6 +266,7 @@ export class SessionHandle {
       this.#emit('connectionChange', false)
       if (this.#closed || !this.#options.reconnect) return
       const delay = Math.min(500 * 2 ** this.#retries++, 10_000)
+      this.#emit('reconnectAttempt', this.#retries)
       this.#connectTimer = setTimeout(() => this.#connect(), delay)
     }
     ws.onerror = () => {
@@ -382,7 +416,7 @@ export class WorkerDeckClient {
     })
     if (!res.ok) {
       const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      throw new Error(payload.error ?? `GET file failed with ${res.status}`)
+      throw new WorkerDeckError(payload.error ?? `GET file failed with ${res.status}`, res.status)
     }
     return await res.text()
   }
@@ -406,7 +440,7 @@ export class WorkerDeckClient {
     })
     if (!res.ok) {
       const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      throw new Error(payload.error ?? `upload failed with ${res.status}`)
+      throw new WorkerDeckError(payload.error ?? `upload failed with ${res.status}`, res.status)
     }
     return ((await res.json()) as UploadAttachmentResponse).attachment
   }
@@ -663,7 +697,7 @@ export class WorkerDeckClient {
     })
     const payload = (await res.json().catch(() => ({}))) as { error?: string }
     if (!res.ok) {
-      throw new Error(payload.error ?? `${method} ${path} failed with ${res.status}`)
+      throw new WorkerDeckError(payload.error ?? `${method} ${path} failed with ${res.status}`, res.status)
     }
     return payload
   }

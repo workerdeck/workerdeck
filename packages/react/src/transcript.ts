@@ -1,6 +1,8 @@
+import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import type {
   ContentBlock,
   ContextUsage,
+  EngineCapabilities,
   MessageAttachment,
   ModelOption,
   PermissionMode,
@@ -79,6 +81,21 @@ export type TranscriptState = {
   /** Engine running the session, from the attach snapshot. Gates CLI-only
    * affordances; absent (an older server) reads as 'claude'. */
   engine?: ProfileEngine
+  /**
+   * What this session's engine does and does not do: the runner-reported record
+   * from the attach snapshot when present, else {@link ENGINE_CAPABILITIES} for
+   * the engine. Always defined, so a surface can render every affordance from it
+   * rather than switching on the engine name — an absent capability means the
+   * affordance is *hidden*, never a control that silently does nothing.
+   */
+  capabilities: EngineCapabilities
+  /**
+   * The most recent attach snapshot, whole. The session-level facts no event
+   * carries — profile, apiKeySource, canBypassPermissions, createdAt, numTurns —
+   * live only here. Unlike the fields above it is replaced on every attach: it is
+   * the server's answer, not something the event stream refines.
+   */
+  session?: SessionInfo
   /** Models the session can switch to (from the `capabilities` event). */
   models?: ModelOption[]
   /** Slash commands the CLI accepts (from the `capabilities` event). */
@@ -94,6 +111,13 @@ export type TranscriptState = {
   /** Latest rate-limit snapshot per window ('five_hour', 'seven_day', ...).
    * Absent for API-key sessions — render nothing, not 0%. */
   rateLimits?: Record<string, RateLimitInfo>
+  /**
+   * When the newest window reading was *taken* (the event's `ts`), not when this
+   * client received it — so a reading replayed on attach is dated honestly
+   * rather than as "just now". Updates come one per turn at best, which makes a
+   * stale reading normal and worth saying out loud.
+   */
+  rateLimitsUpdatedAt?: number
   /** claude.ai plan the rate-limit windows belong to ('pro', 'max', ...), from
    * `plan_info`. Absent for API-key sessions, like the windows themselves. */
   subscriptionType?: string
@@ -105,6 +129,9 @@ export type TranscriptState = {
 
 export const initialTranscriptState: TranscriptState = {
   status: 'starting',
+  // The protocol's own default for an absent `engine`, so a surface has a record
+  // to render from before the first attach frame lands.
+  capabilities: ENGINE_CAPABILITIES.claude,
   items: [],
   pendingApprovals: [],
   totalCostUsd: 0,
@@ -155,6 +182,9 @@ function upsert(items: TranscriptItem[], item: TranscriptItem): TranscriptItem[]
  * haven't set yet; the event stream stays authoritative.
  */
 export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): TranscriptState {
+  // Never changes for a live session, and no event carries it — the snapshot is
+  // the only source, so take it whenever it is present.
+  const engine = info.engine ?? state.engine
   return {
     ...state,
     // Before any event has arrived, the snapshot status is fresher than 'starting'.
@@ -163,10 +193,34 @@ export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): 
     permissionMode: state.permissionMode ?? info.permissionMode,
     cwd: state.cwd ?? info.cwd,
     sdkSessionId: state.sdkSessionId ?? info.sdkSessionId,
-    // Never changes for a live session, and no event carries it — the snapshot is
-    // the only source, so take it whenever it is present.
-    engine: info.engine ?? state.engine,
+    engine,
+    // The wire copy wins over the static default when both exist, per the
+    // protocol — the runner knows what it actually wired up.
+    capabilities: info.capabilities ?? ENGINE_CAPABILITIES[engine ?? 'claude'],
+    session: info,
   }
+}
+
+/**
+ * The session's rate-limit windows in reading order: the session window, the
+ * weekly window, then whichever per-model weekly windows it reports.
+ *
+ * Discovered rather than hardcoded — the SDK's set of windows is an open union
+ * and has grown before — but ordered, so the first two always mean the same
+ * thing. A window with no `utilization` is *unknown*, not zero, and is dropped
+ * entirely rather than drawn as an empty bar that reads as "plenty left".
+ */
+export function rateLimitWindows(
+  state: TranscriptState,
+): Array<{ key: string; info: RateLimitInfo }> {
+  const all = Object.entries(state.rateLimits ?? {})
+    .filter(([, info]) => info.utilization !== undefined)
+    .map(([key, info]) => ({ key, info }))
+  const named = ['five_hour', 'seven_day'].flatMap((key) => all.filter((w) => w.key === key))
+  const perModel = all
+    .filter((w) => w.key.startsWith('seven_day_'))
+    .sort((a, b) => a.key.localeCompare(b.key))
+  return [...named, ...perModel]
 }
 
 export function applyEvent(state: TranscriptState, event: SessionEvent): TranscriptState {
@@ -208,7 +262,11 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
       // Keyed by window so five_hour and seven_day updates don't clobber each other.
       const key = event.info.rateLimitType
       if (!key) return base
-      return { ...base, rateLimits: { ...base.rateLimits, [key]: event.info } }
+      return {
+        ...base,
+        rateLimits: { ...base.rateLimits, [key]: event.info },
+        rateLimitsUpdatedAt: event.ts,
+      }
     }
 
     case 'plan_info':

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import type { SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
 import {
   applyEvent,
@@ -472,6 +473,36 @@ describe('transcript reducer', () => {
     expect(reseeded.status).toBe('running')
     expect(reseeded.model).toBe('claude-sonnet-4-6')
     expect(reseeded.permissionMode).toBe('default')
+  })
+
+  it('resolves the capability record: wire copy wins, else the engine default', () => {
+    const info: SessionInfo = {
+      id: 'srv-1',
+      status: 'idle',
+      cwd: '/tmp/p',
+      engine: 'codex',
+      createdAt: 0,
+      lastSeq: 0,
+      pendingPermissionCount: 0,
+    }
+    // Before any attach there is still a record to render from — the protocol's
+    // default for an absent engine.
+    expect(initialTranscriptState.capabilities).toEqual(ENGINE_CAPABILITIES.claude)
+
+    // No wire copy: the engine's static record.
+    const seeded = seedFromSessionInfo(initialTranscriptState, info)
+    expect(seeded.capabilities).toEqual(ENGINE_CAPABILITIES.codex)
+    expect(seeded.capabilities.mcpStatus).toBe(false)
+    // The snapshot itself is kept whole — nothing else carries profile,
+    // apiKeySource or canBypassPermissions.
+    expect(seeded.session).toBe(info)
+
+    // A runner that reports its own record overrides the default.
+    const reported = seedFromSessionInfo(initialTranscriptState, {
+      ...info,
+      capabilities: { ...ENGINE_CAPABILITIES.codex, mcpStatus: true },
+    })
+    expect(reported.capabilities.mcpStatus).toBe(true)
   })
 
   describe('tool-call execution states', () => {
