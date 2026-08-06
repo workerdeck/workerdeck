@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  PROVIDER_PERMISSION_MODES,
+  ENGINE_CAPABILITIES,
   type PermissionMode,
   type ProfileInfo,
   type SessionCapability,
@@ -119,7 +119,9 @@ export function EditProfileCard({
               variant='form'
               mode={mode}
               onModeChange={setMode}
-              modes={isProvider ? PROVIDER_PERMISSION_MODES : undefined}
+              // The record, not the engine name — the one source of truth for
+              // which modes this profile's engine can honor.
+              modes={(profile.capabilities ?? ENGINE_CAPABILITIES[profile.engine ?? 'claude']).permissionModes}
             />
           </Field>
         </div>

@@ -8,6 +8,7 @@ import {
   AlertDialogDescription,
   AlertDialogTitle,
   AlertDialogTrigger,
+  Badge,
   Button,
   CopyButton,
   SessionPanel,
@@ -46,6 +47,10 @@ export function SessionView() {
     void navigate({ to: '/sessions' })
   }
 
+  // The project name, like the iOS app's navigation title — the full path is a
+  // line of monospace nobody reads, and it is one tap away in Session info.
+  const project = info?.cwd?.split('/').filter(Boolean).pop()
+
   return (
     <SessionPanel
       key={sessionId}
@@ -59,10 +64,19 @@ export function SessionView() {
             </Button>
           </Link>
           <span className='truncate text-body-sm font-medium text-fg-1'>
-            {info?.title ?? sessionId.slice(0, 8)}
+            {info?.title ?? project ?? sessionId.slice(0, 8)}
           </span>
+          {/* Which engine is answering — the one session-level fact that changes
+              what every other control means. */}
+          {info?.engine && info.engine !== 'claude' ? (
+            <Badge variant='neutral' className='shrink-0'>
+              {info.engine}
+            </Badge>
+          ) : null}
           {info?.cwd ? (
-            <span className='truncate font-mono text-label text-fg-4'>{info.cwd}</span>
+            <span className='min-w-0 truncate font-mono text-label text-fg-4' title={info.cwd}>
+              {info.cwd}
+            </span>
           ) : null}
           <span className='flex-1' />
           <CopyButton value={sessionId} aria-label='Copy session id' />
@@ -77,8 +91,8 @@ export function SessionView() {
             <AlertDialogContent>
               <AlertDialogTitle>Close this session?</AlertDialogTitle>
               <AlertDialogDescription>
-                The Claude Code subprocess is terminated. You can resume it later from
-                “Resume a previous session” (the transcript is kept on disk by the SDK).
+                The run is terminated on the server. You can pick it up later from “Resume a
+                previous session” — the transcript is kept by the engine, not by the gateway.
               </AlertDialogDescription>
               <div className='mt-4 flex justify-end gap-2'>
                 <AlertDialogClose render={<Button variant='outline'>Cancel</Button>} />

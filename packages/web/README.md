@@ -1,8 +1,10 @@
 # @workerdeck/web
 
 The [WorkerDeck](https://github.com/workerdeck/workerdeck) dashboard, **prebuilt**:
-session list, create/resume flow, live transcript panel with approve/deny controls, jobs, profiles,
-settings. TanStack Router, React 19, Tailwind v4.
+session list, create/resume flow, live session runner (streaming transcript, approve/deny with a
+reason, attachments, `@file` and `/command` completion, and panels for session info, context, plan
+usage, MCP servers and the project tree), jobs, profiles, settings. TanStack Router, React 19,
+Tailwind v4.
 
 This package ships static files and **no runtime dependencies** — React, the router and the rest
 are compiled into `dist/`, not installed by you.

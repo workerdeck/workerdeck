@@ -41,6 +41,10 @@ export const DEFAULT_IGNORED_DIRS = [
   '.gradle',
   'Pods',
   'DerivedData',
+  // Swift Package Manager's build directory. Its object files carry the source
+  // names, so without this a Swift project's `@` search answers with
+  // `Transcript.o` before `Transcript.swift`.
+  '.build',
 ]
 
 export type FoundFile = {

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { ListChecks, PanelLeftClose, PanelLeftOpen, Settings, SquareTerminal, UsersRound } from 'lucide-react'
 import { cn } from '@workerdeck/ui'
+import { APP_VERSION } from '@/lib/version.ts'
 import { BrandMark } from './BrandMark.tsx'
 import { ThemeToggle } from './ThemeToggle.tsx'
 
@@ -75,7 +76,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
             'flex items-center',
             collapsed ? 'flex-col gap-1' : 'justify-between px-1',
           )}>
-          {!collapsed && <span className='font-mono text-label text-fg-4'>v0.1</span>}
+          {!collapsed && <span className='font-mono text-label text-fg-4'>v{APP_VERSION}</span>}
           <ThemeToggle />
           <button
             type='button'
