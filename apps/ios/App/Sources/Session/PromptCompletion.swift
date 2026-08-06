@@ -2,15 +2,17 @@ import WorkerDeckKit
 import Foundation
 import Observation
 
-/// Drives the suggestion list under the composer, for both prompt tokens.
+/// Drives the suggestion list under the composer, for all three prompt tokens.
 ///
 /// The text half — finding and replacing a token — is `PromptTokens` in
 /// `WorkerDeckKit`, where it can be unit-tested; this is the part that needs a
 /// client, a clock, and the session's capabilities.
 ///
-/// The two halves behave nothing alike, which is why they share a model rather
-/// than a code path. `/commands` arrive with the `capabilities` event, so
-/// filtering them is local, synchronous and complete. `@files` are a search
+/// The three behave nothing alike, which is why they share a model rather than a
+/// code path. `/commands` arrive with the `capabilities` event and `$skills`
+/// with the `skills` event, so filtering both is local, synchronous and
+/// complete — and they stay separate keys because codex itself separates them.
+/// `@files` are a search
 /// against the host filesystem: debounced and single-flight, so a fast typist
 /// makes one request rather than eight, and a gateway without host files answers
 /// 404 once and file completion switches itself off for the session rather than
@@ -21,8 +23,8 @@ final class PromptCompletionModel {
   enum Suggestion: Identifiable, Equatable {
     case file(HostFileMatch)
     case command(SlashCommandInfo)
-    /// A skill, offered under the same `/` — but it resolves to prose, not to a
-    /// token. See `SkillInfo`: no engine parses `/skillname`.
+    /// A skill, offered under `$` — codex's own sigil. Resolves to prose, not
+    /// to a token: see `SkillInfo`, no engine parses `$skillname` as syntax.
     case skill(SkillInfo)
 
     var id: String {
@@ -44,16 +46,13 @@ final class PromptCompletionModel {
     }
 
     /// What a picked skill types: the engine's own suggested opener where it
-    /// declared one, otherwise a neutral line naming the skill. Always ends in a
-    /// space, so the caret lands ready for the rest of the sentence.
-    ///
-    /// The fallback names the skill by its *last* segment: real skill names are
-    /// namespaced (`documents:documents`), and "Use the documents:documents
-    /// skill" reads like a typo.
+    /// declared one, otherwise `$name` — codex's native way of referring to a
+    /// skill in prompt text (its `skill-creator` documents `Use $skill-x at
+    /// /path/to/skill-x to …`, and its bundled prompts read "Use $pdf to …").
+    /// Always ends in a space, so the caret lands ready for the rest.
     static func prompt(for skill: SkillInfo) -> String {
-      let bare = skill.name.split(separator: ":").last.map(String.init) ?? skill.name
       let trimmed = skill.defaultPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
-      let base = (trimmed?.isEmpty == false ? trimmed! : "Use the \(bare) skill to")
+      let base = (trimmed?.isEmpty == false ? trimmed! : "$\(skill.name)")
       return base.hasSuffix(" ") ? base : base + " "
     }
   }
@@ -78,9 +77,12 @@ final class PromptCompletionModel {
     }
   }
 
-  /// Whether the `/` list has anything to offer. Read by the empty state, which
-  /// must not advertise a popover that would open empty.
-  var hasSlashSuggestions: Bool { !commands.isEmpty || skills.contains { $0.enabled } }
+  /// Whether `/` has anything to offer. Read by the empty state, which must not
+  /// advertise a popover that would open empty.
+  var hasCommands: Bool { !commands.isEmpty }
+  /// Whether `$` has anything to offer. Its own flag, not a variant of the
+  /// above: they are different keys offering different things.
+  var hasSkills: Bool { skills.contains { $0.enabled } }
 
   /// Whether `@file` completion is on offer: the session's cwd is known and this
   /// gateway hasn't already 404'd the search. Read by the empty state, which must
@@ -103,6 +105,7 @@ final class PromptCompletionModel {
     }
     switch token.kind {
     case .command: showCommands(matching: token.query)
+    case .skill: showSkills(matching: token.query)
     case .file: searchFiles(matching: token.query)
     }
   }
@@ -116,8 +119,8 @@ final class PromptCompletionModel {
     let caret = cursor ?? text.endIndex
     defer { cancel() }
     guard let token = PromptTokens.active(in: text, at: caret) else { return (text, caret) }
-    // A skill types prose over the `/name`; a command and a file resolve to
-    // tokens the transcript will style. Same list, deliberately different result.
+    // A skill types prose over the `$name`; a command and a file resolve to
+    // tokens the transcript will style. Different keys, different results.
     if case .skill = suggestion {
       return PromptTokens.replace(with: suggestion.value, replacing: token, in: text)
     }
@@ -132,7 +135,7 @@ final class PromptCompletionModel {
     isActive = false
   }
 
-  // MARK: - The two halves
+  // MARK: - The three halves
 
   /// Local and immediate. Matches on the command name, its aliases, and the bare
   /// name of a namespaced one — typing "wrapup" should find "dev:wrapup".
@@ -142,17 +145,26 @@ final class PromptCompletionModel {
     lastQuery = nil
     isActive = true
     let needle = query.lowercased()
-    let matchedCommands =
+    suggestions =
       commands
       .filter { needle.isEmpty || $0.matches(prefix: needle) }
+      .prefix(20)
       .map(Suggestion.command)
-    // Commands first: they do what their name says, while a skill only ever
-    // drafts a message.
-    let matchedSkills =
+  }
+
+  /// Local and immediate, like commands — but its own list under its own key.
+  /// `$` is codex's sigil for skills; `/` stays the CLI's commands.
+  private func showSkills(matching query: String) {
+    task?.cancel()
+    task = nil
+    lastQuery = nil
+    isActive = true
+    let needle = query.lowercased()
+    suggestions =
       skills
       .filter { $0.enabled && (needle.isEmpty || $0.matches(prefix: needle)) }
+      .prefix(20)
       .map(Suggestion.skill)
-    suggestions = Array((matchedCommands + matchedSkills).prefix(20))
   }
 
   private func searchFiles(matching query: String) {

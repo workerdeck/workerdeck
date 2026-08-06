@@ -43,12 +43,12 @@ export interface ComposerProps {
   /** Slash commands offered as autocomplete; picked ones render as chips. */
   commands?: SlashCommandInfo[]
   /**
-   * Skills offered under the same `/` popover — as a **typing aid**, not as
-   * commands. Picking one inserts editable prose (the skill's own
-   * `defaultPrompt` where it has one) and nothing is sent; there is no
-   * `/skillname` any engine would parse, which is exactly why these can never
-   * resolve to a chip like `commands` do. Rows are marked so the two kinds are
-   * not mistaken for each other.
+   * Skills offered under a **`$`** popover of their own — codex's sigil, kept
+   * separate from `/` because the two behave differently. A skill is a typing
+   * aid, not a command: picking one inserts editable text (the skill's own
+   * `defaultPrompt` where it has one, else `$name`) and nothing is sent. No
+   * engine parses `$skillname` as syntax, which is exactly why these can never
+   * resolve to a chip the way `commands` do.
    */
   skills?: SkillInfo[]
   /** Host-file search behind the `@` trigger. Omit to leave `@` inert — a
@@ -65,27 +65,22 @@ export interface ComposerProps {
 /** CLI names may carry display annotations (e.g. "foo (MCP)") the parser rejects. */
 const cleanName = (name: string) => name.replace(/\s*\(MCP\)$/i, '')
 
-/** Suggestion values are the popover's React keys, so the two sources must not
- * collide — a repo can perfectly well have a `wrapup` command and a `wrapup`
- * skill. It also doubles as the discriminator `insertAsText` switches on. */
-const SKILL_VALUE_PREFIX = 'skill:'
-
 /**
  * What a picked skill types into the composer.
  *
  * The engine's own `defaultPrompt` when it declared one — it knows what its
- * skill wants to be asked — and otherwise a neutral opener naming the skill,
- * which is all the model needs to go and read it. Either way it ends in a space
- * so the caret lands ready for the rest of the sentence, and either way it is
- * ordinary text: nothing here is submitted, and nothing is parsed back out.
+ * skill wants to be asked — and otherwise `$name`, which is codex's native way
+ * of referring to a skill in prompt text: its `skill-creator` documents the form
+ * (`Use $skill-x at /path/to/skill-x to solve problem y`) and its own bundled
+ * prompts are written that way ("Use $pdf to …"). Spelling it the way the engine
+ * spells it beats paraphrasing into "Use the X skill to".
  *
- * The fallback names the skill by its *last* segment: real skill names are
- * namespaced (`documents:documents`, `browser:control-in-app-browser`), and
- * "Use the documents:documents skill" reads like a typo.
+ * Either way it ends in a space so the caret lands ready for the rest of the
+ * sentence, and either way it is ordinary text: nothing here is submitted, and
+ * nothing is parsed back out.
  */
 export function skillPrompt(skill: SkillInfo): string {
-  const bare = skill.name.slice(skill.name.lastIndexOf(':') + 1)
-  const base = skill.defaultPrompt?.trim() || `Use the ${bare} skill to`
+  const base = skill.defaultPrompt?.trim() || `$${skill.name}`
   return /\s$/.test(base) ? base : base + ' '
 }
 
@@ -102,16 +97,18 @@ function matchScore(query: string, haystacks: string[]): number {
 /**
  * Framed prompt input built on prompt-area's contentEditable.
  *
- * Two completions ride the same field and behave nothing alike: `/` is a local
- * list (the CLI's commands, plus any skills the engine reports), so it filters
- * locally and completely; `@` is a search against the host filesystem, debounced
- * and abortable so a fast typist makes one request rather than eight.
+ * Three completions ride the same field and behave nothing alike. `/` is the
+ * CLI's command list and `$` is the engine's skill list — both local, so they
+ * filter completely and instantly; `@` is a search against the host filesystem,
+ * debounced and abortable so a fast typist makes one request rather than eight.
  *
- * The `/` list is itself two kinds of thing, and the difference is not cosmetic:
- * a command resolves to a chip because the CLI really does parse `/name` out of
- * the message, while a skill types plain prose because no engine parses
- * `/skillname` at all. Rendering them alike would promise something that does
- * not happen.
+ * `/` and `$` are separate keys rather than one merged menu, and that mirrors
+ * the engines themselves: codex completes skills on `$` and reserves `/` for
+ * commands. The behaviours differ too — a command resolves to a **chip**,
+ * because the CLI really does parse `/name` out of the message, while a skill
+ * resolves to plain editable **text**, because no engine parses `$name` as
+ * syntax; it is prose the model reads. Rendering them alike would promise
+ * something that does not happen.
  *
  * Files can arrive three ways — the paperclip, a drop, or a paste — because on a
  * desktop all three are things people already do, and the upload starts the
@@ -152,10 +149,10 @@ export function Composer({
   const triggers = useMemo(() => {
     const configured = []
     const usableSkills = (skills ?? []).filter((s) => s.enabled)
-    if ((commands && commands.length > 0) || usableSkills.length > 0) {
+    if (commands && commands.length > 0) {
       // The CLI list can contain the same skill name from several sources — first wins.
       const seen = new Set<string>()
-      const unique = (commands ?? []).flatMap((c) => {
+      const unique = commands.flatMap((c) => {
         const name = cleanName(c.name)
         if (seen.has(name)) return []
         seen.add(name)
@@ -179,19 +176,36 @@ export function Composer({
                 },
               })
             }
-            // Skills rank alongside commands but read differently on purpose:
-            // no leading slash (there is no such command), an icon, and a
-            // description that says what selecting one will actually do.
+            scored.sort((a, b) => b.score - a.score)
+            return scored.map(({ suggestion }) => suggestion)
+          },
+          // Chip text renders as trigger + displayText — return the bare name so
+          // the chip reads "/name" (label carries the argument hint for the menu).
+          onSelect: (suggestion) => suggestion.value,
+          chipClassName: 'font-mono',
+        }),
+      )
+    }
+    if (usableSkills.length > 0) {
+      // `$`, not `/`, because that is codex's own sigil — its TUI completes
+      // skills on `$` and reserves `/` for commands, and its bundled prompts
+      // refer to skills that way in prose ("Use $pdf to …"). Matching it means
+      // muscle memory transfers, and it keeps the two lists from being one
+      // ambiguous menu of things that behave differently.
+      configured.push(
+        commandTrigger({
+          char: '$',
+          accessibilityLabel: 'skill',
+          onSearch: (query: string): TriggerSuggestion[] => {
+            const scored: Array<{ score: number; suggestion: TriggerSuggestion }> = []
             for (const skill of usableSkills) {
               const score = matchScore(query, [skill.name, ...skill.name.split(/[-:_]/)])
               if (score === 0) continue
               const summary = skill.shortDescription ?? skill.description
               scored.push({
-                // Commands win ties: they do what their name says, while a skill
-                // only ever drafts a message.
-                score: score - 0.5,
+                score,
                 suggestion: {
-                  value: `${SKILL_VALUE_PREFIX}${skill.name}`,
+                  value: skill.name,
                   label: skill.displayName ?? skill.name,
                   description: summary
                     ? `Skill · ${summary}`
@@ -203,20 +217,14 @@ export function Composer({
             scored.sort((a, b) => b.score - a.score)
             return scored.map(({ suggestion }) => suggestion)
           },
-          // A skill is not a command: picking one types prose into the field for
-          // the user to finish, rather than resolving to a chip that would claim
-          // the engine parses `/name` back out. Commands fall through to the
-          // chip path by returning undefined.
+          // Always text, never a chip: a skill is not wire syntax the engine
+          // parses back out, so what lands has to stay ordinary editable prose.
+          // Returning a string unconditionally is what makes this trigger's
+          // whole list behave that way.
           insertAsText: (suggestion) => {
-            if (!suggestion.value.startsWith(SKILL_VALUE_PREFIX)) return undefined
-            const name = suggestion.value.slice(SKILL_VALUE_PREFIX.length)
-            const skill = usableSkills.find((s) => s.name === name)
-            return skill ? skillPrompt(skill) : undefined
+            const skill = usableSkills.find((s) => s.name === suggestion.value)
+            return skill ? skillPrompt(skill) : `$${suggestion.value} `
           },
-          // Chip text renders as trigger + displayText — return the bare name so
-          // the chip reads "/name" (label carries the argument hint for the menu).
-          onSelect: (suggestion) => suggestion.value,
-          chipClassName: 'font-mono',
         }),
       )
     }

@@ -1,8 +1,8 @@
 import Foundation
 
-/// The two prompt tokens the CLI understands — `@file` and `/command` — as one
-/// set of rules, used by both halves of the app: the composer (which completes
-/// them) and the transcript (which styles them once sent).
+/// The three prompt tokens — `@file`, `/command` and `$skill` — as one set of
+/// rules, used by both halves of the app: the composer (which completes them)
+/// and the transcript (which styles them once sent).
 ///
 /// Pure string work, so it lives here rather than in the app: this package is the
 /// part under test, and every interesting case is an edge — an `@` mid-word, a
@@ -17,6 +17,12 @@ public struct PromptToken: Equatable, Sendable {
     /// for it mid-draft, and refusing to complete there just means typing the
     /// name out by hand.
     case command
+    /// `$name` — a skill. Codex's own sigil: its TUI completes skills on `$`
+    /// and reserves `/` for commands, and its bundled prompts refer to skills
+    /// that way in prose ("Use $pdf to …"). Unlike the other two this is not
+    /// syntax any engine parses — it is what the model reads — so the composer
+    /// resolves it to plain text rather than to a token.
+    case skill
   }
 
   public let kind: Kind
@@ -58,6 +64,12 @@ public enum PromptTokens {
     var tokens: [PromptToken] = []
     for word in words(in: text) {
       guard let kind = kind(ofWordAt: word.lowerBound, in: text) else { continue }
+      // Skills complete but are never *styled*. `$` is ordinary prose far more
+      // often than it is a skill — `$PATH`, `$5.00`, a shell snippet — and
+      // unlike `@` and `/` it is not syntax any engine parses, so a false
+      // positive would be colouring a word for no reason. The charset check
+      // that saves `/` here cannot save `$`: `5.00` passes it.
+      if kind == .skill { continue }
       let range = word.lowerBound..<trimmedEnd(of: word, in: text)
       let body = text[text.index(after: range.lowerBound)..<range.upperBound]
       guard !body.isEmpty else { continue }
@@ -111,7 +123,12 @@ public enum PromptTokens {
   public static func apply(_ value: String, replacing token: PromptToken, in text: String)
     -> (text: String, cursor: String.Index)
   {
-    let prefix = token.kind == .file ? "@" : "/"
+    let prefix: String
+    switch token.kind {
+    case .file: prefix = "@"
+    case .command: prefix = "/"
+    case .skill: prefix = "$"
+    }
     let followedBySpace =
       token.range.upperBound < text.endIndex && text[token.range.upperBound].isWhitespace
     let replacement = "\(prefix)\(value)\(followedBySpace ? "" : " ")"
@@ -184,6 +201,7 @@ public enum PromptTokens {
     switch text[start] {
     case "@": return .file
     case "/": return .command
+    case "$": return .skill
     default: return nil
     }
   }

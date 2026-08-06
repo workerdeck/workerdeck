@@ -94,14 +94,13 @@ struct SessionEmptyState: View {
     // its history into the transcript (`resumeBackfill`), so a resumed session
     // doesn't reach this empty state — its history is on screen.
     var hints = [Hint(symbol: "text.bubble", text: "Tell me what to do")]
-    if hasCommands && hasSkills {
-      hints.append(Hint(symbol: "slash.circle", text: "Type / for slash commands and skills."))
-    } else if hasCommands {
+    // Two keys, two hints — different features, not two spellings of one. `$` is
+    // codex's own sigil for skills; `/` stays the CLI's commands.
+    if hasCommands {
       hints.append(Hint(symbol: "slash.circle", text: "Type / for the CLI's slash commands."))
-    } else if hasSkills {
-      // Skills only: say what picking one does, because it is not what a `/`
-      // menu usually does.
-      hints.append(Hint(symbol: "sparkles", text: "Type / to draft a message for a skill."))
+    }
+    if hasSkills {
+      hints.append(Hint(symbol: "sparkles", text: "Type $ to draft a message for a skill."))
     }
     if canBrowseFiles {
       hints.append(Hint(symbol: "at", text: "Type @ to search this project's files."))

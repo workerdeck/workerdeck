@@ -46,6 +46,36 @@ struct PromptTokenTests {
     #expect(PromptTokens.active(in: "and/or") == nil)
   }
 
+  @Test func skillsCompleteOnDollarButAreNeverStyled() {
+    // Codex's own sigil: its TUI completes skills on `$` and keeps `/` for
+    // commands.
+    #expect(PromptTokens.active(in: "$scr")?.kind == .skill)
+    #expect(PromptTokens.active(in: "$scr")?.query == "scr")
+    #expect(PromptTokens.active(in: "please $scr")?.kind == .skill)
+    // A `$` inside a word is just a dollar sign.
+    #expect(PromptTokens.active(in: "US$5") == nil)
+
+    // Completing is one thing; STYLING sent text is another. `$` is ordinary
+    // prose far more often than it is a skill, and unlike `/` and `@` it is not
+    // syntax any engine parses — so scan() must leave every one of these alone.
+    #expect(PromptTokens.scan("echo $PATH and $5.00").isEmpty)
+    #expect(PromptTokens.scan("$scratch-notes jot this down").isEmpty)
+    // …while its neighbours still style.
+    #expect(PromptTokens.scan("see @README.md").map(\.kind) == [.file])
+  }
+
+  @Test func acceptingASkillReplacesTheTokenWithLiteralText() {
+    let text = "please $scr"
+    let token = PromptTokens.active(in: text)!
+    // `replace` writes the literal verbatim — prefix included, nothing appended
+    // — because what lands is prose the model reads, not a token to parse back.
+    let result = PromptTokens.replace(with: "$scratch-notes ", replacing: token, in: text)
+    #expect(result.text == "please $scratch-notes ")
+    #expect(result.text.distance(from: result.text.startIndex, to: result.cursor) == 22)
+    // And it does not read back as a token, so the transcript won't colour it.
+    #expect(PromptTokens.scan(result.text).isEmpty)
+  }
+
   @Test func readsTheTokenAroundACursorMidMessage() {
     let text = "look at @src/Ses and then stop"
     // Cursor inside the token: the whole word is returned, so accepting replaces

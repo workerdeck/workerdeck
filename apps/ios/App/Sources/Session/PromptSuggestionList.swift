@@ -1,7 +1,7 @@
 import WorkerDeckKit
 import SwiftUI
 
-/// The `/command` and `@file` picker: one glass panel filling the space between
+/// The `/command`, `$skill` and `@file` picker: one glass panel filling the space
 /// the header and the composer.
 ///
 /// It is a screen-level popover rather than part of the composer's card, which is
@@ -89,9 +89,10 @@ private struct SuggestionRow: View {
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     case .skill(let skill):
-      // Deliberately unlike the command row above: no slash, a different glyph,
-      // and a subtitle that says what picking it does. A skill row that looked
-      // like a command row would promise a `/skillname` no engine parses.
+      // Deliberately unlike the command row above: `$` rather than `/`, a
+      // different glyph, and a subtitle saying what picking it does. Codex's own
+      // TUI shows skills this way, and a row that looked like a command row
+      // would promise syntax no engine parses.
       HStack(spacing: 9) {
         Image(systemName: "sparkles")
           .font(.caption)

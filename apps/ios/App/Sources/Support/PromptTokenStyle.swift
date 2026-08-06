@@ -45,6 +45,10 @@ enum PromptTokenStyle {
     switch kind {
     case .file: return .accentColor
     case .command: return .purple
+    // Unreachable from `scan` (which skips skills — `$` is ordinary prose too
+    // often to colour on sight) but the draft editor styles the token it is
+    // completing, and a distinct colour there says "this is not a command".
+    case .skill: return .orange
     }
   }
 }

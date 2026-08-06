@@ -574,6 +574,43 @@ describe('CodexRunner', () => {
     expect(ofType(events, 'skills')).toHaveLength(2)
   })
 
+  it('lists skills before the first turn, over a connection it then throws away', async () => {
+    const peer = scriptedPeer()
+    peer.respond('skills/list', () => ({
+      data: [{ cwd: '/tmp/project', skills: [{ name: 'scratch-notes', enabled: true }] }],
+    }))
+
+    // Promptless and not resuming: the dashboard's "create a session, then type"
+    // flow. Nothing else would bring a child up, so without the probe this
+    // session would have no skill list at all until its first turn — the one
+    // place codex's own TUI has them and we did not.
+    const runner = new CodexRunner({ cwd: '/tmp/project', connectFn: peer.connectFn })
+    const events = collect(runner)
+    void runner.start()
+
+    await vi.waitFor(() => expect(ofType(events, 'skills')).toHaveLength(1))
+    expect(ofType(events, 'skills')[0]!.skills.map((s) => s.name)).toEqual(['scratch-notes'])
+    // Thrown away, not adopted: no thread was started on it, and it is closed.
+    expect(peer.requests.some((r) => r.method === 'thread/start')).toBe(false)
+    await vi.waitFor(() => expect(peer.closed()).toBe(1))
+    expect(runner.status).toBe('idle')
+  })
+
+  it('does not probe when the session is about to connect anyway', async () => {
+    const peer = scriptedPeer()
+    peer.respond('skills/list', () => ({ data: [] }))
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+
+    // A prompt means a turn, which means a child within moments. A second
+    // spawn just to ask the same question would be pure waste.
+    const runner = new CodexRunner({ cwd: '/tmp/p', prompt: 'go', connectFn: peer.connectFn })
+    await runner.start()
+
+    expect(peer.connections()).toBe(1)
+  })
+
   it('says nothing about skills when the binary rejects skills/list', async () => {
     const peer = scriptedPeer()
     peer.respond('skills/list', () => {
@@ -1257,9 +1294,15 @@ describe('CodexRunner', () => {
     expect(texts[0]).toContain('<attachment name="notes.txt" type="text/plain">')
     expect(texts[1]).toBe('what is this?')
 
+    // Counted as a DELTA across close(), not as a total: a promptless session
+    // also opens a throwaway connection to list skills, and that one closes
+    // itself. What matters here is that close() tore down the session's own
+    // child exactly once. Snapshot and assert are back to back on purpose —
+    // no await between them for the probe's close to slip through.
+    const closedBefore = peer.closed()
     runner.close()
     expect(existsSync(image.path!)).toBe(false)
-    expect(peer.closed()).toBe(1)
+    expect(peer.closed()).toBe(closedBefore + 1)
 
     const pdfPeer = scriptedPeer()
     const pdfRunner = new CodexRunner({ cwd: '/tmp', connectFn: pdfPeer.connectFn })

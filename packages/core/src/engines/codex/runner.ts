@@ -706,7 +706,53 @@ export class CodexRunner implements Runner {
       this.#setStatus('idle')
     }
     if (this.#config.prompt) this.sendMessage(this.#config.prompt)
+    // A session that is about to connect anyway (a prompt to run, or a resume
+    // to backfill) gets its skills from that connection a moment later. Only
+    // the promptless, non-resume case — the dashboard's "create, then type" —
+    // would otherwise sit with no child and therefore no skill list at all,
+    // which is the one place codex's own TUI has them and we did not.
+    if (!this.#config.prompt && !this.#config.resume) void this.#probeSkills()
     return this.#turnChain
+  }
+
+  /**
+   * List skills over a **throwaway** connection, for a session with nothing else
+   * to do yet.
+   *
+   * `skills/list` needs a live child but not a thread, so this spawns one, asks,
+   * and closes it — rather than bringing up the session's own child early and
+   * leaving a codex process parked behind every session someone created and
+   * never typed into. The session's real connection re-lists when it arrives;
+   * the fingerprint compare in {@link #refreshSkills} makes that a no-op.
+   *
+   * Entirely best-effort and never awaited: a missing binary, a failed spawn or
+   * a rejected handshake here must not turn a session that has not started into
+   * a session that failed.
+   */
+  async #probeSkills(): Promise<void> {
+    let connection: AppServerConnection | undefined
+    try {
+      connection = this.#config.connectFn({ env: this.#childEnv() })
+      // No onNotification/onRequest/onClose wiring: this child answers exactly
+      // one question and is not the session's. A `skills/changed` it might send
+      // is irrelevant — the list is re-read on the real connection anyway.
+      await connection.request('initialize', {
+        clientInfo: {
+          name: 'workerdeck',
+          title: 'WorkerDeck',
+          version: `protocol-${PROTOCOL_VERSION}`,
+        },
+        capabilities: { experimentalApi: true },
+      })
+      connection.notify('initialized')
+      if (this.#closed) return
+      await this.#refreshSkills(connection)
+    } catch {
+      // The session is fine; it simply has no skill list until its own child
+      // comes up and asks again.
+    } finally {
+      connection?.close()
+    }
   }
 
   sendMessage(text: string, attachments?: readonly AttachmentInput[]): void {

@@ -629,20 +629,32 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   capability — **never** `capabilities.commands`, which means "the CLI accepts these as commands".
   A client may list them and may offer them as a typing aid; it may not render them as command
   chips.
-- **Picking one inserts prose; it does not send.** Both clients insert the skill's own
-  `interface.defaultPrompt` (codex authors it) as ordinary editable text, falling back to
-  "Use the *name* skill to ". The vendored prompt-area grew `TriggerConfig.insertAsText` for
-  exactly this: a `/` dropdown that resolves some rows to chips and others to plain text.
+- **Skills complete on `$`, not `/` — and that is codex's own convention, not a preference.**
+  Its TUI completes skills on `$` and reserves `/` for commands, its `skill-creator` documents the
+  reference form (`Use $skill-x at /path/to/skill-x to solve problem y`), and its bundled prompts
+  are written that way ("Use $pdf to …"). So the two are separate triggers in both composers, and
+  they behave differently: `/` resolves to a **chip** (the CLI really does parse `/name` out of a
+  message), `$` resolves to plain editable **text**.
+- **Picking one inserts text; it does not send.** Both clients insert the skill's own
+  `interface.defaultPrompt` where it has one, else `$name` — the engine's own spelling beats
+  paraphrasing it. The vendored prompt-area grew `TriggerConfig.insertAsText` for exactly this: a
+  dropdown that can resolve a row to plain text instead of a chip.
+- **`$` completes but is never *styled* in a sent message.** `$PATH`, `$5.00` and any shell
+  snippet would otherwise be coloured as skills, and the charset check that saves `/` cannot save
+  `$` (`5.00` passes it). Unlike `@` and `/` it is not syntax any engine parses, so a false
+  positive buys nothing. Swift's `PromptTokens.scan` skips `.skill` outright; a test pins it.
 - **Codex has skills and no commands; Claude has commands and no listable skills.** The two axes
   are orthogonal. Claude's CLI reports skill *names* on `system_init` and nothing else — no
   descriptions, no scope, no suggested prompt — which is not enough to fill a picker honestly, so
   `skillsList` is false there rather than rendering a list of bare words.
-- **Gate the UI on having the list, not on the capability flag.** `skills/list` needs a live
-  child, and a codex session does not spawn one until it has something to do — so a fresh session
-  reports no skills until its first turn. Both clients hide the `⋯` entry until a `skills` event
-  has landed; the flag says the engine *can* answer, the event says it *has*. Spawning eagerly
-  just to list skills was considered and rejected: it would put a codex process behind every
-  created-but-unused session.
+- **A promptless session lists skills over a throwaway connection.** `skills/list` needs a live
+  child but not a thread, and a codex session otherwise spawns nothing until it has work — so the
+  dashboard's "create, then type" flow had no skill list at all, which is the one place codex's
+  own TUI beat us. `CodexRunner.start()` therefore spawns a child, asks, and closes it, rather
+  than bringing the session's real child up early and parking a codex process behind every
+  session someone created and never typed into. It is skipped when a prompt or a resume means a
+  connection is coming anyway (a test pins that: one connection, not two), and the session's real
+  connection re-lists on arrival — the fingerprint compare makes that a no-op.
 - **`skills/list` must be given `cwds` explicitly — the empty case is a trap.** The schema
   documents it as defaulting to "the current session working directory", which reads like the
   thread's. Measured against 0.146.0: with no `cwds`, and *after* a `thread/start` carrying the

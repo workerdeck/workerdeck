@@ -36,19 +36,11 @@ export function SessionEmptyState({
 }: SessionEmptyStateProps) {
   const hints = [
     { icon: MessageSquareText, text: 'Tell the agent what to do.' },
-    ...(hasCommands || hasSkills
-      ? [
-          {
-            icon: hasCommands ? SlashSquare : Sparkles,
-            text: hasCommands
-              ? hasSkills
-                ? 'Type / for slash commands and skills.'
-                : 'Type / for the CLI’s slash commands.'
-              : // Skills only: say what picking one does, because it is not
-                // what a `/` menu usually does.
-                'Type / to draft a message for one of the agent’s skills.',
-          },
-        ]
+    // Two keys, two hints — they are different features, not two spellings of
+    // one. `$` is codex's own sigil for skills; `/` stays the CLI's commands.
+    ...(hasCommands ? [{ icon: SlashSquare, text: 'Type / for the CLI’s slash commands.' }] : []),
+    ...(hasSkills
+      ? [{ icon: Sparkles, text: 'Type $ to draft a message for one of the agent’s skills.' }]
       : []),
     ...(canBrowseFiles
       ? [{ icon: AtSign, text: 'Type @ to search this project’s files.' }]
