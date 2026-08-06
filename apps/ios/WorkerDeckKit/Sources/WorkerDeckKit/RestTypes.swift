@@ -122,7 +122,7 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     slashCommands: false, settingSources: false, budgets: false,
     attachments: ["image", "text"],
     reasoningEfforts: ["minimal", "low", "medium", "high", "xhigh"],
-    vfs: false, streaming: "item"
+    vfs: false, streaming: "token"
   ),
   .provider: EngineCapabilities(
     interactiveApprovals: false,

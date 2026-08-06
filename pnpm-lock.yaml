@@ -20,7 +20,7 @@ importers:
       '@jitl/quickjs-ng-wasmfile-release-asyncify':
         specifier: ^0.31.0
         version: 0.31.0
-      '@openai/codex-sdk':
+      '@openai/codex':
         specifier: ~0.146.0
         version: 0.146.0
       '@swc-node/register':
@@ -111,7 +111,7 @@ importers:
 
   packages/cli:
     dependencies:
-      '@openai/codex-sdk':
+      '@openai/codex':
         specifier: ~0.146.0
         version: 0.146.0
       '@workerdeck/server':
@@ -213,7 +213,7 @@ importers:
       '@jitl/quickjs-ng-wasmfile-release-asyncify':
         specifier: ^0.31.0
         version: 0.31.0
-      '@openai/codex-sdk':
+      '@openai/codex':
         specifier: ~0.146.0
         version: 0.146.0
       '@types/node':
@@ -1375,10 +1375,6 @@ packages:
   '@node-rs/xxhash@1.7.6':
     resolution: {integrity: sha512-XMisO+aQHsVpxRp/85EszTtOQTOlhPbd149P/Xa9F55wafA6UM3h2UhOgOs7aAzItnHU/Aw1WQ1FVTEg7WB43Q==}
     engines: {node: '>= 12'}
-
-  '@openai/codex-sdk@0.146.0':
-    resolution: {integrity: sha512-lhlcfmufd4EvjquERH3HNG0/fuxPQJBjFsAjtP2LJjAsuyMZk245ci8xfvT4QoZ7Vnbe15y7rj/NtMNcUJIJOg==}
-    engines: {node: '>=18'}
 
   '@openai/codex@0.146.0':
     resolution: {integrity: sha512-yG3sPWNda/2YAIQIDq9MrrjoCTIQ7rxYM5IasrG3VBcuhCLTkgeg/JzqmJq1V98RE4MJ5jCxDXXQlOjrditFRw==}
@@ -5208,10 +5204,6 @@ snapshots:
       '@node-rs/xxhash-win32-arm64-msvc': 1.7.6
       '@node-rs/xxhash-win32-ia32-msvc': 1.7.6
       '@node-rs/xxhash-win32-x64-msvc': 1.7.6
-
-  '@openai/codex-sdk@0.146.0':
-    dependencies:
-      '@openai/codex': 0.146.0
 
   '@openai/codex@0.146.0':
     optionalDependencies:

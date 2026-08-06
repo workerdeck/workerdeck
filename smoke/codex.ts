@@ -4,28 +4,34 @@
  *   pnpm smoke:codex [model]        # full run — needs codex auth, costs plan/API usage
  *   pnpm smoke:codex --canary       # the free auth-drift canaries only (network, no tokens)
  *
- * Auth (either route; both verified 2026-08-05, see the PRD's matrix):
- *   - `codex login` in YOUR terminal (ChatGPT plan), or
- *   - CODEX_API_KEY in the environment / repo .env.
- *   OPENAI_API_KEY alone does NOT work — codex exec ignores it (canary 1 is the
- *   alarm for the release where that changes).
+ * Auth — ONE route (verified 2026-08-05 against 0.146.0 by driving the raw
+ * app-server; the exec-era matrix does NOT carry over): `codex login` in YOUR
+ * terminal (ChatGPT plan, or `codex login --with-api-key` to persist a key
+ * into CODEX_HOME). The env keys are dead ends on this surface — CODEX_API_KEY
+ * is read only by `codex exec` (retired), OPENAI_API_KEY by neither; the
+ * app-server sends NO credential from either, and canaries 1–2 are the alarm
+ * for the release where that changes.
  *
- * The paid part is the drift alarm for `--experimental-json` (the SDK is
- * pre-1.0 and the flag's name promises drift): the real JSONL vocabulary vs
- * our §9.2 mapping, a real command execution with its exit code, the §9.5
- * usage-relation asserts (open question 1), resume continuity, interrupt
- * behavior + post-interrupt resumability (open question 3), and the read-only
- * sandbox actually refusing a write (open question 2). Any change to
- * CodexRunner's spawn options or event mapping requires a run.
+ * The canaries drive the REAL binary through the real `CodexRunner` +
+ * `connectAppServer`, so a free run also exercises the spawn contract, the
+ * initialize/initialized handshake, and thread/start — drift in any of those
+ * fails a canary before it costs a token.
+ *
+ * The paid part is the drift alarm for the app-server JSON-RPC v2 vocabulary
+ * (pre-1.0, regenerable from the binary — the schema promises drift): token
+ * deltas actually arriving (the reason this transport exists), a real command
+ * execution with its exit code, the usage-relation asserts on the summed
+ * tokenUsage/updated stream, resume continuity, interrupt behavior +
+ * post-interrupt resumability, the read-only sandbox actually refusing a
+ * write, and a `localImage` attachment. Any change to CodexRunner's spawn
+ * options, handshake, or event mapping requires a run.
  */
 import { execFile } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { Codex } from '@openai/codex-sdk'
-import { CodexRunner, resolveBundledCodexExecutable } from '@workerdeck/core'
-import type { CodexFactory, CodexOptionsLike } from '@workerdeck/core'
+import { CodexRunner, connectAppServer, resolveBundledCodexExecutable } from '@workerdeck/core'
 import type { SessionEvent } from '@workerdeck/protocol'
 
 const MODEL = process.argv.find((a) => !a.startsWith('-') && a.includes('gpt')) ?? 'gpt-5.6-luna'
@@ -38,6 +44,8 @@ const fail = (name: string, detail: string) => {
   failures += 1
   console.error(`  FAIL  ${name} — ${detail}`)
 }
+
+const codexBin = resolveBundledCodexExecutable()
 
 /** Complete child env (codex replaces, never merges) with a scratch home. */
 function scratchEnv(extra: Record<string, string | undefined> = {}): Record<string, string> {
@@ -56,58 +64,86 @@ function scratchEnv(extra: Record<string, string | undefined> = {}): Record<stri
   return env
 }
 
-/** One throwaway exec turn; returns the terminal failure message ('' = completed). */
-async function probeTurn(env: Record<string, string>): Promise<string> {
-  const codex = new Codex({ env })
-  const thread = codex.startThread({
-    sandboxMode: 'read-only',
-    workingDirectory: process.cwd(),
-    skipGitRepoCheck: true,
-    approvalPolicy: 'never',
+function makeRunner(
+  cwd: string,
+  overrides: Record<string, unknown> = {},
+): { runner: CodexRunner; events: SessionEvent[] } {
+  if (!codexBin) throw new Error('bundled codex binary not resolvable — is @openai/codex installed?')
+  const runner = new CodexRunner({
+    cwd,
+    model: MODEL,
+    connectFn: (options) => connectAppServer({ executable: codexBin, ...options }),
+    ...overrides,
   })
+  const events: SessionEvent[] = []
+  runner.subscribe((e) => events.push(e))
+  return { runner, events }
+}
+
+const turnResults = (events: SessionEvent[]) =>
+  events.filter((e): e is Extract<SessionEvent, { type: 'turn_result' }> => e.type === 'turn_result')
+
+/**
+ * One throwaway app-server turn through the real runner; returns the terminal
+ * failure message ('' = completed). Handshake/spawn failures surface here too,
+ * as the turn's error — which is exactly what makes the canaries a drift alarm
+ * for the spawn contract as well as the auth chain.
+ */
+async function probeTurn(env: Record<string, string>): Promise<string> {
+  const cwd = mkdtempSync(join(tmpdir(), 'codex-smoke-probe-'))
+  const { runner, events } = makeRunner(cwd, { prompt: 'say hi', model: undefined, env })
+  const timeout = setTimeout(() => runner.close(), 90_000)
   try {
-    const { events } = await thread.runStreamed('say hi')
-    let lastError = ''
-    for await (const event of events) {
-      if (event.type === 'turn.failed') return event.error.message
-      if (event.type === 'error') lastError = event.message
-      if (event.type === 'turn.completed') return ''
-    }
-    return lastError || 'stream ended without a terminal event'
-  } catch (error) {
-    return error instanceof Error ? error.message : String(error)
+    await runner.start()
+    const [result] = turnResults(events)
+    if (!result) return 'no turn_result within 90s'
+    return result.subtype === 'success' ? '' : (result.errors?.join('; ') ?? 'unknown failure')
+  } finally {
+    clearTimeout(timeout)
+    runner.close()
+    rmSync(cwd, { recursive: true, force: true })
   }
 }
 
 async function canaries(): Promise<void> {
   console.log('\n— free auth-drift canaries (fake keys, scratch CODEX_HOME, no tokens) —')
 
-  // 1. OPENAI_API_KEY alone must still be a no-op for exec. The day this
-  //    fails with invalid_api_key instead, codex started honoring the var and
-  //    the availability probe's rule 4 (and its reason line) are stale.
+  // 1. OPENAI_API_KEY alone must still be a no-op ("Missing bearer" — no
+  //    credential was sent). The day this fails with invalid_api_key instead,
+  //    codex started honoring the var and the probe's hint is stale.
   const viaOpenai = await probeTurn(scratchEnv({ OPENAI_API_KEY: 'sk-smoke-fake' }))
   if (viaOpenai.includes('Missing bearer')) {
-    pass('OPENAI_API_KEY ignored', 'exec sent no credential (Missing bearer)')
+    pass('OPENAI_API_KEY ignored', 'app-server sent no credential (Missing bearer)')
   } else if (viaOpenai.toLowerCase().includes('invalid') && viaOpenai.includes('api')) {
     fail(
       'OPENAI_API_KEY ignored',
-      `exec SENT the key (${viaOpenai.slice(0, 80)}…) — codex now honors OPENAI_API_KEY; ` +
-        'update the availability probe (PRD §6.4 rule 4) and ENGINE docs',
+      `codex SENT the key (${viaOpenai.slice(0, 80)}…) — codex now honors OPENAI_API_KEY; ` +
+        'update the availability probe and the GOTCHAS auth bullet',
     )
   } else {
     fail('OPENAI_API_KEY ignored', `unexpected failure shape: ${viaOpenai.slice(0, 120)}`)
   }
 
-  // 2. CODEX_API_KEY must still reach exec as a bearer (the env auth route).
+  // 2. CODEX_API_KEY must still be exec-only, i.e. a no-op for the app-server
+  //    (established 2026-08-05: the exec surface DID send it as a bearer, this
+  //    surface does not). The probe therefore trusts `login status` alone —
+  //    the day this fails with invalid_api_key, app-server started honoring
+  //    the env key and the probe under-claims: restore a presence rule.
   const viaCodexKey = await probeTurn(scratchEnv({ CODEX_API_KEY: 'sk-smoke-fake' }))
-  if (viaCodexKey.includes('invalid_api_key') || viaCodexKey.includes('Incorrect API key')) {
-    pass('CODEX_API_KEY honored', 'exec sent the key (invalid_api_key for the fake)')
+  if (viaCodexKey.includes('Missing bearer')) {
+    pass('CODEX_API_KEY exec-only', 'app-server sent no credential (Missing bearer)')
+  } else if (viaCodexKey.includes('invalid_api_key') || viaCodexKey.includes('Incorrect API key')) {
+    fail(
+      'CODEX_API_KEY exec-only',
+      'app-server SENT the key — it now honors CODEX_API_KEY; the availability probe ' +
+        'under-claims (add the presence rule back) and the GOTCHAS auth bullet is stale',
+    )
   } else {
-    fail('CODEX_API_KEY honored', `unexpected failure shape: ${viaCodexKey.slice(0, 120)}`)
+    fail('CODEX_API_KEY exec-only', `unexpected failure shape: ${viaCodexKey.slice(0, 120)}`)
   }
 
-  // 3. `login status` still exit-codes its verdict on an empty home.
-  const codexBin = resolveBundledCodexExecutable()
+  // 3. `login status` still exit-codes its verdict on an empty home — what the
+  //    availability probe's rule 3 reads (exit code + fixed line, nothing else).
   if (!codexBin) {
     fail('login status verdict', 'could not resolve the bundled codex binary')
   } else {
@@ -126,10 +162,9 @@ async function canaries(): Promise<void> {
   }
 }
 
-/** The auth this run will use, mirroring the availability probe's chain. */
+/** The auth this run will use, mirroring the availability probe's chain:
+ * `login status` alone — the env keys are not read by the app-server. */
 async function detectAuth(): Promise<string | null> {
-  if (process.env.CODEX_API_KEY) return 'CODEX_API_KEY'
-  const codexBin = resolveBundledCodexExecutable()
   if (!codexBin) return null
   try {
     await execFileP(codexBin, ['login', 'status'], { timeout: 15_000 })
@@ -139,34 +174,13 @@ async function detectAuth(): Promise<string | null> {
   }
 }
 
-const realCodexFactory: CodexFactory = (options: CodexOptionsLike) =>
-  new Codex(options) as ReturnType<CodexFactory>
-
-function makeRunner(cwd: string, overrides: Record<string, unknown> = {}): {
-  runner: CodexRunner
-  events: SessionEvent[]
-} {
-  const runner = new CodexRunner({
-    cwd,
-    model: MODEL,
-    codexFn: realCodexFactory,
-    ...overrides,
-  })
-  const events: SessionEvent[] = []
-  runner.subscribe((e) => events.push(e))
-  return { runner, events }
-}
-
-const turnResults = (events: SessionEvent[]) =>
-  events.filter((e): e is Extract<SessionEvent, { type: 'turn_result' }> => e.type === 'turn_result')
-
 async function paid(): Promise<void> {
   const auth = await detectAuth()
   if (!auth) {
     fail(
       'auth',
-      'no codex credentials: run `codex login` in your own terminal, or set CODEX_API_KEY ' +
-        '(in the environment or the repo .env). OPENAI_API_KEY alone is not used by codex.',
+      'no codex credentials: run `codex login` (or `codex login --with-api-key`) in your own ' +
+        'terminal. The env keys are not read by the app-server surface.',
     )
     return
   }
@@ -203,30 +217,68 @@ async function paid(): Promise<void> {
     if (echoed) pass('command output', 'tool_result carries the echoed marker')
     else fail('command output', 'echo output did not reach a tool_result')
 
-    // Streaming granularity — a drift alarm in canary 1's shape, not a feature
-    // test. Verified 2026-08-05 against 0.146.0: a turn is exactly
-    // thread.started / turn.started / item.completed / turn.completed, with no
-    // item.updated under either --experimental-json or legacy --json, so
-    // CodexRunner's delta synthesis never fires and a turn lands as one wall of
-    // text. The day this fails, codex started streaming: #handleItemProgress
-    // has woken up, ENGINE_CAPABILITIES.codex.streaming may deserve better than
-    // 'item', and the GOTCHAS bullet is stale.
-    const deltas = events.filter((e) => e.type === 'stream_delta').length
-    if (deltas === 0) {
-      pass('no partial streaming', 'turn arrived as one item.completed, as mapped')
+    // Token streaming — the reason the app-server transport is THE transport.
+    // exec's JSONL never carried a partial message (the old smoke asserted the
+    // absence); the positive counterpart is now load-bearing: text deltas must
+    // arrive before the completed item, in more than one piece, and agree with
+    // the final answer the completed item supersedes them with.
+    const textDeltas = events
+      .filter((e): e is Extract<SessionEvent, { type: 'stream_delta' }> => e.type === 'stream_delta')
+      .map((e) => (e.event as { delta?: { type?: string; text?: string } }).delta)
+      .filter((d) => d?.type === 'text_delta')
+      .map((d) => d!.text ?? '')
+    if (textDeltas.length >= 2) {
+      pass('token streaming', `${textDeltas.length} text deltas for one answer`)
+    } else if (textDeltas.length === 1) {
+      fail('token streaming', 'the whole answer arrived as ONE delta — check item/agentMessage/delta')
     } else {
       fail(
-        'no partial streaming',
-        `${deltas} stream_delta event(s) — codex now emits item.updated; re-check ` +
-          "ENGINE_CAPABILITIES.codex.streaming and the GOTCHAS §Codex streaming bullet",
+        'token streaming',
+        'no stream_delta at all — item/agentMessage/delta never fired; the capability record ' +
+          "(streaming: 'token') is now a lie",
       )
     }
+    // Agreement is asserted PER MESSAGE, not across the turn — a turn with a
+    // tool call emits several agent messages (codex narrates "I'm running the
+    // requested shell command…" before the echo, then answers after it), so
+    // concatenating every delta and comparing to the last message's text
+    // compares a preamble+answer against an answer and fails by construction.
+    // The invariant that is actually true, and the one both reducers implement
+    // ("the full message supersedes any in-flight streamed text"): the deltas
+    // accumulated since the previous completed message reconstruct the next
+    // one. That is what a client renders, so that is what is checked.
+    let pending = ''
+    let matched = 0
+    const mismatches: string[] = []
+    for (const event of events) {
+      if (event.type === 'stream_delta') {
+        const delta = (event.event as { delta?: { type?: string; text?: string } }).delta
+        if (delta?.type === 'text_delta') pending += delta.text ?? ''
+        continue
+      }
+      if (event.type !== 'assistant_message' || !Array.isArray(event.message.content)) continue
+      const text = event.message.content.find((b) => b.type === 'text') as { text?: string } | undefined
+      if (text === undefined) continue
+      if (pending === '') continue // a message that was never streamed — nothing to agree with
+      if (text.text === pending) matched += 1
+      else mismatches.push(`streamed ${JSON.stringify(pending.slice(0, 30))} vs completed ${JSON.stringify((text.text ?? '').slice(0, 30))}`)
+      pending = ''
+    }
+    if (matched > 0 && mismatches.length === 0) {
+      pass('delta/final agreement', `${matched} message(s) reconstructed exactly from their deltas`)
+    } else if (mismatches.length > 0) {
+      fail('delta/final agreement', mismatches[0]!)
+    } else {
+      fail('delta/final agreement', 'no completed message was preceded by deltas')
+    }
 
-    // §9.5 usage asserts — the mapping already subtracted, so recover the raw
-    // relation from the normalized fields: raw input = input + cache_read.
+    // Usage asserts — `turn/completed` carries no usage on this surface; the
+    // runner sums `thread/tokenUsage/updated.last` across the turn and applies
+    // the Anthropic-convention subtraction. Recover the raw relation from the
+    // normalized fields: raw input = input + cache_read.
     const usage = result.usage as Record<string, number> | undefined
     if (!usage) {
-      fail('usage', 'turn_result carried no usage')
+      fail('usage', 'turn_result carried no usage — tokenUsage/updated never arrived')
     } else {
       if (usage.output_tokens! > 0) pass('usage', `nonzero output (${usage.output_tokens})`)
       else fail('usage', 'zero output tokens')
@@ -234,7 +286,7 @@ async function paid(): Promise<void> {
         pass(
           'usage relation',
           `input(excl. cache)=${usage.input_tokens} cacheRead=${usage.cache_read_input_tokens} ` +
-            'a negative input would have been clamped — see the next turn for the cache-heavy case',
+            '— a negative input would have been clamped; see the resume turn for the cache-heavy case',
         )
       }
     }
@@ -243,7 +295,8 @@ async function paid(): Promise<void> {
     if (!threadId) throw new Error('no thread id after turn 1')
     runner.close()
 
-    // Turn 2: resume continuity + the cache-heavy usage relation (open Q1).
+    // Turn 2: resume continuity (a fresh child + thread/resume) + the
+    // cache-heavy usage relation.
     const resumed = makeRunner(cwd, {
       prompt: 'What exact string did I ask you to echo earlier? Reply with just the string.',
       resume: threadId,
@@ -251,31 +304,32 @@ async function paid(): Promise<void> {
     await resumed.runner.start()
     const [turn2] = turnResults(resumed.events)
     if (turn2?.subtype === 'success' && turn2.result?.includes('codex-smoke-ok')) {
-      pass('resume', 'turn 2 recalled turn 1 through `codex exec resume`')
+      pass('resume', 'turn 2 recalled turn 1 through thread/resume')
     } else {
       fail('resume', `turn 2: ${turn2?.result ?? turn2?.errors?.join('; ') ?? 'no result'}`)
     }
     const u2 = turn2?.usage as Record<string, number> | undefined
     if (u2 && u2.input_tokens! >= 0) {
-      // The §9.5 subtraction assumes OpenAI-convention input INCLUDES cached.
+      // The subtraction assumes OpenAI-convention inputTokens INCLUDES cached.
       // If that were wrong, a cache-heavy resume turn would clamp at 0 with a
       // large cache_read — flag the suspicious shape instead of proving it.
       if (u2.input_tokens === 0 && (u2.cache_read_input_tokens ?? 0) > 0) {
         fail(
-          'usage relation (Q1)',
+          'usage relation (cache-heavy)',
           `resume turn: input clamped to 0 with cacheRead=${u2.cache_read_input_tokens} — ` +
-            'input_tokens may NOT include cached; re-check §9.5’s subtraction',
+            'inputTokens may NOT include cached; re-check the subtraction in #finishTurn',
         )
       } else {
         pass(
-          'usage relation (Q1)',
+          'usage relation (cache-heavy)',
           `resume turn: input(excl. cache)=${u2.input_tokens} cacheRead=${u2.cache_read_input_tokens} — subtraction holds`,
         )
       }
     }
     resumed.runner.close()
 
-    // Turn 3: interrupt kills cleanly (open Q3), and the thread survives it.
+    // Turn 3: interrupt lands cleanly (turn/interrupt → status 'interrupted'),
+    // and the thread survives it.
     const spinner = makeRunner(cwd, {
       prompt: 'Count from 1 to 500 out loud, one number per line, without using any tools.',
       resume: threadId,
@@ -299,18 +353,17 @@ async function paid(): Promise<void> {
     await afterInterrupt.runner.start()
     const [aliveResult] = turnResults(afterInterrupt.events)
     if (aliveResult?.subtype === 'success' && /alive/i.test(aliveResult.result ?? '')) {
-      pass('post-interrupt resume (Q3)', 'the thread stayed resumable after a killed turn')
+      pass('post-interrupt resume', 'the thread stayed resumable after an interrupted turn')
     } else {
       fail(
-        'post-interrupt resume (Q3)',
-        `resume after interrupt: ${aliveResult?.result ?? aliveResult?.errors?.join('; ') ?? 'nothing'} ` +
-          '— CodexRunner may need a thread-poisoned fallback (PRD §13 Q3)',
+        'post-interrupt resume',
+        `resume after interrupt: ${aliveResult?.result ?? aliveResult?.errors?.join('; ') ?? 'nothing'}`,
       )
     }
     afterInterrupt.runner.close()
 
-    // Turn 4: the read-only sandbox actually refuses a write (open Q2 /
-    // permission-mode mapping). Fresh thread, default mode.
+    // Turn 4: the read-only sandbox actually refuses a write (the permission-
+    // mode mapping — thread `sandbox` + turn `sandboxPolicy`). Fresh thread.
     const readonly = makeRunner(cwd, {
       prompt:
         'Create a file named smoke-write-test.txt containing "x" in the current directory. ' +
@@ -320,13 +373,15 @@ async function paid(): Promise<void> {
     await readonly.runner.start()
     const wrote = existsSync(join(cwd, 'smoke-write-test.txt'))
     if (!wrote) pass('read-only sandbox', "'default' mode refused the write, as mapped")
-    else fail('read-only sandbox', "'default' mode let a write through — §9.3's mapping is broken")
+    else fail('read-only sandbox', "'default' mode let a write through — the sandbox mapping is broken")
     readonly.runner.close()
 
-    // Turn 5: an image attachment reaches the model as --image. The pixel is
+    // Turn 5: an image attachment reaches the model as `localImage` — the one
+    // input shape no unit test can prove the binary accepts. The pixel is
     // RGBA(255,0,0,127) — decoded from these bytes, not assumed; the first
-    // paid run (2026-08-05) caught an "expected blue" assertion that had never
-    // executed. A model that never received the attachment cannot name it.
+    // exec-era paid run (2026-08-05) caught an "expected blue" assertion that
+    // had never executed. A model that never received the attachment cannot
+    // name it.
     const png =
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
     const vision = makeRunner(cwd, {})
@@ -357,7 +412,7 @@ async function paid(): Promise<void> {
   }
 }
 
-console.log(`smoke:codex — @openai/codex-sdk against the real binary`)
+console.log('smoke:codex — CodexRunner over `codex app-server` against the real binary')
 await canaries()
 if (!CANARY_ONLY) await paid()
 if (failures > 0) {

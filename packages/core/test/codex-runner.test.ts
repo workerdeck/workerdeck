@@ -1,70 +1,111 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
-import { ENGINE_CAPABILITIES, type SessionEvent } from '@workerdeck/protocol'
+import type { SessionEvent } from '@workerdeck/protocol'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
 import type {
-  CodexFactory,
-  CodexOptionsLike,
-  CodexThreadEvent,
-  CodexThreadOptions,
-  CodexUsage,
-  CodexUserInput,
+  AppServerConnectFn,
+  AppServerConnection,
 } from '../src/engines/codex/types.ts'
 
-const USAGE: CodexUsage = {
-  input_tokens: 1000,
-  cached_input_tokens: 800,
-  cache_write_input_tokens: 50,
-  output_tokens: 100,
-  reasoning_output_tokens: 25,
+const THREAD_RESULT = {
+  thread: { id: 'thread-1' },
+  model: 'gpt-5.6-terra',
+  reasoningEffort: 'medium',
 }
 
-type ScriptedTurn = {
-  events: CodexThreadEvent[]
-  /** After the events, wait for abort and then throw like a killed child. */
-  hang?: boolean
-  /** Throw instead of yielding anything (a spawn that dies). */
-  throwError?: string
+const USAGE_A = {
+  inputTokens: 600,
+  cachedInputTokens: 500,
+  cacheWriteInputTokens: 30,
+  outputTokens: 60,
+  reasoningOutputTokens: 15,
+  totalTokens: 675,
+}
+const USAGE_B = {
+  inputTokens: 400,
+  cachedInputTokens: 300,
+  cacheWriteInputTokens: 20,
+  outputTokens: 40,
+  reasoningOutputTokens: 10,
+  totalTokens: 450,
 }
 
-/** The `queryFn` pattern for codex: a scripted exec, no binary spawn. */
-function scriptedCodex(turns: ScriptedTurn[]) {
-  const calls: Array<{
-    input: string | CodexUserInput[]
-    threadOptions: CodexThreadOptions | undefined
-    resumedFrom: string | undefined
-  }> = []
-  const factoryOptions: CodexOptionsLike[] = []
-  let turnIndex = 0
-  const codexFn: CodexFactory = (options) => {
-    factoryOptions.push(options)
-    const thread = (resumedFrom: string | undefined, threadOptions?: CodexThreadOptions) => ({
-      runStreamed: async (input: string | CodexUserInput[], turnOptions?: { signal?: AbortSignal }) => {
-        calls.push({ input, threadOptions, resumedFrom })
-        const turn = turns[turnIndex++] ?? { events: [] }
-        return {
-          events: (async function* () {
-            if (turn.throwError) throw new Error(turn.throwError)
-            for (const event of turn.events) yield event
-            if (turn.hang) {
-              await new Promise<never>((_, reject) => {
-                const signal = turnOptions?.signal
-                if (signal?.aborted) reject(new Error('Codex exited with code 130'))
-                signal?.addEventListener('abort', () =>
-                  reject(new Error('Codex exited with code 130')),
-                )
-              })
-            }
-          })(),
-        }
+/**
+ * The `queryFn` injection pattern at the wire level: a scripted JSON-RPC peer. Requests are
+ * recorded and answered by method responders; the test emits server→client
+ * notifications and requests through the handlers the runner registered.
+ */
+function scriptedPeer() {
+  const requests: Array<{ method: string; params: unknown; connection: number }> = []
+  const notifies: string[] = []
+  const envs: Array<Record<string, string>> = []
+  const responders = new Map<string, (params: unknown) => unknown>()
+  let connectCount = 0
+  let closedCount = 0
+  let notificationHandler: ((method: string, params: unknown) => void) | undefined
+  let requestHandler: ((method: string, params: unknown) => Promise<unknown>) | undefined
+  let closeHandler: ((message: string) => void) | undefined
+
+  responders.set('initialize', () => ({ codexHome: '/tmp/.codex' }))
+  responders.set('thread/start', () => THREAD_RESULT)
+  responders.set('thread/resume', () => THREAD_RESULT)
+
+  const connectFn: AppServerConnectFn = (options) => {
+    envs.push(options.env)
+    const connection = ++connectCount
+    const peer: AppServerConnection = {
+      request: async (method, params) => {
+        requests.push({ method, params, connection })
+        const responder = responders.get(method)
+        if (!responder) return {}
+        return responder(params)
       },
-    })
-    return {
-      startThread: (options?: CodexThreadOptions) => thread(undefined, options),
-      resumeThread: (id: string, options?: CodexThreadOptions) => thread(id, options),
+      notify: (method) => {
+        notifies.push(method)
+      },
+      onNotification: (handler) => {
+        notificationHandler = handler
+      },
+      onRequest: (handler) => {
+        requestHandler = handler
+      },
+      onClose: (handler) => {
+        closeHandler = handler
+      },
+      close: () => {
+        closedCount++
+      },
     }
+    return peer
   }
-  return { codexFn, calls, factoryOptions }
+
+  return {
+    connectFn,
+    requests,
+    notifies,
+    envs,
+    respond: (method: string, responder: (params: unknown) => unknown) =>
+      responders.set(method, responder),
+    emit: (method: string, params: unknown) => notificationHandler!(method, params),
+    serverRequest: (method: string, params: unknown) => requestHandler!(method, params),
+    die: (message: string) => closeHandler!(message),
+    connections: () => connectCount,
+    closed: () => closedCount,
+  }
+}
+
+/** Scripted happy-path turn: deltas, items, usage, completion — all emitted
+ * synchronously from inside the turn/start responder. */
+function scriptTurn(
+  peer: ReturnType<typeof scriptedPeer>,
+  script: (emit: (method: string, params: unknown) => void, turnId: string) => void,
+  turnId = 'turn-1',
+) {
+  peer.respond('turn/start', () => {
+    peer.emit('turn/started', { threadId: 'thread-1', turn: { id: turnId, status: 'inProgress' } })
+    script(peer.emit, turnId)
+    return { turn: { id: turnId, status: 'inProgress' } }
+  })
 }
 
 function collect(runner: CodexRunner): SessionEvent[] {
@@ -73,7 +114,6 @@ function collect(runner: CodexRunner): SessionEvent[] {
   return events
 }
 
-/** Type-narrowing filter (Array.filter alone doesn't narrow union members). */
 function ofType<T extends SessionEvent['type']>(
   events: SessionEvent[],
   type: T,
@@ -81,107 +121,225 @@ function ofType<T extends SessionEvent['type']>(
   return events.filter((e): e is Extract<SessionEvent, { type: T }> => e.type === type)
 }
 
-const item = (event: 'item.started' | 'item.updated' | 'item.completed', payload: object) =>
-  ({ type: event, item: payload }) as CodexThreadEvent
+describe('CodexRunner', () => {
+  it('streams token deltas — text and reasoning with section breaks — suppressibly', async () => {
+    const script = (emit: (m: string, p: unknown) => void, turnId: string) => {
+      const base = { threadId: 'thread-1', turnId, itemId: 'item_0' }
+      emit('item/reasoning/summaryTextDelta', { ...base, summaryIndex: 0, delta: 'First' })
+      emit('item/reasoning/summaryTextDelta', { ...base, summaryIndex: 0, delta: ' part' })
+      emit('item/reasoning/summaryTextDelta', { ...base, summaryIndex: 1, delta: 'Second' })
+      emit('item/agentMessage/delta', { ...base, itemId: 'item_1', delta: 'He' })
+      emit('item/agentMessage/delta', { ...base, itemId: 'item_1', delta: 'llo' })
+      emit('item/completed', {
+        threadId: 'thread-1',
+        turnId,
+        item: { id: 'item_1', type: 'agentMessage', text: 'Hello' },
+      })
+      emit('thread/tokenUsage/updated', {
+        threadId: 'thread-1',
+        turnId,
+        tokenUsage: { last: USAGE_A, total: USAGE_A },
+      })
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    }
 
-describe('CodexRunner event mapping', () => {
-  it('folds the full item vocabulary into protocol events (§9.2)', async () => {
-    const { codexFn } = scriptedCodex([
-      {
-        events: [
-          { type: 'thread.started', thread_id: 'thread-1' },
-          { type: 'turn.started' },
-          item('item.started', { id: 'r1', type: 'reasoning', text: '' }),
-          item('item.updated', { id: 'r1', type: 'reasoning', text: 'thinking…' }),
-          item('item.completed', { id: 'r1', type: 'reasoning', text: 'thinking…' }),
-          item('item.started', { id: 'c1', type: 'command_execution', command: 'ls', aggregated_output: '', status: 'in_progress' }),
-          item('item.completed', { id: 'c1', type: 'command_execution', command: 'ls', aggregated_output: 'file.txt\n', exit_code: 0, status: 'completed' }),
-          item('item.completed', { id: 'f1', type: 'file_change', changes: [{ path: 'a.ts', kind: 'update' }], status: 'completed' }),
-          item('item.started', { id: 'm1', type: 'mcp_tool_call', server: 'wiki', tool: 'lookup', arguments: { q: 'x' }, status: 'in_progress' }),
-          item('item.completed', { id: 'm1', type: 'mcp_tool_call', server: 'wiki', tool: 'lookup', arguments: { q: 'x' }, result: { ok: true }, status: 'completed' }),
-          item('item.completed', { id: 'w1', type: 'web_search', query: 'weather' }),
-          item('item.completed', { id: 't1', type: 'todo_list', items: [{ text: 'step', completed: false }] }),
-          item('item.completed', { id: 'e1', type: 'error', message: 'transport hiccup' }),
-          item('item.completed', { id: 'x1', type: 'exotic_novelty', detail: 42 }),
-          item('item.started', { id: 'a1', type: 'agent_message', text: 'Hel' }),
-          item('item.updated', { id: 'a1', type: 'agent_message', text: 'Hello' }),
-          item('item.completed', { id: 'a1', type: 'agent_message', text: 'Hello' }),
-          { type: 'turn.completed', usage: USAGE },
-        ],
-      },
+    const on = scriptedPeer()
+    scriptTurn(on, script)
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: on.connectFn })
+    const events = collect(runner)
+    await runner.start()
+    const deltas = ofType(events, 'stream_delta').map(
+      (e) => e.event.delta as { text?: string; thinking?: string },
+    )
+    expect(deltas.map((d) => d.thinking ?? d.text)).toEqual([
+      'First',
+      ' part',
+      '\n\nSecond', // the summaryIndex bump renders as a paragraph break
+      'He',
+      'llo',
     ])
-    const runner = new CodexRunner({ cwd: '/tmp/p', prompt: 'go', codexFn })
+    // The completed message supersedes the stream, exec-style.
+    const texts = ofType(events, 'assistant_message').filter(
+      (e) => Array.isArray(e.message.content) && e.message.content[0]!.type === 'text',
+    )
+    expect((texts[0]!.message.content as Array<{ text: string }>)[0]!.text).toBe('Hello')
+
+    const off = scriptedPeer()
+    scriptTurn(off, script)
+    const quiet = new CodexRunner({
+      cwd: '/tmp',
+      prompt: 'hi',
+      includePartialMessages: false,
+      connectFn: off.connectFn,
+    })
+    const quietEvents = collect(quiet)
+    await quiet.start()
+    expect(quietEvents.some((e) => e.type === 'stream_delta')).toBe(false)
+    // Suppressing deltas must not suppress the answer.
+    expect(ofType(quietEvents, 'turn_result')[0]).toMatchObject({ result: 'Hello' })
+  })
+
+  it('runs a full turn: handshake, thread/start, item mapping, summed usage', async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      emit('item/started', {
+        threadId: 'thread-1',
+        turnId,
+        item: { id: 'c1', type: 'commandExecution', command: 'ls', status: 'inProgress' },
+      })
+      emit('item/completed', {
+        threadId: 'thread-1',
+        turnId,
+        item: {
+          id: 'c1',
+          type: 'commandExecution',
+          command: 'ls',
+          aggregatedOutput: 'file.txt\n',
+          exitCode: 0,
+          status: 'completed',
+        },
+      })
+      emit('item/completed', {
+        threadId: 'thread-1',
+        turnId,
+        item: {
+          id: 'f1',
+          type: 'fileChange',
+          changes: [{ path: 'a.ts', kind: { type: 'update' }, diff: '--- a\n+++ b\n' }],
+          status: 'completed',
+        },
+      })
+      emit('item/completed', {
+        threadId: 'thread-1',
+        turnId,
+        item: { id: 'r1', type: 'reasoning', summary: ['thought one', 'thought two'], content: [] },
+      })
+      emit('item/completed', {
+        threadId: 'thread-1',
+        turnId,
+        item: { id: 'u0', type: 'userMessage', content: [{ type: 'text', text: 'go' }] },
+      })
+      emit('item/completed', {
+        threadId: 'thread-1',
+        turnId,
+        item: { id: 'x1', type: 'exoticNovelty', detail: 42 },
+      })
+      emit('turn/plan/updated', {
+        threadId: 'thread-1',
+        turnId,
+        plan: [
+          { step: 'read', status: 'completed' },
+          { step: 'write', status: 'inProgress' },
+        ],
+      })
+      emit('item/completed', {
+        threadId: 'thread-1',
+        turnId,
+        item: { id: 'a1', type: 'agentMessage', text: 'done' },
+      })
+      emit('thread/tokenUsage/updated', {
+        threadId: 'thread-1',
+        turnId,
+        tokenUsage: { last: USAGE_A, total: USAGE_A },
+      })
+      emit('thread/tokenUsage/updated', {
+        threadId: 'thread-1',
+        turnId,
+        tokenUsage: { last: USAGE_B, total: USAGE_B },
+      })
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+
+    const runner = new CodexRunner({
+      cwd: '/tmp/project',
+      prompt: 'go',
+      model: 'gpt-5.6-sol',
+      reasoningEffort: 'high',
+      permissionMode: 'acceptEdits',
+      connectFn: peer.connectFn,
+    })
     const events = collect(runner)
     await runner.start()
 
-    // Thread id becomes the resumable session id.
+    // The JSON-RPC choreography: initialize → (initialized) → thread/start → turn/start.
+    expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'thread/start', 'turn/start'])
+    expect(peer.notifies).toEqual(['initialized'])
+    expect(peer.requests[1]!.params).toMatchObject({
+      cwd: '/tmp/project',
+      approvalPolicy: 'never',
+      sandbox: 'workspace-write',
+      model: 'gpt-5.6-sol',
+    })
+    expect(peer.requests[2]!.params).toMatchObject({
+      threadId: 'thread-1',
+      input: [{ type: 'text', text: 'go' }],
+      cwd: '/tmp/project',
+      approvalPolicy: 'never',
+      sandboxPolicy: { type: 'workspaceWrite' },
+      model: 'gpt-5.6-sol',
+      effort: 'high',
+    })
     expect(runner.sdkSessionId).toBe('thread-1')
 
+    // The record's forsworn events never occur.
     const types = events.map((e) => e.type)
-    // The record's forsworn events never occur — conformance over a
-    // full-vocabulary run.
-    for (const forsworn of ['system_init', 'permission_requested', 'context_usage', 'rate_limit', 'plan_info', 'capabilities']) {
+    for (const forsworn of ['system_init', 'permission_requested', 'context_usage', 'rate_limit']) {
       expect(types).not.toContain(forsworn)
     }
 
-    // Reasoning lands as its own thinking message before the text answer.
     const assistants = ofType(events, 'assistant_message')
-    expect(assistants[0]!.message.content).toEqual([{ type: 'thinking', thinking: 'thinking…' }])
-
-    // Command execution: tool_use at start, paired tool_result at completion.
-    // Published ids are per-turn-namespaced (codex restarts item ids in every
-    // exec child), with the raw id surviving as the suffix.
+    // Reasoning: its own thinking message, sections joined as paragraphs.
+    expect(assistants.some((e) =>
+      (e.message.content as Array<{ type: string; thinking?: string }>).some(
+        (b) => b.type === 'thinking' && b.thinking === 'thought one\n\nthought two',
+      ),
+    )).toBe(true)
+    // Command execution: tool_use at item/started, paired tool_result at completion,
+    // ids per-turn-namespaced with the raw id surviving as the suffix.
     const commandUse = assistants.find(
-      (e) => Array.isArray(e.message.content) && e.message.content[0]!.type === 'tool_use'
-        && (e.message.content[0] as { name?: string }).name === 'CodexCommand',
+      (e) =>
+        Array.isArray(e.message.content) &&
+        (e.message.content[0] as { name?: string }).name === 'CodexCommand',
     )!
-    const commandBlock = (commandUse.message.content as Array<{ id: string }>)[0]!
-    expect(commandBlock).toMatchObject({
-      type: 'tool_use',
-      name: 'CodexCommand',
-      input: { command: 'ls' },
-    })
+    const commandBlock = (e => (e.message.content as Array<{ id: string }>)[0]!)(commandUse)
     expect(commandBlock.id).toMatch(/:c1$/)
     const results = ofType(events, 'user_message').filter((e) => e.synthetic)
-    const commandResult = results.find(
-      (e) => (e.message.content as Array<{ tool_use_id?: string }>)[0]!.tool_use_id === commandBlock.id,
-    )!
-    expect((commandResult.message.content as Array<{ content?: string; is_error?: boolean }>)[0]).toMatchObject({
-      content: 'file.txt\n',
-    })
-
-    // File changes arrive post-hoc: use + result together, matching ids.
-    const fileUse = assistants.find(
-      (e) => Array.isArray(e.message.content)
-        && (e.message.content[0] as { name?: string }).name === 'CodexFileChange',
-    )!
-    expect((fileUse.message.content as Array<{ id?: string }>)[0]!.id).toMatch(/:f1$/)
-
-    // MCP calls take Claude's naming so existing MCP-aware rendering applies.
-    const mcpUse = assistants.find(
-      (e) => Array.isArray(e.message.content)
-        && (e.message.content[0] as { name?: string }).name === 'mcp__wiki__lookup',
+    expect(
+      results.some(
+        (e) =>
+          (e.message.content as Array<{ tool_use_id?: string; content?: string }>)[0]!
+            .tool_use_id === commandBlock.id,
+      ),
+    ).toBe(true)
+    // v2's object kind renders like exec's string kind did.
+    const fileResult = results.find((e) =>
+      String((e.message.content as Array<{ content?: string }>)[0]!.content).includes('update: a.ts'),
     )
-    expect(mcpUse).toBeDefined()
+    expect(fileResult).toBeDefined()
+    // The user's own echoed item is dropped: exactly one non-synthetic user message.
+    expect(ofType(events, 'user_message').filter((e) => !e.synthetic)).toHaveLength(1)
 
-    // Unmodeled codex items ride sdk_event, namespaced.
+    // Unknown items and the plan ride sdk_event, exec-style.
     const sdkTypes = ofType(events, 'sdk_event').map((e) => e.payload.type)
+    expect(sdkTypes).toContain('codex.exoticNovelty')
     expect(sdkTypes).toContain('codex.todo_list')
-    expect(sdkTypes).toContain('codex.error')
-    expect(sdkTypes).toContain('codex.exotic_novelty')
+    const plan = ofType(events, 'sdk_event').find((e) => e.payload.type === 'codex.todo_list')!
+    expect(plan.payload.items).toEqual([
+      { text: 'read', completed: true },
+      { text: 'write', completed: false },
+    ])
 
-    // The turn result: final text, success, and the usage normalization of
-    // §9.5 — Anthropic convention, input excludes cache, reasoning is output.
-    const result = ofType(events, 'turn_result')[0]!
-    expect(result).toMatchObject({
+    // Usage: summed across the turn's updates, Anthropic convention (input
+    // excludes cache, reasoning is output), totalCostUsd 0 = unknown.
+    expect(ofType(events, 'turn_result')[0]).toMatchObject({
       subtype: 'success',
       isError: false,
-      result: 'Hello',
+      result: 'done',
       numTurns: 1,
       totalCostUsd: 0,
       usage: {
-        input_tokens: 200,
-        output_tokens: 125,
+        input_tokens: 200, // (600+400) - (500+300)
+        output_tokens: 125, // (60+40) + (15+10)
         cache_creation_input_tokens: 50,
         cache_read_input_tokens: 800,
       },
@@ -189,79 +347,27 @@ describe('CodexRunner event mapping', () => {
     expect(runner.status).toBe('idle')
   })
 
-  it('synthesizes stream deltas from item text growth, suppressible', async () => {
-    const script = [
-      {
-        events: [
-          { type: 'thread.started', thread_id: 't' } as CodexThreadEvent,
-          item('item.started', { id: 'a', type: 'agent_message', text: 'He' }),
-          item('item.updated', { id: 'a', type: 'agent_message', text: 'Hello' }),
-          item('item.completed', { id: 'a', type: 'agent_message', text: 'Hello' }),
-          { type: 'turn.completed', usage: USAGE } as CodexThreadEvent,
-        ],
-      },
-    ]
-    const on = scriptedCodex(script)
-    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', codexFn: on.codexFn })
-    const events = collect(runner)
-    await runner.start()
-    const deltas = ofType(events, 'stream_delta')
-    expect(deltas.map((d) => (d.event.delta as { text: string }).text)).toEqual(['He', 'llo'])
-
-    const off = scriptedCodex(script)
-    const quiet = new CodexRunner({ cwd: '/tmp', prompt: 'hi', includePartialMessages: false, codexFn: off.codexFn })
-    const quietEvents = collect(quiet)
-    await quiet.start()
-    expect(quietEvents.some((e) => e.type === 'stream_delta')).toBe(false)
-  })
-
-  it('treats a failed turn as a failed turn, not a failed session', async () => {
-    const { codexFn } = scriptedCodex([
-      {
-        events: [
-          { type: 'thread.started', thread_id: 't' },
-          { type: 'error', message: 'Reconnecting... 1/5' },
-          { type: 'turn.failed', error: { message: '401 Unauthorized' } },
-        ],
-      },
-      {
-        events: [
-          item('item.completed', { id: 'a', type: 'agent_message', text: 'recovered' }),
-          { type: 'turn.completed', usage: USAGE },
-        ],
-      },
-    ])
-    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', codexFn })
-    const events = collect(runner)
-    await runner.start()
-    const failed = ofType(events, 'turn_result')[0]!
-    expect(failed).toMatchObject({
-      subtype: 'error_during_execution',
-      isError: true,
-      errors: ['401 Unauthorized'],
+  it('interrupts via turn/interrupt and lands as an interrupted turn result', async () => {
+    const peer = scriptedPeer()
+    // A turn that starts and hangs (the responder returns without a terminal).
+    peer.respond('turn/start', () => {
+      peer.emit('turn/started', { threadId: 'thread-1', turn: { id: 'turn-9', status: 'inProgress' } })
+      return { turn: { id: 'turn-9', status: 'inProgress' } }
     })
-    expect(runner.status).toBe('idle')
-    expect(events.some((e) => e.type === 'session_error')).toBe(false)
-
-    // The session stays usable: the next message runs an ordinary turn.
-    runner.sendMessage('again')
-    await vi.waitFor(() => {
-      const results = ofType(events, 'turn_result')
-      expect(results).toHaveLength(2)
-      expect(results[1]).toMatchObject({ subtype: 'success', result: 'recovered' })
+    peer.respond('turn/interrupt', () => {
+      peer.emit('turn/completed', { threadId: 'thread-1', turn: { id: 'turn-9', status: 'interrupted' } })
+      return {}
     })
-  })
-
-  it('interrupt kills the child and lands as an interrupted turn result', async () => {
-    const { codexFn } = scriptedCodex([
-      { events: [{ type: 'thread.started', thread_id: 't' }], hang: true },
-    ])
-    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'spin', codexFn })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'spin', connectFn: peer.connectFn })
     const events = collect(runner)
     const run = runner.start()
     await vi.waitFor(() => expect(runner.status).toBe('running'))
     await runner.interrupt()
     await run
+    expect(peer.requests.find((r) => r.method === 'turn/interrupt')?.params).toEqual({
+      threadId: 'thread-1',
+      turnId: 'turn-9',
+    })
     expect(ofType(events, 'turn_result')[0]).toMatchObject({
       subtype: 'error_during_execution',
       errors: ['interrupted'],
@@ -269,52 +375,129 @@ describe('CodexRunner event mapping', () => {
     expect(runner.status).toBe('idle')
   })
 
-  it('queues messages: one turn at a time, in order', async () => {
-    const answer = (text: string, id: string): ScriptedTurn => ({
-      events: [
-        { type: 'thread.started', thread_id: 't' },
-        item('item.completed', { id, type: 'agent_message', text }),
-        { type: 'turn.completed', usage: USAGE },
-      ],
+  it('resumes: a create-request resume goes through thread/resume, and a dead child respawns into the same thread', async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      emit('item/completed', {
+        threadId: 'thread-1',
+        turnId,
+        item: { id: 'a1', type: 'agentMessage', text: 'back' },
+      })
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
     })
-    const { codexFn, calls } = scriptedCodex([answer('one', 'a1'), answer('two', 'a2')])
-    const runner = new CodexRunner({ cwd: '/tmp', codexFn })
+    const runner = new CodexRunner({
+      cwd: '/tmp',
+      prompt: 'continue',
+      resume: 'prior-thread',
+      connectFn: peer.connectFn,
+    })
     const events = collect(runner)
-    void runner.start()
-    runner.sendMessage('first')
-    runner.sendMessage('second')
-    await vi.waitFor(() => {
-      expect(ofType(events, 'turn_result')).toHaveLength(2)
+    await runner.start()
+    expect(peer.requests[1]).toMatchObject({
+      method: 'thread/resume',
+      params: { threadId: 'prior-thread' },
+      connection: 1,
     })
-    expect(calls.map((c) => c.input)).toEqual(['first', 'second'])
-    expect(ofType(events, 'turn_result').map((e) => e.result)).toEqual([
-      'one',
-      'two',
-    ])
+    expect(ofType(events, 'turn_result')[0]).toMatchObject({ subtype: 'success', result: 'back' })
+
+    // The child dies while idle; the next message spawns a fresh one and
+    // resumes the SAME thread — a dead child is never a dead session.
+    peer.die('codex app-server exited (code 1): boom')
+    runner.sendMessage('again')
+    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
+    const resumed = peer.requests.filter((r) => r.method === 'thread/resume')
+    expect(resumed).toHaveLength(2)
+    expect(resumed[1]).toMatchObject({ params: { threadId: 'thread-1' }, connection: 2 })
+    expect(ofType(events, 'turn_result')[1]).toMatchObject({ subtype: 'success' })
+    expect(events.some((e) => e.type === 'session_error')).toBe(false)
   })
 
-  it('namespaces item ids per turn — two exec children never publish the same id', async () => {
-    // One codex child per turn, and item ids restart at item_0 in every child.
-    // Raw ids on the wire would make a client's upsert-by-id overwrite turn 1's
-    // bubble with turn N's answer (the reproduced "codex returned nothing" bug).
-    const turn = (text: string): ScriptedTurn => ({
-      events: [
-        { type: 'thread.started', thread_id: 't' },
-        item('item.started', { id: 'item_0', type: 'command_execution', command: 'ls', aggregated_output: '', status: 'in_progress' }),
-        item('item.completed', { id: 'item_0', type: 'command_execution', command: 'ls', aggregated_output: 'ok\n', exit_code: 0, status: 'completed' }),
-        item('item.completed', { id: 'item_1', type: 'agent_message', text }),
-        { type: 'turn.completed', usage: USAGE },
-      ],
+  it('fails the in-flight turn with the exit diagnostic when the child dies mid-turn', async () => {
+    const peer = scriptedPeer()
+    peer.respond('turn/start', () => {
+      peer.emit('turn/started', { threadId: 'thread-1', turn: { id: 't', status: 'inProgress' } })
+      return { turn: { id: 't', status: 'inProgress' } }
     })
-    const { codexFn } = scriptedCodex([turn('four'), turn('six')])
-    const runner = new CodexRunner({ cwd: '/tmp', codexFn })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
+    const events = collect(runner)
+    const run = runner.start()
+    await vi.waitFor(() => expect(runner.status).toBe('running'))
+    peer.die('codex app-server exited (SIGKILL): stderr tail here')
+    await run
+    expect(ofType(events, 'turn_result')[0]).toMatchObject({
+      subtype: 'error_during_execution',
+      errors: ['codex app-server exited (SIGKILL): stderr tail here'],
+    })
+    expect(runner.status).toBe('idle')
+  })
+
+  it('treats a failed turn as a failed turn — turn/completed(status failed) with its error', async () => {
+    const peer = scriptedPeer()
+    peer.respond('turn/start', () => {
+      peer.emit('error', {
+        threadId: 'thread-1',
+        turnId: 't',
+        error: { message: 'Reconnecting… 1/5' },
+        willRetry: true,
+      })
+      peer.emit('turn/completed', {
+        threadId: 'thread-1',
+        turn: { id: 't', status: 'failed', error: { message: '401 Unauthorized' } },
+      })
+      return { turn: { id: 't', status: 'inProgress' } }
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+    expect(ofType(events, 'turn_result')[0]).toMatchObject({
+      subtype: 'error_during_execution',
+      errors: ['401 Unauthorized'],
+    })
+    expect(runner.status).toBe('idle')
+    expect(events.some((e) => e.type === 'session_error')).toBe(false)
+  })
+
+  it('namespaces item ids per turn — one long-lived child never publishes colliding ids', async () => {
+    const peer = scriptedPeer()
+    const answer = (text: string) => (emit: (m: string, p: unknown) => void, turnId: string) => {
+      emit('item/started', {
+        threadId: 'thread-1',
+        turnId,
+        item: { id: 'item_0', type: 'commandExecution', command: 'ls', status: 'inProgress' },
+      })
+      emit('item/completed', {
+        threadId: 'thread-1',
+        turnId,
+        item: {
+          id: 'item_0',
+          type: 'commandExecution',
+          command: 'ls',
+          aggregatedOutput: 'ok\n',
+          exitCode: 0,
+          status: 'completed',
+        },
+      })
+      emit('item/completed', {
+        threadId: 'thread-1',
+        turnId,
+        item: { id: 'item_1', type: 'agentMessage', text },
+      })
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    }
+    let turnIndex = 0
+    peer.respond('turn/start', () => {
+      const turnId = `turn-${++turnIndex}`
+      peer.emit('turn/started', { threadId: 'thread-1', turn: { id: turnId, status: 'inProgress' } })
+      answer(turnIndex === 1 ? 'four' : 'six')(peer.emit, turnId)
+      return { turn: { id: turnId, status: 'inProgress' } }
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', connectFn: peer.connectFn })
     const events = collect(runner)
     void runner.start()
     runner.sendMessage('2+2')
     runner.sendMessage('3+3')
     await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
 
-    // Both answers survive as distinct items: distinct uuids, stable raw suffix.
     const answers = ofType(events, 'assistant_message').filter(
       (e) => Array.isArray(e.message.content) && e.message.content[0]!.type === 'text',
     )
@@ -323,10 +506,8 @@ describe('CodexRunner event mapping', () => {
       'six',
     ])
     expect(answers[0]!.uuid).not.toBe(answers[1]!.uuid)
-    for (const answer of answers) expect(answer.uuid).toMatch(/:item_1$/)
+    for (const a of answers) expect(a.uuid).toMatch(/:item_1$/)
 
-    // Tool ids: distinct across turns, and each turn's tool_result pairs with
-    // its own turn's tool_use (started → completed stays one item).
     const uses = ofType(events, 'assistant_message')
       .map((e) => (e.message.content as Array<{ type: string; id?: string }>)[0]!)
       .filter((block) => block.type === 'tool_use')
@@ -338,89 +519,86 @@ describe('CodexRunner event mapping', () => {
     expect(resultIds).toEqual([uses[0]!.id, uses[1]!.id])
   })
 
-  it('applies model/mode/effort per spawn, mutable between turns, fixed mid-turn', async () => {
-    const done = (id: string): ScriptedTurn => ({
-      events: [
-        { type: 'thread.started', thread_id: 'thread-9' },
-        item('item.completed', { id, type: 'agent_message', text: 'ok' }),
-        { type: 'turn.completed', usage: USAGE },
-      ],
+  it('applies model/mode between turns, resets to the resolved default, refuses mid-turn', async () => {
+    const peer = scriptedPeer()
+    let turnIndex = 0
+    peer.respond('turn/start', () => {
+      const turnId = `turn-${++turnIndex}`
+      peer.emit('turn/started', { threadId: 'thread-1', turn: { id: turnId, status: 'inProgress' } })
+      if (turnIndex < 3) {
+        peer.emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+      } // turn 3 hangs for the mid-turn refusals
+      return { turn: { id: turnId, status: 'inProgress' } }
     })
-    const { codexFn, calls } = scriptedCodex([done('a'), done('b'), { events: [], hang: true }])
-    const runner = new CodexRunner({
-      cwd: '/tmp/project',
-      prompt: 'go',
-      model: 'gpt-5.6-sol',
-      permissionMode: 'acceptEdits',
-      reasoningEffort: 'ultra',
-      codexFn,
-    })
-    const events = collect(runner)
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
     await runner.start()
-    expect(calls[0]!.resumedFrom).toBeUndefined()
-    expect(calls[0]!.threadOptions).toEqual({
-      model: 'gpt-5.6-sol',
-      sandboxMode: 'workspace-write',
-      workingDirectory: '/tmp/project',
-      skipGitRepoCheck: true,
-      approvalPolicy: 'never',
-      modelReasoningEffort: 'ultra',
+    // No model configured: the resolved default from thread/start is named
+    // explicitly (overrides persist per thread, so every turn states its model).
+    const turnParams = () => peer.requests.filter((r) => r.method === 'turn/start')
+    expect(turnParams()[0]!.params).toMatchObject({
+      model: 'gpt-5.6-terra',
+      effort: 'medium',
+      sandboxPolicy: { type: 'readOnly' },
     })
 
     await runner.setModel('gpt-5.5')
     await runner.setPermissionMode('bypassPermissions')
-    expect(events.some((e) => e.type === 'model_changed' && e.model === 'gpt-5.5')).toBe(true)
     runner.sendMessage('next')
-    await vi.waitFor(() => expect(calls).toHaveLength(2))
-    // The follow-up turn resumes the thread the first spawn started.
-    expect(calls[1]!.resumedFrom).toBe('thread-9')
-    expect(calls[1]!.threadOptions).toMatchObject({
+    await vi.waitFor(() => expect(turnParams()).toHaveLength(2))
+    expect(turnParams()[1]!.params).toMatchObject({
       model: 'gpt-5.5',
-      sandboxMode: 'danger-full-access',
+      sandboxPolicy: { type: 'dangerFullAccess' },
     })
+    expect(runner.info().model).toBe('gpt-5.5')
 
-    // Mid-turn, the running child's settings are fixed.
+    // Back to default — possible because the resolved default is remembered.
+    await runner.setModel(undefined)
+    expect(runner.info().model).toBe('gpt-5.6-terra')
+
     runner.sendMessage('spin')
-    await vi.waitFor(() => expect(calls).toHaveLength(3))
+    await vi.waitFor(() => expect(turnParams()).toHaveLength(3))
+    expect(turnParams()[2]!.params).toMatchObject({ model: 'gpt-5.6-terra' })
     await expect(runner.setModel('gpt-5.2')).rejects.toThrow(/mid-turn/)
     await expect(runner.setPermissionMode('default')).rejects.toThrow(/mid-turn/)
     runner.close()
   })
 
-  it("maps 'default' to the read-only sandbox — the honest degradation", async () => {
-    const { codexFn, calls } = scriptedCodex([
-      { events: [{ type: 'turn.completed', usage: USAGE }] },
-    ])
-    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'x', codexFn })
+  it('auto-declines server→client approval requests, visibly, and errors the unknown', async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
+    const events = collect(runner)
     await runner.start()
-    expect(calls[0]!.threadOptions?.sandboxMode).toBe('read-only')
-    expect(calls[0]!.threadOptions?.approvalPolicy).toBe('never')
-  })
-
-  it('resumes an existing thread id from the create request', async () => {
-    const { codexFn, calls } = scriptedCodex([
-      { events: [{ type: 'turn.completed', usage: USAGE }] },
-    ])
-    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'continue', resume: 'prior-thread', codexFn })
-    await runner.start()
-    expect(calls[0]!.resumedFrom).toBe('prior-thread')
-  })
-
-  it('refuses forkSession and CLI-only permission modes at construction', () => {
-    const { codexFn } = scriptedCodex([])
-    expect(
-      () => new CodexRunner({ cwd: '/tmp', resume: 't', forkSession: true, codexFn }),
-    ).toThrow(/fork/)
-    expect(() => new CodexRunner({ cwd: '/tmp', permissionMode: 'plan', codexFn })).toThrow(
-      /not supported/,
+    await expect(
+      peer.serverRequest('item/commandExecution/requestApproval', { itemId: 'c1' }),
+    ).resolves.toEqual({ decision: 'decline' })
+    await expect(peer.serverRequest('item/permissions/requestApproval', {})).resolves.toEqual({
+      permissions: {},
+    })
+    await expect(peer.serverRequest('mcpServer/elicitation/request', {})).resolves.toEqual({
+      action: 'decline',
+    })
+    await expect(peer.serverRequest('account/chatgptAuthTokens/refresh', {})).rejects.toMatchObject({
+      code: -32601,
+    })
+    const declined = ofType(events, 'sdk_event').filter(
+      (e) => e.payload.type === 'codex.approval_auto_declined',
     )
+    expect(declined.map((e) => e.payload.method)).toEqual([
+      'item/commandExecution/requestApproval',
+      'item/permissions/requestApproval',
+      'mcpServer/elicitation/request',
+    ])
   })
 
-  it('hands images to codex as temp files and cleans them up on close', async () => {
-    const { codexFn, calls } = scriptedCodex([
-      { events: [{ type: 'turn.completed', usage: USAGE }] },
-    ])
-    const runner = new CodexRunner({ cwd: '/tmp', codexFn })
+  it('hands images to codex as localImage temp files and cleans up on close', async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', connectFn: peer.connectFn })
     void runner.start()
     const pixel =
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
@@ -434,81 +612,102 @@ describe('CodexRunner event mapping', () => {
         data: Buffer.from('hello').toString('base64'),
       },
     ])
-    await vi.waitFor(() => expect(calls).toHaveLength(1))
-    const input = calls[0]!.input as CodexUserInput[]
-    const image = input.find((p) => p.type === 'local_image')!
+    await vi.waitFor(() =>
+      expect(peer.requests.some((r) => r.method === 'turn/start')).toBe(true),
+    )
+    const input = (peer.requests.find((r) => r.method === 'turn/start')!.params as {
+      input: Array<{ type: string; path?: string; text?: string }>
+    }).input
+    const image = input.find((p) => p.type === 'localImage')!
     expect(image.path).toMatch(/att-1\.png$/)
-    expect(existsSync(image.path)).toBe(true)
-    expect(readFileSync(image.path).equals(Buffer.from(pixel, 'base64'))).toBe(true)
-    // Text files inline in the shared envelope; the typed text follows.
+    expect(existsSync(image.path!)).toBe(true)
+    expect(readFileSync(image.path!).equals(Buffer.from(pixel, 'base64'))).toBe(true)
     const texts = input.filter((p) => p.type === 'text').map((p) => p.text)
     expect(texts[0]).toContain('<attachment name="notes.txt" type="text/plain">')
-    expect(texts[0]).toContain('hello')
     expect(texts[1]).toBe('what is this?')
 
     runner.close()
-    expect(existsSync(image.path)).toBe(false)
-  })
+    expect(existsSync(image.path!)).toBe(false)
+    expect(peer.closed()).toBe(1)
 
-  it('refuses a PDF attachment — no codex representation exists', async () => {
-    const { codexFn } = scriptedCodex([])
-    const runner = new CodexRunner({ cwd: '/tmp', codexFn })
-    void runner.start()
+    const pdfPeer = scriptedPeer()
+    const pdfRunner = new CodexRunner({ cwd: '/tmp', connectFn: pdfPeer.connectFn })
+    void pdfRunner.start()
     expect(() =>
-      runner.sendMessage('read this', [
+      pdfRunner.sendMessage('read this', [
         { id: 'a', name: 'doc.pdf', mediaType: 'application/pdf', bytes: 4, data: 'JVBERg==' },
       ]),
     ).toThrow(/unsupported attachment/)
-    // What `#buildInput` accepts (images as paths, text inlined) is exactly what
-    // the record promises — clients filter their attach menus by this list.
-    expect(ENGINE_CAPABILITIES.codex.attachments).toEqual(['image', 'text'])
   })
 
-  it('passes a complete child env with the CODEX_HOME pin winning', () => {
-    const { codexFn, factoryOptions } = scriptedCodex([])
-    new CodexRunner({
+  it('passes a complete child env with the CODEX_HOME pin winning, on every spawn', async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({
       cwd: '/tmp',
-      codexFn,
+      prompt: 'go',
+      connectFn: peer.connectFn,
       env: { PATH: '/usr/bin', HOME: '/Users/op', CODEX_HOME: '/elsewhere', GONE: undefined },
       codexHome: '/profiles/codex-a',
     })
-    expect(factoryOptions[0]!.env).toEqual({
+    await runner.start()
+    expect(peer.envs[0]).toEqual({
       PATH: '/usr/bin',
       HOME: '/Users/op',
       CODEX_HOME: '/profiles/codex-a',
     })
   })
 
-  it('reports codex identity, capabilities, and thread id on info()', async () => {
-    const { codexFn } = scriptedCodex([
-      {
-        events: [
-          { type: 'thread.started', thread_id: 'thread-5' },
-          { type: 'turn.completed', usage: USAGE },
-        ],
-      },
-    ])
-    const runner = new CodexRunner({ cwd: '/tmp/w', prompt: 'hello world', codexFn })
+  it('reports codex identity and the token-streaming capability record on info()', async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({
+      cwd: '/tmp/w',
+      prompt: 'hello world',
+      connectFn: peer.connectFn,
+    })
     await runner.start()
     const info = runner.info()
     expect(info.engine).toBe('codex')
+    expect(info.capabilities?.streaming).toBe('token')
     expect(info.capabilities?.interactiveApprovals).toBe(false)
-    expect(info.capabilities?.streaming).toBe('item')
-    expect(info.sdkSessionId).toBe('thread-5')
-    expect(info.canBypassPermissions).toBe(true)
+    expect(info.sdkSessionId).toBe('thread-1')
     expect(info.pendingPermissionCount).toBe(0)
     expect(info.title).toBe('hello world')
   })
 
-  it('survives a stream that dies without a terminal event', async () => {
-    const { codexFn } = scriptedCodex([{ events: [], throwError: 'spawn ENOENT' }])
-    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'x', codexFn })
+  it('refuses forkSession and CLI-only permission modes at construction', () => {
+    const peer = scriptedPeer()
+    expect(
+      () =>
+        new CodexRunner({ cwd: '/tmp', resume: 't', forkSession: true, connectFn: peer.connectFn }),
+    ).toThrow(/fork/)
+    expect(
+      () => new CodexRunner({ cwd: '/tmp', permissionMode: 'plan', connectFn: peer.connectFn }),
+    ).toThrow(/not supported/)
+  })
+
+  it('fails the turn when turn/start itself is rejected, and stays usable', async () => {
+    const peer = scriptedPeer()
+    let attempts = 0
+    peer.respond('turn/start', () => {
+      if (++attempts === 1) throw new Error('invalid params: input')
+      peer.emit('turn/completed', { threadId: 'thread-1', turn: { id: 't2', status: 'completed' } })
+      return { turn: { id: 't2', status: 'inProgress' } }
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
     const events = collect(runner)
     await runner.start()
     expect(ofType(events, 'turn_result')[0]).toMatchObject({
       subtype: 'error_during_execution',
-      errors: ['spawn ENOENT'],
+      errors: ['invalid params: input'],
     })
-    expect(runner.status).toBe('idle')
+    runner.sendMessage('again')
+    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
+    expect(ofType(events, 'turn_result')[1]).toMatchObject({ subtype: 'success' })
   })
 })

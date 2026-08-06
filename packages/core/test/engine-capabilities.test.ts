@@ -56,8 +56,12 @@ describe('ENGINE_CAPABILITIES invariants', () => {
     }
   })
 
-  it('declares approvals for claude alone — the structural codex fact', () => {
+  it('declares approvals for claude alone, and token streaming for codex', () => {
     expect(ENGINE_CAPABILITIES.claude.interactiveApprovals).toBe(true)
+    // Codex streams token-wise (app-server deltas) yet approvals stay false:
+    // the JSON-RPC channel exists, but the runner auto-declines rather than
+    // asking — the record describes what ships, not what the wire could do.
+    expect(ENGINE_CAPABILITIES.codex.streaming).toBe('token')
     expect(ENGINE_CAPABILITIES.codex.interactiveApprovals).toBe(false)
     expect(ENGINE_CAPABILITIES.provider.interactiveApprovals).toBe(false)
   })
@@ -80,7 +84,6 @@ describe('adapter conformance', () => {
   })
 
   it('refuses restore on the engines that cannot rehydrate', async () => {
-    // Sync throw (claude) and async rejection (codex) both fail the create.
     expect(() =>
       claudeAdapter.createRunner({
         config: { cwd: '/tmp' },

@@ -91,16 +91,19 @@ master; 0.7.0 is the latest published).
   with the release (the learned-models map is gone — `GET /profiles` serves a real picker from
   the first request, which fixed the iOS cold-start free-text bug), and probes its own
   credentials (`available`/`unavailableReason` on `ProfileInfo`, display-only, ~60s TTL). Codex
-  (`@openai/codex-sdk` driving the codex CLI, one `codex exec --experimental-json` spawn per
-  turn) is a peer of the Claude engine: create/attach/watch/interrupt/resume, sandbox-mapped
-  permission modes, item-granularity streaming, images via `--image`, per-turn usage re-mapped to
-  the Anthropic accounting convention — with approvals declared structurally impossible in exec
-  mode (`interactiveApprovals: false`; the record is what keeps clients from rendering an
-  approval UI that never fires). Claude gained create-time `reasoningEffort` (SDK
+  (the `@openai/codex` binary driven over its `codex app-server` JSON-RPC surface — one child
+  per *session*, held across turns) is a peer of the Claude engine:
+  create/attach/watch/interrupt/resume, sandbox-mapped permission modes, token-by-token
+  streaming, images via `localImage`, per-turn usage summed from `thread/tokenUsage/updated`
+  and re-mapped to the Anthropic accounting convention — with approvals auto-declined rather
+  than asked (`interactiveApprovals: false`; the record is what keeps clients from rendering an
+  approval UI that never fires). An exec transport (`codex exec --experimental-json`, one spawn
+  per turn) came first and was replaced before release: its JSONL carries no partial messages,
+  so it could never stream. Claude gained create-time `reasoningEffort` (SDK
   `Options.effort`) with per-model efforts on catalog rows. The `@ai-sdk` provider profiles stop
   being offered by default but the engine, its tests and its example stay green. `smoke:codex`
-  covers what the scripted exec cannot, including free auth-drift canaries pinning the verified
-  codex auth matrix.
+  covers what the scripted JSON-RPC peer cannot, including free auth-drift canaries pinning the
+  verified codex auth matrix (CODEX_HOME login only — no env key reaches the app-server).
 - **Message attachments + MCP screens** (`PROTOCOL_VERSION` 5) — a session can be sent photos,
   PDFs and text files. The bytes never ride the protocol: an upload
   (`POST /sessions/:id/attachments`) is held per session and the `user_message` command names it
@@ -158,9 +161,10 @@ with filesystem state), multi-tenant SaaS, and claude.ai authentication of any k
   OpenAI's terms restrict headless/gateway use of ChatGPT-subscription codex auth the way
   Anthropic's restrict claude.ai logins is unresolved — the posture mirrors the Anthropic one
   (surface honestly, never circumvent) until answered.
-- **Codex approvals via `codex app-server`.** The experimental JSON-RPC surface the IDE
-  extension uses is the only route to `interactiveApprovals: true` for codex. The capability
-  record means flipping it on would need no protocol change; a spike ticket, not a plan.
+- **Codex interactive approvals.** The engine already speaks the app-server surface, which has
+  the request channel (server→client JSON-RPC requests) — the runner currently auto-declines
+  them under `approvalPolicy: 'never'`. Wiring the channel to the permission surface flips
+  `interactiveApprovals` with no protocol change; a spike ticket, not a plan.
 - **Returning `@ai-sdk` providers as bespoke adapters.** New union members (a versioned protocol
   event) or per-profile capability overrides under `'provider'` — the record supports both, so
   the choice stays deferred without penalty.

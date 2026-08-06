@@ -45,11 +45,12 @@ A [profile](/workerdeck/docs/guides/profiles/) decides what a session runs as, i
 
 - **`claude`** (the default) — Claude Code via the Agent SDK, everything described above: a real
   CLI process against a real checkout, with the full permission system.
-- **`codex`** — OpenAI Codex via `@openai/codex-sdk`, driving the local codex binary the same
-  way the Agent SDK drives the Claude CLI. The binary resolves its own auth (`codex login` in
-  your terminal, or `CODEX_API_KEY`); permission modes map onto codex's own sandbox, and because
-  `codex exec` has no ask-channel, its capability record declares approvals off — clients hide
-  the approval UI instead of rendering one that never fires.
+- **`codex`** — OpenAI Codex, the local codex binary driven over its `app-server` JSON-RPC
+  surface the same way the Agent SDK drives the Claude CLI, streaming token-by-token. The
+  binary resolves its own auth (`codex login` in your terminal); permission modes map onto
+  codex's own sandbox, and because approvals are not wired to the permission surface, its
+  capability record declares them off — clients hide the approval UI instead of rendering one
+  that never fires.
 - **`provider`** — a model-agnostic engine over the [AI SDK](https://ai-sdk.dev), for any provider
   it supports, assembled by your own server hook. No CLI process and no config directory, and no
   ambient authority either: tools are capability-scoped, the filesystem is an in-memory scratch
@@ -82,7 +83,7 @@ Nine libraries, one instance, one dependency rule:
 | --- | --- |
 | `workerdeck` | The turnkey instance: gateway + dashboard on one port, shared-secret auth, durable parking, restart guard. |
 | `@workerdeck/protocol` | The wire protocol: session events, commands, REST shapes. Dependency-free, browser-safe. The product boundary. |
-| `@workerdeck/core` | The engines, as adapters — `SessionRunner` (Agent SDK), `CodexRunner` (`@openai/codex-sdk`) and `AiSdkRunner` (any provider) behind one `Runner` interface. No transport. |
+| `@workerdeck/core` | The engines, as adapters — `SessionRunner` (Agent SDK), `CodexRunner` (the codex binary over JSON-RPC) and `AiSdkRunner` (any provider) behind one `Runner` interface. No transport. |
 | `@workerdeck/sandbox` | The untrusted-code boundary: a QuickJS-NG WASM guest with interpreter-enforced limits. Runs server-side or in a tab. |
 | `@workerdeck/queue` | Job queue: one-shot unattended runs with concurrency limits, token budgets, and webhooks. |
 | `@workerdeck/server` | HTTP + WebSocket gateway: session registry, pluggable auth hook, profiles, optional job routes. |

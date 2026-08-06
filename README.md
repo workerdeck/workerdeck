@@ -104,10 +104,10 @@ There's a rung for every level of control: the styled `SessionPanel`, the headle
 ## Three engines: Claude Code, Codex, and any provider
 
 A **profile** is what a session runs as — and it picks the engine. The default is Claude Code via
-the Agent SDK. `engine: 'codex'` runs OpenAI Codex the same way — `@openai/codex-sdk` driving the
-local codex binary, which resolves its own auth (`codex login` in your terminal, or
-`CODEX_API_KEY`) exactly as the Claude CLI resolves its own. `engine: 'provider'` runs the
-model-agnostic engine through a host hook: no CLI process, any AI SDK provider.
+the Agent SDK. `engine: 'codex'` runs OpenAI Codex the same way — the local codex binary driven
+over its `app-server` JSON-RPC surface, streaming token-by-token, resolving its own auth
+(`codex login` in your terminal) exactly as the Claude CLI resolves its own. `engine: 'provider'`
+runs the model-agnostic engine through a host hook: no CLI process, any AI SDK provider.
 
 ```ts
 createWorkerServer({
@@ -132,10 +132,11 @@ Every profile answers `GET /profiles` with its engine's **capability record** (a
 resume, telemetry, attachments, reasoning efforts…), a **model catalog** shipped with the release
 — a real picker from the first request, no warm-up session — and whether its credentials
 currently **probe as usable** (`available`, with an actionable reason when not; display-only, so
-a stale probe can never block a create). Codex has no ask-channel in exec mode, so its record
-declares `interactiveApprovals: false` and every client hides the approval UI instead of
-rendering one that never fires; its permission modes map onto the codex sandbox (`default` →
-read-only, `acceptEdits` → workspace-write, `bypassPermissions` → full access).
+a stale probe can never block a create). Codex approvals are not wired to the permission surface
+(the runner auto-declines rather than asking), so its record declares
+`interactiveApprovals: false` and every client hides the approval UI instead of rendering one
+that never fires; its permission modes map onto the codex sandbox (`default` → read-only,
+`acceptEdits` → workspace-write, `bypassPermissions` → full access).
 
 The provider engine trades ambient authority for a sandbox:
 
@@ -250,7 +251,7 @@ run. Each package has its own README.
 | --- | --- |
 | [`workerdeck`](packages/cli) | The turnkey instance: gateway + dashboard on one port, shared-secret auth, durable parking, restart guard. |
 | [`@workerdeck/protocol`](packages/protocol) | The wire protocol — events, commands, REST shapes. Dependency-free, browser-safe. **The product boundary**, versioned from day one. |
-| [`@workerdeck/core`](packages/core) | The engines, as adapters: `SessionRunner` (Agent SDK), `CodexRunner` (`@openai/codex-sdk`, an optional peer) and `AiSdkRunner` (any provider) behind one `Runner` interface — each with a capability record, a shipped model catalog and a credential probe — plus tool execution on a swappable `ToolExecutor` seam and `park()`/`restore`. No transport. |
+| [`@workerdeck/core`](packages/core) | The engines, as adapters: `SessionRunner` (Agent SDK), `CodexRunner` (the codex binary over JSON-RPC; `@openai/codex` an optional peer) and `AiSdkRunner` (any provider) behind one `Runner` interface — each with a capability record, a shipped model catalog and a credential probe — plus tool execution on a swappable `ToolExecutor` seam and `park()`/`restore`. No transport. |
 | [`@workerdeck/sandbox`](packages/sandbox) | The untrusted-code boundary: QuickJS-NG WASM guest, in-memory scratch VFS, by-value host bridge, interpreter-enforced memory and time limits. Runs server-side or in a tab. |
 | [`@workerdeck/queue`](packages/queue) | The job queue: concurrency, token budgets, retries, watchdog, retention, webhooks. Pluggable `QueueAdapter` (in-memory bundled). |
 | [`@workerdeck/server`](packages/server) | The gateway: HTTP + WebSocket, session registry, auth hook, profiles, job routes, session notifications, browser tool bridge, parked-session storage, opt-in host-file routes. |

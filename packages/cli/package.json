@@ -28,7 +28,7 @@
     "dev": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register src/cli.ts"
   },
   "dependencies": {
-    "@openai/codex-sdk": "~0.146.0",
+    "@openai/codex": "~0.146.0",
     "@workerdeck/server": "workspace:*",
     "@workerdeck/web": "workspace:*"
   },

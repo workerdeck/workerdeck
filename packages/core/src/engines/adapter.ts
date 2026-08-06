@@ -44,7 +44,7 @@ export type EngineRunnerRequest = {
  * One engine, as the server consumes it: its capability record, its shipped
  * model catalog, a credential probe, and a runner factory. The claude adapter
  * wraps `SessionRunner` without behaviour change; the codex adapter owns the
- * `@openai/codex-sdk` integration; the provider adapter is a pseudo-adapter —
+ * `codex app-server` integration; the provider adapter is a pseudo-adapter —
  * its runners are built by the host's `createEngineRunner` hook, so its
  * `createRunner` throws and the server routes around it.
  */

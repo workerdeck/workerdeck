@@ -65,16 +65,15 @@ export { codexAdapter, resolveBundledCodexExecutable } from './engines/codex/ada
 export { CODEX_CATALOG } from './engines/codex/catalog.ts'
 export { CodexRunner } from './engines/codex/runner.ts'
 export type { CodexRunnerConfig } from './engines/codex/runner.ts'
+export { connectAppServer } from './engines/codex/process.ts'
+export { JsonRpcError, JsonRpcStdioConnection } from './engines/codex/jsonrpc.ts'
 export type {
-  CodexFactory,
-  CodexLike,
-  CodexOptionsLike,
-  CodexStreamedTurn,
-  CodexThreadEvent,
-  CodexThreadItem,
-  CodexThreadLike,
-  CodexThreadOptions,
-  CodexUsage,
-  CodexUserInput,
+  AppServerConnection,
+  AppServerConnectFn,
+  AppServerConnectOptions,
+  AppServerItem,
+  AppServerTokenUsage,
+  AppServerTurn,
+  AppServerUserInput,
 } from './engines/codex/types.ts'
 export { providerAdapter } from './engines/provider/adapter.ts'

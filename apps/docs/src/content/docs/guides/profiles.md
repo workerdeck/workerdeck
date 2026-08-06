@@ -26,9 +26,9 @@ createWorkerServer({
 
 A profile also selects which **engine** runs the session. `engine: 'claude'` (the default, and
 what everything above describes) is Claude Code via the Agent SDK. `engine: 'codex'` is OpenAI
-Codex via `@openai/codex-sdk` driving the local codex binary — the direct structural sibling: a
-local agent binary with sessions, sandboxing and resume, resolving its own credentials from the
-operator's environment (`codex login` in your own terminal, or `CODEX_API_KEY`; the optional
+Codex — the local codex binary driven over its `app-server` JSON-RPC surface — the direct
+structural sibling: a local agent binary with sessions, sandboxing and resume, resolving its own
+credentials from the operator's environment (`codex login` in your own terminal; the optional
 `codexHome` pins a CODEX_HOME the way `configDir` pins a config dir). `engine: 'provider'` runs
 the model-agnostic engine — no config directory, no CLI process; the server builds it through
 the `createEngineRunner` hook, which is where the operator resolves the model and its credentials.
@@ -58,8 +58,8 @@ switching on the engine name:
   `bypassPermissions`, mapped onto codex's own sandbox (read-only / workspace-write / full
   access). Asking for a mode outside the record is a **400**, and a profile whose
   `defaults.permissionMode` is outside it fails `createWorkerServer` at startup.
-- Codex has **no interactive approvals** — `codex exec` closes stdin after the prompt and its
-  event stream has no approval request, so the record declares `interactiveApprovals: false` and
+- Codex has **no interactive approvals** — the runner pins codex's `approvalPolicy: 'never'`
+  and auto-declines rather than asking, so the record declares `interactiveApprovals: false` and
   clients hide the approval UI rather than render one that never fires.
 - The claude and codex engines ship a **model catalog** with each release, served as
   `ProfileInfo.models` from the first request — a real picker on a cold server, with per-model

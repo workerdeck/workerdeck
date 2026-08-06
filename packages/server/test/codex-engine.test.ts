@@ -5,37 +5,27 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import { CodexRunner, CODEX_CATALOG } from '@workerdeck/core'
 import type { EngineAdapter, EngineAvailability, SessionRunnerConfig } from '@workerdeck/core'
-import type {
-  CodexThreadEvent,
-  CodexThreadOptions,
-  CodexUserInput,
-} from '@workerdeck/core'
+import type { AppServerConnection } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES, type ProfileInfo, type ServerFrame } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 const USAGE = {
-  input_tokens: 100,
-  cached_input_tokens: 40,
-  cache_write_input_tokens: 10,
-  output_tokens: 20,
-  reasoning_output_tokens: 5,
+  inputTokens: 100,
+  cachedInputTokens: 40,
+  cacheWriteInputTokens: 10,
+  outputTokens: 20,
+  reasoningOutputTokens: 5,
+  totalTokens: 125,
 }
 
-/** One canned answering turn of codex JSONL. */
-const answerTurn = (text: string): CodexThreadEvent[] => [
-  { type: 'thread.started', thread_id: 'thread-1' },
-  { type: 'turn.started' },
-  { type: 'item.completed', item: { id: 'a1', type: 'agent_message', text } },
-  { type: 'turn.completed', usage: USAGE },
-]
-
 /**
- * The real codex adapter shape with the SDK swapped for a scripted exec — what
- * the `engines` override exists for: the full HTTP→adapter→CodexRunner→WS path
- * runs, and `pnpm test` spawns no binary.
+ * The real codex adapter shape with the binary swapped for a scripted
+ * app-server JSON-RPC peer — what the `engines` override exists for: the full
+ * HTTP→adapter→CodexRunner→WS path runs, and `pnpm test` spawns no binary.
+ * Each `turns` entry is the agent's answer text for one turn.
  */
 function fakeCodexAdapter(options: {
-  turns?: CodexThreadEvent[][]
+  turns?: string[]
   probe?: () => EngineAvailability
   onCreate?: (config: SessionRunnerConfig) => void
 }): { adapter: EngineAdapter; probeCalls: () => number } {
@@ -51,22 +41,44 @@ function fakeCodexAdapter(options: {
     },
     createRunner: ({ config, profile }) => {
       options.onCreate?.(config)
+      let notify: ((method: string, params: unknown) => void) | undefined
+      const connection: AppServerConnection = {
+        request: async (method) => {
+          if (method === 'thread/start' || method === 'thread/resume') {
+            return { thread: { id: 'thread-1' } }
+          }
+          if (method === 'turn/start') {
+            const text = options.turns?.[turnIndex++] ?? 'done'
+            notify?.('item/completed', {
+              threadId: 'thread-1',
+              turnId: 't1',
+              item: { id: 'a1', type: 'agentMessage', text },
+            })
+            notify?.('thread/tokenUsage/updated', {
+              threadId: 'thread-1',
+              turnId: 't1',
+              tokenUsage: { last: USAGE, total: USAGE },
+            })
+            notify?.('turn/completed', {
+              threadId: 'thread-1',
+              turn: { id: 't1', status: 'completed' },
+            })
+            return { turn: { id: 't1', status: 'inProgress' } }
+          }
+          return {}
+        },
+        notify: () => {},
+        onNotification: (handler) => {
+          notify = handler
+        },
+        onRequest: () => {},
+        onClose: () => {},
+        close: () => {},
+      }
       return new CodexRunner({
         ...config,
         codexHome: profile?.codexHome,
-        codexFn: () => {
-          const thread = (_options?: CodexThreadOptions) => ({
-            runStreamed: async (_input: string | CodexUserInput[]) => {
-              const events = options.turns?.[turnIndex++] ?? answerTurn('done')
-              return {
-                events: (async function* () {
-                  for (const event of events) yield event
-                })(),
-              }
-            },
-          })
-          return { startThread: thread, resumeThread: (_id: string, o?: CodexThreadOptions) => thread(o) }
-        },
+        connectFn: () => connection,
       })
     },
   }
@@ -91,7 +103,7 @@ afterEach(async () => {
 
 describe('codex engine over the gateway', () => {
   it('creates, watches, and completes a codex session end to end', async () => {
-    const { adapter } = fakeCodexAdapter({ turns: [answerTurn('hello from codex')] })
+    const { adapter } = fakeCodexAdapter({ turns: ['hello from codex'] })
     running = createWorkerServer({
       allowUnauthenticated: true,
       allowedCwdRoots: ['/tmp'],
@@ -106,6 +118,7 @@ describe('codex engine over the gateway', () => {
     expect(profiles.profiles[0]!.models?.[0]?.value).toBe('gpt-5.6-sol')
     expect(profiles.profiles[0]!.models?.[0]?.reasoningEfforts).toContain('ultra')
     expect(profiles.profiles[0]!.capabilities?.interactiveApprovals).toBe(false)
+    expect(profiles.profiles[0]!.capabilities?.streaming).toBe('token')
 
     const created = await fetch(`${base}/sessions`, {
       method: 'POST',
@@ -132,7 +145,7 @@ describe('codex engine over the gateway', () => {
       expect(
         (attached as { session: { capabilities?: { streaming?: string } } }).session.capabilities
           ?.streaming,
-      ).toBe('item')
+      ).toBe('token')
       const events = frames.filter((f) => f.type === 'event').map((f) => f.event)
       expect(events.some((e) => e.type === 'turn_result' && e.result === 'hello from codex')).toBe(
         true,
@@ -333,7 +346,7 @@ describe('availability', () => {
   it('gates nothing: create against an unavailable profile still proceeds', async () => {
     const { adapter } = fakeCodexAdapter({
       probe: () => ({ available: false, reason: 'not logged in' }),
-      turns: [answerTurn('ran anyway')],
+      turns: ['ran anyway'],
     })
     running = createWorkerServer({
       allowUnauthenticated: true,

@@ -64,8 +64,11 @@ boundary: anything a client needs must be expressible as protocol events and com
   `EngineCapabilities` record (pinned by identity to protocol's `ENGINE_CAPABILITIES`), a model
   catalog versioned with the release, a credential-availability probe, and a runner factory —
   looked up via `getEngineAdapter`. `claude/` wraps `SessionRunner` unchanged; `codex/` owns
-  `CodexRunner` over `@openai/codex-sdk` (an optional peer, dynamically imported — one
-  `codex exec --experimental-json` spawn per turn, JSONL folded into protocol events);
+  `CodexRunner` over the codex binary's `app-server` JSON-RPC surface (`@openai/codex` as an
+  optional peer carrying the binary — one child per *session*, held across turns, a hand-rolled
+  newline-delimited client with zero new deps, token-level `stream_delta`s; the retired first
+  transport was one `codex exec --experimental-json` spawn per turn, whose JSONL could not
+  stream at all);
   `provider/` is a pseudo-adapter whose runners the host's `createEngineRunner` hook builds.
   Adapters live here and not in a new package because the dependency stance was never "server
   touches no engine" — `server` already constructs `SessionRunner` from core. The real

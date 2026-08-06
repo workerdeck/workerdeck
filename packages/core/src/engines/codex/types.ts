@@ -1,132 +1,145 @@
 /**
- * Structural mirror of the `@openai/codex-sdk` surface this engine consumes.
+ * Structural mirror of the slice of the `codex app-server` JSON-RPC v2 surface
+ * this engine consumes. Local on purpose: no published client for this
+ * protocol exists, the shapes are regenerated from the binary itself
+ * (`codex app-server generate-json-schema --out <dir>`, verified 2026-08-05
+ * against 0.146.0), and every open-ended axis is a plain string so a newer
+ * binary degrades to the unknown-item path instead of a type error.
  *
- * Local on purpose, twice over: the SDK is an optional peer dependency (these
- * types must not leak it into core's published .d.ts), and its own unions are
- * already stale against the binary it drives — the embedded model catalog
- * lists reasoning efforts (`max`, `ultra`) beyond `ModelReasoningEffort`, so
- * every open-ended axis here is a plain string. The real `Codex` class
- * satisfies {@link CodexLike} structurally; tests inject a scripted one.
+ * Naming note: the v2 surface is camelCase (`aggregatedOutput`, `exitCode`,
+ * `localImage`) where `codex exec`'s JSONL — the retired first transport, and
+ * what OpenAI's own docs mostly show — is snake_case. The two vocabularies
+ * look alike but are not interchangeable.
  */
 
-/** Per-turn token usage, OpenAI accounting (`turn.completed`). */
-export type CodexUsage = {
-  input_tokens: number
-  cached_input_tokens: number
-  cache_write_input_tokens: number
-  output_tokens: number
-  reasoning_output_tokens: number
+/** `TokenUsageBreakdown` — one entry of `thread/tokenUsage/updated`. OpenAI
+ * accounting: `inputTokens` INCLUDES the cached share (the relation the
+ * runner's subtraction assumes, asserted in `smoke:codex`). */
+export type AppServerTokenUsage = {
+  inputTokens: number
+  cachedInputTokens: number
+  /** Default 0 in the schema; absent in some payloads. */
+  cacheWriteInputTokens?: number
+  outputTokens: number
+  reasoningOutputTokens: number
+  totalTokens: number
 }
 
-export type CodexAgentMessageItem = { id: string; type: 'agent_message'; text: string }
-/** Reasoning summary, not raw CoT. */
-export type CodexReasoningItem = { id: string; type: 'reasoning'; text: string }
-export type CodexCommandExecutionItem = {
+/** `thread/tokenUsage/updated` params. `last` is the last model request, not
+ * the turn — a tool-looping turn updates several times, so per-turn usage is
+ * the sum of `last` values seen during the turn. */
+export type AppServerTokenUsageUpdate = {
+  threadId: string
+  turnId: string
+  tokenUsage: { last: AppServerTokenUsage; total: AppServerTokenUsage; modelContextWindow?: number | null }
+}
+
+export type AppServerAgentMessageItem = { id: string; type: 'agentMessage'; text: string }
+/** `summary` is what streams by default (`item/reasoning/summaryTextDelta`);
+ * `content` is raw CoT and only populated when the operator's config asks. */
+export type AppServerReasoningItem = {
   id: string
-  type: 'command_execution'
+  type: 'reasoning'
+  content?: string[]
+  summary?: string[]
+}
+export type AppServerCommandExecutionItem = {
+  id: string
+  type: 'commandExecution'
   command: string
-  aggregated_output: string
-  /** Set when the command exits; absent while running. */
-  exit_code?: number
-  /** 'in_progress' | 'completed' | 'failed' — open. */
+  aggregatedOutput?: string
+  exitCode?: number | null
+  /** 'inProgress' | 'completed' | 'failed' | 'declined' — open. */
   status: string
 }
-export type CodexFileChangeItem = {
+/** v2 `kind` is an object (`{type: 'add'|'delete'|'update', move_path?}`) —
+ * the snake_case JSONL's was a bare string; mapped defensively. */
+export type AppServerFileChangeItem = {
   id: string
-  type: 'file_change'
-  changes: Array<{ path: string; kind: string }>
-  /** Arrives as a completed/failed patch, never a proposal. */
+  type: 'fileChange'
+  changes: Array<{ path: string; kind: string | { type: string }; diff?: string }>
   status: string
 }
-export type CodexMcpToolCallItem = {
+export type AppServerMcpToolCallItem = {
   id: string
-  type: 'mcp_tool_call'
+  type: 'mcpToolCall'
   server: string
   tool: string
   arguments: unknown
   result?: unknown
-  error?: { message: string }
+  error?: { message: string } | null
   status: string
 }
-export type CodexWebSearchItem = { id: string; type: 'web_search'; query: string }
-export type CodexTodoListItem = {
+export type AppServerWebSearchItem = { id: string; type: 'webSearch'; query: string }
+/** The user's own message, echoed back as an item — dropped (the runner
+ * already emitted its `user_message`). */
+export type AppServerUserMessageItem = { id: string; type: 'userMessage'; content?: unknown }
+/** Forward-compatible fallback — not a union member (an index signature would
+ * defeat discriminant narrowing); unknown items are cast to this. */
+export type AppServerUnknownItem = { id: string; type: string; [key: string]: unknown }
+
+export type AppServerItem =
+  | AppServerAgentMessageItem
+  | AppServerReasoningItem
+  | AppServerCommandExecutionItem
+  | AppServerFileChangeItem
+  | AppServerMcpToolCallItem
+  | AppServerWebSearchItem
+  | AppServerUserMessageItem
+
+/** The `Turn` object of `turn/started` / `turn/completed`. */
+export type AppServerTurn = {
   id: string
-  type: 'todo_list'
-  items: Array<{ text: string; completed: boolean }>
+  /** 'inProgress' | 'completed' | 'failed' | 'interrupted' — open. */
+  status: string
+  error?: { message: string } | null
 }
-/** Non-fatal by contract. */
-export type CodexErrorItem = { id: string; type: 'error'; message: string }
-/** Forward-compatible fallback for item types this version doesn't model —
- * not a union member (an index signature would defeat discriminant narrowing);
- * unknown items are cast to this in the mapping's default branch. */
-export type CodexUnknownItem = { id: string; type: string; [key: string]: unknown }
 
-export type CodexThreadItem =
-  | CodexAgentMessageItem
-  | CodexReasoningItem
-  | CodexCommandExecutionItem
-  | CodexFileChangeItem
-  | CodexMcpToolCallItem
-  | CodexWebSearchItem
-  | CodexTodoListItem
-  | CodexErrorItem
-
-/** Top-level JSONL events of `codex exec --experimental-json`. */
-export type CodexThreadEvent =
-  | { type: 'thread.started'; thread_id: string }
-  | { type: 'turn.started' }
-  | { type: 'turn.completed'; usage: CodexUsage }
-  | { type: 'turn.failed'; error: { message: string } }
-  | { type: 'item.started'; item: CodexThreadItem }
-  | { type: 'item.updated'; item: CodexThreadItem }
-  | { type: 'item.completed'; item: CodexThreadItem }
-  | { type: 'error'; message: string }
-
-export type CodexUserInput =
+export type AppServerUserInput =
   | { type: 'text'; text: string }
-  | { type: 'local_image'; path: string }
+  | { type: 'localImage'; path: string }
 
-/** Options one spawn gets (a subset of the SDK's ThreadOptions, efforts open). */
-export type CodexThreadOptions = {
-  model?: string
-  sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access'
-  workingDirectory?: string
-  skipGitRepoCheck?: boolean
-  modelReasoningEffort?: string
-  approvalPolicy?: string
-  networkAccessEnabled?: boolean
-  additionalDirectories?: string[]
+/** `turn/plan/updated` params (v2's todo list). */
+export type AppServerPlanUpdate = {
+  threadId: string
+  turnId: string
+  plan: Array<{ step: string; status: string }>
 }
 
-export type CodexTurnOptions = { signal?: AbortSignal }
-
-export type CodexStreamedTurn = {
-  events: AsyncIterable<CodexThreadEvent>
-}
-
-export type CodexThreadLike = {
-  runStreamed(
-    input: string | CodexUserInput[],
-    turnOptions?: CodexTurnOptions,
-  ): Promise<CodexStreamedTurn>
-}
-
-export type CodexLike = {
-  startThread(options?: CodexThreadOptions): CodexThreadLike
-  resumeThread(id: string, options?: CodexThreadOptions): CodexThreadLike
-}
+// ---------------------------------------------------------------------------
+// The connection seam (the `queryFn` injection pattern, at the wire level)
+// ---------------------------------------------------------------------------
 
 /**
- * Env for the codex child process. **Replace-not-merge** (verified in the SDK
- * source): when provided, the child inherits nothing from process.env — so it
- * must always be the complete session environment, never a delta. A delta
- * silently strands HOME/PATH, and the auth chain with them.
+ * One live `codex app-server` child as the runner consumes it. The real
+ * implementation (`process.ts`) spawns the binary and frames JSON-RPC
+ * over its stdio; unit tests inject a scripted one — no process, no
+ * credentials.
  */
-export type CodexOptionsLike = {
-  codexPathOverride?: string
-  env?: Record<string, string>
+export type AppServerConnection = {
+  /** Client→server request. Rejects on a JSON-RPC error response, a dead
+   * child, or a closed connection. */
+  request(method: string, params?: unknown): Promise<unknown>
+  /** Client→server notification (fire and forget). */
+  notify(method: string, params?: unknown): void
+  /** Server→client notifications. One handler (the runner). */
+  onNotification(handler: (method: string, params: unknown) => void): void
+  /** Server→client REQUESTS (approvals live here): the handler's resolution is
+   * sent back as the JSON-RPC result; a throw becomes an error response. */
+  onRequest(handler: (method: string, params: unknown) => Promise<unknown>): void
+  /** Fires once when the child exits or the pipe breaks — NOT on `close()`.
+   * The message carries an exit summary and a stderr tail for diagnostics. */
+  onClose(handler: (message: string) => void): void
+  /** Tear the child down (session close). Suppresses the onClose callback. */
+  close(): void
 }
 
-/** The injectable constructor: the real SDK's `new Codex(options)` in
- * production, a scripted fake in tests (the `queryFn` pattern). */
-export type CodexFactory = (options: CodexOptionsLike) => CodexLike
+export type AppServerConnectOptions = {
+  /** Complete child environment — a provided spawn env replaces process.env,
+   * never merges with it (CODEX_HOME pin already applied). */
+  env: Record<string, string>
+}
+
+/** The injectable connection factory: `connectAppServer` under the resolved
+ * binary in production, a scripted peer in tests. */
+export type AppServerConnectFn = (options: AppServerConnectOptions) => AppServerConnection

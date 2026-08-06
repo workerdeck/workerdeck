@@ -114,52 +114,60 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   all stay green — they are the proof the path still works, and the route back if those providers
   return as bespoke adapters.
 
-## Codex engine (`@openai/codex-sdk` / codex CLI)
+## Codex engine (`codex app-server` / the `@openai/codex` binary)
 
-- **The process model explains everything else**: `Thread.runStreamed()` spawns one
-  `codex exec --experimental-json` child *per turn*, writes the whole prompt to stdin and closes
-  it, streams JSONL on stdout, exits. Follow-ups run `codex exec … resume <thread_id>`. So
-  between-turn mutability (model, mode, effort) is free — the next spawn just gets different
-  flags — and mid-turn mutability is impossible (`setModel`/`setPermissionMode` throw mid-turn).
-- **Codex item ids restart at `item_0` in every child**, i.e. every turn — they are unique only
-  within a turn, and both transcript reducers upsert by id (correct for streaming and
-  tool_result pairing), so publishing them raw makes turn N's answer overwrite turn 1's bubble
-  in place (reproduced live: "the model returned nothing"). `CodexRunner.#runTurn` therefore
-  mints a per-turn `randomUUID()` token and namespaces every item-derived id it publishes
-  (`<token>:<item.id>` — assistant/reasoning uuids, tool_use/tool_result ids, the todo_list
-  sdk_event id). Random, not a counter: a counter restarts with the process and would collide
-  with ids a client already holds. Keep any new item-derived id on the same token.
-- **There is no partial-text streaming, and `streaming: 'item'` is more generous than reality**
-  (verified 2026-08-05 against 0.146.0 by running the binary): a whole turn is four events —
-  `thread.started`, `turn.started`, `item.completed [agent_message]`, `turn.completed`. No
-  `item.started`, no `item.updated`, no deltas, under **both** `--experimental-json` and the
-  legacy `--json`; `codex exec` has no partial-message flag to pass. So a single-message turn
-  shows nothing until the entire answer lands at once — expected behavior in every client, not a
-  transport bug, and the visible difference from claude's `streaming: 'token'`.
-  `CodexRunner.#handleItemProgress` does synthesize deltas from `item.updated` growth, which
-  means **that path is correct but never executes today** — it is forward-looking, not tested by
-  anything. `smoke:codex` asserts the current four-event shape so the day codex starts emitting
-  `item.updated` is the day the smoke tells you, rather than the day someone notices the dead
-  branch woke up.
-- **Interactive approvals are structurally impossible in exec mode** — closed event union with no
-  approval request, stdin already closed, `codex exec --help` says non-interactive. That is why
-  `ENGINE_CAPABILITIES.codex.interactiveApprovals` is false and every codex spawn passes
-  `approvalPolicy: 'never'`. The only route back is the experimental `codex app-server` JSON-RPC
-  surface — a future adapter, not a flag.
-- **`CodexOptions.env` replaces, never merges** (verified in the SDK source): pass a *complete*
-  environment always. A delta silently strands HOME/PATH — and the auth chain with them. The
-  profile's `codexHome` pin rides this env (`CODEX_HOME`), which is also why `buildRunnerConfig`
-  does NOT pin it the way claude profiles pin `CLAUDE_CONFIG_DIR`.
-- **The auth matrix is asymmetric** (verified 2026-08-05 against 0.146.0 by running the binary):
-  `CODEX_API_KEY` env works for exec but is invisible to `codex login status` (exit 1);
-  `OPENAI_API_KEY` env is a **no-op for exec** ("Missing bearer") yet `codex doctor` counts it as
-  credentials; `codex login` / `codex login --with-api-key` persist to `$CODEX_HOME/auth.json`
-  and make `login status` exit 0. The availability probe therefore mirrors *exec's* chain:
-  CODEX_API_KEY presence → `login status` exit code, with an actionable OPENAI_API_KEY hint on
-  failure and anything unparseable mapping to 'unknown'. The free `smoke:codex --canary` run is
-  the drift alarm for all three facts. Two probe details that bite: the "Not logged in" verdict
-  prints on **stderr**, and the success line includes a masked key fragment — surface exit codes
-  and fixed strings only.
+- **The process model explains everything else**: ONE `codex app-server` JSON-RPC child per
+  *session* — spawned lazily, held across turns — with the conversation as a *thread* the binary
+  persists in CODEX_HOME. Mid-turn mutability is still off (`setModel`/`setPermissionMode` throw
+  mid-turn: the running turn's settings are fixed), but between turns everything is a `turn/start`
+  parameter. History: the first codex transport was `codex exec --experimental-json`, one child
+  per turn — retired (never released) because its JSONL carries no partial messages at all, so a
+  turn could not stream; token streaming is the reason this engine speaks app-server.
+- **The wire framing is NDJSON with a bare envelope** (verified 2026-08-05 against 0.146.0 by
+  driving the binary): one JSON object per line, `{id, method, params}` / `{id, result|error}` —
+  **no `jsonrpc: "2.0"` field** — and notifications carry a top-level `emittedAtMs`. Handshake is
+  `initialize` → `initialized` (a client *notification*), then `thread/start`/`thread/resume` →
+  `turn/start`. The schema is regenerable from the binary itself:
+  `codex app-server generate-json-schema --out <dir>`.
+- **The v2 vocabulary is camelCase; the snake_case JSONL you'll find in OpenAI's docs (and our
+  pre-0.9.0 history) is exec's, and NOT this protocol**: `agentMessage`/`aggregatedOutput`/
+  `exitCode`/`localImage`, `fileChange.changes[].kind` an *object* (`{type: 'update', …}`) where
+  the JSONL's was a string, reasoning items carrying `summary[]` (what streams by default) and
+  `content[]` (raw CoT, only under an operator config) instead of `text`. The lookalike shapes
+  are the trap — don't paste exec-era mappings.
+- **Item ids are namespaced per turn, unconditionally** (`<nonce>:<itemId>`): both transcript
+  reducers upsert by id, and exec's per-child ids restarting at `item_0` made turn N's answer
+  overwrite turn 1's bubble in place (b026e70, reproduced live). Whether app-server item ids are
+  unique per thread is unverified, and a respawned child would reset any per-process counter — so
+  the discipline stays: a random per-turn nonce (a counter would restart with the process), and
+  any new item-derived id goes on the same nonce.
+- **Streaming is real tokens** (`streaming: 'token'`): `item/agentMessage/delta` and the
+  reasoning summary/text deltas arrive token-by-token, `item/completed` supersedes the stream
+  with the final text. The paid `smoke:codex` asserts deltas actually arrive and agree with the
+  completed message — the record must never quietly go back to being a lie in either direction.
+- **Interactive approvals stay `false`, by policy not by transport**: the protocol HAS the ask
+  channel (server→client JSON-RPC requests), but this increment pins `approvalPolicy: 'never'`
+  on both `thread/start` and `turn/start` and auto-declines anything that arrives anyway —
+  visibly (a `codex.approval_auto_declined` sdk_event), never silently, and unknown server
+  requests get a JSON-RPC -32601 rather than a hang (an unanswered request wedges the turn).
+  Flip `ENGINE_CAPABILITIES.codex.interactiveApprovals` only when the channel is actually wired
+  to the permission surface.
+- **The spawn env replaces, never merges**: a `spawn(..., { env })` child inherits nothing, so
+  the runner always passes a *complete* environment (a delta silently strands HOME/PATH — and
+  the auth chain with them). The profile's `codexHome` pin rides this env (`CODEX_HOME`), which
+  is also why `buildRunnerConfig` does NOT pin it the way claude profiles pin
+  `CLAUDE_CONFIG_DIR`.
+- **Auth is the CODEX_HOME store, full stop** (verified 2026-08-05 against 0.146.0 by driving
+  the raw binary): the app-server surface reads **neither** `CODEX_API_KEY` — that env key is
+  honored only by `codex exec`, which we no longer ship — **nor** `OPENAI_API_KEY`; with either
+  set, a turn goes out with no credential at all ("Missing bearer"). What works is
+  `codex login` / `codex login --with-api-key` persisting into `$CODEX_HOME` (file or, under
+  `auth_credentials_store_mode`, the OS keyring), which makes `codex login status` exit 0. The
+  availability probe therefore trusts `login status` alone, with exact remedies when a stranded
+  env key explains the misconfiguration, and anything unparseable maps to 'unknown'. The free
+  `smoke:codex --canary` run is the drift alarm for all three facts. Two probe details that
+  bite: the "Not logged in" verdict prints on **stderr**, and the success line includes a masked
+  key fragment — surface exit codes and fixed strings only.
 - **The Keychain trap does not transfer, but not for the reason you'd guess**: codex auth is NOT
   always file-based (`auth_credentials_store_mode` can move it to the OS keyring — a home with no
   `auth.json` can still be logged in). The trap still doesn't transfer because the store is
@@ -167,30 +175,44 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   the default home is harmless and there is no analogue of the `claudeSessionEnv` skip. Whether a
   keyring-stored login is scoped per home or per user is unverified; multi-`codexHome` profiles
   are verified for file-mode only.
-- `@openai/codex-sdk` is pinned to an exact minor (`~0.146.0`): pre-1.0, driving a flag literally
-  named `--experimental-json`. It is an **optional peer** of core (dynamic import inside the
-  adapter; absent → profiles report unavailable, creates throw the install message) and a real
-  dependency of the CLI so the turnkey instance has codex out of the box. Any change to
-  `CodexRunner`'s spawn options or event mapping requires a `smoke:codex` run — the fake exec
-  cannot validate the real JSONL vocabulary.
-- Usage arrives per turn in OpenAI convention; `CodexRunner` re-maps it to the Anthropic
-  convention the whole stack assumes: `input_tokens` minus the cached share (else queue token
-  budgets double-count cache-heavy runs), reasoning tokens folded into output. `totalCostUsd: 0`
-  = unknown, the AiSdkRunner precedent. The relation behind the subtraction is asserted in
-  `smoke:codex` (PRD open question 1).
-- Sandbox mapping is the honest degradation: `default` → `read-only` ("would have asked" becomes
+- `@openai/codex` — the npm package carrying the binary — is pinned to an exact minor
+  (`~0.146.0`): pre-1.0, and the JSON-RPC schema regenerates per release. It is an **optional
+  peer** of core (absent → profiles report unavailable, creates throw the install message; no
+  consumer downloads a ~40 MB per-platform binary it never uses) and a real dependency of the
+  CLI so the turnkey instance has codex out of the box. The runner drives the binary directly —
+  there is no SDK in between (`@openai/codex-sdk` left with exec; it has no app-server client) —
+  resolved two hops through the wrapper package to `vendor/<triple>/bin/codex`, the same file
+  the wrapper's own `bin/codex.js` execs. Any change to `CodexRunner`'s spawn options,
+  handshake, or event mapping requires a `smoke:codex` run — the scripted peer cannot validate
+  the real vocabulary.
+- **`turn/completed` carries NO usage.** Usage rides `thread/tokenUsage/updated`, whose `last`
+  is one model *request*, not the turn — a tool-looping turn updates several times, so per-turn
+  usage is the sum of the `last` values seen during the turn, re-mapped to the Anthropic
+  convention the whole stack assumes: `inputTokens` minus the cached share (else queue token
+  budgets double-count cache-heavy runs), reasoning tokens folded into output, `totalCostUsd: 0`
+  = unknown (the AiSdkRunner precedent). `total` is thread-cumulative and unused (its baseline
+  after a resume is unknowable). The relation behind the subtraction is asserted in
+  `smoke:codex`.
+- Sandbox mapping is the honest degradation: `default` → read-only ("would have asked" becomes
   "cannot act" — commands still run, writes are refused by the OS sandbox), `acceptEdits` →
-  `workspace-write`, `bypassPermissions` → `danger-full-access`. `plan`/`dontAsk`/`auto` are not
+  workspace-write, `bypassPermissions` → danger-full-access. `plan`/`dontAsk`/`auto` are not
   offered — they name CLI workflows codex cannot deliver, and a control that silently does
-  nothing is exactly what the capability record exists to prevent. Every spawn passes
-  `--skip-git-repo-check` (the gateway's cwd contract has no git requirement).
-- A failed *turn* is not a failed *session*: `turn.failed`, stream errors, and a dead child all
-  land as `turn_result: error_during_execution` and the session returns to idle — the thread
-  persists and the next message spawns fresh. Codex has no instructions surface
+  nothing is exactly what the capability record exists to prevent. The same policy is stated
+  twice on the wire — `thread/start` takes a `sandbox` string, `turn/start` a `sandboxPolicy`
+  object — keep them in lockstep.
+- **Model/effort overrides persist "for this turn and subsequent turns"**, so the runner names
+  the model and effort explicitly on every `turn/start`, remembering the resolved defaults from
+  the `thread/start` response — that is the only way `setModel(undefined)` can mean "back to the
+  profile default" again.
+- **A dead child is a failed turn, not a failed session**: the thread lives on disk in
+  CODEX_HOME, so the runner drops the connection, fails the in-flight turn with the exit +
+  stderr tail, and the next message spawns a fresh child that `thread/resume`s the same thread
+  id. `turn/completed(status: failed)` and a rejected `turn/start` land the same way —
+  `turn_result: error_during_execution`, session back to idle. Codex has no instructions surface
   (`session.instructions` on a codex profile is refused at startup; codex reads the cwd's
   AGENTS.md), no per-session MCP (CODEX_HOME's config.toml owns servers; `/mcp` 501s), and
-  image + text attachments only (images as host temp-file paths via `--image`, text inlined
-  into the prompt envelope; a PDF has no representation, and the upload route 415s any kind a
+  image + text attachments only (images as `localImage` host temp-file paths, text inlined into
+  the prompt envelope; a PDF has no representation, and the upload route 415s any kind a
   session's capability record forswears).
 
 ## Engine adapters & capability records
@@ -208,7 +230,9 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   (browser-safe default) and the server-stamped `ProfileInfo.capabilities` /
   `SessionInfo.capabilities` (wire truth — it wins when both exist). The conformance test pins
   the adapters to the protocol record by identity; if per-profile variance ever arrives, the wire
-  copy is already authoritative by construction.
+  copy is already authoritative by construction. (A `capabilitiesFor(profile)` seam existed
+  briefly while codex had two transports and was removed with the second transport — one record
+  per engine again, and a seam that varies nothing must not outlive its variance.)
 - Catalogs are versioned with releases; the release checklist re-runs each catalog's extraction
   (documented in the catalog file headers) and diffs. Availability probing is gated on
   `checkCredentials` (a library must spawn nothing in tests), cached ~60s, refreshed lazily on

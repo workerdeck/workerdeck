@@ -19,10 +19,12 @@ protocol. Read these before changing scope or structure:
   catalog versioned with the release, a credential-availability probe, a runner factory), looked
   up via `getEngineAdapter`. Three runners behind `Runner` (`src/runner-interface.ts`), which is
   what server and queue type against: `SessionRunner` (Claude, over the SDK's `query()`),
-  `CodexRunner` (`engines/codex/` — `@openai/codex-sdk` as an **optional peer**, one
-  `codex exec --experimental-json` spawn per turn, JSONL folded into protocol events, complete
-  child env always — codex *replaces* env, never merges), and `AiSdkRunner` (provider, over AI
-  SDK v7, built by the host's `createEngineRunner` hook — its adapter is a pseudo-adapter). The
+  `CodexRunner` (`engines/codex/` — the `@openai/codex` binary as an **optional peer**, driven
+  over its `codex app-server` JSON-RPC surface: one child per *session* held across turns, a
+  hand-rolled NDJSON client with zero new deps, token streaming, complete child env always — a
+  spawn env *replaces*, never merges; see `docs/GOTCHAS.md` §Codex), and `AiSdkRunner`
+  (provider, over AI SDK v7, built by the host's `createEngineRunner` hook — its adapter is a
+  pseudo-adapter). The
   **model list clients see is shaped here**, not by each UI: catalogs apply
   `modelOptionsFromSdk`'s rules (`src/normalize.ts`) at authoring time — no `default` sentinel
   row, names derived from resolved ids (`claude-haiku-4-5-20251001` → "Haiku 4.5"), newest of
@@ -141,13 +143,14 @@ before touching versioning or the publish workflow.
 
 ## Testing
 
-`pnpm test` — core: fake `queryFn` harness (no CLI spawn) + scripted-exec `codexFn` harness for
-`CodexRunner`; server: real HTTP+WS integration incl. job routes + webhook receiver (codex via
-the test-only `engines` adapter override); queue: fake runner; react: reducer + bridge e2e.
+`pnpm test` — core: fake `queryFn` harness (no CLI spawn) + a scripted JSON-RPC peer
+(`connectFn`) for `CodexRunner`; server: real HTTP+WS integration incl. job routes + webhook
+receiver (codex via the test-only `engines` adapter override); queue: fake runner; react:
+reducer + bridge e2e.
 Real-SDK smokes cost tokens and never run in `pnpm test`, but permission-path or
-CLI-control-request changes need one — the fake harness can't validate those payloads — and **a
-new engine's process-spawn contract can't either**: any change to `CodexRunner`'s spawn options
-or event mapping needs `pnpm smoke:codex`. Smokes live in `smoke/`: `smoke:sandbox` and
+CLI-control-request changes need one — the fake harness can't validate those payloads — and **an
+engine's process contract can't either**: any change to `CodexRunner`'s spawn options,
+handshake, or event mapping needs `pnpm smoke:codex`. Smokes live in `smoke/`: `smoke:sandbox` and
 `smoke:codex --canary` are free; `smoke:live`, `smoke:sdk`, `smoke:media` (the only check that
 the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:codex` are not.
 
@@ -178,11 +181,12 @@ or login UI, subscription-token extraction/storage/forwarding, Claude Code clien
 spoofing, or multi-account pooling / rate-limit circumvention. Policy enforcement lives in
 configuration (`requireApiKey`, the one-time 'oauth' notice, `apiKeySource` on
 SessionInfo/system_init), never in tampering with the credential chain. **The same principle
-binds the Codex engine**: `codex login` is the operator's job in their own terminal; WorkerDeck
-never invokes it, never reads `auth.json`, never wires `CodexOptions.apiKey` (the env route is
-`CODEX_API_KEY` in the operator's session env, passed through whole — presence checked for
-availability, value never read, logged, or forwarded), and the probe surfaces exit codes and
-fixed reason strings only, never `codex login status` output (it contains a masked key
-fragment). Compliance/legal review is in progress — keep the README "Auth & Anthropic's terms"
+binds the Codex engine**: `codex login` (or `codex login --with-api-key`) is the operator's job
+in their own terminal; WorkerDeck never invokes it, never reads `auth.json`, and never wires an
+API key into the child or over the app-server's account RPCs — the operator's session env is
+passed through whole, but no env key is a credential route on this surface (`CODEX_API_KEY` is
+read only by `codex exec`, which we no longer ship; the canary pins that), so availability
+comes from `codex login status` alone, and the probe surfaces exit codes and fixed reason
+strings only, never `codex login status` output (it contains a masked key fragment). Compliance/legal review is in progress — keep the README "Auth & Anthropic's terms"
 section's status honest as things settle; whether OpenAI's terms restrict headless
 ChatGPT-subscription codex use the same way is unresolved and mirrors the same posture.

@@ -38,9 +38,9 @@ export default {
    * A claude profile from your own `~/.claude` (exactly what auto-detection
    * would create), plus a codex profile — engine adapters ship in the box, so
    * declaring one is all it takes. Codex auth is the binary's own: run
-   * `codex login` in YOUR terminal (or export CODEX_API_KEY) and the profile
-   * goes green; until then it lists as unavailable with the remedy, and
-   * creating a session against it simply fails with codex's own error.
+   * `codex login` (or `codex login --with-api-key`) in YOUR terminal and the
+   * profile goes green; until then it lists as unavailable with the remedy,
+   * and creating a session against it simply fails with codex's own error.
    *
    * The claude default dir is never pinned as `CLAUDE_CONFIG_DIR` — setting the
    * variable at all would move the CLI's credential source to
@@ -59,6 +59,12 @@ export default {
       configDir: `${process.env.HOME}/.claude`,
       description: 'Claude Code via the Agent SDK (your own config dir)',
     },
+    /**
+     * Codex runs over the binary's `app-server` JSON-RPC surface: one child
+     * per session, held across turns, streaming token-by-token. Same auth
+     * story as claude — the binary's own `~/.codex` login, never anything
+     * WorkerDeck holds.
+     */
     {
       name: 'codex',
       engine: 'codex',

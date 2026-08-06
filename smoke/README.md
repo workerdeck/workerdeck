@@ -107,11 +107,11 @@ words on the PDF page, or the passphrase in the text file. Verified against `cla
 
 ## `smoke:codex` — the Codex engine against the real binary
 
-The codex unit tests drive a scripted exec, so they cannot validate the real
-`--experimental-json` vocabulary (a pre-1.0 SDK whose flag name promises drift), the spawn
-options, or the auth chain. This is the drift alarm: **any change to `CodexRunner`'s spawn
-options or event mapping requires a run** — it is to Codex what the permission smoke is to
-Claude.
+The codex unit tests drive a scripted JSON-RPC peer, so they cannot validate the real
+`codex app-server` v2 vocabulary (pre-1.0, regenerable per release — drift is promised), the
+spawn contract, the handshake, or the auth chain. This is the drift alarm: **any change to
+`CodexRunner`'s spawn options, handshake, or event mapping requires a run** — it is to Codex
+what the permission smoke is to Claude.
 
 ```bash
 pnpm smoke:codex --canary       # FREE (network only): the auth-drift canaries
@@ -119,15 +119,19 @@ pnpm smoke:codex                # full run — needs codex auth, costs plan/API 
 pnpm smoke:codex gpt-5.6-sol    # full run on a specific model (default gpt-5.6-luna)
 ```
 
-The free canaries pin the verified auth matrix with fake keys against a scratch `CODEX_HOME`:
-`OPENAI_API_KEY` alone is still ignored by `codex exec` ("Missing bearer" — the day this flips to
-`invalid_api_key`, the availability probe's OPENAI_API_KEY hint is stale), `CODEX_API_KEY` still
-reaches exec as a bearer, and `codex login status` still exit-codes its verdict.
+The free canaries pin the verified auth matrix with fake keys against a scratch `CODEX_HOME`,
+running real turns through `CodexRunner` + `connectAppServer` — so a free run also exercises
+the spawn, the `initialize` handshake, and `thread/start`. The pinned facts (2026-08-05,
+0.146.0): `OPENAI_API_KEY` is ignored ("Missing bearer" — no credential sent), `CODEX_API_KEY`
+is **exec-only and equally ignored by the app-server** (the day either flips to
+`invalid_api_key`, the availability probe's rules are stale — see GOTCHAS §Codex), and
+`codex login status` still exit-codes its verdict.
 
-The paid part needs one of the two supported auth routes — `codex login` **run in your own
-terminal**, or `CODEX_API_KEY` in the environment / repo `.env` — and covers: a real command
-execution mapped to `CodexCommand` with its output and exit code, the §9.5 usage-relation asserts
-on a cache-heavy resume turn, resume continuity across spawns, interrupt killing cleanly *and*
-the thread staying resumable after, `default` mode's read-only sandbox actually refusing a write,
-and an image attachment answered correctly. Before a first release, run it once under **each**
-auth route.
+The paid part needs the one supported auth route — `codex login` (or
+`codex login --with-api-key`) **run in your own terminal** — and covers: token deltas actually
+arriving and agreeing with the final message (the reason this transport exists), a real command
+execution mapped to `CodexCommand` with its output and exit code, the usage-relation asserts on
+a cache-heavy resume turn (usage is summed from `thread/tokenUsage/updated`), resume continuity
+across child processes, interrupt landing cleanly *and* the thread staying resumable after,
+`default` mode's read-only sandbox actually refusing a write, and a `localImage` attachment
+answered correctly.

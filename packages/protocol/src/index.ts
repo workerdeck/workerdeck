@@ -546,8 +546,9 @@ export type ProfileDefaults = {
  * member is a versioned protocol event.
  *
  * - `claude` (default) — Claude Code via the Agent SDK, configured by a config dir.
- * - `codex` — OpenAI Codex via `@openai/codex-sdk` driving the codex CLI binary,
- *   configured by a CODEX_HOME (auth resolved by the binary itself, like claude).
+ * - `codex` — OpenAI Codex over the codex CLI binary's `app-server` JSON-RPC
+ *   surface, configured by a CODEX_HOME (auth resolved by the binary itself,
+ *   like claude).
  * - `provider` — a model-agnostic provider over the AI SDK, assembled by the
  *   host's `createEngineRunner` hook.
  */
@@ -640,8 +641,11 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     streaming: 'token',
   },
   codex: {
-    // Structural, not a gap: codex exec closes stdin after the prompt and its
-    // event union has no approval request — there is no channel to ask on.
+    // The app-server protocol HAS the ask channel (server→client JSON-RPC
+    // requests), but WorkerDeck pins `approvalPolicy: 'never'` and auto-declines
+    // anything that arrives — false until the channel is actually wired to the
+    // permission surface, because a record that over-promises makes clients
+    // render approval UI that never fires.
     interactiveApprovals: false,
     // 'default' degrades honestly to the read-only sandbox ("would have asked"
     // becomes "cannot act"); acceptEdits = workspace-write; bypass = full access.
@@ -659,13 +663,15 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     slashCommands: false,
     settingSources: false,
     budgets: false,
-    // Images travel as local_image host paths, text is inlined into the prompt
+    // Images travel as localImage host paths, text is inlined into the prompt
     // envelope; pdf has no representation and 415s at upload.
     attachments: ['image', 'text'],
-    // Seeded from the SDK union; per-model supersets ride ModelOption.reasoningEfforts.
+    // The engine-wide floor; per-model supersets (max, ultra) ride
+    // ModelOption.reasoningEfforts from the catalog.
     reasoningEfforts: ['minimal', 'low', 'medium', 'high', 'xhigh'],
     vfs: false,
-    streaming: 'item',
+    // item/agentMessage/delta and the reasoning deltas arrive token-by-token.
+    streaming: 'token',
   },
   provider: {
     interactiveApprovals: false,

@@ -43,7 +43,7 @@
     "@workerdeck/sandbox": "workspace:*",
     "@workerdeck/server": "workspace:*",
     "@jitl/quickjs-ng-wasmfile-release-asyncify": "^0.31.0",
-    "@openai/codex-sdk": "~0.146.0",
+    "@openai/codex": "~0.146.0",
     "@swc-node/register": "^1.11.1",
     "@swc/core": "^1.15.41",
     "@types/node": "^22.20.1",
