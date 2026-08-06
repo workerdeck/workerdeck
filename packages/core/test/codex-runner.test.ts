@@ -525,9 +525,21 @@ describe('CodexRunner', () => {
       emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
     })
 
-    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
+    const runner = new CodexRunner({
+      cwd: '/tmp/project',
+      prompt: 'go',
+      connectFn: peer.connectFn,
+    })
     const events = collect(runner)
     await runner.start()
+
+    // The session's cwd is passed EXPLICITLY. Omitting it does not fall back to
+    // the thread's directory — measured against 0.146.0, it falls back to the
+    // app-server child's own process cwd, and a project's `.codex/skills/**`
+    // are then invisible. This assertion is the guard on that.
+    expect(peer.requests.find((r) => r.method === 'skills/list')?.params).toEqual({
+      cwds: ['/tmp/project'],
+    })
 
     const first = ofType(events, 'skills')
     expect(first).toHaveLength(1)

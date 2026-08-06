@@ -496,11 +496,11 @@ struct SessionView: View {
         if vm.capabilities.mcpStatus {
           Button("MCP servers", systemImage: "puzzlepiece.extension") { sheet = .mcp }
         }
-        // On having the list, not merely on the capability: codex can answer
-        // `skills/list` but only over a live child, so before the first turn
-        // the honest state is "no entry" rather than an entry onto an empty
-        // screen.
-        if vm.capabilities.skillsList, !(vm.state.skills ?? []).isEmpty {
+        // On the capability alone, like the MCP entry. Codex answers
+        // `skills/list` only over a live child, so before the first turn there
+        // is no list yet — but hiding the entry until then made the sheet's own
+        // explanation of that unreachable, which read as a missing feature.
+        if vm.capabilities.skillsList {
           Button("Skills", systemImage: "sparkles") { sheet = .skills }
         }
         Divider()

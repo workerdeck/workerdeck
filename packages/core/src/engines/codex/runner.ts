@@ -987,10 +987,13 @@ export class CodexRunner implements Runner {
   /**
    * Re-read `skills/list` and publish it, if it changed.
    *
-   * No `cwds` argument: codex documents the empty case as "the session's own
-   * working directory", which is exactly the scope a session should report —
-   * passing our own would let a client see skills the model in this thread
-   * cannot actually reach.
+   * **`cwds` is passed explicitly, and must be.** The schema documents the empty
+   * case as "the current session working directory", which reads like the
+   * thread's — it is not. Measured against 0.146.0: with no `cwds`, and *after*
+   * a `thread/start` carrying this session's cwd, the response comes back keyed
+   * to the app-server child's own process directory (for WorkerDeck, wherever
+   * the gateway was launched) and reports no repo-scoped skills at all. So a
+   * project's own `.codex/skills/**` were invisible until this argument existed.
    *
    * Best-effort throughout. A binary too old to know the method, a broken
    * manifest, a child that died mid-call — none of that is worth failing a
@@ -1000,7 +1003,9 @@ export class CodexRunner implements Runner {
     if (this.#skillsRefresh) return this.#skillsRefresh
     const run = (async () => {
       try {
-        const result = (await connection.request('skills/list', {})) as AppServerSkillsListResponse
+        const result = (await connection.request('skills/list', {
+          cwds: [this.#config.cwd],
+        })) as AppServerSkillsListResponse
         if (this.#closed) return
         const entries = Array.isArray(result?.data) ? result.data : []
         const seen = new Set<string>()

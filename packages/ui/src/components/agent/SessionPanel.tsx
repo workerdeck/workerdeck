@@ -191,11 +191,12 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
                   <Plug className='size-3.5 text-fg-3' /> MCP servers
                 </MenuItem>
               ) : null}
-              {/* On having the list, not merely on the capability: codex can
-                  answer `skills/list` but only over a live child, so before the
-                  first turn the honest state is "no entry" rather than an entry
-                  onto an empty screen. */}
-              {capabilities.skillsList && state.skills?.length ? (
+              {/* On the capability alone, like MCP's entry. Codex answers
+                  `skills/list` only over a live child, so before the first turn
+                  there is no list yet — but hiding the entry until then made the
+                  dialog's own explanation of that unreachable, which read as the
+                  feature being missing. The empty state says it instead. */}
+              {capabilities.skillsList ? (
                 <MenuItem onClick={() => setPanel('skills')}>
                   <Sparkles className='size-3.5 text-fg-3' /> Skills
                 </MenuItem>

@@ -643,6 +643,19 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   has landed; the flag says the engine *can* answer, the event says it *has*. Spawning eagerly
   just to list skills was considered and rejected: it would put a codex process behind every
   created-but-unused session.
+- **`skills/list` must be given `cwds` explicitly — the empty case is a trap.** The schema
+  documents it as defaulting to "the current session working directory", which reads like the
+  thread's. Measured against 0.146.0: with no `cwds`, and *after* a `thread/start` carrying the
+  session's cwd, the response comes back keyed to the **app-server child's own process
+  directory** — for WorkerDeck, wherever the gateway was launched — and reports no repo-scoped
+  skills at all. A project's own `.codex/skills/**` were invisible until the argument was passed.
+  A core test pins the exact params.
+- **Repo skills live at `<cwd>/.codex/skills/<name>/SKILL.md`** and come back with
+  `scope: 'repo'`. `interface` (and so `defaultPrompt`) is a **plugin** concept: it is read from
+  a `.codex-plugin/plugin.json` manifest, not from anything beside a `SKILL.md`. A `SKILL.json`
+  next to a `SKILL.md` is ignored outright — tested, it produced no `interface` whatsoever. So
+  every hand-written skill takes the clients' own fallback opener, which makes that fallback the
+  common path rather than the edge case.
 - **`skills/changed` carries no payload — it is an invalidation signal.** The runner re-runs
   `skills/list` and republishes only when the result actually differs (a fingerprint compare); the
   watcher fires per touched file, and an event per keystroke would fill the log with identical
