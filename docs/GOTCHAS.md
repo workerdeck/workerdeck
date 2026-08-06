@@ -312,6 +312,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   the picture by reading it back through `/fs/read`. It therefore previews only when the path is
   under an allowed root **and** within `hostFiles.maxFileBytes` (1 MiB default — a full-size
   generated PNG exceeds it); otherwise the card names the path, which is the honest fallback.
+  Both defaults refuse the *common* case, so an operator who wants previews declares them —
+  `hostFiles.roots` must then restate the cwd roots it replaces, plus
+  `$CODEX_HOME/generated_images`, and `maxFileBytes` needs raising to a few MB.
+  `examples/dev-server.config.mjs` does exactly this and is the worked example. Grant the
+  **drawer, never `~/.codex`**: the same directory holds `auth.json`, and no file route may be
+  one path segment away from it. (Making this work without operator config needs the runner to
+  *deliver* the bytes rather than name them — a protocol addition; see `_docs/plans/`.)
   The item's `result` is an undocumented free-form string and is length-capped before it reaches
   the event log — assume a long one is an encoded image, and base64 never goes on the wire.
 - **The app-server has no slash-command surface at all** — no command-listing RPC exists, and
