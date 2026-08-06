@@ -21,7 +21,10 @@
  * `initialize` accepting `capabilities.experimentalApi: true`, and
  * `thread/start` accepting the granular `approvalPolicy` object — WorkerDeck
  * has no non-experimental fallback, so losing either gate breaks approvals
- * outright.
+ * outright. And `skills/list`'s shape, which is free for the same reason (a
+ * local directory scan, no model call) and is hand-mirrored in
+ * `engines/codex/types.ts` — an unmapped field there is a panel that silently
+ * loses a column.
  *
  * The paid part is the drift alarm for the app-server JSON-RPC v2 vocabulary
  * (pre-1.0, regenerable from the binary — the schema promises drift): token
@@ -211,6 +214,63 @@ async function canaries(): Promise<void> {
         fail(
           'granular approvalPolicy gate',
           `thread/start rejected the granular approvalPolicy: ${(error as Error).message}`,
+        )
+      }
+
+      // 6. `skills/list` — the shape `engines/codex/types.ts` mirrors by hand.
+      //    Free (a local directory scan, no model call) and worth pinning: an
+      //    unmapped field here is a skills panel that silently loses a column,
+      //    and `interface.defaultPrompt` in particular is the whole reason the
+      //    composer can offer skills without pretending they are commands.
+      //    Asserted structurally, never on *which* skills exist — this machine's
+      //    CODEX_HOME is not the contract.
+      try {
+        const listed = (await connection.request('skills/list', {})) as {
+          data?: Array<{
+            cwd?: string
+            skills?: Array<{ name?: unknown; enabled?: unknown; interface?: unknown }>
+            errors?: unknown[]
+          }>
+        }
+        if (!Array.isArray(listed?.data)) {
+          fail('skills/list shape', 'result has no `data` array')
+        } else {
+          const entries = listed.data
+          const skills = entries.flatMap((e) => e?.skills ?? [])
+          const named = skills.filter((s) => typeof s?.name === 'string')
+          const badEntry = entries.find((e) => e?.skills !== undefined && !Array.isArray(e.skills))
+          if (badEntry) {
+            fail('skills/list shape', 'an entry\'s `skills` is not an array')
+          } else if (named.length !== skills.length) {
+            fail('skills/list shape', 'a skill came back without a string `name`')
+          } else {
+            // `enabled` may be absent (the runner defaults it true); `interface`
+            // may be absent; neither may be a different *kind* of thing.
+            const wrongEnabled = skills.find(
+              (s) => s.enabled !== undefined && typeof s.enabled !== 'boolean',
+            )
+            const wrongInterface = skills.find(
+              (s) => s.interface !== undefined && (typeof s.interface !== 'object' || s.interface === null),
+            )
+            if (wrongEnabled) fail('skills/list shape', '`enabled` is not a boolean')
+            else if (wrongInterface) fail('skills/list shape', '`interface` is not an object')
+            else {
+              const withPrompt = skills.filter(
+                (s) => typeof (s.interface as { defaultPrompt?: unknown })?.defaultPrompt === 'string',
+              ).length
+              pass(
+                'skills/list shape',
+                `${skills.length} skill(s) across ${entries.length} cwd(s), ` +
+                  `${withPrompt} carrying interface.defaultPrompt`,
+              )
+            }
+          }
+        }
+      } catch (error) {
+        fail(
+          'skills/list shape',
+          `skills/list rejected: ${(error as Error).message} — the skills panel and the ` +
+            'composer\'s skill completion are both dead until the runner is updated',
         )
       }
     } catch (error) {

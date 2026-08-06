@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash, randomUUID } from 'node:crypto'
+import { mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -14,6 +14,7 @@ import {
   type SessionEventBody,
   type SessionInfo,
   type SessionStatus,
+  type SkillInfo,
   type UserQuestion,
 } from '@workerdeck/protocol'
 import {
@@ -36,6 +37,8 @@ import type {
   AppServerPermissionsApprovalParams,
   AppServerPlanUpdate,
   AppServerRateLimits,
+  AppServerSkillMetadata,
+  AppServerSkillsListResponse,
   AppServerTokenUsage,
   AppServerTokenUsageUpdate,
   AppServerTurn,
@@ -122,6 +125,57 @@ const MAX_IMAGE_RESULT_CHARS = 512
 
 const shortResult = (result: string): boolean =>
   result.length > 0 && result.length <= MAX_IMAGE_RESULT_CHARS && !result.startsWith('data:')
+
+/**
+ * `file_produced.fileId` — derived from the path, not minted fresh.
+ *
+ * Two properties fall out of that and both are load-bearing: codex reports the
+ * same `savedPath` on the progress item and again on the completed one, so a
+ * derived id makes the second emission a no-op instead of a duplicate row; and
+ * a session rebuilt from a snapshot re-derives the same ids, so a client's
+ * cached URL still resolves after a park/restore.
+ */
+function producedFileId(path: string): string {
+  return createHash('sha256').update(path).digest('hex').slice(0, 32)
+}
+
+/** Media type from the extension, for the handful a client renders inline.
+ * Undefined for everything else — the route sniffs, and guessing here is how a
+ * text file ends up labelled `image/png`. */
+function producedMediaType(path: string): string | undefined {
+  const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
+  return PRODUCED_MEDIA_TYPES[extension]
+}
+
+const PRODUCED_MEDIA_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  pdf: 'application/pdf',
+}
+
+/**
+ * Codex's `SkillMetadata` as the protocol states it. `interface.shortDescription`
+ * beats the legacy top-level one (codex's own comment says to prefer it), and
+ * `enabled` defaults to true — an entry codex listed without the field is one it
+ * considers live, and defaulting to false would hide working skills.
+ */
+function skillInfo(skill: AppServerSkillMetadata): SkillInfo {
+  return {
+    name: skill.name,
+    ...(skill.description ? { description: skill.description } : {}),
+    ...(skill.interface?.shortDescription ?? skill.shortDescription
+      ? { shortDescription: skill.interface?.shortDescription ?? skill.shortDescription }
+      : {}),
+    ...(skill.interface?.displayName ? { displayName: skill.interface.displayName } : {}),
+    ...(skill.interface?.defaultPrompt ? { defaultPrompt: skill.interface.defaultPrompt } : {}),
+    ...(skill.scope ? { scope: skill.scope } : {}),
+    enabled: skill.enabled !== false,
+  }
+}
 
 /** What the card shows while the picture is being made, and after. `savedPath`
  * only exists once it lands — a client keys its preview off it, so it is a
@@ -548,6 +602,17 @@ export class CodexRunner implements Runner {
   /** Set around history replay: {@link #emit} stamps `replay: true` onto the
    * message events the live item mapping produces. */
   #replayingHistory = false
+  /** Last `skills` payload emitted, serialized — the comparison that keeps a
+   * `skills/changed` storm (the watcher fires per touched file) from filling
+   * the event log with identical lists. */
+  #skillsFingerprint: string | undefined
+  /** In-flight `skills/list`, so a burst of `skills/changed` makes one call.
+   * The pending promise is reused rather than queued: the request has no
+   * arguments, so a second one would ask the same question. */
+  #skillsRefresh: Promise<void> | undefined
+  /** Host paths already announced via `file_produced`, so the same picture
+   * reported on both the progress and the completed item registers once. */
+  #producedPaths = new Set<string>()
 
   constructor(config: CodexRunnerConfig, id: string = randomUUID()) {
     const mode = config.permissionMode ?? 'default'
@@ -910,7 +975,92 @@ export class CodexRunner implements Runner {
       }
       this.#threadLoaded = true
     }
+    // Fire and forget, and only now: `skills/list` needs a live child, and a
+    // codex session does not spawn one until it has something to do. So the
+    // skill list arrives with the first turn rather than at create time —
+    // which is why clients gate the affordance on having received a `skills`
+    // event, not on the capability flag alone.
+    void this.#refreshSkills(connection)
     return connection
+  }
+
+  /**
+   * Re-read `skills/list` and publish it, if it changed.
+   *
+   * No `cwds` argument: codex documents the empty case as "the session's own
+   * working directory", which is exactly the scope a session should report —
+   * passing our own would let a client see skills the model in this thread
+   * cannot actually reach.
+   *
+   * Best-effort throughout. A binary too old to know the method, a broken
+   * manifest, a child that died mid-call — none of that is worth failing a
+   * session over, and the panel simply stays absent.
+   */
+  async #refreshSkills(connection: AppServerConnection): Promise<void> {
+    if (this.#skillsRefresh) return this.#skillsRefresh
+    const run = (async () => {
+      try {
+        const result = (await connection.request('skills/list', {})) as AppServerSkillsListResponse
+        if (this.#closed) return
+        const entries = Array.isArray(result?.data) ? result.data : []
+        const seen = new Set<string>()
+        const skills: SkillInfo[] = []
+        for (const entry of entries) {
+          for (const skill of entry?.skills ?? []) {
+            // The same skill can be reported under several cwds; the first
+            // wins, matching how codex itself resolves a name collision.
+            if (typeof skill?.name !== 'string' || seen.has(skill.name)) continue
+            seen.add(skill.name)
+            skills.push(skillInfo(skill))
+          }
+        }
+        skills.sort((a, b) => a.name.localeCompare(b.name))
+        const fingerprint = JSON.stringify(skills)
+        if (fingerprint === this.#skillsFingerprint) return
+        this.#skillsFingerprint = fingerprint
+        this.#emit({ type: 'skills', skills })
+      } catch {
+        // Nothing to say: an engine that cannot list its skills is an engine
+        // whose skills panel does not appear.
+      } finally {
+        this.#skillsRefresh = undefined
+      }
+    })()
+    this.#skillsRefresh = run
+    return run
+  }
+
+  /**
+   * Announce a file the ENGINE wrote on the host, so a client can fetch it
+   * without the operator having declared its directory as a host-file root.
+   *
+   * Deliberately narrow: only paths codex reports as *written by its own tool*
+   * belong here. A path the model merely read (`imageView`) is an agent-chosen
+   * claim, and those keep going through `/fs/*` and its root allowlist — see
+   * the note on `file_produced` in the protocol.
+   */
+  #emitFileProduced(path: string, toolUseId: string): void {
+    if (this.#producedPaths.has(path)) return
+    this.#producedPaths.add(path)
+    let bytes: number | undefined
+    try {
+      const stat = statSync(path)
+      if (stat.isFile()) bytes = stat.size
+      // A `savedPath` that is not a regular file is still announced: the route
+      // re-checks before serving, and a client showing the path it was given
+      // beats one silently dropping it.
+    } catch {
+      // Reported but not there (yet, or at all) — announce it anyway and let
+      // the fetch be the thing that fails.
+    }
+    this.#emit({
+      type: 'file_produced',
+      fileId: producedFileId(path),
+      path,
+      ...(producedMediaType(path) ? { mediaType: producedMediaType(path) } : {}),
+      ...(bytes !== undefined ? { bytes } : {}),
+      toolUseId,
+    })
   }
 
   /**
@@ -1181,6 +1331,15 @@ export class CodexRunner implements Runner {
         active.contextWindow = update.tokenUsage?.modelContextWindow ?? undefined
         return
       }
+      case 'skills/changed': {
+        // An invalidation signal with no payload — codex's watcher saying
+        // "re-run skills/list", which is exactly what this does. Not gated on
+        // `active`: the operator can edit a skill between turns, and that is
+        // in fact when they usually do.
+        const connection = this.#connection
+        if (connection) void this.#refreshSkills(connection)
+        return
+      }
       case 'account/rateLimits/updated': {
         // Pushed during a turn, so — unlike the Claude engine, whose CLI only
         // pushes on change and therefore needs an explicit poll — listening is
@@ -1411,6 +1570,10 @@ export class CodexRunner implements Runner {
     if (item.type === 'imageGeneration' && !active.toolUseEmitted.has(id)) {
       active.toolUseEmitted.add(id)
       this.#emitToolUse(id, CODEX_IMAGE_TOOL, imageGenerationInput(item))
+      // Rare but real: a progress item can already carry `savedPath`. Announce
+      // it here too — `#emitFileProduced` dedupes by path, so the completed
+      // item's second report costs nothing.
+      if (item.savedPath) this.#emitFileProduced(item.savedPath, id)
     }
   }
 
@@ -1495,9 +1658,10 @@ export class CodexRunner implements Runner {
         active.toolUseEmitted.add(id)
         this.#emitToolUse(id, CODEX_IMAGE_TOOL, imageGenerationInput(item))
         // The path IS the deliverable — the bytes live on the host and no event
-        // may carry them. A client that can reach the host filesystem renders
-        // the picture from it; one that can't at least says where it went,
-        // which beats a turn that silently produced nothing.
+        // may carry them. `file_produced` is what makes those bytes reachable
+        // anyway: the gateway serves a path its own runner reported, with no
+        // host-file root to declare first.
+        if (item.savedPath) this.#emitFileProduced(item.savedPath, id)
         const lines = [
           item.savedPath ? `Saved to ${item.savedPath}` : 'No saved path reported',
           ...(shortResult(item.result) ? [item.result] : []),

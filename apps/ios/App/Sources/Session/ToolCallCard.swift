@@ -10,6 +10,15 @@ struct ToolCallCard: View {
   let call: ToolCallItem
   @Binding var isExpanded: Bool
 
+  @Environment(\.producedImageLoader) private var producedImages
+
+  /// The host path this call says it wrote, when the engine reported one. Only
+  /// `savedPath` — a file the agent merely *read* is not a produced file and
+  /// has no route to fetch it from.
+  private var producedPath: String? {
+    call.input["savedPath"]?.stringValue
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       Button {
@@ -18,6 +27,13 @@ struct ToolCallCard: View {
         header
       }
       .buttonStyle(.plain)
+
+      // Shown collapsed as well as expanded: for an image-generating call the
+      // picture *is* the result, and hiding it behind a disclosure would make
+      // the one interesting turn look like the others.
+      if let path = producedPath, producedImages?.hasImage(forPath: path) == true {
+        producedImage(path)
+      }
 
       if isExpanded {
         detail
@@ -58,6 +74,25 @@ struct ToolCallCard: View {
       StatusChip(status: call.status)
     }
     .contentShape(Rectangle())
+  }
+
+  private func producedImage(_ path: String) -> some View {
+    Group {
+      if let image = producedImages?.image(forPath: path) {
+        Image(uiImage: image)
+          .resizable()
+          .scaledToFit()
+          .frame(maxWidth: .infinity)
+          .clipShape(RoundedRectangle(cornerRadius: 8))
+      } else {
+        RoundedRectangle(cornerRadius: 8)
+          .fill(Color.secondary.opacity(0.12))
+          .frame(height: 120)
+          .overlay(ProgressView().controlSize(.small))
+      }
+    }
+    .task(id: path) { producedImages?.load(path: path) }
+    .accessibilityLabel("Generated image")
   }
 
   @ViewBuilder

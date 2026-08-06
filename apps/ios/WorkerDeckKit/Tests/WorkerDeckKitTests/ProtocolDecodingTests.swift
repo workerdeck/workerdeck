@@ -90,6 +90,61 @@ struct ProtocolDecodingTests {
     #expect(info.rateLimitType == "five_hour")
   }
 
+  @Test func decodesSkillsWithTheirSuggestedPrompt() throws {
+    let event = try decodeEvent(
+      #"""
+      {"type":"skills","seq":12,"ts":1,"skills":[
+        {"name":"imagegen","description":"Generate images","scope":"user","enabled":true,
+         "displayName":"Image generation","shortDescription":"Make a picture",
+         "defaultPrompt":"Generate an image of"},
+        {"name":"pdf-fill","enabled":false}]}
+      """#)
+    guard case .skills(let skills) = event.body else {
+      Issue.record("expected skills, got \(event.body)")
+      return
+    }
+    #expect(skills.count == 2)
+    // The field that makes a picker possible without pretending `/imagegen` is
+    // a command the engine parses.
+    #expect(skills[0].defaultPrompt == "Generate an image of")
+    #expect(skills[0].shortDescription == "Make a picture")
+    // A skill listed without `enabled` is one codex considers live — defaulting
+    // to false would hide working skills.
+    #expect(skills[1].enabled == false)
+    #expect(skills[1].description == nil)
+  }
+
+  @Test func decodesAProducedFile() throws {
+    let event = try decodeEvent(
+      #"""
+      {"type":"file_produced","seq":13,"ts":1,"fileId":"abc123",
+       "path":"/home/me/.codex/generated_images/flower.png",
+       "mediaType":"image/png","bytes":2048,"toolUseId":"turn:g1"}
+      """#)
+    guard case .fileProduced(let file) = event.body else {
+      Issue.record("expected file_produced, got \(event.body)")
+      return
+    }
+    #expect(file.fileId == "abc123")
+    #expect(file.mediaType == "image/png")
+    #expect(file.bytes == 2048)
+  }
+
+  /// A protocol-6 gateway sends no `skillsList` — that must read as "no skills
+  /// panel", not as a session whose whole capability record failed to decode.
+  @Test func anOlderRecordWithoutSkillsListStillDecodes() throws {
+    let json = #"""
+      {"interactiveApprovals":true,"permissionModes":["default"],
+       "defaultPermissionMode":"default","resume":true,"resumeBackfill":true,
+       "listSessions":true,"contextUsage":true,"rateLimits":true,"mcpStatus":true,
+       "sessionMcpServers":true,"slashCommands":true,"settingSources":true,
+       "budgets":true,"attachments":["image"],"vfs":false,"streaming":"token"}
+      """#
+    let record = try JSONDecoder().decode(EngineCapabilities.self, from: Data(json.utf8))
+    #expect(record.skillsList == false)
+    #expect(record.slashCommands == true)
+  }
+
   /// The CLI names its rows with aliases and reports a resolved wire id; the chip
   /// is only useful if those meet.
   @Test func matchesTheModelASessionReports() throws {
@@ -148,7 +203,7 @@ struct ProtocolDecodingTests {
 
   @Test func decodesAttachedFrame() throws {
     let json = #"""
-      {"type":"attached","protocolVersion":6,"replayingFrom":0,
+      {"type":"attached","protocolVersion":7,"replayingFrom":0,
        "session":{"id":"s1","status":"idle","cwd":"/x","createdAt":1722300000000,
                   "lastSeq":12,"pendingPermissionCount":0}}
       """#

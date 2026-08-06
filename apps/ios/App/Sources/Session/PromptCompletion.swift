@@ -21,20 +21,40 @@ final class PromptCompletionModel {
   enum Suggestion: Identifiable, Equatable {
     case file(HostFileMatch)
     case command(SlashCommandInfo)
+    /// A skill, offered under the same `/` — but it resolves to prose, not to a
+    /// token. See `SkillInfo`: no engine parses `/skillname`.
+    case skill(SkillInfo)
 
     var id: String {
       switch self {
       case .file(let match): return "@\(match.relative)"
       case .command(let command): return "/\(command.name)"
+      case .skill(let skill): return "skill:\(skill.name)"
       }
     }
 
     /// What replaces the token — without its prefix, which `PromptTokens` adds.
+    /// For a skill this is the whole literal, prefix included (there is none).
     var value: String {
       switch self {
       case .file(let match): return match.relative
       case .command(let command): return command.name
+      case .skill(let skill): return Self.prompt(for: skill)
       }
+    }
+
+    /// What a picked skill types: the engine's own suggested opener where it
+    /// declared one, otherwise a neutral line naming the skill. Always ends in a
+    /// space, so the caret lands ready for the rest of the sentence.
+    ///
+    /// The fallback names the skill by its *last* segment: real skill names are
+    /// namespaced (`documents:documents`), and "Use the documents:documents
+    /// skill" reads like a typo.
+    static func prompt(for skill: SkillInfo) -> String {
+      let bare = skill.name.split(separator: ":").last.map(String.init) ?? skill.name
+      let trimmed = skill.defaultPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let base = (trimmed?.isEmpty == false ? trimmed! : "Use the \(bare) skill to")
+      return base.hasSuffix(" ") ? base : base + " "
     }
   }
 
@@ -44,6 +64,9 @@ final class PromptCompletionModel {
 
   /// Slash commands from `capabilities`; empty until that event lands.
   var commands: [SlashCommandInfo] = []
+  /// Skills from the `skills` event; empty until that lands (for codex, on the
+  /// session's first turn — listing needs a live child).
+  var skills: [SkillInfo] = []
   /// Host-file search, absent until the session's cwd is known.
   var scope: HostFileScope? {
     didSet {
@@ -54,6 +77,10 @@ final class PromptCompletionModel {
       cancel()
     }
   }
+
+  /// Whether the `/` list has anything to offer. Read by the empty state, which
+  /// must not advertise a popover that would open empty.
+  var hasSlashSuggestions: Bool { !commands.isEmpty || skills.contains { $0.enabled } }
 
   /// Whether `@file` completion is on offer: the session's cwd is known and this
   /// gateway hasn't already 404'd the search. Read by the empty state, which must
@@ -89,6 +116,11 @@ final class PromptCompletionModel {
     let caret = cursor ?? text.endIndex
     defer { cancel() }
     guard let token = PromptTokens.active(in: text, at: caret) else { return (text, caret) }
+    // A skill types prose over the `/name`; a command and a file resolve to
+    // tokens the transcript will style. Same list, deliberately different result.
+    if case .skill = suggestion {
+      return PromptTokens.replace(with: suggestion.value, replacing: token, in: text)
+    }
     return PromptTokens.apply(suggestion.value, replacing: token, in: text)
   }
 
@@ -110,11 +142,17 @@ final class PromptCompletionModel {
     lastQuery = nil
     isActive = true
     let needle = query.lowercased()
-    suggestions =
+    let matchedCommands =
       commands
       .filter { needle.isEmpty || $0.matches(prefix: needle) }
-      .prefix(20)
       .map(Suggestion.command)
+    // Commands first: they do what their name says, while a skill only ever
+    // drafts a message.
+    let matchedSkills =
+      skills
+      .filter { $0.enabled && (needle.isEmpty || $0.matches(prefix: needle)) }
+      .map(Suggestion.skill)
+    suggestions = Array((matchedCommands + matchedSkills).prefix(20))
   }
 
   private func searchFiles(matching query: String) {
@@ -151,6 +189,14 @@ final class PromptCompletionModel {
 extension SlashCommandInfo {
   fileprivate func matches(prefix needle: String) -> Bool {
     let candidates = [name] + (aliases ?? []) + name.split(separator: ":").map(String.init)
+    return candidates.contains { $0.lowercased().hasPrefix(needle) }
+  }
+}
+
+extension SkillInfo {
+  fileprivate func matches(prefix needle: String) -> Bool {
+    let candidates =
+      [name] + name.split(whereSeparator: { "-:_".contains($0) }).map(String.init)
     return candidates.contains { $0.lowercased().hasPrefix(needle) }
   }
 }

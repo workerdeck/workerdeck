@@ -104,6 +104,21 @@ export type TriggerConfig = {
    */
   onSelect?: (suggestion: TriggerSuggestion) => string | void
   /**
+   * For 'dropdown' mode: opt a suggestion out of becoming a chip.
+   *
+   * Return a string and the trigger's range is replaced with that **plain,
+   * editable text** — the trigger character included — with the caret left at
+   * its end. Return undefined and the suggestion resolves to a chip as usual,
+   * so one dropdown can mix both kinds.
+   *
+   * For suggestions that are a typing aid rather than a token: something the
+   * user is meant to finish and edit, where a chip would falsely promise the
+   * host parses it back out. Takes precedence over `onSelect`, which is not
+   * called for a text-resolved suggestion (there is no chip to label), and
+   * `onChipAdd` does not fire either.
+   */
+  insertAsText?: (suggestion: TriggerSuggestion) => string | undefined
+  /**
    * For 'callback' and 'launch' modes: called when the trigger is activated.
    * Receives the full input text and cursor position. For 'launch' it fires on
    * keydown (before the char would insert); for 'callback' it fires after.

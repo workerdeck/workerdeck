@@ -53,7 +53,11 @@ protocol. Read these before changing scope or structure:
   sessions, because it is the operator's CLI config),
   optional `/jobs` + `/queue` routes, profiles (+ `profileStore` CRUD), `GET /sessions/:id/files`,
   message attachments (`attachments.ts` — bytes held per session so the event log carries only
-  `MessageAttachment` refs; **never** inline base64 into an event) and `/sessions/:id/mcp`
+  `MessageAttachment` refs; **never** inline base64 into an event),
+  `/sessions/:id/produced[/:fileId]` (`produced-files.ts` — host files the *engine* wrote, served
+  with **no roots and no byte cap** because the allowlist is built solely from `file_produced`
+  events; a path the *agent* named is not a produced file and stays behind `/fs/*`)
+  and `/sessions/:id/mcp`
   (status + reconnect/enable/disable, with each server's `env`/`headers` stripped),
   the host-filesystem routes (`/fs/*`, `host-files.ts` + `host-file-search.ts` — operator
   privilege; reads follow `allowedCwdRoots` and `hostFiles.roots` only narrows, writes opt in
@@ -177,9 +181,9 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
 - push: yes — branch `master`, repo is public, and every push deploys the docs site.
 - version_bump: yes — `pnpm version:set <x.y.z> && pnpm install --lockfile-only` (the 10 packages
   only; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.9.0 on master
-  (protocol 6 + the codex engine + the session-runner parity work; it absorbed the never-published
-  0.8.0, and unreleased work keeps landing in it rather than inflating the number), 0.7.0 is the
-  latest published — tag `v0.9.0` to release it.
+  (protocol **7** + the codex engine + the session-runner parity work + codex skills and produced
+  files; it absorbed the never-published 0.8.0, and unreleased work keeps landing in it rather
+  than inflating the number), 0.7.0 is the latest published — tag `v0.9.0` to release it.
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees

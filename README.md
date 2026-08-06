@@ -142,6 +142,19 @@ unsandboxed. Permission modes map onto the codex sandbox + ask policy (`default`
 blocked actions ask; `acceptEdits` → workspace-write, escalations ask; `bypassPermissions` →
 full access, asks nothing).
 
+Two things a codex session has and a Claude one doesn't. **Skills** — `~/.codex/skills/**`, listed
+over the binary's `skills/list` and republished whenever its watcher says they changed. They reach
+clients on their own `skills` channel rather than as slash commands, because they *aren't*
+commands: codex has no command-listing RPC at all, and a skill is something the model chooses from
+its description, so there is no `/skillname` to send. Clients list them in a panel and offer them
+under `/` as a typing aid — picking one writes codex's own suggested opening line into the composer
+for you to edit and send. **Generated images** — codex's built-in `image_gen` reports a host path
+and never bytes, so the runner announces the file it wrote (`file_produced`) and the gateway serves
+it from `GET /sessions/:id/produced/:fileId`. No host-file root to declare and no byte cap to
+raise: the allowlist is the exact set of paths this session's own runner reported producing, which
+is a fact about one file rather than a guess about a directory. The picture just appears, in the
+dashboard and on the phone.
+
 The provider engine trades ambient authority for a sandbox:
 
 - **Capability-scoped tools.** No shell, no host filesystem. `fs_*` operate on an in-memory

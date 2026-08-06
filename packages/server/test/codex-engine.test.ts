@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -28,6 +28,8 @@ function fakeCodexAdapter(options: {
   turns?: string[]
   probe?: () => EngineAvailability
   onCreate?: (config: SessionRunnerConfig) => void
+  /** Extra notifications to emit mid-turn, before the agent message. */
+  onTurn?: (notify: (method: string, params: unknown) => void) => void
 }): { adapter: EngineAdapter; probeCalls: () => number } {
   let probeCalls = 0
   let turnIndex = 0
@@ -49,6 +51,7 @@ function fakeCodexAdapter(options: {
           }
           if (method === 'turn/start') {
             const text = options.turns?.[turnIndex++] ?? 'done'
+            if (notify) options.onTurn?.(notify)
             notify?.('item/completed', {
               threadId: 'thread-1',
               turnId: 't1',
@@ -152,6 +155,87 @@ describe('codex engine over the gateway', () => {
       )
     })
     ws.close()
+  })
+
+  it('serves a generated image from the produced-file route, with no host-file roots', async () => {
+    scratchDir = mkdtempSync(join(tmpdir(), 'wd-produced-'))
+    // A 2 MiB "PNG": past the 1 MiB `/fs/read` default, which is exactly the
+    // case that used to leave the operator looking at a path.
+    const png = Buffer.alloc(2 * 1024 * 1024, 7)
+    const savedPath = join(scratchDir, 'flower.png')
+    writeFileSync(savedPath, png)
+
+    const { adapter } = fakeCodexAdapter({
+      onTurn: (notify) => {
+        notify('item/completed', {
+          threadId: 'thread-1',
+          turnId: 't1',
+          item: {
+            id: 'g1',
+            type: 'imageGeneration',
+            status: 'completed',
+            result: 'ok',
+            savedPath,
+          },
+        })
+      },
+    })
+    running = createWorkerServer({
+      allowUnauthenticated: true,
+      allowedCwdRoots: ['/tmp'],
+      profiles: [codexProfile()],
+      engines: { codex: adapter },
+      // Deliberately NOT configured: no `hostFiles`, so `/fs/*` does not even
+      // exist on this gateway. The produced route must still serve the picture
+      // — that is the whole point of the channel.
+    })
+    const { port } = await running.listen(0, '127.0.0.1')
+    const base = `http://127.0.0.1:${port}/v1`
+
+    const created = await fetch(`${base}/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/project', profile: 'codex', prompt: 'draw a flower' }),
+    })
+    const { session } = (await created.json()) as { session: { id: string } }
+
+    // The announcement reaches clients as an ordinary event…
+    let fileId = ''
+    await vi.waitFor(async () => {
+      const res = await fetch(`${base}/sessions/${session.id}/produced`)
+      const body = (await res.json()) as {
+        files: Array<{ fileId: string; path: string; mediaType?: string; bytes?: number }>
+      }
+      expect(body.files).toHaveLength(1)
+      expect(body.files[0]).toMatchObject({
+        path: savedPath,
+        mediaType: 'image/png',
+        bytes: png.length,
+      })
+      fileId = body.files[0]!.fileId
+    })
+
+    // …and the bytes come back whole, uncapped.
+    const file = await fetch(`${base}/sessions/${session.id}/produced/${fileId}`)
+    expect(file.status).toBe(200)
+    expect(file.headers.get('content-type')).toBe('image/png')
+    // Model-authored bytes must never render as a document on this origin.
+    expect(file.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(Buffer.from(await file.arrayBuffer()).length).toBe(png.length)
+
+    // The allowlist is exact: an id nobody produced is a 404, and so is a real
+    // id under a different session.
+    expect((await fetch(`${base}/sessions/${session.id}/produced/deadbeef`)).status).toBe(404)
+
+    // A file that has since left the disk fails at the fetch, not at the
+    // announcement — the card still knows where it went.
+    rmSync(savedPath)
+    expect((await fetch(`${base}/sessions/${session.id}/produced/${fileId}`)).status).toBe(404)
+
+    // The session's hold ends with the session.
+    await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE' })
+    const afterDelete = await fetch(`${base}/sessions/${session.id}/produced/${fileId}`)
+    expect(afterDelete.status).toBe(404)
   })
 
   it('refuses the request fields the codex record forswears', async () => {

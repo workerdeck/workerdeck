@@ -47,10 +47,14 @@ A [profile](/workerdeck/docs/guides/profiles/) decides what a session runs as, i
   CLI process against a real checkout, with the full permission system.
 - **`codex`** — OpenAI Codex, the local codex binary driven over its `app-server` JSON-RPC
   surface the same way the Agent SDK drives the Claude CLI, streaming token-by-token. The
-  binary resolves its own auth (`codex login` in your terminal); permission modes map onto
-  codex's own sandbox, and because approvals are not wired to the permission surface, its
-  capability record declares them off — clients hide the approval UI instead of rendering one
-  that never fires.
+  binary resolves its own auth (`codex login` in your terminal), and permission modes map onto
+  codex's own sandbox. Its ask channels ride the **same permission surface** as Claude's, with one
+  difference the request carries honestly: a codex command approval is usually an *escalation
+  after the sandbox already refused*, not a gate before execution. Two things it has that a Claude
+  session doesn't: **skills** (listed from `~/.codex/skills`, offered under `/` as a typing aid
+  rather than as commands — codex has no slash commands, and a skill is something the model
+  chooses from its description) and **generated images**, which the runner announces as produced
+  files so the gateway can serve them without any host-filesystem grant.
 - **`provider`** — a model-agnostic engine over the [AI SDK](https://ai-sdk.dev), for any provider
   it supports, assembled by your own server hook. No CLI process and no config directory, and no
   ambient authority either: tools are capability-scoped, the filesystem is an in-memory scratch

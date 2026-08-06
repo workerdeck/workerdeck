@@ -141,6 +141,16 @@ public struct TranscriptState: Sendable, Equatable {
   public var models: [ModelOption]?
   /// Slash commands the CLI accepts (from the `capabilities` event).
   public var commands: [SlashCommandInfo]?
+  /// Skills the engine can reach (from the `skills` event), replaced whole each
+  /// time. Absent until the engine has enumerated them — which for codex is on
+  /// its first turn, since listing needs a live child. Gate the affordance on
+  /// this being non-nil, not on `skillsList` alone: the flag says the engine
+  /// *can* answer, this says it *has*. Not commands — see `SkillInfo`.
+  public var skills: [SkillInfo]?
+  /// Files the engine wrote on the host (from `file_produced`), keyed by the
+  /// absolute path it reported. A tool card holding a `savedPath` looks itself
+  /// up here to turn that path into a fetchable id.
+  public var producedFiles: [String: ProducedFile]?
   /// What this session's default model resolves to (from `capabilities`).
   /// Known before the first turn, which `model` is not — a promptless session
   /// has no `system_init` until it is spoken to.
@@ -164,6 +174,7 @@ public struct TranscriptState: Sendable, Equatable {
     status: SessionStatus = .starting, statusDetail: String? = nil, model: String? = nil,
     cwd: String? = nil, sdkSessionId: String? = nil, engine: ProfileEngine? = nil,
     models: [ModelOption]? = nil, commands: [SlashCommandInfo]? = nil,
+    skills: [SkillInfo]? = nil, producedFiles: [String: ProducedFile]? = nil,
     defaultModel: String? = nil,
     permissionMode: PermissionMode? = nil, contextUsage: ContextUsage? = nil,
     rateLimits: [String: RateLimitInfo]? = nil, subscriptionType: String? = nil,
@@ -178,6 +189,8 @@ public struct TranscriptState: Sendable, Equatable {
     self.engine = engine
     self.models = models
     self.commands = commands
+    self.skills = skills
+    self.producedFiles = producedFiles
     self.defaultModel = defaultModel
     self.permissionMode = permissionMode
     self.contextUsage = contextUsage
@@ -339,6 +352,16 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
     next.models = models
     next.commands = commands
     if let defaultModel { next.defaultModel = defaultModel }
+
+  case .skills(let skills):
+    // Replaced whole, never merged: the event is the engine's current answer,
+    // so a skill deleted on disk has to be able to disappear from the list.
+    next.skills = skills
+
+  case .fileProduced(let file):
+    // Keyed by PATH, because the lookup a card does is "here is the savedPath
+    // in my tool input — is there anything to fetch?".
+    next.producedFiles = (next.producedFiles ?? [:]).merging([file.path: file]) { _, new in new }
 
   case .modelChanged(let model):
     // nil = reset to the server default; keep showing the last known model.

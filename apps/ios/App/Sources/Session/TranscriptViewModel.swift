@@ -238,6 +238,12 @@ final class TranscriptViewModel {
     try await client.fetchAttachment(sessionId: sessionId, attachmentId: attachmentId)
   }
 
+  /// Bytes of a file this session's engine produced (a generated image). Needs
+  /// no host-file roots — see `readProducedFile`.
+  func producedFileData(_ fileId: String) async throws -> Data {
+    try await client.readProducedFile(sessionId: sessionId, fileId: fileId)
+  }
+
   /// The session's MCP servers, live from the engine.
   func mcpServers() async throws -> [McpServerStatusInfo] {
     try await client.listMcpServers(sessionId: sessionId)

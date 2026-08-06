@@ -13,7 +13,7 @@ import Foundation
 /// Never decode with a global key-conversion strategy.
 public enum WorkerProtocol {
   /// Mirror of PROTOCOL_VERSION. Compare against `AttachedFrame.protocolVersion`.
-  public static let version = 6
+  public static let version = 7
 }
 
 // MARK: - Session lifecycle
@@ -370,6 +370,90 @@ public struct ModelOption: Codable, Sendable, Equatable, Identifiable {
   }
 }
 
+/// A skill the engine can decide to use — **not** a command.
+///
+/// The distinction is why this is its own type. A slash command is wire syntax
+/// the CLI parses out of the message; a skill is a capability the model chooses
+/// from its description, and there is no `/skillname` any engine recognises. So
+/// a skill may be listed, and may be offered as a typing aid that inserts
+/// editable prose (`defaultPrompt`) — but never as a command chip.
+public struct SkillInfo: Decodable, Sendable, Equatable, Identifiable {
+  /// Directory name under the skills root — the identity the model refers to.
+  public let name: String
+  /// What the skill is for, as its own manifest states it. This is the text the
+  /// MODEL selects on, so it is also the most honest thing to show a human.
+  public let description: String?
+  public let shortDescription: String?
+  public let displayName: String?
+  /// The engine's own suggested opening message. Inserted for the user to
+  /// finish and send — a draft, never something submitted on selection.
+  public let defaultPrompt: String?
+  /// 'user' | 'repo' | 'system' | 'admin' — kept as String, the set may grow.
+  public let scope: String?
+  /// False when the operator has it switched off: still listed, because
+  /// "installed but off" is a different answer from "not installed".
+  public let enabled: Bool
+
+  public var id: String { name }
+
+  public init(
+    name: String, description: String? = nil, shortDescription: String? = nil,
+    displayName: String? = nil, defaultPrompt: String? = nil, scope: String? = nil,
+    enabled: Bool = true
+  ) {
+    self.name = name
+    self.description = description
+    self.shortDescription = shortDescription
+    self.displayName = displayName
+    self.defaultPrompt = defaultPrompt
+    self.scope = scope
+    self.enabled = enabled
+  }
+
+  // Spelled out, not synthesized: a custom `init(from:)` suppresses synthesis,
+  // and every key here is one the gateway may omit.
+  private enum CodingKeys: String, CodingKey {
+    case name, description, shortDescription, displayName, defaultPrompt, scope, enabled
+  }
+
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    name = try c.decode(String.self, forKey: .name)
+    description = try c.decodeIfPresent(String.self, forKey: .description)
+    shortDescription = try c.decodeIfPresent(String.self, forKey: .shortDescription)
+    displayName = try c.decodeIfPresent(String.self, forKey: .displayName)
+    defaultPrompt = try c.decodeIfPresent(String.self, forKey: .defaultPrompt)
+    scope = try c.decodeIfPresent(String.self, forKey: .scope)
+    enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+  }
+}
+
+/// One file an engine wrote on the host, from a `file_produced` event. Fetch it
+/// at `GET /sessions/:id/produced/:fileId` — no host-file roots to declare and
+/// no byte cap, because the allowlist is "paths this session's runner reported
+/// producing" rather than "anywhere under a root".
+public struct ProducedFile: Sendable, Equatable, Identifiable {
+  public let fileId: String
+  /// Absolute host path, as the engine reported it.
+  public let path: String
+  public let mediaType: String?
+  public let bytes: Int?
+  public let toolUseId: String?
+
+  public var id: String { fileId }
+
+  public init(
+    fileId: String, path: String, mediaType: String? = nil, bytes: Int? = nil,
+    toolUseId: String? = nil
+  ) {
+    self.fileId = fileId
+    self.path = path
+    self.mediaType = mediaType
+    self.bytes = bytes
+    self.toolUseId = toolUseId
+  }
+}
+
 public struct SlashCommandInfo: Decodable, Sendable, Equatable, Identifiable {
   /// Command name without the leading slash.
   public let name: String
@@ -659,6 +743,12 @@ public enum SessionEventBody: Sendable, Equatable {
   case statusChanged(status: SessionStatus, detail: String?)
   case capabilities(
     models: [ModelOption], commands: [SlashCommandInfo], defaultModel: String?)
+  /// The skills this engine can reach, replaced whole each time. Only engines
+  /// whose record sets `skillsList` ever send it.
+  case skills([SkillInfo])
+  /// The engine wrote a host file and handed over its path — the
+  /// host-filesystem sibling of `fileDelivered`.
+  case fileProduced(ProducedFile)
   /// `model` nil = back to the server default.
   case modelChanged(model: String?)
   case permissionModeChanged(mode: PermissionMode)
@@ -713,6 +803,7 @@ extension SessionEvent: Decodable {
     case requestId, behavior, resolvedBy, message, request
     case executionId, toolName, backend, deferred, expiresAt, output, logs, durationMs
     case reason, error, path, bytes, description, payload
+    case skills, fileId, mediaType, toolUseId
   }
 
   public init(from decoder: Decoder) throws {
@@ -733,6 +824,16 @@ extension SessionEvent: Decodable {
           models: try container.decode([ModelOption].self, forKey: .models),
           commands: try container.decode([SlashCommandInfo].self, forKey: .commands),
           defaultModel: try container.decodeIfPresent(String.self, forKey: .defaultModel))
+      case "skills":
+        body = .skills(try container.decode([SkillInfo].self, forKey: .skills))
+      case "file_produced":
+        body = .fileProduced(
+          ProducedFile(
+            fileId: try container.decode(String.self, forKey: .fileId),
+            path: try container.decode(String.self, forKey: .path),
+            mediaType: try container.decodeIfPresent(String.self, forKey: .mediaType),
+            bytes: try container.decodeIfPresent(Int.self, forKey: .bytes),
+            toolUseId: try container.decodeIfPresent(String.self, forKey: .toolUseId)))
       case "model_changed":
         body = .modelChanged(model: try container.decodeIfPresent(String.self, forKey: .model))
       case "permission_mode_changed":

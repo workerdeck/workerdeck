@@ -350,6 +350,70 @@ describe('transcript reducer', () => {
     expect(after.model).toBe('claude-opus-4-8')
   })
 
+  it('replaces the skill list whole, and keeps it out of commands', () => {
+    seq = 0
+    const state = run(initialTranscriptState, [
+      {
+        type: 'capabilities',
+        models: [],
+        commands: [{ name: 'compact' }],
+      },
+      {
+        type: 'skills',
+        skills: [
+          { name: 'imagegen', description: 'Make a picture', enabled: true },
+          { name: 'pdf-fill', enabled: false },
+        ],
+      },
+    ])
+    expect(state.skills?.map((s) => s.name)).toEqual(['imagegen', 'pdf-fill'])
+    // The two channels stay separate: a skill is not something the CLI parses
+    // out of a message, and folding it into `commands` would say it is.
+    expect(state.commands?.map((c) => c.name)).toEqual(['compact'])
+
+    // Replaced, not merged — a skill deleted on disk has to disappear.
+    const after = applyEvent(
+      state,
+      ev({ type: 'skills', skills: [{ name: 'imagegen', enabled: true }] }),
+    )
+    expect(after.skills?.map((s) => s.name)).toEqual(['imagegen'])
+  })
+
+  it('indexes produced files by path, idempotently', () => {
+    seq = 0
+    const state = run(initialTranscriptState, [
+      {
+        type: 'file_produced',
+        fileId: 'abc123',
+        path: '/home/me/.codex/generated_images/flower.png',
+        mediaType: 'image/png',
+        bytes: 2048,
+        toolUseId: 'turn:g1',
+      },
+      // The same file announced again (progress item, then completed one).
+      {
+        type: 'file_produced',
+        fileId: 'abc123',
+        path: '/home/me/.codex/generated_images/flower.png',
+        mediaType: 'image/png',
+        bytes: 2048,
+      },
+      { type: 'file_produced', fileId: 'def456', path: '/home/me/out/chart.png' },
+    ])
+    // Keyed by path, because "here is the savedPath in my tool input — is there
+    // anything to fetch?" is the lookup a tool card does.
+    expect(Object.keys(state.producedFiles ?? {})).toEqual([
+      '/home/me/.codex/generated_images/flower.png',
+      '/home/me/out/chart.png',
+    ])
+    expect(state.producedFiles?.['/home/me/.codex/generated_images/flower.png']).toEqual({
+      fileId: 'abc123',
+      mediaType: 'image/png',
+      bytes: 2048,
+    })
+    expect(state.producedFiles?.['/home/me/out/chart.png']).toEqual({ fileId: 'def456' })
+  })
+
   it('seeds permissionMode from system_init and follows permission_mode_changed', () => {
     seq = 0
     const state = run(initialTranscriptState, [

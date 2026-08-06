@@ -1,7 +1,16 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react'
-import type { SlashCommandInfo } from '@workerdeck/protocol'
+import { useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
+import type { SkillInfo, SlashCommandInfo } from '@workerdeck/protocol'
 import type { StagedAttachment, UseAttachmentsResult } from '@workerdeck/react'
-import { ArrowUp, FileText, Paperclip, RotateCw, Square, TriangleAlert, X } from 'lucide-react'
+import {
+  ArrowUp,
+  FileText,
+  Paperclip,
+  RotateCw,
+  Sparkles,
+  Square,
+  TriangleAlert,
+  X,
+} from 'lucide-react'
 import { Button } from '../ui/Button.tsx'
 import { Spinner } from '../ui/Spinner.tsx'
 import { PromptArea } from '../prompt-area/prompt-area.tsx'
@@ -15,6 +24,14 @@ import { formatBytes } from '../../lib/format.ts'
  * the ui package doesn't have to reach for the protocol's `HostFileMatch`. */
 export type ComposerFileMatch = { path: string; relative: string }
 
+/** Imperative surface for panels that draft a message the user then finishes —
+ * the skills dialog's "Use this skill". Nothing here sends. */
+export type ComposerHandle = {
+  /** Append plain text at the caret's end and focus, separating it from
+   * whatever is already there. */
+  insertText: (text: string) => void
+}
+
 export interface ComposerProps {
   /** `attachmentIds` are the staged uploads, in the order they were picked. */
   onSend: (text: string, attachmentIds: string[]) => void
@@ -25,6 +42,15 @@ export interface ComposerProps {
   placeholder?: string
   /** Slash commands offered as autocomplete; picked ones render as chips. */
   commands?: SlashCommandInfo[]
+  /**
+   * Skills offered under the same `/` popover — as a **typing aid**, not as
+   * commands. Picking one inserts editable prose (the skill's own
+   * `defaultPrompt` where it has one) and nothing is sent; there is no
+   * `/skillname` any engine would parse, which is exactly why these can never
+   * resolve to a chip like `commands` do. Rows are marked so the two kinds are
+   * not mistaken for each other.
+   */
+  skills?: SkillInfo[]
   /** Host-file search behind the `@` trigger. Omit to leave `@` inert — a
    * gateway without host files has nothing to complete. */
   onSearchFiles?: (query: string, options: { signal: AbortSignal }) => Promise<ComposerFileMatch[]>
@@ -33,19 +59,59 @@ export interface ComposerProps {
   /** Left side of the toolbar row (mode selects, …). */
   toolbar?: ReactNode
   className?: string
+  ref?: Ref<ComposerHandle>
 }
 
 /** CLI names may carry display annotations (e.g. "foo (MCP)") the parser rejects. */
 const cleanName = (name: string) => name.replace(/\s*\(MCP\)$/i, '')
 
+/** Suggestion values are the popover's React keys, so the two sources must not
+ * collide — a repo can perfectly well have a `wrapup` command and a `wrapup`
+ * skill. It also doubles as the discriminator `insertAsText` switches on. */
+const SKILL_VALUE_PREFIX = 'skill:'
+
+/**
+ * What a picked skill types into the composer.
+ *
+ * The engine's own `defaultPrompt` when it declared one — it knows what its
+ * skill wants to be asked — and otherwise a neutral opener naming the skill,
+ * which is all the model needs to go and read it. Either way it ends in a space
+ * so the caret lands ready for the rest of the sentence, and either way it is
+ * ordinary text: nothing here is submitted, and nothing is parsed back out.
+ *
+ * The fallback names the skill by its *last* segment: real skill names are
+ * namespaced (`documents:documents`, `browser:control-in-app-browser`), and
+ * "Use the documents:documents skill" reads like a typo.
+ */
+export function skillPrompt(skill: SkillInfo): string {
+  const bare = skill.name.slice(skill.name.lastIndexOf(':') + 1)
+  const base = skill.defaultPrompt?.trim() || `Use the ${bare} skill to`
+  return /\s$/.test(base) ? base : base + ' '
+}
+
+/** Ranks a haystack set against the typed query: 2 for a prefix hit, 1 for a
+ * substring, 0 for no match. Shared so commands and skills sort as one list
+ * rather than two concatenated ones. */
+function matchScore(query: string, haystacks: string[]): number {
+  const needle = query.toLowerCase()
+  const lowered = haystacks.map((s) => s.toLowerCase())
+  if (lowered.some((h) => h.startsWith(needle))) return 2
+  return lowered.some((h) => h.includes(needle)) ? 1 : 0
+}
+
 /**
  * Framed prompt input built on prompt-area's contentEditable.
  *
- * Two completions ride the same field and behave nothing alike: `/` is the CLI's
- * command list, which arrives with `capabilities` and so filters locally and
- * completely; `@` is a search against the host filesystem, debounced and
- * abortable so a fast typist makes one request rather than eight. Both resolve
- * into inline chips.
+ * Two completions ride the same field and behave nothing alike: `/` is a local
+ * list (the CLI's commands, plus any skills the engine reports), so it filters
+ * locally and completely; `@` is a search against the host filesystem, debounced
+ * and abortable so a fast typist makes one request rather than eight.
+ *
+ * The `/` list is itself two kinds of thing, and the difference is not cosmetic:
+ * a command resolves to a chip because the CLI really does parse `/name` out of
+ * the message, while a skill types plain prose because no engine parses
+ * `/skillname` at all. Rendering them alike would promise something that does
+ * not happen.
  *
  * Files can arrive three ways — the paperclip, a drop, or a paste — because on a
  * desktop all three are things people already do, and the upload starts the
@@ -58,21 +124,38 @@ export function Composer({
   disabled,
   placeholder = 'Message the agent…',
   commands,
+  skills,
   onSearchFiles,
   attachments,
   toolbar,
   className,
+  ref,
 }: ComposerProps) {
   const { bind, plainText, isEmpty, clear, focus } = usePromptAreaState()
   const fileInput = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertText: (text: string) => {
+        // A space in front only when there is something to separate from, so a
+        // draft into an empty composer doesn't start with one.
+        const prefix = plainText.length > 0 && !/\s$/.test(plainText) ? ' ' : ''
+        bind.ref.current?.appendText(prefix + text)
+        focus()
+      },
+    }),
+    [bind.ref, plainText, focus],
+  )
+
   const triggers = useMemo(() => {
     const configured = []
-    if (commands && commands.length > 0) {
+    const usableSkills = (skills ?? []).filter((s) => s.enabled)
+    if ((commands && commands.length > 0) || usableSkills.length > 0) {
       // The CLI list can contain the same skill name from several sources — first wins.
       const seen = new Set<string>()
-      const unique = commands.flatMap((c) => {
+      const unique = (commands ?? []).flatMap((c) => {
         const name = cleanName(c.name)
         if (seen.has(name)) return []
         seen.add(name)
@@ -81,26 +164,54 @@ export function Composer({
       configured.push(
         commandTrigger({
           onSearch: (query: string): TriggerSuggestion[] => {
-            const needle = query.toLowerCase()
-            const scored = unique.flatMap((c) => {
+            const scored: Array<{ score: number; suggestion: TriggerSuggestion }> = []
+            for (const c of unique) {
               // "wrapup" should find "dev:wrapup" — the bare half of a
               // namespaced name is what people type.
-              const haystacks = [c.name, ...(c.aliases ?? []), ...c.name.split(':')].map((s) =>
-                s.toLowerCase(),
-              )
-              const score = haystacks.some((h) => h.startsWith(needle))
-                ? 2
-                : haystacks.some((h) => h.includes(needle))
-                  ? 1
-                  : 0
-              return score === 0 ? [] : [{ c, score }]
-            })
+              const score = matchScore(query, [c.name, ...(c.aliases ?? []), ...c.name.split(':')])
+              if (score === 0) continue
+              scored.push({
+                score,
+                suggestion: {
+                  value: c.name,
+                  label: `/${c.name}${c.argumentHint ? ` ${c.argumentHint}` : ''}`,
+                  description: c.description,
+                },
+              })
+            }
+            // Skills rank alongside commands but read differently on purpose:
+            // no leading slash (there is no such command), an icon, and a
+            // description that says what selecting one will actually do.
+            for (const skill of usableSkills) {
+              const score = matchScore(query, [skill.name, ...skill.name.split(/[-:_]/)])
+              if (score === 0) continue
+              const summary = skill.shortDescription ?? skill.description
+              scored.push({
+                // Commands win ties: they do what their name says, while a skill
+                // only ever drafts a message.
+                score: score - 0.5,
+                suggestion: {
+                  value: `${SKILL_VALUE_PREFIX}${skill.name}`,
+                  label: skill.displayName ?? skill.name,
+                  description: summary
+                    ? `Skill · ${summary}`
+                    : 'Skill · inserts a message you can edit',
+                  icon: <Sparkles className='size-3.5 text-fg-3' />,
+                },
+              })
+            }
             scored.sort((a, b) => b.score - a.score)
-            return scored.map(({ c }) => ({
-              value: c.name,
-              label: `/${c.name}${c.argumentHint ? ` ${c.argumentHint}` : ''}`,
-              description: c.description,
-            }))
+            return scored.map(({ suggestion }) => suggestion)
+          },
+          // A skill is not a command: picking one types prose into the field for
+          // the user to finish, rather than resolving to a chip that would claim
+          // the engine parses `/name` back out. Commands fall through to the
+          // chip path by returning undefined.
+          insertAsText: (suggestion) => {
+            if (!suggestion.value.startsWith(SKILL_VALUE_PREFIX)) return undefined
+            const name = suggestion.value.slice(SKILL_VALUE_PREFIX.length)
+            const skill = usableSkills.find((s) => s.name === name)
+            return skill ? skillPrompt(skill) : undefined
           },
           // Chip text renders as trigger + displayText — return the bare name so
           // the chip reads "/name" (label carries the argument hint for the menu).
@@ -131,7 +242,7 @@ export function Composer({
       )
     }
     return configured.length > 0 ? configured : undefined
-  }, [commands, onSearchFiles])
+  }, [commands, skills, onSearchFiles])
 
   const staged = attachments?.items ?? []
   // A photo on its own is a message — send doesn't wait for text. It does wait

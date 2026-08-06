@@ -167,6 +167,12 @@ boundary: anything a client needs must be expressible as protocol events and com
   session's servers and their tools straight from the engine and performs the CLI's own three
   actions on one (reconnect, enable, disable); `mcpStatusInfo` in `core` strips each server's
   `env` and `headers` on the way out, so reading it is never a way to read the operator's tokens.
+  **Produced files** (`GET /sessions/:id/produced[/:fileId]`) serve host files the *engine* wrote
+  — codex's generated images, which arrive as a path and never as bytes. It is the host-filesystem
+  sibling of `/files`, and the only route with neither a root allowlist nor a byte cap: its
+  allowlist is built solely from `file_produced` events, so it is the exact set of paths this
+  session's own runner announced producing rather than a guess about a directory. A path the
+  *agent* merely read is not a produced file and stays behind `/fs/*` — see `docs/GOTCHAS.md`.
 - **`packages/client`** — typed protocol client on platform `fetch`/`WebSocket`: REST session
   and job management, WS attach with auto-reconnect and replay-from-last-seq, `attachQueue()`
   for the live queue stream. Zero runtime deps; browser and Node.

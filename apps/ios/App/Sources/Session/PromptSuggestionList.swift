@@ -88,6 +88,26 @@ private struct SuggestionRow: View {
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
+    case .skill(let skill):
+      // Deliberately unlike the command row above: no slash, a different glyph,
+      // and a subtitle that says what picking it does. A skill row that looked
+      // like a command row would promise a `/skillname` no engine parses.
+      HStack(spacing: 9) {
+        Image(systemName: "sparkles")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 1) {
+          Text(skill.displayName ?? skill.name)
+            .font(.callout)
+            .lineLimit(1)
+          Text(skill.shortDescription ?? skill.description ?? "Inserts a message you can edit")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+        }
+        Spacer(minLength: 0)
+      }
     }
   }
 }

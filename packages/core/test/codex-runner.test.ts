@@ -287,8 +287,16 @@ describe('CodexRunner', () => {
     const events = collect(runner)
     await runner.start()
 
-    // The JSON-RPC choreography: initialize → (initialized) → thread/start → turn/start.
-    expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'thread/start', 'turn/start'])
+    // The JSON-RPC choreography: initialize → (initialized) → thread/start →
+    // skills/list → turn/start. skills/list rides the same thread-load seam
+    // (it needs a live child and nothing else), and being fire-and-forget it
+    // must not delay the turn — which is why it lands before it, not instead.
+    expect(peer.requests.map((r) => r.method)).toEqual([
+      'initialize',
+      'thread/start',
+      'skills/list',
+      'turn/start',
+    ])
     expect(peer.notifies).toEqual(['initialized'])
     // experimentalApi is unconditional — granular approval policies are
     // rejected without it, and there is no non-experimental fallback.
@@ -299,7 +307,7 @@ describe('CodexRunner', () => {
       sandbox: 'workspace-write',
       model: 'gpt-5.6-sol',
     })
-    expect(peer.requests[2]!.params).toMatchObject({
+    expect(peer.requests[3]!.params).toMatchObject({
       threadId: 'thread-1',
       input: [{ type: 'text', text: 'go' }],
       cwd: '/tmp/project',
@@ -460,6 +468,118 @@ describe('CodexRunner', () => {
     expect(ofType(events, 'sdk_event').map((e) => e.payload.type)).not.toContain(
       'codex.imageGeneration',
     )
+
+    // …and the path is announced as a produced file, which is what makes the
+    // bytes fetchable without the operator declaring `$CODEX_HOME` as a
+    // host-file root. ONE announcement despite the path being reported on both
+    // the progress and completed item: the id derives from the path.
+    const produced = ofType(events, 'file_produced')
+    expect(produced.map((e) => e.path)).toEqual([
+      '/Users/me/.codex/generated_images/flower.png',
+    ])
+    expect(produced[0]).toMatchObject({
+      mediaType: 'image/png',
+      toolUseId: expect.stringMatching(/:g1$/),
+    })
+    // Stable, and derived: the same path in a rebuilt session gets the same id,
+    // so a client's cached URL survives a park/restore.
+    expect(produced[0]!.fileId).toMatch(/^[0-9a-f]{32}$/)
+    // A generation with no savedPath announces nothing — there is no file.
+    expect(produced.length).toBe(1)
+  })
+
+  it('lists skills over skills/list, and re-lists when the watcher says they changed', async () => {
+    const peer = scriptedPeer()
+    let listCalls = 0
+    peer.respond('skills/list', () => {
+      listCalls += 1
+      return {
+        data: [
+          {
+            cwd: '/tmp',
+            skills: [
+              {
+                name: 'imagegen',
+                description: 'Generate images from a prompt',
+                scope: 'user',
+                enabled: true,
+                interface: {
+                  displayName: 'Image generation',
+                  shortDescription: 'Make a picture',
+                  defaultPrompt: 'Generate an image of',
+                },
+              },
+              // Second page, same skill: codex can report one skill under
+              // several cwds and the first wins.
+              { name: 'imagegen', description: 'duplicate', scope: 'repo' },
+              ...(listCalls > 1
+                ? [{ name: 'pdf-fill', description: 'Fill PDF forms', enabled: false }]
+                : []),
+            ],
+            errors: [],
+          },
+        ],
+      }
+    })
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+
+    const first = ofType(events, 'skills')
+    expect(first).toHaveLength(1)
+    expect(first[0]!.skills).toEqual([
+      {
+        name: 'imagegen',
+        description: 'Generate images from a prompt',
+        shortDescription: 'Make a picture',
+        displayName: 'Image generation',
+        // Codex's own suggested opener — the field that makes a picker possible
+        // without pretending `/imagegen` is a command.
+        defaultPrompt: 'Generate an image of',
+        scope: 'user',
+        enabled: true,
+      },
+    ])
+
+    // The watcher fires; the list is re-read and the new skill published.
+    peer.emit('skills/changed', {})
+    await vi.waitFor(() => expect(ofType(events, 'skills')).toHaveLength(2))
+    const second = ofType(events, 'skills')[1]!
+    expect(second.skills.map((s) => s.name)).toEqual(['imagegen', 'pdf-fill'])
+    // Listed, not hidden: "installed but off" is a different answer from
+    // "not installed".
+    expect(second.skills[1]).toMatchObject({ name: 'pdf-fill', enabled: false })
+
+    // An unchanged list does not re-publish — the watcher fires per touched
+    // file and an event per keystroke would fill the log with identical rows.
+    peer.emit('skills/changed', {})
+    peer.emit('skills/changed', {})
+    await vi.waitFor(() => expect(listCalls).toBeGreaterThanOrEqual(3))
+    expect(ofType(events, 'skills')).toHaveLength(2)
+  })
+
+  it('says nothing about skills when the binary rejects skills/list', async () => {
+    const peer = scriptedPeer()
+    peer.respond('skills/list', () => {
+      throw new Error('method not found')
+    })
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+
+    // A binary too old to list skills is a session with no skills panel — not
+    // a session error, and not a failed turn.
+    expect(ofType(events, 'skills')).toHaveLength(0)
+    expect(events.some((e) => e.type === 'session_error')).toBe(false)
+    expect(runner.status).toBe('idle')
   })
 
   it('interrupts via turn/interrupt and lands as an interrupted turn result', async () => {
@@ -1391,7 +1511,11 @@ describe('CodexRunner resume backfill', () => {
     expect(toolResult[0]!.tool_use_id).toBe(toolUse[0]!.id)
 
     // History was one page and complete: no thread/read, no turn ran, no notice.
-    expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'thread/resume'])
+    expect(peer.requests.map((r) => r.method)).toEqual([
+      'initialize',
+      'thread/resume',
+      'skills/list',
+    ])
     expect(events.some((e) => e.type === 'session_error')).toBe(false)
     expect(events.some((e) => e.type === 'turn_result')).toBe(false)
     expect(runner.status).toBe('idle')
@@ -1457,8 +1581,13 @@ describe('CodexRunner resume backfill', () => {
     const events = collect(runner)
     await runner.start()
 
-    expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'thread/resume', 'thread/read'])
-    expect(peer.requests[2]).toMatchObject({
+    expect(peer.requests.map((r) => r.method)).toEqual([
+      'initialize',
+      'thread/resume',
+      'skills/list',
+      'thread/read',
+    ])
+    expect(peer.requests[3]).toMatchObject({
       params: { threadId: 'thread-1', includeTurns: true },
     })
     const users = ofType(events, 'user_message').filter((e) => !e.synthetic)

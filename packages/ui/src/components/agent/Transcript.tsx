@@ -186,6 +186,7 @@ export function Transcript({
           <SessionEmptyState
             cwd={state.cwd}
             hasCommands={!!state.commands?.length}
+            hasSkills={!!state.skills?.some((s) => s.enabled)}
             canBrowseFiles={canBrowseFiles}
           />
         ) : (

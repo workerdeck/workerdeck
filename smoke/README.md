@@ -125,7 +125,11 @@ the spawn, the `initialize` handshake, and `thread/start`. The pinned facts (202
 0.146.0): `OPENAI_API_KEY` is ignored ("Missing bearer" — no credential sent), `CODEX_API_KEY`
 is **exec-only and equally ignored by the app-server** (the day either flips to
 `invalid_api_key`, the availability probe's rules are stale — see GOTCHAS §Codex), and
-`codex login status` still exit-codes its verdict.
+`codex login status` still exit-codes its verdict. They also pin the two approval gates
+(`capabilities.experimentalApi` at initialize, the granular `approvalPolicy` at `thread/start`)
+and the shape of `skills/list` — free because it is a local directory scan, and worth pinning
+because `engines/codex/types.ts` mirrors it by hand. The skills check asserts *structure* only,
+never which skills this machine happens to have.
 
 The paid part needs the one supported auth route — `codex login` (or
 `codex login --with-api-key`) **run in your own terminal** — and covers: token deltas actually

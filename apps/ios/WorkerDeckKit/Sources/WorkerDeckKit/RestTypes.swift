@@ -34,6 +34,10 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
   public let mcpStatus: Bool
   public let sessionMcpServers: Bool
   public let slashCommands: Bool
+  /// `skills` events can occur. False: hide the skills panel entirely rather
+  /// than showing an empty one. Orthogonal to `slashCommands` — codex has
+  /// skills and no commands; claude has commands and no listable skills.
+  public let skillsList: Bool
   public let settingSources: Bool
   public let budgets: Bool
   /// 'image' | 'pdf' | 'text' — open strings; filter the attach menu by the ones
@@ -49,7 +53,8 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     interactiveApprovals: Bool, permissionModes: [PermissionMode],
     defaultPermissionMode: PermissionMode, resume: Bool, resumeBackfill: Bool,
     listSessions: Bool, contextUsage: Bool, rateLimits: Bool, mcpStatus: Bool,
-    sessionMcpServers: Bool, slashCommands: Bool, settingSources: Bool, budgets: Bool,
+    sessionMcpServers: Bool, slashCommands: Bool, skillsList: Bool = false,
+    settingSources: Bool, budgets: Bool,
     attachments: [String], reasoningEfforts: [String]? = nil, vfs: Bool, streaming: String
   ) {
     self.interactiveApprovals = interactiveApprovals
@@ -63,6 +68,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     self.mcpStatus = mcpStatus
     self.sessionMcpServers = sessionMcpServers
     self.slashCommands = slashCommands
+    self.skillsList = skillsList
     self.settingSources = settingSources
     self.budgets = budgets
     self.attachments = attachments
@@ -89,6 +95,10 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     mcpStatus = try c.decode(Bool.self, forKey: .mcpStatus)
     sessionMcpServers = try c.decode(Bool.self, forKey: .sessionMcpServers)
     slashCommands = try c.decode(Bool.self, forKey: .slashCommands)
+    // decodeIfPresent, unlike its siblings: a protocol-6 gateway's record has
+    // no such key, and "the server is older" must read as "no skills panel",
+    // not as a failed decode of the whole session.
+    skillsList = try c.decodeIfPresent(Bool.self, forKey: .skillsList) ?? false
     settingSources = try c.decode(Bool.self, forKey: .settingSources)
     budgets = try c.decode(Bool.self, forKey: .budgets)
     attachments = try c.decode([String].self, forKey: .attachments)
@@ -108,7 +118,7 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     defaultPermissionMode: .default,
     resume: true, resumeBackfill: true, listSessions: true,
     contextUsage: true, rateLimits: true, mcpStatus: true, sessionMcpServers: true,
-    slashCommands: true, settingSources: true, budgets: true,
+    slashCommands: true, skillsList: false, settingSources: true, budgets: true,
     attachments: ["image", "pdf", "text"],
     reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
     vfs: false, streaming: "token"
@@ -128,7 +138,9 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     // contextUsage arrives with an empty `categories` — occupancy only, no
     // breakdown. ContextSheet hides its Breakdown section for that case.
     contextUsage: true, rateLimits: true, mcpStatus: false, sessionMcpServers: false,
-    slashCommands: false, settingSources: false, budgets: false,
+    // No command-listing RPC exists on the app-server surface at all; but
+    // `skills/list` does, and `skills/changed` says when to re-read it.
+    slashCommands: false, skillsList: true, settingSources: false, budgets: false,
     attachments: ["image", "text"],
     reasoningEfforts: ["minimal", "low", "medium", "high", "xhigh"],
     vfs: false, streaming: "token"
@@ -139,7 +151,7 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     defaultPermissionMode: .default,
     resume: false, resumeBackfill: false, listSessions: false,
     contextUsage: false, rateLimits: false, mcpStatus: false, sessionMcpServers: false,
-    slashCommands: false, settingSources: false, budgets: false,
+    slashCommands: false, skillsList: false, settingSources: false, budgets: false,
     attachments: ["image", "pdf", "text"], vfs: true, streaming: "token"
   ),
 ]

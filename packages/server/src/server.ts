@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto'
 import {
+  createReadStream,
   existsSync,
   lstatSync,
   readdirSync,
   readFileSync,
   realpathSync,
+  statSync,
   type Dirent,
 } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
@@ -55,6 +57,7 @@ import {
   writeContained,
 } from './host-files.ts'
 import { AttachmentStore } from './attachments.ts'
+import { ProducedFileStore } from './produced-files.ts'
 import { SessionRegistry } from './registry.ts'
 import { SessionNotifier, type SessionNotificationOptions } from './notifications.ts'
 import { BridgeHub, type BridgeHubOptions } from './bridge.ts'
@@ -951,9 +954,13 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
    * learned — and still absent on a cold server, the accepted regression.
    */
   const profileDefaultModels = new Map<string, string>()
+  const producedFiles = new ProducedFileStore()
   const registry = new SessionRegistry({
     onRegister: (runner) => {
       notifier.watch(runner)
+      // Same hook, opposite replay choice: from 0, because a rebuilt session's
+      // earlier pictures must stay fetchable (see ProducedFileStore.watch).
+      producedFiles.watch(runner)
       const profile = runner.info().profile
       if (!profile) return
       runner.subscribe((event) => {
@@ -1179,7 +1186,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   }
 
   // Route pattern: {basePath}/sessions[/:id[/ws | /permissions/:requestId |
-  //   /files[/<path>] | /attachments[/:attachmentId] | /mcp[/:serverName]]]
+  //   /files[/<path>] | /attachments[/:attachmentId] | /mcp[/:serverName] |
+  //   /produced[/:fileId]]]
   const parseRoute = (
     url: string,
   ): {
@@ -1192,6 +1200,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     attachmentId?: string
     mcp?: boolean
     mcpServer?: string
+    produced?: boolean
+    producedFileId?: string
   } | null => {
     const pathname = new URL(url, 'http://internal').pathname
     if (!pathname.startsWith(basePath + '/sessions')) return null
@@ -1210,6 +1220,13 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         id: decodeURIComponent(parts[0]!),
         attachments: true,
         attachmentId: parts[2] === undefined ? undefined : decodeURIComponent(parts[2]),
+      }
+    }
+    if (parts.length <= 3 && parts[1] === 'produced') {
+      return {
+        id: decodeURIComponent(parts[0]!),
+        produced: true,
+        producedFileId: parts[2] === undefined ? undefined : decodeURIComponent(parts[2]),
       }
     }
     if (parts.length <= 3 && parts[1] === 'mcp') {
@@ -1376,6 +1393,87 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       return
     }
     json(res, 405, { error: 'method not allowed' })
+  }
+
+  /**
+   * `{basePath}/sessions/:id/produced[/:fileId]` — files this session's ENGINE
+   * wrote on the host (codex's generated images), listed and served.
+   *
+   * The one route here with no root allowlist and no byte cap, and the comment
+   * on {@link ProducedFileStore} is the argument for why that is right rather
+   * than lax: the allowlist is the exact set of paths this session's own runner
+   * announced producing. It is emphatically NOT a hole in `/fs/*` — a path the
+   * *agent* named is not a produced file and never enters this store.
+   *
+   * Everything else matches the attachment download: `nosniff` and an attachment
+   * disposition, because these bytes are model-authored and must not render as a
+   * document on the gateway's origin. (`<img src>` is unaffected — disposition
+   * does not apply to subresources, which is the whole point.)
+   */
+  const handleProducedFiles = async (
+    req: IncomingMessage,
+    res: ServerResponse,
+    sessionId: string,
+    fileId?: string,
+  ): Promise<void> => {
+    if (req.method !== 'GET') {
+      json(res, 405, { error: 'method not allowed' })
+      return
+    }
+    if (fileId === undefined) {
+      json(res, 200, {
+        files: producedFiles.list(sessionId).map(({ fileId: id, path, mediaType, bytes }) => ({
+          fileId: id,
+          path,
+          ...(mediaType ? { mediaType } : {}),
+          ...(bytes !== undefined ? { bytes } : {}),
+        })),
+      })
+      return
+    }
+    const found = producedFiles.get(sessionId, fileId)
+    if (!found) {
+      json(res, 404, { error: 'no such produced file' })
+      return
+    }
+    // Re-checked at serve time, not trusted from the announcement: the engine
+    // reported this path when it wrote the file, and the file may since have
+    // been moved, replaced, or turned into a directory. `statSync` follows
+    // symlinks deliberately — a link the engine itself created is part of what
+    // it produced, and there is no containment root here for a realpath check
+    // to compare against.
+    let stat
+    try {
+      stat = statSync(found.path)
+    } catch {
+      json(res, 404, { error: 'produced file is no longer on disk' })
+      return
+    }
+    if (!stat.isFile()) {
+      json(res, 404, { error: 'produced file is not a regular file' })
+      return
+    }
+    const filename = basename(found.path) || 'file'
+    res.writeHead(200, {
+      'content-type': found.mediaType ?? contentTypeFor(filename),
+      'content-length': stat.size,
+      'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      'x-content-type-options': 'nosniff',
+    })
+    // Streamed rather than read whole: a generated PNG is a couple of megabytes
+    // and there is no cap on this route, so buffering would put the file size
+    // straight into the gateway's heap.
+    await new Promise<void>((done) => {
+      const stream = createReadStream(found.path)
+      stream.on('error', () => {
+        // Headers are already out; the only honest signal left is a truncated
+        // response, which is what destroying the socket produces.
+        res.destroy()
+        done()
+      })
+      stream.on('close', () => done())
+      stream.pipe(res)
+    })
   }
 
   /**
@@ -2138,6 +2236,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       res.end(content)
       return
     }
+    if (route.produced) {
+      await handleProducedFiles(req, res, route.id, route.producedFileId)
+      return
+    }
     if (route.permissionId) {
       // REST counterpart of the WS permission_decision command, for controllers
       // without a socket (e.g. answering a job's AskUserQuestion from a webhook).
@@ -2174,6 +2276,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       await parking.discard(route.id)
       // The session is gone; so is anything it was holding for it.
       attachmentStore.drop(route.id)
+      producedFiles.drop(route.id)
       json(res, 200, {
         session: runner?.info() ?? { ...parked!.info, status: 'closed' as const },
       })

@@ -25,4 +25,4 @@ export {
   rateLimitWindows,
   seedFromSessionInfo,
 } from './transcript.ts'
-export type { TranscriptItem, TranscriptState } from './transcript.ts'
+export type { ProducedFileRef, TranscriptItem, TranscriptState } from './transcript.ts'

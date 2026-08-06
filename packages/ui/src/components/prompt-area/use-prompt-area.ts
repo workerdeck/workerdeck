@@ -17,6 +17,7 @@ import {
   plainTextToSegments,
   segmentsEqual,
   resolveChip,
+  resolveText,
   removeChipAtIndex,
   revertChipAtIndex,
   replaceTextRange,
@@ -929,6 +930,25 @@ export function usePromptArea({
       if (!activeTrigger) return
 
       const segments = readSegmentsFromDOM()
+
+      // Text-resolved suggestions leave before any chip machinery runs: there
+      // is no chip, so there is nothing for the chip-click editing path or the
+      // onChipAdd callback below to be about.
+      const asText = activeTrigger.config.insertAsText?.(suggestion)
+      if (asText !== undefined) {
+        const inserted = resolveText(segments, activeTrigger, asText)
+        events.pushUndo(segments)
+        onChange(inserted.segments)
+        renderSegmentsToDOM(inserted.segments)
+        const editor = editorRef.current
+        if (editor) setCursorAtOffset(editor, inserted.cursorOffset)
+        dismissTrigger()
+        setTimeout(() => {
+          editorRef.current?.focus()
+        }, 0)
+        return
+      }
+
       const displayText = activeTrigger.config.onSelect?.(suggestion) ?? suggestion.label
 
       const chipData = {

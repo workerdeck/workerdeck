@@ -87,7 +87,9 @@ export {
 } from './components/agent/QuestionPrompt.tsx'
 export {
   Composer,
+  skillPrompt,
   type ComposerFileMatch,
+  type ComposerHandle,
   type ComposerProps,
 } from './components/agent/Composer.tsx'
 export { ModelSelect, type ModelSelectProps } from './components/agent/ModelSelect.tsx'
@@ -106,6 +108,7 @@ export {
   type SessionInfoDialogProps,
 } from './components/agent/SessionInfoDialog.tsx'
 export { McpDialog, type McpDialogProps } from './components/agent/McpDialog.tsx'
+export { SkillsDialog, type SkillsDialogProps } from './components/agent/SkillsDialog.tsx'
 export { HostFilesDialog, type HostFilesDialogProps } from './components/agent/HostFilesDialog.tsx'
 export {
   SessionList,

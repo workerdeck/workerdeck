@@ -288,6 +288,59 @@ export function resolveChip(
   return { segments: merged, cursorOffset }
 }
 
+/**
+ * Replaces the active trigger's range with **plain text** instead of a chip.
+ *
+ * The sibling of {@link resolveChip}, for suggestions that are a typing aid
+ * rather than a token: what lands in the document is ordinary editable text the
+ * user is expected to finish and change, and it must not look or behave like a
+ * resolved chip — no immutability, no trigger character, nothing for a consumer
+ * to parse back out. The caret is left at the end of the inserted text so typing
+ * continues from there.
+ */
+export function resolveText(
+  segments: Segment[],
+  activeTrigger: ActiveTrigger,
+  text: string,
+): { segments: Segment[]; cursorOffset: number } {
+  const triggerStart = activeTrigger.startOffset
+  const triggerEnd = triggerStart + 1 + activeTrigger.query.length // +1 for trigger char
+
+  const newSegments: Segment[] = []
+  let offset = 0
+  let cursorOffset = triggerStart + text.length
+
+  for (const seg of segments) {
+    if (seg.type === 'chip') {
+      const chipEnd = offset + `${seg.trigger}${seg.displayText}`.length
+      // A trigger range can never overlap a chip — chips are atomic — so a chip
+      // is either wholly before or wholly after, and is kept either way.
+      if (chipEnd <= triggerStart || offset >= triggerEnd) newSegments.push(seg)
+      offset = chipEnd
+      continue
+    }
+    const textStart = offset
+    const textEnd = offset + seg.text.length
+    if (textEnd <= triggerStart || textStart >= triggerEnd) {
+      newSegments.push(seg)
+    } else {
+      const before = seg.text.slice(0, Math.max(0, triggerStart - textStart))
+      const after = seg.text.slice(Math.min(seg.text.length, triggerEnd - textStart))
+      if (before) newSegments.push({ type: 'text', text: before })
+      newSegments.push({ type: 'text', text })
+      if (after) newSegments.push({ type: 'text', text: after })
+    }
+    offset = textEnd
+  }
+
+  const merged = mergeAdjacentTextSegments(newSegments)
+  // Clamp: a trigger detected against a stale document could otherwise leave the
+  // caret past the end, which renders as no caret at all.
+  const total = segmentsToPlainText(merged).length
+  if (cursorOffset > total) cursorOffset = total
+  return { segments: merged, cursorOffset }
+}
+
 // ---------------------------------------------------------------------------
 // Chip removal
 // ---------------------------------------------------------------------------

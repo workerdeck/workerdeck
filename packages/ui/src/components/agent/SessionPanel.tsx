@@ -7,6 +7,7 @@ import {
   useClaudeSession,
   useHostFileSearch,
   useToolCallHost,
+  type ProducedFileRef,
 } from '@workerdeck/react'
 import {
   ChartPie,
@@ -15,16 +16,18 @@ import {
   Info,
   MoreHorizontal,
   Plug,
+  Sparkles,
   TriangleAlert,
   X,
 } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
 import { Button } from '../ui/Button.tsx'
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../ui/Menu.tsx'
-import { Composer } from './Composer.tsx'
+import { Composer, skillPrompt, type ComposerHandle } from './Composer.tsx'
 import { ContextDialog } from './ContextDialog.tsx'
 import { HostFilesDialog } from './HostFilesDialog.tsx'
 import { McpDialog } from './McpDialog.tsx'
+import { SkillsDialog } from './SkillsDialog.tsx'
 import { ModelSelect } from './ModelSelect.tsx'
 import { PermissionModeSelect } from './PermissionModeSelect.tsx'
 import { PermissionPrompt } from './PermissionPrompt.tsx'
@@ -44,7 +47,7 @@ export interface SessionPanelProps {
 
 /** The panels the session surface can raise. One at a time, by identity: a bag
  * of booleans would let two open at once. */
-type Panel = 'info' | 'context' | 'usage' | 'mcp' | 'files'
+type Panel = 'info' | 'context' | 'usage' | 'mcp' | 'files' | 'skills'
 
 /**
  * The all-in-one embeddable session surface: status bar, streaming transcript,
@@ -110,7 +113,8 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
   // Reads a picture the engine left on the host (codex's `image_gen` reports a
   // path, never bytes). Stable and memoized per path: transcript rows re-render
   // on every delta, and a fresh function would re-fetch each time.
-  const hostImage = useHostImage(client)
+  const hostImage = useHostImage(client, sessionId, state.producedFiles)
+  const composerRef = useRef<ComposerHandle>(null)
 
   // "/model" is handled panel-side (see handleSend) — surface it in the autocomplete
   // even though the CLI's command list doesn't include it.
@@ -187,6 +191,15 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
                   <Plug className='size-3.5 text-fg-3' /> MCP servers
                 </MenuItem>
               ) : null}
+              {/* On having the list, not merely on the capability: codex can
+                  answer `skills/list` but only over a live child, so before the
+                  first turn the honest state is "no entry" rather than an entry
+                  onto an empty screen. */}
+              {capabilities.skillsList && state.skills?.length ? (
+                <MenuItem onClick={() => setPanel('skills')}>
+                  <Sparkles className='size-3.5 text-fg-3' /> Skills
+                </MenuItem>
+              ) : null}
               {hostFiles.available ? (
                 <MenuItem onClick={() => setPanel('files')}>
                   <FolderTree className='size-3.5 text-fg-3' /> Project files
@@ -242,11 +255,13 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
         </div>
       ) : null}
       <Composer
+        ref={composerRef}
         onSend={handleSend}
         onInterrupt={interrupt}
         busy={busy}
         disabled={ended || !sessionId}
         commands={capabilities.slashCommands ? commands : undefined}
+        skills={capabilities.skillsList ? state.skills : undefined}
         attachments={attachments}
         onSearchFiles={
           hostFiles.available
@@ -308,6 +323,14 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
         open={panel === 'mcp'}
         onOpenChange={(next) => setPanel(next ? 'mcp' : undefined)}
       />
+      <SkillsDialog
+        skills={state.skills}
+        open={panel === 'skills'}
+        onOpenChange={(next) => setPanel(next ? 'skills' : undefined)}
+        // Drafts into the composer; the operator sends it. There is no engine
+        // call that runs a skill, so there is nothing else this button could do.
+        onUse={(skill) => composerRef.current?.insertText(skillPrompt(skill))}
+      />
       <HostFilesDialog
         client={client}
         cwd={state.cwd}
@@ -319,36 +342,79 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
 }
 
 /**
- * Reads a host file as a data URL, once per path.
+ * Turns a host path a tool card is holding into something an `<img>` can show.
+ *
+ * Two sources, tried in that order and for a reason:
+ *
+ * 1. **The session's produced files.** If this session's own runner announced
+ *    writing that path (`file_produced`), the gateway will serve it from
+ *    `/sessions/:id/produced/:fileId` — no host-file roots to declare, no byte
+ *    cap to raise. This is the path codex's generated images take, and it is
+ *    why they now render out of the box.
+ * 2. **`/fs/read`.** For a path nothing produced — a picture the model looked
+ *    at, an image already in the tree — where the operator's declared roots are
+ *    the right gate and the answer is legitimately "no" outside them.
  *
  * The cache is what makes this usable from a transcript row: rows re-render on
  * every streamed delta, and an uncached resolver would re-fetch the picture each
- * time. A path the gateway won't serve — which is the *expected* answer for
- * codex's default `$CODEX_HOME` save location, outside any allowed root — is
- * cached as a miss too, so the refusal costs one request rather than one per
+ * time. A refusal is cached too, so it costs one request rather than one per
  * render.
+ *
+ * Keyed by `fileId`-or-path so that a path which becomes produced *after* a
+ * failed `/fs/read` is retried under a different key rather than staying cached
+ * as a miss.
  */
-function useHostImage(client: WorkerDeckClient): (path: string) => Promise<string | undefined> {
+function useHostImage(
+  client: WorkerDeckClient,
+  sessionId: string | undefined,
+  producedFiles: Record<string, ProducedFileRef> | undefined,
+): (path: string) => Promise<string | undefined> {
   const cache = useRef(new Map<string, Promise<string | undefined>>())
+  // Object URLs pin their blob until revoked, so a long session that generated
+  // a dozen images would hold a dozen megabytes past unmount.
+  const objectUrls = useRef<string[]>([])
+  useEffect(
+    () => () => {
+      for (const url of objectUrls.current) URL.revokeObjectURL(url)
+      objectUrls.current = []
+    },
+    [],
+  )
   return useCallback(
     (path: string) => {
-      const hit = cache.current.get(path)
+      const produced = producedFiles?.[path]
+      const key = produced ? `produced:${produced.fileId}` : `fs:${path}`
+      const hit = cache.current.get(key)
       if (hit) return hit
-      const pending = client
-        .readHostFile(path)
-        .then((file) => {
-          if (file.encoding !== 'base64') return undefined
-          // The route reports bytes and an encoding but not a media type; the
-          // extension is what a browser needs to decode it.
-          const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
-          const mediaType = IMAGE_MEDIA_TYPES[extension]
-          return mediaType ? `data:${mediaType};base64,${file.content}` : undefined
-        })
-        .catch(() => undefined)
-      cache.current.set(path, pending)
+      const pending =
+        produced && sessionId
+          ? // Fetched rather than pointed at: the panel may be talking to a
+            // header-authenticated gateway, where a bare URL in an `<img src>`
+            // carries no credential.
+            client
+              .readProducedFile(sessionId, produced.fileId)
+              .then((blob) => {
+                if (blob.size === 0) return undefined
+                const url = URL.createObjectURL(blob)
+                objectUrls.current.push(url)
+                return url
+              })
+              .catch(() => undefined)
+          : client
+              .readHostFile(path)
+              .then((file) => {
+                if (file.encoding !== 'base64') return undefined
+                // The route reports bytes and an encoding but not a media type;
+                // the extension is what a browser needs to decode it.
+                const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
+                const mediaType = IMAGE_MEDIA_TYPES[extension]
+                return mediaType ? `data:${mediaType};base64,${file.content}` : undefined
+              })
+              .catch(() => undefined)
+      cache.current.set(key, pending)
       return pending
     },
-    [client],
+    [client, sessionId, producedFiles],
   )
 }
 

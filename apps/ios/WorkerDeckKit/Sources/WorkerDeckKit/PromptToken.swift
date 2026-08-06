@@ -122,6 +122,23 @@ public enum PromptTokens {
     return (next, next.index(next.startIndex, offsetBy: offset))
   }
 
+  /// Replace `token` with a **literal** — the prefix included, nothing appended.
+  ///
+  /// The sibling of ``apply(_:replacing:in:)`` for a suggestion that is a typing
+  /// aid rather than a token: picking a skill types ordinary prose where the
+  /// `/name` was, and what lands must not read back as a token at all (`scan`
+  /// would style it, and there is no command by that name to style). The caret
+  /// is left at the end of the inserted text.
+  public static func replace(with literal: String, replacing token: PromptToken, in text: String)
+    -> (text: String, cursor: String.Index)
+  {
+    var next = text
+    next.replaceSubrange(token.range, with: literal)
+    let offset =
+      text.distance(from: text.startIndex, to: token.range.lowerBound) + literal.count
+    return (next, next.index(next.startIndex, offsetBy: offset))
+  }
+
   // MARK: - Word geometry
 
   /// Word starts: the beginning of the text, and every position after whitespace.

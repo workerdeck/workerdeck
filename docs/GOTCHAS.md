@@ -589,6 +589,68 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   control characters and the envelope's own `<`/`"` delimiters — it is client-supplied text
   crossing into both a response header and a prompt.
 
+## Produced files (`/v1/sessions/:id/produced`)
+
+- **This route has no roots and no byte cap, and that is not a relaxation of `/fs/*` — it is a
+  different claim.** `/fs/*` gates paths the *agent* may have authored, which is why it needs a
+  root allowlist and realpath containment. A `file_produced` event is authored by the *runner*
+  about a file the engine itself just wrote, and the store is built from nothing else. So the
+  allowlist here is "the exact paths this session's own runner announced", not "anywhere under a
+  directory someone declared" — an exact set of files beats a guess about a tree. The cap is
+  absent for the same reason the old default was the bug: a generated PNG is routinely 1–2 MB and
+  `/fs/read`'s 1 MiB default refused the common case.
+- **Only files the engine *wrote*. Never files the agent *read*.** Codex's `imageGeneration`
+  reports a `savedPath` its own tool created — that is a produced file. `imageView` reports a path
+  the model chose to look at, which is an agent claim about an arbitrary location, and announcing
+  it would hand `/fs/*`'s job to a route with no roots. It stays on `/fs/read`. If you are adding
+  a new `file_produced` emission, the question to answer is "did the engine write this?", not "is
+  this a file we'd like to show".
+- **`fileId` is derived from the path (sha256, truncated), never minted.** Two things depend on
+  it: codex reports the same `savedPath` on the progress item *and* the completed one, so a
+  derived id makes the second a no-op instead of a duplicate; and a session rebuilt from a park
+  re-derives the same ids, so a client's cached URL still resolves.
+- **The store subscribes from seq 0 — the opposite of `SessionNotifier`, on purpose.** Replaying
+  a permission request is a spurious notification; replaying a `file_produced` is how a rebuilt
+  session re-learns what it already produced. Registration is idempotent, so replay is free.
+- **The path is re-checked at serve time, not trusted from the announcement.** A file can move,
+  be deleted, or become a directory between the event and the fetch — those are 404s, and the
+  transcript still shows the path, which is the honest rendering. Bytes are *streamed*: with no
+  cap on this route, buffering would put the file size into the gateway's heap.
+- Serving is `nosniff` + `content-disposition: attachment`, like `/files` and `/attachments`:
+  model-authored bytes must never render as a document on the gateway's origin. An `<img src>`
+  is unaffected — disposition does not apply to subresources, which is the point.
+
+## Skills (the `skills` event, `skillsList`)
+
+- **A skill is not a slash command, and the protocol keeps them apart deliberately.** A command is
+  wire syntax the CLI parses out of the message. A skill is a capability the *model* chooses from
+  its description; there is no `/skillname` any engine recognises, and sending one reaches the
+  model as literal text. So skills ride their own `skills` event and their own `skillsList`
+  capability — **never** `capabilities.commands`, which means "the CLI accepts these as commands".
+  A client may list them and may offer them as a typing aid; it may not render them as command
+  chips.
+- **Picking one inserts prose; it does not send.** Both clients insert the skill's own
+  `interface.defaultPrompt` (codex authors it) as ordinary editable text, falling back to
+  "Use the *name* skill to ". The vendored prompt-area grew `TriggerConfig.insertAsText` for
+  exactly this: a `/` dropdown that resolves some rows to chips and others to plain text.
+- **Codex has skills and no commands; Claude has commands and no listable skills.** The two axes
+  are orthogonal. Claude's CLI reports skill *names* on `system_init` and nothing else — no
+  descriptions, no scope, no suggested prompt — which is not enough to fill a picker honestly, so
+  `skillsList` is false there rather than rendering a list of bare words.
+- **Gate the UI on having the list, not on the capability flag.** `skills/list` needs a live
+  child, and a codex session does not spawn one until it has something to do — so a fresh session
+  reports no skills until its first turn. Both clients hide the `⋯` entry until a `skills` event
+  has landed; the flag says the engine *can* answer, the event says it *has*. Spawning eagerly
+  just to list skills was considered and rejected: it would put a codex process behind every
+  created-but-unused session.
+- **`skills/changed` carries no payload — it is an invalidation signal.** The runner re-runs
+  `skills/list` and republishes only when the result actually differs (a fingerprint compare); the
+  watcher fires per touched file, and an event per keystroke would fill the log with identical
+  lists. Concurrent refreshes coalesce onto one in-flight request.
+- Everything about the listing is best-effort. A binary too old to know the method, a broken
+  manifest, a child that died mid-call — none of it fails a session; the panel simply never
+  appears.
+
 ## MCP status (`/v1/sessions/:id/mcp`)
 
 - **`mcpStatusInfo` drops `env` and `headers`, and must keep doing so.** The SDK's

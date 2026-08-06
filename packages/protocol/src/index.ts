@@ -10,7 +10,7 @@
  */
 
 /** Bumped on any breaking change to events, commands, or REST shapes. */
-export const PROTOCOL_VERSION = 6
+export const PROTOCOL_VERSION = 7
 
 // ---------------------------------------------------------------------------
 // Session lifecycle
@@ -195,6 +195,46 @@ export type ModelOption = {
   reasoningEfforts?: readonly string[]
 }
 
+/**
+ * A skill the engine can decide to use — **not** a command.
+ *
+ * The distinction is the whole point of this type existing beside
+ * {@link SlashCommandInfo}. A slash command is wire syntax: the CLI parses
+ * `/wrapup` out of the message and runs it. A skill is a capability the model
+ * *chooses* from its description; there is no `/skillname` the engine would
+ * recognise, and sending one reaches the model as literal text.
+ *
+ * So a client may list these, and may offer them as a **typing aid** that
+ * inserts ordinary editable prose ({@link SkillInfo.defaultPrompt}) — but it
+ * must never render them as command chips, and must never put them in
+ * `capabilities.commands`, which means "the CLI accepts these as commands".
+ */
+export type SkillInfo = {
+  /** Directory name under the skills root — the identity the model refers to. */
+  name: string
+  /** What the skill is for, as its own manifest states it. This is the text the
+   * MODEL selects on, so it is also the most honest thing to show a human. */
+  description?: string
+  /** A one-liner where the skill declares one, for a list row too narrow for
+   * `description`. */
+  shortDescription?: string
+  /** Human-facing name from the skill's own interface block, when it differs
+   * from `name`. */
+  displayName?: string
+  /**
+   * The engine's own suggested opening message for this skill. A client that
+   * offers a picker INSERTS this as plain editable text for the user to finish
+   * and send; it is a draft, never something submitted on selection.
+   */
+  defaultPrompt?: string
+  /** Where the skill came from: 'user' | 'repo' | 'system' | 'admin' — kept as
+   * a string, the engine's set may grow. */
+  scope?: string
+  /** False when the operator has this skill switched off: still listed, because
+   * "installed but off" is a different answer from "not installed". */
+  enabled: boolean
+}
+
 /** A slash command the CLI accepts as user-message text (SDK SlashCommand mirror). */
 export type SlashCommandInfo = {
   /** Command name without the leading slash. */
@@ -306,6 +346,50 @@ export type SessionEventBody =
        * anything — `system_init` carries the model, but a promptless session gets
        * no `system_init` until its first message. */
       defaultModel?: string
+    }
+  /**
+   * The skills this session's engine can reach ({@link SkillInfo}) — a full
+   * replacement each time, not a delta, so a late attacher's replay of several
+   * of these converges on the last one. Emitted once the session's engine has
+   * enumerated them, and again whenever the engine reports the set changed
+   * (a skill added or edited on disk).
+   *
+   * Deliberately NOT folded into `capabilities.commands`: skills are not
+   * commands (see {@link SkillInfo}). Only engines whose record sets
+   * {@link EngineCapabilities.skillsList} ever emit it.
+   */
+  | { type: 'skills'; skills: SkillInfo[] }
+  /**
+   * The engine wrote a file on the **host filesystem** and handed over its path
+   * — codex's `image_gen` saving a PNG is the case that motivated it. The
+   * host-filesystem sibling of `file_delivered` (which is the scratch-VFS one).
+   *
+   * Fetch it at `GET {basePath}/sessions/:id/produced/:fileId` for as long as
+   * the session lives. That route has no root allowlist and no size cap, and
+   * that is sound *because of where the path came from*: this event is authored
+   * by the runner about a file the engine itself just wrote, not by the agent
+   * about a path it chose. `/fs/*` gates the second kind and must keep doing so
+   * — a file the agent merely *read* is not a produced file and does not belong
+   * here.
+   *
+   * Re-emitting the same file is a no-op: `fileId` is derived from the path, so
+   * a runner that learns the path twice (codex reports `savedPath` on both the
+   * progress and completed item) registers it once.
+   */
+  | {
+      type: 'file_produced'
+      /** Opaque, stable per session+path. The route's path segment. */
+      fileId: string
+      /** Absolute host path, as the engine reported it. Shown to the operator,
+       * and what a client matches against a tool card's own `savedPath`. */
+      path: string
+      /** Media type when the runner could determine one (usually from the
+       * extension). Absent = let the route's own sniffing decide. */
+      mediaType?: string
+      /** Size at the time it was reported, when the runner knew it. */
+      bytes?: number
+      /** The tool call that produced it, when one did. */
+      toolUseId?: string
     }
   /** The session's model changed via `set_model`. `model` undefined = back to default. */
   | { type: 'model_changed'; model?: string }
@@ -599,6 +683,12 @@ export type EngineCapabilities = {
   sessionMcpServers: boolean
   /** capabilities events carry slash commands (composer popover). */
   slashCommands: boolean
+  /** `skills` events can occur — the engine can enumerate its skills. False:
+   * hide the skills panel entirely rather than showing an empty one. Orthogonal
+   * to `slashCommands`: an engine can have skills and no commands (codex), or
+   * commands and no skill listing (claude, whose skills reach clients only as
+   * `system_init.skills` names). */
+  skillsList: boolean
   /** settingSources / allowDangerouslySkipPermissions-style CLI options apply. */
   settingSources: boolean
   /** maxTurns / maxBudgetUsd are honored (else the gateway 400s them). */
@@ -637,6 +727,11 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     mcpStatus: true,
     sessionMcpServers: true,
     slashCommands: true,
+    // The CLI reports skill NAMES on `system_init` and nothing more — no
+    // descriptions, no scope, no suggested prompt. That is not enough to fill a
+    // picker honestly, and the SDK exposes no listing call, so the panel stays
+    // off here rather than rendering a list of bare words.
+    skillsList: false,
     settingSources: true,
     budgets: true,
     attachments: ['image', 'pdf', 'text'],
@@ -684,7 +779,15 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     mcpStatus: false,
     // MCP belongs to CODEX_HOME's config.toml; a session request cannot add servers.
     sessionMcpServers: false,
+    // There is no command-listing RPC in the app-server surface at all: codex's
+    // own `/model`, `/approvals` etc. are TUI-local and never reach this
+    // transport. This is settled, not pending.
     slashCommands: false,
+    // …but `skills/list` does exist, and `skills/changed` says when to re-read
+    // it. What comes back is metadata rich enough to render (description,
+    // scope, and codex's own `defaultPrompt`) — see {@link SkillInfo} for why
+    // that is still not a command.
+    skillsList: true,
     settingSources: false,
     budgets: false,
     // Images travel as localImage host paths, text is inlined into the prompt
@@ -709,6 +812,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     mcpStatus: false,
     sessionMcpServers: false,
     slashCommands: false,
+    skillsList: false,
     settingSources: false,
     budgets: false,
     attachments: ['image', 'pdf', 'text'],

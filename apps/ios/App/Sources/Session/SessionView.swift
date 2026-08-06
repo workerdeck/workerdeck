@@ -18,7 +18,7 @@ struct SessionView: View {
   /// The modal screens over a session. `Identifiable` so one `.sheet(item:)`
   /// presents all of them.
   enum Sheet: String, Identifiable {
-    case context, usage, info, files, model, mode, addMedia, mcp
+    case context, usage, info, files, model, mode, addMedia, mcp, skills
     var id: String { rawValue }
   }
 
@@ -51,6 +51,9 @@ struct SessionView: View {
   @State private var attachments = ComposerAttachmentStore()
   /// Fetches (and caches) transcript thumbnails, which need the auth header.
   @State private var attachmentLoader = AttachmentLoader()
+  /// Fetches (and caches) pictures the engine produced on the host — codex's
+  /// generated images, which arrive as a path and never as bytes.
+  @State private var producedImages = ProducedImageLoader()
   /// The two system pickers the Add Media sheet hands off to. Separate flags
   /// rather than `Sheet` cases: iOS presents both full screen and neither can be
   /// raised from underneath the half-height sheet that chose it.
@@ -84,6 +87,7 @@ struct SessionView: View {
       .toolbar { toolbarMenu }
       .environment(\.fileDownloader, downloader)
       .environment(\.attachmentLoader, attachmentLoader)
+      .environment(\.producedImageLoader, producedImages)
       .fileDownloadPresentation(downloader)
       .task {
         downloader.access = vm.fileAccess
@@ -91,6 +95,7 @@ struct SessionView: View {
           try await vm.uploadAttachment(name: name, mediaType: mediaType, data: data)
         }
         attachmentLoader.fetch = { [vm] id in try await vm.attachmentData(id) }
+        producedImages.fetch = { [vm] id in try await vm.producedFileData(id) }
         await vm.run()
       }
       .onChange(of: scenePhase) { _, phase in
@@ -117,6 +122,17 @@ struct SessionView: View {
       .task(id: vm.state.commands) {
         completion.commands = vm.state.commands ?? []
       }
+      // Skills arrive on their own channel, and later still: codex can only
+      // list them over a live child, so a cold session gets none until its
+      // first turn.
+      .task(id: vm.state.skills) {
+        completion.skills = vm.state.skills ?? []
+      }
+      // Path → fileId, so a tool card holding a `savedPath` can fetch its
+      // picture without the transcript growing another prop.
+      .task(id: vm.state.producedFiles) {
+        producedImages.files = vm.state.producedFiles ?? [:]
+      }
       .sheet(item: $sheet) { sheet in
         switch sheet {
         case .context:
@@ -142,6 +158,8 @@ struct SessionView: View {
             onSelect: { vm.setModel($0) })
         case .addMedia:
           AddMediaSheet(acceptsImages: acceptedKinds.contains("image"), onChoose: choose)
+        case .skills:
+          SkillsView(skills: vm.state.skills ?? [], onUse: draftSkill)
         case .mcp:
           McpServersView(
             load: { try await vm.mcpServers() },
@@ -265,6 +283,7 @@ struct SessionView: View {
           SessionEmptyState(
             cwd: vm.cwd,
             hasCommands: !(vm.state.commands ?? []).isEmpty,
+            hasSkills: (vm.state.skills ?? []).contains { $0.enabled },
             canBrowseFiles: completion.hasFileSearch,
             // Belt and braces: the reader already reports a smaller box when the
             // keyboard pushes the safe area up, but whether it does depends on
@@ -477,6 +496,13 @@ struct SessionView: View {
         if vm.capabilities.mcpStatus {
           Button("MCP servers", systemImage: "puzzlepiece.extension") { sheet = .mcp }
         }
+        // On having the list, not merely on the capability: codex can answer
+        // `skills/list` but only over a live child, so before the first turn
+        // the honest state is "no entry" rather than an entry onto an empty
+        // screen.
+        if vm.capabilities.skillsList, !(vm.state.skills ?? []).isEmpty {
+          Button("Skills", systemImage: "sparkles") { sheet = .skills }
+        }
         Divider()
         Button("Close session", systemImage: "xmark.circle", role: .destructive) {
           showCloseConfirmation = true
@@ -485,6 +511,17 @@ struct SessionView: View {
         Label("Session actions", systemImage: "ellipsis.circle")
       }
     }
+  }
+
+  /// Type a skill's opening message into the composer and close the sheet.
+  ///
+  /// Drafting, not running: there is no engine call that invokes a skill, so
+  /// this is the only honest thing the button can do — and the operator still
+  /// edits and sends it.
+  private func draftSkill(_ skill: SkillInfo) {
+    let separator = draft.isEmpty || draft.hasSuffix(" ") ? "" : " "
+    draft += separator + PromptCompletionModel.Suggestion.prompt(for: skill)
+    sheet = nil
   }
 
   /// Only the modes this session's capability record declares — the rest

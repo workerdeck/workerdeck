@@ -41,3 +41,4 @@ apps/ios/App/Info.plist
 apps/ios/App/WorkerDeckApp.entitlements
 DerivedData/
 xcuserdata/
+.silktree/

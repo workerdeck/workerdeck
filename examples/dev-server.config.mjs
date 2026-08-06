@@ -105,19 +105,19 @@ export default {
    */
   hostFiles: {
     write: true,
-    // Declaring `roots` REPLACES the `allowedCwdRoots` inheritance, so the
-    // project root has to be restated alongside the addition.
+    // Declaring `roots` REPLACES the `allowedCwdRoots` inheritance, so every
+    // tree this gateway may serve has to be listed here.
     //
-    // The addition is codex's image drawer. Its built-in `image_gen` reports a
-    // host path and never bytes, and unless it is told the asset belongs to a
-    // project it saves under `$CODEX_HOME/generated_images/` — outside any cwd
-    // root, so a viewer cannot read the picture back and can only name it.
-    // Granting this one subtree is what makes generated images actually appear.
-    // Narrow on purpose: it is the drawer, not `~/.codex`, which also holds
-    // `auth.json` — that is a red line, and no config here should ever cross it.
-    roots: ['/Users/atomic/projects', `${process.env.HOME}/.codex/generated_images`],
-    // A generated PNG is routinely 1–2 MB and the default refuses at 1 MiB,
-    // which reads as "the preview is broken" rather than "the file is big".
+    // Note what is NOT here any more: codex's `$CODEX_HOME/generated_images`
+    // drawer. Generated images no longer come through `/fs/*` at all — the
+    // runner announces the path it wrote in a `file_produced` event and the
+    // gateway serves it from `/sessions/:id/produced/:fileId`, whose allowlist
+    // is that announcement rather than a directory grant. Which is the point:
+    // seeing a picture your own agent just made should not require widening a
+    // filesystem grant toward `~/.codex`, where `auth.json` also lives.
+    roots: ['/Users/atomic/projects'],
+    // Kept for ordinary reads: the 1 MiB default is small for a screenshot or a
+    // PDF the agent left in the project.
     maxFileBytes: 8 * 1024 * 1024,
   },
 

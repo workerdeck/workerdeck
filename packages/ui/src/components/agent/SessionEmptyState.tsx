@@ -1,4 +1,4 @@
-import { AtSign, MessageSquareText, SlashSquare, Terminal } from 'lucide-react'
+import { AtSign, MessageSquareText, SlashSquare, Sparkles, Terminal } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
 
 export interface SessionEmptyStateProps {
@@ -7,6 +7,11 @@ export interface SessionEmptyStateProps {
    * beat after the session starts, and promising a feature that isn't wired up
    * yet is worse than not mentioning it. */
   hasCommands?: boolean
+  /** Whether the engine has reported skills the `/` popover can offer. Its own
+   * flag, not a variant of `hasCommands`: what `/` does differs — a command is
+   * submitted, a skill is typed for you to edit — and an engine can have one
+   * without the other. */
+  hasSkills?: boolean
   /** Whether this gateway serves `@file` search for the session's directory. */
   canBrowseFiles?: boolean
   className?: string
@@ -25,13 +30,25 @@ export interface SessionEmptyStateProps {
 export function SessionEmptyState({
   cwd,
   hasCommands,
+  hasSkills,
   canBrowseFiles,
   className,
 }: SessionEmptyStateProps) {
   const hints = [
     { icon: MessageSquareText, text: 'Tell the agent what to do.' },
-    ...(hasCommands
-      ? [{ icon: SlashSquare, text: 'Type / for the CLI’s slash commands.' }]
+    ...(hasCommands || hasSkills
+      ? [
+          {
+            icon: hasCommands ? SlashSquare : Sparkles,
+            text: hasCommands
+              ? hasSkills
+                ? 'Type / for slash commands and skills.'
+                : 'Type / for the CLI’s slash commands.'
+              : // Skills only: say what picking one does, because it is not
+                // what a `/` menu usually does.
+                'Type / to draft a message for one of the agent’s skills.',
+          },
+        ]
       : []),
     ...(canBrowseFiles
       ? [{ icon: AtSign, text: 'Type @ to search this project’s files.' }]

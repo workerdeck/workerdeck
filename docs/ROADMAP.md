@@ -84,6 +84,24 @@ master; 0.7.0 is the latest published).
   app browses and edits over it, scoped to the open session's cwd, and completes `@file` in the
   composer against `/fs/find`. Covered by tests on both halves; not yet exercised against a live
   gateway from a phone.
+- **Codex skills, and generated images that just appear** (`PROTOCOL_VERSION` 7) — two follow-ups
+  from the codex engine, both found by dumping the binary's own schema rather than guessing.
+  *Skills*: `skills/list` (plus the `skills/changed` watcher) reaches clients as its own `skills`
+  event under a new `skillsList` capability — deliberately **not** `capabilities.commands`, because
+  a skill is not a slash command. Codex has no command-listing RPC at all and never will over this
+  transport; what it has is a capability the model *chooses* from its description, so there is no
+  `/skillname` to send. Both clients therefore list skills in a panel and offer them under `/` as
+  a **typing aid**: picking one inserts codex's own `interface.defaultPrompt` as ordinary editable
+  prose for the operator to finish and send. (The vendored prompt-area grew
+  `TriggerConfig.insertAsText` for it — one dropdown, some rows resolving to chips and some to
+  text.) *Images*: a generated PNG used to require the operator to declare
+  `$CODEX_HOME/generated_images` as a host-file root **and** raise `maxFileBytes`, so out of the
+  box you saw a path instead of a picture. Now the runner emits a `file_produced` event naming the
+  file its engine wrote, and the gateway serves it from `GET /sessions/:id/produced/:fileId` with
+  no roots and no cap — sound precisely because the allowlist is "the exact paths this session's
+  own runner announced" rather than a directory grant. A path the *agent* merely read is not a
+  produced file and stays behind `/fs/*`. The web panel and the iOS tool card both render the
+  picture inline; the example config's drawer grant is gone.
 - **Engine adapters, capability records, and Codex as a first-class engine**
   (`PROTOCOL_VERSION` 6) — engines ship as in-repo adapters (`core/src/engines/`): each declares
   its `EngineCapabilities` record (also in protocol as `ENGINE_CAPABILITIES`, the browser-safe

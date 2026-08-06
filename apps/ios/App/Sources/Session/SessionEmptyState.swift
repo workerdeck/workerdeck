@@ -20,6 +20,11 @@ struct SessionEmptyState: View {
   /// beat after the session starts, and promising a feature that isn't wired up
   /// yet is worse than not mentioning it.
   let hasCommands: Bool
+  /// Whether the engine has reported skills the `/` popover can offer. Its own
+  /// flag, not a variant of `hasCommands`: what `/` does differs — a command is
+  /// submitted, a skill is typed for you to edit — and an engine can have one
+  /// without the other.
+  var hasSkills: Bool = false
   let canBrowseFiles: Bool
   /// What the layout was actually offered, not what the screen is.
   let availableHeight: CGFloat
@@ -89,8 +94,14 @@ struct SessionEmptyState: View {
     // its history into the transcript (`resumeBackfill`), so a resumed session
     // doesn't reach this empty state — its history is on screen.
     var hints = [Hint(symbol: "text.bubble", text: "Tell me what to do")]
-    if hasCommands {
+    if hasCommands && hasSkills {
+      hints.append(Hint(symbol: "slash.circle", text: "Type / for slash commands and skills."))
+    } else if hasCommands {
       hints.append(Hint(symbol: "slash.circle", text: "Type / for the CLI's slash commands."))
+    } else if hasSkills {
+      // Skills only: say what picking one does, because it is not what a `/`
+      // menu usually does.
+      hints.append(Hint(symbol: "sparkles", text: "Type / to draft a message for a skill."))
     }
     if canBrowseFiles {
       hints.append(Hint(symbol: "at", text: "Type @ to search this project's files."))

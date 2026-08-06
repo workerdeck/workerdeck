@@ -283,6 +283,20 @@ public struct WorkerClient: Sendable {
     return try decode(WriteHostFileResponse.self, from: data)
   }
 
+  /// Fetch the bytes of a file this session's ENGINE produced — the `fileId` of
+  /// a `file_produced` event (codex's generated images).
+  ///
+  /// Deliberately not `/fs/read`: this route needs no host-file roots declared
+  /// and applies no byte cap, because its allowlist is the exact set of paths
+  /// this session's own runner reported writing, not a directory grant. A
+  /// generated PNG is routinely megabytes, which is what made the old path
+  /// fail by default.
+  public func readProducedFile(sessionId: String, fileId: String) async throws -> Data {
+    try await call(
+      "GET",
+      "/sessions/\(Self.encodeComponent(sessionId))/produced/\(Self.encodeComponent(fileId))")
+  }
+
   // MARK: - Live attach
 
   /// Open a live connection to a session's event stream.

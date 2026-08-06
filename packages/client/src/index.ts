@@ -451,6 +451,36 @@ export class WorkerDeckClient {
     return `${this.#options.baseUrl}/sessions/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(attachmentId)}`
   }
 
+  /**
+   * Direct URL for a file the session's ENGINE produced on the host — the
+   * `fileId` of a `file_produced` event. Same caveat as `attachmentUrl`: usable
+   * as an `<img src>` only where the credential is a same-origin cookie; a
+   * header-authenticated client (the phone) fetches it and makes its own blob.
+   *
+   * Unlike `/fs/read`, this needs no host-file roots and no raised byte cap —
+   * see the `file_produced` note in the protocol for why that is sound.
+   */
+  producedFileUrl(sessionId: string, fileId: string): string {
+    return `${this.#options.baseUrl}/sessions/${encodeURIComponent(sessionId)}/produced/${encodeURIComponent(fileId)}`
+  }
+
+  /** Fetch a produced file's bytes. For clients that cannot put a credential on
+   * an `<img src>`. Throws {@link WorkerDeckError} with the response status —
+   * a 404 means the file is gone from disk, not that the route is missing. */
+  async readProducedFile(sessionId: string, fileId: string): Promise<Blob> {
+    const res = await this.#fetch(this.producedFileUrl(sessionId, fileId), {
+      headers: { ...this.#options.headers },
+    })
+    if (!res.ok) {
+      const payload = (await res.json().catch(() => ({}))) as { error?: string }
+      throw new WorkerDeckError(
+        payload.error ?? `produced file request failed with ${res.status}`,
+        res.status,
+      )
+    }
+    return await res.blob()
+  }
+
   /** The session's MCP servers and their tools, live from the engine. 501 when the
    * session's engine has no MCP surface; 409 while the session is parked. */
   async listMcpServers(sessionId: string): Promise<McpServerStatusInfo[]> {

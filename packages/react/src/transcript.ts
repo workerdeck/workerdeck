@@ -12,6 +12,7 @@ import type {
   SessionEvent,
   SessionInfo,
   SessionStatus,
+  SkillInfo,
   SlashCommandInfo,
   ToolExecutionBackend,
   ToolExecutionOutput,
@@ -72,6 +73,13 @@ export type TranscriptItem =
    * session lives. */
   | { kind: 'file_delivered'; id: string; path: string; bytes: number; description?: string }
 
+/** A `file_produced` announcement, as the transcript keeps it. */
+export type ProducedFileRef = {
+  fileId: string
+  mediaType?: string
+  bytes?: number
+}
+
 export type TranscriptState = {
   status: SessionStatus
   statusDetail?: string
@@ -100,6 +108,25 @@ export type TranscriptState = {
   models?: ModelOption[]
   /** Slash commands the CLI accepts (from the `capabilities` event). */
   commands?: SlashCommandInfo[]
+  /**
+   * Skills the engine can reach (from the `skills` event), replaced whole each
+   * time. Absent until the engine has enumerated them — which for codex is on
+   * its first turn, since listing needs a live child. So gate the affordance on
+   * *this being defined*, not on `capabilities.skillsList` alone: the flag says
+   * the engine can answer, this says it has.
+   *
+   * Not commands, and must not be offered as such — see the protocol's
+   * `SkillInfo`.
+   */
+  skills?: SkillInfo[]
+  /**
+   * Files the engine wrote on the host, keyed by the absolute path it reported
+   * (from `file_produced`). A tool card holding a `savedPath` looks itself up
+   * here to turn that path into a fetchable id — `client.producedFileUrl` — so
+   * the picture renders without the operator having declared a host-file root.
+   */
+  producedFiles?: Record<string, ProducedFileRef>
+
   /** What this session's default model resolves to (from `capabilities`). Known
    * before the first turn, which `model` is not — a promptless session has no
    * `system_init` until it is spoken to. */
@@ -246,6 +273,26 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
         models: event.models,
         commands: event.commands,
         defaultModel: event.defaultModel ?? base.defaultModel,
+      }
+
+    case 'skills':
+      // Replaced whole, never merged: the event is the engine's current answer,
+      // so a skill deleted on disk has to be able to disappear from the list.
+      return { ...base, skills: event.skills }
+
+    case 'file_produced':
+      // Keyed by PATH, not by fileId, because the lookup a card does is
+      // "here is the savedPath in my tool input — is there anything to fetch?".
+      return {
+        ...base,
+        producedFiles: {
+          ...base.producedFiles,
+          [event.path]: {
+            fileId: event.fileId,
+            ...(event.mediaType ? { mediaType: event.mediaType } : {}),
+            ...(event.bytes !== undefined ? { bytes: event.bytes } : {}),
+          },
+        },
       }
 
     case 'model_changed':

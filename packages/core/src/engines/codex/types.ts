@@ -182,6 +182,45 @@ export type AppServerThreadListResponse = {
   nextCursor?: string | null
 }
 
+/**
+ * One entry of `skills/list`'s `data[].skills` (codex's `SkillMetadata`).
+ *
+ * `interface` is the skill's own presentation block; the only field of it worth
+ * carrying across the wire is `defaultPrompt` — codex's suggested opening
+ * message, which is what makes a picker possible at all. The icon/brand fields
+ * are TUI decoration and point at local files a browser cannot reach.
+ */
+export type AppServerSkillMetadata = {
+  name: string
+  description?: string
+  /** Legacy `short_description` from SKILL.md; `interface.shortDescription` wins. */
+  shortDescription?: string
+  interface?: {
+    displayName?: string
+    shortDescription?: string
+    defaultPrompt?: string
+  }
+  path?: string
+  /** 'user' | 'repo' | 'system' | 'admin' — open. */
+  scope?: string
+  enabled?: boolean
+}
+
+/**
+ * `skills/list` result. One entry per requested cwd (we request none, which
+ * codex documents as "the session's own cwd"), each with the skills it found
+ * and the manifests it could not parse. Errors are surfaced as list rows, not
+ * swallowed: a skill that is present but broken is exactly what an operator
+ * would otherwise spend an hour looking for.
+ */
+export type AppServerSkillsListResponse = {
+  data?: Array<{
+    cwd?: string
+    skills?: AppServerSkillMetadata[]
+    errors?: Array<{ path?: string; message?: string }>
+  }>
+}
+
 export type AppServerUserInput =
   | { type: 'text'; text: string }
   | { type: 'localImage'; path: string }
