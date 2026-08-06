@@ -8,7 +8,8 @@
     "**/.turbo": true,
     "**/build": true,
     "**/dist": true,
-    ".roam": true
+    ".roam": true,
+    ".silktree": true
   },
   "search.exclude": {
     "**/node_modules": true,
