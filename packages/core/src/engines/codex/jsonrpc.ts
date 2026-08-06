@@ -38,7 +38,9 @@ export class JsonRpcStdioConnection {
   #buffer = ''
   #closed = false
   #notificationHandler: ((method: string, params: unknown) => void) | undefined
-  #requestHandler: ((method: string, params: unknown) => Promise<unknown>) | undefined
+  #requestHandler:
+    | ((method: string, params: unknown, id: string | number) => Promise<unknown>)
+    | undefined
 
   constructor(options: { input: Readable; output: Writable }) {
     this.#output = options.output
@@ -67,7 +69,7 @@ export class JsonRpcStdioConnection {
     this.#notificationHandler = handler
   }
 
-  onRequest(handler: (method: string, params: unknown) => Promise<unknown>): void {
+  onRequest(handler: (method: string, params: unknown, id: string | number) => Promise<unknown>): void {
     this.#requestHandler = handler
   }
 
@@ -124,7 +126,7 @@ export class JsonRpcStdioConnection {
         respond({ error: { code: -32601, message: `no handler for server request '${method}'` } })
         return
       }
-      handler(method, message.params).then(
+      handler(method, message.params, id as string | number).then(
         (result) => respond({ result: result ?? {} }),
         (error: unknown) =>
           respond({

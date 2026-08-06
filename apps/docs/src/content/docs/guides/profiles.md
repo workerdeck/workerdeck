@@ -56,11 +56,15 @@ switching on the engine name:
 - `permissionMode` is Claude Code's vocabulary. A provider session runs `default`,
   `bypassPermissions` and `dontAsk`; a codex session runs `default`, `acceptEdits` and
   `bypassPermissions`, mapped onto codex's own sandbox (read-only / workspace-write / full
-  access). Asking for a mode outside the record is a **400**, and a profile whose
-  `defaults.permissionMode` is outside it fails `createWorkerServer` at startup.
-- Codex has **no interactive approvals** — the runner pins codex's `approvalPolicy: 'never'`
-  and auto-declines rather than asking, so the record declares `interactiveApprovals: false` and
-  clients hide the approval UI rather than render one that never fires.
+  access) plus its ask policy. Asking for a mode outside the record is a **400**, and a profile
+  whose `defaults.permissionMode` is outside it fails `createWorkerServer` at startup.
+- Codex approvals ride the **same permission surface** as Claude's: the binary's ask channels
+  (command escalations, file changes, permission grants, questions, MCP elicitations) arrive as
+  pending approvals, answerable from any client or over REST. One semantic difference, carried
+  in the request itself: a codex command approval is usually an *escalation after the sandbox
+  already refused the command* — the request's title is codex's own "command failed; retry
+  without sandbox?", and approving re-runs the command unsandboxed. In `default` mode a blocked
+  action asks instead of silently failing; `bypassPermissions` asks nothing.
 - The claude and codex engines ship a **model catalog** with each release, served as
   `ProfileInfo.models` from the first request — a real picker on a cold server, with per-model
   reasoning efforts where the engine takes them. Provider engines have no equivalent of a pinned

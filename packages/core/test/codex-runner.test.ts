@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
+import { JsonRpcError } from '../src/engines/codex/jsonrpc.ts'
 import type {
   AppServerConnectFn,
   AppServerConnection,
@@ -11,6 +12,28 @@ const THREAD_RESULT = {
   thread: { id: 'thread-1' },
   model: 'gpt-5.6-terra',
   reasoningEffort: 'medium',
+}
+
+/** The wire shape of the ask policy (default/acceptEdits) and its all-off
+ * mirror (bypassPermissions) — granular objects, never the string vocabulary
+ * (plain 'untrusted' never asks; measured against 0.146.0). */
+const GRANULAR_ASK = {
+  granular: {
+    sandbox_approval: true,
+    rules: true,
+    mcp_elicitations: true,
+    request_permissions: true,
+    skill_approval: true,
+  },
+}
+const GRANULAR_NEVER = {
+  granular: {
+    sandbox_approval: false,
+    rules: false,
+    mcp_elicitations: false,
+    request_permissions: false,
+    skill_approval: false,
+  },
 }
 
 const USAGE_A = {
@@ -43,7 +66,9 @@ function scriptedPeer() {
   let connectCount = 0
   let closedCount = 0
   let notificationHandler: ((method: string, params: unknown) => void) | undefined
-  let requestHandler: ((method: string, params: unknown) => Promise<unknown>) | undefined
+  let requestHandler:
+    | ((method: string, params: unknown, id: string | number) => Promise<unknown>)
+    | undefined
   let closeHandler: ((message: string) => void) | undefined
 
   responders.set('initialize', () => ({ codexHome: '/tmp/.codex' }))
@@ -87,7 +112,8 @@ function scriptedPeer() {
     respond: (method: string, responder: (params: unknown) => unknown) =>
       responders.set(method, responder),
     emit: (method: string, params: unknown) => notificationHandler!(method, params),
-    serverRequest: (method: string, params: unknown) => requestHandler!(method, params),
+    serverRequest: (method: string, params: unknown, id: string | number = 'wire-1') =>
+      requestHandler!(method, params, id),
     die: (message: string) => closeHandler!(message),
     connections: () => connectCount,
     closed: () => closedCount,
@@ -264,9 +290,12 @@ describe('CodexRunner', () => {
     // The JSON-RPC choreography: initialize → (initialized) → thread/start → turn/start.
     expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'thread/start', 'turn/start'])
     expect(peer.notifies).toEqual(['initialized'])
+    // experimentalApi is unconditional — granular approval policies are
+    // rejected without it, and there is no non-experimental fallback.
+    expect(peer.requests[0]!.params).toMatchObject({ capabilities: { experimentalApi: true } })
     expect(peer.requests[1]!.params).toMatchObject({
       cwd: '/tmp/project',
-      approvalPolicy: 'never',
+      approvalPolicy: GRANULAR_ASK,
       sandbox: 'workspace-write',
       model: 'gpt-5.6-sol',
     })
@@ -274,18 +303,20 @@ describe('CodexRunner', () => {
       threadId: 'thread-1',
       input: [{ type: 'text', text: 'go' }],
       cwd: '/tmp/project',
-      approvalPolicy: 'never',
+      approvalPolicy: GRANULAR_ASK,
       sandboxPolicy: { type: 'workspaceWrite' },
       model: 'gpt-5.6-sol',
       effort: 'high',
     })
     expect(runner.sdkSessionId).toBe('thread-1')
 
-    // The record's forsworn events never occur.
+    // The record's forsworn events never occur. (permission_requested is no
+    // longer forsworn — approvals are wired — but this quiet turn asks none.)
     const types = events.map((e) => e.type)
-    for (const forsworn of ['system_init', 'permission_requested']) {
+    for (const forsworn of ['system_init']) {
       expect(types).not.toContain(forsworn)
     }
+    expect(types).not.toContain('permission_requested')
     // context_usage and rate_limit are NOT forsworn — the record declares both.
     // They are absent here because this turn reported neither a
     // `modelContextWindow` nor an `account/rateLimits/updated`, and a reading
@@ -556,6 +587,8 @@ describe('CodexRunner', () => {
     expect(turnParams()[1]!.params).toMatchObject({
       model: 'gpt-5.5',
       sandboxPolicy: { type: 'dangerFullAccess' },
+      // bypassPermissions asks NOTHING — same granular shape, all flags off.
+      approvalPolicy: GRANULAR_NEVER,
     })
     expect(runner.info().model).toBe('gpt-5.5')
 
@@ -571,7 +604,88 @@ describe('CodexRunner', () => {
     runner.close()
   })
 
-  it('auto-declines server→client approval requests, visibly, and errors the unknown', async () => {
+  it('surfaces a command escalation as permission_requested and accepts on allow', async () => {
+    // The real shape, measured against 0.146.0: the command already RAN inside
+    // the read-only sandbox and was refused — the approval is an escalation
+    // ("command failed; retry without sandbox?"), not a pre-execution gate.
+    const peer = scriptedPeer()
+    let approvalResponse: unknown
+    peer.respond('turn/start', () => {
+      peer.emit('turn/started', { threadId: 'thread-1', turn: { id: 't1', status: 'inProgress' } })
+      peer.emit('item/started', {
+        threadId: 'thread-1',
+        turnId: 't1',
+        item: { id: 'exec-1', type: 'commandExecution', command: 'printf x > /tmp/p.txt', status: 'inProgress' },
+      })
+      void peer
+        .serverRequest('item/commandExecution/requestApproval', {
+          threadId: 'thread-1',
+          turnId: 't1',
+          itemId: 'exec-1',
+          command: 'printf x > /tmp/p.txt',
+          cwd: '/tmp',
+          reason: 'command failed; retry without sandbox?',
+          availableDecisions: [
+            'accept',
+            { acceptWithExecpolicyAmendment: { execpolicy_amendment: ['printf'] } },
+            'cancel',
+          ],
+        })
+        .then((response) => {
+          approvalResponse = response
+          peer.emit('item/completed', {
+            threadId: 'thread-1',
+            turnId: 't1',
+            item: {
+              id: 'exec-1',
+              type: 'commandExecution',
+              command: 'printf x > /tmp/p.txt',
+              aggregatedOutput: '',
+              exitCode: 0,
+              status: 'completed',
+            },
+          })
+          peer.emit('turn/completed', { threadId: 'thread-1', turn: { id: 't1', status: 'completed' } })
+        })
+      return { turn: { id: 't1', status: 'inProgress' } }
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
+    const events = collect(runner)
+    const run = runner.start()
+    await vi.waitFor(() => expect(ofType(events, 'permission_requested')).toHaveLength(1))
+
+    const request = ofType(events, 'permission_requested')[0]!.request
+    // Codex's own reason sentence IS the headline — the honest tense (the
+    // command already ran and was blocked; approving re-runs it unsandboxed).
+    expect(request.toolName).toBe('CodexCommand')
+    expect(request.title).toBe('command failed; retry without sandbox?')
+    expect(request.decisionReason).toBe('command failed; retry without sandbox?')
+    expect(request.input).toMatchObject({ command: 'printf x > /tmp/p.txt', cwd: '/tmp' })
+    expect(request.expiresAt).toBeGreaterThan(Date.now())
+    // Anchored to the tool card the item already produced.
+    const use = ofType(events, 'assistant_message')
+      .flatMap((e) => (Array.isArray(e.message.content) ? e.message.content : []))
+      .find((b) => b.type === 'tool_use') as { id: string }
+    expect(request.toolUseId).toBe(use.id)
+    expect(runner.status).toBe('awaiting_approval')
+    expect(runner.info().pendingPermissionCount).toBe(1)
+    expect(runner.pendingApprovals.map((r) => r.id)).toEqual([request.id])
+
+    expect(runner.resolvePermission(request.id, { behavior: 'allow' })).toBe(true)
+    await run
+    expect(approvalResponse).toEqual({ decision: 'accept' })
+    expect(ofType(events, 'permission_resolved')[0]).toMatchObject({
+      requestId: request.id,
+      behavior: 'allow',
+      resolvedBy: 'client',
+    })
+    expect(runner.status).toBe('idle')
+    expect(runner.info().pendingPermissionCount).toBe(0)
+    // Unknown ids (already settled) answer false.
+    expect(runner.resolvePermission(request.id, { behavior: 'allow' })).toBe(false)
+  })
+
+  it('denies with decline, cancels only when interrupting, and never invents an accept', async () => {
     const peer = scriptedPeer()
     scriptTurn(peer, (emit, turnId) => {
       emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
@@ -579,26 +693,327 @@ describe('CodexRunner', () => {
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
     const events = collect(runner)
     await runner.start()
-    await expect(
-      peer.serverRequest('item/commandExecution/requestApproval', { itemId: 'c1' }),
-    ).resolves.toEqual({ decision: 'decline' })
-    await expect(peer.serverRequest('item/permissions/requestApproval', {})).resolves.toEqual({
-      permissions: {},
+
+    // Deny → 'decline', even when availableDecisions omits it: the response
+    // schema declares decline unconditionally and a live decline against this
+    // exact shape completed cleanly (0.146.0) — the list gates the accept
+    // variants, it does not take "no, but keep going" away ('cancel', its only
+    // listed alternative, would interrupt the whole turn).
+    const deny = peer.serverRequest('item/commandExecution/requestApproval', {
+      threadId: 'thread-1',
+      itemId: 'c1',
+      command: 'rm -rf /',
+      availableDecisions: ['accept', 'cancel'],
     })
-    await expect(peer.serverRequest('mcpServer/elicitation/request', {})).resolves.toEqual({
-      action: 'decline',
+    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    runner.resolvePermission(runner.pendingApprovals[0]!.id, {
+      behavior: 'deny',
+      message: 'no thanks',
     })
+    await expect(deny).resolves.toEqual({ decision: 'decline' })
+    expect(ofType(events, 'permission_resolved').at(-1)).toMatchObject({
+      behavior: 'deny',
+      resolvedBy: 'client',
+      message: 'no thanks',
+    })
+
+    // Deny+interrupt → 'cancel' (codex's own deny-and-interrupt decision).
+    const cancel = peer.serverRequest('item/commandExecution/requestApproval', {
+      threadId: 'thread-1',
+      itemId: 'c2',
+      command: 'sleep 999',
+      availableDecisions: ['accept', 'cancel'],
+    })
+    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'deny', interrupt: true })
+    await expect(cancel).resolves.toEqual({ decision: 'cancel' })
+
+    // An allow the request offered no plain accept for is NEVER widened into a
+    // broader grant — the runner answers with the denial and says why.
+    const noAccept = peer.serverRequest('item/commandExecution/requestApproval', {
+      threadId: 'thread-1',
+      itemId: 'c3',
+      command: 'echo hi',
+      availableDecisions: [
+        'acceptForSession',
+        { acceptWithExecpolicyAmendment: { execpolicy_amendment: ['echo'] } },
+        'cancel',
+      ],
+    })
+    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'allow' })
+    await expect(noAccept).resolves.toEqual({ decision: 'decline' })
+    expect(ofType(events, 'permission_resolved').at(-1)).toMatchObject({
+      behavior: 'deny',
+      resolvedBy: 'policy',
+      message: expect.stringContaining('no plain accept'),
+    })
+
+    // Unhandled server requests still get -32601, never a hang.
     await expect(peer.serverRequest('account/chatgptAuthTokens/refresh', {})).rejects.toMatchObject({
       code: -32601,
     })
-    const declined = ofType(events, 'sdk_event').filter(
-      (e) => e.payload.type === 'codex.approval_auto_declined',
-    )
-    expect(declined.map((e) => e.payload.method)).toEqual([
-      'item/commandExecution/requestApproval',
-      'item/permissions/requestApproval',
-      'mcpServer/elicitation/request',
-    ])
+  })
+
+  it('times out an unanswered approval without wedging the turn', async () => {
+    const peer = scriptedPeer()
+    peer.respond('turn/start', () => {
+      peer.emit('turn/started', { threadId: 'thread-1', turn: { id: 't1', status: 'inProgress' } })
+      void peer
+        .serverRequest('item/fileChange/requestApproval', {
+          threadId: 'thread-1',
+          turnId: 't1',
+          itemId: 'f1',
+          grantRoot: '/tmp/project',
+        })
+        .then((response) => {
+          expect(response).toEqual({ decision: 'decline' })
+          peer.emit('turn/completed', { threadId: 'thread-1', turn: { id: 't1', status: 'completed' } })
+        })
+      return { turn: { id: 't1', status: 'inProgress' } }
+    })
+    const runner = new CodexRunner({
+      cwd: '/tmp',
+      prompt: 'go',
+      approvalTimeoutMs: 25,
+      connectFn: peer.connectFn,
+    })
+    const events = collect(runner)
+    await runner.start()
+    expect(ofType(events, 'permission_requested')[0]!.request).toMatchObject({
+      toolName: 'CodexFileChange',
+      input: { grantRoot: '/tmp/project' },
+    })
+    expect(ofType(events, 'permission_resolved')[0]).toMatchObject({
+      behavior: 'deny',
+      resolvedBy: 'timeout',
+      message: 'Approval timed out',
+    })
+    expect(runner.status).toBe('idle')
+    // The runner stays usable after the timeout.
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    }, 't2')
+    runner.sendMessage('again')
+    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
+  })
+
+  it('maps requestUserInput onto the AskUserQuestion convention, with question policies', async () => {
+    const QUESTIONS = {
+      threadId: 'thread-1',
+      turnId: 't1',
+      itemId: 'q-item',
+      questions: [
+        {
+          id: 'q1',
+          header: 'Auth',
+          question: 'Which auth method?',
+          options: [
+            { label: 'OAuth', description: 'browser flow' },
+            { label: 'API key', description: 'env var' },
+          ],
+        },
+      ],
+    }
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
+    await runner.start()
+
+    // 'ask' (default): pending, in the exact UserQuestion wire shape the
+    // existing QuestionPrompt UIs parse; the allow's `updatedInput.answers`
+    // (question text → chosen label) maps back to codex's id-keyed shape.
+    const asked = peer.serverRequest('item/tool/requestUserInput', QUESTIONS)
+    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    const request = runner.pendingApprovals[0]!
+    expect(request.toolName).toBe('AskUserQuestion')
+    expect(request.input).toEqual({
+      questions: [
+        {
+          question: 'Which auth method?',
+          header: 'Auth',
+          options: [
+            { label: 'OAuth', description: 'browser flow' },
+            { label: 'API key', description: 'env var' },
+          ],
+        },
+      ],
+    })
+    runner.resolvePermission(request.id, {
+      behavior: 'allow',
+      updatedInput: { answers: { 'Which auth method?': 'API key' } },
+    })
+    await expect(asked).resolves.toEqual({ answers: { q1: { answers: ['API key'] } } })
+
+    // 'auto': settled synchronously with each question's first (recommended)
+    // option — request/resolved events still fire, nothing pends.
+    const autoPeer = scriptedPeer()
+    scriptTurn(autoPeer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const auto = new CodexRunner({
+      cwd: '/tmp',
+      prompt: 'go',
+      questionBehavior: 'auto',
+      connectFn: autoPeer.connectFn,
+    })
+    const autoEvents = collect(auto)
+    await auto.start()
+    await expect(autoPeer.serverRequest('item/tool/requestUserInput', QUESTIONS)).resolves.toEqual({
+      answers: { q1: { answers: ['OAuth'] } },
+    })
+    expect(auto.pendingApprovals).toHaveLength(0)
+    expect(ofType(autoEvents, 'permission_resolved')[0]).toMatchObject({
+      behavior: 'allow',
+      resolvedBy: 'policy',
+    })
+
+    // 'deny': the model is sent back to decide, with the guidance message.
+    const denyPeer = scriptedPeer()
+    scriptTurn(denyPeer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const denied = new CodexRunner({
+      cwd: '/tmp',
+      prompt: 'go',
+      questionBehavior: 'deny',
+      connectFn: denyPeer.connectFn,
+    })
+    const deniedEvents = collect(denied)
+    await denied.start()
+    await expect(denyPeer.serverRequest('item/tool/requestUserInput', QUESTIONS)).resolves.toEqual({
+      answers: {},
+    })
+    expect(ofType(deniedEvents, 'permission_resolved')[0]).toMatchObject({
+      behavior: 'deny',
+      resolvedBy: 'policy',
+    })
+  })
+
+  it('grants exactly the requested permission profile on allow, nothing on deny or teardown', async () => {
+    const PROFILE = { fileSystem: { write: ['/tmp/project'] } }
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+
+    const granted = peer.serverRequest('item/permissions/requestApproval', {
+      threadId: 'thread-1',
+      itemId: 'p1',
+      permissions: PROFILE,
+      reason: 'need to write build output',
+    })
+    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    expect(runner.pendingApprovals[0]).toMatchObject({
+      toolName: 'CodexPermissions',
+      title: 'need to write build output',
+    })
+    runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'allow' })
+    // The grant echoes the REQUESTED profile — turn-scoped by default, never a
+    // widened one.
+    await expect(granted).resolves.toEqual({ permissions: PROFILE })
+
+    const refused = peer.serverRequest('item/permissions/requestApproval', {
+      threadId: 'thread-1',
+      itemId: 'p2',
+      permissions: PROFILE,
+    })
+    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'deny' })
+    await expect(refused).resolves.toEqual({ permissions: {} })
+
+    // An MCP elicitation allow carries the filled form as content; deny declines.
+    const elicited = peer.serverRequest('mcpServer/elicitation/request', {
+      threadId: 'thread-1',
+      serverName: 'deepwiki',
+      message: 'API token?',
+      mode: 'form',
+    })
+    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    expect(runner.pendingApprovals[0]!.toolName).toBe('CodexMcpElicitation')
+    runner.resolvePermission(runner.pendingApprovals[0]!.id, {
+      behavior: 'allow',
+      updatedInput: { token: 'abc' },
+    })
+    await expect(elicited).resolves.toEqual({ action: 'accept', content: { token: 'abc' } })
+
+    // Session close settles what's left with the channel's own "no".
+    const orphan = peer.serverRequest('mcpServer/elicitation/request', {
+      threadId: 'thread-1',
+      serverName: 'deepwiki',
+      message: 'still there?',
+      mode: 'form',
+    })
+    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
+    runner.close()
+    await expect(orphan).resolves.toEqual({ action: 'decline' })
+    expect(ofType(events, 'permission_resolved').at(-1)).toMatchObject({
+      behavior: 'deny',
+      resolvedBy: 'policy',
+      message: 'Session closed',
+    })
+  })
+
+  it('sweeps approvals the turn outlived, and honors serverRequest/resolved', async () => {
+    const peer = scriptedPeer()
+    const responses: unknown[] = []
+    peer.respond('turn/start', () => {
+      peer.emit('turn/started', { threadId: 'thread-1', turn: { id: 't1', status: 'inProgress' } })
+      // Two asks codex settles without us: one it resolves itself (announced
+      // via serverRequest/resolved), one simply outlived by the turn.
+      void peer
+        .serverRequest('item/commandExecution/requestApproval', { threadId: 'thread-1', itemId: 'c1', command: 'a' }, 'wire-7')
+        .then((r) => responses.push(r))
+      void peer
+        .serverRequest('item/commandExecution/requestApproval', { threadId: 'thread-1', itemId: 'c2', command: 'b' }, 'wire-8')
+        .then((r) => responses.push(r))
+      return { turn: { id: 't1', status: 'inProgress' } }
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
+    const events = collect(runner)
+    const run = runner.start()
+    await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(2))
+
+    // Codex resolved wire-7 on its own (auto-resolution): the card retires.
+    peer.emit('serverRequest/resolved', { threadId: 'thread-1', requestId: 'wire-7' })
+    expect(runner.pendingApprovals).toHaveLength(1)
+    expect(ofType(events, 'permission_resolved')[0]).toMatchObject({
+      resolvedBy: 'policy',
+      message: 'resolved by codex',
+    })
+
+    // The turn ends with the second still pending: swept, never wedged.
+    peer.emit('turn/completed', { threadId: 'thread-1', turn: { id: 't1', status: 'completed' } })
+    await run
+    expect(runner.pendingApprovals).toHaveLength(0)
+    expect(ofType(events, 'permission_resolved')[1]).toMatchObject({
+      resolvedBy: 'policy',
+      message: 'Turn ended',
+    })
+    expect(responses).toEqual([{ decision: 'decline' }, { decision: 'decline' }])
+    expect(runner.status).toBe('idle')
+  })
+
+  it('fails loudly when initialize rejects the experimentalApi capability', async () => {
+    const peer = scriptedPeer()
+    peer.respond('initialize', () => {
+      throw new JsonRpcError(-32602, 'unknown capability: experimentalApi')
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+    const [result] = ofType(events, 'turn_result')
+    expect(result).toMatchObject({ subtype: 'error_during_execution' })
+    expect(result!.errors?.[0]).toMatch(/experimentalApi/)
+    expect(result!.errors?.[0]).toMatch(/no non-experimental fallback/)
+    // A failed handshake is a failed turn, not a failed session.
+    expect(events.some((e) => e.type === 'session_error')).toBe(false)
+    expect(runner.status).toBe('idle')
   })
 
   it('hands images to codex as localImage temp files and cleans up on close', async () => {
@@ -682,7 +1097,7 @@ describe('CodexRunner', () => {
     const info = runner.info()
     expect(info.engine).toBe('codex')
     expect(info.capabilities?.streaming).toBe('token')
-    expect(info.capabilities?.interactiveApprovals).toBe(false)
+    expect(info.capabilities?.interactiveApprovals).toBe(true)
     expect(info.sdkSessionId).toBe('thread-1')
     expect(info.pendingPermissionCount).toBe(0)
     expect(info.title).toBe('hello world')

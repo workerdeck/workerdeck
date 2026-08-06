@@ -108,7 +108,13 @@ export type ApiMessage = {
 // Permission requests
 // ---------------------------------------------------------------------------
 
-/** A tool call promoted into a pending approval by the runner's canUseTool hook. */
+/** A tool call promoted into a pending approval by the runner's canUseTool hook
+ * (Claude), or an engine ask-channel request surfaced by its runner (codex).
+ * The two do not share a tense: Claude asks BEFORE a tool runs; codex's command
+ * approval is usually an escalation AFTER its sandbox already ran and refused
+ * the command ("command failed; retry without sandbox?"). The runner authors
+ * `title`/`description`/`decisionReason` to say which — clients should render
+ * those fields rather than composing their own "X wants to run Y" sentence. */
 export type PermissionRequest = {
   /** Server-assigned id; used by the `permission_decision` command. */
   id: string
@@ -641,15 +647,21 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     streaming: 'token',
   },
   codex: {
-    // The app-server protocol HAS the ask channel (server→client JSON-RPC
-    // requests), but WorkerDeck pins `approvalPolicy: 'never'` and auto-declines
-    // anything that arrives — false until the channel is actually wired to the
-    // permission surface, because a record that over-promises makes clients
-    // render approval UI that never fires.
-    interactiveApprovals: false,
-    // 'default' degrades honestly to the read-only sandbox ("would have asked"
-    // becomes "cannot act"); acceptEdits = workspace-write; bypass = full access.
-    // plan/dontAsk/auto name CLI workflows codex cannot deliver.
+    // The app-server ask channels (server→client JSON-RPC requests: command
+    // escalations, file changes, permission grants, tool questions, MCP
+    // elicitations) are wired to the permission surface: they arrive as
+    // `permission_requested` and are answered by `permission_decision`.
+    // NOTE the semantic shift a client should not paper over: codex's command
+    // approval is usually an ESCALATION after the sandbox already refused the
+    // command ("command failed; retry without sandbox?"), not a gate before
+    // execution — the runner authors `title`/`decisionReason` from codex's own
+    // reason sentence, so render those rather than composing "wants to use X".
+    interactiveApprovals: true,
+    // 'default' = read-only sandbox + ask (a blocked action becomes a real
+    // question instead of a silent refusal); acceptEdits = workspace-write +
+    // ask (in-workspace writes sail through, escalations still ask); bypass =
+    // full access, asking nothing. plan/dontAsk/auto name CLI workflows codex
+    // cannot deliver.
     permissionModes: ['default', 'acceptEdits', 'bypassPermissions'],
     defaultPermissionMode: 'default',
     resume: true,

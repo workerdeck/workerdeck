@@ -17,14 +17,21 @@
  * initialize/initialized handshake, and thread/start — drift in any of those
  * fails a canary before it costs a token.
  *
+ * The free canaries also pin the two APPROVAL gates (discovered by trial):
+ * `initialize` accepting `capabilities.experimentalApi: true`, and
+ * `thread/start` accepting the granular `approvalPolicy` object — WorkerDeck
+ * has no non-experimental fallback, so losing either gate breaks approvals
+ * outright.
+ *
  * The paid part is the drift alarm for the app-server JSON-RPC v2 vocabulary
  * (pre-1.0, regenerable from the binary — the schema promises drift): token
  * deltas actually arriving (the reason this transport exists), a real command
  * execution with its exit code, the usage-relation asserts on the summed
  * tokenUsage/updated stream, resume continuity, interrupt behavior +
- * post-interrupt resumability, the read-only sandbox actually refusing a
- * write, and a `localImage` attachment. Any change to CodexRunner's spawn
- * options, handshake, or event mapping requires a run.
+ * post-interrupt resumability, the approval flow under 'default' mode (the
+ * sandbox refusal surfacing as a real permission_requested, denied, with the
+ * turn surviving), and a `localImage` attachment. Any change to CodexRunner's
+ * spawn options, handshake, or event mapping requires a run.
  */
 import { execFile } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
@@ -32,7 +39,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { CodexRunner, connectAppServer, resolveBundledCodexExecutable } from '@workerdeck/core'
-import type { SessionEvent } from '@workerdeck/protocol'
+import type { PermissionRequest, SessionEvent } from '@workerdeck/protocol'
 
 const MODEL = process.argv.find((a) => !a.startsWith('-') && a.includes('gpt')) ?? 'gpt-5.6-luna'
 const CANARY_ONLY = process.argv.includes('--canary')
@@ -158,6 +165,63 @@ async function canaries(): Promise<void> {
       } else {
         fail('login status verdict', `unexpected output: ${output.trim().slice(0, 80)}`)
       }
+    }
+  }
+
+  // 4+5. The two approval gates, discovered by trial and easy to lose in a
+  //      release: `initialize` must accept `capabilities.experimentalApi:
+  //      true`, and `thread/start` must accept the GRANULAR approvalPolicy
+  //      object (the string vocabulary never asks — measured). Both are free:
+  //      no turn, no tokens, no auth (thread/start is local; credentials are
+  //      first consulted at turn/start). WorkerDeck runs ONE code path — there
+  //      is no non-experimental fallback — so either gate failing here means
+  //      approvals are broken until the runner is updated.
+  if (!codexBin) {
+    fail('experimentalApi gate', 'could not resolve the bundled codex binary')
+  } else {
+    const gateCwd = mkdtempSync(join(tmpdir(), 'codex-smoke-gates-'))
+    const connection = connectAppServer({ executable: codexBin, env: scratchEnv() })
+    try {
+      await connection.request('initialize', {
+        clientInfo: { name: 'workerdeck-smoke', title: 'WorkerDeck smoke', version: 'gates' },
+        capabilities: { experimentalApi: true },
+      })
+      pass('experimentalApi gate', 'initialize accepted capabilities.experimentalApi: true')
+      connection.notify('initialized')
+      try {
+        const started = (await connection.request('thread/start', {
+          cwd: gateCwd,
+          sandbox: 'read-only',
+          approvalPolicy: {
+            granular: {
+              sandbox_approval: true,
+              rules: true,
+              mcp_elicitations: true,
+              request_permissions: true,
+              skill_approval: true,
+            },
+          },
+        })) as { thread?: { id?: string } }
+        if (typeof started?.thread?.id === 'string') {
+          pass('granular approvalPolicy gate', 'thread/start accepted the granular object')
+        } else {
+          fail('granular approvalPolicy gate', 'thread/start answered without a thread id')
+        }
+      } catch (error) {
+        fail(
+          'granular approvalPolicy gate',
+          `thread/start rejected the granular approvalPolicy: ${(error as Error).message}`,
+        )
+      }
+    } catch (error) {
+      fail(
+        'experimentalApi gate',
+        `initialize rejected: ${(error as Error).message} — the runner has NO non-experimental ` +
+          'fallback; codex approvals are broken until this is resolved',
+      )
+    } finally {
+      connection.close()
+      rmSync(gateCwd, { recursive: true, force: true })
     }
   }
 }
@@ -362,18 +426,57 @@ async function paid(): Promise<void> {
     }
     afterInterrupt.runner.close()
 
-    // Turn 4: the read-only sandbox actually refuses a write (the permission-
-    // mode mapping — thread `sandbox` + turn `sandboxPolicy`). Fresh thread.
+    // Turn 4: the approval flow, end to end, in 'default' mode (read-only
+    // sandbox + granular ask). The write attempt is refused by the sandbox and
+    // must now surface as a real permission_requested — codex's escalation
+    // ("command failed; retry without sandbox?") — which the smoke DENIES, so
+    // the file must still not exist and the turn must complete anyway. This is
+    // the check the scripted peer cannot make: that the real binary actually
+    // asks under the granular policy, and that a decline lands cleanly.
     const readonly = makeRunner(cwd, {
       prompt:
-        'Create a file named smoke-write-test.txt containing "x" in the current directory. ' +
-        'If you cannot, say why in one line.',
+        'Create a file named smoke-write-test.txt containing "x" in the current directory ' +
+        'using a shell command. If you cannot, say why in one line.',
       permissionMode: 'default',
     })
+    const approvals: PermissionRequest[] = []
+    readonly.runner.subscribe((event) => {
+      if (event.type === 'permission_requested') {
+        approvals.push(event.request)
+        // Deny WITHOUT interrupt: the turn must survive a "no".
+        readonly.runner.resolvePermission(event.request.id, {
+          behavior: 'deny',
+          message: 'smoke: keep the sandbox',
+        })
+      }
+    })
+    const readonlyTimeout = setTimeout(() => readonly.runner.close(), 120_000)
     await readonly.runner.start()
+    clearTimeout(readonlyTimeout)
+    if (approvals.length > 0) {
+      pass(
+        'sandbox escalation asks',
+        `permission_requested (${approvals[0]!.toolName}): "${approvals[0]!.title ?? ''}"`,
+      )
+    } else {
+      fail(
+        'sandbox escalation asks',
+        'no permission_requested — the granular ask policy did not ask; the sandbox refusal ' +
+          'was silent (the pre-approvals behavior)',
+      )
+    }
     const wrote = existsSync(join(cwd, 'smoke-write-test.txt'))
-    if (!wrote) pass('read-only sandbox', "'default' mode refused the write, as mapped")
-    else fail('read-only sandbox', "'default' mode let a write through — the sandbox mapping is broken")
+    if (!wrote) pass('denied escalation stays denied', 'the write never landed')
+    else fail('denied escalation stays denied', 'the file exists — a decline still let the write through')
+    const [readonlyResult] = turnResults(readonly.events)
+    if (readonlyResult?.subtype === 'success') {
+      pass('decline keeps the turn alive', 'the turn completed after the deny')
+    } else {
+      fail(
+        'decline keeps the turn alive',
+        `turn ended ${readonlyResult?.subtype ?? 'not at all'}: ${readonlyResult?.errors?.join('; ') ?? ''}`,
+      )
+    }
     readonly.runner.close()
 
     // Turn 5: an image attachment reaches the model as `localImage` — the one

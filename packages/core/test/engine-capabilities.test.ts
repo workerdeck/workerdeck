@@ -56,13 +56,14 @@ describe('ENGINE_CAPABILITIES invariants', () => {
     }
   })
 
-  it('declares approvals for claude alone, and token streaming for codex', () => {
+  it('declares approvals for claude and codex, and token streaming for codex', () => {
     expect(ENGINE_CAPABILITIES.claude.interactiveApprovals).toBe(true)
-    // Codex streams token-wise (app-server deltas) yet approvals stay false:
-    // the JSON-RPC channel exists, but the runner auto-declines rather than
-    // asking — the record describes what ships, not what the wire could do.
+    // Codex streams token-wise (app-server deltas) AND asks: the server→client
+    // ask channels are wired to the permission surface (granular approval
+    // policy under experimentalApi) — the record describes what ships, and
+    // what ships now includes approvals.
     expect(ENGINE_CAPABILITIES.codex.streaming).toBe('token')
-    expect(ENGINE_CAPABILITIES.codex.interactiveApprovals).toBe(false)
+    expect(ENGINE_CAPABILITIES.codex.interactiveApprovals).toBe(true)
     expect(ENGINE_CAPABILITIES.provider.interactiveApprovals).toBe(false)
   })
 })

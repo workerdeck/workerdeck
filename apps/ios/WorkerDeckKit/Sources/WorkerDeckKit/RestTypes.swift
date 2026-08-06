@@ -114,7 +114,11 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     vfs: false, streaming: "token"
   ),
   .codex: EngineCapabilities(
-    interactiveApprovals: false,
+    // The app-server ask channels are wired to the permission surface. NOTE
+    // the tense: codex's command approval is usually an escalation AFTER the
+    // sandbox refused ("command failed; retry without sandbox?") — render the
+    // request's own title/description rather than composing "wants to use X".
+    interactiveApprovals: true,
     permissionModes: [.default, .acceptEdits, .bypassPermissions],
     defaultPermissionMode: .default,
     resume: true, resumeBackfill: false, listSessions: false,

@@ -129,6 +129,86 @@ export type AppServerPlanUpdate = {
 }
 
 // ---------------------------------------------------------------------------
+// Server→client approval requests (the ask channels)
+// ---------------------------------------------------------------------------
+
+/** `item/commandExecution/requestApproval` params. Under `sandbox_approval`
+ * this is an ESCALATION: the command already ran inside the sandbox and was
+ * refused — `reason` is codex's own sentence ("command failed; retry without
+ * sandbox?"), and accepting re-runs the command WITHOUT the sandbox.
+ * `availableDecisions` is experimental (present under `experimentalApi: true`)
+ * and per-request; entries are the schema's strings or structured objects
+ * (`{acceptWithExecpolicyAmendment: …}`). */
+export type AppServerCommandApprovalParams = {
+  threadId: string
+  turnId?: string
+  itemId: string
+  /** Distinct callback id when several approvals belong to one item. */
+  approvalId?: string | null
+  command?: string | null
+  cwd?: string | null
+  reason?: string | null
+  availableDecisions?: unknown[]
+}
+
+/** `item/fileChange/requestApproval` params. */
+export type AppServerFileChangeApprovalParams = {
+  threadId: string
+  turnId?: string
+  itemId: string
+  /** Root the change wants write access under, when codex names one. */
+  grantRoot?: string | null
+  reason?: string | null
+  availableDecisions?: unknown[]
+}
+
+/** `item/permissions/requestApproval` params: the model proactively asks for a
+ * permission profile (filesystem/network grants). Allowing echoes the
+ * requested profile back as granted (scope defaults to 'turn'). */
+export type AppServerPermissionsApprovalParams = {
+  threadId: string
+  turnId?: string
+  itemId: string
+  cwd?: string | null
+  reason?: string | null
+  permissions?: Record<string, unknown> | null
+}
+
+/** One `item/tool/requestUserInput` question (EXPERIMENTAL in codex's schema —
+ * codex's AskUserQuestion analogue). */
+export type AppServerUserInputQuestion = {
+  id: string
+  header?: string
+  question: string
+  /** Free-text answers allowed. */
+  isOther?: boolean
+  isSecret?: boolean
+  options?: Array<{ label: string; description?: string }> | null
+}
+
+/** `item/tool/requestUserInput` params. */
+export type AppServerUserInputParams = {
+  threadId: string
+  turnId?: string
+  itemId: string
+  questions: AppServerUserInputQuestion[]
+  autoResolutionMs?: number | null
+}
+
+/** `mcpServer/elicitation/request` params (union over `mode`; the runner keeps
+ * it structural). `turnId` is nullable — elicitations are thread-scoped. */
+export type AppServerElicitationParams = {
+  threadId?: string
+  turnId?: string | null
+  serverName?: string
+  message?: string
+  mode?: string
+  requestedSchema?: unknown
+  elicitationId?: string
+  url?: string
+}
+
+// ---------------------------------------------------------------------------
 // The connection seam (the `queryFn` injection pattern, at the wire level)
 // ---------------------------------------------------------------------------
 
@@ -147,8 +227,11 @@ export type AppServerConnection = {
   /** Server→client notifications. One handler (the runner). */
   onNotification(handler: (method: string, params: unknown) => void): void
   /** Server→client REQUESTS (approvals live here): the handler's resolution is
-   * sent back as the JSON-RPC result; a throw becomes an error response. */
-  onRequest(handler: (method: string, params: unknown) => Promise<unknown>): void
+   * sent back as the JSON-RPC result; a throw becomes an error response. `id`
+   * is the wire request id — `serverRequest/resolved` names it when codex
+   * settles a request on its own (auto-resolution), so the runner can retire
+   * the matching pending approval instead of leaving a stale card. */
+  onRequest(handler: (method: string, params: unknown, id: string | number) => Promise<unknown>): void
   /** Fires once when the child exits or the pipe breaks — NOT on `close()`.
    * The message carries an exit summary and a stderr tail for diagnostics. */
   onClose(handler: (message: string) => void): void

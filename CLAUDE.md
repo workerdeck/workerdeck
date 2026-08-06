@@ -21,8 +21,10 @@ protocol. Read these before changing scope or structure:
   what server and queue type against: `SessionRunner` (Claude, over the SDK's `query()`),
   `CodexRunner` (`engines/codex/` — the `@openai/codex` binary as an **optional peer**, driven
   over its `codex app-server` JSON-RPC surface: one child per *session* held across turns, a
-  hand-rolled NDJSON client with zero new deps, token streaming, complete child env always — a
-  spawn env *replaces*, never merges; see `docs/GOTCHAS.md` §Codex), and `AiSdkRunner`
+  hand-rolled NDJSON client with zero new deps, token streaming, interactive approvals over the
+  server→client ask channels (granular policy under `experimentalApi`, no fallback — a codex
+  command approval is an *escalation after a sandbox refusal*, see `docs/GOTCHAS.md` §Codex),
+  complete child env always — a spawn env *replaces*, never merges), and `AiSdkRunner`
   (provider, over AI SDK v7, built by the host's `createEngineRunner` hook — its adapter is a
   pseudo-adapter). The
   **model list clients see is shaped here**, not by each UI: catalogs apply

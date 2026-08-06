@@ -117,7 +117,7 @@ describe('codex engine over the gateway', () => {
     const profiles = (await (await fetch(`${base}/profiles`)).json()) as { profiles: ProfileInfo[] }
     expect(profiles.profiles[0]!.models?.[0]?.value).toBe('gpt-5.6-sol')
     expect(profiles.profiles[0]!.models?.[0]?.reasoningEfforts).toContain('ultra')
-    expect(profiles.profiles[0]!.capabilities?.interactiveApprovals).toBe(false)
+    expect(profiles.profiles[0]!.capabilities?.interactiveApprovals).toBe(true)
     expect(profiles.profiles[0]!.capabilities?.streaming).toBe('token')
 
     const created = await fetch(`${base}/sessions`, {
@@ -252,14 +252,24 @@ describe('codex engine over the gateway', () => {
     expect(((await res.json()) as { error: string }).error).toMatch(/reasoningEffort/)
   })
 
-  it('strips questionBehavior for engines without an approval channel', async () => {
-    let captured: SessionRunnerConfig | undefined
-    const { adapter } = fakeCodexAdapter({ onCreate: (config) => (captured = config) })
+  it('passes questionBehavior through to codex (it has an approval channel), strips it for provider', async () => {
+    // Codex's requestUserInput rides the AskUserQuestion convention, so the
+    // policy is meaningful and must reach the runner …
+    let codexConfig: SessionRunnerConfig | undefined
+    let providerConfig: SessionRunnerConfig | undefined
+    const { adapter } = fakeCodexAdapter({ onCreate: (config) => (codexConfig = config) })
     running = createWorkerServer({
       allowUnauthenticated: true,
       allowedCwdRoots: ['/tmp'],
-      profiles: [codexProfile()],
+      profiles: [
+        codexProfile(),
+        { name: 'kimi', engine: 'provider', provider: { id: 'moonshotai', model: 'kimi-k3' } },
+      ],
       engines: { codex: adapter },
+      createEngineRunner: ({ config }) => {
+        providerConfig = config as SessionRunnerConfig
+        throw new Error('assembled far enough — the strip already happened')
+      },
     })
     const { port } = await running.listen(0, '127.0.0.1')
     const res = await fetch(`http://127.0.0.1:${port}/v1/sessions`, {
@@ -268,7 +278,17 @@ describe('codex engine over the gateway', () => {
       body: JSON.stringify({ cwd: '/tmp/p', profile: 'codex', questionBehavior: 'auto' }),
     })
     expect(res.status).toBe(201)
-    expect(captured?.questionBehavior).toBeUndefined()
+    expect(codexConfig?.questionBehavior).toBe('auto')
+
+    // … while an engine with no approval channel still has it stripped, so job
+    // webhooks never grow phantom permission_requested expectations.
+    await fetch(`http://127.0.0.1:${port}/v1/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/p', profile: 'kimi', questionBehavior: 'auto' }),
+    })
+    expect(providerConfig).toBeDefined()
+    expect(providerConfig?.questionBehavior).toBeUndefined()
   })
 
   it('validates codexHome like configDir, and refuses undeliverable instructions', () => {

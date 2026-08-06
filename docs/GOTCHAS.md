@@ -145,13 +145,39 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   reasoning summary/text deltas arrive token-by-token, `item/completed` supersedes the stream
   with the final text. The paid `smoke:codex` asserts deltas actually arrive and agree with the
   completed message — the record must never quietly go back to being a lie in either direction.
-- **Interactive approvals stay `false`, by policy not by transport**: the protocol HAS the ask
-  channel (server→client JSON-RPC requests), but this increment pins `approvalPolicy: 'never'`
-  on both `thread/start` and `turn/start` and auto-declines anything that arrives anyway —
-  visibly (a `codex.approval_auto_declined` sdk_event), never silently, and unknown server
-  requests get a JSON-RPC -32601 rather than a hang (an unanswered request wedges the turn).
-  Flip `ENGINE_CAPABILITIES.codex.interactiveApprovals` only when the channel is actually wired
-  to the permission surface.
+- **Approvals are gated TWICE, and neither gate alone is enough** (measured against 0.146.0):
+  `initialize` must declare `capabilities: {experimentalApi: true}`, and the `approvalPolicy`
+  must be the **granular object** (`{granular: {sandbox_approval, rules, mcp_elicitations,
+  request_permissions, skill_approval}}`) — the string vocabulary never asks (plain
+  `'untrusted'` silently refused a sandbox-violating write and auto-approved a safe echo; no
+  request ever arrived). The runner declares `experimentalApi` unconditionally and has **no
+  non-experimental fallback** — a binary that rejects either gate fails the turn loudly, naming
+  the capability, instead of quietly not asking. The free `smoke:codex --canary` pins both
+  gates.
+- **A codex command approval is an ESCALATION after a sandbox refusal, not a gate before
+  execution.** The command already ran inside the sandbox and was blocked; the request's
+  `reason` is codex's own sentence ("command failed; retry without sandbox?") and accepting
+  re-runs the command WITHOUT the sandbox. The runner therefore authors
+  `PermissionRequest.title`/`decisionReason` from that reason verbatim and anchors `toolUseId`
+  to the already-emitted tool card — clients render the request's own words (both UIs already
+  prefer `title`) and never compose a "wants to use X" sentence that would misstate the tense.
+  The five wired channels: `item/commandExecution/requestApproval`,
+  `item/fileChange/requestApproval`, `item/permissions/requestApproval` (allow echoes the
+  *requested* profile back, turn-scoped), `item/tool/requestUserInput` (mapped onto the
+  AskUserQuestion convention, `questionBehavior` honored), `mcpServer/elicitation/request`
+  (allow's `updatedInput` travels as the elicitation `content`). Everything else still gets a
+  JSON-RPC -32601 rather than a hang, an unanswered approval times out into the channel's own
+  denial (`approvalTimeoutMs`, default 300s), and turn end / interrupt / child death / session
+  close all sweep pending approvals — a card never outlives what it gates.
+- **`availableDecisions` is per-request, experimental, and gates the ACCEPT side only.** Under
+  `experimentalApi` a command approval may carry `availableDecisions` (strings plus structured
+  variants like `{acceptWithExecpolicyAmendment: …}`). The runner sends plain `accept` only
+  when it's offered, and an allow the request offers no plain accept for is answered with the
+  denial *and says so* — a one-shot allow is never widened into `acceptForSession` or a
+  persistent execpolicy amendment. `decline` is sent even when unlisted: the response schema
+  declares it unconditionally and a live decline against a request whose list omitted it
+  completed cleanly (0.146.0) — the list's only "no" alternative, `cancel`, would interrupt the
+  whole turn, which is codex's deny-and-interrupt and maps to our deny+`interrupt: true`.
 - **The spawn env replaces, never merges**: a `spawn(..., { env })` child inherits nothing, so
   the runner always passes a *complete* environment (a delta silently strands HOME/PATH — and
   the auth chain with them). The profile's `codexHome` pin rides this env (`CODEX_HOME`), which
@@ -218,13 +244,20 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   is unknown, not zero, and is dropped. Unlike the Claude engine — whose CLI pushes only on
   *change*, hence its `/usage` poll — app-server pushes these **during a turn**, so the runner
   only listens. `planType` becomes `plan_info`, emitted once per change.
-- Sandbox mapping is the honest degradation: `default` → read-only ("would have asked" becomes
-  "cannot act" — commands still run, writes are refused by the OS sandbox), `acceptEdits` →
-  workspace-write, `bypassPermissions` → danger-full-access. `plan`/`dontAsk`/`auto` are not
-  offered — they name CLI workflows codex cannot deliver, and a control that silently does
-  nothing is exactly what the capability record exists to prevent. The same policy is stated
-  twice on the wire — `thread/start` takes a `sandbox` string, `turn/start` a `sandboxPolicy`
-  object — keep them in lockstep.
+- Permission modes ride TWO wire axes in lockstep: the sandbox (`default` → read-only,
+  `acceptEdits` → workspace-write, `bypassPermissions` → danger-full-access) decides *what needs
+  asking*, and the granular approval policy decides *whether asking happens* (`default`/
+  `acceptEdits` all-flags-on, `bypassPermissions` all-flags-off — same shape, so there is one
+  code path). So `default` is no longer the old "honest degradation" (read-only + never, where
+  "would have asked" became "cannot act"): a blocked write now escalates to a real question,
+  which is the closest codex gets to Claude's `default` — with the caveat that approving runs
+  the command *unsandboxed*, a bigger grant than approving one Claude edit, which is why the
+  request carries codex's own escalation sentence. `acceptEdits` auto-runs in-workspace writes
+  (the sandbox allows them, so nothing asks) and still asks for what the sandbox refuses.
+  `plan`/`dontAsk`/`auto` are still not offered — they name CLI workflows codex cannot deliver.
+  Each policy is stated twice on the wire — `thread/start` takes `sandbox` (string) +
+  `approvalPolicy`, `turn/start` takes `sandboxPolicy` (object) + `approvalPolicy` — keep all
+  four in lockstep.
 - **Model/effort overrides persist "for this turn and subsequent turns"**, so the runner names
   the model and effort explicitly on every `turn/start`, remembering the resolved defaults from
   the `thread/start` response — that is the only way `setModel(undefined)` can mean "back to the

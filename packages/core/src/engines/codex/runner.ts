@@ -7,12 +7,14 @@ import {
   PROTOCOL_VERSION,
   type ContentBlock,
   type CreateSessionRequest,
+  type PermissionDecisionSource,
   type PermissionMode,
   type PermissionRequest,
   type SessionEvent,
   type SessionEventBody,
   type SessionInfo,
   type SessionStatus,
+  type UserQuestion,
 } from '@workerdeck/protocol'
 import {
   attachmentKind,
@@ -23,9 +25,13 @@ import {
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
 import { JsonRpcError } from './jsonrpc.ts'
 import type {
+  AppServerCommandApprovalParams,
   AppServerConnection,
   AppServerConnectFn,
+  AppServerElicitationParams,
+  AppServerFileChangeApprovalParams,
   AppServerItem,
+  AppServerPermissionsApprovalParams,
   AppServerPlanUpdate,
   AppServerRateLimits,
   AppServerTokenUsage,
@@ -33,17 +39,16 @@ import type {
   AppServerTurn,
   AppServerUnknownItem,
   AppServerUserInput,
+  AppServerUserInputParams,
+  AppServerUserInputQuestion,
 } from './types.ts'
 
 /**
  * thread/start's sandbox axis (string form) — our permission modes as codex
- * sandbox modes, the honest degradation: `default` → read-only ("would have
- * asked before acting" becomes "cannot act" — reads run, writes are refused by
- * the OS sandbox), `acceptEdits` → workspace-write, `bypassPermissions` →
- * danger-full-access. Always with `approvalPolicy: 'never'`: the protocol HAS
- * an ask channel (server→client requests), but this increment does not wire it
- * to the permission surface, so any policy that asks would stall a turn on our
- * own auto-decline.
+ * sandbox modes: `default` → read-only (reads run; any mutation is refused by
+ * the OS sandbox and — with the ask policy below — escalates to a real
+ * question), `acceptEdits` → workspace-write (in-workspace writes sail
+ * through, the acceptEdits grant), `bypassPermissions` → danger-full-access.
  */
 const THREAD_SANDBOX_BY_MODE: Partial<Record<PermissionMode, string>> = {
   default: 'read-only',
@@ -59,17 +64,323 @@ const TURN_SANDBOX_BY_MODE: Partial<Record<PermissionMode, { type: string }>> = 
 }
 
 /**
- * Minimal denials for the server→client requests `approvalPolicy: 'never'`
- * should already prevent: never approve, never hang (an unanswered request
- * wedges the turn). Each is the schema's own "no" — decline the action,
- * grant no permissions, answer no questions.
+ * The approval axis, stated as the GRANULAR object on both thread/start and
+ * turn/start — never the string vocabulary, deliberately and unconditionally:
+ * measured against 0.146.0, plain `'untrusted'` never asked anything (a
+ * sandbox-violating write was silently refused, a safe echo auto-approved),
+ * while the granular flags make a blocked action a real server→client
+ * question. Granular policies are gated on `capabilities.experimentalApi` at
+ * initialize; WorkerDeck declares it always and keeps NO non-experimental
+ * fallback — a future binary that rejects either gate fails loudly (see
+ * {@link CodexRunner.#ensureThread}) instead of quietly not asking.
+ *
+ * `default`/`acceptEdits` ask (all flags on — the sandbox axis above already
+ * decides *what needs asking*); `bypassPermissions` asks nothing, same shape.
  */
-const DECLINE_BY_METHOD: Record<string, object> = {
-  'item/commandExecution/requestApproval': { decision: 'decline' },
-  'item/fileChange/requestApproval': { decision: 'decline' },
-  'item/permissions/requestApproval': { permissions: {} },
-  'item/tool/requestUserInput': { answers: {} },
-  'mcpServer/elicitation/request': { action: 'decline' },
+const GRANULAR_ASK = {
+  granular: {
+    sandbox_approval: true,
+    rules: true,
+    mcp_elicitations: true,
+    request_permissions: true,
+    skill_approval: true,
+  },
+}
+const GRANULAR_NEVER = {
+  granular: {
+    sandbox_approval: false,
+    rules: false,
+    mcp_elicitations: false,
+    request_permissions: false,
+    skill_approval: false,
+  },
+}
+const APPROVAL_POLICY_BY_MODE: Partial<Record<PermissionMode, object>> = {
+  default: GRANULAR_ASK,
+  acceptEdits: GRANULAR_ASK,
+  bypassPermissions: GRANULAR_NEVER,
+}
+
+/** Fallback timeout for a pending approval nobody answers — the SessionRunner
+ * default, so unattended codex sessions land the same way Claude ones do. */
+const DEFAULT_APPROVAL_TIMEOUT_MS = 300_000
+
+/**
+ * The experimental per-request decision list, normalized to names: a string
+ * entry is its own name, a structured entry (`{acceptWithExecpolicyAmendment:
+ * …}`) is named by its key. Undefined = the request stated no list and the
+ * channel's schema enum applies. Present only under `experimentalApi: true` —
+ * which WorkerDeck always declares.
+ */
+function offeredDecisions(params: unknown): Set<string> | undefined {
+  const raw = (params as { availableDecisions?: unknown })?.availableDecisions
+  if (!Array.isArray(raw)) return undefined
+  const names = new Set<string>()
+  for (const entry of raw) {
+    if (typeof entry === 'string') names.add(entry)
+    else if (entry && typeof entry === 'object') {
+      for (const key of Object.keys(entry)) names.add(key)
+    }
+  }
+  return names.size > 0 ? names : undefined
+}
+
+/**
+ * Decision picking for the `{decision: …}` channels (commandExecution,
+ * fileChange), honoring the request's own `availableDecisions`:
+ *
+ * - allow → 'accept' when offered (or when no list was stated). A request
+ *   offering only the broader accepts ('acceptForSession',
+ *   'acceptWithExecpolicyAmendment') yields undefined: a one-shot allow must
+ *   not be silently widened into a session-wide or persistent policy grant, so
+ *   the caller answers with the denial and says why.
+ * - deny → 'decline', always: the response schema declares it unconditionally,
+ *   and it was verified live against 0.146.0 answering a request whose
+ *   availableDecisions omitted it — the turn completed cleanly. The list's job
+ *   is to gate the accept variants, not to take "no, but keep going" away
+ *   (its own alternative, 'cancel', would interrupt the whole turn).
+ * - deny+interrupt → 'cancel' (codex's deny-and-interrupt) when offered;
+ *   otherwise 'decline', and the caller interrupts the turn itself.
+ */
+function pickDecision(
+  behavior: 'allow' | 'deny',
+  interrupt: boolean,
+  offered: Set<string> | undefined,
+): string | undefined {
+  const has = (name: string) => !offered || offered.has(name)
+  if (behavior === 'allow') return has('accept') ? 'accept' : undefined
+  if (interrupt && has('cancel')) return 'cancel'
+  return 'decline'
+}
+
+/** Codex `requestUserInput` questions in the AskUserQuestion wire shape both
+ * clients already render (QuestionPrompt / QuestionPromptView). */
+function userQuestionsFromCodex(questions: readonly AppServerUserInputQuestion[]): UserQuestion[] {
+  return questions.map((question) => ({
+    question: question.question,
+    header: question.header ?? '',
+    options: (question.options ?? []).map((option) => ({
+      label: option.label,
+      description: option.description,
+    })),
+  }))
+}
+
+/** The AskUserQuestion answer convention (question text → chosen label(s),
+ * comma-joined) mapped back to codex's id-keyed shape. Questions the client
+ * did not answer are absent, not empty. */
+function codexAnswers(
+  questions: readonly AppServerUserInputQuestion[],
+  answers: Record<string, unknown> | undefined,
+): Record<string, { answers: string[] }> {
+  const out: Record<string, { answers: string[] }> = {}
+  for (const question of questions) {
+    const value = answers?.[question.question] ?? answers?.[question.id]
+    if (typeof value === 'string' && value.length > 0) out[question.id] = { answers: [value] }
+  }
+  return out
+}
+
+type ApprovalSurface = Pick<
+  PermissionRequest,
+  'toolName' | 'input' | 'title' | 'displayName' | 'description' | 'decisionReason'
+>
+
+/**
+ * One server→client ask channel: how it surfaces as a {@link PermissionRequest}
+ * and what its wire responses are. `allow` may return undefined — the request
+ * offered no plain accept — in which case the caller answers with `deny` and
+ * says so. `decision` names the wire decision when the channel has one, so the
+ * caller knows whether a deny+interrupt still needs an explicit
+ * `turn/interrupt` ('cancel' carries the interrupt itself).
+ */
+type ApprovalChannel = {
+  describe(params: unknown): ApprovalSurface
+  itemId(params: unknown): string | undefined
+  allow(
+    params: unknown,
+    updatedInput: Record<string, unknown> | undefined,
+    offered: Set<string> | undefined,
+  ): { response: unknown; decision?: string } | undefined
+  deny(
+    params: unknown,
+    interrupt: boolean,
+    offered: Set<string> | undefined,
+  ): { response: unknown; decision?: string }
+}
+
+/** The two channels whose response is `{decision: …}` share their pick logic. */
+function decisionChannel(
+  describe: (params: unknown) => ApprovalSurface,
+  itemId: (params: unknown) => string | undefined,
+): ApprovalChannel {
+  return {
+    describe,
+    itemId,
+    allow: (_params, _updatedInput, offered) => {
+      const decision = pickDecision('allow', false, offered)
+      return decision ? { response: { decision }, decision } : undefined
+    },
+    deny: (_params, interrupt, offered) => {
+      const decision = pickDecision('deny', interrupt, offered)!
+      return { response: { decision }, decision }
+    },
+  }
+}
+
+/**
+ * The ask channels, wired to the permission surface. Anything not listed here
+ * still gets a JSON-RPC -32601 — never a hang (an unanswered server request
+ * wedges the turn).
+ */
+const APPROVAL_CHANNELS: Record<string, ApprovalChannel> = {
+  'item/commandExecution/requestApproval': decisionChannel(
+    (raw) => {
+      const params = raw as AppServerCommandApprovalParams
+      const command = params.command ?? undefined
+      return {
+        toolName: 'CodexCommand',
+        input: {
+          ...(command !== undefined ? { command } : {}),
+          ...(params.cwd ? { cwd: params.cwd } : {}),
+          ...(params.reason ? { reason: params.reason } : {}),
+        },
+        // Codex's own sentence is the truth of what is being asked: for a
+        // sandbox escalation it reads "command failed; retry without sandbox?"
+        // — an after-the-refusal question, NOT a pre-execution gate — and the
+        // clients render `title` verbatim, so the tense stays honest.
+        title:
+          params.reason ??
+          (command ? `Codex wants to run: ${command}` : 'Codex wants to run a command'),
+        displayName: 'Run command',
+        description: params.reason && command ? command : (params.cwd ?? undefined),
+        decisionReason: params.reason ?? undefined,
+      }
+    },
+    (raw) => (raw as AppServerCommandApprovalParams).itemId,
+  ),
+  'item/fileChange/requestApproval': decisionChannel(
+    (raw) => {
+      const params = raw as AppServerFileChangeApprovalParams
+      return {
+        toolName: 'CodexFileChange',
+        input: {
+          ...(params.grantRoot ? { grantRoot: params.grantRoot } : {}),
+          ...(params.reason ? { reason: params.reason } : {}),
+        },
+        title: params.reason ?? 'Codex wants to apply file changes',
+        displayName: 'Apply file changes',
+        description: params.grantRoot ? `write access under ${params.grantRoot}` : undefined,
+        decisionReason: params.reason ?? undefined,
+      }
+    },
+    (raw) => (raw as AppServerFileChangeApprovalParams).itemId,
+  ),
+  'item/permissions/requestApproval': {
+    describe: (raw) => {
+      const params = raw as AppServerPermissionsApprovalParams
+      return {
+        toolName: 'CodexPermissions',
+        input: {
+          ...(params.permissions ? { permissions: params.permissions } : {}),
+          ...(params.cwd ? { cwd: params.cwd } : {}),
+          ...(params.reason ? { reason: params.reason } : {}),
+        },
+        title: params.reason ?? 'Codex requests additional permissions',
+        displayName: 'Grant permissions',
+        description: undefined,
+        decisionReason: params.reason ?? undefined,
+      }
+    },
+    itemId: (raw) => (raw as AppServerPermissionsApprovalParams).itemId,
+    // Allow grants exactly what was asked (or the client's narrowed rewrite via
+    // `updatedInput.permissions`), scoped to the turn — the response's default
+    // scope, never 'session'.
+    allow: (raw, updatedInput) => ({
+      response: {
+        permissions:
+          (updatedInput?.permissions as Record<string, unknown> | undefined) ??
+          (raw as AppServerPermissionsApprovalParams).permissions ??
+          {},
+      },
+    }),
+    // This channel's "no" is an empty grant.
+    deny: () => ({ response: { permissions: {} } }),
+  },
+  'item/tool/requestUserInput': {
+    describe: (raw) => ({
+      toolName: 'AskUserQuestion',
+      input: {
+        questions: userQuestionsFromCodex((raw as AppServerUserInputParams).questions ?? []),
+      },
+      title: 'Codex asks a question',
+      displayName: 'Answer questions',
+      description: undefined,
+      decisionReason: undefined,
+    }),
+    itemId: (raw) => (raw as AppServerUserInputParams).itemId,
+    allow: (raw, updatedInput) => ({
+      response: {
+        answers: codexAnswers(
+          (raw as AppServerUserInputParams).questions ?? [],
+          updatedInput?.answers as Record<string, unknown> | undefined,
+        ),
+      },
+    }),
+    deny: () => ({ response: { answers: {} } }),
+  },
+  'mcpServer/elicitation/request': {
+    describe: (raw) => {
+      const params = raw as AppServerElicitationParams
+      return {
+        toolName: 'CodexMcpElicitation',
+        input: {
+          ...(params.serverName ? { serverName: params.serverName } : {}),
+          ...(params.message ? { message: params.message } : {}),
+          ...(params.mode ? { mode: params.mode } : {}),
+          ...(params.requestedSchema !== undefined
+            ? { requestedSchema: params.requestedSchema }
+            : {}),
+          ...(params.url ? { url: params.url } : {}),
+        },
+        title: params.serverName
+          ? `MCP server '${params.serverName}' requests input`
+          : 'An MCP server requests input',
+        displayName: 'MCP elicitation',
+        description: params.message ?? undefined,
+        decisionReason: undefined,
+      }
+    },
+    itemId: () => undefined,
+    // An allow's `updatedInput` IS the elicitation content (the filled form);
+    // content is nullable in the schema, so an allow without one is an accept
+    // with no content and the MCP server judges it.
+    allow: (_raw, updatedInput) => ({
+      response: {
+        action: 'accept',
+        ...(updatedInput !== undefined ? { content: updatedInput } : {}),
+      },
+    }),
+    // 'cancel' here cancels the ELICITATION, not the codex turn — no
+    // `decision` is reported, so a deny+interrupt still interrupts the turn
+    // explicitly.
+    deny: (_raw, interrupt) => ({ response: { action: interrupt ? 'cancel' : 'decline' } }),
+  },
+}
+
+/** One pending server→client approval: the surfaced request, the channel that
+ * knows its wire vocabulary, and the resolver that answers the JSON-RPC
+ * request when a decision lands. */
+type PendingCodexApproval = {
+  request: PermissionRequest
+  channel: ApprovalChannel
+  params: unknown
+  offered: Set<string> | undefined
+  /** JSON-RPC wire id — `serverRequest/resolved` names it when codex settles
+   * the request itself. */
+  wireId: string | number | undefined
+  timer: ReturnType<typeof setTimeout>
+  respond: (response: unknown) => void
 }
 
 export type CodexRunnerConfig = CreateSessionRequest & {
@@ -82,6 +393,9 @@ export type CodexRunnerConfig = CreateSessionRequest & {
   env?: Record<string, string | undefined>
   /** CODEX_HOME pin from the profile (auth, config.toml, thread storage). */
   codexHome?: string
+  /** Timeout for pending approvals when the request itself doesn't set one.
+   * Default 300000 — the SessionRunner default. */
+  defaultApprovalTimeoutMs?: number
 }
 
 /** One queued user message: the input for exactly one turn. */
@@ -173,6 +487,8 @@ export class CodexRunner implements Runner {
   #closed = false
   /** Session temp dir for image attachments (`localImage` takes host paths). */
   #imageDir: string | undefined
+  /** Pending server→client approvals, keyed by the surfaced request id. */
+  #approvals = new Map<string, PendingCodexApproval>()
 
   constructor(config: CodexRunnerConfig, id: string = randomUUID()) {
     const mode = config.permissionMode ?? 'default'
@@ -217,7 +533,7 @@ export class CodexRunner implements Runner {
   }
 
   get pendingApprovals(): PermissionRequest[] {
-    return []
+    return [...this.#approvals.values()].map((pending) => pending.request)
   }
 
   info(): SessionInfo {
@@ -234,7 +550,7 @@ export class CodexRunner implements Runner {
       canBypassPermissions: true,
       createdAt: this.createdAt,
       lastSeq: this.#seq,
-      pendingPermissionCount: 0,
+      pendingPermissionCount: this.#approvals.size,
       meta: this.#config.meta,
       title: this.#title(),
       totalCostUsd: this.#totalCostUsd,
@@ -311,11 +627,34 @@ export class CodexRunner implements Runner {
     return parts
   }
 
-  resolvePermission(_requestId: string, _decision: PermissionDecision): boolean {
-    return false
+  /** Resolve a pending approval. Returns false if the id is unknown (e.g.
+   * timed out, or already settled by codex itself). */
+  resolvePermission(requestId: string, decision: PermissionDecision): boolean {
+    const pending = this.#approvals.get(requestId)
+    if (!pending) return false
+    this.#settleApproval(requestId, pending, decision, 'client')
+    return true
   }
 
   async interrupt(): Promise<void> {
+    // A pending approval is what's holding the turn open — settle each as a
+    // denied interrupt first (codex's 'cancel' where the request offers it,
+    // which itself ends the turn).
+    for (const [id, pending] of this.#approvals) {
+      this.#settleApproval(
+        id,
+        pending,
+        { behavior: 'deny', message: 'interrupted', interrupt: true },
+        'policy',
+      )
+    }
+    await this.#interruptTurn()
+    await this.#turnChain
+  }
+
+  /** Address the in-flight turn only (no approval sweep) — also the follow-up
+   * for a deny+interrupt whose wire decision couldn't carry the interrupt. */
+  async #interruptTurn(): Promise<void> {
     const active = this.#activeTurn
     const connection = this.#connection
     if (active && !active.settled) {
@@ -340,7 +679,6 @@ export class CodexRunner implements Runner {
         active.reject(new Error('interrupted'))
       }
     }
-    await this.#turnChain
   }
 
   async setPermissionMode(mode: PermissionMode): Promise<void> {
@@ -373,6 +711,11 @@ export class CodexRunner implements Runner {
     if (this.#closed) return
     this.#closed = true
     this.#queue.length = 0
+    // Settle pending approvals before the connection goes: each gets its
+    // channel's own "no" on the wire and a permission_resolved in the log.
+    for (const [id, pending] of this.#approvals) {
+      this.#settleApproval(id, pending, { behavior: 'deny', message: 'Session closed' }, 'policy')
+    }
     this.#connection?.close()
     this.#connection = undefined
     this.#activeTurn?.reject(new Error('session closed'))
@@ -414,29 +757,55 @@ export class CodexRunner implements Runner {
       this.#connection = connection
       this.#threadLoaded = false
       connection.onNotification((method, params) => this.#handleNotification(method, params))
-      connection.onRequest((method, params) => this.#answerServerRequest(method, params))
+      connection.onRequest((method, params, id) => this.#answerServerRequest(method, params, id))
       connection.onClose((message) => {
         if (this.#connection === connection) {
           this.#connection = undefined
           this.#threadLoaded = false
         }
+        // Approvals pending against a dead child can never be answered on the
+        // wire — retire their cards and timers.
+        for (const [id, pending] of this.#approvals) {
+          this.#settleApproval(id, pending, { behavior: 'deny', message }, 'policy')
+        }
         // A child dying mid-turn fails that turn (with the exit diagnostic);
         // idle, there is nothing to settle and the next turn respawns.
         this.#activeTurn?.reject(new Error(message))
       })
-      await connection.request('initialize', {
-        clientInfo: {
-          name: 'workerdeck',
-          title: 'WorkerDeck',
-          version: `protocol-${PROTOCOL_VERSION}`,
-        },
-      })
+      try {
+        // `experimentalApi` is load-bearing, not a nicety: granular approval
+        // policies are rejected without it, and WorkerDeck ships ONE code path
+        // (no string-policy fallback). A binary that rejects the capability
+        // must fail loudly here — a session that quietly stops asking for
+        // approvals is worse than one that refuses to start and says why.
+        await connection.request('initialize', {
+          clientInfo: {
+            name: 'workerdeck',
+            title: 'WorkerDeck',
+            version: `protocol-${PROTOCOL_VERSION}`,
+          },
+          capabilities: { experimentalApi: true },
+        })
+      } catch (error) {
+        // Don't leave a half-initialized child around — the next message must
+        // respawn from scratch, not talk to a child that refused the handshake.
+        connection.close()
+        if (this.#connection === connection) this.#connection = undefined
+        if (error instanceof JsonRpcError) {
+          throw new Error(
+            'codex app-server rejected initialize (capabilities.experimentalApi: true — required ' +
+              'for the granular approval policy, and WorkerDeck has no non-experimental fallback): ' +
+              error.message,
+          )
+        }
+        throw error
+      }
       connection.notify('initialized')
     }
     if (!this.#threadLoaded) {
       const options: Record<string, unknown> = {
         cwd: this.#config.cwd,
-        approvalPolicy: 'never',
+        approvalPolicy: APPROVAL_POLICY_BY_MODE[this.#permissionMode],
         sandbox: THREAD_SANDBOX_BY_MODE[this.#permissionMode],
       }
       if (this.#model) options.model = this.#model
@@ -498,7 +867,7 @@ export class CodexRunner implements Runner {
         threadId: this.#sdkSessionId,
         input: turn.input,
         cwd: this.#config.cwd,
-        approvalPolicy: 'never',
+        approvalPolicy: APPROVAL_POLICY_BY_MODE[this.#permissionMode],
         sandboxPolicy: TURN_SANDBOX_BY_MODE[this.#permissionMode],
       }
       // Overrides persist "for this turn and subsequent turns", so name the
@@ -657,6 +1026,22 @@ export class CodexRunner implements Runner {
         })
         return
       }
+      case 'serverRequest/resolved': {
+        // Codex settled one of its own asks (auto-resolution, e.g.
+        // requestUserInput's autoResolutionMs) — retire the matching card. The
+        // late JSON-RPC response we still send is ignored by the peer. The
+        // resolved event reports 'deny' because we cannot know what codex
+        // chose; the message says who really decided.
+        const requestId = (params as { requestId?: string | number })?.requestId
+        if (requestId === undefined) return
+        for (const [id, pending] of this.#approvals) {
+          if (pending.wireId === requestId) {
+            this.#settleApproval(id, pending, { behavior: 'deny', message: 'resolved by codex' }, 'policy')
+            return
+          }
+        }
+        return
+      }
       case 'error': {
         // Mostly retry noise (`willRetry: true`); keep the last message so a
         // turn that fails without its own error still explains itself.
@@ -671,16 +1056,157 @@ export class CodexRunner implements Runner {
     }
   }
 
-  /** Answer a server→client request. Approvals cannot legitimately occur under
-   * `approvalPolicy: 'never'`, so anything arriving is declined — visibly (an
-   * sdk_event), never approved, and never left hanging. */
-  async #answerServerRequest(method: string, _params: unknown): Promise<unknown> {
-    const decline = DECLINE_BY_METHOD[method]
-    if (decline) {
-      this.#emit({ type: 'sdk_event', payload: { type: 'codex.approval_auto_declined', method } })
-      return decline
-    }
+  /** Answer a server→client request: the ask channels become pending
+   * permission requests; anything else gets a JSON-RPC -32601 rather than a
+   * hang (an unanswered server request wedges the turn). */
+  async #answerServerRequest(
+    method: string,
+    params: unknown,
+    wireId?: string | number,
+  ): Promise<unknown> {
+    const channel = APPROVAL_CHANNELS[method]
+    if (channel) return this.#requestApproval(channel, method, params, wireId)
     throw new JsonRpcError(-32601, `workerdeck does not handle server request '${method}'`)
+  }
+
+  /**
+   * Surface one ask-channel request as a pending {@link PermissionRequest};
+   * the returned promise is the JSON-RPC response, resolved when a
+   * `permission_decision` lands — or by the timeout, an interrupt, turn end,
+   * session close, or codex resolving it itself. Never left hanging.
+   */
+  #requestApproval(
+    channel: ApprovalChannel,
+    method: string,
+    params: unknown,
+    wireId: string | number | undefined,
+  ): Promise<unknown> {
+    // AskUserQuestion policy resolution, the SessionRunner convention: 'auto'
+    // picks each question's first (recommended) option, 'deny' sends the model
+    // back to decide for itself — both visibly, neither pending.
+    if (method === 'item/tool/requestUserInput') {
+      const behavior = this.#config.questionBehavior ?? 'ask'
+      if (behavior !== 'ask') {
+        return Promise.resolve(this.#resolveQuestionByPolicy(channel, params, behavior))
+      }
+    }
+    const id = randomUUID()
+    const timeoutMs =
+      this.#config.approvalTimeoutMs ??
+      this.#config.defaultApprovalTimeoutMs ??
+      DEFAULT_APPROVAL_TIMEOUT_MS
+    const itemId = channel.itemId(params)
+    const request: PermissionRequest = {
+      id,
+      ...channel.describe(params),
+      // Anchored to the tool card the turn already emitted for this item (the
+      // command that ran and was refused, the file change in flight); channels
+      // with no item anchor on the request itself.
+      toolUseId: itemId ? `${this.#activeTurn?.nonce ?? 'codex'}:${itemId}` : id,
+      expiresAt: Date.now() + timeoutMs,
+    }
+    return new Promise<unknown>((resolve) => {
+      const timer = setTimeout(() => {
+        const pending = this.#approvals.get(id)
+        if (pending) {
+          this.#settleApproval(id, pending, { behavior: 'deny', message: 'Approval timed out' }, 'timeout')
+        }
+      }, timeoutMs)
+      this.#approvals.set(id, {
+        request,
+        channel,
+        params,
+        offered: offeredDecisions(params),
+        wireId,
+        timer,
+        respond: resolve,
+      })
+      this.#emit({ type: 'permission_requested', request })
+      if (this.#activeTurn) this.#setStatus('awaiting_approval')
+    })
+  }
+
+  /** 'auto'/'deny' sessions settle codex questions synchronously instead of
+   * pending. Request/resolved events still fire so transcripts and job
+   * webhooks show what was chosen. */
+  #resolveQuestionByPolicy(
+    channel: ApprovalChannel,
+    params: unknown,
+    mode: 'auto' | 'deny',
+  ): unknown {
+    const itemId = channel.itemId(params)
+    const request: PermissionRequest = {
+      id: randomUUID(),
+      ...channel.describe(params),
+      toolUseId: itemId ? `${this.#activeTurn?.nonce ?? 'codex'}:${itemId}` : randomUUID(),
+    }
+    this.#emit({ type: 'permission_requested', request })
+    if (mode === 'deny') {
+      this.#emit({
+        type: 'permission_resolved',
+        requestId: request.id,
+        behavior: 'deny',
+        resolvedBy: 'policy',
+        message:
+          'Interactive questions are disabled for this session — choose the most reasonable option yourself and continue.',
+      })
+      return { answers: {} }
+    }
+    const answers: Record<string, { answers: string[] }> = {}
+    for (const question of (params as AppServerUserInputParams).questions ?? []) {
+      const first = question.options?.[0]?.label
+      if (first) answers[question.id] = { answers: [first] }
+    }
+    this.#emit({
+      type: 'permission_resolved',
+      requestId: request.id,
+      behavior: 'allow',
+      resolvedBy: 'policy',
+    })
+    return { answers }
+  }
+
+  /**
+   * Settle one pending approval: pick the channel's wire response for the
+   * decision, answer the JSON-RPC request, and emit `permission_resolved`.
+   * An allow the request offered no plain accept for becomes the channel's
+   * denial, said out loud — never a silently widened grant, and never a
+   * decision the request didn't offer.
+   */
+  #settleApproval(
+    id: string,
+    pending: PendingCodexApproval,
+    decision: PermissionDecision,
+    resolvedBy: PermissionDecisionSource,
+  ): void {
+    clearTimeout(pending.timer)
+    this.#approvals.delete(id)
+    let behavior = decision.behavior
+    let message = decision.behavior === 'deny' ? (decision.message ?? 'Denied') : undefined
+    let sent: { response: unknown; decision?: string }
+    if (decision.behavior === 'allow') {
+      const allowed = pending.channel.allow(pending.params, decision.updatedInput, pending.offered)
+      if (allowed) {
+        sent = allowed
+      } else {
+        behavior = 'deny'
+        resolvedBy = 'policy'
+        message =
+          'codex offered no plain accept for this request (only broader session/policy grants) — denied instead'
+        sent = pending.channel.deny(pending.params, false, pending.offered)
+      }
+    } else {
+      sent = pending.channel.deny(pending.params, decision.interrupt === true, pending.offered)
+    }
+    pending.respond(sent.response)
+    this.#emit({ type: 'permission_resolved', requestId: id, behavior, resolvedBy, message })
+    if (behavior === 'deny' && decision.behavior === 'deny' && decision.interrupt && sent.decision !== 'cancel') {
+      // The wire decision couldn't carry the interrupt itself.
+      void this.#interruptTurn()
+    }
+    if (!this.#closed && this.#approvals.size === 0 && this.#status === 'awaiting_approval') {
+      this.#setStatus('running')
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -741,9 +1267,10 @@ export class CodexRunner implements Runner {
         return
       }
       case 'fileChange': {
-        // Post-hoc by design: under 'never' the patch already applied or
-        // failed — there is no proposal stage. v2's `kind` is an object
-        // (`{type: 'update', …}`), mapped defensively.
+        // The completed item: by the time it lands the patch applied, failed,
+        // or was declined (a pending proposal rides the approval channel, not
+        // this item). v2's `kind` is an object (`{type: 'update', …}`), mapped
+        // defensively.
         this.#emitToolUse(id, 'CodexFileChange', { changes: item.changes })
         const lines = item.changes.map((change) => {
           const kind = typeof change.kind === 'string' ? change.kind : change.kind?.type
@@ -847,6 +1374,12 @@ export class CodexRunner implements Runner {
     active: ActiveTurn,
     errors?: string[],
   ): void {
+    // Approvals that outlived the turn (codex moved on, or the turn failed
+    // around them) are settled now — a card must never outlive what it gates,
+    // and an unanswered timer must never fire into a finished turn.
+    for (const [id, pending] of this.#approvals) {
+      this.#settleApproval(id, pending, { behavior: 'deny', message: 'Turn ended' }, 'policy')
+    }
     this.#numTurns += 1
     this.#totalCostUsd = 0
     const usage = active.sawUsage ? active.usage : undefined

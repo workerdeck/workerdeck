@@ -132,11 +132,15 @@ Every profile answers `GET /profiles` with its engine's **capability record** (a
 resume, telemetry, attachments, reasoning efforts…), a **model catalog** shipped with the release
 — a real picker from the first request, no warm-up session — and whether its credentials
 currently **probe as usable** (`available`, with an actionable reason when not; display-only, so
-a stale probe can never block a create). Codex approvals are not wired to the permission surface
-(the runner auto-declines rather than asking), so its record declares
-`interactiveApprovals: false` and every client hides the approval UI instead of rendering one
-that never fires; its permission modes map onto the codex sandbox (`default` → read-only,
-`acceptEdits` → workspace-write, `bypassPermissions` → full access).
+a stale probe can never block a create). Codex approvals are wired to the same permission
+surface as Claude's: the binary's ask channels (command escalations, file changes, permission
+grants, questions, MCP elicitations) arrive as pending approvals and are answered from any
+client — with one semantic difference carried honestly in the request itself: a codex command
+approval is usually an *escalation after its sandbox already refused the command* ("command
+failed; retry without sandbox?"), not a gate before execution, and approving re-runs it
+unsandboxed. Permission modes map onto the codex sandbox + ask policy (`default` → read-only,
+blocked actions ask; `acceptEdits` → workspace-write, escalations ask; `bypassPermissions` →
+full access, asks nothing).
 
 The provider engine trades ambient authority for a sandbox:
 
