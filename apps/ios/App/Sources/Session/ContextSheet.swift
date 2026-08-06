@@ -28,9 +28,15 @@ struct ContextSheet: View {
                 Text(model)
               }
             }
-            Section("Breakdown") {
-              ForEach(Array(usage.categories.enumerated()), id: \.offset) { _, category in
-                CategoryRow(category: category, maxTokens: max(usage.maxTokens, 1))
+            // Codex reports occupancy with no breakdown, so an engine can send a
+            // real reading and an empty `categories`. A "Breakdown" header over
+            // nothing reads as a failed load; the used/total row above already
+            // says everything that is known.
+            if !usage.categories.isEmpty {
+              Section("Breakdown") {
+                ForEach(Array(usage.categories.enumerated()), id: \.offset) { _, category in
+                  CategoryRow(category: category, maxTokens: max(usage.maxTokens, 1))
+                }
               }
             }
           }

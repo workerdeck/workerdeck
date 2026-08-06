@@ -655,7 +655,10 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     resume: true,
     resumeBackfill: false,
     listSessions: false,
-    contextUsage: false,
+    // From `thread/tokenUsage/updated.last` against `modelContextWindow`, after
+    // each turn. Its `categories` is always empty — codex publishes no
+    // breakdown — so a client must not draw an empty breakdown section.
+    contextUsage: true,
     rateLimits: false,
     mcpStatus: false,
     // MCP belongs to CODEX_HOME's config.toml; a session request cannot add servers.

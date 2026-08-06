@@ -193,6 +193,19 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   = unknown (the AiSdkRunner precedent). `total` is thread-cumulative and unused (its baseline
   after a resume is unknowable). The relation behind the subtraction is asserted in
   `smoke:codex`.
+- **Context usage takes the OPPOSITE half of that same notification, and mixing them up is
+  silent.** Occupancy is `last.totalTokens` (overwritten, never summed) against
+  `tokenUsage.modelContextWindow`, emitted as a `context_usage` event after each turn — because a
+  request's input *already contains the whole conversation*, so the newest request IS the current
+  window occupancy. Sizing the meter off `total` instead would climb toward 100% on an
+  almost-empty thread: measured against 0.146.0, two trivial turns moved `total` 13931 → 27878
+  while `last` stayed ~13.9k of a 258400 window (5.1% both times, correctly). So one notification
+  feeds two numbers with opposite rules — summed for billing, latest for occupancy — and a core
+  test pins both against the same fixture. Two further constraints: the event is emitted only when
+  the window is present (a reading without its window is not a reading, and the protocol says
+  render nothing rather than 0%), and its `categories` is always empty because codex publishes no
+  breakdown — `contextUsage: true` with an empty breakdown is a valid combination, so clients must
+  not draw an empty "Breakdown" section (iOS's `ContextSheet` hides it).
 - Sandbox mapping is the honest degradation: `default` → read-only ("would have asked" becomes
   "cannot act" — commands still run, writes are refused by the OS sandbox), `acceptEdits` →
   workspace-write, `bypassPermissions` → danger-full-access. `plan`/`dontAsk`/`auto` are not

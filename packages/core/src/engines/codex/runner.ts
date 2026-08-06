@@ -100,6 +100,10 @@ type ActiveTurn = {
   lastError?: string
   usage: AppServerTokenUsage
   sawUsage: boolean
+  /** Context occupancy from the most recent model request, with the window it
+   * was measured against. NOT `total` — see {@link CodexRunner.emitContextUsage}. */
+  contextTokens?: number
+  contextWindow?: number
   toolUseEmitted: Set<string>
   /** Last seen reasoning section index per item+kind, for '\n\n' separators. */
   sectionIndex: Map<string, number>
@@ -600,6 +604,16 @@ export class CodexRunner implements Runner {
           (active.usage.cacheWriteInputTokens ?? 0) + (last.cacheWriteInputTokens ?? 0)
         active.usage.outputTokens += last.outputTokens ?? 0
         active.usage.reasoningOutputTokens += last.reasoningOutputTokens ?? 0
+        // Context occupancy is the OPPOSITE choice from the accounting above:
+        // `last` (overwritten, not summed) against the window, because a request's
+        // input already contains the whole conversation. `total` is cumulative
+        // billing — it grows every turn while the context stays where it is, so a
+        // meter built on it would climb to 100% on an almost-empty thread
+        // (measured: total 13931 → 27878 across two trivial turns, last 13931 →
+        // 13947, window 258400).
+        const update = params as AppServerTokenUsageUpdate
+        active.contextTokens = last.totalTokens ?? undefined
+        active.contextWindow = update.tokenUsage?.modelContextWindow ?? undefined
         return
       }
       case 'turn/plan/updated': {
@@ -829,7 +843,34 @@ export class CodexRunner implements Runner {
           }
         : undefined,
     })
+    this.#emitContextUsage(active)
     this.#setStatus('idle')
+  }
+
+  /**
+   * Context occupancy, after the turn — the same cadence the Claude runner
+   * polls `getContextUsage()` on, so clients need nothing new.
+   *
+   * Emitted only when the binary gave BOTH numbers: the protocol is explicit
+   * that a client renders nothing rather than a 0% ring, and a window of
+   * `null` (which app-server does send) would otherwise divide into a
+   * meaningless percentage. `categories` is empty because codex publishes no
+   * breakdown — clients must not render an empty "Breakdown" section for it.
+   */
+  #emitContextUsage(active: ActiveTurn): void {
+    const totalTokens = active.contextTokens
+    const maxTokens = active.contextWindow
+    if (totalTokens === undefined || !maxTokens || maxTokens <= 0) return
+    this.#emit({
+      type: 'context_usage',
+      usage: {
+        categories: [],
+        totalTokens,
+        maxTokens,
+        percentage: Math.min(100, (totalTokens / maxTokens) * 100),
+        model: this.#model ?? this.#resolvedModel,
+      },
+    })
   }
 
   #setStatus(status: SessionStatus, detail?: string): void {

@@ -283,9 +283,13 @@ describe('CodexRunner', () => {
 
     // The record's forsworn events never occur.
     const types = events.map((e) => e.type)
-    for (const forsworn of ['system_init', 'permission_requested', 'context_usage', 'rate_limit']) {
+    for (const forsworn of ['system_init', 'permission_requested', 'rate_limit']) {
       expect(types).not.toContain(forsworn)
     }
+    // context_usage is NOT forsworn — but this turn reported no
+    // `modelContextWindow`, and a reading without its window is not a reading.
+    // The protocol is explicit that a client renders nothing rather than 0%.
+    expect(types).not.toContain('context_usage')
 
     const assistants = ofType(events, 'assistant_message')
     // Reasoning: its own thinking message, sections joined as paragraphs.
@@ -678,6 +682,55 @@ describe('CodexRunner', () => {
     expect(info.sdkSessionId).toBe('thread-1')
     expect(info.pendingPermissionCount).toBe(0)
     expect(info.title).toBe('hello world')
+  })
+
+  it('measures context occupancy from `last`, never the cumulative `total`', async () => {
+    // Two model requests in one turn, as a tool-looping turn produces. `total`
+    // is cumulative billing and grows every request; `last` is the occupancy of
+    // the window, because a request's input already carries the conversation.
+    // Sizing the meter off `total` would climb toward 100% on an almost-empty
+    // thread — measured against the real binary at 13931 → 27878 total while
+    // last stayed ~13.9k of a 258400 window.
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      emit('thread/tokenUsage/updated', {
+        threadId: 'thread-1',
+        turnId,
+        tokenUsage: { last: USAGE_A, total: USAGE_A, modelContextWindow: 1000 },
+      })
+      emit('thread/tokenUsage/updated', {
+        threadId: 'thread-1',
+        turnId,
+        tokenUsage: {
+          last: USAGE_B,
+          total: { ...USAGE_A, totalTokens: USAGE_A.totalTokens + USAGE_B.totalTokens },
+          modelContextWindow: 1000,
+        },
+      })
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({ cwd: '/tmp/w', prompt: 'go', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+
+    const [usage] = ofType(events, 'context_usage')
+    expect(usage).toBeDefined()
+    // USAGE_B.totalTokens (the LAST request), not 675 + 450.
+    expect(usage!.usage.totalTokens).toBe(USAGE_B.totalTokens)
+    expect(usage!.usage.maxTokens).toBe(1000)
+    expect(usage!.usage.percentage).toBeCloseTo(45)
+    // No breakdown exists on this surface — an empty list, never a fabricated row.
+    expect(usage!.usage.categories).toEqual([])
+    // Per-turn token accounting still SUMS, which is the opposite choice and
+    // deliberately so: it is billing, not occupancy.
+    const [result] = ofType(events, 'turn_result')
+    expect(result!.usage).toMatchObject({
+      output_tokens:
+        USAGE_A.outputTokens +
+        USAGE_A.reasoningOutputTokens +
+        USAGE_B.outputTokens +
+        USAGE_B.reasoningOutputTokens,
+    })
   })
 
   it('refuses forkSession and CLI-only permission modes at construction', () => {

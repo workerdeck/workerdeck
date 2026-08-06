@@ -118,7 +118,9 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     permissionModes: [.default, .acceptEdits, .bypassPermissions],
     defaultPermissionMode: .default,
     resume: true, resumeBackfill: false, listSessions: false,
-    contextUsage: false, rateLimits: false, mcpStatus: false, sessionMcpServers: false,
+    // contextUsage arrives with an empty `categories` — occupancy only, no
+    // breakdown. ContextSheet hides its Breakdown section for that case.
+    contextUsage: true, rateLimits: false, mcpStatus: false, sessionMcpServers: false,
     slashCommands: false, settingSources: false, budgets: false,
     attachments: ["image", "text"],
     reasoningEfforts: ["minimal", "low", "medium", "high", "xhigh"],
