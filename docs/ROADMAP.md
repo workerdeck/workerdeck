@@ -95,9 +95,13 @@ master; 0.7.0 is the latest published).
   per *session*, held across turns) is a peer of the Claude engine:
   create/attach/watch/interrupt/resume, sandbox-mapped permission modes, token-by-token
   streaming, images via `localImage`, per-turn usage summed from `thread/tokenUsage/updated`
-  and re-mapped to the Anthropic accounting convention — with approvals auto-declined rather
-  than asked (`interactiveApprovals: false`; the record is what keeps clients from rendering an
-  approval UI that never fires). An exec transport (`codex exec --experimental-json`, one spawn
+  and re-mapped to the Anthropic accounting convention, context occupancy and subscription
+  windows off the same surface, and **interactive approvals** — the last needing two gates that
+  no schema reading finds (`capabilities.experimentalApi: true` at initialize *and* a granular
+  `approvalPolicy`; the plainly-named `'untrusted'` policy never asks at all). Its command
+  approval is an escalation *after* the sandbox refused, not a gate before, and accepting re-runs
+  the command unsandboxed — so the request carries codex's own sentence rather than a composed
+  one. An exec transport (`codex exec --experimental-json`, one spawn
   per turn) came first and was replaced before release: its JSONL carries no partial messages,
   so it could never stream. Claude gained create-time `reasoningEffort` (SDK
   `Options.effort`) with per-model efforts on catalog rows. The `@ai-sdk` provider profiles stop

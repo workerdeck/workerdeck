@@ -61,7 +61,7 @@ export type {
 } from './engines/adapter.ts'
 export { claudeAdapter } from './engines/claude/adapter.ts'
 export { CLAUDE_CATALOG } from './engines/claude/catalog.ts'
-export { codexAdapter, resolveBundledCodexExecutable } from './engines/codex/adapter.ts'
+export { codexAdapter, listCodexSessions, resolveBundledCodexExecutable } from './engines/codex/adapter.ts'
 export { CODEX_CATALOG } from './engines/codex/catalog.ts'
 export { CodexRunner } from './engines/codex/runner.ts'
 export type { CodexRunnerConfig } from './engines/codex/runner.ts'
@@ -71,7 +71,10 @@ export type {
   AppServerConnection,
   AppServerConnectFn,
   AppServerConnectOptions,
+  AppServerHistoryTurn,
   AppServerItem,
+  AppServerThreadListResponse,
+  AppServerThreadSummary,
   AppServerTokenUsage,
   AppServerTurn,
   AppServerUserInput,

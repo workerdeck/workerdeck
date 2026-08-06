@@ -525,17 +525,23 @@ export class WorkerDeckClient {
     await this.#call('DELETE', `/profiles/${encodeURIComponent(name)}`)
   }
 
-  /** List the Agent SDK's on-disk sessions (for resume across server restarts).
-   * Feed a result's `sessionId` to createSession({ resume }). */
+  /** List an engine's on-disk sessions (for resume across server restarts).
+   * Feed a result's `sessionId` to createSession({ resume }) — under a profile
+   * of the same engine. `profile` names whose store to list (claude profiles →
+   * the Agent SDK store, codex profiles → CODEX_HOME threads); absent, the
+   * server resolves it implicitly when it declares exactly one profile, else
+   * lists the Claude engine's store. */
   async listSdkSessions(params?: {
     dir?: string
     limit?: number
     offset?: number
+    profile?: string
   }): Promise<SdkSessionSummary[]> {
     const search = new URLSearchParams()
     if (params?.dir) search.set('dir', params.dir)
     if (params?.limit !== undefined) search.set('limit', String(params.limit))
     if (params?.offset !== undefined) search.set('offset', String(params.offset))
+    if (params?.profile) search.set('profile', params.profile)
     const qs = search.size > 0 ? `?${search.toString()}` : ''
     const body = await this.#call('GET', `/sdk-sessions${qs}`)
     return (body as { sdkSessions: SdkSessionSummary[] }).sdkSessions

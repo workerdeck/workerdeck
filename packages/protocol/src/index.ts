@@ -665,8 +665,14 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     permissionModes: ['default', 'acceptEdits', 'bypassPermissions'],
     defaultPermissionMode: 'default',
     resume: true,
-    resumeBackfill: false,
-    listSessions: false,
+    // A resume replays the thread's prior turns from `thread/resume`'s
+    // `thread.turns` (topped up via `thread/read {includeTurns: true}` when the
+    // resume page is partial) as `replay: true` events — same contract as the
+    // Claude engine's backfill.
+    resumeBackfill: true,
+    // `GET /sdk-sessions?profile=<codex profile>` lists CODEX_HOME's threads
+    // over a short-lived `thread/list` connection; no live session required.
+    listSessions: true,
     // From `thread/tokenUsage/updated.last` against `modelContextWindow`, after
     // each turn. Its `categories` is always empty — codex publishes no
     // breakdown — so a client must not draw an empty breakdown section.
@@ -1005,9 +1011,15 @@ export type SessionInfo = {
 }
 
 /**
- * A session in the Agent SDK's on-disk store (independent of this server's registry).
- * Listed so hosts can offer "resume" across server restarts: feed `sessionId` to
- * CreateSessionRequest.resume. Mirrors the SDK's SDKSessionInfo, kept browser-safe.
+ * A session in an engine's on-disk store (independent of this server's registry):
+ * the Agent SDK's session files, or a codex profile's CODEX_HOME threads. Listed
+ * so hosts can offer "resume" across server restarts: feed `sessionId` to
+ * CreateSessionRequest.resume — under a profile of the SAME engine, since the id
+ * only means something to the store it came from. `GET {basePath}/sdk-sessions`
+ * takes an optional `profile` query parameter naming whose store to list; absent,
+ * the profile is resolved implicitly when the server declares exactly one, else
+ * the Claude engine's store is listed (the pre-engine-aware behavior). Mirrors
+ * the SDK's SDKSessionInfo shape, kept browser-safe.
  */
 export type SdkSessionSummary = {
   sessionId: string

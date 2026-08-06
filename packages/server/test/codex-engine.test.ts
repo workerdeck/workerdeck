@@ -385,6 +385,99 @@ describe('availability', () => {
     expect(res.status).toBe(201)
   })
 
+  it('lists a codex profile\u2019s threads via GET /sdk-sessions?profile=, claude default untouched', async () => {
+    const { adapter } = fakeCodexAdapter({})
+    const codexRows = [
+      {
+        sessionId: 'thread-1',
+        summary: 'Create approved.txt',
+        lastModified: 2000,
+        cwd: '/tmp/project',
+      },
+    ]
+    const codexList = vi.fn(
+      async (_options: { profile?: ProfileInfo; dir?: string; limit?: number }) => codexRows,
+    )
+    adapter.listSessions = codexList
+    scratchDir = mkdtempSync(join(tmpdir(), 'cw-codex-list-'))
+    const claudeList = vi.fn(async () => [
+      { sessionId: 'sdk-1', summary: 'claude session', lastModified: 1000, cwd: '/tmp/project' },
+    ])
+    running = createWorkerServer({
+      allowUnauthenticated: true,
+      allowedCwdRoots: ['/tmp'],
+      profiles: [{ name: 'toby', configDir: scratchDir }, codexProfile()],
+      engines: { codex: adapter },
+      listSdkSessions: claudeList,
+    })
+    const { port } = await running.listen(0, '127.0.0.1')
+    const base = `http://127.0.0.1:${port}/v1`
+
+    // The codex profile\u2019s store, through its adapter \u2014 profile and complete
+    // env handed over, dir/limit passed through.
+    const codexRes = await fetch(`${base}/sdk-sessions?profile=codex&dir=/tmp/project&limit=5`)
+    expect(codexRes.status).toBe(200)
+    expect(((await codexRes.json()) as { sdkSessions: unknown[] }).sdkSessions).toEqual(codexRows)
+    expect(codexList).toHaveBeenCalledTimes(1)
+    const call = codexList.mock.calls[0]![0] as {
+      profile?: ProfileInfo
+      env?: Record<string, string | undefined>
+      dir?: string
+      limit?: number
+    }
+    expect(call.profile?.name).toBe('codex')
+    expect(call.dir).toBe('/tmp/project')
+    expect(call.limit).toBe(5)
+    expect(call.env).toBeDefined()
+    expect(claudeList).not.toHaveBeenCalled()
+
+    // No profile named, several declared \u2192 the pre-engine-aware behavior: the
+    // claude store via the injectable lister (old clients keep working).
+    const legacy = await fetch(`${base}/sdk-sessions?dir=/tmp/project`)
+    expect(legacy.status).toBe(200)
+    expect(
+      ((await legacy.json()) as { sdkSessions: Array<{ sessionId: string }> }).sdkSessions[0]!
+        .sessionId,
+    ).toBe('sdk-1')
+    expect(claudeList).toHaveBeenCalledTimes(1)
+
+    // A claude profile named explicitly rides the same injectable seam.
+    expect((await fetch(`${base}/sdk-sessions?profile=toby`)).status).toBe(200)
+    expect(claudeList).toHaveBeenCalledTimes(2)
+
+    // Unknown profile: told, not defaulted.
+    const unknown = await fetch(`${base}/sdk-sessions?profile=nope`)
+    expect(unknown.status).toBe(400)
+    expect(((await unknown.json()) as { error: string }).error).toMatch(/unknown profile/)
+
+    // The cwd policy binds the codex listing the same way it binds claude\u2019s.
+    expect((await fetch(`${base}/sdk-sessions?profile=codex&dir=/etc`)).status).toBe(403)
+
+    // A lister failure surfaces the engine\u2019s own message, as a response \u2014 not
+    // a socket error.
+    codexList.mockRejectedValueOnce(new Error('@openai/codex is not installed'))
+    const failed = await fetch(`${base}/sdk-sessions?profile=codex&dir=/tmp/project`)
+    expect(failed.status).toBe(500)
+    expect(((await failed.json()) as { error: string }).error).toMatch(/not installed/)
+  })
+
+  it('resolves the profile implicitly for GET /sdk-sessions on a single-profile server', async () => {
+    const { adapter } = fakeCodexAdapter({})
+    const codexList = vi.fn(async () => [] as never[])
+    adapter.listSessions = codexList
+    running = createWorkerServer({
+      allowUnauthenticated: true,
+      profiles: [codexProfile()],
+      engines: { codex: adapter },
+    })
+    const { port } = await running.listen(0, '127.0.0.1')
+    // No ?profile= \u2014 but the server declares exactly one, so its engine (codex)
+    // answers rather than the legacy claude store.
+    const res = await fetch(`http://127.0.0.1:${port}/v1/sdk-sessions`)
+    expect(res.status).toBe(200)
+    expect(codexList).toHaveBeenCalledTimes(1)
+  })
+
   it("leaves 'unknown' unstamped — a probe that couldn't run proves nothing", async () => {
     const { adapter } = fakeCodexAdapter({ probe: () => ({ available: 'unknown' }) })
     running = createWorkerServer({

@@ -89,7 +89,11 @@ function CreateSessionCard({ onCreated }: { onCreated: (id: string) => void }) {
     }
     setLoadingSdk(true)
     try {
-      setSdkSessions(await client.listSdkSessions({ dir: cwd.trim(), limit: 20 }))
+      // Named so the server lists the CHOSEN profile's engine store (codex
+      // threads vs Agent SDK sessions) rather than the legacy claude default.
+      setSdkSessions(
+        await client.listSdkSessions({ dir: cwd.trim(), limit: 20, profile: profile || undefined }),
+      )
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to list resumable sessions')
     } finally {
@@ -126,7 +130,12 @@ function CreateSessionCard({ onCreated }: { onCreated: (id: string) => void }) {
           <ProfileSelect
             profiles={profiles}
             value={profile}
-            onChange={selectProfile}
+            onChange={(name) => {
+              selectProfile(name)
+              // The list is per-profile now (per-engine store) — another
+              // profile's rows would offer resumes this engine can't honor.
+              setSdkSessions(undefined)
+            }}
             className='min-w-32'
           />
           <label className='flex min-w-0 flex-col gap-1'>

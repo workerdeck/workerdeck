@@ -266,9 +266,6 @@ struct SessionView: View {
             cwd: vm.cwd,
             hasCommands: !(vm.state.commands ?? []).isEmpty,
             canBrowseFiles: completion.hasFileSearch,
-            // An sdk session id on an *empty* transcript means resume: a fresh
-            // session only earns one alongside its first turn's events.
-            resumedWithoutHistory: vm.state.sdkSessionId != nil && !vm.capabilities.resumeBackfill,
             // Belt and braces: the reader already reports a smaller box when the
             // keyboard pushes the safe area up, but whether it does depends on
             // how SwiftUI resolves this stack — and a panel that overlaps the

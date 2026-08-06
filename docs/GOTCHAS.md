@@ -262,6 +262,33 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   the model and effort explicitly on every `turn/start`, remembering the resolved defaults from
   the `thread/start` response — that is the only way `setModel(undefined)` can mean "back to the
   profile default" again.
+- **Resume backfill reads `thread/resume`'s own response, and `turns` is populated ONLY there**
+  (plus `thread/rollback`, `thread/fork`, and `thread/read` when `includeTurns: true` — every
+  other Thread-bearing response and notification carries an EMPTY `turns` array, so a
+  `thread/read` without the flag looks like an empty thread that isn't). Measured against
+  0.146.0: items come back `itemsView: 'full'` in chronological order, and item ids restart per
+  turn (`item-1`, …), so the replay gives each historical turn its own nonce — the b026e70
+  namespacing discipline applies to backfilled turns exactly as to live ones. A non-null
+  `turnsBackwardsCursor` on the resume response means the page is partial; the runner then
+  fetches the whole rollout via `thread/read {includeTurns: true}` (which has no cursor surface
+  at all), and if even that fails it replays the partial page under a `session_error` notice —
+  truthful-but-partial must say so. Replay events are stamped `replay: true` in `#emit` (one
+  item-mapping code path), a resume's new-turn `user_message` echo is deferred behind the
+  replay so it can never precede the history it follows, and a reconnect after a dead child
+  goes through `thread/resume` again but stashes nothing — history is never replayed twice.
+  Backfill costs no tokens (no `turn/start`), but it does make a promptless resume spawn its
+  child eagerly.
+- **`thread/list` is how `GET /sdk-sessions` answers for codex — one short-lived child per
+  request, closed before responding.** Wire facts (measured, 0.146.0): the page-size param is
+  `limit` (not pageSize), `cursor` continues, `sortKey: 'updated_at'` matches the
+  `lastModified` ordering clients render, timestamps are epoch **seconds** (protocol summaries
+  want ms), and the `cwd` filter is an EXACT path match that accepts an array — pass both the
+  spelled and realpath'd forms or macOS `/tmp` dirs silently miss their `/private/tmp` threads.
+  The resume id is the row's `id`; the row also has a `sessionId` field and it is NOT the one
+  `thread/resume` takes. `ephemeral` rows are dropped (never materialized on disk — nothing to
+  resume). Routing: `?profile=` picks whose store to list; absent, exactly-one-profile servers
+  resolve implicitly and multi-profile servers keep the legacy claude-store answer, because an
+  old client cannot answer a new 400.
 - **A dead child is a failed turn, not a failed session**: the thread lives on disk in
   CODEX_HOME, so the runner drops the connection, fails the in-flight turn with the exit +
   stderr tail, and the next message spawns a fresh child that `thread/resume`s the same thread

@@ -175,12 +175,12 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(body: Data(#"{"sdkSessions":[]}"#.utf8)) }
     let client = makeStubClient()
 
-    _ = try await client.listSdkSessions(dir: "/repo", limit: 10, offset: 5)
+    _ = try await client.listSdkSessions(dir: "/repo", limit: 10, offset: 5, profile: "codex")
 
     let request = try #require(StubStore.shared.requests.first)
     #expect(
       request.url?.absoluteString
-        == "http://127.0.0.1:8787/v1/sdk-sessions?dir=%2Frepo&limit=10&offset=5")
+        == "http://127.0.0.1:8787/v1/sdk-sessions?dir=%2Frepo&limit=10&offset=5&profile=codex")
   }
 
   @Test func postsPermissionDecisions() async throws {

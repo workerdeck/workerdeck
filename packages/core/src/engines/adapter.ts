@@ -3,6 +3,7 @@ import type {
   ModelOption,
   ProfileEngine,
   ProfileInfo,
+  SdkSessionSummary,
 } from '@workerdeck/protocol'
 import type { Runner, RunnerSnapshot } from '../runner-interface.ts'
 import type { SessionRunnerConfig } from '../runner.ts'
@@ -66,6 +67,23 @@ export interface EngineAdapter {
   ): Promise<EngineAvailability>
   /** Build a Runner. Throwing fails the create (session POST 500s, job fails). */
   createRunner(request: EngineRunnerRequest): Runner | Promise<Runner>
+  /**
+   * List the engine's on-disk resumable sessions (`GET /sdk-sessions`) —
+   * present exactly when the capability record's `listSessions` is true. Must
+   * not require a live session: the codex adapter answers over a short-lived
+   * `thread/list` app-server child it closes before returning; the claude
+   * adapter reads the Agent SDK's store directly. `env` follows the
+   * checkAvailability contract (the profile's complete session environment,
+   * never a delta). `dir` narrows to one project directory; `limit`/`offset`
+   * page the newest-first result.
+   */
+  listSessions?(options: {
+    profile?: ProfileInfo
+    env: Record<string, string | undefined>
+    dir?: string
+    limit?: number
+    offset?: number
+  }): Promise<SdkSessionSummary[]>
 }
 
 import { claudeAdapter } from './claude/adapter.ts'

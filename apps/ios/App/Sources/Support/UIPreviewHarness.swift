@@ -170,7 +170,7 @@ struct UIPreviewHarness: View {
                 .foregroundStyle(.tertiary)
               SessionEmptyState(
                 cwd: "/Users/you/projects/workerdeck", hasCommands: true, canBrowseFiles: true,
-                resumedWithoutHistory: height == 700, availableHeight: height)
+                availableHeight: height)
             }
           }
         }

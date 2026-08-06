@@ -1,11 +1,17 @@
 import { execFile } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { ENGINE_CAPABILITIES, type ProfileInfo } from '@workerdeck/protocol'
+import {
+  ENGINE_CAPABILITIES,
+  PROTOCOL_VERSION,
+  type ProfileInfo,
+  type SdkSessionSummary,
+} from '@workerdeck/protocol'
 import type { EngineAdapter, EngineAvailability } from '../adapter.ts'
 import { CodexRunner } from './runner.ts'
 import { CODEX_CATALOG } from './catalog.ts'
 import { connectAppServer } from './process.ts'
+import type { AppServerConnectFn, AppServerThreadListResponse, AppServerThreadSummary } from './types.ts'
 
 const NOT_INSTALLED =
   '@openai/codex is not installed — add it (an optional peer of @workerdeck/core) to run codex profiles'
@@ -120,6 +126,113 @@ async function checkCodexAvailability(
   })
 }
 
+/** `thread/list` page size (its own default is 25) and a hard page bound so a
+ * misbehaving cursor can never spin the listing forever. */
+const LIST_PAGE_SIZE = 100
+const MAX_LIST_PAGES = 40
+
+/** thread/list's `cwd` filter is an EXACT path match (measured, 0.146.0), so
+ * offer both the spelled and canonical forms — macOS listings would otherwise
+ * miss `/tmp/...` threads recorded under `/private/tmp/...`. */
+function cwdFilter(dir: string): string[] {
+  const forms = new Set([dir])
+  try {
+    forms.add(realpathSync(dir))
+  } catch {
+    // A directory that no longer exists still names its recorded threads.
+  }
+  return [...forms]
+}
+
+const secondsToMs = (value: number | null | undefined): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value * 1000 : undefined
+
+/** One thread row in the protocol's browser-safe summary shape. `id` is what
+ * `CreateSessionRequest.resume` feeds `thread/resume` — the row's separate
+ * `sessionId` field is not it. */
+function summarizeThread(row: AppServerThreadSummary): SdkSessionSummary {
+  const name = typeof row.name === 'string' && row.name.length > 0 ? row.name : undefined
+  const preview = typeof row.preview === 'string' && row.preview.length > 0 ? row.preview : undefined
+  return {
+    sessionId: row.id,
+    summary: name ?? preview ?? row.id,
+    lastModified: secondsToMs(row.updatedAt) ?? secondsToMs(row.createdAt) ?? 0,
+    createdAt: secondsToMs(row.createdAt),
+    customTitle: name,
+    firstPrompt: preview,
+    gitBranch:
+      typeof row.gitInfo?.branch === 'string' && row.gitInfo.branch.length > 0
+        ? row.gitInfo.branch
+        : undefined,
+    cwd: typeof row.cwd === 'string' ? row.cwd : undefined,
+  }
+}
+
+/**
+ * CODEX_HOME's threads over ONE short-lived `codex app-server` child: the
+ * runner's own handshake (`experimentalApi` and all — one code path, no
+ * second vocabulary to drift), `thread/list` pages walked by cursor, child
+ * closed before returning. Requires no live session and costs no tokens —
+ * it is how "resume" is offered before anything is running. The `connectFn`
+ * seam exists for the scripted-peer tests; the adapter passes the real
+ * spawn.
+ */
+export async function listCodexSessions(options: {
+  connectFn: AppServerConnectFn
+  profile?: ProfileInfo
+  env: Record<string, string | undefined>
+  dir?: string
+  limit?: number
+  offset?: number
+}): Promise<SdkSessionSummary[]> {
+  const childEnv: Record<string, string> = {}
+  for (const [key, value] of Object.entries(options.env)) {
+    if (value !== undefined) childEnv[key] = value
+  }
+  if (options.profile?.codexHome) childEnv.CODEX_HOME = options.profile.codexHome
+  const connection = options.connectFn({ env: childEnv })
+  const rows: AppServerThreadSummary[] = []
+  try {
+    await connection.request('initialize', {
+      clientInfo: {
+        name: 'workerdeck',
+        title: 'WorkerDeck',
+        version: `protocol-${PROTOCOL_VERSION}`,
+      },
+      capabilities: { experimentalApi: true },
+    })
+    connection.notify('initialized')
+    // Newest-first by *update* time — `lastModified` is the field the pickers
+    // sort and render, and codex's own default sort is by creation.
+    const base: Record<string, unknown> = {
+      limit: LIST_PAGE_SIZE,
+      sortKey: 'updated_at',
+      ...(options.dir ? { cwd: cwdFilter(options.dir) } : {}),
+    }
+    const want = options.limit === undefined ? undefined : (options.offset ?? 0) + options.limit
+    let cursor: string | undefined
+    for (let page = 0; page < MAX_LIST_PAGES; page++) {
+      const result = (await connection.request('thread/list', {
+        ...base,
+        ...(cursor ? { cursor } : {}),
+      })) as AppServerThreadListResponse
+      const data = Array.isArray(result?.data) ? result.data : []
+      rows.push(...data)
+      if (want !== undefined && rows.length >= want) break
+      if (data.length === 0 || typeof result?.nextCursor !== 'string') break
+      cursor = result.nextCursor
+    }
+  } finally {
+    connection.close()
+  }
+  const summaries = rows
+    // An ephemeral thread was never materialized on disk — nothing to resume.
+    .filter((row) => typeof row.id === 'string' && row.id.length > 0 && !row.ephemeral)
+    .map(summarizeThread)
+  const start = options.offset ?? 0
+  return options.limit === undefined ? summaries.slice(start) : summaries.slice(start, start + options.limit)
+}
+
 /**
  * OpenAI Codex as an engine: the codex CLI binary driven over its `app-server`
  * JSON-RPC surface — structurally the Claude engine's sibling (a local agent
@@ -144,6 +257,14 @@ export const codexAdapter: EngineAdapter = {
       ...config,
       codexHome: profile?.codexHome,
       connectFn: (options) => connectAppServer({ executable, ...options }),
+    })
+  },
+  async listSessions(options) {
+    const executable = resolveBundledCodexExecutable()
+    if (!executable) throw new Error(NOT_INSTALLED)
+    return listCodexSessions({
+      ...options,
+      connectFn: (connect) => connectAppServer({ executable, ...connect }),
     })
   },
 }

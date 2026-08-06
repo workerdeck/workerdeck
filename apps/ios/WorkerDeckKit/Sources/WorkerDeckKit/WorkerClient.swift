@@ -212,15 +212,22 @@ public struct WorkerClient: Sendable {
 
   // MARK: - SDK sessions
 
-  /// List the Agent SDK's on-disk sessions, for resume across server restarts.
-  /// Feed a result's `sessionId` to `CreateSessionRequest.resume`.
-  public func listSdkSessions(dir: String? = nil, limit: Int? = nil, offset: Int? = nil)
+  /// List an engine's on-disk sessions, for resume across server restarts.
+  /// Feed a result's `sessionId` to `CreateSessionRequest.resume` — under a
+  /// profile of the same engine. `profile` names whose store to list (claude →
+  /// the Agent SDK store, codex → CODEX_HOME threads); nil, the server resolves
+  /// it implicitly when it declares exactly one profile, else lists the Claude
+  /// engine's store.
+  public func listSdkSessions(
+    dir: String? = nil, limit: Int? = nil, offset: Int? = nil, profile: String? = nil
+  )
     async throws -> [SdkSessionSummary]
   {
     var query: [String] = []
     if let dir { query.append("dir=\(Self.encodeQueryValue(dir))") }
     if let limit { query.append("limit=\(limit)") }
     if let offset { query.append("offset=\(offset)") }
+    if let profile { query.append("profile=\(Self.encodeQueryValue(profile))") }
     let suffix = query.isEmpty ? "" : "?\(query.joined(separator: "&"))"
     let data = try await call("GET", "/sdk-sessions\(suffix)")
     return try decode(ListSdkSessionsResponse.self, from: data).sdkSessions

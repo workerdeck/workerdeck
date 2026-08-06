@@ -117,6 +117,47 @@ export type AppServerTurn = {
   error?: { message: string } | null
 }
 
+/**
+ * One historical turn as `thread/resume` / `thread/read {includeTurns: true}`
+ * return it: the same `ThreadItem` vocabulary the live `item/completed`
+ * notifications carry (so the live mapping replays it unchanged), plus an
+ * `itemsView` marker ('full' | 'summary' | 'notLoaded') saying how much of
+ * `items` was actually loaded. Measured against 0.146.0: both surfaces return
+ * 'full' items in chronological order.
+ */
+export type AppServerHistoryTurn = {
+  id: string
+  items?: AppServerItem[]
+  itemsView?: string
+  status?: string
+}
+
+/**
+ * One `thread/list` row (the summary Thread shape — its `turns` is always
+ * empty on list responses). Timestamps are epoch **seconds** (the protocol's
+ * summaries want ms). `id` is what `CreateSessionRequest.resume` feeds
+ * `thread/resume`; the row's separate `sessionId` field is not it.
+ */
+export type AppServerThreadSummary = {
+  id: string
+  /** Operator-set thread name, when one exists. */
+  name?: string | null
+  /** First user message — the natural summary line. */
+  preview?: string | null
+  createdAt?: number | null
+  updatedAt?: number | null
+  cwd?: string | null
+  /** Ephemeral threads are never materialized on disk — not resumable. */
+  ephemeral?: boolean
+  gitInfo?: { branch?: string | null } | null
+}
+
+/** `thread/list` result: one page plus an opaque continuation cursor. */
+export type AppServerThreadListResponse = {
+  data?: AppServerThreadSummary[]
+  nextCursor?: string | null
+}
+
 export type AppServerUserInput =
   | { type: 'text'; text: string }
   | { type: 'localImage'; path: string }

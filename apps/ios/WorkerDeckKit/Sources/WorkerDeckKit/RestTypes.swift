@@ -121,7 +121,10 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     interactiveApprovals: true,
     permissionModes: [.default, .acceptEdits, .bypassPermissions],
     defaultPermissionMode: .default,
-    resume: true, resumeBackfill: false, listSessions: false,
+    // A resume replays the thread's history as `replay: true` events, and
+    // `GET /sdk-sessions?profile=` lists CODEX_HOME's threads — both true
+    // since protocol 6's backfill landed.
+    resume: true, resumeBackfill: true, listSessions: true,
     // contextUsage arrives with an empty `categories` — occupancy only, no
     // breakdown. ContextSheet hides its Breakdown section for that case.
     contextUsage: true, rateLimits: true, mcpStatus: false, sessionMcpServers: false,

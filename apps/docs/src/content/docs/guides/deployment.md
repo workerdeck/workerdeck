@@ -22,8 +22,10 @@ injectable for older runtimes.
 Sessions are single-host in V1. Transcripts live on the server's local disk (the SDK default),
 and resume works across process restarts **on the same host**: pass `resume: sdkSessionId` on
 `CreateSessionRequest`, and the server backfills the prior transcript as `replay: true` events.
-`GET /v1/sdk-sessions?dir=…` lists the SDK's on-disk sessions so hosts can offer "resume" after
-a restart. `dir` names **one** project directory (and its worktrees), not everything beneath it —
+`GET /v1/sdk-sessions?dir=…` lists an engine's on-disk sessions so hosts can offer "resume" after
+a restart — pass `profile=…` to list a specific profile's store (a codex profile lists its
+CODEX_HOME threads; codex resumes replay history the same way).
+`dir` names **one** project directory (and its worktrees), not everything beneath it —
 so a client with no directory in hand should omit it and let the server apply `allowedCwdRoots`. Note the two ids: `SessionInfo.id` is the server-assigned id; `sdkSessionId` is the
 Agent SDK's — the one you feed back as `resume`.
 

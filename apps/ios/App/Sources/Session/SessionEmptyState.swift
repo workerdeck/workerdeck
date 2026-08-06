@@ -21,10 +21,6 @@ struct SessionEmptyState: View {
   /// yet is worse than not mentioning it.
   let hasCommands: Bool
   let canBrowseFiles: Bool
-  /// The session continues an engine thread whose history is not replayed
-  /// (resume without `resumeBackfill` — codex). Saying so is the difference
-  /// between "the agent remembers this" and an empty screen that reads as a bug.
-  let resumedWithoutHistory: Bool
   /// What the layout was actually offered, not what the screen is.
   let availableHeight: CGFloat
 
@@ -89,14 +85,10 @@ struct SessionEmptyState: View {
   }
 
   private var hints: [Hint] {
+    // No resumed-thread caveat any more: every engine that resumes now replays
+    // its history into the transcript (`resumeBackfill`), so a resumed session
+    // doesn't reach this empty state — its history is on screen.
     var hints = [Hint(symbol: "text.bubble", text: "Tell me what to do")]
-    if resumedWithoutHistory {
-      hints.insert(
-        Hint(
-          symbol: "clock.arrow.circlepath",
-          text: "Continuing an earlier thread. Its history isn't shown here, but the agent remembers it."),
-        at: 0)
-    }
     if hasCommands {
       hints.append(Hint(symbol: "slash.circle", text: "Type / for the CLI's slash commands."))
     }

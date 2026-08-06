@@ -30,6 +30,7 @@ import type {
   AppServerConnectFn,
   AppServerElicitationParams,
   AppServerFileChangeApprovalParams,
+  AppServerHistoryTurn,
   AppServerItem,
   AppServerPermissionsApprovalParams,
   AppServerPlanUpdate,
@@ -41,6 +42,7 @@ import type {
   AppServerUserInput,
   AppServerUserInputParams,
   AppServerUserInputQuestion,
+  AppServerUserMessageItem,
 } from './types.ts'
 
 /**
@@ -164,6 +166,20 @@ function userQuestionsFromCodex(questions: readonly AppServerUserInputQuestion[]
       description: option.description,
     })),
   }))
+}
+
+/** The text of a history `userMessage` item: its content entries' text parts
+ * joined. Image parts have no replayable representation (the bytes went to the
+ * model, not into the rollout we can render from) and are skipped. */
+function historyUserText(item: AppServerUserMessageItem): string {
+  if (!Array.isArray(item.content)) return ''
+  return item.content
+    .map((part) => {
+      const candidate = part as { type?: string; text?: unknown } | null
+      return candidate?.type === 'text' && typeof candidate.text === 'string' ? candidate.text : ''
+    })
+    .filter(Boolean)
+    .join('\n')
 }
 
 /** The AskUserQuestion answer convention (question text → chosen label(s),
@@ -396,6 +412,10 @@ export type CodexRunnerConfig = CreateSessionRequest & {
   /** Timeout for pending approvals when the request itself doesn't set one.
    * Default 300000 — the SessionRunner default. */
   defaultApprovalTimeoutMs?: number
+  /** With `resume`: replay the thread's prior turns as `replay: true` events
+   * before anything else, so late-attaching clients get a full transcript —
+   * the SessionRunner option, same name, same default (true). */
+  backfillHistory?: boolean
 }
 
 /** One queued user message: the input for exactly one turn. */
@@ -489,6 +509,19 @@ export class CodexRunner implements Runner {
   #imageDir: string | undefined
   /** Pending server→client approvals, keyed by the surfaced request id. */
   #approvals = new Map<string, PendingCodexApproval>()
+  /** True from start() until the resume backfill (the turn chain's first link)
+   * settles — while set, sendMessage defers its user_message echo behind the
+   * chain so a new turn can never precede or interleave the replayed history. */
+  #backfillPending = false
+  /** The resumed thread's prior turns, stashed by {@link #ensureThread} from
+   * the ONE thread/resume the backfill consumes (`partial` = the response's
+   * turnsBackwardsCursor said older turns exist beyond this page). A mid-life
+   * reconnect also goes through thread/resume, but with no backfill pending
+   * nothing is stashed — history is never replayed twice. */
+  #resumedHistory: { turns: AppServerHistoryTurn[]; partial: boolean } | undefined
+  /** Set around history replay: {@link #emit} stamps `replay: true` onto the
+   * message events the live item mapping produces. */
+  #replayingHistory = false
 
   constructor(config: CodexRunnerConfig, id: string = randomUUID()) {
     const mode = config.permissionMode ?? 'default'
@@ -570,7 +603,17 @@ export class CodexRunner implements Runner {
   start(): Promise<void> {
     if (this.#started) return this.#turnChain
     this.#started = true
-    this.#setStatus('idle')
+    if (this.#config.resume && this.#config.backfillHistory !== false) {
+      // First link of the turn chain: connect, thread/resume, and replay the
+      // thread's prior turns as `replay: true` events before any queued turn
+      // runs (and before its echo — see sendMessage). This is also why a
+      // promptless resume now connects eagerly rather than on first message:
+      // its history is the whole point of attaching to it.
+      this.#backfillPending = true
+      this.#turnChain = this.#turnChain.then(() => this.#backfillHistory())
+    } else {
+      this.#setStatus('idle')
+    }
     if (this.#config.prompt) this.sendMessage(this.#config.prompt)
     return this.#turnChain
   }
@@ -578,13 +621,20 @@ export class CodexRunner implements Runner {
   sendMessage(text: string, attachments?: readonly AttachmentInput[]): void {
     if (this.#closed) throw new Error('session is closed')
     const input = this.#buildInput(text, attachments ?? [])
-    this.#emit({
-      type: 'user_message',
-      message: { role: 'user', content: text },
-      parentToolUseId: null,
-      attachments: attachments?.length ? attachments.map(attachmentRef) : undefined,
-      uuid: randomUUID(),
-    })
+    const echo = () =>
+      this.#emit({
+        type: 'user_message',
+        message: { role: 'user', content: text },
+        parentToolUseId: null,
+        attachments: attachments?.length ? attachments.map(attachmentRef) : undefined,
+        uuid: randomUUID(),
+      })
+    // While a resume's history replay is still pending, the echo rides the
+    // turn chain (which the replay heads), so the new turn's user message can
+    // never precede the history it follows. Otherwise it is immediate — a
+    // message queued behind a running turn still echoes right away.
+    if (this.#backfillPending) this.#turnChain = this.#turnChain.then(echo)
+    else echo()
     this.#queue.push({ input })
     this.#scheduleTurn()
   }
@@ -809,28 +859,122 @@ export class CodexRunner implements Runner {
         sandbox: THREAD_SANDBOX_BY_MODE[this.#permissionMode],
       }
       if (this.#model) options.model = this.#model
-      const result = (this.#sdkSessionId
+      const resuming = this.#sdkSessionId !== undefined
+      const result = (resuming
         ? await connection.request('thread/resume', { threadId: this.#sdkSessionId, ...options })
         : await connection.request('thread/start', options)) as {
-        thread?: { id?: string }
+        thread?: { id?: string; turns?: AppServerHistoryTurn[] }
         model?: string | null
         reasoningEffort?: string | null
+        /** Non-null: `thread.turns` is one PAGE and older turns exist beyond it. */
+        turnsBackwardsCursor?: string | null
       }
       if (typeof result?.thread?.id === 'string') this.#sdkSessionId = result.thread.id
       if (typeof result?.model === 'string') this.#resolvedModel = result.model
       if (typeof result?.reasoningEffort === 'string') this.#resolvedEffort = result.reasoningEffort
+      // The resume that backfill is waiting on carries the thread's prior
+      // turns — stash them for it. A reconnect after a dead child resumes the
+      // same thread but has no backfill pending, so nothing is stashed and
+      // history is never replayed twice.
+      if (resuming && this.#backfillPending && !this.#resumedHistory) {
+        this.#resumedHistory = {
+          turns: Array.isArray(result?.thread?.turns) ? result.thread.turns : [],
+          partial: typeof result?.turnsBackwardsCursor === 'string',
+        }
+      }
       this.#threadLoaded = true
     }
     return connection
   }
 
-  async #runTurn(): Promise<void> {
-    if (this.#closed) return
-    const turn = this.#queue.shift()
-    if (!turn) return
-    this.#setStatus('running')
-    const startedAt = Date.now()
-    const active: ActiveTurn = {
+  /**
+   * On resume, replay the thread's prior turns as `replay: true` events,
+   * seq'd before any live turn — the SessionRunner backfill contract, fed
+   * from `thread/resume`'s own `thread.turns`. When the resume response says
+   * that page is partial (`turnsBackwardsCursor`), the FULL rollout history
+   * is fetched via `thread/read {includeTurns: true}` instead — and if even
+   * that fails, the partial page is replayed under a visible notice rather
+   * than silently posing as the whole thread. Best-effort like the Claude
+   * backfill: an unreadable history never blocks the resume itself.
+   */
+  async #backfillHistory(): Promise<void> {
+    try {
+      if (this.#closed) return
+      const connection = await this.#ensureThread()
+      const resumed = this.#resumedHistory
+      this.#resumedHistory = undefined
+      let turns = resumed?.turns ?? []
+      let partialReason: string | undefined
+      if (resumed?.partial) {
+        try {
+          const read = (await connection.request('thread/read', {
+            threadId: this.#sdkSessionId,
+            includeTurns: true,
+          })) as { thread?: { turns?: AppServerHistoryTurn[] } }
+          const full = read?.thread?.turns
+          if (Array.isArray(full) && full.length >= turns.length) turns = full
+          else partialReason = 'thread/read returned less history than the resume page'
+        } catch (error) {
+          partialReason = error instanceof Error ? error.message : String(error)
+        }
+      }
+      if (partialReason) {
+        // Rendered as an inline notice by both clients (the session keeps
+        // running) — a truthful-but-partial transcript must say so, above the
+        // part it does show.
+        this.#emit({
+          type: 'session_error',
+          message: `Resumed thread history is incomplete — older turns could not be loaded (${partialReason})`,
+        })
+      }
+      this.#replayTurns(turns)
+    } catch {
+      // A missing/unreadable thread must not block the resume: the next real
+      // turn retries the connection and surfaces its own failure loudly.
+    } finally {
+      this.#backfillPending = false
+      this.#setStatus('idle')
+    }
+  }
+
+  /** Replay historical turns through the SAME item mapping the live path uses. */
+  #replayTurns(turns: readonly AppServerHistoryTurn[]): void {
+    for (const turn of turns) {
+      if (this.#closed) return
+      // "Per turn" means per HISTORICAL turn: each replayed turn gets its own
+      // nonce exactly as each live turn does — codex item ids restart per turn
+      // ("item-1", …), so one shared namespace would fold turn N's items into
+      // turn 1's bubbles (b026e70), and a fresh random nonce per turn also
+      // keeps replayed ids disjoint from every future live turn's.
+      const state = this.#newTurnState()
+      this.#replayingHistory = true
+      try {
+        for (const item of turn.items ?? []) {
+          if (item.type === 'userMessage') {
+            // Dropped on the live path (sendMessage already echoed it); in
+            // history this IS the turn's user message.
+            const text = historyUserText(item)
+            if (!text) continue
+            this.#emit({
+              type: 'user_message',
+              message: { role: 'user', content: text },
+              parentToolUseId: null,
+              uuid: `${state.nonce}:${item.id}`,
+            })
+            continue
+          }
+          this.#handleItemCompleted(item, state)
+        }
+      } finally {
+        this.#replayingHistory = false
+      }
+    }
+  }
+
+  /** Fresh per-turn state — one per live turn, and one per REPLAYED turn (the
+   * nonce is the item-id namespace, and its per-turn-ness is the invariant). */
+  #newTurnState(): ActiveTurn {
+    return {
       nonce: randomUUID(),
       interrupted: false,
       usage: {
@@ -848,6 +992,15 @@ export class CodexRunner implements Runner {
       resolve: () => {},
       reject: () => {},
     }
+  }
+
+  async #runTurn(): Promise<void> {
+    if (this.#closed) return
+    const turn = this.#queue.shift()
+    if (!turn) return
+    this.#setStatus('running')
+    const startedAt = Date.now()
+    const active: ActiveTurn = this.#newTurnState()
     const outcome = new Promise<AppServerTurn>((resolve, reject) => {
       active.resolve = (turnResult) => {
         if (active.settled) return
@@ -1481,6 +1634,11 @@ export class CodexRunner implements Runner {
   }
 
   #emit(body: SessionEventBody): void {
+    // History replay reuses the live item mapping wholesale; the replay flag
+    // is stamped here so the mapping itself stays one code path.
+    if (this.#replayingHistory && (body.type === 'assistant_message' || body.type === 'user_message')) {
+      body = { ...body, replay: true }
+    }
     const event: SessionEvent = { ...body, seq: ++this.#seq, ts: Date.now() }
     this.#lastActivityAt = event.ts
     this.#events.push(event)
