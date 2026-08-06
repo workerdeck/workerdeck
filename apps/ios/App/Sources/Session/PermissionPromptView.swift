@@ -56,9 +56,11 @@ struct PermissionPromptView: View {
           .controlSize(.small)
       }
     }
-    .padding(12)
-    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.orange.opacity(0.35)))
+    // The orange card IS the floating panel — it needs a real surface, because
+    // it sits over a scrolling transcript. Nesting it inside a neutral glass
+    // panel drew two rounded rectangles for one prompt.
+    .padding(14)
+    .glassPanel(cornerRadius: 20, tint: .orange)
     .alert("Deny this tool call?", isPresented: $showDenyMessage) {
       TextField("Reason (optional)", text: $denyMessage)
       Button("Deny") {

@@ -48,9 +48,10 @@ struct QuestionPromptView: View {
           .disabled(!isComplete)
       }
     }
-    .padding(12)
-    .background(Color.blue.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
-    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.blue.opacity(0.3)))
+    // Same rule as the permission prompt: this card is the panel, not something
+    // nested inside one. Blue rather than orange — a question is not a warning.
+    .padding(14)
+    .glassPanel(cornerRadius: 20, tint: .blue)
     .onAppear(perform: preselectRecommended)
   }
 

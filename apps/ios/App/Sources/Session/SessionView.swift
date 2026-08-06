@@ -213,9 +213,9 @@ struct SessionView: View {
         WarningStrip(text: message) { vm.dismissProtocolError() }
       }
       if let request = vm.pendingApproval, !isPickerOpen {
+        // No wrapper: both prompt views bring their own tinted glass panel, so
+        // the coloured card is the floating surface rather than a card inside one.
         approvalBanner(request)
-          .padding(12)
-          .glassPanel(cornerRadius: 20)
       }
       // The picker gets the screen while it is open: it is a list you are reading,
       // and the status bar is not something you consult mid-completion.
