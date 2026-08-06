@@ -24,7 +24,9 @@ protocol. Read these before changing scope or structure:
   hand-rolled NDJSON client with zero new deps, token streaming, interactive approvals over the
   server→client ask channels (granular policy under `experimentalApi`, no fallback — a codex
   command approval is an *escalation after a sandbox refusal*, see `docs/GOTCHAS.md` §Codex),
-  complete child env always — a spawn env *replaces*, never merges), and `AiSdkRunner`
+  complete child env always — a spawn env *replaces*, never merges; and the `ThreadItem` union in
+  `engines/codex/types.ts` must cover what the binary emits, because an unmapped item is
+  **invisible**, not merely unstyled), and `AiSdkRunner`
   (provider, over AI SDK v7, built by the host's `createEngineRunner` hook — its adapter is a
   pseudo-adapter). The
   **model list clients see is shaped here**, not by each UI: catalogs apply
@@ -73,16 +75,28 @@ protocol. Read these before changing scope or structure:
   env wholesale. `checkCredentials` probes each profile at launch and on a ~60s TTL, and the
   verdicts serve `GET /profiles` as `available`/`unavailableReason` — display-only by design.
 - `packages/client` — REST + WS client on platform `fetch`/`WebSocket`; zero runtime deps. Owns
-  the WS frame surface, so new frames need `SessionHandle` methods/events here.
+  the WS frame surface, so new frames need `SessionHandle` methods/events here. A refused REST
+  call throws `WorkerDeckError` (an `Error` subclass carrying `status`), which is what lets a
+  caller tell "this server has no such route" (404 — stop asking) from "that file was too big".
 - `packages/react` — headless: `useClaudeSession`, the pure transcript reducer
-  (`src/transcript.ts`, framework-free, unit-tested — keep rendering out), and the browser tool
-  host (`tool-host.ts`) running server-bridged calls in the tab. Companions must ride the hook's
-  own `handle` — the bridge asks the first attached client, so a second handle sees nothing.
+  (`src/transcript.ts`, framework-free, unit-tested — keep rendering out), the composer's two
+  companions (`useAttachments` — staging + upload, filtered by the capability record;
+  `useHostFileSearch` — `@file` search rooted at the session cwd, self-disabling on a 404), the
+  other pure helpers that both clients must agree on (`rateLimitWindows`, `scanPromptTokens` —
+  the mirror of the Swift `PromptTokens`), and the browser tool host (`tool-host.ts`) running
+  server-bridged calls in the tab. Companions must ride the hook's own `handle` — the bridge asks
+  the first attached client, so a second handle sees nothing. `TranscriptState.capabilities` is
+  always populated, and is what every surface renders from (see `docs/GOTCHAS.md`).
 - `packages/ui` — styled layer (Tailwind v4 + `@base-ui/react` + cva): `src/components/ui`
   primitives, `src/components/agent` components, vendored prompt-area composer (MIT). Ships source
-  styles (`theme.css` + `@source`-scanned classnames; wiring in its README).
+  styles (`theme.css` + `@source`-scanned classnames; wiring in its README). `SessionPanel` is the
+  whole session surface — transcript, composer (attachments, `/` and `@` completion), and the
+  panels behind its status bar and `⋯` menu (session info, context, plan usage, MCP, project
+  files) — each gated on the capability record, so one component is correct for every engine.
 - `packages/web` — dashboard (TanStack Router, hash history); create forms are engine-aware via
-  `src/lib/engine.ts`, reconciling sticky localStorage choices against the chosen profile. Published
+  `src/lib/engine.ts`, reconciling sticky localStorage choices against the chosen profile. The
+  session runner is `@workerdeck/ui`'s `SessionPanel` — the dashboard adds only the header, so a
+  session feature belongs in `ui`/`react` and every embedder gets it too. Published
   as prebuilt static files with **zero runtime deps** — React/router/Tailwind are compiled into
   `dist/`, so every one of them is a devDep; the entry (`entry.mjs`, hand-written, never bundled) is
   a path to `dist/`, not a component. Two constraints are baked in at build time: no vite `base`, so

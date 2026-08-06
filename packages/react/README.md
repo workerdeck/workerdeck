@@ -77,11 +77,41 @@ stream doesn't carry yet; events stay authoritative once they arrive.
 - `pendingApprovals` — permission requests awaiting an approve/deny decision.
 - `status` / `statusDetail`, `model`, `cwd`, `sdkSessionId`, `permissionMode`.
 - `models` and `commands` — what the session can switch to / accepts (from `capabilities`).
+- `capabilities` — **the engine's capability record**, always present: the runner-reported copy
+  from the attach snapshot, else the protocol's static default for the engine. Render affordances
+  from this rather than switching on the engine name; an absent capability means the control is
+  *hidden*, never one that silently does nothing.
+- `session` — the whole attach snapshot, for the facts no event carries (profile, `apiKeySource`,
+  `canBypassPermissions`, `createdAt`).
 - `contextUsage`, `rateLimits` (keyed by window; absent for API-key sessions — render nothing,
-  not 0%), `totalCostUsd` (session-cumulative), and `lastSeq` for replay dedupe.
+  not 0%) with `rateLimitsUpdatedAt`, `totalCostUsd` (session-cumulative), and `lastSeq` for
+  replay dedupe.
 
 The reducer is pure and immutable: same events in, same state out — which is also how it is
-unit-tested. Keep rendering logic out of it.
+unit-tested. Keep rendering logic out of it. `rateLimitWindows(state)` and `scanPromptTokens(text)`
+are the other pure helpers here, for the same reason: ordered usage windows and `@file` /
+`/command` token recognition are string-and-shape work every client needs and every client should
+agree on.
+
+## Composing a message
+
+Two more hooks cover what a composer needs beyond text, both capability-aware:
+
+```tsx
+const { state, send } = useClaudeSession(client, sessionId)
+// Staging + upload, filtered by `capabilities.attachments`: a kind the engine
+// forswears is refused locally instead of 415'ing at the gateway.
+const attachments = useAttachments(client, sessionId, {
+  capabilities: state.capabilities,
+  engine: state.engine,
+})
+// `@file` search rooted at the session's cwd. `available` is false when the
+// gateway serves no host files — don't advertise what isn't there.
+const files = useHostFileSearch(client, state.cwd)
+
+attachments.add(pickedFiles) // uploads start immediately
+send(text, attachments.readyIds) // the message names ids; bytes never enter the event log
+```
 
 ## Running tool calls in the tab
 

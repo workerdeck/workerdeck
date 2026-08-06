@@ -88,8 +88,8 @@ Nine libraries, one instance, one dependency rule:
 | `@workerdeck/queue` | Job queue: one-shot unattended runs with concurrency limits, token budgets, and webhooks. |
 | `@workerdeck/server` | HTTP + WebSocket gateway: session registry, pluggable auth hook, profiles, optional job routes. |
 | `@workerdeck/client` | Typed protocol client for browsers and Node. Zero runtime deps. |
-| `@workerdeck/react` | Headless React layer: `useClaudeSession` + a pure transcript reducer. |
-| `@workerdeck/ui` | Styled agent-control components: `SessionPanel`, transcript, permission prompts, composer. |
+| `@workerdeck/react` | Headless React layer: `useClaudeSession`, attachment/host-file hooks, and a pure transcript reducer. |
+| `@workerdeck/ui` | Styled agent-control components: `SessionPanel` (transcript, permission prompts, composer with attachments and `@file`/`/command` completion, and the session detail panels). |
 | `@workerdeck/web` | The dashboard as prebuilt static files, for serving from your own host. |
 
 The browser side never imports the server side; the protocol is the only bridge. See

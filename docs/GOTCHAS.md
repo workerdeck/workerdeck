@@ -299,6 +299,25 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   image + text attachments only (images as `localImage` host temp-file paths, text inlined into
   the prompt envelope; a PDF has no representation, and the upload route 415s any kind a
   session's capability record forswears).
+- **An unmapped `ThreadItem` is invisible, not merely unstyled.** Unknown item types fall to the
+  `sdk_event` `codex.<type>` channel, which no UI renders — so a turn that did real work looks
+  like it produced nothing. That is how codex's built-in `image_gen` went unnoticed:
+  `imageGeneration` and `imageView` are ordinary item variants. When codex adds one, the item
+  union is the thing to extend; `codex app-server generate-json-schema --out <dir>` (or
+  `generate-ts`) dumps the authoritative list, which is how these were found.
+- **A generated image is a host path, never bytes.** `imageGeneration.savedPath` is absolute on
+  the host — by default under `$CODEX_HOME/generated_images/`, or in the workspace when the model
+  was told the asset belongs to the project. The runner puts it in the tool card's *input* (a
+  field, so a client keys a preview off it rather than parsing a sentence), and a client renders
+  the picture by reading it back through `/fs/read`. It therefore previews only when the path is
+  under an allowed root **and** within `hostFiles.maxFileBytes` (1 MiB default — a full-size
+  generated PNG exceeds it); otherwise the card names the path, which is the honest fallback.
+  The item's `result` is an undocumented free-form string and is length-capped before it reaches
+  the event log — assume a long one is an encoded image, and base64 never goes on the wire.
+- **The app-server has no slash-command surface at all** — no command-listing RPC exists, and
+  codex's own `/model`, `/approvals` etc. are TUI-local. `slashCommands: false` is correct and a
+  composer must hide the `/` popover rather than offer an empty one. (`skills/list` does exist,
+  so surfacing *skills* is a real possibility — a feature, not a repair.)
 
 ## Engine adapters & capability records
 
@@ -329,6 +348,19 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   fails the create (session POST 500s with the message, a job goes straight to `failed`). The
   example and the SDK smoke still share ONE process-wide MCP client (sessions must not close it)
   — right for one public endpoint, not a constraint any more.
+- **A client renders from the record, never from the engine name.** `TranscriptState.capabilities`
+  is always populated (wire copy from the attach snapshot, else the protocol default), which is
+  what lets one `SessionPanel` be correct for all three engines. The failure this replaced was not
+  cosmetic: gating the model picker on the *`capabilities` event* meant a codex session — which
+  never sends one — had no model switcher at all, and could not be switched for its whole life.
+  The catalog on `ProfileInfo.models` is the fallback that fixes it.
+- **A catalog row's `value` is an alias; a session reports a resolved id.** Rows read `opus[1m]`,
+  `sonnet`, `claude-fable-5[1m]`; a running session reports `claude-opus-5[1m]`. Match through
+  `ModelOption.resolvedModel` (authoritative when present, *including when it disagrees* — two
+  rows of one family differ only there), then fall back to the family token for a server too old
+  to send it. Comparing `value` alone is why a chip reads `claude-opus-5[1m]` instead of "Opus 5";
+  the rule is written once per client (`ModelSelect.optionMatches`, Swift `ModelOption.matches`)
+  and the two must stay identical.
 
 ## Tool trust & the sandbox
 

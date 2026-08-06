@@ -260,8 +260,8 @@ run. Each package has its own README.
 | [`@workerdeck/queue`](packages/queue) | The job queue: concurrency, token budgets, retries, watchdog, retention, webhooks. Pluggable `QueueAdapter` (in-memory bundled). |
 | [`@workerdeck/server`](packages/server) | The gateway: HTTP + WebSocket, session registry, auth hook, profiles, job routes, session notifications, browser tool bridge, parked-session storage, opt-in host-file routes. |
 | [`@workerdeck/client`](packages/client) | Typed client for browsers and Node: REST + WS attach with auto-reconnect and replay-from-last-seq. Zero runtime deps. |
-| [`@workerdeck/react`](packages/react) | Headless React: `useClaudeSession` + a pure transcript reducer. No styling opinion. |
-| [`@workerdeck/ui`](packages/ui) | Styled agent-control components: session panel, transcript, tool-call cards, permission prompts, composer. Tailwind v4 + Base UI + cva. |
+| [`@workerdeck/react`](packages/react) | Headless React: `useClaudeSession`, attachment/host-file hooks, and a pure transcript reducer. No styling opinion. |
+| [`@workerdeck/ui`](packages/ui) | Styled agent-control components: session panel (transcript, tool-call cards, permission prompts, composer with attachments and `@file`/`/command` completion, plus the context / usage / MCP / project-file panels). Tailwind v4 + Base UI + cva. |
 | [`@workerdeck/web`](packages/web) | The dashboard as prebuilt static files, for serving from your own host. Zero runtime deps. |
 
 ## Auth & Anthropic's terms
