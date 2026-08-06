@@ -31,6 +31,7 @@ import type {
   AppServerElicitationParams,
   AppServerFileChangeApprovalParams,
   AppServerHistoryTurn,
+  AppServerImageGenerationItem,
   AppServerItem,
   AppServerPermissionsApprovalParams,
   AppServerPlanUpdate,
@@ -106,6 +107,31 @@ const APPROVAL_POLICY_BY_MODE: Partial<Record<PermissionMode, object>> = {
 /** Fallback timeout for a pending approval nobody answers — the SessionRunner
  * default, so unattended codex sessions land the same way Claude ones do. */
 const DEFAULT_APPROVAL_TIMEOUT_MS = 300_000
+
+/**
+ * Tool name for codex's built-in `image_gen`. A stable string because it is a
+ * rendering contract: both clients key an icon (and, where they can reach the
+ * host filesystem, an inline preview) off it.
+ */
+export const CODEX_IMAGE_TOOL = 'CodexImageGeneration'
+
+/** Longest `result` worth putting in a tool card. The field is free-form and
+ * undocumented; anything past this is assumed to be an encoded image rather
+ * than a sentence, and encoded images do not go in the event log. */
+const MAX_IMAGE_RESULT_CHARS = 512
+
+const shortResult = (result: string): boolean =>
+  result.length > 0 && result.length <= MAX_IMAGE_RESULT_CHARS && !result.startsWith('data:')
+
+/** What the card shows while the picture is being made, and after. `savedPath`
+ * only exists once it lands — a client keys its preview off it, so it is a
+ * field rather than a sentence in the result text. */
+function imageGenerationInput(item: AppServerImageGenerationItem): Record<string, unknown> {
+  return {
+    ...(item.revisedPrompt ? { prompt: item.revisedPrompt } : {}),
+    ...(item.savedPath ? { savedPath: item.savedPath } : {}),
+  }
+}
 
 /**
  * The experimental per-request decision list, normalized to names: a string
@@ -1378,6 +1404,13 @@ export class CodexRunner implements Runner {
     if (item.type === 'mcpToolCall' && !active.toolUseEmitted.has(id)) {
       active.toolUseEmitted.add(id)
       this.#emitToolUse(id, `mcp__${item.server}__${item.tool}`, item.arguments)
+      return
+    }
+    // Generating a picture takes seconds — the card exists while it runs, like
+    // a command's does, rather than appearing only once it is finished.
+    if (item.type === 'imageGeneration' && !active.toolUseEmitted.has(id)) {
+      active.toolUseEmitted.add(id)
+      this.#emitToolUse(id, CODEX_IMAGE_TOOL, imageGenerationInput(item))
     }
   }
 
@@ -1453,6 +1486,28 @@ export class CodexRunner implements Runner {
       case 'webSearch':
         this.#emitToolUse(id, 'CodexWebSearch', { query: item.query })
         this.#emitToolResult(id, '', false)
+        return
+      case 'imageGeneration': {
+        // Re-emitted, not guarded by `toolUseEmitted`: `savedPath` only exists
+        // now, and the reducer upserts a tool_use by id — so this replaces the
+        // in-progress card's input with the finished one. The result event
+        // follows immediately, which is what settles the status again.
+        active.toolUseEmitted.add(id)
+        this.#emitToolUse(id, CODEX_IMAGE_TOOL, imageGenerationInput(item))
+        // The path IS the deliverable — the bytes live on the host and no event
+        // may carry them. A client that can reach the host filesystem renders
+        // the picture from it; one that can't at least says where it went,
+        // which beats a turn that silently produced nothing.
+        const lines = [
+          item.savedPath ? `Saved to ${item.savedPath}` : 'No saved path reported',
+          ...(shortResult(item.result) ? [item.result] : []),
+        ]
+        this.#emitToolResult(id, lines.join('\n'), item.status === 'failed')
+        return
+      }
+      case 'imageView':
+        this.#emitToolUse(id, 'CodexImageView', { path: item.path })
+        this.#emitToolResult(id, item.path, false)
         return
       default: {
         const unknown = item as AppServerUnknownItem

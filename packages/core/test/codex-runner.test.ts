@@ -386,6 +386,82 @@ describe('CodexRunner', () => {
     expect(runner.status).toBe('idle')
   })
 
+  it('maps a generated image to a tool card carrying its host path', async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      // While it runs there is no path yet — only the prompt.
+      emit('item/started', {
+        threadId: 'thread-1',
+        turnId,
+        item: {
+          id: 'g1',
+          type: 'imageGeneration',
+          status: 'inProgress',
+          revisedPrompt: 'a pink flower, golden hour',
+          result: '',
+        },
+      })
+      emit('item/completed', {
+        threadId: 'thread-1',
+        turnId,
+        item: {
+          id: 'g1',
+          type: 'imageGeneration',
+          status: 'completed',
+          revisedPrompt: 'a pink flower, golden hour',
+          result: 'ok',
+          savedPath: '/Users/me/.codex/generated_images/flower.png',
+        },
+      })
+      // A result long enough to be an encoded image never reaches the log.
+      emit('item/completed', {
+        threadId: 'thread-1',
+        turnId,
+        item: {
+          id: 'g2',
+          type: 'imageGeneration',
+          status: 'completed',
+          result: 'x'.repeat(4000),
+        },
+      })
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'draw', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+
+    // The finished card carries the path as a *field*, which is what a client
+    // keys an inline preview off — not a sentence it would have to parse.
+    const uses = ofType(events, 'assistant_message').flatMap((e) =>
+      (e.message.content as Array<{ type: string; id?: string; name?: string; input?: unknown }>)
+        .filter((b) => b.type === 'tool_use' && b.name === 'CodexImageGeneration'),
+    )
+    expect(uses.length).toBeGreaterThanOrEqual(2)
+    expect(uses.at(0)!.input).toEqual({ prompt: 'a pink flower, golden hour' })
+    expect(uses.find((u) => u.id?.endsWith(':g1') && (u.input as { savedPath?: string }).savedPath))
+      .toMatchObject({
+        input: {
+          prompt: 'a pink flower, golden hour',
+          savedPath: '/Users/me/.codex/generated_images/flower.png',
+        },
+      })
+
+    const results = ofType(events, 'user_message')
+      .filter((e) => e.synthetic)
+      .map((e) => (e.message.content as Array<{ content?: string }>)[0]!.content ?? '')
+    expect(results.some((r) => r.includes('Saved to /Users/me/.codex/generated_images/flower.png')))
+      .toBe(true)
+    // Never a 4000-character blob: an undocumented free-form field is not a
+    // licence to put an encoded image in the event log.
+    expect(results.some((r) => r.includes('xxxx'))).toBe(false)
+    expect(results.some((r) => r.includes('No saved path reported'))).toBe(true)
+    // It is not swallowed into the unknown-item channel any more.
+    expect(ofType(events, 'sdk_event').map((e) => e.payload.type)).not.toContain(
+      'codex.imageGeneration',
+    )
+  })
+
   it('interrupts via turn/interrupt and lands as an interrupted turn result', async () => {
     const peer = scriptedPeer()
     // A turn that starts and hangs (the responder returns without a terminal).

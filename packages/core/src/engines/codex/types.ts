@@ -93,6 +93,28 @@ export type AppServerMcpToolCallItem = {
   status: string
 }
 export type AppServerWebSearchItem = { id: string; type: 'webSearch'; query: string }
+/**
+ * A picture the model made with codex's built-in `image_gen` tool.
+ *
+ * `savedPath` is an absolute path on the **host** — by default under
+ * `$CODEX_HOME/generated_images/`, or inside the workspace when the model was
+ * told the asset belongs to the project. It is the only reference we get: the
+ * app-server never sends the bytes, and neither do we (the event log carries
+ * references, never base64 — see the protocol's note on attachments).
+ *
+ * `result` is an undocumented free-form string. Treated as untrusted length:
+ * short values are shown, anything long enough to be an encoded image is not.
+ */
+export type AppServerImageGenerationItem = {
+  id: string
+  type: 'imageGeneration'
+  status: string
+  revisedPrompt?: string | null
+  result: string
+  savedPath?: string
+}
+/** The model *looked at* an image on disk (`path`, host-absolute). */
+export type AppServerImageViewItem = { id: string; type: 'imageView'; path: string }
 /** The user's own message, echoed back as an item — dropped (the runner
  * already emitted its `user_message`). */
 export type AppServerUserMessageItem = { id: string; type: 'userMessage'; content?: unknown }
@@ -107,6 +129,8 @@ export type AppServerItem =
   | AppServerFileChangeItem
   | AppServerMcpToolCallItem
   | AppServerWebSearchItem
+  | AppServerImageGenerationItem
+  | AppServerImageViewItem
   | AppServerUserMessageItem
 
 /** The `Turn` object of `turn/started` / `turn/completed`. */

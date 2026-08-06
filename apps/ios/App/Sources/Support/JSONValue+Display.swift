@@ -74,6 +74,11 @@ enum ToolIcon {
     case "TodoWrite": return "checklist"
     case "Skill": return "sparkles"
     case "AskUserQuestion": return "questionmark.bubble"
+    // The codex engine's own tool names (see its runner's item mapping).
+    case "CodexCommand": return "terminal"
+    case "CodexFileChange": return "plusminus"
+    case "CodexWebSearch": return "globe"
+    case "CodexImageGeneration", "CodexImageView": return "photo"
     default:
       return toolName.hasPrefix("mcp__") ? "puzzlepiece.extension" : "wrench.and.screwdriver"
     }
