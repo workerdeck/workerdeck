@@ -6,19 +6,34 @@ import { Conversation, ConversationContent, ConversationScrollButton } from './C
 import { FileCard } from './FileCard.tsx'
 import { Loader } from './Loader.tsx'
 import { Message, MessageContent } from './Message.tsx'
+import { PromptTokenText } from './PromptTokenText.tsx'
 import { Reasoning } from './Reasoning.tsx'
 import { Response } from './Response.tsx'
+import { SessionEmptyState } from './SessionEmptyState.tsx'
 import { ToolCallCard } from './ToolCallCard.tsx'
 
 function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_result' }> }) {
   return (
-    <div data-slot='turn-result' className='flex items-center gap-2 py-1'>
-      <div className='h-px flex-1 bg-border' />
-      <span className={cn('font-mono text-label', item.isError ? 'text-danger' : 'text-fg-4')}>
-        {item.isError ? item.subtype : 'turn done'} · {formatDuration(item.durationMs)} ·{' '}
-        {formatCost(item.totalCostUsd)}
-      </span>
-      <div className='h-px flex-1 bg-border' />
+    <div data-slot='turn-result' className='py-1'>
+      <div className='flex items-center gap-2'>
+        <div className='h-px flex-1 bg-border' />
+        <span className={cn('font-mono text-label', item.isError ? 'text-danger' : 'text-fg-4')}>
+          {item.isError ? item.subtype : 'turn done'} · {formatDuration(item.durationMs)} ·{' '}
+          {formatCost(item.totalCostUsd)}
+        </span>
+        <div className='h-px flex-1 bg-border' />
+      </div>
+      {/* A failed turn's reasons are the whole point of the row — dropping them
+          leaves "error_during_execution" and nothing to act on. */}
+      {item.errors?.length ? (
+        <ul className='mt-1 flex flex-col gap-0.5 text-center'>
+          {item.errors.map((message, index) => (
+            <li key={index} className='text-label break-words text-danger'>
+              {message}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   )
 }
@@ -42,10 +57,12 @@ function TranscriptItemView({
   item,
   fileUrl,
   attachmentUrl,
+  hostImage,
 }: {
   item: TranscriptItem
   fileUrl?: (path: string) => string
   attachmentUrl?: (attachmentId: string) => string
+  hostImage?: (path: string) => Promise<string | undefined>
 }) {
   switch (item.kind) {
     case 'user':
@@ -55,7 +72,11 @@ function TranscriptItemView({
             <SentAttachments attachments={item.attachments} attachmentUrl={attachmentUrl} />
           ) : null}
           {/* A photo can be the whole message — an empty bubble under it says nothing. */}
-          {item.text ? <MessageContent>{item.text}</MessageContent> : null}
+          {item.text ? (
+            <MessageContent>
+              <PromptTokenText text={item.text} />
+            </MessageContent>
+          ) : null}
         </Message>
       )
     case 'assistant_text':
@@ -69,7 +90,7 @@ function TranscriptItemView({
     case 'thinking':
       return <Reasoning isStreaming={item.id === 'streaming-thinking'}>{item.text}</Reasoning>
     case 'tool_call':
-      return <ToolCallCard item={item} />
+      return <ToolCallCard item={item} hostImage={hostImage} />
     case 'turn_result':
       return <TurnResultRow item={item} />
     case 'notice':
@@ -124,6 +145,14 @@ function SentAttachments({
   )
 }
 
+/** Rows produced inside a subagent (`parentToolUseId != null`) are stepped in
+ * behind a rule, so a Task's own output reads as belonging to the tool call
+ * above it rather than as the main thread carrying on. */
+function nestedClass(item: TranscriptItem): string | undefined {
+  const nested = 'parentToolUseId' in item && item.parentToolUseId != null
+  return nested ? 'border-l-2 border-border pl-3' : undefined
+}
+
 export interface TranscriptProps {
   state: TranscriptState
   /** Builds the download URL for a delivered file (see FileCard). Typically
@@ -133,23 +162,42 @@ export interface TranscriptProps {
    * `(id) => client.attachmentUrl(sessionId, id)`. Same-origin and
    * cookie-authenticated, which is what lets an `<img src>` render one. */
   attachmentUrl?: (attachmentId: string) => string
+  /** Whether this gateway serves `@file` search here — the empty state must not
+   * advertise an affordance the composer doesn't have. */
+  canBrowseFiles?: boolean
+  /** Reads a host file as a data URL, for tool calls whose output is a picture
+   * on the host (codex's `image_gen`). Omit and those cards name the path. */
+  hostImage?: (path: string) => Promise<string | undefined>
   className?: string
 }
 
-export function Transcript({ state, fileUrl, attachmentUrl, className }: TranscriptProps) {
+export function Transcript({
+  state,
+  fileUrl,
+  attachmentUrl,
+  canBrowseFiles,
+  hostImage,
+  className,
+}: TranscriptProps) {
   return (
     <Conversation className={className}>
       <ConversationContent>
         {state.items.length === 0 && state.status !== 'starting' ? (
-          <div className='py-12 text-center text-body-sm text-fg-4'>No messages yet.</div>
+          <SessionEmptyState
+            cwd={state.cwd}
+            hasCommands={!!state.commands?.length}
+            canBrowseFiles={canBrowseFiles}
+          />
         ) : (
           state.items.map((item) => (
-            <TranscriptItemView
-              key={`${item.kind}:${item.id}`}
-              item={item}
-              fileUrl={fileUrl}
-              attachmentUrl={attachmentUrl}
-            />
+            <div key={`${item.kind}:${item.id}`} className={nestedClass(item)}>
+              <TranscriptItemView
+                item={item}
+                fileUrl={fileUrl}
+                attachmentUrl={attachmentUrl}
+                hostImage={hostImage}
+              />
+            </div>
           ))
         )}
         {showLoader(state) ? (

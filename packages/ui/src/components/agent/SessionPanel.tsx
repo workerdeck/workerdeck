@@ -1,15 +1,38 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
-import { PROVIDER_PERMISSION_MODES } from '@workerdeck/protocol'
-import { useClaudeSession, useToolCallHost } from '@workerdeck/react'
+import { PROTOCOL_VERSION } from '@workerdeck/protocol'
+import {
+  rateLimitWindows,
+  useAttachments,
+  useClaudeSession,
+  useHostFileSearch,
+  useToolCallHost,
+} from '@workerdeck/react'
+import {
+  ChartPie,
+  FolderTree,
+  Gauge,
+  Info,
+  MoreHorizontal,
+  Plug,
+  TriangleAlert,
+  X,
+} from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
+import { Button } from '../ui/Button.tsx'
+import { Menu, MenuContent, MenuItem, MenuTrigger } from '../ui/Menu.tsx'
 import { Composer } from './Composer.tsx'
+import { ContextDialog } from './ContextDialog.tsx'
+import { HostFilesDialog } from './HostFilesDialog.tsx'
+import { McpDialog } from './McpDialog.tsx'
 import { ModelSelect } from './ModelSelect.tsx'
 import { PermissionModeSelect } from './PermissionModeSelect.tsx'
 import { PermissionPrompt } from './PermissionPrompt.tsx'
 import { QuestionPrompt, parseUserQuestions } from './QuestionPrompt.tsx'
+import { SessionInfoDialog } from './SessionInfoDialog.tsx'
 import { StatusBar } from './StatusBar.tsx'
 import { Transcript } from './Transcript.tsx'
+import { UsageDialog } from './UsageDialog.tsx'
 
 export interface SessionPanelProps {
   client: WorkerDeckClient
@@ -19,10 +42,18 @@ export interface SessionPanelProps {
   className?: string
 }
 
+/** The panels the session surface can raise. One at a time, by identity: a bag
+ * of booleans would let two open at once. */
+type Panel = 'info' | 'context' | 'usage' | 'mcp' | 'files'
+
 /**
  * The all-in-one embeddable session surface: status bar, streaming transcript,
  * permission prompts, composer. Attaches via useClaudeSession; remount (key) to switch
  * sessions.
+ *
+ * Every affordance is gated on the session's **capability record** rather than on
+ * the engine name — an absent capability hides the control instead of offering
+ * one that can only fail.
  */
 export function SessionPanel({ client, sessionId, header, className }: SessionPanelProps) {
   // Rejected commands (the CLI refusing a permission-mode switch, say) render INSIDE
@@ -31,18 +62,55 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
   // — the select would just "not stick". An error channel a host can lose by omission
   // is not an error channel.
   const [protocolError, setProtocolError] = useState<string | undefined>(undefined)
-  const { state, connected, handle, send, approve, deny, interrupt, setModel, setPermissionMode } =
-    useClaudeSession(client, sessionId, { onProtocolError: setProtocolError })
+  const [panel, setPanel] = useState<Panel | undefined>()
+  const {
+    state,
+    connection,
+    protocolMismatch,
+    models,
+    effectiveModel,
+    handle,
+    send,
+    approve,
+    deny,
+    interrupt,
+    setModel,
+    setPermissionMode,
+    reconnectNow,
+  } = useClaudeSession(client, sessionId, { onProtocolError: setProtocolError })
   // Callers are told to remount on a session switch, but a changed prop must not leave
   // the previous session's failure on screen.
   useEffect(() => setProtocolError(undefined), [sessionId])
+  // A tab that was in the background has been sitting out the reconnect backoff;
+  // coming back to it is exactly when waiting the rest of it out is wrong.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') reconnectNow()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [reconnectNow])
   // Host server-bridged tool calls (provider-engine sessions) in this tab, on the
   // SAME handle the panel attached with — the bridge asks the first attached
   // client. Free for Claude sessions: the guest loads lazily on the first call,
   // which for them never comes.
   useToolCallHost(handle)
+  const capabilities = state.capabilities
   const busy = state.status === 'running' || state.status === 'awaiting_approval'
   const ended = state.status === 'failed' || state.status === 'closed'
+  const attachments = useAttachments(client, sessionId, {
+    capabilities,
+    engine: state.engine,
+  })
+  // Rooted at the session's cwd, which arrives with the snapshot — so `@` is
+  // inert for the moment before it does, and stays inert on a gateway that
+  // serves no host files.
+  const hostFiles = useHostFileSearch(client, state.cwd)
+  const windows = useMemo(() => rateLimitWindows(state), [state])
+  // Reads a picture the engine left on the host (codex's `image_gen` reports a
+  // path, never bytes). Stable and memoized per path: transcript rows re-render
+  // on every delta, and a fresh function would re-fetch each time.
+  const hostImage = useHostImage(client)
 
   // "/model" is handled panel-side (see handleSend) — surface it in the autocomplete
   // even though the CLI's command list doesn't include it.
@@ -55,14 +123,25 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
     ]
   }, [state.commands])
 
-  // "/model <id>" switches the model directly instead of going to the CLI.
-  const handleSend = (text: string) => {
-    const modelCommand = /^\/model\s+(\S+)$/.exec(text)
-    if (modelCommand) {
-      setModel(modelCommand[1])
-      return
+  // Two things are answered here rather than sent, because sending them would
+  // spend a turn on a model reading the words back.
+  const handleSend = (text: string, attachmentIds: string[]) => {
+    if (attachmentIds.length === 0) {
+      // "/model <id>" switches the model directly instead of going to the CLI.
+      const modelCommand = /^\/model\s+(\S+)$/.exec(text)
+      if (modelCommand) {
+        setModel(modelCommand[1])
+        return
+      }
+      // The CLI's own `/mcp` is an interactive picker, not a prompt. Only where
+      // the capability exists: elsewhere it is ordinary message text, like any
+      // other slash command on an engine without them.
+      if (capabilities.mcpStatus && text.trim() === '/mcp') {
+        setPanel('mcp')
+        return
+      }
     }
-    send(text)
+    send(text, attachmentIds)
   }
 
   return (
@@ -70,29 +149,75 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
       data-slot='session-panel'
       className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}>
       {header}
-      <StatusBar state={state} connected={connected} />
+      <StatusBar
+        state={state}
+        connection={connection}
+        onOpenStatus={() => setPanel('info')}
+        onOpenContext={() => setPanel('context')}
+        onOpenUsage={() => setPanel('usage')}
+        actions={
+          // Everything the panel can open, in one place — and each one is also
+          // reachable by clicking the thing on the bar that summarises it.
+          // Entries the capability record forswears are absent, not
+          // present-and-empty.
+          <Menu>
+            <MenuTrigger
+              render={
+                <Button variant='ghost' size='icon-sm' aria-label='Session actions'>
+                  <MoreHorizontal className='size-4' />
+                </Button>
+              }
+            />
+            <MenuContent>
+              {capabilities.contextUsage ? (
+                <MenuItem onClick={() => setPanel('context')}>
+                  <ChartPie className='size-3.5 text-fg-3' /> Context
+                </MenuItem>
+              ) : null}
+              {capabilities.rateLimits ? (
+                <MenuItem onClick={() => setPanel('usage')}>
+                  <Gauge className='size-3.5 text-fg-3' /> Usage
+                </MenuItem>
+              ) : null}
+              <MenuItem onClick={() => setPanel('info')}>
+                <Info className='size-3.5 text-fg-3' /> Session info
+              </MenuItem>
+              {capabilities.mcpStatus ? (
+                <MenuItem onClick={() => setPanel('mcp')}>
+                  <Plug className='size-3.5 text-fg-3' /> MCP servers
+                </MenuItem>
+              ) : null}
+              {hostFiles.available ? (
+                <MenuItem onClick={() => setPanel('files')}>
+                  <FolderTree className='size-3.5 text-fg-3' /> Project files
+                </MenuItem>
+              ) : null}
+            </MenuContent>
+          </Menu>
+        }
+      />
+      {protocolMismatch !== undefined ? (
+        <Notice level='warning'>
+          Server speaks protocol v{protocolMismatch}, this build renders v{PROTOCOL_VERSION}. Some
+          events may not render.
+        </Notice>
+      ) : null}
       {protocolError ? (
-        <div className='px-3 pt-2'>
-          <div
-            role='alert'
-            className='mx-auto flex w-full max-w-3xl items-start gap-2 rounded-md border border-danger/40 bg-danger-bg px-3 py-2 text-body-sm text-danger'>
-            <span className='min-w-0 flex-1 break-words'>{protocolError}</span>
-            <button
-              type='button'
-              onClick={() => setProtocolError(undefined)}
-              aria-label='Dismiss error'
-              className='shrink-0 opacity-70 transition-opacity hover:opacity-100'>
-              ✕
-            </button>
-          </div>
-        </div>
+        <Notice level='error' onDismiss={() => setProtocolError(undefined)}>
+          {protocolError}
+        </Notice>
       ) : null}
       <Transcript
         state={state}
         fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
         attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
+        canBrowseFiles={hostFiles.available}
+        hostImage={hostImage}
       />
-      {state.pendingApprovals.length > 0 ? (
+      {/* An engine with no approval channel never raises these, but a stale
+          pending request from a replayed log would still render — the record is
+          the authority on whether an approval UI means anything here. */}
+      {capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
         <div className='px-3 pb-2'>
           <div className='mx-auto flex w-full max-w-3xl flex-col gap-2'>
             {state.pendingApprovals.map((request) =>
@@ -102,7 +227,7 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
                   key={request.id}
                   request={request}
                   onAnswer={approve}
-                  onDismiss={deny}
+                  onDismiss={(id) => deny(id, 'Question dismissed by user')}
                 />
               ) : (
                 <PermissionPrompt
@@ -121,13 +246,22 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
         onInterrupt={interrupt}
         busy={busy}
         disabled={ended || !sessionId}
-        commands={commands}
+        commands={capabilities.slashCommands ? commands : undefined}
+        attachments={attachments}
+        onSearchFiles={
+          hostFiles.available
+            ? (query, options) => hostFiles.search(query, { ...options, limit: 8 })
+            : undefined
+        }
         toolbar={
           <>
-            {state.models?.length ? (
+            {/* Codex reports no `capabilities` event, so its models arrive from
+                the profile catalog instead — without that fallback its picker
+                would be permanently empty and the session unswitchable. */}
+            {models.length ? (
               <ModelSelect
-                models={state.models}
-                model={state.model}
+                models={models}
+                model={effectiveModel}
                 onModelChange={setModel}
                 disabled={ended}
               />
@@ -136,15 +270,131 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
               <PermissionModeSelect
                 mode={state.permissionMode}
                 onModeChange={setPermissionMode}
-                // A provider session rejects the CLI-only modes with a
-                // protocol_error — don't offer what can only fail.
-                modes={state.engine === 'provider' ? PROVIDER_PERMISSION_MODES : undefined}
+                // Only what this engine implements — the rest would come back as
+                // a protocol_error.
+                modes={capabilities.permissionModes}
+                canBypass={state.session?.canBypassPermissions}
                 disabled={ended}
               />
             ) : null}
           </>
         }
       />
+
+      <SessionInfoDialog
+        state={state}
+        client={client}
+        sessionId={sessionId}
+        open={panel === 'info'}
+        onOpenChange={(next) => setPanel(next ? 'info' : undefined)}
+      />
+      <ContextDialog
+        usage={state.contextUsage}
+        open={panel === 'context'}
+        onOpenChange={(next) => setPanel(next ? 'context' : undefined)}
+      />
+      <UsageDialog
+        rateLimits={windows}
+        subscriptionType={state.subscriptionType}
+        engine={state.engine ?? 'claude'}
+        totalCostUsd={state.totalCostUsd}
+        updatedAt={state.rateLimitsUpdatedAt}
+        open={panel === 'usage'}
+        onOpenChange={(next) => setPanel(next ? 'usage' : undefined)}
+      />
+      <McpDialog
+        client={client}
+        sessionId={sessionId}
+        open={panel === 'mcp'}
+        onOpenChange={(next) => setPanel(next ? 'mcp' : undefined)}
+      />
+      <HostFilesDialog
+        client={client}
+        cwd={state.cwd}
+        open={panel === 'files'}
+        onOpenChange={(next) => setPanel(next ? 'files' : undefined)}
+      />
+    </div>
+  )
+}
+
+/**
+ * Reads a host file as a data URL, once per path.
+ *
+ * The cache is what makes this usable from a transcript row: rows re-render on
+ * every streamed delta, and an uncached resolver would re-fetch the picture each
+ * time. A path the gateway won't serve — which is the *expected* answer for
+ * codex's default `$CODEX_HOME` save location, outside any allowed root — is
+ * cached as a miss too, so the refusal costs one request rather than one per
+ * render.
+ */
+function useHostImage(client: WorkerDeckClient): (path: string) => Promise<string | undefined> {
+  const cache = useRef(new Map<string, Promise<string | undefined>>())
+  return useCallback(
+    (path: string) => {
+      const hit = cache.current.get(path)
+      if (hit) return hit
+      const pending = client
+        .readHostFile(path)
+        .then((file) => {
+          if (file.encoding !== 'base64') return undefined
+          // The route reports bytes and an encoding but not a media type; the
+          // extension is what a browser needs to decode it.
+          const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
+          const mediaType = IMAGE_MEDIA_TYPES[extension]
+          return mediaType ? `data:${mediaType};base64,${file.content}` : undefined
+        })
+        .catch(() => undefined)
+      cache.current.set(path, pending)
+      return pending
+    },
+    [client],
+  )
+}
+
+/** Extensions worth rendering inline, and what to call them. Anything else is
+ * left to the card's path text — guessing a media type is how an HTML file ends
+ * up in an `<img>`. */
+const IMAGE_MEDIA_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+}
+
+/** A dismissible advisory strip above the transcript. */
+function Notice({
+  level,
+  onDismiss,
+  children,
+}: {
+  level: 'warning' | 'error'
+  onDismiss?: () => void
+  children: ReactNode
+}) {
+  return (
+    <div className='px-3 pt-2'>
+      <div
+        role='alert'
+        className={cn(
+          'mx-auto flex w-full max-w-3xl items-start gap-2 rounded-md border px-3 py-2 text-body-sm',
+          level === 'error'
+            ? 'border-danger/40 bg-danger-bg text-danger'
+            : 'border-warning/40 bg-warning-bg text-warning',
+        )}>
+        <TriangleAlert className='mt-0.5 size-3.5 shrink-0' />
+        <span className='min-w-0 flex-1 break-words'>{children}</span>
+        {onDismiss ? (
+          <button
+            type='button'
+            onClick={onDismiss}
+            aria-label='Dismiss'
+            className='shrink-0 opacity-70 transition-opacity hover:opacity-100'>
+            <X className='size-3.5' />
+          </button>
+        ) : null}
+      </div>
     </div>
   )
 }

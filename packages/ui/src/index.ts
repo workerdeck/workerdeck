@@ -20,6 +20,22 @@ export {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from './components/ui/AlertDialog.tsx'
+export {
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
+} from './components/ui/Menu.tsx'
+export {
+  Dialog,
+  DialogBody,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogRow,
+  DialogTrigger,
+} from './components/ui/Dialog.tsx'
 export { Tip, TooltipContent, TooltipProvider } from './components/ui/Tooltip.tsx'
 export { Toaster, toast } from './components/ui/Sonner.tsx'
 export { CopyButton, type CopyButtonProps } from './components/ui/CopyButton.tsx'
@@ -69,31 +85,54 @@ export {
   type QuestionPromptProps,
   type QuestionBehaviorMeta,
 } from './components/agent/QuestionPrompt.tsx'
-export { Composer, type ComposerProps } from './components/agent/Composer.tsx'
+export {
+  Composer,
+  type ComposerFileMatch,
+  type ComposerProps,
+} from './components/agent/Composer.tsx'
 export { ModelSelect, type ModelSelectProps } from './components/agent/ModelSelect.tsx'
 export {
   PERMISSION_MODES,
   PermissionModeSelect,
+  permissionModeMeta,
   type PermissionModeMeta,
   type PermissionModeSelectProps,
 } from './components/agent/PermissionModeSelect.tsx'
 export { StatusBar, type StatusBarProps } from './components/agent/StatusBar.tsx'
+export { ContextDialog, type ContextDialogProps } from './components/agent/ContextDialog.tsx'
+export { UsageDialog, type UsageDialogProps } from './components/agent/UsageDialog.tsx'
+export {
+  SessionInfoDialog,
+  type SessionInfoDialogProps,
+} from './components/agent/SessionInfoDialog.tsx'
+export { McpDialog, type McpDialogProps } from './components/agent/McpDialog.tsx'
+export { HostFilesDialog, type HostFilesDialogProps } from './components/agent/HostFilesDialog.tsx'
 export {
   SessionList,
   SessionListItem,
   type SessionListItemProps,
   type SessionListProps,
 } from './components/agent/SessionList.tsx'
+export {
+  SessionEmptyState,
+  type SessionEmptyStateProps,
+} from './components/agent/SessionEmptyState.tsx'
+export { PromptTokenText } from './components/agent/PromptTokenText.tsx'
 export { STATUS_META } from './components/agent/status.ts'
 
 // Utilities
 export { cn } from './lib/utils.ts'
+export { toolIcon } from './lib/tool-icon.ts'
 export {
+  formatAgoPrecise,
   formatBytes,
   formatCost,
   formatCountdown,
   formatDuration,
+  formatRateLimitWindow,
+  formatRateLimitWindowLong,
   formatRelativeTime,
   formatTokens,
+  rateLimitWindowSeconds,
   toolInputPreview,
 } from './lib/format.ts'

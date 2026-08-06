@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
-import type { TranscriptState } from '@workerdeck/react'
+import { useEffect, useState, type ReactNode } from 'react'
+import type { ConnectionState, TranscriptState } from '@workerdeck/react'
 import type { ContextUsage, RateLimitInfo } from '@workerdeck/protocol'
-import { WifiOff } from 'lucide-react'
+import { RefreshCw, WifiOff } from 'lucide-react'
 import { Badge } from '../ui/Badge.tsx'
 import { ProgressRing } from '../ui/ProgressRing.tsx'
 import { Spinner } from '../ui/Spinner.tsx'
@@ -12,7 +12,24 @@ import { STATUS_META } from './status.ts'
 
 export interface StatusBarProps {
   state: TranscriptState
-  connected: boolean
+  /** @deprecated Pass {@link StatusBarProps.connection}; kept so an embedder
+   * still handing over a boolean keeps working. */
+  connected?: boolean
+  /** How the client is doing at reaching the gateway. A dropped socket wins the
+   * status slot: the session status held over a dead socket is a stale reading,
+   * and presenting it as a live one is the thing worth avoiding. */
+  connection?: ConnectionState
+  /**
+   * Where the gauges lead. Each one opens the panel that answers *its* question
+   * — the two meters measure different things, so sending both to one "details"
+   * list would be a detour every time. Omit a handler and that gauge stays a
+   * read-only tooltip.
+   */
+  onOpenStatus?: () => void
+  onOpenContext?: () => void
+  onOpenUsage?: () => void
+  /** Trailing slot — the session-actions menu, in the panel's top-right. */
+  actions?: ReactNode
   className?: string
 }
 
@@ -109,32 +126,82 @@ function RateLimitMeter({ label, info, now }: { label: string; info: RateLimitIn
   )
 }
 
-export function StatusBar({ state, connected, className }: StatusBarProps) {
+/** A gauge that leads somewhere. `undefined` handler leaves it inert, so an
+ * embedder that mounts no panels doesn't get buttons that do nothing. */
+function Slot({ onClick, hint, children }: { onClick?: () => void; hint: string; children: ReactNode }) {
+  if (!onClick) return <>{children}</>
+  return (
+    <button
+      type='button'
+      onClick={onClick}
+      aria-label={hint}
+      className='rounded-md px-1 py-0.5 transition-colors outline-none hover:bg-surface-hover focus-visible:bg-surface-hover'>
+      {children}
+    </button>
+  )
+}
+
+export function StatusBar({
+  state,
+  connected,
+  connection,
+  onOpenStatus,
+  onOpenContext,
+  onOpenUsage,
+  actions,
+  className,
+}: StatusBarProps) {
   const meta = STATUS_META[state.status]
   const now = useNow()
   const session = state.rateLimits?.five_hour
   const weekly = state.rateLimits?.seven_day
+  const link: ConnectionState = connection ?? (connected === false ? 'reconnecting' : 'live')
   return (
     <div
       data-slot='status-bar'
       className={cn(
-        'flex items-center gap-3 border-b border-border bg-surface px-3 py-2',
+        'flex items-center gap-2 border-b border-border bg-surface px-3 py-1.5',
         className,
       )}>
-      <Badge variant={meta.variant} dot={!meta.busy}>
-        {meta.busy ? <Spinner className='size-3 text-current' /> : null}
-        {meta.label}
-      </Badge>
-      {state.contextUsage ? <ContextMeter usage={state.contextUsage} /> : null}
-      {session ? <RateLimitMeter label='Session' info={session} now={now} /> : null}
-      {weekly ? <RateLimitMeter label='Weekly' info={weekly} now={now} /> : null}
-      <span className='flex-1' />
-      {!connected ? (
-        <span className='inline-flex items-center gap-1 text-label text-warning'>
-          <WifiOff className='size-3' /> reconnecting…
-        </span>
+      {/* One slot, two meanings: connection trouble wins it, because a session
+          status shown over a dead socket is a stale reading presented as a live
+          one. Tapping it opens the session's own facts — where it runs, on what,
+          with which credentials — which is the question a status prompts. */}
+      <Slot onClick={onOpenStatus} hint='Session info'>
+        {link === 'live' ? (
+          <Badge variant={meta.variant} dot={!meta.busy}>
+            {meta.busy ? <Spinner className='size-3 text-current' /> : null}
+            {meta.label}
+          </Badge>
+        ) : (
+          <Badge variant={link === 'offline' ? 'danger' : 'warning'} dot={false}>
+            {link === 'offline' ? (
+              <WifiOff className='size-3 text-current' />
+            ) : (
+              <RefreshCw className='size-3 animate-spin text-current' />
+            )}
+            {link === 'offline' ? 'Offline' : 'Reconnecting…'}
+          </Badge>
+        )}
+      </Slot>
+      {/* Never a 0% meter for an engine that doesn't measure: an absent reading
+          and a full window are not the same claim. */}
+      {state.capabilities.contextUsage && state.contextUsage ? (
+        <Slot onClick={onOpenContext} hint='Context breakdown'>
+          <ContextMeter usage={state.contextUsage} />
+        </Slot>
       ) : null}
+      {session || weekly ? (
+        <Slot onClick={onOpenUsage} hint='Plan usage'>
+          <span className='inline-flex items-center gap-2'>
+            {session ? <RateLimitMeter label='Session' info={session} now={now} /> : null}
+            {weekly ? <RateLimitMeter label='Weekly' info={weekly} now={now} /> : null}
+          </span>
+        </Slot>
+      ) : null}
+      <span className='flex-1' />
       <span className='font-mono text-label text-fg-3'>{formatCost(state.totalCostUsd)}</span>
+      {actions}
     </div>
   )
 }

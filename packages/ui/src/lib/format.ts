@@ -51,6 +51,54 @@ export function formatRelativeTime(epochMs: number | undefined, now = Date.now()
   return `${d}d ago`
 }
 
+/**
+ * Human label for a rate-limit window key, compact: 'five_hour' → "5h",
+ * 'seven_day_opus' → "7d opus". The per-model suffix is an open set — the CLI
+ * adds buckets as plans gain them — so it is rewritten rather than enumerated.
+ */
+export function formatRateLimitWindow(key: string): string {
+  if (key === 'five_hour') return '5h'
+  if (key === 'seven_day') return '7d'
+  const spaced = key.replaceAll('_', ' ')
+  return key.startsWith('seven_day_') ? `7d ${spaced.slice('seven day '.length)}` : spaced
+}
+
+/** The same key spelled out, where there is room: 'five_hour' → "5-hour
+ * session", 'seven_day_fable' → "Weekly · Fable". */
+export function formatRateLimitWindowLong(key: string): string {
+  if (key === 'five_hour') return '5-hour session'
+  if (key === 'seven_day') return 'Weekly'
+  if (key === 'seven_day_oauth_apps') return 'Weekly · apps'
+  const capitalize = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase())
+  if (!key.startsWith('seven_day_')) return capitalize(key.replaceAll('_', ' '))
+  return `Weekly · ${capitalize(key.slice('seven_day_'.length).replaceAll('_', ' '))}`
+}
+
+/**
+ * How long a rate-limit window is, in seconds — the denominator behind the pace
+ * marker. Derived from the key rather than reported: the CLI sends a reset time
+ * and a percentage, never a duration. `undefined` for a window whose key doesn't
+ * say, and the marker is then simply not drawn rather than guessed.
+ */
+export function rateLimitWindowSeconds(key: string): number | undefined {
+  if (key === 'five_hour') return 5 * 3600
+  if (key.startsWith('seven_day')) return 7 * 86_400
+  return undefined
+}
+
+/** "8 secs ago" / "3 mins ago" — a freshness line finer-grained than
+ * {@link formatRelativeTime}, because a poll that just landed should say so. */
+export function formatAgoPrecise(epochMs: number, now = Date.now()): string {
+  const seconds = Math.max(0, Math.floor((now - epochMs) / 1000))
+  if (seconds < 60) return `${seconds} sec${seconds === 1 ? '' : 's'} ago`
+  if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60)
+    return `${minutes} min${minutes === 1 ? '' : 's'} ago`
+  }
+  const hours = Math.floor(seconds / 3600)
+  return `${hours} hour${hours === 1 ? '' : 's'} ago`
+}
+
 /** Compact one-line preview of a tool input for card headers. */
 export function toolInputPreview(input: unknown, max = 80): string {
   if (input === null || input === undefined) return ''

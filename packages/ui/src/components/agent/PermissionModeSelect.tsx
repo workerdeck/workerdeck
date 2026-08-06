@@ -1,4 +1,6 @@
+import type { LucideIcon } from 'lucide-react'
 import type { PermissionMode } from '@workerdeck/protocol'
+import { ClipboardList, Code, Hand, ShieldCheck, TriangleAlert, Zap } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -11,34 +13,94 @@ import { cn } from '../../lib/utils.ts'
 
 export type PermissionModeMeta = {
   value: PermissionMode
+  /** The name Claude Code itself uses. */
   label: string
+  /** The chip form, for bars where the label shares a line with three other
+   * things and "Bypass permissions" would eat half of it. */
+  shortLabel: string
+  /** What the mode actually does — the CLI's own one-liners. */
   description: string
+  icon: LucideIcon
   dangerous?: boolean
 }
 
-/** The modes surfaced across UI surfaces (session creation, in-session switcher). */
+/**
+ * The modes surfaced across UI surfaces (session creation, in-session switcher),
+ * ordered by how much of the approval gate they give away.
+ *
+ * Notably `default` is **"Manual"**: the wire value is `default`, but calling it
+ * that in the UI conflates a real mode (ask me every time) with "whatever the
+ * server picked", which is the one confusion a mode chip exists to avoid. The
+ * naming, the icons and the summaries are shared with the iOS app on purpose —
+ * the two surfaces should read as the same list.
+ */
 export const PERMISSION_MODES: PermissionModeMeta[] = [
-  { value: 'default', label: 'default', description: 'ask for approval' },
-  { value: 'acceptEdits', label: 'acceptEdits', description: 'auto-approve file edits' },
-  { value: 'plan', label: 'plan', description: 'read-only planning' },
-  { value: 'auto', label: 'auto', description: 'model decides when to ask' },
-  { value: 'dontAsk', label: 'dontAsk', description: 'never ask — deny unapproved' },
+  {
+    value: 'default',
+    label: 'Manual',
+    shortLabel: 'Manual',
+    description: 'Always ask before making changes',
+    icon: Hand,
+  },
+  {
+    value: 'acceptEdits',
+    label: 'Accept edits',
+    shortLabel: 'Edits',
+    description: 'Automatically accept all file edits',
+    icon: Code,
+  },
+  {
+    value: 'plan',
+    label: 'Plan',
+    shortLabel: 'Plan',
+    description: 'Create a plan before making changes',
+    icon: ClipboardList,
+  },
+  {
+    value: 'auto',
+    label: 'Auto',
+    shortLabel: 'Auto',
+    description: 'Claude handles permission decisions',
+    icon: Zap,
+  },
+  {
+    value: 'dontAsk',
+    label: "Don't ask",
+    shortLabel: "Don't ask",
+    // The CLI's own definition, and the opposite of bypass: it never prompts,
+    // and anything not already permitted is denied rather than allowed.
+    description: 'Never ask — deny anything not pre-approved',
+    icon: ShieldCheck,
+  },
   {
     value: 'bypassPermissions',
-    label: 'bypassPermissions',
-    description: 'no prompts (danger)',
+    label: 'Bypass permissions',
+    shortLabel: 'Bypass',
+    description: 'Skip every approval — the agent is unsupervised',
+    icon: TriangleAlert,
     dangerous: true,
   },
 ]
+
+export const permissionModeMeta = (mode: PermissionMode): PermissionModeMeta | undefined =>
+  PERMISSION_MODES.find((m) => m.value === mode)
 
 export interface PermissionModeSelectProps {
   /** The session's current mode (TranscriptState.permissionMode). */
   mode?: PermissionMode
   onModeChange: (mode: PermissionMode) => void
   /** Restrict what is offered — most of {@link PERMISSION_MODES} is Claude Code
-   * vocabulary the provider engine has no meaning for. Defaults to all of them;
-   * pass `PROVIDER_PERMISSION_MODES` for a provider session. */
+   * vocabulary the other engines have no meaning for. Defaults to all of them;
+   * pass the session's `capabilities.permissionModes`. */
   modes?: readonly PermissionMode[]
+  /**
+   * Whether this session may be switched into `bypassPermissions` at all. The
+   * CLI refuses unless the process was spawned for it, so a session that didn't
+   * ask up front can never gain it. The row is shown disabled rather than hidden
+   * — "you can't have this here" is a more useful answer than a row that
+   * silently isn't there. `undefined` (an older server) offers it.
+   */
+  canBypass?: boolean
   /** 'toolbar' (default) is the composer's compact borderless trigger;
    * 'form' is a standard field-sized Select for create/settings forms. */
   variant?: 'toolbar' | 'form'
@@ -51,12 +113,15 @@ export function PermissionModeSelect({
   mode,
   onModeChange,
   modes,
+  canBypass,
   variant = 'toolbar',
   disabled,
   className,
 }: PermissionModeSelectProps) {
   const dangerous = mode === 'bypassPermissions'
   const offered = modes ? PERMISSION_MODES.filter((m) => modes.includes(m.value)) : PERMISSION_MODES
+  const unavailable = (meta: PermissionModeMeta) =>
+    meta.value === 'bypassPermissions' && canBypass === false
   return (
     <Select
       items={offered.map((m) => ({ value: m.value, label: m.label }))}
@@ -73,21 +138,33 @@ export function PermissionModeSelect({
           dangerous ? 'text-danger' : variant === 'toolbar' ? 'text-fg-3' : undefined,
           className,
         )}>
-        <span className={cn('truncate', variant === 'toolbar' && 'font-mono text-label')}>
+        <span className={cn('truncate', variant === 'toolbar' && 'text-label')}>
           <SelectValue placeholder='permissions' />
         </span>
       </SelectTrigger>
-      <SelectContent className='min-w-56'>
-        {offered.map((m) => (
-          <SelectItem key={m.value} value={m.value}>
-            <SelectItemText>
-              <span className={cn('font-medium', m.dangerous && 'text-danger')}>{m.label}</span>
-            </SelectItemText>
-            <span className={cn('text-label', m.dangerous ? 'text-danger/80' : 'text-fg-4')}>
-              {m.description}
-            </span>
-          </SelectItem>
-        ))}
+      <SelectContent className='min-w-64'>
+        {offered.map((m) => {
+          const blocked = unavailable(m)
+          return (
+            <SelectItem key={m.value} value={m.value} disabled={blocked}>
+              <SelectItemText>
+                <span className='flex items-center gap-2'>
+                  <m.icon
+                    className={cn('size-3.5 shrink-0', m.dangerous ? 'text-danger' : 'text-fg-3')}
+                  />
+                  <span className={cn('font-medium', m.dangerous && 'text-danger')}>{m.label}</span>
+                </span>
+              </SelectItemText>
+              <span
+                className={cn(
+                  'pl-5.5 text-label',
+                  blocked ? 'text-fg-4' : m.dangerous ? 'text-danger/80' : 'text-fg-4',
+                )}>
+                {blocked ? 'Only available to a session started in this mode' : m.description}
+              </span>
+            </SelectItem>
+          )
+        })}
       </SelectContent>
     </Select>
   )

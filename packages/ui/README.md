@@ -1,9 +1,15 @@
 # @workerdeck/ui
 
 Styled agent-control component library for WorkerDeck hosts: `SessionPanel` (status bar +
-streaming transcript + tool-call cards + permission prompts + composer), `SessionList`, and the
-underlying primitives (Button, Badge, Card, Select, AlertDialog, …). Built on **Tailwind v4 +
-Base UI + cva**, themed by CSS tokens with light/dark via `<html data-theme>`.
+streaming transcript + tool-call cards + permission prompts + composer with attachments and
+`@file` / `/command` completion, plus the panels behind it — session info, context, plan usage,
+MCP servers, project files), `SessionList`, and the underlying primitives (Button, Badge, Card,
+Select, Dialog, AlertDialog, …). Built on **Tailwind v4 + Base UI + cva**, themed by CSS tokens
+with light/dark via `<html data-theme>`.
+
+Everything `SessionPanel` offers is gated on the session's **engine capability record**, so the
+same component is correct for a Claude, Codex or provider session without the host branching:
+a control the engine can't honor is absent rather than present-and-failing.
 
 The headless layer (`useClaudeSession`, transcript reducer) lives in `@workerdeck/react`;
 this package is the styling opinion on top.
