@@ -27,6 +27,7 @@ import type {
   AppServerConnectFn,
   AppServerItem,
   AppServerPlanUpdate,
+  AppServerRateLimits,
   AppServerTokenUsage,
   AppServerTokenUsageUpdate,
   AppServerTurn,
@@ -86,6 +87,20 @@ export type CodexRunnerConfig = CreateSessionRequest & {
 /** One queued user message: the input for exactly one turn. */
 type QueuedTurn = { input: AppServerUserInput[] }
 
+/**
+ * Name a subscription window by its measured length, so codex's positional
+ * windows land in the protocol's named vocabulary. The two names clients
+ * already understand are exact matches for codex's durations (300 min = 5h,
+ * 10080 min = 7d); anything else keeps a self-describing key rather than
+ * borrowing a name that would size it wrongly.
+ */
+function rateLimitWindowName(minutes: number | null | undefined): string | undefined {
+  if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) return undefined
+  if (minutes === 300) return 'five_hour'
+  if (minutes === 10_080) return 'seven_day'
+  return `window_${minutes}m`
+}
+
 /** Everything one in-flight turn accumulates between `turn/start` and its
  * terminal `turn/completed`. */
 type ActiveTurn = {
@@ -143,6 +158,8 @@ export class CodexRunner implements Runner {
    * response) — lets `setModel(undefined)` mean "back to the default" even
    * though a turn/start override persists for subsequent turns. */
   #resolvedModel: string | undefined
+  /** Last reported ChatGPT plan, so `plan_info` is emitted once per change. */
+  #planType: string | undefined
   #resolvedEffort: string | undefined
   #queue: QueuedTurn[] = []
   #turnChain: Promise<void> = Promise.resolve()
@@ -616,6 +633,14 @@ export class CodexRunner implements Runner {
         active.contextWindow = update.tokenUsage?.modelContextWindow ?? undefined
         return
       }
+      case 'account/rateLimits/updated': {
+        // Pushed during a turn, so — unlike the Claude engine, whose CLI only
+        // pushes on change and therefore needs an explicit poll — listening is
+        // enough. Not gated on `active`: a window update is about the account,
+        // not the turn.
+        this.#emitRateLimits((params as { rateLimits?: AppServerRateLimits })?.rateLimits)
+        return
+      }
       case 'turn/plan/updated': {
         // v2's todo list, published as the codex.todo_list sdk_event payload
         // both clients already render.
@@ -845,6 +870,48 @@ export class CodexRunner implements Runner {
     })
     this.#emitContextUsage(active)
     this.#setStatus('idle')
+  }
+
+  /**
+   * Subscription windows, mapped onto the protocol's named vocabulary.
+   *
+   * The shapes disagree: codex reports windows *positionally* (`primary` /
+   * `secondary`) with a length in minutes, while `RateLimitInfo.rateLimitType`
+   * is a name whose meaning clients already know — iOS labels `seven_day` as
+   * "Weekly" and derives the pace marker's denominator from it. Naming the
+   * window by its measured duration is therefore the honest mapping rather
+   * than a borrowed one: codex's primary window is 10080 minutes, which *is*
+   * seven days. A duration we have no name for keeps an explicit
+   * `window_<n>m` key — clients render it verbatim and simply draw no pace
+   * marker, which beats mislabeling it as a week.
+   *
+   * `status` is 'allowed' by construction (the session is running), matching
+   * `rateLimitEventsFromUsage`; codex's `rateLimitReachedType` is the one
+   * signal that a limit is actually biting, so it becomes 'rejected'.
+   */
+  #emitRateLimits(limits: AppServerRateLimits | undefined | null): void {
+    if (!limits) return
+    const status = limits.rateLimitReachedType ? 'rejected' : 'allowed'
+    for (const window of [limits.primary, limits.secondary]) {
+      // A window with no percentage is unknown, not zero — dropped rather than
+      // reported at 0%, the same rule the Claude mapping follows.
+      if (!window || window.usedPercent === null || window.usedPercent === undefined) continue
+      this.#emit({
+        type: 'rate_limit',
+        info: {
+          status,
+          rateLimitType: rateLimitWindowName(window.windowDurationMins),
+          utilization: window.usedPercent,
+          ...(typeof window.resetsAt === 'number' ? { resetsAt: window.resetsAt } : {}),
+        },
+      })
+    }
+    // Emitted once per change, like the Claude engine's — it names the windows
+    // rather than sizing them.
+    if (limits.planType && limits.planType !== this.#planType) {
+      this.#planType = limits.planType
+      this.#emit({ type: 'plan_info', subscriptionType: limits.planType })
+    }
   }
 
   /**

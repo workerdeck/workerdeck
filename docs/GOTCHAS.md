@@ -206,6 +206,18 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   render nothing rather than 0%), and its `categories` is always empty because codex publishes no
   breakdown — `contextUsage: true` with an empty breakdown is a valid combination, so clients must
   not draw an empty "Breakdown" section (iOS's `ContextSheet` hides it).
+- **Rate-limit windows are positional there and named here, so they are named by their measured
+  duration.** `account/rateLimits/updated` reports `primary`/`secondary` with a
+  `windowDurationMins`, while `RateLimitInfo.rateLimitType` is a *name* clients already act on —
+  iOS labels `seven_day` "Weekly" and takes the pace marker's denominator from it. So the runner
+  maps by length: 300 min → `five_hour`, 10080 min → `seven_day` (codex's actual primary window;
+  these are exact matches, not approximations), anything else → a self-describing `window_<n>m`
+  that clients print verbatim and draw no marker for — better than mislabeling a fortnight as a
+  week. `status` is 'allowed' by construction as in `rateLimitEventsFromUsage`, with codex's
+  `rateLimitReachedType` the one signal that turns it 'rejected'; a window with no `usedPercent`
+  is unknown, not zero, and is dropped. Unlike the Claude engine — whose CLI pushes only on
+  *change*, hence its `/usage` poll — app-server pushes these **during a turn**, so the runner
+  only listens. `planType` becomes `plan_info`, emitted once per change.
 - Sandbox mapping is the honest degradation: `default` → read-only ("would have asked" becomes
   "cannot act" — commands still run, writes are refused by the OS sandbox), `acceptEdits` →
   workspace-write, `bypassPermissions` → danger-full-access. `plan`/`dontAsk`/`auto` are not

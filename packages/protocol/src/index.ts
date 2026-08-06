@@ -659,7 +659,10 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     // each turn. Its `categories` is always empty — codex publishes no
     // breakdown — so a client must not draw an empty breakdown section.
     contextUsage: true,
-    rateLimits: false,
+    // From `account/rateLimits/updated`, which app-server pushes during a turn
+    // (no poll needed). Windows are positional there and named here by their
+    // measured duration — see `docs/GOTCHAS.md` §Codex.
+    rateLimits: true,
     mcpStatus: false,
     // MCP belongs to CODEX_HOME's config.toml; a session request cannot add servers.
     sessionMcpServers: false,

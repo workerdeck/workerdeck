@@ -283,13 +283,17 @@ describe('CodexRunner', () => {
 
     // The record's forsworn events never occur.
     const types = events.map((e) => e.type)
-    for (const forsworn of ['system_init', 'permission_requested', 'rate_limit']) {
+    for (const forsworn of ['system_init', 'permission_requested']) {
       expect(types).not.toContain(forsworn)
     }
-    // context_usage is NOT forsworn — but this turn reported no
-    // `modelContextWindow`, and a reading without its window is not a reading.
-    // The protocol is explicit that a client renders nothing rather than 0%.
+    // context_usage and rate_limit are NOT forsworn — the record declares both.
+    // They are absent here because this turn reported neither a
+    // `modelContextWindow` nor an `account/rateLimits/updated`, and a reading
+    // without its window (or without a percentage) is not a reading: the
+    // protocol is explicit that a client renders nothing rather than 0%.
     expect(types).not.toContain('context_usage')
+    expect(types).not.toContain('rate_limit')
+    expect(types).not.toContain('plan_info')
 
     const assistants = ofType(events, 'assistant_message')
     // Reasoning: its own thinking message, sections joined as paragraphs.
@@ -731,6 +735,59 @@ describe('CodexRunner', () => {
         USAGE_B.outputTokens +
         USAGE_B.reasoningOutputTokens,
     })
+  })
+
+  it('names codex rate-limit windows by their measured duration, and plans once', async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      emit('account/rateLimits/updated', {
+        rateLimits: {
+          primary: { usedPercent: 12, windowDurationMins: 300, resetsAt: 1_786_518_770 },
+          secondary: { usedPercent: 43, windowDurationMins: 10_080, resetsAt: 1_786_600_000 },
+          planType: 'plus',
+          rateLimitReachedType: null,
+        },
+      })
+      // A second update with the same plan must not re-announce it, and an
+      // unnamed duration keeps a self-describing key rather than borrowing one.
+      emit('account/rateLimits/updated', {
+        rateLimits: {
+          primary: { usedPercent: 90, windowDurationMins: 43_200 },
+          secondary: { usedPercent: null, windowDurationMins: 10_080 },
+          planType: 'plus',
+          rateLimitReachedType: 'primary',
+        },
+      })
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({ cwd: '/tmp/w', prompt: 'go', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+
+    const limits = ofType(events, 'rate_limit').map((e) => e.info)
+    // 300 min IS five hours and 10080 IS seven days — the names clients already
+    // label and size their pace markers from.
+    expect(limits[0]).toMatchObject({
+      status: 'allowed',
+      rateLimitType: 'five_hour',
+      utilization: 12,
+      resetsAt: 1_786_518_770,
+    })
+    expect(limits[1]).toMatchObject({ rateLimitType: 'seven_day', utilization: 43 })
+    // Second update: unnamed duration stays self-describing; a null percentage
+    // is unknown, not zero, so that window is dropped entirely.
+    expect(limits[2]).toMatchObject({
+      status: 'rejected',
+      rateLimitType: 'window_43200m',
+      utilization: 90,
+    })
+    expect(limits[2]!.resetsAt).toBeUndefined()
+    expect(limits).toHaveLength(3)
+
+    // plan_info names the windows once, not per update.
+    const plans = ofType(events, 'plan_info')
+    expect(plans).toHaveLength(1)
+    expect(plans[0]!.subscriptionType).toBe('plus')
   })
 
   it('refuses forkSession and CLI-only permission modes at construction', () => {

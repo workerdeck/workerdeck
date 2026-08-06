@@ -25,6 +25,28 @@ export type AppServerTokenUsage = {
   totalTokens: number
 }
 
+/** One subscription window as codex reports it. Note the shape difference from
+ * the Claude side: windows are positional (`primary`/`secondary`) and carry
+ * their length in minutes rather than being named — see the mapping in
+ * `runner.ts` and `docs/GOTCHAS.md` §Codex. */
+export type AppServerRateLimitWindow = {
+  usedPercent?: number | null
+  windowDurationMins?: number | null
+  /** Epoch **seconds**, matching the protocol's `RateLimitInfo.resetsAt`. */
+  resetsAt?: number | null
+}
+
+/** `account/rateLimits/updated` params (also `account/rateLimits/read`'s result
+ * shape under `rateLimits`). Pushed during a turn, so no polling is needed. */
+export type AppServerRateLimits = {
+  primary?: AppServerRateLimitWindow | null
+  secondary?: AppServerRateLimitWindow | null
+  /** 'plus' | 'pro' | … — the ChatGPT plan, protocol's `plan_info`. */
+  planType?: string | null
+  /** Non-null when a limit is actually being enforced right now. */
+  rateLimitReachedType?: string | null
+}
+
 /** `thread/tokenUsage/updated` params. `last` is the last model request, not
  * the turn — a tool-looping turn updates several times, so per-turn usage is
  * the sum of `last` values seen during the turn. */
