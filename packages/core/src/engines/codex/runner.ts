@@ -826,10 +826,31 @@ export class CodexRunner implements Runner {
   async #probeSkills(): Promise<void> {
     let connection: AppServerConnection | undefined
     try {
-      connection = this.#config.connectFn({ env: this.#childEnv() })
-      // No onNotification/onRequest/onClose wiring: this child answers exactly
-      // one question and is not the session's. A `skills/changed` it might send
-      // is irrelevant — the list is re-read on the real connection anyway.
+      connection = await this.#openScratchConnection()
+      if (this.#closed) return
+      await this.#refreshSkills(connection)
+    } catch {
+      // The session is fine; it simply has no skill list until its own child
+      // comes up and asks again.
+    } finally {
+      connection?.close()
+    }
+  }
+
+  /**
+   * A handshaken child that is **not** the session's — for the questions a
+   * client can ask before the session has anything to run (its skills, its MCP
+   * servers). The caller owns it and must close it.
+   *
+   * No onNotification/onRequest/onClose wiring on purpose: this child answers
+   * one question and goes away, so its notifications are noise and its death is
+   * not the session's problem. The alternative — bringing the session's real
+   * child up early — would park a codex process behind every session someone
+   * created and never typed into.
+   */
+  async #openScratchConnection(): Promise<AppServerConnection> {
+    const connection = this.#config.connectFn({ env: this.#childEnv() })
+    try {
       await connection.request('initialize', {
         clientInfo: {
           name: 'workerdeck',
@@ -839,13 +860,10 @@ export class CodexRunner implements Runner {
         capabilities: { experimentalApi: true },
       })
       connection.notify('initialized')
-      if (this.#closed) return
-      await this.#refreshSkills(connection)
-    } catch {
-      // The session is fine; it simply has no skill list until its own child
-      // comes up and asks again.
-    } finally {
-      connection?.close()
+      return connection
+    } catch (error) {
+      connection.close()
+      throw error
     }
   }
 
@@ -1184,10 +1202,16 @@ export class CodexRunner implements Runner {
    * `mcpServer/startupStatus/updated` notifications say which of them are
    * actually up.
    *
-   * Resolves undefined rather than throwing when there is no child yet: the
-   * route turns that into a 501, which is the truthful answer for a session
-   * that has not connected — "ask again once it has" beats an empty list that
-   * looks like "you have no servers".
+   * Answers **before the session has connected**, over a throwaway child, for
+   * the same reason the skill list does: a codex session spawns nothing until
+   * it has work, and a panel that said "no MCP servers configured" until the
+   * first turn would be stating something false about the operator's config.
+   * The request blocks until the servers are enumerated (measured: complete on
+   * the very first call), so there is no half-populated answer to race.
+   *
+   * Resolves undefined only when there is genuinely nothing to say — the
+   * session is closed, or the child could not be spoken to. The route turns
+   * that into a 501.
    *
    * **Listing only.** There is no per-server reconnect or toggle on this
    * transport — hence no `reconnectMcpServer`/`setMcpServerEnabled` here, and
@@ -1195,15 +1219,25 @@ export class CodexRunner implements Runner {
    * panel read-only instead of offering buttons that cannot work.
    */
   async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
-    const connection = this.#connection
-    if (!connection || this.#closed) return undefined
-    let result: AppServerMcpServerStatusResponse
+    if (this.#closed) return undefined
+    const live = this.#connection
+    let scratch: AppServerConnection | undefined
     try {
-      result = (await connection.request('mcpServerStatus/list', {})) as AppServerMcpServerStatusResponse
+      // The session's own child when it has one — its accumulated
+      // `#mcpStatus` makes the answer sharper — and a throwaway otherwise.
+      const connection = live ?? (scratch = await this.#openScratchConnection())
+      const result = (await connection.request(
+        'mcpServerStatus/list',
+        {},
+      )) as AppServerMcpServerStatusResponse
+      return (result?.data ?? []).map((server) =>
+        mcpServerInfo(server, this.#mcpStatus.get(server.name)),
+      )
     } catch {
       return undefined
+    } finally {
+      scratch?.close()
     }
-    return (result?.data ?? []).map((server) => mcpServerInfo(server, this.#mcpStatus.get(server.name)))
   }
 
   /**

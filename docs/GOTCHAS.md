@@ -699,6 +699,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   would no-op and then answer 200 with the unchanged list: a button reporting success having done
   nothing. The method is checked for before dispatch. Clients hide the controls off the capability;
   this is the door behind them.
+- **Codex answers MCP status before the session has connected, over a throwaway child** — same
+  device as the skill list, and for the same reason: the session spawns nothing until it has work,
+  and a panel reading "No MCP servers configured" until the first turn states something false
+  about the operator's config. `mcpServerStatus/list` blocks until the servers are enumerated
+  (measured: complete on the very first call, ~2s from spawn), so there is no half-populated
+  answer to race. The dialog also stops falling through to its empty state when the request
+  *failed*: a 501 gives no standing to claim nothing is configured.
 - **Codex's list response carries no status at all.** Which servers exist and what they expose
   comes from `mcpServerStatus/list`; whether one is *up* arrives separately on
   `mcpServer/startupStatus/updated`, which `CodexRunner` accumulates and merges in.

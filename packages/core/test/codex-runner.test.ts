@@ -699,12 +699,29 @@ describe('CodexRunner', () => {
     expect(asRunner.setMcpServerEnabled).toBeUndefined()
   })
 
-  it('reports no MCP servers rather than an empty list before the child exists', async () => {
+  it('answers MCP status before the session has connected, over a throwaway child', async () => {
+    const peer = scriptedPeer()
+    peer.respond('mcpServerStatus/list', () => ({
+      data: [{ name: 'scratch', authStatus: 'unsupported', tools: { ping: { name: 'ping' } } }],
+    }))
+    // Promptless and never started: no session child exists. The panel must
+    // still answer — saying "no MCP servers configured" here would state
+    // something false about the operator's config.
+    const runner = new CodexRunner({ cwd: '/tmp/p', connectFn: peer.connectFn })
+
+    const servers = await runner.mcpServers()
+    expect(servers?.map((s) => `${s.name}:${s.status}`)).toEqual(['scratch:connected'])
+    // Throwaway, not adopted: no thread was started on it, and it is closed.
+    expect(peer.requests.some((r) => r.method === 'thread/start')).toBe(false)
+    expect(peer.closed()).toBe(1)
+  })
+
+  it('reports no MCP servers once the session is closed', async () => {
     const peer = scriptedPeer()
     const runner = new CodexRunner({ cwd: '/tmp/p', connectFn: peer.connectFn })
-    // Never started, so no connection. Undefined becomes a 501 at the route —
-    // "ask again once it connects", which an empty list would misreport as
-    // "you have no servers".
+    runner.close()
+    // Undefined becomes a 501 at the route. Spawning a child to answer for a
+    // session that is over would be work nobody asked for.
     expect(await runner.mcpServers()).toBeUndefined()
   })
 

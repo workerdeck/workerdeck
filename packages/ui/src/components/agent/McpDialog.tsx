@@ -142,6 +142,12 @@ export function McpDialog({
               onAct={(action) => void act(server.name, action)}
               onSelectTool={setSelectedTool}
             />
+          ) : error && !servers ? (
+            // The strip above already says what went wrong. Falling through to
+            // the list here would print "No MCP servers configured" underneath
+            // it — a claim about the operator's config that a failed request
+            // gives us no standing to make.
+            null
           ) : (
             <ServerList
               servers={servers}
