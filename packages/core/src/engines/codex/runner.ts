@@ -13,6 +13,7 @@ import {
   type SessionEvent,
   type SessionEventBody,
   type SessionInfo,
+  type McpServerStatusInfo,
   type SessionStatus,
   type SkillInfo,
   type UserQuestion,
@@ -34,6 +35,9 @@ import type {
   AppServerHistoryTurn,
   AppServerImageGenerationItem,
   AppServerItem,
+  AppServerMcpServerStatus,
+  AppServerMcpServerStatusResponse,
+  AppServerMcpStatusUpdate,
   AppServerPermissionsApprovalParams,
   AppServerPlanUpdate,
   AppServerRateLimits,
@@ -174,6 +178,92 @@ function skillInfo(skill: AppServerSkillMetadata): SkillInfo {
     ...(skill.interface?.defaultPrompt ? { defaultPrompt: skill.interface.defaultPrompt } : {}),
     ...(skill.scope ? { scope: skill.scope } : {}),
     enabled: skill.enabled !== false,
+  }
+}
+
+/**
+ * Codex's MCP status → the protocol's, which is Claude Code's vocabulary
+ * ('connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled').
+ *
+ * Two inputs, and the auth one wins where it applies: a server that started
+ * fine but has no credential is *needs-auth*, not connected, because that is
+ * the thing the operator has to act on. `notLoggedIn` is the only auth value
+ * that means "unusable" — `unsupported` is the normal answer for a stdio server
+ * that has no auth concept at all.
+ *
+ * A server with no startup notification yet is 'pending', not 'connected':
+ * `mcpServerStatus/list` alone only proves it is *configured*.
+ */
+function mcpStatusOf(
+  authStatus: string | undefined,
+  update: { status: string; failureReason?: string } | undefined,
+  hasTools: boolean,
+): string {
+  if (update?.status === 'failed') {
+    return update.failureReason === 'reauthenticationRequired' ? 'needs-auth' : 'failed'
+  }
+  // codex's 'cancelled' has no Claude equivalent; it means the startup was
+  // abandoned, which for a reader is the same actionable state as failed.
+  if (update?.status === 'cancelled') return 'failed'
+  if (authStatus === 'notLoggedIn') return 'needs-auth'
+  if (update?.status === 'ready') return 'connected'
+  // **Tools imply connected, and this branch is not a nicety.** The startup
+  // notifications only fire for servers that come up *while we are attached*;
+  // a session whose child already had its servers running receives none at all
+  // (measured against the real binary — a working server with three tools and
+  // no notification). Tools can only have been enumerated over a completed
+  // handshake, so their presence is direct evidence the server is up, and
+  // without this a healthy server would read as 'pending' forever.
+  if (hasTools) return 'connected'
+  // No notification and nothing exposed. Genuinely ambiguous: not started yet,
+  // or switched off in config — and `mcpServerStatus/list` cannot tell the two
+  // apart (it lists disabled servers too, also toolless). 'pending' is the
+  // honest one of the two; claiming 'disabled' would be a guess.
+  return 'pending'
+}
+
+/** One `mcpServerStatus/list` entry as the protocol states it. */
+function mcpServerInfo(
+  server: AppServerMcpServerStatus,
+  update: { status: string; error?: string; failureReason?: string } | undefined,
+): McpServerStatusInfo {
+  // A map keyed by tool name, not an array — and the key is authoritative when
+  // the value omits its own `name`.
+  const tools = Object.entries(server.tools ?? {}).flatMap(([key, tool]) => {
+    if (!tool) return []
+    const annotations = tool.annotations
+    return [
+      {
+        name: tool.name ?? key,
+        ...(tool.description ? { description: tool.description } : {}),
+        ...(tool.inputSchema !== undefined ? { inputSchema: tool.inputSchema } : {}),
+        ...(annotations
+          ? {
+              annotations: {
+                ...(annotations.readOnlyHint != null ? { readOnly: annotations.readOnlyHint } : {}),
+                ...(annotations.destructiveHint != null
+                  ? { destructive: annotations.destructiveHint }
+                  : {}),
+                ...(annotations.openWorldHint != null
+                  ? { openWorld: annotations.openWorldHint }
+                  : {}),
+              },
+            }
+          : {}),
+      },
+    ]
+  })
+  return {
+    name: server.name,
+    status: mcpStatusOf(server.authStatus ?? undefined, update, tools.length > 0),
+    ...(update?.error ? { error: update.error } : {}),
+    ...(server.serverInfo?.name
+      ? { serverInfo: { name: server.serverInfo.name, version: server.serverInfo.version ?? '' } }
+      : {}),
+    // Deliberately no `transport`/`command`/`args`/`url`: the list response
+    // carries none of them. Inventing a transport from the server's name would
+    // be a guess rendered as a fact, and the panel already omits what is absent.
+    ...(tools.length > 0 ? { tools } : {}),
   }
 }
 
@@ -613,6 +703,10 @@ export class CodexRunner implements Runner {
   /** Host paths already announced via `file_produced`, so the same picture
    * reported on both the progress and the completed item registers once. */
   #producedPaths = new Set<string>()
+  /** Per-server liveness, accumulated from `mcpServer/startupStatus/updated`.
+   * `mcpServerStatus/list` does not carry a status field at all, so without
+   * this every server would read as "configured" and never as up or down. */
+  #mcpStatus = new Map<string, { status: string; error?: string; failureReason?: string }>()
 
   constructor(config: CodexRunnerConfig, id: string = randomUUID()) {
     const mode = config.permissionMode ?? 'default'
@@ -1082,6 +1176,37 @@ export class CodexRunner implements Runner {
   }
 
   /**
+   * The session's MCP servers, live from the binary.
+   *
+   * Two sources merged, because codex splits them: `mcpServerStatus/list` says
+   * what is configured and what each server exposes (including every tool's
+   * full JSON Schema, which the Agent SDK does not give us), and the
+   * `mcpServer/startupStatus/updated` notifications say which of them are
+   * actually up.
+   *
+   * Resolves undefined rather than throwing when there is no child yet: the
+   * route turns that into a 501, which is the truthful answer for a session
+   * that has not connected — "ask again once it has" beats an empty list that
+   * looks like "you have no servers".
+   *
+   * **Listing only.** There is no per-server reconnect or toggle on this
+   * transport — hence no `reconnectMcpServer`/`setMcpServerEnabled` here, and
+   * `ENGINE_CAPABILITIES.codex.mcpServerActions: false` so clients render the
+   * panel read-only instead of offering buttons that cannot work.
+   */
+  async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
+    const connection = this.#connection
+    if (!connection || this.#closed) return undefined
+    let result: AppServerMcpServerStatusResponse
+    try {
+      result = (await connection.request('mcpServerStatus/list', {})) as AppServerMcpServerStatusResponse
+    } catch {
+      return undefined
+    }
+    return (result?.data ?? []).map((server) => mcpServerInfo(server, this.#mcpStatus.get(server.name)))
+  }
+
+  /**
    * Announce a file the ENGINE wrote on the host, so a client can fetch it
    * without the operator having declared its directory as a host-file root.
    *
@@ -1380,6 +1505,20 @@ export class CodexRunner implements Runner {
         const update = params as AppServerTokenUsageUpdate
         active.contextTokens = last.totalTokens ?? undefined
         active.contextWindow = update.tokenUsage?.modelContextWindow ?? undefined
+        return
+      }
+      case 'mcpServer/startupStatus/updated': {
+        // The ONLY place a server's liveness comes from — `mcpServerStatus/list`
+        // reports what is configured and what it exposes, never whether it is
+        // up. Not gated on `active`: servers start with the child, well before
+        // any turn.
+        const update = params as AppServerMcpStatusUpdate
+        if (typeof update?.name !== 'string') return
+        this.#mcpStatus.set(update.name, {
+          status: typeof update.status === 'string' ? update.status : 'starting',
+          ...(update.error ? { error: update.error } : {}),
+          ...(update.failureReason ? { failureReason: update.failureReason } : {}),
+        })
         return
       }
       case 'skills/changed': {

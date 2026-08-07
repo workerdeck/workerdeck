@@ -17,6 +17,13 @@ export interface McpDialogProps {
   sessionId: string | undefined
   open: boolean
   onOpenChange: (open: boolean) => void
+  /**
+   * Whether this engine can reconnect/enable/disable a server
+   * (`EngineCapabilities.mcpServerActions`). False renders the panel read-only:
+   * codex reports rich status but exposes no per-server action, and buttons
+   * that 501 are worse than buttons that aren't there.
+   */
+  canManageServers?: boolean
 }
 
 /** The engine's status vocabulary is open — anything unrecognised renders
@@ -33,11 +40,21 @@ const STATUS_VARIANT: Record<string, NonNullable<BadgeProps['variant']>> = {
  * The session's MCP servers, at the CLI's own `/mcp` depth: servers → one server
  * → its tools → one tool, with Reconnect / Enable / Disable where they apply.
  *
- * Tool *parameters* are deliberately absent: `mcpServerStatus()` names and
- * describes each tool but carries no input schema, and nothing else in the SDK
- * exposes one — so the tool view says so rather than leaving a silent gap.
+ * Two things vary by engine rather than being fixed here. **The actions** exist
+ * only where the engine has them (`canManageServers`): codex reports rich status
+ * but has no per-server reconnect or toggle, so its panel is read-only. And
+ * **tool parameters** appear only where the engine reports a schema — codex
+ * returns each tool's full JSON Schema, the Agent SDK returns none at all, so
+ * the tool view either renders it or says why it can't, rather than leaving a
+ * silent gap or claiming the absence is universal.
  */
-export function McpDialog({ client, sessionId, open, onOpenChange }: McpDialogProps) {
+export function McpDialog({
+  client,
+  sessionId,
+  open,
+  onOpenChange,
+  canManageServers = true,
+}: McpDialogProps) {
   const [servers, setServers] = useState<McpServerStatusInfo[] | undefined>()
   const [error, setError] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
@@ -121,6 +138,7 @@ export function McpDialog({ client, sessionId, open, onOpenChange }: McpDialogPr
             <ServerView
               server={server}
               busy={busyServer === server.name}
+              canManage={canManageServers}
               onAct={(action) => void act(server.name, action)}
               onSelectTool={setSelectedTool}
             />
@@ -197,11 +215,13 @@ function ServerList({
 function ServerView({
   server,
   busy,
+  canManage,
   onAct,
   onSelectTool,
 }: {
   server: McpServerStatusInfo
   busy: boolean
+  canManage: boolean
   onAct: (action: McpServerActionRequest['action']) => void
   onSelectTool: (name: string) => void
 }) {
@@ -239,20 +259,25 @@ function ServerView({
         </div>
       ) : null}
 
-      <div className='flex gap-2'>
-        <Button variant='outline' size='sm' disabled={busy} onClick={() => onAct('reconnect')}>
-          {busy ? <Spinner className='size-3 text-current' /> : <RotateCw className='size-3' />}
-          Reconnect
-        </Button>
-        <Button
-          variant='outline'
-          size='sm'
-          disabled={busy}
-          onClick={() => onAct(disabled ? 'enable' : 'disable')}>
-          {disabled ? <Power className='size-3' /> : <PowerOff className='size-3' />}
-          {disabled ? 'Enable' : 'Disable'}
-        </Button>
-      </div>
+      {/* Absent, not disabled, when the engine has no per-server action: a
+          greyed-out Reconnect invites the question "why can't I?" on every
+          visit, where nothing at all reads as "this engine works differently". */}
+      {canManage ? (
+        <div className='flex gap-2'>
+          <Button variant='outline' size='sm' disabled={busy} onClick={() => onAct('reconnect')}>
+            {busy ? <Spinner className='size-3 text-current' /> : <RotateCw className='size-3' />}
+            Reconnect
+          </Button>
+          <Button
+            variant='outline'
+            size='sm'
+            disabled={busy}
+            onClick={() => onAct(disabled ? 'enable' : 'disable')}>
+            {disabled ? <Power className='size-3' /> : <PowerOff className='size-3' />}
+            {disabled ? 'Enable' : 'Disable'}
+          </Button>
+        </div>
+      ) : null}
 
       <div>
         <h3 className='text-label font-medium text-fg-3'>Tools</h3>
@@ -300,10 +325,33 @@ function ToolView({ tool }: { tool: McpServerToolInfo }) {
           {annotations.openWorld ? <Badge variant='warning'>open world</Badge> : null}
         </div>
       ) : null}
-      <p className={cn('text-label text-fg-4')}>
-        Parameters aren’t available: the engine names and describes each tool but reports no input
-        schema.
-      </p>
+      {/* Engine-dependent, and said as such: codex returns each tool's full
+          JSON Schema, the Agent SDK returns none at all. So this is a real
+          section where one exists and an explanation where it doesn't — never a
+          silent gap, and never a claim that no engine has them. */}
+      {tool.inputSchema !== undefined ? (
+        <div>
+          <h3 className='text-label font-medium text-fg-3'>Parameters</h3>
+          <pre className='mt-1 max-h-64 overflow-auto rounded-md bg-surface px-3 py-2 text-label text-fg-2'>
+            {safeSchema(tool.inputSchema)}
+          </pre>
+        </div>
+      ) : (
+        <p className={cn('text-label text-fg-4')}>
+          Parameters aren’t available: this engine names and describes each tool but reports no
+          input schema.
+        </p>
+      )}
     </div>
   )
+}
+
+/** The schema is an opaque JSON document from another process — pretty-print it,
+ * and never let an unserializable value take the dialog down with it. */
+function safeSchema(schema: unknown): string {
+  try {
+    return JSON.stringify(schema, null, 2)
+  } catch {
+    return String(schema)
+  }
 }

@@ -677,8 +677,18 @@ export type EngineCapabilities = {
   contextUsage: boolean
   /** rate_limit / plan_info events can occur. False: render nothing. */
   rateLimits: boolean
-  /** GET/POST /sessions/:id/mcp works (else 501). */
+  /** GET /sessions/:id/mcp works (else 501) — the engine can *list* its MCP
+   * servers. Gates the MCP panel's existence. */
   mcpStatus: boolean
+  /**
+   * POST /sessions/:id/mcp/:name works — the engine can reconnect, enable and
+   * disable a server. Separate from {@link EngineCapabilities.mcpStatus}
+   * because listing and acting are genuinely different powers: codex reports
+   * rich status but exposes no per-server action on this transport, and a panel
+   * that rendered the buttons anyway would present three controls that do
+   * nothing and then report success. False: render the panel read-only.
+   */
+  mcpServerActions: boolean
   /** A session request may bring its own mcpServers. */
   sessionMcpServers: boolean
   /** capabilities events carry slash commands (composer popover). */
@@ -725,6 +735,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     contextUsage: true,
     rateLimits: true,
     mcpStatus: true,
+    mcpServerActions: true,
     sessionMcpServers: true,
     slashCommands: true,
     // The CLI reports skill NAMES on `system_init` and nothing more — no
@@ -776,7 +787,17 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     // (no poll needed). Windows are positional there and named here by their
     // measured duration — see `docs/GOTCHAS.md` §Codex.
     rateLimits: true,
-    mcpStatus: false,
+    // `mcpServerStatus/list` answers with each server, its `serverInfo`, its
+    // auth status and — unlike the Agent SDK — the full JSON Schema of every
+    // tool. Live status rides the `mcpServer/startupStatus/updated`
+    // notification rather than the list response, so the runner tracks it.
+    mcpStatus: true,
+    // …but nothing on this transport reconnects or toggles ONE server. The
+    // reload RPC is server-wide, and enable/disable would mean writing the
+    // operator's config.toml — a different act from Claude's session-scoped
+    // switch. So the panel is read-only here instead of offering buttons that
+    // would lie.
+    mcpServerActions: false,
     // MCP belongs to CODEX_HOME's config.toml; a session request cannot add servers.
     sessionMcpServers: false,
     // There is no command-listing RPC in the app-server surface at all: codex's
@@ -810,6 +831,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     contextUsage: false,
     rateLimits: false,
     mcpStatus: false,
+    mcpServerActions: false,
     sessionMcpServers: false,
     slashCommands: false,
     skillsList: false,
@@ -982,6 +1004,18 @@ export type McpServerToolInfo = {
   name: string
   description?: string
   annotations?: { readOnly?: boolean; destructive?: boolean; openWorld?: boolean }
+  /**
+   * The tool's JSON Schema, where the engine reports one. **Engine-dependent,
+   * and that is not an oversight**: the Agent SDK's `McpServerStatus` names and
+   * describes each tool but carries no schema at all, while codex's
+   * `mcpServerStatus/list` returns the full one. So a client renders parameters
+   * where they exist and says they are unavailable where they don't — rather
+   * than either leaving a silent gap or claiming the absence is universal.
+   *
+   * Opaque on purpose: this is a JSON Schema document, not a shape this
+   * protocol models.
+   */
+  inputSchema?: unknown
 }
 
 /**

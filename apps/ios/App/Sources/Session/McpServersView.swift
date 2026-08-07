@@ -15,6 +15,9 @@ import SwiftUI
 struct McpServersView: View {
   let load: () async throws -> [McpServerStatusInfo]
   let act: (String, McpServerActionRequest.Action) async throws -> [McpServerStatusInfo]
+  /// Whether this engine can reconnect/enable/disable ONE server
+  /// (`EngineCapabilities.mcpServerActions`). False renders read-only.
+  var canManage: Bool = true
 
   @Environment(\.dismiss) private var dismiss
   @State private var servers: [McpServerStatusInfo] = []
@@ -62,7 +65,7 @@ struct McpServersView: View {
         Section(scopeTitle(scope)) {
           ForEach(servers.filter { ($0.scope ?? "other") == scope }) { server in
             NavigationLink {
-              McpServerDetailView(server: server, act: perform)
+              McpServerDetailView(server: server, canManage: canManage, act: perform)
             } label: {
               McpServerRow(server: server)
             }
@@ -173,9 +176,12 @@ struct McpStatusDot: View {
   }
 }
 
-/// One server: everything the CLI's server screen shows, then its three actions.
+/// One server: everything the CLI's server screen shows, then its three actions
+/// — where the engine has them. Codex reports rich status but exposes no
+/// per-server action, so its screen is read-only.
 private struct McpServerDetailView: View {
   let server: McpServerStatusInfo
+  let canManage: Bool
   let act: (String, McpServerActionRequest.Action) async -> Void
 
   @State private var inFlight: McpServerActionRequest.Action?
@@ -223,17 +229,22 @@ private struct McpServerDetailView: View {
         }
       }
 
-      Section {
-        actionButton("Reconnect", "arrow.clockwise", .reconnect)
-        if server.isDisabled {
-          actionButton("Enable", "power", .enable)
-        } else {
-          actionButton("Disable", "power", .disable)
+      // Absent, not disabled, when the engine has no per-server action: a
+      // greyed-out Reconnect invites "why can't I?" on every visit, where
+      // nothing at all reads as "this engine works differently".
+      if canManage {
+        Section {
+          actionButton("Reconnect", "arrow.clockwise", .reconnect)
+          if server.isDisabled {
+            actionButton("Enable", "power", .enable)
+          } else {
+            actionButton("Disable", "power", .disable)
+          }
+        } footer: {
+          // The CLI's own caveat, and the reason a disable is not destructive:
+          // it is this session's view of the server, not an edit to a config file.
+          Text("Applies to this session only — your .mcp.json is untouched.")
         }
-      } footer: {
-        // The CLI's own caveat, and the reason a disable is not destructive: it
-        // is this session's view of the server, not an edit to a config file.
-        Text("Applies to this session only — your .mcp.json is untouched.")
       }
     }
     .navigationTitle(server.name)
@@ -333,10 +344,21 @@ private struct McpToolDetailView: View {
           }
         }
       }
-      Section {
-        Text("Parameters are not reported by the engine — the CLI's status payload names and describes each tool but carries no input schema.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
+      // Engine-dependent, and said as such: codex returns each tool's full JSON
+      // Schema, the Agent SDK returns none. A real section where one exists, an
+      // explanation where it doesn't — never a silent gap.
+      if let schema = tool.inputSchema {
+        Section("Parameters") {
+          Text(schema.prettyJSON)
+            .font(.caption.monospaced())
+            .textSelection(.enabled)
+        }
+      } else {
+        Section {
+          Text("Parameters are not reported by this engine — its status payload names and describes each tool but carries no input schema.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
       }
     }
     .navigationTitle(tool.name)

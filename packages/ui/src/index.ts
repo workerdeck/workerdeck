@@ -125,6 +125,7 @@ export { STATUS_META } from './components/agent/status.ts'
 
 // Utilities
 export { cn } from './lib/utils.ts'
+export { copyText } from './lib/clipboard.ts'
 export { toolIcon } from './lib/tool-icon.ts'
 export {
   formatAgoPrecise,

@@ -56,7 +56,10 @@ export function SessionView() {
       key={sessionId}
       client={client}
       sessionId={sessionId}
-      header={
+      // A function, so the panel hands over its `⋯` menu instead of leaving it
+      // on the status bar: this app has a real top bar, and the session's
+      // controls belong together there rather than split across two rows.
+      header={({ actions }) => (
         <div className='flex items-center gap-2 border-b border-border bg-surface px-3 py-2'>
           <Link to='/sessions' aria-label='Back to sessions'>
             <Button variant='ghost' size='icon-sm'>
@@ -102,8 +105,11 @@ export function SessionView() {
               </div>
             </AlertDialogContent>
           </AlertDialog>
+          {/* Last, to the right of Close session — the panel builds it (it needs
+              the capability record and the host-file verdict) and we place it. */}
+          {actions}
         </div>
-      }
+      )}
     />
   )
 }

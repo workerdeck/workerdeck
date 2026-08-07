@@ -32,6 +32,11 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
   public let contextUsage: Bool
   public let rateLimits: Bool
   public let mcpStatus: Bool
+  /// Whether the engine can reconnect/enable/disable ONE server. Separate from
+  /// `mcpStatus` because listing and acting are different powers: codex reports
+  /// rich status but exposes no per-server action, and buttons that 501 are
+  /// worse than buttons that aren't there.
+  public let mcpServerActions: Bool
   public let sessionMcpServers: Bool
   public let slashCommands: Bool
   /// `skills` events can occur. False: hide the skills panel entirely rather
@@ -53,6 +58,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     interactiveApprovals: Bool, permissionModes: [PermissionMode],
     defaultPermissionMode: PermissionMode, resume: Bool, resumeBackfill: Bool,
     listSessions: Bool, contextUsage: Bool, rateLimits: Bool, mcpStatus: Bool,
+    mcpServerActions: Bool = false,
     sessionMcpServers: Bool, slashCommands: Bool, skillsList: Bool = false,
     settingSources: Bool, budgets: Bool,
     attachments: [String], reasoningEfforts: [String]? = nil, vfs: Bool, streaming: String
@@ -66,6 +72,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     self.contextUsage = contextUsage
     self.rateLimits = rateLimits
     self.mcpStatus = mcpStatus
+    self.mcpServerActions = mcpServerActions
     self.sessionMcpServers = sessionMcpServers
     self.slashCommands = slashCommands
     self.skillsList = skillsList
@@ -93,6 +100,9 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     contextUsage = try c.decode(Bool.self, forKey: .contextUsage)
     rateLimits = try c.decode(Bool.self, forKey: .rateLimits)
     mcpStatus = try c.decode(Bool.self, forKey: .mcpStatus)
+    // decodeIfPresent: a protocol-6 gateway has no such key, and "older server"
+    // must read as "no action buttons", not as a failed decode.
+    mcpServerActions = try c.decodeIfPresent(Bool.self, forKey: .mcpServerActions) ?? false
     sessionMcpServers = try c.decode(Bool.self, forKey: .sessionMcpServers)
     slashCommands = try c.decode(Bool.self, forKey: .slashCommands)
     // decodeIfPresent, unlike its siblings: a protocol-6 gateway's record has
@@ -117,7 +127,8 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     permissionModes: [.default, .acceptEdits, .bypassPermissions, .plan, .dontAsk, .auto],
     defaultPermissionMode: .default,
     resume: true, resumeBackfill: true, listSessions: true,
-    contextUsage: true, rateLimits: true, mcpStatus: true, sessionMcpServers: true,
+    contextUsage: true, rateLimits: true, mcpStatus: true, mcpServerActions: true,
+    sessionMcpServers: true,
     slashCommands: true, skillsList: false, settingSources: true, budgets: true,
     attachments: ["image", "pdf", "text"],
     reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
@@ -137,7 +148,12 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     resume: true, resumeBackfill: true, listSessions: true,
     // contextUsage arrives with an empty `categories` — occupancy only, no
     // breakdown. ContextSheet hides its Breakdown section for that case.
-    contextUsage: true, rateLimits: true, mcpStatus: false, sessionMcpServers: false,
+    // `mcpServerStatus/list` answers with each server, its auth status and —
+    // unlike the Agent SDK — every tool's full JSON Schema. Liveness rides the
+    // `mcpServer/startupStatus/updated` notification, which the runner tracks.
+    // No per-server action exists on this transport, hence read-only.
+    contextUsage: true, rateLimits: true, mcpStatus: true, mcpServerActions: false,
+    sessionMcpServers: false,
     // No command-listing RPC exists on the app-server surface at all; but
     // `skills/list` does, and `skills/changed` says when to re-read it.
     slashCommands: false, skillsList: true, settingSources: false, budgets: false,
@@ -150,7 +166,8 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     permissionModes: [.default, .bypassPermissions, .dontAsk],
     defaultPermissionMode: .default,
     resume: false, resumeBackfill: false, listSessions: false,
-    contextUsage: false, rateLimits: false, mcpStatus: false, sessionMcpServers: false,
+    contextUsage: false, rateLimits: false, mcpStatus: false, mcpServerActions: false,
+    sessionMcpServers: false,
     slashCommands: false, skillsList: false, settingSources: false, budgets: false,
     attachments: ["image", "pdf", "text"], vfs: true, streaming: "token"
   ),
@@ -506,13 +523,22 @@ public struct McpServerToolInfo: Decodable, Sendable, Equatable, Identifiable {
   public let name: String
   public let description: String?
   public let annotations: Annotations?
+  /// The tool's JSON Schema, where the engine reports one — **engine-dependent,
+  /// and not an oversight**: codex's `mcpServerStatus/list` returns the full
+  /// schema, the Agent SDK's equivalent carries none. Render parameters where
+  /// they exist and say they are unavailable where they don't.
+  public let inputSchema: JSONValue?
 
   public var id: String { name }
 
-  public init(name: String, description: String? = nil, annotations: Annotations? = nil) {
+  public init(
+    name: String, description: String? = nil, annotations: Annotations? = nil,
+    inputSchema: JSONValue? = nil
+  ) {
     self.name = name
     self.description = description
     self.annotations = annotations
+    self.inputSchema = inputSchema
   }
 
   public struct Annotations: Decodable, Sendable, Equatable {

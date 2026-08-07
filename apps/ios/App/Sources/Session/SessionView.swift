@@ -163,7 +163,8 @@ struct SessionView: View {
         case .mcp:
           McpServersView(
             load: { try await vm.mcpServers() },
-            act: { name, action in try await vm.mcpAction(name, action) })
+            act: { name, action in try await vm.mcpAction(name, action) },
+            canManage: vm.capabilities.mcpServerActions)
         case .mode:
           ModePickerSheet(
             modes: permissionModes,

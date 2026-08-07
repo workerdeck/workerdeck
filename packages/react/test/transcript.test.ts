@@ -556,7 +556,10 @@ describe('transcript reducer', () => {
     // No wire copy: the engine's static record.
     const seeded = seedFromSessionInfo(initialTranscriptState, info)
     expect(seeded.capabilities).toEqual(ENGINE_CAPABILITIES.codex)
-    expect(seeded.capabilities.mcpStatus).toBe(false)
+    // Codex lists its MCP servers but cannot act on one — the pair of axes that
+    // exists precisely so a read-only engine doesn't render dead buttons.
+    expect(seeded.capabilities.mcpStatus).toBe(true)
+    expect(seeded.capabilities.mcpServerActions).toBe(false)
     // The snapshot itself is kept whole — nothing else carries profile,
     // apiKeySource or canBypassPermissions.
     expect(seeded.session).toBe(info)
@@ -564,9 +567,9 @@ describe('transcript reducer', () => {
     // A runner that reports its own record overrides the default.
     const reported = seedFromSessionInfo(initialTranscriptState, {
       ...info,
-      capabilities: { ...ENGINE_CAPABILITIES.codex, mcpStatus: true },
+      capabilities: { ...ENGINE_CAPABILITIES.codex, mcpServerActions: true },
     })
-    expect(reported.capabilities.mcpStatus).toBe(true)
+    expect(reported.capabilities.mcpServerActions).toBe(true)
   })
 
   describe('tool-call execution states', () => {

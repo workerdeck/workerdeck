@@ -684,12 +684,57 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   down"; it must never become a way to read the operator's credentials off their own machine.
   `args` *is* forwarded (the operator's own client shows it, and hiding it would only mislead),
   so keep secrets out of argv, not out of this response. A server test asserts both omissions.
-- **Tool parameters are not available.** The status payload names and describes each tool and
-  carries no input schema, so the CLI's own "Parameters:" block cannot be mirrored. The iOS tool
-  screen says so rather than leaving a suspicious gap.
-- **The three actions are session-scoped.** `reconnect`/`enable`/`disable` go to the running CLI;
-  nothing is written to a `.mcp.json`. The iOS screen's footer says this, because "Disable" on a
-  server list otherwise reads as an edit to config.
+- **Tool parameters are engine-dependent, and both halves must be said.** The Agent SDK's status
+  payload names and describes each tool and carries no input schema; codex's `mcpServerStatus/list`
+  returns the **full JSON Schema** per tool. So `McpServerToolInfo.inputSchema` is optional, the
+  tool screens render it where it exists, and the "not available" copy is now conditional — it
+  used to claim the absence was universal, which stopped being true.
+- **Listing and acting are separate capabilities.** `mcpStatus` says the engine can *list*;
+  `mcpServerActions` says it can reconnect/enable/disable ONE server. Codex has the first and not
+  the second: its reload RPC is server-wide, and enable/disable would mean writing the operator's
+  `config.toml` — a different act from Claude's session-scoped switch. Splitting the axis is what
+  keeps a read-only engine from rendering three buttons that do nothing.
+- **The route 501s a POST the runner cannot serve, and that check is load-bearing.** `handleMcp`
+  dispatches through `runner.reconnectMcpServer?.(…)` — optional chaining, so a missing method
+  would no-op and then answer 200 with the unchanged list: a button reporting success having done
+  nothing. The method is checked for before dispatch. Clients hide the controls off the capability;
+  this is the door behind them.
+- **Codex's list response carries no status at all.** Which servers exist and what they expose
+  comes from `mcpServerStatus/list`; whether one is *up* arrives separately on
+  `mcpServer/startupStatus/updated`, which `CodexRunner` accumulates and merges in.
+  **Those notifications only fire for servers that come up while we are attached** — a child whose
+  servers were already running sends none at all (measured: a working server with three tools and
+  no notification). So *tools imply connected*: they can only have been enumerated over a completed
+  handshake, and without that branch a healthy server reads as `pending` forever. A server with
+  neither a notification nor tools stays `pending`, which is genuinely ambiguous — not started, or
+  disabled in config, and the list response cannot tell them apart. `authStatus: 'notLoggedIn'`
+  beats a missing notification and maps to `needs-auth`, because a credential is the thing the
+  operator has to act on.
+- **The three actions are session-scoped** *where they exist*. `reconnect`/`enable`/`disable` go to
+  the running CLI; nothing is written to a `.mcp.json`. The iOS screen's footer says this, because
+  "Disable" on a server list otherwise reads as an edit to config.
+
+## Web dashboard
+
+- **`navigator.clipboard` does not exist on the origin this dashboard actually runs on.** It is
+  gated on a *secure context* — HTTPS or localhost — and the normal WorkerDeck deployment is plain
+  HTTP on a LAN address, reached from another machine or a phone. So the property is `undefined`
+  there and `navigator.clipboard.writeText(...)` throws outright. Copy through `copyText`
+  (`ui/src/lib/clipboard.ts`), which falls back to `document.execCommand('copy')` over an
+  off-screen textarea: deprecated, universally implemented, and the only thing that works here.
+  The textarea must be *off-screen* rather than `display: none` — a hidden element cannot hold a
+  selection, so the copy would silently do nothing.
+- **The dashboard is a build artifact; the packages are not.** `pnpm server` is
+  `pnpm dashboard && pnpm cli …`, so the gateway serves `packages/web/dist/` while every package
+  resolves to source through the `@workerdeck/source` condition. A long-running `pnpm server`
+  therefore keeps serving the JS it was started with — a UI change needs the server restarted (or
+  `pnpm dashboard` re-run), even though a server-side change would too. Symptoms look
+  web-specific and are not.
+- `SessionPanel`'s `header` prop takes a **function** when an embedder wants the session-actions
+  (`⋯`) menu in its own chrome: it is called with the menu and the status bar then renders
+  without it. The menu can only be built inside the panel (capability record, host-file verdict,
+  dialog state), but an app with a real top bar wants it up there — hence the seam rather than a
+  second menu.
 
 ## APNs push (the CLI's forwarder)
 

@@ -1381,6 +1381,22 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         json(res, 400, { error: "action must be 'reconnect', 'enable' or 'disable'" })
         return
       }
+      // Checked before dispatching, because the calls below are optionally
+      // chained: an engine that lists its servers but cannot act on one (codex)
+      // would otherwise no-op and then answer 200 with the unchanged list —
+      // a button that reports success having done nothing, which is worse than
+      // an error. Clients hide these controls off
+      // `ENGINE_CAPABILITIES[engine].mcpServerActions`; this is the door.
+      const canAct =
+        body.action === 'reconnect'
+          ? typeof runner.reconnectMcpServer === 'function'
+          : typeof runner.setMcpServerEnabled === 'function'
+      if (!canAct) {
+        json(res, 501, {
+          error: `this session's engine cannot ${body.action} an MCP server`,
+        })
+        return
+      }
       try {
         if (body.action === 'reconnect') await runner.reconnectMcpServer?.(serverName)
         else await runner.setMcpServerEnabled?.(serverName, body.action === 'enable')

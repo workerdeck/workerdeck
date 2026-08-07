@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
 import { JsonRpcError } from '../src/engines/codex/jsonrpc.ts'
+import type { Runner } from '../src/runner-interface.ts'
 import type {
   AppServerConnectFn,
   AppServerConnection,
@@ -609,6 +610,102 @@ describe('CodexRunner', () => {
     await runner.start()
 
     expect(peer.connections()).toBe(1)
+  })
+
+  it('merges mcpServerStatus/list with the startup notifications that carry liveness', async () => {
+    const peer = scriptedPeer()
+    peer.respond('mcpServerStatus/list', () => ({
+      data: [
+        {
+          name: 'scratch',
+          serverInfo: { name: 'scratch-mcp', version: '0.1.0', title: null },
+          authStatus: 'unsupported',
+          // A MAP keyed by tool name, not an array — and carrying the full
+          // input schema, which the Agent SDK never gives us.
+          tools: {
+            scratch_ping: {
+              name: 'scratch_ping',
+              description: 'Prove the server is reachable',
+              inputSchema: { type: 'object', properties: { note: { type: 'string' } } },
+              annotations: { readOnlyHint: true, destructiveHint: null },
+            },
+          },
+        },
+        { name: 'broken', authStatus: 'unsupported', tools: {} },
+        { name: 'needs-login', authStatus: 'notLoggedIn', tools: {} },
+        { name: 'never-reported', authStatus: 'unsupported', tools: {} },
+        // Up, serving tools, and never announced — the case that actually
+        // happens: startup notifications only fire for servers that come up
+        // while we are attached, and a child whose servers were already running
+        // sends none. Measured against the real binary.
+        {
+          name: 'silently-fine',
+          authStatus: 'unsupported',
+          tools: { do_thing: { name: 'do_thing' } },
+        },
+      ],
+    }))
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+
+    const runner = new CodexRunner({ cwd: '/tmp/p', prompt: 'go', connectFn: peer.connectFn })
+    await runner.start()
+
+    // Liveness arrives ONLY on this notification — the list response has no
+    // status field at all.
+    peer.emit('mcpServer/startupStatus/updated', { name: 'scratch', status: 'ready' })
+    peer.emit('mcpServer/startupStatus/updated', {
+      name: 'broken',
+      status: 'failed',
+      error: 'spawn ENOENT',
+    })
+
+    const servers = await runner.mcpServers()
+    expect(servers?.map((s) => `${s.name}:${s.status}`)).toEqual([
+      'scratch:connected',
+      'broken:failed',
+      // Auth beats a missing notification: no credential is the thing to act on.
+      'needs-login:needs-auth',
+      // Listed, never announced, and exposing nothing: genuinely ambiguous
+      // (not started, or switched off in config — the list cannot tell them
+      // apart), so 'pending' rather than a guess.
+      'never-reported:pending',
+      // …but tools could only have been enumerated over a completed handshake,
+      // so they are direct evidence the server is up. Without this a healthy
+      // server reads as 'pending' forever.
+      'silently-fine:connected',
+    ])
+    expect(servers?.find((s) => s.name === 'broken')?.error).toBe('spawn ENOENT')
+    expect(servers?.[0]).toMatchObject({
+      serverInfo: { name: 'scratch-mcp', version: '0.1.0' },
+      tools: [
+        {
+          name: 'scratch_ping',
+          description: 'Prove the server is reachable',
+          inputSchema: { type: 'object', properties: { note: { type: 'string' } } },
+          // A null hint is absent, not false — codex sends nulls for "unstated".
+          annotations: { readOnly: true },
+        },
+      ],
+    })
+
+    // Listing only: there is no per-server action on this transport, and the
+    // absent methods are what make the gateway 501 rather than silently no-op.
+    // Read through `Runner`, where they are declared optional — on CodexRunner
+    // itself they do not exist at all, which is the stronger statement.
+    const asRunner: Runner = runner
+    expect(asRunner.reconnectMcpServer).toBeUndefined()
+    expect(asRunner.setMcpServerEnabled).toBeUndefined()
+  })
+
+  it('reports no MCP servers rather than an empty list before the child exists', async () => {
+    const peer = scriptedPeer()
+    const runner = new CodexRunner({ cwd: '/tmp/p', connectFn: peer.connectFn })
+    // Never started, so no connection. Undefined becomes a 501 at the route —
+    // "ask again once it connects", which an empty list would misreport as
+    // "you have no servers".
+    expect(await runner.mcpServers()).toBeUndefined()
   })
 
   it('says nothing about skills when the binary rejects skills/list', async () => {

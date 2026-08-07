@@ -221,6 +221,55 @@ export type AppServerSkillsListResponse = {
   }>
 }
 
+/**
+ * One entry of `mcpServerStatus/list`'s `data` (codex's `McpServerStatus`).
+ *
+ * Note what is NOT here: a status. The list response says which servers exist
+ * and what they expose; whether one is *up* arrives separately on the
+ * `mcpServer/startupStatus/updated` notification, which the runner tracks and
+ * merges in. A list entry on its own therefore means "configured", not
+ * "connected".
+ *
+ * `tools` is a MAP keyed by tool name, not an array — and each `Tool` carries a
+ * full `inputSchema`, which the Agent SDK's equivalent does not.
+ */
+export type AppServerMcpServerStatus = {
+  name: string
+  serverInfo?: { name?: string; version?: string; title?: string | null } | null
+  tools?: Record<string, AppServerMcpTool | undefined>
+  /** 'unsupported' | 'notLoggedIn' | 'bearerToken' | 'oAuth' — open. */
+  authStatus?: string
+}
+
+export type AppServerMcpTool = {
+  name?: string
+  title?: string | null
+  description?: string | null
+  inputSchema?: unknown
+  annotations?: {
+    readOnlyHint?: boolean | null
+    destructiveHint?: boolean | null
+    openWorldHint?: boolean | null
+  } | null
+}
+
+/** `mcpServerStatus/list` result — one page plus an opaque continuation cursor. */
+export type AppServerMcpServerStatusResponse = {
+  data?: AppServerMcpServerStatus[]
+  nextCursor?: string | null
+}
+
+/** `mcpServer/startupStatus/updated` params — where a server's liveness actually
+ * comes from. `status` is 'starting' | 'ready' | 'failed' | 'cancelled'. */
+export type AppServerMcpStatusUpdate = {
+  threadId?: string | null
+  name: string
+  status?: string
+  error?: string | null
+  /** 'reauthenticationRequired' — the one reason codex names. */
+  failureReason?: string | null
+}
+
 export type AppServerUserInput =
   | { type: 'text'; text: string }
   | { type: 'localImage'; path: string }

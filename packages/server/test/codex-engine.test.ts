@@ -30,6 +30,8 @@ function fakeCodexAdapter(options: {
   onCreate?: (config: SessionRunnerConfig) => void
   /** Extra notifications to emit mid-turn, before the agent message. */
   onTurn?: (notify: (method: string, params: unknown) => void) => void
+  /** What `mcpServerStatus/list` answers with (codex's own shape). */
+  mcpServers?: unknown[]
 }): { adapter: EngineAdapter; probeCalls: () => number } {
   let probeCalls = 0
   let turnIndex = 0
@@ -48,6 +50,9 @@ function fakeCodexAdapter(options: {
         request: async (method) => {
           if (method === 'thread/start' || method === 'thread/resume') {
             return { thread: { id: 'thread-1' } }
+          }
+          if (method === 'mcpServerStatus/list') {
+            return { data: options.mcpServers ?? [] }
           }
           if (method === 'turn/start') {
             const text = options.turns?.[turnIndex++] ?? 'done'
@@ -236,6 +241,63 @@ describe('codex engine over the gateway', () => {
     await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE' })
     const afterDelete = await fetch(`${base}/sessions/${session.id}/produced/${fileId}`)
     expect(afterDelete.status).toBe(404)
+  })
+
+  it('lists MCP servers but refuses to act on one, rather than silently no-opping', async () => {
+    const { adapter } = fakeCodexAdapter({
+      mcpServers: [
+        {
+          name: 'scratch',
+          serverInfo: { name: 'scratch-mcp', version: '0.1.0' },
+          authStatus: 'unsupported',
+          tools: { scratch_ping: { name: 'scratch_ping', inputSchema: { type: 'object' } } },
+        },
+      ],
+    })
+    running = createWorkerServer({
+      allowUnauthenticated: true,
+      allowedCwdRoots: ['/tmp'],
+      profiles: [codexProfile()],
+      engines: { codex: adapter },
+    })
+    const { port } = await running.listen(0, '127.0.0.1')
+    const base = `http://127.0.0.1:${port}/v1`
+
+    const created = await fetch(`${base}/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/project', profile: 'codex', prompt: 'go' }),
+    })
+    const { session } = (await created.json()) as { session: { id: string } }
+
+    // Listing works, and carries what the Agent SDK cannot: a tool's schema.
+    await vi.waitFor(async () => {
+      const res = await fetch(`${base}/sessions/${session.id}/mcp`)
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as {
+        servers: Array<{ name: string; tools?: Array<{ inputSchema?: unknown }> }>
+      }
+      expect(body.servers.map((s) => s.name)).toEqual(['scratch'])
+      expect(body.servers[0]!.tools?.[0]?.inputSchema).toEqual({ type: 'object' })
+    })
+
+    // Acting does NOT. The runner exposes no reconnect/enable/disable, and the
+    // route's optional chaining would otherwise no-op and answer 200 with the
+    // unchanged list — a button reporting success having done nothing.
+    for (const action of ['reconnect', 'enable', 'disable'] as const) {
+      const res = await fetch(`${base}/sessions/${session.id}/mcp/scratch`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      expect(res.status).toBe(501)
+      expect(((await res.json()) as { error?: string }).error).toMatch(/cannot .* an MCP server/)
+    }
+
+    // And the record says so, which is what lets clients hide the buttons
+    // instead of discovering the 501.
+    expect(ENGINE_CAPABILITIES.codex.mcpStatus).toBe(true)
+    expect(ENGINE_CAPABILITIES.codex.mcpServerActions).toBe(false)
   })
 
   it('refuses the request fields the codex record forswears', async () => {

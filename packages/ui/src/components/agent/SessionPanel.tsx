@@ -40,8 +40,21 @@ import { UsageDialog } from './UsageDialog.tsx'
 export interface SessionPanelProps {
   client: WorkerDeckClient
   sessionId: string | undefined
-  /** Optional slot rendered at the top, above the status bar. */
-  header?: ReactNode
+  /**
+   * Optional slot rendered at the top, above the status bar.
+   *
+   * Pass a **function** to take the session-actions (`⋯`) menu into your own
+   * chrome: it is called with the menu element, and wherever you put it is
+   * where it lives — the status bar then renders without it, so it never
+   * appears twice. Pass a plain node (or nothing) and the menu stays in the
+   * status bar's trailing slot.
+   *
+   * The seam exists because the menu can only be *built* here — it needs the
+   * capability record, the host-file verdict and the panel's own dialog state —
+   * but an embedder with a real header usually wants it up there with the rest
+   * of the session's controls, not stranded on the status line.
+   */
+  header?: ReactNode | ((slots: { actions: ReactNode }) => ReactNode)
   className?: string
 }
 
@@ -148,67 +161,75 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
     send(text, attachmentIds)
   }
 
+  // Everything the panel can open, in one place — and each one is also
+  // reachable by clicking the thing on the bar that summarises it. Entries the
+  // capability record forswears are absent, not present-and-empty.
+  //
+  // Built once and placed once: either the embedder's header takes it (see the
+  // `header` render-prop) or the status bar does. Never both — two `⋯` menus on
+  // one screen is worse than either position.
+  const actionsMenu = (
+    <Menu>
+      <MenuTrigger
+        render={
+          <Button variant='ghost' size='icon-sm' aria-label='Session actions'>
+            <MoreHorizontal className='size-4' />
+          </Button>
+        }
+      />
+      <MenuContent>
+        {capabilities.contextUsage ? (
+          <MenuItem onClick={() => setPanel('context')}>
+            <ChartPie className='size-3.5 text-fg-3' /> Context
+          </MenuItem>
+        ) : null}
+        {capabilities.rateLimits ? (
+          <MenuItem onClick={() => setPanel('usage')}>
+            <Gauge className='size-3.5 text-fg-3' /> Usage
+          </MenuItem>
+        ) : null}
+        <MenuItem onClick={() => setPanel('info')}>
+          <Info className='size-3.5 text-fg-3' /> Session info
+        </MenuItem>
+        {capabilities.mcpStatus ? (
+          <MenuItem onClick={() => setPanel('mcp')}>
+            <Plug className='size-3.5 text-fg-3' /> MCP servers
+          </MenuItem>
+        ) : null}
+        {/* On the capability alone, like MCP's entry. Codex answers
+            `skills/list` only over a live child, so before the first turn there
+            is no list yet — but hiding the entry until then made the dialog's
+            own explanation of that unreachable, which read as the feature being
+            missing. The empty state says it instead. */}
+        {capabilities.skillsList ? (
+          <MenuItem onClick={() => setPanel('skills')}>
+            <Sparkles className='size-3.5 text-fg-3' /> Skills
+          </MenuItem>
+        ) : null}
+        {hostFiles.available ? (
+          <MenuItem onClick={() => setPanel('files')}>
+            <FolderTree className='size-3.5 text-fg-3' /> Project files
+          </MenuItem>
+        ) : null}
+      </MenuContent>
+    </Menu>
+  )
+
+  // A function header claims the menu; anything else leaves it on the status bar.
+  const headerTakesActions = typeof header === 'function'
+
   return (
     <div
       data-slot='session-panel'
       className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}>
-      {header}
+      {headerTakesActions ? header({ actions: actionsMenu }) : header}
       <StatusBar
         state={state}
         connection={connection}
         onOpenStatus={() => setPanel('info')}
         onOpenContext={() => setPanel('context')}
         onOpenUsage={() => setPanel('usage')}
-        actions={
-          // Everything the panel can open, in one place — and each one is also
-          // reachable by clicking the thing on the bar that summarises it.
-          // Entries the capability record forswears are absent, not
-          // present-and-empty.
-          <Menu>
-            <MenuTrigger
-              render={
-                <Button variant='ghost' size='icon-sm' aria-label='Session actions'>
-                  <MoreHorizontal className='size-4' />
-                </Button>
-              }
-            />
-            <MenuContent>
-              {capabilities.contextUsage ? (
-                <MenuItem onClick={() => setPanel('context')}>
-                  <ChartPie className='size-3.5 text-fg-3' /> Context
-                </MenuItem>
-              ) : null}
-              {capabilities.rateLimits ? (
-                <MenuItem onClick={() => setPanel('usage')}>
-                  <Gauge className='size-3.5 text-fg-3' /> Usage
-                </MenuItem>
-              ) : null}
-              <MenuItem onClick={() => setPanel('info')}>
-                <Info className='size-3.5 text-fg-3' /> Session info
-              </MenuItem>
-              {capabilities.mcpStatus ? (
-                <MenuItem onClick={() => setPanel('mcp')}>
-                  <Plug className='size-3.5 text-fg-3' /> MCP servers
-                </MenuItem>
-              ) : null}
-              {/* On the capability alone, like MCP's entry. Codex answers
-                  `skills/list` only over a live child, so before the first turn
-                  there is no list yet — but hiding the entry until then made the
-                  dialog's own explanation of that unreachable, which read as the
-                  feature being missing. The empty state says it instead. */}
-              {capabilities.skillsList ? (
-                <MenuItem onClick={() => setPanel('skills')}>
-                  <Sparkles className='size-3.5 text-fg-3' /> Skills
-                </MenuItem>
-              ) : null}
-              {hostFiles.available ? (
-                <MenuItem onClick={() => setPanel('files')}>
-                  <FolderTree className='size-3.5 text-fg-3' /> Project files
-                </MenuItem>
-              ) : null}
-            </MenuContent>
-          </Menu>
-        }
+        actions={headerTakesActions ? undefined : actionsMenu}
       />
       {protocolMismatch !== undefined ? (
         <Notice level='warning'>
@@ -321,6 +342,7 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
       <McpDialog
         client={client}
         sessionId={sessionId}
+        canManageServers={capabilities.mcpServerActions}
         open={panel === 'mcp'}
         onOpenChange={(next) => setPanel(next ? 'mcp' : undefined)}
       />
