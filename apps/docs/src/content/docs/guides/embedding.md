@@ -58,10 +58,21 @@ param via `buildWsUrl(sessionId, afterSeq)` or with cookies.
 
 ## The UI options ladder
 
-Four levels, from most batteries-included to most raw:
+Five levels, from most batteries-included to most raw:
 
+0. **`SessionWorkspace`** (`@workerdeck/ui`) — a VS Code-shaped layout *around* the panel:
+   project tree and fuzzy search on the left, editor tabs above, the agent below, with the agent
+   claiming the whole column when nothing is open.
+   `<SessionWorkspace client={client} sessionId={session.id} />`. It needs the gateway's
+   `hostFiles` routes (without them the rail is absent and you get the panel), and editing
+   additionally needs `hostFiles.write`, which is a separate opt-in defaulting to off — the
+   editor renders read-only otherwise. Saves are conditional on the hash the tab read, so a
+   collision with the agent's own edits is refused and offered as a choice, never a silent
+   overwrite. **Vite hosts need `optimizeDeps: { exclude: ['monaco-editor'] }`** — see the
+   `@workerdeck/ui` README for why.
 1. **`SessionPanel`** (`@workerdeck/ui`) — status bar, streaming transcript, tool-call cards,
    permission prompts, composer. `<SessionPanel client={client} sessionId={session.id} />`.
+   Untouched by the workspace and complete on its own; an app with its own file tree wants this.
 2. **Headless `useClaudeSession`** (`@workerdeck/react`) — the hook attaches to a session,
    folds the event stream through a pure transcript reducer, and hands back live state plus the
    control surface (send, approve/deny, interrupt, permission mode, model). Bring your own

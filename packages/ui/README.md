@@ -3,9 +3,10 @@
 Styled agent-control component library for WorkerDeck hosts: `SessionPanel` (status bar +
 streaming transcript + tool-call cards + permission prompts + composer with attachments and
 `@file` / `/command` completion, plus the panels behind it — session info, context, plan usage,
-MCP servers, project files), `SessionList`, and the underlying primitives (Button, Badge, Card,
-Select, Dialog, AlertDialog, …). Built on **Tailwind v4 + Base UI + cva**, themed by CSS tokens
-with light/dark via `<html data-theme>`.
+MCP servers, project files), `SessionWorkspace` (a VS Code-shaped layout *around* that panel —
+file tree, editor tabs, Monaco), `SessionList`, and the underlying primitives (Button, Badge,
+Card, Select, Dialog, AlertDialog, …). Built on **Tailwind v4 + Base UI + cva**, themed by CSS
+tokens with light/dark via `<html data-theme>`.
 
 Everything `SessionPanel` offers is gated on the session's **engine capability record**, so the
 same component is correct for a Claude, Codex or provider session without the host branching:
@@ -62,6 +63,40 @@ const client = new WorkerDeckClient({ baseUrl: `${location.origin}/v1` })
 
 <SessionPanel key={sessionId} client={client} sessionId={sessionId} />
 ```
+
+### The workspace (optional)
+
+`SessionWorkspace` wraps that same panel in a three-region layout — project tree on the left,
+open files above, agent below — and is **strictly additive**: `SessionPanel` is untouched and
+still complete on its own, so pick whichever fits. An app with its own file tree keeps the panel.
+
+```tsx
+import { SessionWorkspace } from '@workerdeck/ui'
+
+<SessionWorkspace key={sessionId} client={client} sessionId={sessionId} />
+```
+
+It needs the gateway's host-filesystem routes (`hostFiles` in the server config); without them
+the rail is simply absent and you get the panel. Editing additionally needs `hostFiles.write`,
+which is a separate opt-in and defaults **off** — the editor reads `/fs/roots` and renders
+read-only when it's not enabled. Saves are conditional on the hash the tab read, so a save that
+collides with the agent's own edit is refused (409) and offered as a choice rather than silently
+winning.
+
+**If you bundle with Vite, you need one line** — the workspace uses Monaco, which reaches its
+web workers with `new Worker(new URL(…, import.meta.url))`. Rollup resolves that at build time,
+but Vite's dev dep-optimizer rewrites the package into `.vite/deps/` and breaks the relative URL;
+Monaco then *silently* runs worker code on the main thread:
+
+```ts
+// vite.config.ts
+export default defineConfig({ optimizeDeps: { exclude: ['monaco-editor'] } })
+```
+
+Monaco is loaded through a dynamic `import()`, so it costs nothing until a file is opened. Our
+own dashboard additionally aliases away Monaco's four worker-backed language services
+(TypeScript/JSON/CSS/HTML) — 8.8MB of build output for IntelliSense and schema validation, with
+syntax highlighting unaffected — see `packages/web/vite.config.ts` if you want the same trade.
 
 Every component takes `className` and carries `data-slot` attributes for targeted overrides.
 

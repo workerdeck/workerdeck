@@ -41,6 +41,7 @@ export { Toaster, toast } from './components/ui/Sonner.tsx'
 export { CopyButton, type CopyButtonProps } from './components/ui/CopyButton.tsx'
 export { Spinner } from './components/ui/Spinner.tsx'
 export { CodeBlock, type CodeBlockProps } from './components/ui/CodeBlock.tsx'
+export { Splitter, type SplitterProps } from './components/ui/Splitter.tsx'
 export { ProgressRing, type ProgressRingProps } from './components/ui/ProgressRing.tsx'
 // Prompt input (vendored just-marketing/prompt-area, themed to these tokens)
 export {
@@ -64,6 +65,14 @@ export {
 
 // Agent-control components
 export { SessionPanel, type SessionPanelProps } from './components/agent/SessionPanel.tsx'
+export {
+  SessionWorkspace,
+  type SessionWorkspaceProps,
+} from './components/agent/SessionWorkspace.tsx'
+export { FileTree, type FileTreeProps } from './components/agent/FileTree.tsx'
+export { EditorTabs, type EditorTabsProps } from './components/agent/EditorTabs.tsx'
+export { FileViewer, type FileViewerProps } from './components/agent/FileViewer.tsx'
+export { CodeEditor, type CodeEditorProps } from './components/agent/CodeEditor.tsx'
 export { Transcript, type TranscriptProps } from './components/agent/Transcript.tsx'
 export {
   Conversation,

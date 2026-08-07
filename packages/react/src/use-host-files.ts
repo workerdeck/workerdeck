@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { WorkerDeckError, type WorkerDeckClient } from '@workerdeck/client'
 import type { HostFileMatch } from '@workerdeck/protocol'
+import { ancestorsWithin, flattenHostTree, type HostDirState, type HostTreeRow } from './host-tree.ts'
 
 export type UseHostFileSearchResult = {
   /**
@@ -62,4 +63,223 @@ export function useHostFileSearch(
   )
 
   return { available: !!cwd && !unsupported, search }
+}
+
+export type UseHostFileRootsResult = {
+  /** Whether this gateway serves host files at all. */
+  available: boolean
+  /**
+   * Whether `PUT /fs/write` is enabled here.
+   *
+   * Read it before offering an editor. Writing is a **separate** server opt-in
+   * from reading and defaults off, so a gateway that happily lists and reads a
+   * tree may still refuse every save — and finding that out at save time, with
+   * edits already made, is the worst moment for it.
+   */
+  canWrite: boolean
+}
+
+/**
+ * Whether host files are served here, and whether they may be written.
+ *
+ * One request per client, cached for the life of the hook: the roots and the
+ * write flag are gateway configuration, not session state, and they do not
+ * change while the tab is open.
+ */
+export function useHostFileRoots(client: WorkerDeckClient): UseHostFileRootsResult {
+  const [result, setResult] = useState<UseHostFileRootsResult>({
+    available: false,
+    canWrite: false,
+  })
+  useEffect(() => {
+    let cancelled = false
+    client
+      .listHostRoots()
+      .then((response) => {
+        if (!cancelled) setResult({ available: true, canWrite: response.canWrite })
+      })
+      // A 404 means no host files here; anything else means we could not find
+      // out. Both answer the same way, because the safe default for "may I
+      // write to the operator's disk?" is no.
+      .catch(() => {
+        if (!cancelled) setResult({ available: false, canWrite: false })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [client])
+  return result
+}
+
+export type UseHostFileTreeResult = {
+  /**
+   * Whether a tree can be shown at all: the cwd is known and this gateway serves
+   * host files. Read it before rendering the rail — a gateway with no
+   * `hostFiles` configured has no tree, and that is a layout decision, not an
+   * error to display.
+   */
+  available: boolean
+  /** The directory the tree is rooted at — the session's cwd. */
+  root: string | undefined
+  /** The visible tree, flattened. Empty until the root listing arrives. */
+  rows: HostTreeRow[]
+  /** True while the root listing is outstanding and there is nothing to show. */
+  loading: boolean
+  /** A listing that failed, verbatim from the gateway. */
+  error: string | undefined
+  /** Expand or collapse a directory. Expanding lists it once and remembers. */
+  toggle: (path: string) => void
+  /** Expand every directory between the root and this path, so it is on screen. */
+  reveal: (path: string) => void
+  /** Re-list one directory (default: the root), keeping what is expanded. */
+  refresh: (path?: string) => void
+}
+
+/**
+ * An expandable file tree rooted at a session's working directory.
+ *
+ * Rooted at the cwd rather than at `/fs/roots` for the same reason
+ * {@link useHostFileSearch} is: the roots are the *security* boundary the server
+ * enforces on every request, but what someone wants while watching an agent work
+ * is this project's tree. The roots may well be broader; showing them would
+ * offer navigation to directories the session has nothing to do with.
+ *
+ * Listings are cached per directory and kept across a collapse, so reopening a
+ * folder is instant and does not re-ask. That staleness is deliberate and
+ * bounded: `refresh` exists, and knowing when to call it is the *next* problem
+ * (the agent is editing this same tree), not something a tree can guess.
+ *
+ * Like the search hook, a 404 is answered once for the session: host files are
+ * either configured here or they are not.
+ */
+export function useHostFileTree(
+  client: WorkerDeckClient,
+  cwd: string | undefined,
+): UseHostFileTreeResult {
+  const [dirs, setDirs] = useState<Map<string, HostDirState>>(() => new Map())
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  const [unsupported, setUnsupported] = useState(false)
+  const [error, setError] = useState<string | undefined>()
+
+  // A resume into a different project invalidates everything, including the
+  // 404 verdict — the new cwd may well be under a configured root.
+  const lastCwd = useRef(cwd)
+  useEffect(() => {
+    if (lastCwd.current === cwd) return
+    lastCwd.current = cwd
+    setDirs(new Map())
+    setExpanded(new Set())
+    setUnsupported(false)
+    setError(undefined)
+  }, [cwd])
+
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+    }
+  }, [])
+
+  // Directories whose listing has been asked for. A ref rather than state: it
+  // must not re-render anything, and it is what keeps an expand-collapse-expand
+  // from issuing three requests.
+  const requested = useRef(new Set<string>())
+
+  const list = useCallback(
+    (target: string, { force = false } = {}) => {
+      if (unsupported) return
+      if (!force && requested.current.has(target)) return
+      requested.current.add(target)
+      client
+        .listHostDir(target)
+        .then((response) => {
+          if (!alive.current) return
+          setDirs((previous) => {
+            const next = new Map(previous)
+            // Keyed on the requested path, not the canonical one the server
+            // answers with: the tree navigates by the paths `/fs/list` gave it,
+            // and re-keying on a resolved path would orphan the node that asked.
+            next.set(target, { entries: response.entries, truncated: response.truncated })
+            return next
+          })
+        })
+        .catch((e: unknown) => {
+          if (!alive.current) return
+          requested.current.delete(target)
+          if (e instanceof WorkerDeckError && e.status === 404) {
+            // No host files on this gateway, or the cwd is not under a root.
+            // Not an error banner — the rail simply is not on offer.
+            setUnsupported(true)
+            return
+          }
+          setError(e instanceof Error ? e.message : 'Could not read that directory')
+        })
+    },
+    [client, unsupported],
+  )
+
+  // The root lists itself; everything below is listed on expand.
+  useEffect(() => {
+    if (cwd) list(cwd)
+  }, [cwd, list])
+
+  const toggle = useCallback(
+    (path: string) => {
+      setExpanded((previous) => {
+        const next = new Set(previous)
+        if (next.has(path)) next.delete(path)
+        else next.add(path)
+        return next
+      })
+      // Outside the updater on purpose — React may run an updater twice, and a
+      // request fired from inside one is a side effect in a place that promises
+      // not to have any. Listing is idempotent (`requested` guards it) and the
+      // first action on a directory is always an expand, so the call this makes
+      // on a *collapse* has already been answered and does nothing.
+      list(path)
+    },
+    [list],
+  )
+
+  const reveal = useCallback(
+    (path: string) => {
+      if (!cwd) return
+      const ancestors = ancestorsWithin(cwd, path)
+      if (ancestors.length === 0) return
+      for (const dir of ancestors) list(dir)
+      setExpanded((previous) => {
+        const next = new Set(previous)
+        for (const dir of ancestors) next.add(dir)
+        return next
+      })
+    },
+    [cwd, list],
+  )
+
+  const refresh = useCallback(
+    (path?: string) => {
+      const target = path ?? cwd
+      if (!target) return
+      setError(undefined)
+      list(target, { force: true })
+    },
+    [cwd, list],
+  )
+
+  const rows = useMemo(
+    () => (cwd ? flattenHostTree(cwd, dirs, expanded) : []),
+    [cwd, dirs, expanded],
+  )
+
+  return {
+    available: !!cwd && !unsupported,
+    root: cwd,
+    rows,
+    loading: !!cwd && !unsupported && !dirs.has(cwd) && !error,
+    error,
+    toggle,
+    reveal,
+    refresh,
+  }
 }

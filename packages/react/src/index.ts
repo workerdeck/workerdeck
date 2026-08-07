@@ -13,8 +13,20 @@ export type {
 } from './use-attachments.ts'
 export { scanPromptTokens } from './prompt-tokens.ts'
 export type { PromptToken } from './prompt-tokens.ts'
-export { useHostFileSearch } from './use-host-files.ts'
-export type { UseHostFileSearchResult } from './use-host-files.ts'
+export { useHostFileRoots, useHostFileSearch, useHostFileTree } from './use-host-files.ts'
+export type {
+  UseHostFileRootsResult,
+  UseHostFileSearchResult,
+  UseHostFileTreeResult,
+} from './use-host-files.ts'
+export { ancestorsWithin, flattenHostTree } from './host-tree.ts'
+export type { HostDirState, HostTreeRow } from './host-tree.ts'
+export { useSessionInfo } from './use-session-info.ts'
+export type { UseSessionInfoResult } from './use-session-info.ts'
+export { useOpenFiles } from './use-open-files.ts'
+export type { UseOpenFilesResult } from './use-open-files.ts'
+export { currentText, initialOpenFilesState, isDirty, openFilesReducer } from './open-files.ts'
+export type { OpenFile, OpenFilesAction, OpenFilesState } from './open-files.ts'
 export { useToolCallHost } from './use-tool-host.ts'
 export type { UseToolCallHostOptions } from './use-tool-host.ts'
 export { createToolCallHost } from './tool-host.ts'

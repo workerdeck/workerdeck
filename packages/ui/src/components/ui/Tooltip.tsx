@@ -1,4 +1,4 @@
-import { type FunctionComponent, type ReactNode } from 'react'
+import { type FunctionComponent, type ReactElement, type ReactNode } from 'react'
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip'
 import { cn } from '../../lib/utils.ts'
 
@@ -21,14 +21,31 @@ export const TooltipContent: FunctionComponent<
   </TooltipPrimitive.Portal>
 )
 
-/** Convenience wrapper: <Tip content="..."><Button/></Tip> */
-export function Tip({ content, children }: { content: ReactNode; children: ReactNode }) {
+/**
+ * Convenience wrapper: `<Tip content="..."><Button/></Tip>`.
+ *
+ * Pass `render` when the trigger must *be* an element you already have — a tab, a
+ * row — rather than something wrapped in a span. The default span is fine beside
+ * a button but would break any layout that styles its own children (a flex tab
+ * strip gets an extra box between the container and its items).
+ */
+export function Tip({
+  content,
+  render,
+  side,
+  children,
+}: {
+  content: ReactNode
+  render?: ReactElement
+  side?: 'top' | 'right' | 'bottom' | 'left'
+  children?: ReactNode
+}) {
   return (
     <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger render={<span className='inline-flex' />}>
+      <TooltipPrimitive.Trigger render={render ?? <span className='inline-flex' />}>
         {children}
       </TooltipPrimitive.Trigger>
-      <TooltipContent>{content}</TooltipContent>
+      <TooltipContent side={side}>{content}</TooltipContent>
     </TooltipPrimitive.Root>
   )
 }

@@ -191,6 +191,14 @@ boundary: anything a client needs must be expressible as protocol events and com
   design tokens with light/dark on `<html data-theme>`. Ships source styles that the consumer's
   Tailwind build compiles (`@source` scanning — wiring in the package README). The composer's
   input is a vendored copy of just-marketing/prompt-area (MIT) under `src/components/prompt-area`.
+  `SessionWorkspace` is the optional VS Code-shaped layout *around* `SessionPanel` (FileTree,
+  EditorTabs, the Monaco-backed FileViewer, a hand-rolled `Splitter` — Base UI ships none), and is
+  strictly additive: the panel is untouched and an embedder picks either. Two invariants inside
+  it: the editor region is **absent** from the layout when no file is open rather than
+  zero-height, and `SessionPanel` keeps its child index across that transition, because
+  remounting it would drop the WebSocket attach and the whole rendered transcript. The embedder's
+  `header` render-prop is portalled from inside the panel up to the top of the workspace — only
+  the panel can build the `⋯` menu it is handed, but app chrome belongs above everything.
 - **`packages/web`** — the full session-control dashboard (TanStack Router, hash history): session
   list, create/resume flow, live panel, jobs view, profiles view, settings. Published as prebuilt
   static files with zero runtime deps (`dashboardDir` is a path, not a component tree) — it is an

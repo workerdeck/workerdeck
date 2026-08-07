@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Link, useNavigate, useParams } from '@tanstack/react-router'
-import type { SessionInfo } from '@workerdeck/protocol'
+import { useSessionInfo } from '@workerdeck/react'
 import {
   AlertDialog,
   AlertDialogClose,
@@ -11,7 +11,7 @@ import {
   Badge,
   Button,
   CopyButton,
-  SessionPanel,
+  SessionWorkspace,
   toast,
 } from '@workerdeck/ui'
 import { ArrowLeft, Trash2 } from 'lucide-react'
@@ -20,23 +20,16 @@ import { client } from '@/lib/client.ts'
 export function SessionView() {
   const { sessionId } = useParams({ from: '/sessions/$sessionId' })
   const navigate = useNavigate()
-  const [info, setInfo] = useState<SessionInfo | undefined>()
+  // The workspace asks for this record too, and the client de-dupes nothing —
+  // but it is one small GET per session view, and the alternative is threading
+  // the panel's session state back out through a prop nobody else wants.
+  const { info, error } = useSessionInfo(client, sessionId)
 
   useEffect(() => {
-    let cancelled = false
-    client
-      .getSession(sessionId)
-      .then((s) => {
-        if (!cancelled) setInfo(s)
-      })
-      .catch(() => {
-        toast.error('Session not found')
-        void navigate({ to: '/sessions' })
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [sessionId, navigate])
+    if (!error) return
+    toast.error('Session not found')
+    void navigate({ to: '/sessions' })
+  }, [error, navigate])
 
   const close = async () => {
     try {
@@ -52,7 +45,7 @@ export function SessionView() {
   const project = info?.cwd?.split('/').filter(Boolean).pop()
 
   return (
-    <SessionPanel
+    <SessionWorkspace
       key={sessionId}
       client={client}
       sessionId={sessionId}

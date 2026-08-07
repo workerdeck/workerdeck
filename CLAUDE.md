@@ -10,7 +10,7 @@ protocol. Read these before changing scope or structure:
 - `docs/ROADMAP.md` — shipped / next / open questions. Non-goals (don't relitigate): serverless
   hosting, multi-tenant SaaS, claude.ai auth.
 
-## Layout
+## Layouts
 
 - `packages/protocol` — wire types (events/commands/REST). Dependency-free, browser-safe, depends
   on nothing and everything depends on it. Breaking → bump `PROTOCOL_VERSION`.
@@ -86,6 +86,13 @@ protocol. Read these before changing scope or structure:
   (`src/transcript.ts`, framework-free, unit-tested — keep rendering out), the composer's two
   companions (`useAttachments` — staging + upload, filtered by the capability record;
   `useHostFileSearch` — `@file` search rooted at the session cwd, self-disabling on a 404), the
+  workspace's headless half (`useHostFileTree` + the pure `flattenHostTree`; `useOpenFiles` + the
+  pure `openFilesReducer`, which keeps `content` (disk) and `draft` (edits) apart and carries each
+  tab's `hash`, because `/fs/write` is conditional *always* — a 409 is a **choice** to offer
+  (reload / keep mine / dismiss), never a message, and nothing but `revert` and an explicit reload
+  may discard a draft; `useHostFileRoots` for `canWrite`, which is a *separate* server opt-in from
+  reading and defaults off; `useSessionInfo`, one REST record — never a second `useClaudeSession`,
+  see the bridge rule below), the
   other pure helpers that both clients must agree on (`rateLimitWindows`, `scanPromptTokens` —
   the mirror of the Swift `PromptTokens`), and the browser tool host (`tool-host.ts`) running
   server-bridged calls in the tab. Companions must ride the hook's own `handle` — the bridge asks
@@ -97,9 +104,29 @@ protocol. Read these before changing scope or structure:
   whole session surface — transcript, composer (attachments, `/` and `@` completion), and the
   panels behind its status bar and `⋯` menu (session info, context, plan usage, MCP, project
   files) — each gated on the capability record, so one component is correct for every engine.
+  `SessionWorkspace` is the VS Code-shaped layout *around* it (file rail, tabs, read-only viewer,
+  hand-rolled `Splitter` — Base UI ships none) and is **strictly additive**: an embedder picks the
+  panel or the workspace, and `SessionPanel` is untouched by it. Two invariants there — the editor
+  region is *absent* from the layout when no file is open (not zero-height), and `SessionPanel`
+  keeps its child index across that transition, because remounting it drops the WS attach and the
+  whole transcript. The embedder's `header` is portalled out of the panel to the top of the
+  workspace, since only the panel can build the `⋯` menu it is handed. The editor is **Monaco**
+  (`CodeEditor.tsx`), `import()`ed so it is a lazy chunk — the dashboard's first paint is unchanged
+  and its ~100 language grammars load per file type. One Monaco model per path, kept across tab
+  switches so undo history survives. Monaco reaches its workers with `new URL(…, import.meta.url)`,
+  which Rollup resolves at build time but **Vite's dev dep-optimizer breaks** by rewriting the
+  package into `.vite/deps/` — hence `optimizeDeps.exclude: ['monaco-editor']` in `web`, without
+  which Monaco silently runs its worker code on the main thread. Any Vite-based embedder needs the
+  same line. `web` also aliases away Monaco's four **worker-backed language services**
+  (ts/json/css/html) — 8.8MB of build output, `ts.worker` alone being 6.7MB of TypeScript
+  compiler — so `dist/` is 7.9MB rather than 17MB, which matters because `npx workerdeck` ships it.
+  Highlighting is untouched by that: Monarch grammars (`languages/definitions/*`) are a separate
+  main-thread mechanism, and TS/JSON/CSS files still colour correctly. The alias lives in `web`'s
+  config and not behind a hand-written Monaco entry because such an entry must also import two CSS
+  files and monaco's exports map (`"./*": "./esm/vs/*.js"`) cannot resolve a `.css` subpath at all.
 - `packages/web` — dashboard (TanStack Router, hash history); create forms are engine-aware via
   `src/lib/engine.ts`, reconciling sticky localStorage choices against the chosen profile. The
-  session runner is `@workerdeck/ui`'s `SessionPanel` — the dashboard adds only the header, so a
+  session runner is `@workerdeck/ui`'s `SessionWorkspace` — the dashboard adds only the header, so a
   session feature belongs in `ui`/`react` and every embedder gets it too. Published
   as prebuilt static files with **zero runtime deps** — React/router/Tailwind are compiled into
   `dist/`, so every one of them is a devDep; the entry (`entry.mjs`, hand-written, never bundled) is
@@ -180,10 +207,12 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
 - test: `pnpm test`
 - push: yes — branch `master`, repo is public, and every push deploys the docs site.
 - version_bump: yes — `pnpm version:set <x.y.z> && pnpm install --lockfile-only` (the 10 packages
-  only; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.9.0 on master
-  (protocol **7** + the codex engine + the session-runner parity work + codex skills, produced
-  files and MCP status; it absorbed the never-published 0.8.0, and unreleased work keeps landing
-  in it rather than inflating the number), 0.7.0 is the latest published — tag `v0.9.0` to release it.
+  only; `workspace:*` needs no bumping, so the lockfile step is a no-op). **0.9.0 is tagged and
+  published** (protocol **7** + the codex engine + the session-runner parity work + codex skills,
+  produced files and MCP status; it absorbed the never-published 0.8.0). Master still *reads*
+  0.9.0 but has moved past it — codex skills/images, the MCP panel, and the session workspace all
+  landed after the tag, so the next release is a **minor**: set the version, then tag it. Check
+  `git log v<latest>..HEAD` before assuming the number in `package.json` is unreleased.
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees

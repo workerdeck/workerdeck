@@ -151,6 +151,20 @@ master; 0.7.0 is the latest published).
   with each server's `env` and HTTP `headers` stripped on the way out, so the route can never
   become a way to read the operator's tokens. The iOS app gained an Add Media sheet (camera /
   photos / files, HEIC transcoded and photos downscaled on device) and the four `/mcp` screens.
+- **Session workspace — a VS Code-shaped layout around a live session.** `SessionWorkspace` in
+  `@workerdeck/ui`: project tree and fuzzy search on the left, editor tabs above, the agent
+  below, and the agent claiming the whole column when nothing is open. Strictly additive —
+  `SessionPanel` is untouched and an embedder picks either. The headless half is in
+  `@workerdeck/react` (`useHostFileTree`, `useOpenFiles`, `useHostFileRoots`, `useSessionInfo`,
+  with pure `flattenHostTree` / `openFilesReducer` cores under unit test); `ui` only renders.
+  It needed no new backend — `/fs/list`, `/fs/read`, `/fs/find`, `/fs/roots` and `/fs/write`
+  were already there. **Editing is Monaco**, dynamically imported so it costs nothing until a
+  file is opened, with saves conditional on the hash the tab read: a collision with the agent's
+  own edit is a 409 offered as a choice (take disk / keep mine / dismiss), never a silent
+  overwrite in either direction, and `hostFiles.write` still gates whether the editor is
+  writable at all. Monaco's worker-backed language services are aliased out of the dashboard
+  build (8.8MB, `ts.worker` alone being 6.7MB of TypeScript compiler); syntax highlighting is a
+  separate main-thread mechanism and is unaffected.
 
 ## Next
 

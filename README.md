@@ -96,7 +96,8 @@ const session = await client.createSession({
 <SessionPanel client={client} sessionId={session.id} />
 ```
 
-There's a rung for every level of control: the styled `SessionPanel`, the headless
+There's a rung for every level of control: `SessionWorkspace` (the panel plus a VS Code-shaped
+file tree and Monaco editor around it), the styled `SessionPanel`, the headless
 `useClaudeSession` hook, the raw event stream (`client.attach(id).on('event', …)`), or
 `SessionRunner` from `@workerdeck/core` in-process with no server at all. See the
 [embedding guide](https://workerdeck.github.io/workerdeck/docs/guides/embedding/).
