@@ -84,6 +84,19 @@ master; 0.7.0 is the latest published).
   app browses and edits over it, scoped to the open session's cwd, and completes `@file` in the
   composer against `/fs/find`. Covered by tests on both halves; not yet exercised against a live
   gateway from a phone.
+- **Codex MCP status, read-only by design** — `mcpStatus: false` for codex turned out to be a
+  stale declaration rather than a limitation: `mcpServerStatus/list` answers, and answers *richer*
+  than Claude's, carrying each tool's full JSON Schema where the Agent SDK carries none. So
+  `McpServerToolInfo.inputSchema` is optional and both clients render parameters where they exist.
+  Two things the schema does not say, both found by probing the binary: liveness is not in the
+  list response (it arrives on `mcpServer/startupStatus/updated`, which fires *only* for servers
+  that come up while attached — so tools-imply-connected is load-bearing, not a nicety), and
+  listing is not acting (nothing on this transport reconnects or toggles one server, so
+  `mcpServerActions` splits off from `mcpStatus` and the route 501s a POST the runner cannot
+  serve — it previously no-opped through optional chaining and answered 200). Both the skills and
+  MCP panels now answer *before the session has connected*, over a throwaway child, because a
+  codex session spawns nothing until it has work and a panel that says "none configured" until the
+  first turn is stating something false about the operator's config.
 - **Codex skills, and generated images that just appear** (`PROTOCOL_VERSION` 7) — two follow-ups
   from the codex engine, both found by dumping the binary's own schema rather than guessing.
   *Skills*: `skills/list` (plus the `skills/changed` watcher) reaches clients as its own `skills`
