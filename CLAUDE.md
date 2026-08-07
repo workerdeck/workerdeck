@@ -207,12 +207,12 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
 - test: `pnpm test`
 - push: yes — branch `master`, repo is public, and every push deploys the docs site.
 - version_bump: yes — `pnpm version:set <x.y.z> && pnpm install --lockfile-only` (the 10 packages
-  only; `workspace:*` needs no bumping, so the lockfile step is a no-op). **0.9.0 is tagged and
-  published** (protocol **7** + the codex engine + the session-runner parity work + codex skills,
-  produced files and MCP status; it absorbed the never-published 0.8.0). Master still *reads*
-  0.9.0 but has moved past it — codex skills/images, the MCP panel, and the session workspace all
-  landed after the tag, so the next release is a **minor**: set the version, then tag it. Check
-  `git log v<latest>..HEAD` before assuming the number in `package.json` is unreleased.
+  only; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.9.0 is published
+  (protocol **7** + the codex engine + the session-runner parity work; it absorbed the
+  never-published 0.8.0). **0.10.0 on master** — codex skills and generated images, the codex MCP
+  panel, and the session workspace with its Monaco editor; protocol stays **7**. Tag `v0.10.0` to
+  release it. Always check `git log v<latest>..HEAD` before assuming the number in `package.json`
+  is unreleased — 0.9.0 sat on master for 15 commits *after* it had shipped.
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees

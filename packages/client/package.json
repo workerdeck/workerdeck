@@ -1,6 +1,6 @@
 {
   "name": "@workerdeck/client",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "type": "module",
   "description": "Typed WorkerDeck protocol client for browsers and Node: REST session management plus a WebSocket attach with auto-reconnect and replay-from-last-seq. Uses the platform's fetch and WebSocket; zero runtime deps.",
   "license": "MIT",
