@@ -84,14 +84,20 @@ pretends otherwise):
   sidebar via the extension host.
 - **WorkerDeck sidebar** — management and switching. The **Sessions** view lists **every
   gateway's sessions at once**: the gateway is a facet, not the frame the list lives in. One
-  view-title icon toggles the whole view config (search + gateway/adapter/state filters +
+  view-title icon toggles the whole view config (search + scope/gateway/adapter/state filters +
   group and sort), which persists across reloads in webview state; a second opens the
-  **Gateways** screen, the only place a gateway is viewed, added, edited or removed. Session
+  **Gateways** screen, the only place a gateway is viewed, added, edited or removed. The
+  window's **open folders are a facet too, and the only one on by default** — a session counts
+  as inside a folder only where its gateway could be (a real folder scopes loopback gateways;
+  a `workerdeck://` mount scopes its own), and because it hides without being asked, the scope
+  and a one-click "show all" sit above the list rather than behind the icon. Session
   cards are rich (spinner while working, ringing bell when a human is needed,
   age/model/folder/turns/cost, a `⋯` menu with Rename/Stop/Delete) and renameable in place —
   a rename is a `PATCH /sessions/:id` on the gateway, so the dashboard and the phone see the
   same name; clearing it restores the derived title. New Session and the gateway form are
-  **pushed screens** with a back arrow. There is no implicit localhost gateway: an
+  **pushed screens** with a back arrow. New Session is also the **resume** picker where the
+  engine has a browsable store: it lists what is on disk for that directory and profile, and
+  picking one continues that engine session instead of starting a fresh one. There is no implicit localhost gateway: an
   unconfigured install shows an empty list with an add affordance rather than a phantom
   entry that is usually unreachable. The scoped surfaces —
   **Session Info / Context / Usage / MCP Servers** — are each their **own VS Code view**
