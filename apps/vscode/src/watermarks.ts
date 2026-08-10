@@ -50,12 +50,17 @@ export class Watermarks {
    * Record what is on screen now. Monotonic on purpose: a transcript that
    * *shrank* (a compaction, a fresh attach mid-replay) must not walk the mark
    * backwards and resurrect rows the user already read.
+   *
+   * Returns whether the mark actually moved, because the unread badge is
+   * computed from it and nothing else will say so: rows read in the panel do
+   * not touch the sessions poll, so a caller that doesn't hear about this has
+   * no other way to learn the count is now wrong.
    */
   mark(
     hostId: string,
     sessionId: string,
     seen: { itemCount?: number; activity?: number; turns?: number },
-  ): void {
+  ): boolean {
     const id = key(hostId, sessionId)
     const previous = this.#cache[id]
     const next: Watermark = {
@@ -73,10 +78,11 @@ export class Watermarks {
       // hammering globalState on every streamed row.
       next.seenAt - previous.seenAt < 60_000
     ) {
-      return
+      return false
     }
     this.#cache[id] = next
     void this.#memento.update(KEY, this.#prune())
+    return true
   }
 
   /** Forget a session — it was deleted, and its mark is now noise. */

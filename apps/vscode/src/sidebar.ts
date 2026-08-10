@@ -99,18 +99,34 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
   }
 
   #pushState(): void {
-    if (!this.#view || !this.#ready) return
+    if (this.#view && this.#ready) {
+      this.#post({ kind: 'wd-sidebar-state', state: this.#model.sidebarState() })
+    }
+    this.refreshBadge()
+  }
+
+  /**
+   * Recompute the activity-bar badge alone.
+   *
+   * Separate from the state push, and public, because the two have different
+   * triggers and different preconditions. The webview can only be told things
+   * once it has said `wd-ready`; the badge is a property of the *view* and is
+   * the one thing still worth maintaining while nobody is looking at the list —
+   * it is what tells you to look. And the event that most often makes it wrong
+   * is not a poll at all: reading a session in the panel moves its watermark,
+   * which no model change announces. Gating this on `#ready` is how the badge
+   * came to sit at a stale count until the sidebar was next opened.
+   */
+  refreshBadge(): void {
+    if (!this.#view) return
     const state = this.#model.sidebarState()
-    this.#post({ kind: 'wd-sidebar-state', state })
-    // The activity-bar badge: everything new, in rows — the same unit the cards
-    // and the panel's recap count in, so the numbers add up across surfaces. It
-    // is deliberately every session on every gateway, not the filtered list: a
-    // filter is a view preference, this is "how much has happened".
-    // Sessions waiting on a human are the more urgent thing but not a bigger
-    // number, so they lead the tooltip rather than replacing the count.
-    // Only the rows the list is actually showing: a badge announcing work in a
-    // session the filter (or the workspace scope, which is on by default) is
-    // hiding sends you looking for something that isn't there.
+    // The badge counts in **rows** — the same unit the cards and the panel's
+    // recap use, so the numbers add up across surfaces — and only over the rows
+    // the list is actually showing: a badge announcing work in a session the
+    // filter (or the workspace scope, which is on by default) is hiding sends
+    // you looking for something that isn't there. Sessions waiting on a human
+    // are the more urgent thing but not a bigger number, so they lead the
+    // tooltip rather than replacing the count.
     const visible = filterRows(buildRows(state), this.#viewConfig, state.scope)
     const rows = visible.reduce(
       (total, row) => total + (state.unseen?.[`${row.hostId}:${row.info.id}`] ?? 0),

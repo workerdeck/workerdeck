@@ -40,11 +40,18 @@ export function activate(context: vscode.ExtensionContext): void {
     const active = panel.active
     if (!active || (!panel.visible && !force)) return
     const info = model.sessionsOf(active.host.id).find((s) => s.id === active.sessionId)
-    watermarks.mark(active.host.id, active.sessionId, {
+    const moved = watermarks.mark(active.host.id, active.sessionId, {
       itemCount: vitals?.itemCount,
       activity: info?.activityCount,
       turns: info?.numTurns,
     })
+    // Reading rows is the *other* way the unread count changes, and it is silent
+    // — no poll, no model event. Without this the badge holds whatever it last
+    // computed: you answer the prompts, read the session, and the activity bar
+    // still says (2) until something unrelated happens to refresh it. (Guarded
+    // because a poll can land before `sidebar` is assigned; that path fires
+    // `#pushState` for itself a moment later.)
+    if (moved) sidebar?.refreshBadge()
   }
 
   const feed = {
