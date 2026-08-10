@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Brain, ChevronDown } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
 import { Response } from './Response.tsx'
+import { LineGlyph, useLines } from './transcript-variant.tsx'
 
 export interface ReasoningProps {
   children: string
@@ -14,6 +15,7 @@ export interface ReasoningProps {
 /** Collapsible extended-thinking block: open while the model is thinking, tucks itself
  * away once the thought is finished (unless the user toggled it manually). */
 export function Reasoning({ children, isStreaming = false, defaultOpen, className }: ReasoningProps) {
+  const lines = useLines()
   const [open, setOpen] = useState(defaultOpen ?? isStreaming)
   const userToggled = useRef(false)
 
@@ -41,15 +43,28 @@ export function Reasoning({ children, isStreaming = false, defaultOpen, classNam
           userToggled.current = true
           setOpen((v) => !v)
         }}
-        className='flex items-center gap-1.5 text-label text-fg-3 transition-colors outline-none disabled:cursor-default hover:text-fg-1 disabled:hover:text-fg-3'>
-        <Brain className='size-3.5' />
-        <span>{isStreaming ? 'Thinking…' : 'Thought process'}</span>
-        {hasText ? (
+        className={cn(
+          'flex items-baseline text-label text-fg-3 transition-colors outline-none disabled:cursor-default hover:text-fg-1 disabled:hover:text-fg-3',
+          lines ? 'w-full gap-2' : 'items-center gap-1.5',
+        )}>
+        {lines ? (
+          <LineGlyph className='text-fg-4'>✻</LineGlyph>
+        ) : (
+          <Brain className='size-3.5' />
+        )}
+        <span className={cn(lines && 'leading-5')}>
+          {isStreaming ? 'Thinking…' : 'Thought process'}
+        </span>
+        {hasText && !lines ? (
           <ChevronDown className={cn('size-3.5 transition-transform', open && 'rotate-180')} />
         ) : null}
       </button>
       {open && hasText ? (
-        <div className='mt-2 border-l-2 border-border pl-3 text-body-sm text-fg-3 [&_*]:text-fg-3'>
+        <div
+          className={cn(
+            'border-l border-border text-body-sm text-fg-3 [&_*]:text-fg-3',
+            lines ? 'ml-[0.4375rem] mt-0.5 pl-2 leading-5' : 'mt-2 border-l-2 pl-3',
+          )}>
           <Response streaming={isStreaming}>{children}</Response>
         </div>
       ) : null}

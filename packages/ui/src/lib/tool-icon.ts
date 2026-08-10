@@ -72,3 +72,25 @@ export function toolIcon(toolName: string): LucideIcon {
       return toolName.startsWith('mcp__') ? Puzzle : Wrench
   }
 }
+
+/**
+ * Does this tool *change* the workspace?
+ *
+ * Worth its own colour in a transcript: skimming a run, "what did it edit" is a
+ * different question from "what did it look at", and a write is the one you
+ * might need to undo. Names from both first-party engines; an MCP tool is
+ * unknowable from its name, so it reads as neutral rather than guessed.
+ */
+export function isMutatingTool(toolName: string): boolean {
+  switch (toolName) {
+    case 'Write':
+    case 'Edit':
+    case 'MultiEdit':
+    case 'NotebookEdit':
+    case 'Update':
+    case 'CodexFileChange':
+      return true
+    default:
+      return false
+  }
+}

@@ -66,6 +66,7 @@ export {
 // Agent-control components
 export {
   SessionPanel,
+  type SessionControls,
   type SessionPanelProps,
   type SessionSurfacePanel,
   type SessionVitals,
@@ -81,6 +82,11 @@ export {
   type ConversationProps,
 } from './components/agent/Conversation.tsx'
 export { Message, MessageContent, type MessageProps } from './components/agent/Message.tsx'
+export {
+  TranscriptVariantProvider,
+  useTranscriptVariant,
+  type TranscriptVariant,
+} from './components/agent/transcript-variant.tsx'
 export { Response, type ResponseProps } from './components/agent/Response.tsx'
 export { Reasoning, type ReasoningProps } from './components/agent/Reasoning.tsx'
 export { Loader } from './components/agent/Loader.tsx'
@@ -105,7 +111,9 @@ export { ModelSelect, type ModelSelectProps } from './components/agent/ModelSele
 export {
   PERMISSION_MODES,
   PermissionModeSelect,
+  permissionModeChoices,
   permissionModeMeta,
+  type PermissionModeChoice,
   type PermissionModeMeta,
   type PermissionModeSelectProps,
 } from './components/agent/PermissionModeSelect.tsx'
@@ -135,7 +143,7 @@ export { STATUS_META } from './components/agent/status.ts'
 // Utilities
 export { cn } from './lib/utils.ts'
 export { copyText } from './lib/clipboard.ts'
-export { toolIcon } from './lib/tool-icon.ts'
+export { isMutatingTool, toolIcon } from './lib/tool-icon.ts'
 export {
   formatAgoPrecise,
   formatBytes,
@@ -146,6 +154,7 @@ export {
   formatRateLimitWindowLong,
   formatRelativeTime,
   formatTokens,
+  friendlyModel,
   rateLimitWindowSeconds,
   toolInputPreview,
 } from './lib/format.ts'

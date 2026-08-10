@@ -7,17 +7,55 @@ export interface CodeBlockProps {
   /** Header label, e.g. a language or "Parameters". */
   label?: ReactNode
   copyable?: boolean
+  /**
+   * `'panel'` (default) is the framed card: border, header strip, rounded.
+   * `'plain'` is the terminal treatment — the label is a dim line, the code a
+   * flat band, and copy is a character. For surfaces where a box around every
+   * payload is more chrome than content (the transcript's `lines` variant).
+   *
+   * A prop rather than a read of the transcript's variant context: this is a
+   * `ui/` primitive and has no business knowing what a transcript is. The agent
+   * component that renders it does.
+   */
+  variant?: 'panel' | 'plain'
   className?: string
 }
 
 /** Plain (unhighlighted) code panel for structured data like tool inputs. Markdown code
  * inside assistant responses is highlighted by <Response> instead. */
-export function CodeBlock({ code, label, copyable = true, className }: CodeBlockProps) {
+export function CodeBlock({
+  code,
+  label,
+  copyable = true,
+  variant = 'panel',
+  className,
+}: CodeBlockProps) {
+  const plain = variant === 'plain'
+  const header = label !== undefined || copyable
+
+  if (plain) {
+    return (
+      <div data-slot='code-block' data-variant='plain' className={cn('min-w-0', className)}>
+        {header ? (
+          <div className='flex items-baseline justify-between gap-2'>
+            <span className='truncate text-label leading-5 text-fg-4'>{label}</span>
+            {copyable ? (
+              <CopyButton glyph value={code} className='size-5 shrink-0 rounded-sm' />
+            ) : null}
+          </div>
+        ) : null}
+        <pre className='max-h-64 overflow-auto bg-code-bg px-2 font-mono text-label leading-5 whitespace-pre-wrap text-fg-2'>
+          {code}
+        </pre>
+      </div>
+    )
+  }
+
   return (
     <div
       data-slot='code-block'
       className={cn('overflow-hidden rounded-md border border-border bg-code-bg', className)}>
-      {label !== undefined || copyable ? (
+      {header ? (
         <div className='flex h-8 items-center justify-between border-b border-border px-2.5'>
           <span className='font-mono text-label text-fg-3'>{label}</span>
           {copyable ? <CopyButton value={code} /> : null}

@@ -6,9 +6,19 @@ import { cn } from '../../lib/utils.ts'
 
 export interface CopyButtonProps extends Omit<ButtonProps, 'onClick' | 'children'> {
   value: string
+  /** Draw the state as characters (`⧉` / `✓`) rather than line-art icons — for
+   * terminal-styled surfaces, where an SVG reads as another app's button. */
+  glyph?: boolean
 }
 
-export function CopyButton({ value, className, variant = 'ghost', size = 'icon-sm', ...props }: CopyButtonProps) {
+export function CopyButton({
+  value,
+  glyph,
+  className,
+  variant = 'ghost',
+  size = 'icon-sm',
+  ...props
+}: CopyButtonProps) {
   const [copied, setCopied] = useState(false)
   return (
     <Button
@@ -29,7 +39,15 @@ export function CopyButton({ value, className, variant = 'ghost', size = 'icon-s
         })
       }}
       {...props}>
-      {copied ? <Check className='size-3.5 text-success' /> : <Copy className='size-3.5' />}
+      {glyph ? (
+        <span className={cn('font-mono text-body-sm leading-5', copied && 'text-success')}>
+          {copied ? '✓' : '⧉'}
+        </span>
+      ) : copied ? (
+        <Check className='size-3.5 text-success' />
+      ) : (
+        <Copy className='size-3.5' />
+      )}
     </Button>
   )
 }

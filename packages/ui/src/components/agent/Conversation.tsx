@@ -6,17 +6,25 @@ import { cn } from '../../lib/utils.ts'
 
 export interface ConversationProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
   children: ReactNode
+  /**
+   * How the view follows content that grows. `'smooth'` is right for a live
+   * turn — the text scrolls as it is written. `'instant'` is right while a
+   * transcript is *filling* (an attach replaying a whole session), where
+   * animating each arrival makes opening a session a several-second journey
+   * from its first row to its last.
+   */
+  resize?: 'smooth' | 'instant'
 }
 
 /** Scroll container that stays pinned to the bottom while streaming, unless the user
  * scrolls up — plus a floating scroll-to-bottom button. */
-export function Conversation({ className, children, ...props }: ConversationProps) {
+export function Conversation({ className, children, resize = 'smooth', ...props }: ConversationProps) {
   return (
     <StickToBottom
       data-slot='conversation'
       className={cn('relative flex-1 overflow-y-auto', className)}
       initial='instant'
-      resize='smooth'
+      resize={resize}
       role='log'
       {...props}>
       {children}

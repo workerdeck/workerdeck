@@ -30,6 +30,8 @@ export type ComposerHandle = {
   /** Append plain text at the caret's end and focus, separating it from
    * whatever is already there. */
   insertText: (text: string) => void
+  /** Put the caret in the field, changing nothing. */
+  focus: () => void
 }
 
 export interface ComposerProps {
@@ -58,6 +60,14 @@ export interface ComposerProps {
   attachments?: UseAttachmentsResult
   /** Left side of the toolbar row (mode selects, …). */
   toolbar?: ReactNode
+  /**
+   * `'stacked'` (default) gives the buttons a row of their own under the field —
+   * right where a toolbar belongs. `'inline'` puts the field and the buttons on
+   * ONE line, growing from a single row as the message does: for a host whose
+   * session controls live in its own chrome (VS Code's status bar), where the
+   * empty composer would otherwise spend two rows saying nothing.
+   */
+  layout?: 'stacked' | 'inline'
   className?: string
   ref?: Ref<ComposerHandle>
 }
@@ -125,9 +135,11 @@ export function Composer({
   onSearchFiles,
   attachments,
   toolbar,
+  layout = 'stacked',
   className,
   ref,
 }: ComposerProps) {
+  const inline = layout === 'inline'
   const { bind, plainText, isEmpty, clear, focus } = usePromptAreaState()
   const fileInput = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -142,6 +154,7 @@ export function Composer({
         bind.ref.current?.appendText(prefix + text)
         focus()
       },
+      focus,
     }),
     [bind.ref, plainText, focus],
   )
@@ -273,6 +286,81 @@ export function Composer({
     if (files && files.length > 0) attachments?.add(files)
   }
 
+  // Built once, placed twice: the stacked layout gives these a toolbar row, the
+  // inline one sets them either side of the field. An attach affordance the
+  // engine has no meaning for is not a choice — the capability record decides it
+  // exists.
+  const fileField =
+    attachments && !attachments.disabled ? (
+      <input
+        ref={fileInput}
+        type='file'
+        multiple
+        accept={attachments.accept || undefined}
+        className='hidden'
+        onChange={(e) => {
+          pick(e.target.files)
+          // Re-picking the same file must fire `change` again.
+          e.target.value = ''
+        }}
+      />
+    ) : null
+  const canAttach = !!attachments && !attachments.disabled
+
+  const attach = canAttach ? (
+    <>
+      {fileField}
+      {inline ? (
+        // The glyph sits in the same 14px gutter the transcript's markers use,
+        // so the typed line starts on the column the conversation does.
+        <GlyphButton label='Attach files' disabled={disabled} onClick={() => fileInput.current?.click()}>
+          +
+        </GlyphButton>
+      ) : (
+        <Button
+          variant='ghost'
+          size='icon-sm'
+          aria-label='Attach files'
+          disabled={disabled}
+          onClick={() => fileInput.current?.click()}>
+          <Paperclip className='size-4' />
+        </Button>
+      )}
+    </>
+  ) : null
+
+  const interrupting = busy && !canSend
+  const submitButton = inline ? (
+    // Terminal furniture rather than chat furniture: a glyph that lights up on
+    // hover/focus instead of a filled pill. `↵` is what sends, `■` is what stops
+    // — the same two symbols the keyboard and a shell already use.
+    <GlyphButton
+      label={interrupting ? 'Interrupt' : 'Send'}
+      disabled={!interrupting && !canSend}
+      onClick={interrupting ? onInterrupt : submit}
+      className={interrupting ? 'text-warning' : canSend ? 'text-accent' : undefined}>
+      {interrupting ? '■' : '↵'}
+    </GlyphButton>
+  ) : interrupting ? (
+    <Button
+      variant='outline'
+      size='icon-sm'
+      aria-label='Interrupt'
+      className='rounded-full'
+      onClick={onInterrupt}>
+      <Square className='size-3' />
+    </Button>
+  ) : (
+    <Button
+      size='icon-sm'
+      aria-label='Send'
+      className='rounded-full'
+      disabled={!canSend}
+      onClick={submit}>
+      <ArrowUp className='size-4' />
+    </Button>
+  )
+
   return (
     <div data-slot='composer' className={cn('px-3 pb-3', className)}>
       <div
@@ -299,68 +387,51 @@ export function Composer({
         {staged.length > 0 && attachments ? (
           <AttachmentStrip attachments={attachments} />
         ) : null}
-        <PromptArea
-          {...bind}
-          triggers={triggers}
-          onSubmit={submit}
-          disabled={disabled}
-          placeholder={disabled ? 'Session ended' : placeholder}
-          minHeight={28}
-          maxHeight={192}
-          aria-label='Message the agent'
-          className='px-3 pt-2.5 pb-1 text-body-sm text-text'
-          onImagePaste={(file) => attachments?.add([file])}
-        />
-        <div className='flex items-center justify-between gap-2 px-2 pb-2'>
-          <div className='flex min-w-0 items-center gap-1'>
-            {/* An attach affordance the engine has no meaning for is not a
-                choice — the capability record decides whether it exists. */}
-            {attachments && !attachments.disabled ? (
-              <>
-                <input
-                  ref={fileInput}
-                  type='file'
-                  multiple
-                  accept={attachments.accept || undefined}
-                  className='hidden'
-                  onChange={(e) => {
-                    pick(e.target.files)
-                    // Re-picking the same file must fire `change` again.
-                    e.target.value = ''
-                  }}
-                />
-                <Button
-                  variant='ghost'
-                  size='icon-sm'
-                  aria-label='Attach files'
-                  disabled={disabled}
-                  onClick={() => fileInput.current?.click()}>
-                  <Paperclip className='size-4' />
-                </Button>
-              </>
-            ) : null}
-            {toolbar}
+        {inline ? (
+          // One row until the message needs more: the field grows into the space
+          // rather than the frame reserving it, and the buttons stay bottom-
+          // aligned as it does. 4px of padding and gap all round against 24px
+          // buttons and a 24px line box (20px of text, 2px either side) — on a
+          // single line everything centres without anything being nudged.
+          <div className='flex items-end gap-1 p-1'>
+            {attach}
+            <PromptArea
+              {...bind}
+              triggers={triggers}
+              onSubmit={submit}
+              disabled={disabled}
+              placeholder={disabled ? 'Session ended' : placeholder}
+              minHeight={20}
+              maxHeight={192}
+              aria-label='Message the agent'
+              className='min-w-0 flex-1 py-0.5 text-body-sm text-text'
+              onImagePaste={(file) => attachments?.add([file])}
+            />
+            {submitButton}
           </div>
-          {busy && !canSend ? (
-            <Button
-              variant='outline'
-              size='icon-sm'
-              aria-label='Interrupt'
-              className='rounded-full'
-              onClick={onInterrupt}>
-              <Square className='size-3' />
-            </Button>
-          ) : (
-            <Button
-              size='icon-sm'
-              aria-label='Send'
-              className='rounded-full'
-              disabled={!canSend}
-              onClick={submit}>
-              <ArrowUp className='size-4' />
-            </Button>
-          )}
-        </div>
+        ) : (
+          <>
+            <PromptArea
+              {...bind}
+              triggers={triggers}
+              onSubmit={submit}
+              disabled={disabled}
+              placeholder={disabled ? 'Session ended' : placeholder}
+              minHeight={28}
+              maxHeight={192}
+              aria-label='Message the agent'
+              className='px-3 pt-2.5 pb-1 text-body-sm text-text'
+              onImagePaste={(file) => attachments?.add([file])}
+            />
+            <div className='flex items-center justify-between gap-2 px-2 pb-2'>
+              <div className='flex min-w-0 items-center gap-1'>
+                {attach}
+                {toolbar}
+              </div>
+              {submitButton}
+            </div>
+          </>
+        )}
       </div>
       {attachments?.error ? (
         <div className='mx-auto mt-1 flex w-full max-w-[var(--wd-content-max-w,48rem)] items-center gap-2 text-label text-danger'>
@@ -382,6 +453,45 @@ export function Composer({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * A composer action as a **character**, for the inline (terminal) layout: no
+ * pill, no border, nothing drawn until you reach for it — the surface only
+ * appears on hover/focus/press, which is how a terminal's own affordances
+ * behave. Sized to the transcript's gutter glyph (14px) so the row's furniture
+ * lines up with the conversation above it rather than towering over it.
+ */
+function GlyphButton({
+  label,
+  disabled,
+  onClick,
+  className,
+  children,
+}: {
+  label: string
+  disabled?: boolean
+  onClick: () => void
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <button
+      type='button'
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'flex size-6 shrink-0 items-center justify-center rounded-sm font-mono text-body-sm leading-none',
+        'text-fg-3 transition-colors outline-none select-none',
+        'hover:bg-surface-hover hover:text-fg-1 focus-visible:bg-surface-hover focus-visible:text-fg-1',
+        'active:bg-accent-bg disabled:pointer-events-none disabled:opacity-40',
+        className,
+      )}>
+      {children}
+    </button>
   )
 }
 

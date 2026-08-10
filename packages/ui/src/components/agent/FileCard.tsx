@@ -2,6 +2,7 @@ import type { TranscriptItem } from '@workerdeck/react'
 import { Download, FileText } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
 import { formatBytes } from '../../lib/format.ts'
+import { LineGlyph, useLines } from './transcript-variant.tsx'
 
 export type FileDeliveredItem = Extract<TranscriptItem, { kind: 'file_delivered' }>
 
@@ -17,7 +18,32 @@ export interface FileCardProps {
  * The file lives in the session's in-memory VFS — the link works while the
  * session lives. */
 export function FileCard({ item, href, className }: FileCardProps) {
+  const lines = useLines()
   const name = item.path.split('/').pop() || item.path
+  if (lines) {
+    // One row: what arrived, how big, and the link — no box around it.
+    return (
+      <div data-slot='file-delivered' className={cn('flex w-full items-baseline gap-2', className)}>
+        <LineGlyph className='text-fg-4'>◇</LineGlyph>
+        <span className='min-w-0 flex-1 truncate text-body-sm leading-5'>
+          <span className='font-medium text-fg-1'>{name}</span>
+          <span className='text-fg-4'>
+            {' · '}
+            {formatBytes(item.bytes)}
+            {item.description ? ` · ${item.description}` : ''}
+          </span>
+        </span>
+        {href ? (
+          <a
+            href={href}
+            download={name}
+            className='shrink-0 text-label text-fg-3 underline-offset-2 hover:text-fg-1 hover:underline'>
+            download
+          </a>
+        ) : null}
+      </div>
+    )
+  }
   return (
     <div
       data-slot='file-delivered'

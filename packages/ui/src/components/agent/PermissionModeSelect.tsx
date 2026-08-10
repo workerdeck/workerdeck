@@ -85,6 +85,40 @@ export const PERMISSION_MODES: PermissionModeMeta[] = [
 export const permissionModeMeta = (mode: PermissionMode): PermissionModeMeta | undefined =>
   PERMISSION_MODES.find((m) => m.value === mode)
 
+/** One offered mode as plain data — no icon, no React. What a host chrome
+ * outside the panel (a VS Code QuickPick) needs to draw the same list. */
+export type PermissionModeChoice = {
+  value: PermissionMode
+  label: string
+  description: string
+  dangerous?: boolean
+  /** Offered but unreachable: a session not started for bypass can never gain
+   * it, and saying so beats omitting the row. */
+  disabled?: boolean
+}
+
+/**
+ * The modes this session may actually be switched into, with the reasons baked
+ * in — the same filtering {@link PermissionModeSelect} applies, so an embedder
+ * rendering its own picker cannot drift from the panel's.
+ */
+export function permissionModeChoices(
+  modes?: readonly PermissionMode[],
+  canBypass?: boolean,
+): PermissionModeChoice[] {
+  const offered = modes ? PERMISSION_MODES.filter((m) => modes.includes(m.value)) : PERMISSION_MODES
+  return offered.map((m) => ({
+    value: m.value,
+    label: m.label,
+    description:
+      m.value === 'bypassPermissions' && canBypass === false
+        ? 'Only available to a session started in this mode'
+        : m.description,
+    dangerous: m.dangerous,
+    disabled: m.value === 'bypassPermissions' && canBypass === false,
+  }))
+}
+
 export interface PermissionModeSelectProps {
   /** The session's current mode (TranscriptState.permissionMode). */
   mode?: PermissionMode

@@ -113,3 +113,69 @@ export function toolInputPreview(input: unknown, max = 80): string {
   const text = JSON.stringify(input) ?? ''
   return text.length > max ? text.slice(0, max - 1) + '…' : text
 }
+
+/** Families whose name isn't just a capitalised first letter, and how the
+ * vendor writes the version after it. GPT is `GPT-5.6`; everyone else spaces
+ * it. Anything unlisted is title-cased and spaced. */
+const MODEL_FAMILIES: Record<string, { name: string; joiner?: string }> = {
+  gpt: { name: 'GPT', joiner: '-' },
+  deepseek: { name: 'DeepSeek' },
+  glm: { name: 'GLM' },
+  qwen: { name: 'Qwen' },
+  kimi: { name: 'Kimi' },
+  llama: { name: 'Llama' },
+  mistral: { name: 'Mistral' },
+  grok: { name: 'Grok' },
+}
+
+/**
+ * The name a person says, from a wire model id:
+ *
+ * - `claude-opus-5[1m]` → "Opus 5"
+ * - `claude-haiku-4-5-20251001` → "Haiku 4.5"
+ * - `gpt-5.6-luna` → "GPT-5.6 Luna"
+ * - `gemini-2.5-pro` → "Gemini 2.5 Pro"
+ * - `o3-mini` → "o3 Mini"
+ *
+ * Three kinds of token after the family, because vendors mix them freely: a
+ * **version** (`5`, `4-5`, `5.6` — joined with dots, since Anthropic splits what
+ * OpenAI writes as one token), a **code name or tier** (`luna`, `codex`, `pro`,
+ * `mini` — kept and capitalised, since it is often the only thing telling two
+ * models apart), and a **snapshot date** (`20251001` — dropped; it is a build,
+ * not a version).
+ *
+ * Anything genuinely unreadable falls back to the id: a wrong name is worse than
+ * a raw one, which is at least true.
+ *
+ * The server has a narrower version of this (`friendlyModelName` in core's
+ * `normalize.ts`) that derives Claude catalog names at authoring time. This one
+ * is the *render-time* fallback for an id with no catalog row behind it — the
+ * sidebar has only `SessionInfo.model` — so it has to cope with every vendor the
+ * provider engine can reach, not just the CLI's own.
+ */
+export function friendlyModel(id: string | undefined): string | undefined {
+  if (!id) return undefined
+  const withoutVariant = id.split('[')[0] ?? id
+  const parts = withoutVariant.toLowerCase().split('-').filter(Boolean)
+  if (parts[0] === 'claude') parts.shift()
+  const familyToken = parts.shift()
+  if (!familyToken) return id
+  const family = MODEL_FAMILIES[familyToken]
+  const name =
+    family?.name ??
+    // OpenAI's reasoning series is lower-case by its own convention ('o3-mini'),
+    // and "O3" reads as a different product.
+    (/^o\d+$/.test(familyToken)
+      ? familyToken
+      : `${familyToken.charAt(0).toUpperCase()}${familyToken.slice(1)}`)
+
+  const version: string[] = []
+  const words: string[] = []
+  for (const part of parts) {
+    if (/^\d{8}$/.test(part)) continue
+    if (/^\d+(\.\d+)?$/.test(part)) version.push(part)
+    else words.push(`${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+  }
+  const versioned = version.length > 0 ? `${name}${family?.joiner ?? ' '}${version.join('.')}` : name
+  return [versioned, ...words].join(' ')
+}

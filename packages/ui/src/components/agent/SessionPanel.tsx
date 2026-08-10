@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
-import { PROTOCOL_VERSION } from '@workerdeck/protocol'
+import { PROTOCOL_VERSION, type ModelOption, type PermissionMode } from '@workerdeck/protocol'
 import {
   rateLimitWindows,
   useAttachments,
@@ -31,12 +39,17 @@ import { HostFilesDialog } from './HostFilesDialog.tsx'
 import { McpDialog } from './McpDialog.tsx'
 import { SkillsDialog } from './SkillsDialog.tsx'
 import { ModelSelect } from './ModelSelect.tsx'
-import { PermissionModeSelect } from './PermissionModeSelect.tsx'
+import {
+  PermissionModeSelect,
+  permissionModeChoices,
+  type PermissionModeChoice,
+} from './PermissionModeSelect.tsx'
 import { PermissionPrompt } from './PermissionPrompt.tsx'
 import { QuestionPrompt, parseUserQuestions } from './QuestionPrompt.tsx'
 import { SessionInfoDialog } from './SessionInfoDialog.tsx'
 import { StatusBar } from './StatusBar.tsx'
 import { Transcript } from './Transcript.tsx'
+import type { TranscriptVariant } from './transcript-variant.tsx'
 import { UsageDialog } from './UsageDialog.tsx'
 
 export interface SessionPanelProps {
@@ -87,8 +100,82 @@ export interface SessionPanelProps {
    * status/context/usage into chrome outside the panel (identity-stable via an
    * internal ref, so an inline closure is fine). */
   onVitals?: (vitals: SessionVitals) => void
+  /**
+   * How the transcript draws a turn — `'cards'` (default) or `'lines'`, the
+   * space-efficient terminal treatment: no boxes, no bubbles, one full-width
+   * hover-highlit row per event behind a gutter glyph. An embedder in a dock
+   * (the VS Code panel) wants `'lines'`; a full-width dashboard usually doesn't.
+   */
+  transcriptVariant?: TranscriptVariant
+  /**
+   * Where the session's own controls — model and permission mode — live.
+   * `'internal'` (default) draws them in the composer's toolbar row.
+   * `'external'` draws neither, and the composer collapses to a single line
+   * with its attach/send buttons beside the field: the embedder renders the
+   * pickers in its own chrome (VS Code's status bar, where a click opens a
+   * QuickPick) and drives them through {@link onControls}.
+   *
+   * The options themselves ride {@link SessionVitals} — an embedder must not
+   * attach a second time to learn what the models are.
+   */
+  controlsSurface?: 'internal' | 'external'
+  /**
+   * Handed the session's setters once the panel is live, and `undefined` on
+   * unmount. The counterpart to `controlsSurface: 'external'`: vitals carry the
+   * readings out, this carries the commands back in. Stable identity — safe to
+   * stash in a ref.
+   */
+  onControls?: (controls: SessionControls | undefined) => void
+  /**
+   * Click anywhere the panel isn't already doing something and the caret lands
+   * in the composer — the terminal/chat convention, and what a docked panel
+   * wants: the field is why the panel is focussed at all.
+   *
+   * Only dead space. A click that hits a control (a tool row expanding, a link,
+   * a button) or that ends a text selection is that action, not a request for
+   * the input. Off by default: a full-page surface has plenty of dead space that
+   * means nothing in particular.
+   */
+  focusComposerOnClick?: boolean
+  /**
+   * What this session looked like when it was last looked at: how many
+   * transcript items had been seen, and when. Present and behind the current
+   * transcript → **catch-up**: a recap row at the boundary, everything above it
+   * dimmed, and a bar offering to jump there or to dismiss.
+   *
+   * The embedder owns the watermark because only it knows what "looked at"
+   * means in its own chrome — a hidden dock is not being read. The panel reports
+   * the number to remember through `SessionVitals.itemCount`.
+   */
+  unseen?: { itemCount: number; since?: number }
   className?: string
 }
+
+/** What an embedder needs to *change* a session it doesn't own the attach for. */
+export type SessionControls = {
+  setModel: (model?: string) => void
+  setPermissionMode: (mode: PermissionMode) => void
+  interrupt: () => void
+}
+
+/** Everything a click can mean other than "put the caret in the composer".
+ * Deliberately broad: mistaking a real target for dead space steals focus from
+ * whatever the user just opened. */
+const INTERACTIVE = [
+  'button',
+  'a',
+  'input',
+  'textarea',
+  'select',
+  'summary',
+  'img',
+  '[contenteditable="true"]',
+  '[role="button"]',
+  '[role="menuitem"]',
+  '[role="checkbox"]',
+  '[role="radio"]',
+  '[role="tab"]',
+].join(',')
 
 /** The panels the session surface can raise. One at a time, by identity: a bag
  * of booleans would let two open at once. */
@@ -111,10 +198,20 @@ export type SessionVitals = {
   engine: TranscriptState['engine']
   capabilities: TranscriptState['capabilities']
   model: string | undefined
+  /** The models this session can switch to — the panel's own list, so an
+   * external picker offers exactly what the internal one would. */
+  models: ModelOption[]
   permissionMode: TranscriptState['permissionMode']
+  /** The modes it can switch into, already filtered by the capability record
+   * and the session's bypass grant (see `permissionModeChoices`). */
+  permissionModes: PermissionModeChoice[]
   cwd: TranscriptState['cwd']
   contextUsage: TranscriptState['contextUsage']
   rateLimits: TranscriptState['rateLimits']
+  /** How many transcript rows exist right now — the number an embedder stores
+   * as its "seen" watermark while the panel is actually on screen, and compares
+   * against later to know what is new. */
+  itemCount: number
 }
 
 /**
@@ -134,10 +231,16 @@ export function SessionPanel({
   statusSurface = 'internal',
   onOpenPanel,
   onVitals,
+  transcriptVariant = 'cards',
+  controlsSurface = 'internal',
+  onControls,
+  focusComposerOnClick = false,
+  unseen,
   className,
 }: SessionPanelProps) {
   const external = panelSurface === 'external'
   const statusExternal = statusSurface === 'external'
+  const controlsExternal = controlsSurface === 'external'
   // Rejected commands (the CLI refusing a permission-mode switch, say) render INSIDE
   // the panel rather than through `toast`. The panel does not mount a `Toaster`, and
   // an embedder that doesn't either would drop the only signal that a command failed
@@ -163,6 +266,20 @@ export function SessionPanel({
   // Callers are told to remount on a session switch, but a changed prop must not leave
   // the previous session's failure on screen.
   useEffect(() => setProtocolError(undefined), [sessionId])
+
+  // Catch-up is entered once, from the watermark the embedder handed over, and
+  // left when dismissed or when the user sends anything (they are plainly
+  // caught up at that point). Snapshotted into state rather than read from the
+  // prop each render: the embedder keeps updating the watermark while the panel
+  // is on screen, and a boundary that crept forward under the reader would
+  // un-dim the very rows they came back to read.
+  const [caughtUp, setCaughtUp] = useState(false)
+  useEffect(() => {
+    setCaughtUp(false)
+  }, [sessionId])
+  const [catchUpMark] = useState(unseen)
+  const catchUp = caughtUp ? undefined : catchUpMark
+  const newCount = catchUp ? Math.max(0, state.items.length - catchUp.itemCount) : 0
 
   // One router for every panel-opening affordance: internal surface opens the
   // dialog, external hands the intent to the embedder (or drops it, absent a
@@ -195,6 +312,12 @@ export function SessionPanel({
   const onVitalsRef = useRef(onVitals)
   onVitalsRef.current = onVitals
   const vitalsModel = effectiveModel ?? state.model
+  // The choices, not just the current values: an external picker has no second
+  // attach to learn them from.
+  const permissionModes = useMemo(
+    () => permissionModeChoices(capabilities.permissionModes, state.session?.canBypassPermissions),
+    [capabilities.permissionModes, state.session?.canBypassPermissions],
+  )
   useEffect(() => {
     onVitalsRef.current?.({
       status: state.status,
@@ -202,10 +325,13 @@ export function SessionPanel({
       engine: state.engine,
       capabilities: state.capabilities,
       model: vitalsModel,
+      models,
       permissionMode: state.permissionMode,
+      permissionModes,
       cwd: state.cwd,
       contextUsage: state.contextUsage,
       rateLimits: state.rateLimits,
+      itemCount: state.items.length,
     })
   }, [
     state.status,
@@ -213,11 +339,31 @@ export function SessionPanel({
     state.engine,
     state.capabilities,
     vitalsModel,
+    models,
     state.permissionMode,
+    permissionModes,
     state.cwd,
     state.contextUsage,
     state.rateLimits,
+    state.items.length,
   ])
+
+  // The commands back in. One stable object reading through refs, so an
+  // embedder can stash it and a re-render never invalidates what it holds.
+  const onControlsRef = useRef(onControls)
+  onControlsRef.current = onControls
+  const setters = useRef({ setModel, setPermissionMode, interrupt })
+  setters.current = { setModel, setPermissionMode, interrupt }
+  const controls = useRef<SessionControls>({
+    setModel: (model) => setters.current.setModel(model),
+    setPermissionMode: (mode) => setters.current.setPermissionMode(mode),
+    interrupt: () => setters.current.interrupt(),
+  })
+  useEffect(() => {
+    const handler = onControlsRef.current
+    handler?.(controls.current)
+    return () => handler?.(undefined)
+  }, [sessionId])
   const busy = state.status === 'running' || state.status === 'awaiting_approval'
   const ended = state.status === 'failed' || state.status === 'closed'
   const attachments = useAttachments(client, sessionId, {
@@ -234,6 +380,7 @@ export function SessionPanel({
   // on every delta, and a fresh function would re-fetch each time.
   const hostImage = useHostImage(client, sessionId, state.producedFiles)
   const composerRef = useRef<ComposerHandle>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   // "/model" is handled panel-side (see handleSend) — surface it in the autocomplete
   // even though the CLI's command list doesn't include it.
@@ -264,6 +411,9 @@ export function SessionPanel({
         return
       }
     }
+    // Typing into a session is the clearest possible statement that you have
+    // read it — nothing left to catch up on.
+    setCaughtUp(true)
     send(text, attachmentIds)
   }
 
@@ -327,9 +477,22 @@ export function SessionPanel({
   const menu = external ? null : actionsMenu
   const headerTakesActions = typeof header === 'function'
 
+  // Dead-space clicks land in the composer. Anything the user actually aimed at
+  // — a control, a link, the end of a drag-selection — keeps its own meaning;
+  // this only claims what was left over.
+  const handleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!focusComposerOnClick) return
+    const target = event.target as HTMLElement | null
+    if (target?.closest(INTERACTIVE)) return
+    if (window.getSelection()?.isCollapsed === false) return
+    composerRef.current?.focus()
+  }
+
   return (
     <div
+      ref={panelRef}
       data-slot='session-panel'
+      onClick={handleClick}
       className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}>
       {headerTakesActions ? header({ actions: menu }) : header}
       {statusExternal ? null : (
@@ -359,7 +522,43 @@ export function SessionPanel({
         attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
         canBrowseFiles={hostFiles.available}
         hostImage={hostImage}
+        variant={transcriptVariant}
+        catchUp={
+          catchUp && newCount > 0
+            ? { from: catchUp.itemCount, since: catchUp.since }
+            : undefined
+        }
       />
+      {/* The way back into what you missed. Above the composer because that is
+          where the eye already is on returning, and because the transcript
+          itself opens pinned to the newest row. */}
+      {catchUp && newCount > 0 ? (
+        <div className='px-3 pb-1'>
+          <div
+            data-slot='catch-up'
+            className='mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] items-center gap-2 text-label text-fg-3'>
+            <span aria-hidden className='select-none text-accent'>
+              ※
+            </span>
+            <span className='min-w-0 flex-1 truncate'>
+              {newCount} new {newCount === 1 ? 'row' : 'rows'}
+              {catchUp.since !== undefined ? ` since you were last here` : ''}
+            </span>
+            <button
+              type='button'
+              onClick={() => scrollToRecap(panelRef.current)}
+              className='shrink-0 underline-offset-2 hover:text-fg-1 hover:underline'>
+              jump
+            </button>
+            <button
+              type='button'
+              onClick={() => setCaughtUp(true)}
+              className='shrink-0 underline-offset-2 hover:text-fg-1 hover:underline'>
+              dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
       {/* An engine with no approval channel never raises these, but a stale
           pending request from a replayed log would still render — the record is
           the authority on whether an approval UI means anything here. */}
@@ -401,7 +600,9 @@ export function SessionPanel({
             ? (query, options) => hostFiles.search(query, { ...options, limit: 8 })
             : undefined
         }
+        layout={controlsExternal ? 'inline' : 'stacked'}
         toolbar={
+          controlsExternal ? undefined : (
           <>
             {/* Codex reports no `capabilities` event, so its models arrive from
                 the profile catalog instead — without that fallback its picker
@@ -426,6 +627,7 @@ export function SessionPanel({
               />
             ) : null}
           </>
+          )
         }
       />
 
@@ -567,6 +769,21 @@ const IMAGE_MEDIA_TYPES: Record<string, string> = {
   jpeg: 'image/jpeg',
   gif: 'image/gif',
   webp: 'image/webp',
+}
+
+/**
+ * Scroll the recap row into view.
+ *
+ * Through the DOM rather than a ref threaded down through the transcript: the
+ * row is rendered deep inside a virtualised-ish scroll container that the panel
+ * does not own, and one query for a `data-slot` it also renders is less
+ * machinery than a ref chain through three components for a button press.
+ */
+function scrollToRecap(root: HTMLElement | null): void {
+  // Explicitly smooth: this one IS a journey, and seeing it travel is what tells
+  // you how far back the boundary was. (The container itself opens instantly —
+  // see `useSettled` in Transcript.)
+  root?.querySelector('[data-slot="recap"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
 /** A dismissible advisory strip above the transcript. */
