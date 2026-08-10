@@ -1,7 +1,10 @@
 # Roadmap & open questions
 
-What's shipped, what's next, and what's still undecided. Status as of 2026-08-05 (0.9.0 on
-master; 0.7.0 is the latest published).
+What's shipped, what's next, and what's still undecided. Status as of 2026-08-10: **0.10.0** on
+master (codex skills and generated images, the codex MCP panel, the session workspace and its
+Monaco editor — protocol stays 7), tagged but not yet pushed; **0.9.0** is the latest published.
+The session rename (`PATCH /sessions/:id`) and the VS Code extension land after that tag and are
+unreleased.
 
 ## Shipped
 
@@ -182,7 +185,14 @@ master; 0.7.0 is the latest published).
   capability record, so collapse/reorder/drag-anywhere are VS Code's own. The agent panel
   is purely the conversation: `SessionPanel` grew `panelSurface: 'external'` + `onOpenPanel`
   + `onVitals` seams in `ui`, so the panel renders no dialogs and relays intents and live
-  vitals outward instead (a status-bar context click focuses the Context view). Sessions data is REST rollups on a poll with an
+  vitals outward instead. The status bar went the same way — `statusSurface: 'external'`
+  suppresses the in-panel bar and the readings are drawn as **VS Code's own** status-bar items
+  (status, context, plan usage; each focuses the section view that answers it, cost and reset
+  countdowns in tooltips, capability-gated and colour-coded on the same 80/95 thresholds), on
+  the reasoning that the panel already sits inside a window that has a status line. That move
+  is what put `connection` on `SessionVitals`: a status held over a dropped socket is a stale
+  reading, so the link state takes the slot outside the panel exactly as it does inside.
+  Sessions data is REST rollups on a poll with an
   awaiting-approval badge (`pendingPermissionCount` — already in the protocol, no addition
   needed); notifications for permission asks tapped from frames already crossing the bridge,
   answered over REST `resolvePermission`, no second attach anywhere (interrupt from a card is
@@ -215,19 +225,26 @@ master; 0.7.0 is the latest published).
    — the code is tested and the alternative was holding the host-filesystem release behind it —
    but it stays here rather than under Shipped until a push has actually reached a phone, and the
    README says as much. The same caveat covers the iOS file browser released alongside it.
-1. **Shared-backend `QueueAdapter`** (BullMQ or plain redis) — the reason the adapter contract
+1. **Finish the VS Code extension.** The surface is built and side-loadable, but three things
+   are open, in order: (a) a live end-to-end run against a real gateway in an Extension
+   Development Host — every claim above is tested but none is *observed*, the same caveat that
+   keeps APNs out of Shipped; (b) agent→IDE tools (PRD §7), the thing that makes it more than a
+   webview — selection/diagnostics/open-file as context, and edits arriving as VS Code edits
+   rather than filesystem writes; (c) Marketplace publishing, which is a packaging and
+   naming decision, not code. CI already uploads the `.vsix` as an artifact.
+2. **Shared-backend `QueueAdapter`** (BullMQ or plain redis) — the reason the adapter contract
    exists. `claimNext` must stay atomic (BullMQ free; raw redis needs LMOVE/Lua) and honor
    `nextRunAt` (BullMQ delayed jobs); daily counters map to `INCRBY` on a dated key with TTL.
    Caveat: `JobQueue` assumes the claiming process runs the job — multi-worker deployments need a
    claim-lease/heartbeat so a dead worker doesn't strand jobs in `running`, and webhook ordering
    is per-process.
-2. **Promote the remaining `sdk_event` passthroughs** UIs care about: tool progress,
+3. **Promote the remaining `sdk_event` passthroughs** UIs care about: tool progress,
    task/subagent events, todo lists — for both engines at once (Codex todo lists currently ride
    `sdk_event` as `codex.todo_list`).
-3. **Managed sandbox tier-2** — a hosted execution backend (Vercel/E2B) behind the existing
+4. **Managed sandbox tier-2** — a hosted execution backend (Vercel/E2B) behind the existing
    `ToolExecutor` seam. Deliberately after deferred execution: if a third backend needs no
    runner-loop or protocol change, the seam held.
-4. **Multi-host sessions** — the durable half landed (`createFileSessionStore`), but it is
+5. **Multi-host sessions** — the durable half landed (`createFileSessionStore`), but it is
    single-process by construction: two servers over one directory would both hydrate and both
    rebuild. What's left is a shared-backend store (redis/sqlite/a table) with a claim on rebuild
    and, for Claude-engine sessions, cross-host resume over the SDK's on-disk transcripts. Also
@@ -246,10 +263,6 @@ with filesystem state), multi-tenant SaaS, and claude.ai authentication of any k
   OpenAI's terms restrict headless/gateway use of ChatGPT-subscription codex auth the way
   Anthropic's restrict claude.ai logins is unresolved — the posture mirrors the Anthropic one
   (surface honestly, never circumvent) until answered.
-- **Codex interactive approvals.** The engine already speaks the app-server surface, which has
-  the request channel (server→client JSON-RPC requests) — the runner currently auto-declines
-  them under `approvalPolicy: 'never'`. Wiring the channel to the permission surface flips
-  `interactiveApprovals` with no protocol change; a spike ticket, not a plan.
 - **Returning `@ai-sdk` providers as bespoke adapters.** New union members (a versioned protocol
   event) or per-profile capability overrides under `'provider'` — the record supports both, so
   the choice stays deferred without penalty.

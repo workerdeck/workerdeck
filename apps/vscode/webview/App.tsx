@@ -72,6 +72,9 @@ export function App({ bridge }: { bridge: Bridge }) {
         sessionId={shown.sessionId}
         className='h-full'
         panelSurface='external'
+        // The window status bar renders these instead (src/status-bar.ts) — a
+        // second bar inside a panel that already sits in one is a bar too many.
+        statusSurface='external'
         onOpenPanel={(panel) => bridge.post({ kind: 'wd-open-panel', panel })}
         onVitals={(vitals) => bridge.post({ kind: 'wd-vitals', vitals })}
       />

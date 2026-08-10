@@ -138,3 +138,15 @@ lose by forgetting a second mount isn't one.
   rate limits, capabilities) those external surfaces need, so host chrome never has to
   attach a second time (the tool bridge asks the first attached client). The VS Code
   extension's sidebar sections are the reference consumer.
+- `statusSurface: 'external'` is the separate opt-out for the **status bar itself**, for a host
+  whose chrome already has a status line (VS Code's window bar): the panel draws no bar and the
+  readings leave through `onVitals` as before. The two flags are independent, with one coupling
+  — the `⋯` menu lives in the bar's trailing slot, so `statusSurface: 'external'` alongside
+  `panelSurface: 'internal'` must pass a **function** `header` for the menu to land in.
+  Whatever draws the bar owes the panel's own rule: `SessionVitals.connection` wins the status
+  slot whenever it isn't `'live'`, because a session status held over a dropped socket is a
+  stale reading presented as a current one.
+- `@workerdeck/ui/format` is a third entry point carrying the pure formatters (`45.2k`,
+  `2h 10m`) with no React in the graph — for a host that renders session readings outside
+  React, like an extension host drawing them into a window status bar, and wants them spelled
+  exactly as the panel spells them.

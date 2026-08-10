@@ -8,6 +8,7 @@ import { SidebarProvider } from './sidebar.ts'
 import { SectionViewProvider, type SectionKind } from './section-view.ts'
 import { WorkerdeckFileSystem } from './fsp.ts'
 import { startDevReload } from './dev-reload.ts'
+import { SessionStatusBar } from './status-bar.ts'
 
 /** Section view ids — each its OWN view, so VS Code owns collapse/placement. */
 const SECTION_VIEWS: Record<SectionKind, string> = {
@@ -26,6 +27,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Cleared on selection change so a new session never wears the old one's
   // readings while its first snapshot is still in flight.
   let vitals: SessionVitals | undefined
+  const statusBar = new SessionStatusBar()
 
   const feed = {
     state: () => model.sidebarState(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath),
@@ -77,8 +79,28 @@ export function activate(context: vscode.ExtensionContext): void {
       vitals = v
       updateContexts()
       pushSections()
+      pushStatusBar()
     },
   })
+  // Title and cost come from the REST rollup, the live readings from vitals —
+  // the two arrive on different clocks, so the bar is rendered from both each
+  // time either moves.
+  const pushStatusBar = () => {
+    const active = panel.active
+    if (!active) {
+      statusBar.update(undefined, undefined)
+      return
+    }
+    const info = model.sessionsOf(active.host.id).find((s) => s.id === active.sessionId)
+    statusBar.update(
+      {
+        title: info?.title ?? active.sessionId.slice(0, 8),
+        hostName: active.host.name,
+        cost: info?.totalCostUsd,
+      },
+      vitals,
+    )
+  }
   sidebar = new SidebarProvider(context.extensionUri, store, model, {
     selectSession: async (hostId, sessionId) => {
       const host = store.get(hostId)
@@ -98,18 +120,12 @@ export function activate(context: vscode.ExtensionContext): void {
     activeSessionId: () => panel.active?.sessionId,
   })
 
-  const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50)
-  statusBar.command = `${SessionPanelProvider.viewId}.focus`
-  panel.onDidChangeActive((active) => {
-    if (!active) {
-      statusBar.hide()
-      return
-    }
-    const info = model.sessionsOf(active.host.id).find((s) => s.id === active.sessionId)
-    statusBar.text = `$(hubot) ${info?.title ?? active.sessionId.slice(0, 8)}`
-    statusBar.tooltip = `WorkerDeck session on ${active.host.name}`
-    statusBar.show()
-  })
+  // The window status bar IS the agent's status bar — the panel renders none of
+  // its own (`statusSurface='external'` in the webview). Fed from both sides:
+  // vitals for the live readings, the sessions poll for the title and cost.
+  panel.onDidChangeActive(() => pushStatusBar())
+  model.onDidChange(() => pushStatusBar())
+  pushStatusBar()
 
   context.subscriptions.push(
     startDevReload(context, [panel, sidebar, ...Object.values(sections)]),

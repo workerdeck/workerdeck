@@ -7,6 +7,7 @@ import {
   useClaudeSession,
   useHostFileSearch,
   useToolCallHost,
+  type ConnectionState,
   type ProducedFileRef,
   type TranscriptState,
 } from '@workerdeck/react'
@@ -65,6 +66,20 @@ export interface SessionPanelProps {
    * conversation surface.
    */
   panelSurface?: 'internal' | 'external'
+  /**
+   * Where the status bar lives. `'internal'` (default) draws it across the top
+   * of the panel. `'external'` draws none — the readings still leave through
+   * {@link onVitals}, so an embedder with a status line of its own (VS Code's
+   * window status bar) renders them there instead of stacking a second bar
+   * inside a panel that already sits in one.
+   *
+   * Deliberately independent of {@link panelSurface}: hosting the dialogs and
+   * hosting the bar are separate decisions. One coupling to know about — the
+   * `⋯` menu lives in the bar's trailing slot, so `statusSurface: 'external'`
+   * with `panelSurface: 'internal'` must pass a **function** {@link header} to
+   * take the menu, or it has nowhere left to go.
+   */
+  statusSurface?: 'internal' | 'external'
   /** Where `panelSurface: 'external'` routes opens. Absent = the affordances
    * (status-bar clicks, `/mcp`) become inert rather than half-working. */
   onOpenPanel?: (panel: SessionSurfacePanel) => void
@@ -85,6 +100,14 @@ type Panel = SessionSurfacePanel
  * which the tool bridge forbids (it asks the first attached client). */
 export type SessionVitals = {
   status: TranscriptState['status']
+  /**
+   * How the client is reaching the gateway. Load-bearing for a host rendering
+   * these outside the panel: `status` is the last thing the session *said*, and
+   * over a dropped socket that is a stale reading. The panel's own bar gives
+   * the connection the status slot when it isn't `'live'` for exactly this
+   * reason — an embedder showing `status` alone would present stale as current.
+   */
+  connection: ConnectionState
   engine: TranscriptState['engine']
   capabilities: TranscriptState['capabilities']
   model: string | undefined
@@ -108,11 +131,13 @@ export function SessionPanel({
   sessionId,
   header,
   panelSurface = 'internal',
+  statusSurface = 'internal',
   onOpenPanel,
   onVitals,
   className,
 }: SessionPanelProps) {
   const external = panelSurface === 'external'
+  const statusExternal = statusSurface === 'external'
   // Rejected commands (the CLI refusing a permission-mode switch, say) render INSIDE
   // the panel rather than through `toast`. The panel does not mount a `Toaster`, and
   // an embedder that doesn't either would drop the only signal that a command failed
@@ -173,6 +198,7 @@ export function SessionPanel({
   useEffect(() => {
     onVitalsRef.current?.({
       status: state.status,
+      connection,
       engine: state.engine,
       capabilities: state.capabilities,
       model: vitalsModel,
@@ -183,6 +209,7 @@ export function SessionPanel({
     })
   }, [
     state.status,
+    connection,
     state.engine,
     state.capabilities,
     vitalsModel,
@@ -305,14 +332,16 @@ export function SessionPanel({
       data-slot='session-panel'
       className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}>
       {headerTakesActions ? header({ actions: menu }) : header}
-      <StatusBar
-        state={state}
-        connection={connection}
-        onOpenStatus={external && !onOpenPanel ? undefined : () => openPanel('info')}
-        onOpenContext={external && !onOpenPanel ? undefined : () => openPanel('context')}
-        onOpenUsage={external && !onOpenPanel ? undefined : () => openPanel('usage')}
-        actions={headerTakesActions ? undefined : menu}
-      />
+      {statusExternal ? null : (
+        <StatusBar
+          state={state}
+          connection={connection}
+          onOpenStatus={external && !onOpenPanel ? undefined : () => openPanel('info')}
+          onOpenContext={external && !onOpenPanel ? undefined : () => openPanel('context')}
+          onOpenUsage={external && !onOpenPanel ? undefined : () => openPanel('usage')}
+          actions={headerTakesActions ? undefined : menu}
+        />
+      )}
       {protocolMismatch !== undefined ? (
         <Notice level='warning'>
           Server speaks protocol v{protocolMismatch}, this build renders v{PROTOCOL_VERSION}. Some

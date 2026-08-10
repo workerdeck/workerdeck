@@ -21,6 +21,11 @@
       "types": "./build/workspace.d.mts",
       "default": "./build/workspace.mjs"
     },
+    "./format": {
+      "@workerdeck/source": "./src/format.ts",
+      "types": "./build/format.d.mts",
+      "default": "./build/format.mjs"
+    },
     "./theme.css": "./src/styles/theme.css"
   },
   "scripts": {

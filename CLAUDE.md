@@ -107,7 +107,15 @@ protocol. Read these before changing scope or structure:
   `panelSurface: 'external'` hands that dialog surface to the embedder: no dialogs, no `⋯`
   menu, intents via `onOpenPanel`, live readings via `onVitals` (what lets external chrome
   render context/usage without a second attach — the tool bridge asks the first attached
-  client). The VS Code extension's sidebar is the reference consumer.
+  client). `statusSurface: 'external'` is the *separate* opt-out for the bar itself, for an
+  embedder whose chrome already has a status line (VS Code's window bar); it carries the `⋯`
+  menu's only home, so combining it with `panelSurface: 'internal'` needs a **function**
+  `header` to take the menu. `SessionVitals` carries `connection` precisely so an external bar
+  can obey the panel's own rule — a session status held over a dropped socket is a stale
+  reading, and the link state has to win the slot. The VS Code extension is the reference
+  consumer of both. Pure formatters ship from a third entry (`@workerdeck/ui/format`) so a
+  non-React host spells `45.2k` and `2h 10m` the same way the panel does, without pulling React
+  into an extension-host bundle.
   `SessionWorkspace` is the VS Code-shaped layout *around* it (file rail, tabs, read-only viewer,
   hand-rolled `Splitter` — Base UI ships none) and is **strictly additive**: an embedder picks the
   panel or the workspace, and `SessionPanel` is untouched by it. It ships from a **second entry
