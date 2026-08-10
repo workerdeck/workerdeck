@@ -758,6 +758,20 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   which is why catch-up's "jump" is a closure the transcript fills in (`jumpToRecapRef`) rather
   than a DOM query, and why it has to re-aim: the offset it first scrolls to is the sum of a few
   hundred estimates, and only the rows it crosses make it true.
+- **The transcript variant is a *panel-wide* context, not a transcript one.**
+  `TranscriptVariantProvider` wraps `SessionPanel`'s whole tree, because the approval and
+  question prompts render **outside** the scroller and still have to answer `useLines()`. It was
+  originally around the transcript alone, and the symptom of that is quiet: the prompts silently
+  rendered as cards inside an otherwise terminal panel, with nothing erroring. Anything new the
+  panel draws beside the transcript inherits the fix; anything an embedder mounts outside the
+  panel does not.
+- **The markdown renderer marks its lists `list-inside`, and that is not a spacing preference.**
+  With the marker inside the content flow, `padding-left` moves the *bullet* as well as the text
+  (so a list sits a marker-width right of the paragraph above it) and a wrapped line runs back
+  under the bullet instead of hanging under its own text. The `lines` prose block therefore sets
+  `list-outside!` **before** its `pl-[2ch]`/`pl-[3ch]` indents; changing the padding without the
+  position flag looks like it works and quietly reintroduces both problems. `cards` keeps the
+  renderer's defaults on purpose.
 - `SessionPanel`'s `header` prop takes a **function** when an embedder wants the session-actions
   (`⋯`) menu in its own chrome: it is called with the menu and the status bar then renders
   without it. The menu can only be built inside the panel (capability record, host-file verdict,

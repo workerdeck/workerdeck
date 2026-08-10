@@ -7,7 +7,7 @@ import { Spinner } from '../ui/Spinner.tsx'
 import { cn } from '../../lib/utils.ts'
 import { toolInputPreview } from '../../lib/format.ts'
 import { isMutatingTool, toolIcon } from '../../lib/tool-icon.ts'
-import { Response } from './Response.tsx'
+import { LINE_INDENT, LinePayload } from './line-prompt.tsx'
 import { LineGlyph, useLines } from './transcript-variant.tsx'
 
 export type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
@@ -192,7 +192,7 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
           </div>
         ) : null}
         {image}
-        {details ? <div className='pl-[calc(0.875rem+0.5rem)]'>{details}</div> : null}
+        {details ? <div className={LINE_INDENT}>{details}</div> : null}
       </div>
     )
   }
@@ -256,35 +256,9 @@ function PlainPayload({ code, label, variant, className }: PayloadProps) {
   return <CodeBlock code={code} label={label} variant={variant} className={className} />
 }
 
-/**
- * The terminal payload: a dim label line over a **highlighted** band.
- *
- * Highlighting goes through `Response` — the markdown renderer already carries
- * shiki, and a tool result is usually a file's contents anyway. Wrapping the
- * text in a fence therefore costs no new dependency, no second highlighter and
- * no second theme to keep in sync, and it inherits the terminal flattening
- * (`TERMINAL_PROSE`) plus the hover copy/download the renderer draws for every
- * code block. A payload with no language still goes through it, as an unlabelled
- * fence: same band, same grid, no grammar guessed.
- */
+/** The terminal payload — shared with the line-shaped prompts. */
 function HighlightedPayload({ code, label, language, className }: PayloadProps) {
-  return (
-    <div className={cn('min-w-0', className)}>
-      <span className='block truncate text-label leading-5 text-fg-4'>{label}</span>
-      <Response>{fence(code, language)}</Response>
-    </div>
-  )
-}
-
-/**
- * Wrap text as a markdown code fence, with a fence long enough to survive the
- * content: a result containing ``` would otherwise close the block early and
- * spill the rest of it into the transcript as markdown.
- */
-function fence(code: string, language?: string): string {
-  const longest = Math.max(0, ...[...code.matchAll(/`+/g)].map((match) => match[0].length))
-  const ticks = '`'.repeat(Math.max(3, longest + 1))
-  return `${ticks}${language ?? ''}\n${code}\n${ticks}`
+  return <LinePayload code={code} label={label} language={language} className={className} />
 }
 
 /**
@@ -322,7 +296,7 @@ function HostImage({
   }, [path, load])
   if (!src) return null
   return (
-    <div className={cn(lines ? 'py-1 pl-[calc(0.875rem+0.5rem)]' : 'border-t border-border p-2.5')}>
+    <div className={cn(lines ? cn('py-1', LINE_INDENT) : 'border-t border-border p-2.5')}>
       <img
         src={src}
         alt={path.split('/').pop() ?? 'Generated image'}

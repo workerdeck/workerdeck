@@ -126,7 +126,13 @@ protocol. Read these before changing scope or structure:
   glyph, no boxes, for a host where vertical space is scarce. It rides a **context**
   (`transcript-variant.tsx`), not a prop chain, so a row component composed by hand gets the
   right treatment too; every row component branches on `useLines()` rather than the embedder
-  restyling `data-slot`s from outside. The transcript is **virtualized**
+  restyling `data-slot`s from outside. The provider wraps the **whole panel**, not just the
+  scroller, because the approval and question prompts render outside it and are line items in
+  the same run: in `lines` they are keyboard-first rows built from `line-prompt.tsx` (roving
+  `❯` marker, numbered rows, `↑↓`/digits/`esc`, `[x]` vs `(•)` for multi- vs one-of) rather
+  than dialogs — no boxes means the affordance has to be carried by the keyboard, which is
+  what a terminal does anyway. The same file owns the fenced-`Response` payload band the tool
+  rows already used. The transcript is **virtualized**
   (`@tanstack/react-virtual`), and the rule that keeps it honest is that two parties want to
   write `scrollTop`: `use-stick-to-bottom`'s follow spring and the virtualizer's size-change
   correction. They are split by regime — **pinned, corrections are suppressed** (being at the

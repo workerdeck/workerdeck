@@ -6,6 +6,14 @@ import { Input } from '../ui/Input.tsx'
 import { cn } from '../../lib/utils.ts'
 import { toolInputPreview } from '../../lib/format.ts'
 import { toolIcon } from '../../lib/tool-icon.ts'
+import {
+  LINE_INDENT,
+  LineHint,
+  LineInput,
+  LineOptionList,
+  LinePayload,
+} from './line-prompt.tsx'
+import { LineGlyph, useLines } from './transcript-variant.tsx'
 
 export interface PermissionPromptProps {
   request: PermissionRequest
@@ -29,9 +37,11 @@ export interface PermissionPromptProps {
  * already written the sentence that says so.
  */
 export function PermissionPrompt({ request, onApprove, onDeny, className }: PermissionPromptProps) {
+  const lines = useLines()
   const [showInput, setShowInput] = useState(false)
   const [denying, setDenying] = useState(false)
   const [reason, setReason] = useState('')
+  const [focused, setFocused] = useState(0)
 
   const deny = (interrupt: boolean) => {
     const message = reason.trim()
@@ -42,6 +52,88 @@ export function PermissionPrompt({ request, onApprove, onDeny, className }: Perm
 
   const summary = toolInputPreview(request.input)
   const ToolIcon = toolIcon(request.toolName)
+  const heading = request.title ?? request.displayName ?? 'Permission needed'
+
+  if (lines) {
+    // The same three outcomes as the card, as rows. "Deny" opens the reason
+    // field rather than acting, because a denial the agent can learn from is the
+    // one worth defaulting to — an empty field still just denies.
+    const options = [
+      { key: 'allow', label: 'Allow' },
+      {
+        key: 'deny',
+        label: 'Deny',
+        description: 'the turn continues',
+        detail: denying ? (
+          <LineInput
+            value={reason}
+            onChange={setReason}
+            onSubmit={() => deny(false)}
+            onCancel={() => setDenying(false)}
+            placeholder='Reason (optional) — the agent reads this and can try something else'
+          />
+        ) : undefined,
+      },
+      { key: 'stop', label: 'Deny & stop', description: 'interrupt the turn', danger: true },
+    ]
+
+    return (
+      <div
+        data-slot='permission-prompt'
+        className={cn('w-full', className)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            deny(false)
+          }
+        }}>
+        <div className='flex items-baseline gap-2'>
+          <LineGlyph className='text-warning'>!</LineGlyph>
+          <span className='min-w-0 flex-1 text-body-sm leading-5 font-medium text-fg-1'>
+            {heading}
+          </span>
+        </div>
+        {request.description ? (
+          <div className={cn(LINE_INDENT, 'text-label leading-5 text-fg-3')}>
+            {request.description}
+          </div>
+        ) : null}
+        {request.decisionReason ? (
+          <div className={cn(LINE_INDENT, 'text-label leading-5 text-fg-4')}>
+            {request.decisionReason}
+          </div>
+        ) : null}
+        <button
+          type='button'
+          onClick={() => setShowInput((v) => !v)}
+          className='flex w-full items-baseline gap-2 text-left outline-none hover:bg-surface-hover/60'>
+          <LineGlyph className='text-fg-4'>⎿</LineGlyph>
+          <span className='min-w-0 flex-1 truncate text-label leading-5 text-fg-4'>
+            <span className='font-medium text-fg-2'>{request.toolName}</span>
+            {summary ? `(${summary})` : null}
+          </span>
+        </button>
+        {showInput ? (
+          <div className={LINE_INDENT}>
+            <LinePayload code={JSON.stringify(request.input, null, 2)} language='json' label='Input' />
+          </div>
+        ) : null}
+        <LineOptionList
+          label={heading}
+          options={options}
+          focused={focused}
+          onFocus={setFocused}
+          active={!denying}
+          onChoose={(index) => {
+            if (index === 0) onApprove(request.id)
+            else if (index === 1) setDenying(true)
+            else deny(true)
+          }}
+        />
+        <LineHint>↑↓ move · 1–3 choose · esc deny</LineHint>
+      </div>
+    )
+  }
 
   return (
     <div

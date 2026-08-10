@@ -33,8 +33,18 @@ const TERMINAL_PROSE = [
   '[&_ul]:my-0! [&_ol]:my-0! [&_li]:my-0! [&_li>p]:my-0!',
   '[&_li+li]:mt-0! [&_ul_ul]:mt-0! [&_ul_ol]:mt-0! [&_ol_ul]:mt-0! [&_ol_ol]:mt-0!',
   '[&_li]:py-0! [&_ul]:py-0! [&_ol]:py-0!',
-  // Markers on their own column, the way a terminal list indents.
-  '[&_ul]:pl-4! [&_ol]:pl-4! [&_li]:pl-0!',
+  // Markers on their own column, at the width the marker actually is — the
+  // indent a terminal (and the markdown source) uses, not a typographic one.
+  // `ch` is the unit because this variant runs in a monospace face: `• ` is two
+  // cells, `1. ` is three, so the text starts exactly where it would in the raw
+  // document and a wrapped line hangs under it instead of under the bullet.
+  // Nesting then costs one marker width per level, which is the 2-space step.
+  // `list-outside` is the load-bearing half: the renderer marks lists `inside`,
+  // where the marker joins the text flow — so the indent moves the bullet too
+  // (the list sits a marker-width right of the paragraph above it) and a wrapped
+  // line runs back under the bullet instead of hanging under its own text.
+  '[&_ul]:list-outside! [&_ol]:list-outside!',
+  '[&_ul]:pl-[2ch]! [&_ol]:pl-[3ch]! [&_li]:pl-0!',
   // Headings are weight, not size — a terminal has one type size.
   '[&_h1]:text-body-sm [&_h2]:text-body-sm [&_h3]:text-body-sm',
   '[&_h4]:text-body-sm [&_h5]:text-body-sm [&_h6]:text-body-sm',

@@ -49,7 +49,7 @@ import { QuestionPrompt, parseUserQuestions } from './QuestionPrompt.tsx'
 import { SessionInfoDialog } from './SessionInfoDialog.tsx'
 import { StatusBar } from './StatusBar.tsx'
 import { Transcript } from './Transcript.tsx'
-import type { TranscriptVariant } from './transcript-variant.tsx'
+import { TranscriptVariantProvider, type TranscriptVariant } from './transcript-variant.tsx'
 import { UsageDialog } from './UsageDialog.tsx'
 
 export interface SessionPanelProps {
@@ -491,197 +491,202 @@ export function SessionPanel({
   }
 
   return (
-    <div
-      data-slot='session-panel'
-      onClick={handleClick}
-      className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}>
-      {headerTakesActions ? header({ actions: menu }) : header}
-      {statusExternal ? null : (
-        <StatusBar
+    // The variant is a panel-wide fact, not a transcript-only one: the approval
+    // and question prompts live outside the scroller but are line items in the
+    // same run, and they read `useLines()` like every other row.
+    <TranscriptVariantProvider value={transcriptVariant}>
+      <div
+        data-slot='session-panel'
+        onClick={handleClick}
+        className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}>
+        {headerTakesActions ? header({ actions: menu }) : header}
+        {statusExternal ? null : (
+          <StatusBar
+            state={state}
+            connection={connection}
+            onOpenStatus={external && !onOpenPanel ? undefined : () => openPanel('info')}
+            onOpenContext={external && !onOpenPanel ? undefined : () => openPanel('context')}
+            onOpenUsage={external && !onOpenPanel ? undefined : () => openPanel('usage')}
+            actions={headerTakesActions ? undefined : menu}
+          />
+        )}
+        {protocolMismatch !== undefined ? (
+          <Notice level='warning'>
+            Server speaks protocol v{protocolMismatch}, this build renders v{PROTOCOL_VERSION}. Some
+            events may not render.
+          </Notice>
+        ) : null}
+        {protocolError ? (
+          <Notice level='error' onDismiss={() => setProtocolError(undefined)}>
+            {protocolError}
+          </Notice>
+        ) : null}
+        <Transcript
           state={state}
-          connection={connection}
-          onOpenStatus={external && !onOpenPanel ? undefined : () => openPanel('info')}
-          onOpenContext={external && !onOpenPanel ? undefined : () => openPanel('context')}
-          onOpenUsage={external && !onOpenPanel ? undefined : () => openPanel('usage')}
-          actions={headerTakesActions ? undefined : menu}
+          fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
+          attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
+          canBrowseFiles={hostFiles.available}
+          hostImage={hostImage}
+          variant={transcriptVariant}
+          catchUp={
+            catchUp && newCount > 0
+              ? { from: catchUp.itemCount, since: catchUp.since }
+              : undefined
+          }
+          jumpToRecapRef={jumpToRecap}
         />
-      )}
-      {protocolMismatch !== undefined ? (
-        <Notice level='warning'>
-          Server speaks protocol v{protocolMismatch}, this build renders v{PROTOCOL_VERSION}. Some
-          events may not render.
-        </Notice>
-      ) : null}
-      {protocolError ? (
-        <Notice level='error' onDismiss={() => setProtocolError(undefined)}>
-          {protocolError}
-        </Notice>
-      ) : null}
-      <Transcript
-        state={state}
-        fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
-        attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
-        canBrowseFiles={hostFiles.available}
-        hostImage={hostImage}
-        variant={transcriptVariant}
-        catchUp={
-          catchUp && newCount > 0
-            ? { from: catchUp.itemCount, since: catchUp.since }
-            : undefined
-        }
-        jumpToRecapRef={jumpToRecap}
-      />
-      {/* The way back into what you missed. Above the composer because that is
-          where the eye already is on returning, and because the transcript
-          itself opens pinned to the newest row. */}
-      {catchUp && newCount > 0 ? (
-        <div className='px-3 pb-1'>
-          <div
-            data-slot='catch-up'
-            className='mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] items-center gap-2 text-label text-fg-3'>
-            <span aria-hidden className='select-none text-accent'>
-              ※
-            </span>
-            <span className='min-w-0 flex-1 truncate'>
-              {newCount} new {newCount === 1 ? 'row' : 'rows'}
-              {catchUp.since !== undefined ? ` since you were last here` : ''}
-            </span>
-            <button
-              type='button'
-              onClick={() => jumpToRecap.current?.()}
-              className='shrink-0 underline-offset-2 hover:text-fg-1 hover:underline'>
-              jump
-            </button>
-            <button
-              type='button'
-              onClick={() => setCaughtUp(true)}
-              className='shrink-0 underline-offset-2 hover:text-fg-1 hover:underline'>
-              dismiss
-            </button>
+        {/* The way back into what you missed. Above the composer because that is
+            where the eye already is on returning, and because the transcript
+            itself opens pinned to the newest row. */}
+        {catchUp && newCount > 0 ? (
+          <div className='px-3 pb-1'>
+            <div
+              data-slot='catch-up'
+              className='mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] items-center gap-2 text-label text-fg-3'>
+              <span aria-hidden className='select-none text-accent'>
+                ※
+              </span>
+              <span className='min-w-0 flex-1 truncate'>
+                {newCount} new {newCount === 1 ? 'row' : 'rows'}
+                {catchUp.since !== undefined ? ` since you were last here` : ''}
+              </span>
+              <button
+                type='button'
+                onClick={() => jumpToRecap.current?.()}
+                className='shrink-0 underline-offset-2 hover:text-fg-1 hover:underline'>
+                jump
+              </button>
+              <button
+                type='button'
+                onClick={() => setCaughtUp(true)}
+                className='shrink-0 underline-offset-2 hover:text-fg-1 hover:underline'>
+                dismiss
+              </button>
+            </div>
           </div>
-        </div>
-      ) : null}
-      {/* An engine with no approval channel never raises these, but a stale
-          pending request from a replayed log would still render — the record is
-          the authority on whether an approval UI means anything here. */}
-      {capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
-        <div className='px-3 pb-2'>
-          <div className='mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] flex-col gap-2'>
-            {state.pendingApprovals.map((request) =>
-              request.toolName === 'AskUserQuestion' &&
-              parseUserQuestions(request.input).length > 0 ? (
-                <QuestionPrompt
-                  key={request.id}
-                  request={request}
-                  onAnswer={approve}
-                  onDismiss={(id) => deny(id, 'Question dismissed by user')}
-                />
-              ) : (
-                <PermissionPrompt
-                  key={request.id}
-                  request={request}
-                  onApprove={approve}
-                  onDeny={deny}
-                />
-              ),
-            )}
+        ) : null}
+        {/* An engine with no approval channel never raises these, but a stale
+            pending request from a replayed log would still render — the record is
+            the authority on whether an approval UI means anything here. */}
+        {capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
+          <div className='px-3 pb-2'>
+            <div className='mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] flex-col gap-2'>
+              {state.pendingApprovals.map((request) =>
+                request.toolName === 'AskUserQuestion' &&
+                parseUserQuestions(request.input).length > 0 ? (
+                  <QuestionPrompt
+                    key={request.id}
+                    request={request}
+                    onAnswer={approve}
+                    onDismiss={(id) => deny(id, 'Question dismissed by user')}
+                  />
+                ) : (
+                  <PermissionPrompt
+                    key={request.id}
+                    request={request}
+                    onApprove={approve}
+                    onDeny={deny}
+                  />
+                ),
+              )}
+            </div>
           </div>
-        </div>
-      ) : null}
-      <Composer
-        ref={composerRef}
-        onSend={handleSend}
-        onInterrupt={interrupt}
-        busy={busy}
-        disabled={ended || !sessionId}
-        commands={capabilities.slashCommands ? commands : undefined}
-        skills={capabilities.skillsList ? state.skills : undefined}
-        attachments={attachments}
-        onSearchFiles={
-          hostFiles.available
-            ? (query, options) => hostFiles.search(query, { ...options, limit: 8 })
-            : undefined
-        }
-        layout={controlsExternal ? 'inline' : 'stacked'}
-        toolbar={
-          controlsExternal ? undefined : (
-          <>
-            {/* Codex reports no `capabilities` event, so its models arrive from
-                the profile catalog instead — without that fallback its picker
-                would be permanently empty and the session unswitchable. */}
-            {models.length ? (
-              <ModelSelect
-                models={models}
-                model={effectiveModel}
-                onModelChange={setModel}
-                disabled={ended}
-              />
-            ) : null}
-            {state.permissionMode ? (
-              <PermissionModeSelect
-                mode={state.permissionMode}
-                onModeChange={setPermissionMode}
-                // Only what this engine implements — the rest would come back as
-                // a protocol_error.
-                modes={capabilities.permissionModes}
-                canBypass={state.session?.canBypassPermissions}
-                disabled={ended}
-              />
-            ) : null}
-          </>
-          )
-        }
-      />
+        ) : null}
+        <Composer
+          ref={composerRef}
+          onSend={handleSend}
+          onInterrupt={interrupt}
+          busy={busy}
+          disabled={ended || !sessionId}
+          commands={capabilities.slashCommands ? commands : undefined}
+          skills={capabilities.skillsList ? state.skills : undefined}
+          attachments={attachments}
+          onSearchFiles={
+            hostFiles.available
+              ? (query, options) => hostFiles.search(query, { ...options, limit: 8 })
+              : undefined
+          }
+          layout={controlsExternal ? 'inline' : 'stacked'}
+          toolbar={
+            controlsExternal ? undefined : (
+            <>
+              {/* Codex reports no `capabilities` event, so its models arrive from
+                  the profile catalog instead — without that fallback its picker
+                  would be permanently empty and the session unswitchable. */}
+              {models.length ? (
+                <ModelSelect
+                  models={models}
+                  model={effectiveModel}
+                  onModelChange={setModel}
+                  disabled={ended}
+                />
+              ) : null}
+              {state.permissionMode ? (
+                <PermissionModeSelect
+                  mode={state.permissionMode}
+                  onModeChange={setPermissionMode}
+                  // Only what this engine implements — the rest would come back as
+                  // a protocol_error.
+                  modes={capabilities.permissionModes}
+                  canBypass={state.session?.canBypassPermissions}
+                  disabled={ended}
+                />
+              ) : null}
+            </>
+            )
+          }
+        />
 
-      {/* The internal dialog surface. The external one renders none of these —
-          the embedder hosts equivalent surfaces and is handed the intents. */}
-      {!external ? (
-        <>
-        <SessionInfoDialog
-          state={state}
-          client={client}
-          sessionId={sessionId}
-          open={panel === 'info'}
-          onOpenChange={(next) => setPanel(next ? 'info' : undefined)}
-        />
-        <ContextDialog
-          usage={state.contextUsage}
-          open={panel === 'context'}
-          onOpenChange={(next) => setPanel(next ? 'context' : undefined)}
-        />
-        <UsageDialog
-          rateLimits={windows}
-          subscriptionType={state.subscriptionType}
-          engine={state.engine ?? 'claude'}
-          totalCostUsd={state.totalCostUsd}
-          updatedAt={state.rateLimitsUpdatedAt}
-          open={panel === 'usage'}
-          onOpenChange={(next) => setPanel(next ? 'usage' : undefined)}
-        />
-        <McpDialog
-          client={client}
-          sessionId={sessionId}
-          canManageServers={capabilities.mcpServerActions}
-          open={panel === 'mcp'}
-          onOpenChange={(next) => setPanel(next ? 'mcp' : undefined)}
-        />
-        <SkillsDialog
-          skills={state.skills}
-          open={panel === 'skills'}
-          onOpenChange={(next) => setPanel(next ? 'skills' : undefined)}
-          // Drafts into the composer; the operator sends it. There is no engine
-          // call that runs a skill, so there is nothing else this button could do.
-          onUse={(skill) => composerRef.current?.insertText(skillPrompt(skill))}
-        />
-        <HostFilesDialog
-          client={client}
-          cwd={state.cwd}
-          open={panel === 'files'}
-          onOpenChange={(next) => setPanel(next ? 'files' : undefined)}
-        />
-        </>
-      ) : null}
-    </div>
+        {/* The internal dialog surface. The external one renders none of these —
+            the embedder hosts equivalent surfaces and is handed the intents. */}
+        {!external ? (
+          <>
+          <SessionInfoDialog
+            state={state}
+            client={client}
+            sessionId={sessionId}
+            open={panel === 'info'}
+            onOpenChange={(next) => setPanel(next ? 'info' : undefined)}
+          />
+          <ContextDialog
+            usage={state.contextUsage}
+            open={panel === 'context'}
+            onOpenChange={(next) => setPanel(next ? 'context' : undefined)}
+          />
+          <UsageDialog
+            rateLimits={windows}
+            subscriptionType={state.subscriptionType}
+            engine={state.engine ?? 'claude'}
+            totalCostUsd={state.totalCostUsd}
+            updatedAt={state.rateLimitsUpdatedAt}
+            open={panel === 'usage'}
+            onOpenChange={(next) => setPanel(next ? 'usage' : undefined)}
+          />
+          <McpDialog
+            client={client}
+            sessionId={sessionId}
+            canManageServers={capabilities.mcpServerActions}
+            open={panel === 'mcp'}
+            onOpenChange={(next) => setPanel(next ? 'mcp' : undefined)}
+          />
+          <SkillsDialog
+            skills={state.skills}
+            open={panel === 'skills'}
+            onOpenChange={(next) => setPanel(next ? 'skills' : undefined)}
+            // Drafts into the composer; the operator sends it. There is no engine
+            // call that runs a skill, so there is nothing else this button could do.
+            onUse={(skill) => composerRef.current?.insertText(skillPrompt(skill))}
+          />
+          <HostFilesDialog
+            client={client}
+            cwd={state.cwd}
+            open={panel === 'files'}
+            onOpenChange={(next) => setPanel(next ? 'files' : undefined)}
+          />
+          </>
+        ) : null}
+      </div>
+    </TranscriptVariantProvider>
   )
 }
 
