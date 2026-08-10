@@ -1182,6 +1182,19 @@ export type ListSessionsResponse = { sessions: SessionInfo[] }
 export type CreateSessionResponse = { session: SessionInfo }
 export type GetSessionResponse = { session: SessionInfo }
 
+/**
+ * Body of `PATCH {basePath}/sessions/:id` — the host-facing edits to a live
+ * session. Today that is only its display name: `title` writes `meta.title`,
+ * which {@link SessionInfo.title} prefers over the derived one, and `null` (or
+ * an empty string) clears the override so the derived title comes back. Nothing
+ * here reaches the engine — renaming does not speak to the model.
+ *
+ * 409 when the session is parked: a parked session has no runner to carry the
+ * change, and its snapshot is the host's to rewrite, not this route's.
+ */
+export type UpdateSessionRequest = { title?: string | null }
+export type UpdateSessionResponse = { session: SessionInfo }
+
 /** Body of `POST {basePath}/sessions/:id/permissions/:requestId` — the REST counterpart
  * of the WS `permission_decision` command, for remote controllers without a socket
  * (e.g. answering a job's AskUserQuestion from a webhook consumer). 404 = the request

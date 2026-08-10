@@ -282,6 +282,46 @@ describe('createWorkerServer', () => {
     expect(gone.status).toBe(404)
   })
 
+  it('renames a session over PATCH, and clears back to the derived title', async () => {
+    const harness = fakeHarness()
+    const { base } = await startServer(harness)
+
+    const createRes = await fetch(`${base}/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/project', prompt: 'ship the thing' }),
+    })
+    const { session } = (await createRes.json()) as { session: SessionInfo }
+    // Derived from the first prompt until the host names it.
+    expect(session.title).toBe('ship the thing')
+
+    const patch = async (body: unknown) =>
+      fetch(`${base}/sessions/${session.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+    const named = await patch({ title: '  Release prep  ' })
+    expect(named.status).toBe(200)
+    expect(((await named.json()) as { session: SessionInfo }).session.title).toBe('Release prep')
+
+    // The rename is what the rollup carries, not just the PATCH response.
+    const listed = (await (await fetch(`${base}/sessions`)).json()) as { sessions: SessionInfo[] }
+    expect(listed.sessions.find((s) => s.id === session.id)?.title).toBe('Release prep')
+
+    const cleared = await patch({ title: null })
+    expect(((await cleared.json()) as { session: SessionInfo }).session.title).toBe('ship the thing')
+
+    expect((await patch({ title: 42 })).status).toBe(400)
+    const unknown = await fetch(`${base}/sessions/nope`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'x' }),
+    })
+    expect(unknown.status).toBe(404)
+  })
+
   it('resolves a pending permission over REST (remote-controller channel)', async () => {
     const harness = fakeHarness()
     const { base } = await startServer(harness)

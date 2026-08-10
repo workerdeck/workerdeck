@@ -27,6 +27,7 @@ function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
     }),
     subscribe: () => () => {},
     sendMessage: () => {},
+    setTitle: () => {},
     resolvePermission: () => false,
     interrupt: async () => {},
     setPermissionMode: async () => {},

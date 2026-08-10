@@ -785,6 +785,15 @@ export class CodexRunner implements Runner {
     return prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt
   }
 
+  /** Host-facing rename: writes `meta.title`, which `#title()` prefers. Clearing
+   * it (undefined) restores the derived title. The engine is never told. */
+  setTitle(title: string | undefined): void {
+    const meta = { ...this.#config.meta }
+    if (title) meta.title = title
+    else delete meta.title
+    this.#config = { ...this.#config, meta }
+  }
+
   start(): Promise<void> {
     if (this.#started) return this.#turnChain
     this.#started = true

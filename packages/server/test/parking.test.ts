@@ -142,6 +142,9 @@ class ParkableRunner implements Runner {
     return () => this.#listeners.delete(listener)
   }
   sendMessage(): void {}
+  setTitle(title: string | undefined): void {
+    this.#config = { ...this.#config, meta: { ...this.#config.meta, title } }
+  }
   resolvePermission(): boolean {
     return false
   }

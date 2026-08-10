@@ -40,6 +40,7 @@ import {
   type QueueServerFrame,
   type McpServerActionRequest,
   type ResolvePermissionRequest,
+  type UpdateSessionRequest,
   type SdkSessionSummary,
   type ServerFrame,
   type SessionInfo,
@@ -2281,6 +2282,25 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     }
     if (req.method === 'GET') {
       json(res, 200, { session: runner?.info() ?? parked!.info })
+      return
+    }
+    if (req.method === 'PATCH') {
+      // Rename. A parked session has no runner to carry the change and its
+      // snapshot belongs to the park store, so it is refused rather than lied to.
+      if (!runner) {
+        json(res, 409, { error: 'session is parked (wake it before renaming)' })
+        return
+      }
+      const body = (await readJsonBody(req, maxBodyBytes)) as UpdateSessionRequest
+      if (body?.title !== undefined) {
+        if (body.title !== null && typeof body.title !== 'string') {
+          json(res, 400, { error: 'title must be a string or null' })
+          return
+        }
+        const title = typeof body.title === 'string' ? body.title.trim() : ''
+        runner.setTitle(title || undefined)
+      }
+      json(res, 200, { session: runner.info() })
       return
     }
     if (req.method === 'DELETE') {

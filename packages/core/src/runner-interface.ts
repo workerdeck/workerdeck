@@ -87,6 +87,10 @@ export interface Runner {
   reconnectMcpServer?(name: string): Promise<void>
   /** Enable or disable one MCP server by name. Throws if it fails. */
   setMcpServerEnabled?(name: string, enabled: boolean): Promise<void>
+  /** Set (or clear, with undefined) the host's display title — `meta.title`, which
+   * `info().title` prefers over the derived one. A host-facing edit only: nothing
+   * is sent to the engine. */
+  setTitle(title: string | undefined): void
   /** Resolve a pending permission request. Returns false if the id is unknown (e.g. timed out). */
   resolvePermission(requestId: string, decision: PermissionDecision): boolean
   interrupt(): Promise<void>

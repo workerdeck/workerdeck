@@ -25,6 +25,7 @@ import type {
   QueueServerFrame,
   QueueStats,
   ResolvePermissionRequest,
+  UpdateSessionRequest,
   SubmitExecutionResultRequest,
   SubmitExecutionResultResponse,
   SaveProfileResponse,
@@ -393,6 +394,13 @@ export class WorkerDeckClient {
 
   async getSession(id: string): Promise<SessionInfo> {
     const body = await this.#call('GET', `/sessions/${encodeURIComponent(id)}`)
+    return (body as { session: SessionInfo }).session
+  }
+
+  /** Rename a session (or clear the name with `null`, restoring the derived
+   * title). 409 when the session is parked. */
+  async updateSession(id: string, patch: UpdateSessionRequest): Promise<SessionInfo> {
+    const body = await this.#call('PATCH', `/sessions/${encodeURIComponent(id)}`, patch)
     return (body as { session: SessionInfo }).session
   }
 

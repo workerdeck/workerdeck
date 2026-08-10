@@ -880,6 +880,15 @@ export class AiSdkRunner implements Runner {
     return prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt
   }
 
+  /** Host-facing rename: writes `meta.title`, which `#title()` prefers. Clearing
+   * it (undefined) restores the derived title. The engine is never told. */
+  setTitle(title: string | undefined): void {
+    const meta = { ...this.#config.meta }
+    if (title) meta.title = title
+    else delete meta.title
+    this.#config = { ...this.#config, meta }
+  }
+
   #setStatus(status: SessionStatus, detail?: string): void {
     if (this.#status === status) return
     if (this.#status === 'closed' || this.#status === 'failed') return
