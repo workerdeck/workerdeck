@@ -84,10 +84,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
 
   #pushState(): void {
     if (!this.#view || !this.#ready) return
-    this.#post({
-      kind: 'wd-sidebar-state',
-      state: this.#model.sidebarState(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath),
-    })
+    this.#post({ kind: 'wd-sidebar-state', state: this.#model.sidebarState() })
     const waiting = this.#model.attentionCount()
     this.#view.badge =
       waiting > 0

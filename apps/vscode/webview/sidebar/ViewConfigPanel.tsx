@@ -9,11 +9,11 @@ import {
   cn,
 } from '@workerdeck/ui'
 import { X } from 'lucide-react'
-import type { WireHost } from '../../src/bridge-protocol.ts'
+import type { WireHost, WorkspaceScope } from '../../src/bridge-protocol.ts'
 import {
-  DEFAULT_VIEW_CONFIG,
   STATE_LABELS,
   STATE_ORDER,
+  clearFilters,
   isFiltering,
   toggleFilter,
   type GroupBy,
@@ -46,11 +46,13 @@ export function ViewConfigPanel({
   config,
   hosts,
   adapters,
+  scope,
   onChange,
 }: {
   config: ViewConfig
   hosts: readonly WireHost[]
   adapters: readonly string[]
+  scope: WorkspaceScope | undefined
   onChange: (next: ViewConfig) => void
 }) {
   const set = <K extends keyof ViewConfig>(key: K, value: ViewConfig[K]) =>
@@ -75,6 +77,19 @@ export function ViewConfigPanel({
           </button>
         ) : null}
       </div>
+
+      {/* Only where there is a folder to be inside of — an inert chip pair in a
+          folderless window would be a control that does nothing. */}
+      {scope ? (
+        <ChipRow label='Scope'>
+          <Chip active={config.scoped} onClick={() => set('scoped', true)}>
+            {scope.label}
+          </Chip>
+          <Chip active={!config.scoped} onClick={() => set('scoped', false)}>
+            All folders
+          </Chip>
+        </ChipRow>
+      ) : null}
 
       {hosts.length > 1 ? (
         <ChipRow label='Gateway'>
@@ -137,12 +152,10 @@ export function ViewConfigPanel({
         />
       </div>
 
-      {isFiltering(config) ? (
+      {isFiltering(config, scope) ? (
         <button
           type='button'
-          onClick={() =>
-            onChange({ ...DEFAULT_VIEW_CONFIG, groupBy: config.groupBy, sortBy: config.sortBy })
-          }
+          onClick={() => onChange(clearFilters(config))}
           className='self-start text-label text-fg-4 underline-offset-2 hover:text-fg-1 hover:underline'>
           Clear filters
         </button>

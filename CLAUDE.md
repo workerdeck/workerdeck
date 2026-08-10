@@ -193,7 +193,18 @@ protocol. Read these before changing scope or structure:
   by probing paths, which is also what makes `extensionKind: ["workspace","ui"]` the whole
   Remote SSH story. The Sessions view lists every gateway's sessions at once — gateway is a
   facet (filter/group/sort) beside adapter and state, not the frame — and gateways are managed
-  only on their own screen; there is **no implicit localhost gateway**. A session rename is a
+  only on their own screen; there is **no implicit localhost gateway**. The window's open
+  folders are a facet too, and the only one **on by default**: `workspaceScope()` turns them
+  into scope roots, and a session is inside one only when the *gateway* could be — a `file:`
+  folder scopes loopback gateways alone (a remote gateway's identical-looking path is another
+  machine's directory), a `workerdeck://<hostId>` mount scopes that gateway alone. Because it
+  hides by default it says so: a scope line above the list with a one-click way out, and a
+  scoped-empty list offers "show all folders" rather than the generic clear-filters dead end.
+  The new-session form doubles as the **resume** picker (as `web`'s does): `listSdkSessions`
+  for the chosen directory *and profile* — the engine store is per-engine, so another
+  profile's ids mean nothing here — gated on the capability record's `listSessions`, and a
+  pick is the same create call with `resume` set and no first prompt (the engine replays the
+  thread; a prompt on top would be an unasked-for turn). A session rename is a
   gateway edit (`PATCH /sessions/:id` → `meta.title`), never a local override, so every client
   sees the same name. `src/dev-reload.ts` is development-mode only: a webview rebuild
   re-renders the webviews in place, an extension-host rebuild reloads the window (VS Code

@@ -35,11 +35,26 @@ export type WireHost = {
   cwdSuggestion?: string
 }
 
+/**
+ * One folder open in this window, as a place sessions can live in.
+ *
+ * `hostId` present = the folder is a `workerdeck://<hostId>` mount, so only that
+ * gateway's sessions can be inside it. Absent = a real local folder, which only
+ * a loopback gateway's cwds can be inside: a remote gateway's paths are on
+ * another machine, where an identical-looking path means nothing.
+ */
+export type ScopeRoot = { hostId?: string; path: string }
+
+/** The window's open folders — the sessions list's intrinsic scope. */
+export type WorkspaceScope = { label: string; roots: ScopeRoot[] }
+
 export type SidebarState = {
   hosts: WireHost[]
   /** Keyed by host id; present only for connected hosts. */
   sessions: Record<string, SessionInfo[]>
   selected?: { hostId: string; sessionId: string }
+  /** Absent when no folder is open — the scope filter is then inert. */
+  scope?: WorkspaceScope
 }
 
 /** Transport messages — either webview → host. */

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
-import type { ProfileInfo } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, type ProfileInfo, type SdkSessionSummary } from '@workerdeck/protocol'
 import {
   Button,
   Input,
@@ -12,7 +12,9 @@ import {
   SelectValue,
   Spinner,
   Textarea,
+  formatRelativeTime,
 } from '@workerdeck/ui'
+import { History } from 'lucide-react'
 import type { WireHost } from '../../src/bridge-protocol.ts'
 import type { Bridge } from '../bridge.ts'
 
@@ -21,6 +23,11 @@ import type { Bridge } from '../bridge.ts'
  * client, availability-aware) → cwd → optional first prompt. Creates the
  * session ITSELF over REST — the bridge injects the gateway's credentials host
  * side — and hands the id up via onCreated; errors stay inline.
+ *
+ * The same form resumes: an engine with a browsable session store lists what is
+ * on disk for the chosen directory, and picking one creates a session that
+ * continues that engine session instead of a fresh one. Same route, one flag
+ * (`resume`) — which is why it is here and not a screen of its own.
  */
 export function NewSessionForm({
   bridge,
@@ -45,6 +52,8 @@ export function NewSessionForm({
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>(undefined)
+  const [stored, setStored] = useState<SdkSessionSummary[] | undefined>(undefined)
+  const [loadingStored, setLoadingStored] = useState(false)
 
   const client = useMemo(
     () =>
@@ -86,15 +95,23 @@ export function NewSessionForm({
     }
   }, [client])
 
-  const submit = async () => {
+  // The stored list is per directory and per engine store — a change to either
+  // makes what is on screen answer a question nobody is asking any more.
+  useEffect(() => setStored(undefined), [client, profile, cwd])
+
+  const submit = async (resume?: SdkSessionSummary) => {
     if (!client || !host) return
     setBusy(true)
     setError(undefined)
     try {
       const info = await client.createSession({
-        cwd: cwd.trim(),
+        // A stored session knows its own directory; trust it over the field.
+        cwd: resume?.cwd ?? cwd.trim(),
         profile,
-        prompt: prompt.trim() || undefined,
+        // The engine replays the thread it is resuming — a first prompt on top
+        // of that would be a second turn nobody asked for.
+        prompt: resume ? undefined : prompt.trim() || undefined,
+        resume: resume?.sessionId,
       })
       onCreated(host.id, info.id)
     } catch (err) {
@@ -104,7 +121,28 @@ export function NewSessionForm({
   }
 
   const cwdValid = cwd.trim().startsWith('/')
-  const selectedProfile = profiles?.find((p) => p.name === profile)
+  // With one profile the server resolves it implicitly (and the picker is
+  // hidden), so that profile is still what the session will run under.
+  const selectedProfile =
+    profiles?.find((p) => p.name === profile) ?? (profiles?.length === 1 ? profiles[0] : undefined)
+  // Absent record = the engine's default, exactly as the panel resolves it.
+  const capabilities =
+    selectedProfile?.capabilities ?? ENGINE_CAPABILITIES[selectedProfile?.engine ?? 'claude']
+
+  const loadStored = async () => {
+    if (!client || !cwdValid) return
+    setLoadingStored(true)
+    setError(undefined)
+    try {
+      // Named so the gateway lists the CHOSEN profile's engine store — another
+      // engine's ids mean nothing to this one.
+      setStored(await client.listSdkSessions({ dir: cwd.trim(), limit: 20, profile }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoadingStored(false)
+    }
+  }
 
   return (
     <div className='flex flex-col gap-3 p-3'>
@@ -197,6 +235,55 @@ export function NewSessionForm({
           {busy ? <Spinner className='size-3' /> : null} Create session
         </Button>
       </div>
+
+      {/* Resuming needs an engine whose sessions are on disk and browsable. */}
+      {profiles === undefined || !capabilities.listSessions ? null : (
+        <div className='mt-1 flex flex-col gap-1 border-t border-border pt-3'>
+          <div className='flex items-center justify-between gap-2'>
+            <span className='text-body-sm text-fg-3'>Resume a previous session</span>
+            <Button
+              variant='ghost'
+              size='xs'
+              onClick={() => void loadStored()}
+              disabled={loadingStored || !cwdValid}>
+              {loadingStored ? <Spinner className='size-3' /> : <History className='size-3' />}
+              {stored ? 'Reload' : 'Browse'}
+            </Button>
+          </div>
+          {/* Stored sessions are indexed by directory, so the field decides
+              which ones exist — say so rather than offering a dead button. */}
+          {!cwdValid ? (
+            <span className='text-label text-fg-4'>
+              Set a working directory — stored sessions are listed per project.
+            </span>
+          ) : stored === undefined ? null : stored.length === 0 ? (
+            <span className='text-label text-fg-4'>No stored sessions for this directory.</span>
+          ) : (
+            <ul className='flex flex-col'>
+              {stored.map((s) => (
+                <li
+                  key={s.sessionId}
+                  className='flex items-center gap-2 rounded-md px-1 py-1 hover:bg-surface-hover'>
+                  <div className='min-w-0 flex-1'>
+                    <div className='truncate text-body-sm text-fg-1'>{s.customTitle ?? s.summary}</div>
+                    <div className='flex gap-2 font-mono text-label text-fg-4'>
+                      {s.gitBranch ? <span className='truncate'>{s.gitBranch}</span> : null}
+                      <span className='shrink-0'>{formatRelativeTime(s.lastModified)}</span>
+                    </div>
+                  </div>
+                  <Button
+                    variant='outline'
+                    size='xs'
+                    onClick={() => void submit(s)}
+                    disabled={busy}>
+                    Resume
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import type { SessionInfo } from '@workerdeck/protocol'
-import type { SidebarState } from '../../src/bridge-protocol.ts'
+import type { SidebarState, WorkspaceScope } from '../../src/bridge-protocol.ts'
 
 /**
  * How the sessions list is filtered, grouped and sorted — the whole of the view
@@ -41,6 +41,9 @@ export type ViewConfig = {
   gateways: string[]
   adapters: string[]
   states: SessionState[]
+  /** Show only sessions inside the window's open folders. Inert with no folder
+   * open, which is why it can default on. */
+  scoped: boolean
   groupBy: GroupBy
   sortBy: SortBy
 }
@@ -50,6 +53,7 @@ export const DEFAULT_VIEW_CONFIG: ViewConfig = {
   gateways: [],
   adapters: [],
   states: [],
+  scoped: true,
   groupBy: 'state',
   sortBy: 'recent',
 }
@@ -58,6 +62,8 @@ export const DEFAULT_VIEW_CONFIG: ViewConfig = {
 export type SessionRow = {
   hostId: string
   hostName: string
+  /** Its gateway is loopback — its cwds are paths on this machine. */
+  local: boolean
   adapter: string
   state: SessionState
   info: SessionInfo
@@ -75,6 +81,7 @@ export function buildRows(state: SidebarState | undefined): SessionRow[] {
       rows.push({
         hostId: host.id,
         hostName: host.name,
+        local: host.local,
         adapter: info.engine ?? 'claude',
         state: sessionState(info),
         info,
@@ -105,13 +112,52 @@ function matchesSearch(row: SessionRow, needle: string): boolean {
   )
 }
 
-export function filterRows(rows: readonly SessionRow[], config: ViewConfig): SessionRow[] {
+/** Trailing separators dropped and separators unified, so containment is a
+ * plain prefix test on both a posix and a Windows gateway. */
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, '/').replace(/\/+$/, '')
+}
+
+function isWithin(root: string, path: string): boolean {
+  const base = normalizePath(root)
+  const dir = normalizePath(path)
+  // The separator matters: /a/project must not swallow /a/project-2.
+  return dir === base || dir.startsWith(`${base}/`)
+}
+
+/**
+ * Is this session inside one of the window's folders? A `workerdeck://` mount
+ * only ever matches its own gateway; a real folder only matches a loopback
+ * gateway, because a remote gateway's identical-looking path is a different
+ * machine's directory.
+ */
+export function inScope(row: SessionRow, scope: WorkspaceScope): boolean {
+  return scope.roots.some(
+    (root) =>
+      (root.hostId ? root.hostId.toLowerCase() === row.hostId.toLowerCase() : row.local) &&
+      isWithin(root.path, row.info.cwd),
+  )
+}
+
+/** Whether the scope filter is actually hiding anything — it is inert with no
+ * folder open, and that is the difference between a default and a filter. */
+export function scopeActive(config: ViewConfig, scope: WorkspaceScope | undefined): boolean {
+  return config.scoped && scope !== undefined
+}
+
+export function filterRows(
+  rows: readonly SessionRow[],
+  config: ViewConfig,
+  scope?: WorkspaceScope,
+): SessionRow[] {
   const needle = config.search.trim().toLowerCase()
+  const scoping = scopeActive(config, scope) ? scope : undefined
   return rows.filter(
     (row) =>
       (config.gateways.length === 0 || config.gateways.includes(row.hostId)) &&
       (config.adapters.length === 0 || config.adapters.includes(row.adapter)) &&
       (config.states.length === 0 || config.states.includes(row.state)) &&
+      (!scoping || inScope(row, scoping)) &&
       matchesSearch(row, needle),
   )
 }
@@ -177,14 +223,28 @@ export function groupRows(rows: readonly SessionRow[], config: ViewConfig): Sess
   return [...groups.values()].sort((a, b) => a.rank.localeCompare(b.rank))
 }
 
-/** Whether the config hides anything — what the header icon's dot reports. */
-export function isFiltering(config: ViewConfig): boolean {
+/** Whether the config hides anything — what the header icon's dot reports.
+ * Scope counts only where it bites, and a window with a folder open is scoped
+ * by default, so pass the scope to know. */
+export function isFiltering(config: ViewConfig, scope?: WorkspaceScope): boolean {
   return (
     config.search.trim().length > 0 ||
     config.gateways.length > 0 ||
     config.adapters.length > 0 ||
-    config.states.length > 0
+    config.states.length > 0 ||
+    scopeActive(config, scope)
   )
+}
+
+/** "Show me everything": every filter off, including scope. The group/sort
+ * choices are a layout preference and survive. */
+export function clearFilters(config: ViewConfig): ViewConfig {
+  return {
+    ...DEFAULT_VIEW_CONFIG,
+    scoped: false,
+    groupBy: config.groupBy,
+    sortBy: config.sortBy,
+  }
 }
 
 /** Toggle one value of a multi-select facet filter (empty array = "all"). */

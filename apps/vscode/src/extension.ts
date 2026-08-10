@@ -30,7 +30,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const statusBar = new SessionStatusBar()
 
   const feed = {
-    state: () => model.sidebarState(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath),
+    state: () => model.sidebarState(),
     vitals: () => vitals,
   }
   const sections = Object.fromEntries(

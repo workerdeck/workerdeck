@@ -4,6 +4,7 @@ import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl, isLoopbackHost } from './hosts.ts'
 import { clientFor, probe, type ProbeResult } from './gateway.ts'
 import type { SidebarState, WireHost } from './bridge-protocol.ts'
+import { workspaceScope } from './workspace-scope.ts'
 
 type HostSnapshot =
   | { probe: 'connected'; sessions: SessionInfo[] }
@@ -26,10 +27,15 @@ export class SessionsModel implements vscode.Disposable {
   #selected: { hostId: string; sessionId: string } | undefined
   #timer: NodeJS.Timeout | undefined
   #refreshing = false
+  readonly #folders: vscode.Disposable
 
   constructor(store: HostStore) {
     this.#store = store
     store.onDidChange(() => void this.refresh())
+    // The open folders are part of the state consumers render (the scope
+    // filter, the cwd suggestion), so a folder added or removed has to reach
+    // them — no gateway poll is involved.
+    this.#folders = vscode.workspace.onDidChangeWorkspaceFolders(() => this.#onDidChange.fire())
   }
 
   setSelected(selected: { hostId: string; sessionId: string } | undefined): void {
@@ -104,7 +110,8 @@ export class SessionsModel implements vscode.Disposable {
     return waiting
   }
 
-  sidebarState(workspaceFolder: string | undefined): SidebarState {
+  sidebarState(): SidebarState {
+    const scope = workspaceScope()
     const hosts: WireHost[] = []
     const sessions: SidebarState['sessions'] = {}
     for (const host of this.#store.all()) {
@@ -112,6 +119,12 @@ export class SessionsModel implements vscode.Disposable {
       if (!base) continue
       const snap = this.#snapshots.get(host.id)
       const local = isLoopbackHost(host)
+      // The open folder is the best guess only where it is a path this gateway
+      // could chdir into: its own mount, or any folder at all when the gateway
+      // runs on this machine. Otherwise fall back to where its sessions live.
+      const folder = scope?.roots.find((r) =>
+        r.hostId ? r.hostId.toLowerCase() === host.id.toLowerCase() : local,
+      )?.path
       hosts.push({
         id: host.id,
         name: host.name,
@@ -119,11 +132,11 @@ export class SessionsModel implements vscode.Disposable {
         rawUrl: host.baseUrl,
         local,
         probe: snap?.probe ?? 'pending',
-        cwdSuggestion: local ? workspaceFolder : this.sessionsOf(host.id)[0]?.cwd,
+        cwdSuggestion: folder ?? this.sessionsOf(host.id)[0]?.cwd,
       })
       if (snap?.probe === 'connected') sessions[host.id] = snap.sessions
     }
-    return { hosts, sessions, selected: this.#selected }
+    return { hosts, sessions, selected: this.#selected, scope }
   }
 
   hostOf(hostId: string): GatewayHost | undefined {
@@ -132,6 +145,7 @@ export class SessionsModel implements vscode.Disposable {
 
   dispose(): void {
     this.stopPolling()
+    this.#folders.dispose()
     this.#onDidChange.dispose()
   }
 }

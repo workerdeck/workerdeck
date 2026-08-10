@@ -192,6 +192,13 @@ unreleased.
   the reasoning that the panel already sits inside a window that has a status line. That move
   is what put `connection` on `SessionVitals`: a status held over a dropped socket is a stale
   reading, so the link state takes the slot outside the panel exactly as it does inside.
+  The list is **scoped to the window's open folders by default** — the folder is a facet
+  alongside gateway/adapter/state, matched only where the gateway could actually be in it (a
+  local folder scopes loopback gateways; a `workerdeck://` mount scopes its own), announced
+  above the list and one click from "show all", because a filter nobody chose has to be a
+  filter everybody can see. The new-session form is also the resume picker, the same
+  `listSdkSessions` → `createSession({ resume })` pair the dashboard offers, per directory and
+  per profile and gated on the capability record.
   Sessions data is REST rollups on a poll with an
   awaiting-approval badge (`pendingPermissionCount` — already in the protocol, no addition
   needed); notifications for permission asks tapped from frames already crossing the bridge,

@@ -1,5 +1,5 @@
 import { Button } from '@workerdeck/ui'
-import { ArrowLeft, Plug, Plus } from 'lucide-react'
+import { ArrowLeft, FolderOpen, Plug, Plus } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { SidebarState } from '../../src/bridge-protocol.ts'
 import type { AppHostMessage, Bridge } from '../bridge.ts'
@@ -12,9 +12,11 @@ import {
   DEFAULT_VIEW_CONFIG,
   adaptersOf,
   buildRows,
+  clearFilters,
   filterRows,
   groupRows,
   isFiltering,
+  scopeActive,
   type ViewConfig,
 } from './view-config.ts'
 
@@ -44,7 +46,12 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const [gwError, setGwError] = useState<string | undefined>(undefined)
   const [gwBusy, setGwBusy] = useState(false)
   const persisted = bridge.getState<Persisted>()
-  const [config, setConfig] = useState<ViewConfig>(persisted?.config ?? DEFAULT_VIEW_CONFIG)
+  // Spread over the defaults, not instead of them: a config persisted by an
+  // older build is missing whatever fields have been added since.
+  const [config, setConfig] = useState<ViewConfig>({
+    ...DEFAULT_VIEW_CONFIG,
+    ...persisted?.config,
+  })
   const [configOpen, setConfigOpen] = useState(persisted?.configOpen ?? false)
 
   // The view config outlives a reload — VS Code tears webviews down freely.
@@ -85,10 +92,19 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
   )
 
   const hosts = state?.hosts ?? []
+  const scope = state?.scope
   const rows = useMemo(() => buildRows(state), [state])
   const adapters = useMemo(() => adaptersOf(rows), [rows])
-  const groups = useMemo(() => groupRows(filterRows(rows, config), config), [rows, config])
+  const filtered = useMemo(() => filterRows(rows, config, scope), [rows, config, scope])
+  const groups = useMemo(() => groupRows(filtered, config), [filtered, config])
+  // Nothing hidden means an empty list is an empty gateway, not a filter — the
+  // two want opposite affordances (create one vs. widen the view).
+  const hidden = rows.length - filtered.length
   const connected = hosts.filter((h) => h.probe === 'connected')
+  const scoping = scopeActive(config, scope)
+  // Scope alone is hiding things — worth saying so plainly, since it is on by
+  // default and the rest of the config is behind a toggle.
+  const onlyScoped = scoping && !isFiltering({ ...config, scoped: false })
 
   if (screen.kind === 'new-session') {
     return (
@@ -152,8 +168,24 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
           config={config}
           hosts={hosts}
           adapters={adapters}
+          scope={scope}
           onChange={setConfig}
         />
+      ) : null}
+
+      {/* The list is scoped by default, so the fact has to be visible without
+          opening the config — with the way out on the same line. */}
+      {scoping && !configOpen ? (
+        <div className='flex items-center gap-1 px-2 py-1 text-label text-fg-4'>
+          <FolderOpen className='size-3 shrink-0' />
+          <span className='min-w-0 flex-1 truncate'>{scope?.label}</span>
+          <button
+            type='button'
+            onClick={() => setConfig({ ...config, scoped: false })}
+            className='shrink-0 underline-offset-2 hover:text-fg-1 hover:underline'>
+            Show all
+          </button>
+        </div>
       ) : null}
 
       <div className='min-h-0 flex-1 overflow-y-auto py-1'>
@@ -178,14 +210,21 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             onClick={() => setScreen({ kind: 'gateways' })}
           />
         ) : groups.length === 0 ? (
-          isFiltering(config) ? (
-            <Empty
-              message='No session matches the current filters.'
-              action='Clear filters'
-              onClick={() =>
-                setConfig({ ...DEFAULT_VIEW_CONFIG, groupBy: config.groupBy, sortBy: config.sortBy })
-              }
-            />
+          hidden > 0 ? (
+            onlyScoped ? (
+              <Empty
+                message={`No sessions in ${scope?.label ?? 'this project'}.`}
+                action='Show sessions from all folders'
+                icon={<FolderOpen className='size-3.5' />}
+                onClick={() => setConfig({ ...config, scoped: false })}
+              />
+            ) : (
+              <Empty
+                message='No session matches the current filters.'
+                action='Clear filters'
+                onClick={() => setConfig(clearFilters(config))}
+              />
+            )
           ) : (
             <Empty
               message='No sessions yet.'
