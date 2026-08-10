@@ -1,4 +1,5 @@
 import * as vscode from 'vscode'
+import type { PermissionMode } from '@workerdeck/protocol'
 import type { SessionVitals, SessionSurfacePanel } from '@workerdeck/ui'
 import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl, isLoopbackHost } from './hosts.ts'
@@ -18,6 +19,13 @@ export type PanelDelegate = {
   openPanel: (panel: SessionSurfacePanel) => Promise<void>
   /** Live vitals for the shown session — relayed to the sidebar's sections. */
   vitals: (vitals: SessionVitals) => void
+  /** What had been seen of this session last time it was on screen, for the
+   * panel's catch-up. The store lives in `activate`; the panel only carries it
+   * across the bridge. */
+  unseen: (hostId: string, sessionId: string) => { itemCount: number; since: number } | undefined
+  /** The panel became visible or hidden. Visibility is what makes a session
+   * "read", so the watermark writer needs to hear about it. */
+  visibilityChanged: () => void
 }
 
 /**
@@ -56,6 +64,18 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     return this.#active
   }
 
+  /** Is the panel actually on screen? A hidden dock is not being read. */
+  get visible(): boolean {
+    return this.#view?.visible ?? false
+  }
+
+  /** Is this exactly what the panel is already showing? Load-bearing for
+   * re-selection: the panel does not remount, so anything a caller tears down
+   * "because the session changed" will not be rebuilt. */
+  isShowing(hostId: string, sessionId: string): boolean {
+    return this.#active?.sessionId === sessionId && this.#active.host.id === hostId
+  }
+
   resolveWebviewView(view: vscode.WebviewView): void {
     this.#view = view
     this.#ready = false
@@ -64,20 +84,30 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     this.#transports = new WebviewTransportHost(this.#store, post, (text) => this.#tapFrame(text))
     const dist = vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
     view.webview.options = { enableScripts: true, localResourceRoots: [dist] }
-    view.webview.html = webviewHtml(view.webview, dist, 'main.js')
+    view.webview.html = webviewHtml(view.webview, dist, 'main.js', {}, 0, { font: true })
     view.webview.onDidReceiveMessage((msg: PanelToHost) => void this.#onMessage(msg))
+    view.onDidChangeVisibility(() => this.#delegate.visibilityChanged())
     view.onDidDispose(() => {
       this.#view = undefined
       this.#ready = false
       this.#transports?.dispose()
+      // A disposed panel is not showing anything: whatever was on screen stops
+      // counting as read from here on.
+      this.#delegate.visibilityChanged()
     })
   }
 
   /** Show a session (revealing the panel), or clear it with undefined. */
   async show(active: ActiveSession | undefined): Promise<void> {
+    // Re-selecting what is already on screen must not pull keyboard focus out
+    // of the sidebar — a second click on a card is not a request to leave it.
+    // Only when the view doesn't exist yet is the focus worth it: that is what
+    // materializes it.
+    const alreadyShown =
+      !!active && !!this.#view && this.isShowing(active.host.id, active.sessionId)
     this.#active = active
     this.#onDidChangeActive.fire(active)
-    if (active) {
+    if (active && !alreadyShown) {
       // Focussing materializes the view if the panel has never been opened.
       await vscode.commands.executeCommand(`${SessionPanelProvider.viewId}.focus`)
     }
@@ -95,7 +125,12 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     if (!base) return
     this.#post({
       kind: 'wd-show-session',
-      session: { baseUrl: base, sessionId: active.sessionId, hostName: active.host.name },
+      session: {
+        baseUrl: base,
+        sessionId: active.sessionId,
+        hostName: active.host.name,
+        unseen: this.#delegate.unseen(active.host.id, active.sessionId),
+      },
     })
   }
 
@@ -165,14 +200,25 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
   }
 
 
-  /** Dev hot-reload: re-render this webview from the freshly built bundle. The
-   * webview re-announces `wd-ready`, which is what re-pushes its state. */
+  /** Switch the live session's model / permission mode. Inert when the panel
+   * has never been opened: with no webview there is no attach to command. */
+  setModel(model?: string): void {
+    this.#post({ kind: 'wd-set-model', model })
+  }
+
+  setPermissionMode(mode: PermissionMode): void {
+    this.#post({ kind: 'wd-set-permission-mode', mode })
+  }
+
+  /** Re-render this webview from disk — the dev reloader after a rebuild, and
+   * a font-setting change (the typeface is baked into the HTML). The webview
+   * re-announces `wd-ready`, which is what re-pushes its state. */
   reloadWebview(): void {
     const view = this.#view
     if (!view) return
     this.#ready = false
     const dist = vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
-    view.webview.html = webviewHtml(view.webview, dist, 'main.js', {}, ++this.#htmlVersion)
+    view.webview.html = webviewHtml(view.webview, dist, 'main.js', {}, ++this.#htmlVersion, { font: true })
   }
 
   dispose(): void {

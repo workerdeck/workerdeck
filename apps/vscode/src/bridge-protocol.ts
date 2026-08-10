@@ -17,7 +17,8 @@
  * Dependency-free at runtime (type-only imports, erased at build). Imported by
  * BOTH tsconfigs: keep it to types and constants.
  */
-import type { SessionInfo } from '@workerdeck/protocol'
+import type { PermissionMode, SessionInfo } from '@workerdeck/protocol'
+import type { ViewConfig } from './view-config.ts'
 import type { SessionSurfacePanel, SessionVitals } from '@workerdeck/ui'
 
 /** A gateway as the webviews see it (no credentials — those stay host-side). */
@@ -55,6 +56,12 @@ export type SidebarState = {
   selected?: { hostId: string; sessionId: string }
   /** Absent when no folder is open — the scope filter is then inert. */
   scope?: WorkspaceScope
+  /**
+   * Transcript rows since a session was last on screen, keyed
+   * `hostId:sessionId` — the gateway's own `SessionInfo.activityCount` minus the
+   * window's watermark. Only sessions with something new appear.
+   */
+  unseen?: Record<string, number>
 }
 
 /** Transport messages — either webview → host. */
@@ -111,8 +118,27 @@ export type HostToPanel =
   | TransportToWebview
   | {
       kind: 'wd-show-session'
-      session?: { baseUrl: string; sessionId: string; hostName: string }
+      session?: {
+        baseUrl: string
+        sessionId: string
+        hostName: string
+        /** What had been seen last time this session was on screen — the panel
+         * enters catch-up from it. Absent for a session opened for the first
+         * time, which has nothing to catch up on. */
+        unseen?: { itemCount: number; since: number }
+      }
     }
+  | {
+      /**
+       * Switch the model / permission mode from outside the panel — the window
+       * status bar's pickers. It has to travel this way round: the panel owns
+       * the session's one live attach, so it is the only place a setter exists.
+       * `model: undefined` means "back to the CLI's default".
+       */
+      kind: 'wd-set-model'
+      model?: string
+    }
+  | { kind: 'wd-set-permission-mode'; mode: PermissionMode }
 
 /** Sidebar webview → host. */
 export type SidebarToHost =
@@ -128,7 +154,8 @@ export type SidebarToHost =
     }
   | { kind: 'wd-delete-session'; hostId: string; sessionId: string }
   | {
-      /** Rename. Empty string clears the name, restoring the derived title. */
+      /** Rename (double-click the name). Empty string clears it, restoring the
+       * derived title. */
       kind: 'wd-rename-session'
       hostId: string
       sessionId: string
@@ -148,6 +175,16 @@ export type SidebarToHost =
        * key prefilled from the keychain (the webview cannot read it itself). */
       kind: 'wd-edit-gateway'
       hostId: string
+    }
+  | {
+      /**
+       * The sessions list's filter/group/sort, mirrored to the host whenever it
+       * changes. The webview stays its owner (it renders from its own state);
+       * the host keeps a copy so the activity-bar badge can count the rows the
+       * list is actually showing rather than every session that exists.
+       */
+      kind: 'wd-view-config'
+      config: ViewConfig
     }
   | {
       /** The new-session form created the session itself (its own bridged
@@ -171,11 +208,6 @@ export type HostToSidebar =
       hostId?: string
     }
   | { kind: 'wd-form-result'; ok: boolean; error?: string }
-  | {
-      /** Show/hide the view config (search, filters, group, sort) — the header
-       * icon lives in VS Code's view title, so the toggle arrives from there. */
-      kind: 'wd-toggle-view-config'
-    }
   | {
       /** Live vitals for the SELECTED session, relayed from the agent panel.
        * Absent vitals = selection changed and no reading exists yet. */

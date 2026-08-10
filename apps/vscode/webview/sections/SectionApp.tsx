@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
-import type { SessionInfo } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
 import type { SessionVitals } from '@workerdeck/ui'
 import type { SidebarState } from '../../src/bridge-protocol.ts'
 import type { AppHostMessage, Bridge } from '../bridge.ts'
@@ -45,9 +45,17 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
     [bridge, host?.baseUrl],
   )
 
+  // Every view is always contributed now, so "nothing to show" is a state each
+  // one renders rather than a reason to vanish — the sidebar keeps its shape.
   if (!info) {
     return <Empty>Select a session in the WorkerDeck sidebar.</Empty>
   }
+
+  // Live capabilities first, the REST rollup next, the engine's record last —
+  // the panel's own gating order, and the same one the view header uses.
+  const caps =
+    vitals?.capabilities ?? info.capabilities ?? ENGINE_CAPABILITIES[info.engine ?? 'claude']
+  const engine = info.engine ?? 'claude'
 
   switch (kind) {
     case 'info':
@@ -57,18 +65,21 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
         </Pad>
       )
     case 'context':
+      if (!caps.contextUsage) return <Empty>{engine} reports no context window.</Empty>
       return (
         <Pad>
           <ContextSection usage={vitals?.contextUsage} />
         </Pad>
       )
     case 'usage':
+      if (!caps.rateLimits) return <Empty>{engine} reports no plan usage.</Empty>
       return (
         <Pad>
           <UsageSection rateLimits={vitals?.rateLimits} />
         </Pad>
       )
     case 'mcp':
+      if (!caps.mcpStatus) return <Empty>{engine} exposes no MCP servers.</Empty>
       return (
         <Pad>
           <McpSection client={client} sessionId={info.id} />

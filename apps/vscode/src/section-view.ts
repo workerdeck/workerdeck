@@ -1,8 +1,10 @@
 import * as vscode from 'vscode'
+import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import type { HostStore } from './hosts.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import type { HostToSection, SectionToHost, SidebarState } from './bridge-protocol.ts'
 import type { SessionVitals } from '@workerdeck/ui'
+import { formatCost } from '@workerdeck/ui/format'
 import { webviewHtml } from './webview-html.ts'
 
 export type SectionKind = 'info' | 'context' | 'usage' | 'mcp'
@@ -17,8 +19,14 @@ export type SectionFeed = {
  * One scoped surface (Session Info / Context / Usage / MCP) as its OWN VS Code
  * view — native header, collapse, drag-to-reorder, drag into the secondary
  * sidebar or panel, right-click visibility: all VS Code's, none of it ours.
- * `when` clauses in the manifest hide a view whose capability the selected
- * session's engine forswears.
+ *
+ * All four are **always contributed**, `visibility: "collapsed"` in the
+ * manifest so a fresh install shows the headers without the bodies. They used to
+ * come and go on `when` clauses, which meant the sidebar's shape changed under
+ * the pointer every time a session was selected or its engine differed. A view
+ * cannot be disabled or collapsed through the API, so inert is said the two ways
+ * that exist: the header's `description` (`no session`, `not reported`) and an
+ * empty state in the body.
  *
  * All four share one bundle entry; the HTML stamps which section this view is
  * onto the root element. Data is pushed (state + vitals) — the MCP section
@@ -51,6 +59,9 @@ export class SectionViewProvider implements vscode.WebviewViewProvider, vscode.D
     view.webview.options = { enableScripts: true, localResourceRoots: [dist] }
     view.webview.html = webviewHtml(view.webview, dist, 'sections.js', { 'data-view': this.#kind })
     view.webview.onDidReceiveMessage((msg: SectionToHost) => void this.#onMessage(msg))
+    // The header can be right before the body exists — push() sets the
+    // description whether or not the webview has announced itself yet.
+    this.push()
     view.onDidDispose(() => {
       this.#view = undefined
       this.#ready = false
@@ -68,7 +79,12 @@ export class SectionViewProvider implements vscode.WebviewViewProvider, vscode.D
 
   /** Push current state + vitals (model change, vitals change, ready). */
   push(): void {
-    if (!this.#view || !this.#ready) return
+    if (!this.#view) return
+    // The header says it even while collapsed, which is the whole point: a
+    // collapsed view whose body nobody can see still reports whether opening it
+    // would show anything.
+    this.#view.description = headerDescription(this.#kind, this.#feed.state(), this.#feed.vitals())
+    if (!this.#ready) return
     void this.#view.webview.postMessage({
       kind: 'wd-sidebar-state',
       state: this.#feed.state(),
@@ -80,8 +96,9 @@ export class SectionViewProvider implements vscode.WebviewViewProvider, vscode.D
   }
 
 
-  /** Dev hot-reload: re-render this webview from the freshly built bundle. The
-   * webview re-announces `wd-ready`, which is what re-pushes its state. */
+  /** Re-render this webview from disk — the dev reloader after a rebuild, and
+   * a font-setting change (the typeface is baked into the HTML). The webview
+   * re-announces `wd-ready`, which is what re-pushes its state. */
   reloadWebview(): void {
     const view = this.#view
     if (!view) return
@@ -93,4 +110,32 @@ export class SectionViewProvider implements vscode.WebviewViewProvider, vscode.D
   dispose(): void {
     this.#transports?.dispose()
   }
+}
+
+/**
+ * What the view header carries to the right of its name: why this view has
+ * nothing to show, or — for a view that does — the one reading worth having
+ * while it is collapsed. Usage gets the session's spend, which is a number
+ * people watch and which otherwise costs an expand to see.
+ */
+function headerDescription(
+  kind: SectionKind,
+  state: SidebarState,
+  vitals: SessionVitals | undefined,
+): string | undefined {
+  const selected = state.selected
+  const info = selected
+    ? state.sessions[selected.hostId]?.find((s) => s.id === selected.sessionId)
+    : undefined
+  if (!info) return 'no session'
+  // Live capabilities when the panel has them, the REST rollup next, the
+  // engine's own record last — the same order the panel's own gating uses.
+  const caps = vitals?.capabilities ?? info.capabilities ?? ENGINE_CAPABILITIES[info.engine ?? 'claude']
+  if (kind === 'context' && !caps.contextUsage) return 'not reported'
+  if (kind === 'usage' && !caps.rateLimits) return 'not reported'
+  if (kind === 'mcp' && !caps.mcpStatus) return 'not supported'
+  // The rollup's number, not a live one: cost lands with the turn result, so
+  // this is the same figure the session card and the status tooltip show.
+  if (kind === 'usage' && info.totalCostUsd !== undefined) return formatCost(info.totalCostUsd)
+  return undefined
 }

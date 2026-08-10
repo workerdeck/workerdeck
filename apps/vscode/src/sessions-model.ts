@@ -29,6 +29,10 @@ export class SessionsModel implements vscode.Disposable {
   #refreshing = false
   readonly #folders: vscode.Disposable
 
+  /** Supplied by `activate`: turns-since-last-seen per session. The model owns
+   * no watermarks itself — it is the poll, not the memory of what was read. */
+  #unseen: ((sessions: SidebarState['sessions']) => Record<string, number>) | undefined
+
   constructor(store: HostStore) {
     this.#store = store
     store.onDidChange(() => void this.refresh())
@@ -136,7 +140,11 @@ export class SessionsModel implements vscode.Disposable {
       })
       if (snap?.probe === 'connected') sessions[host.id] = snap.sessions
     }
-    return { hosts, sessions, selected: this.#selected, scope }
+    return { hosts, sessions, selected: this.#selected, scope, unseen: this.#unseen?.(sessions) }
+  }
+
+  setUnseenProvider(provider: (sessions: SidebarState['sessions']) => Record<string, number>): void {
+    this.#unseen = provider
   }
 
   hostOf(hostId: string): GatewayHost | undefined {

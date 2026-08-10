@@ -17,6 +17,6 @@
     "noEmit": true,
     "types": ["vite/client"]
   },
-  "include": ["webview/**/*.ts", "webview/**/*.tsx", "src/bridge-protocol.ts", "vite.config.ts"],
+  "include": ["webview/**/*.ts", "webview/**/*.tsx", "src/bridge-protocol.ts", "src/view-config.ts", "vite.config.ts"],
   "exclude": ["node_modules", "dist"]
 }

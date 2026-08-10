@@ -41,7 +41,7 @@
       "panel": [
         {
           "id": "workerdeck-panel",
-          "title": "WorkerDeck",
+          "title": "Agent",
           "icon": "media/sidebar.svg"
         }
       ]
@@ -59,28 +59,28 @@
           "type": "webview",
           "name": "Session Info",
           "icon": "media/sidebar.svg",
-          "when": "workerdeck.sessionSelected"
+          "visibility": "collapsed"
         },
         {
           "id": "workerdeck.context",
           "type": "webview",
           "name": "Context",
           "icon": "media/sidebar.svg",
-          "when": "workerdeck.sessionSelected && workerdeck.capContext"
+          "visibility": "collapsed"
         },
         {
           "id": "workerdeck.usage",
           "type": "webview",
           "name": "Usage",
           "icon": "media/sidebar.svg",
-          "when": "workerdeck.sessionSelected && workerdeck.capUsage"
+          "visibility": "collapsed"
         },
         {
           "id": "workerdeck.mcp",
           "type": "webview",
           "name": "MCP Servers",
           "icon": "media/sidebar.svg",
-          "when": "workerdeck.sessionSelected && workerdeck.capMcp"
+          "visibility": "collapsed"
         }
       ],
       "workerdeck-panel": [
@@ -106,12 +106,6 @@
         "icon": "$(plug)"
       },
       {
-        "command": "workerdeck.toggleViewConfig",
-        "title": "Filter, Group and Sort Sessions",
-        "category": "WorkerDeck",
-        "icon": "$(filter)"
-      },
-      {
         "command": "workerdeck.addGateway",
         "title": "Add Gateway",
         "category": "WorkerDeck"
@@ -121,6 +115,16 @@
         "title": "Refresh Sessions",
         "category": "WorkerDeck",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "workerdeck.selectModel",
+        "title": "Select Model",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.selectPermissionMode",
+        "title": "Select Permission Mode",
+        "category": "WorkerDeck"
       },
       {
         "command": "workerdeck.openProjectFolder",
@@ -136,25 +140,53 @@
           "group": "navigation@1"
         },
         {
-          "command": "workerdeck.toggleViewConfig",
-          "when": "view == workerdeck.sessions",
-          "group": "navigation@2"
-        },
-        {
           "command": "workerdeck.gateways",
           "when": "view == workerdeck.sessions",
           "group": "navigation@3"
-        },
-        {
-          "command": "workerdeck.refreshSessions",
-          "when": "view == workerdeck.sessions",
-          "group": "1_workerdeck@1"
         }
       ]
     },
     "configuration": {
       "title": "WorkerDeck",
       "properties": {
+        "workerdeck.fontFamily": {
+          "type": "string",
+          "enum": [
+            "editor",
+            "sans"
+          ],
+          "enumDescriptions": [
+            "The editor font (monospace) — matches the terminal and the code around it.",
+            "VS Code's UI font, like every other view."
+          ],
+          "default": "editor",
+          "description": "Typeface for the WorkerDeck agent panel. The sidebar and the session views always follow VS Code's UI font."
+        },
+        "workerdeck.statusBar.status": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the session status badge (its state, or the connection when the link is down) in the window status bar."
+        },
+        "workerdeck.statusBar.context": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the context-window badge in the window status bar. Only appears for engines that report a context window."
+        },
+        "workerdeck.statusBar.usage": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the plan-usage badge (the fullest rate-limit window) in the window status bar."
+        },
+        "workerdeck.statusBar.model": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the model picker in the window status bar. Clicking it opens a Quick Pick."
+        },
+        "workerdeck.statusBar.mode": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the permission-mode picker in the window status bar. Clicking it opens a Quick Pick."
+        },
         "workerdeck.dev.autoReload": {
           "type": "boolean",
           "default": true,

@@ -14,6 +14,34 @@
  * the look native to the editor. */
 
 /*
+ * Baseline for EVERY view: VS Code's own UI font, which is what a view docked in
+ * the workbench is supposed to look like (the sidebar and the section views are
+ * ordinary VS Code UI and stop here).
+ */
+:root {
+  --cw-font-sans: var(--vscode-font-family, system-ui, -apple-system, sans-serif);
+}
+
+/*
+ * The AGENT PANEL only, from `workerdeck.fontFamily` (stamped on <html> by
+ * webview-html.ts — no other view carries the attribute). `editor`, the default,
+ * points the sans token at VS Code's editor font, so the transcript renders
+ * monospace and reads as part of the terminal/editor rather than as a web app
+ * docked next to one. The mono token is left alone: code was already mono, and
+ * pointing both at the same stack is what makes the two indistinguishable.
+ */
+html[data-font='editor'] {
+  --cw-font-sans: var(
+    --vscode-editor-font-family,
+    ui-monospace,
+    'SF Mono',
+    Menlo,
+    Consolas,
+    monospace
+  );
+}
+
+/*
  * Skin the ui tokens with the editor's own theme. VS Code injects `--vscode-*`
  * variables into every webview, already resolved for the ACTIVE theme — so
  * these overrides are theme-agnostic and live on :root unconditionally
@@ -36,7 +64,18 @@
   --fg-2: var(--vscode-foreground, #454545);
   --fg-3: var(--vscode-descriptionForeground, #737373);
   --fg-4: var(--vscode-descriptionForeground, #a1a1a1);
-  --accent: var(--vscode-foreground, #171717);
+  /* The theme's own primary — its link colour, which every VS Code theme tunes
+     for its background (a lighter blue in dark themes, a darker one in light).
+     This is what the working spinner, the recap mark, the `❯` on your own
+     messages and an armed send button wear, so "accent" in this webview means
+     the same blue the editor already uses for anything primary. */
+  --accent: var(--vscode-textLink-foreground, #3794ff);
+  --accent-hover: var(--vscode-textLink-activeForeground, #4daafc);
+  --accent-fg: var(--vscode-button-foreground, #ffffff);
+  --accent-bg: var(--vscode-list-activeSelectionBackground, #04395e);
+  /* Focus is VS Code's own focus colour, not the ui's foreground-derived ring —
+     a white outline in an editor theme reads as a selection, not as focus. */
+  --ring: var(--vscode-focusBorder, #0078d4);
 
   /* Edge-to-edge content: a bottom dock has no width to spare on centering. */
   --wd-content-max-w: 100%;
@@ -59,6 +98,10 @@
   border-left-width: 0;
   border-right-width: 0;
   border-bottom-width: 0;
+  /* The frame's drop shadow AND its focus ring are both box-shadows. With only a
+     top border left, the ring drew a second line above the first — one blue rule
+     is the whole affordance here. */
+  box-shadow: none;
 }
 
 html,
@@ -70,4 +113,24 @@ body,
 
 body {
   background: var(--bg);
+}
+
+/*
+ * Links, and the things that behave like them.
+ *
+ * A real anchor underlines on hover, like every link in the editor. A path only
+ * *opens* while Cmd/Ctrl is down, so it only looks clickable then: App.tsx adds
+ * `.wd-linkish` to whatever is under the pointer while the modifier is held,
+ * using the same test the click itself makes.
+ */
+a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.wd-linkish {
+  color: var(--vscode-editorLink-activeForeground, var(--vscode-foreground));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }

@@ -18,7 +18,7 @@ import {
   isFiltering,
   scopeActive,
   type ViewConfig,
-} from './view-config.ts'
+} from '../../src/view-config.ts'
 
 type Screen =
   | { kind: 'list' }
@@ -33,8 +33,11 @@ type Persisted = { config?: ViewConfig; configOpen?: boolean }
 
 /**
  * The Sessions view: every gateway's sessions in one list, filtered/grouped/
- * sorted by the view config behind the header's filter icon. Gateways are
- * managed on their own screen (the header's plug icon) — the list is a view
+ * sorted by the Filter bar above it — which lives in this webview, not in the
+ * view title: VS Code's own search-and-filter row (the Extensions view's) is
+ * workbench chrome with no extension API, so the closest honest place for it is
+ * the first row of the view itself. Gateways are managed on their own screen
+ * (the header's plug icon) — the list is a view
  * across all of them, not a picker plus a list. New Session, Add Gateway and the
  * gateway edit form are pushed screens with a back arrow: the closest thing a
  * webview has to a dialog that doesn't cover the work. The scoped surfaces
@@ -59,16 +62,19 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
     bridge.setState<Persisted>({ config, configOpen })
   }, [bridge, config, configOpen])
 
+  // …and the host mirrors it, so the activity-bar badge counts the rows this
+  // list is showing rather than every session on every gateway. One-way: the
+  // webview owns the config, the host only reads it.
+  useEffect(() => {
+    bridge.post({ kind: 'wd-view-config', config })
+  }, [bridge, config])
+
   useEffect(
     () =>
       bridge.onHostMessage((msg: AppHostMessage) => {
         switch (msg.kind) {
           case 'wd-sidebar-state':
             setState(msg.state)
-            return
-          case 'wd-toggle-view-config':
-            setScreen({ kind: 'list' })
-            setConfigOpen((open) => !open)
             return
           case 'wd-navigate':
             setGwError(undefined)
@@ -163,15 +169,18 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
 
   return (
     <div className='flex h-screen flex-col text-body-sm'>
-      {configOpen ? (
-        <ViewConfigPanel
-          config={config}
-          hosts={hosts}
-          adapters={adapters}
-          scope={scope}
-          onChange={setConfig}
-        />
-      ) : null}
+      {/* Always mounted: the bar is the sign that a filter exists at all, and
+          this list hides sessions before anyone asks it to. Its own chevron is
+          the only toggle — there is no view-title button to keep in sync. */}
+      <ViewConfigPanel
+        config={config}
+        hosts={hosts}
+        adapters={adapters}
+        scope={scope}
+        open={configOpen}
+        onOpenChange={setConfigOpen}
+        onChange={setConfig}
+      />
 
       {/* The list is scoped by default, so the fact has to be visible without
           opening the config — with the way out on the same line. */}
@@ -245,6 +254,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
                 <SessionCard
                   key={row.info.id}
                   info={row.info}
+                  unseen={row.unseen}
                   hostName={
                     config.groupBy !== 'gateway' && hosts.length > 1 ? row.hostName : undefined
                   }

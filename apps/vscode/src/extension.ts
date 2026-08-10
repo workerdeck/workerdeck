@@ -1,5 +1,4 @@
 import * as vscode from 'vscode'
-import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import type { SessionVitals } from '@workerdeck/ui'
 import { HostStore, isLoopbackHost } from './hosts.ts'
 import { SessionsModel } from './sessions-model.ts'
@@ -8,7 +7,8 @@ import { SidebarProvider } from './sidebar.ts'
 import { SectionViewProvider, type SectionKind } from './section-view.ts'
 import { WorkerdeckFileSystem } from './fsp.ts'
 import { startDevReload } from './dev-reload.ts'
-import { SessionStatusBar } from './status-bar.ts'
+import { SessionStatusBar, currentModel, modelLabel } from './status-bar.ts'
+import { Watermarks } from './watermarks.ts'
 
 /** Section view ids — each its OWN view, so VS Code owns collapse/placement. */
 const SECTION_VIEWS: Record<SectionKind, string> = {
@@ -28,6 +28,24 @@ export function activate(context: vscode.ExtensionContext): void {
   // readings while its first snapshot is still in flight.
   let vitals: SessionVitals | undefined
   const statusBar = new SessionStatusBar()
+  const watermarks = new Watermarks(context)
+
+  /**
+   * Record what is on screen as read — but only while it really is on screen.
+   * The panel being visible AND showing this session is the whole test; a dock
+   * behind the Terminal tab is not being read, and marking it read is exactly
+   * how an unread badge quietly stops working.
+   */
+  const markSeen = (force = false) => {
+    const active = panel.active
+    if (!active || (!panel.visible && !force)) return
+    const info = model.sessionsOf(active.host.id).find((s) => s.id === active.sessionId)
+    watermarks.mark(active.host.id, active.sessionId, {
+      itemCount: vitals?.itemCount,
+      activity: info?.activityCount,
+      turns: info?.numTurns,
+    })
+  }
 
   const feed = {
     state: () => model.sidebarState(),
@@ -43,27 +61,34 @@ export function activate(context: vscode.ExtensionContext): void {
     for (const provider of Object.values(sections)) provider.push()
   }
 
-  /**
-   * `when`-clause contexts: a section view is ABSENT (not empty) when nothing
-   * is selected or the engine forswears its capability. Capabilities come from
-   * live vitals when present, the rollup otherwise, the engine default last.
-   */
-  const updateContexts = () => {
-    const selected = feed.state().selected
-    const info =
-      selected && model.sessionsOf(selected.hostId).find((s) => s.id === selected.sessionId)
-    const caps =
-      vitals?.capabilities ?? info?.capabilities ?? ENGINE_CAPABILITIES[info?.engine ?? 'claude']
-    void vscode.commands.executeCommand('setContext', 'workerdeck.sessionSelected', !!info)
-    void vscode.commands.executeCommand('setContext', 'workerdeck.capContext', !!caps.contextUsage)
-    void vscode.commands.executeCommand('setContext', 'workerdeck.capUsage', !!caps.rateLimits)
-    void vscode.commands.executeCommand('setContext', 'workerdeck.capMcp', !!caps.mcpStatus)
-  }
-  model.onDidChange(() => {
-    updateContexts()
-    pushSections()
+  // The section views are always contributed (no `when` clauses): a sidebar
+  // whose views appear and disappear as sessions are selected changes shape
+  // under the pointer. Each one says for itself when it has nothing to show —
+  // header description from the provider, empty state in its body.
+  model.onDidChange(() => pushSections())
+  // Unread counts for the sessions list: transcript rows the rollup has counted
+  // minus the rows this window had seen. Rows, not turns — a turn that runs five
+  // tools is one turn and eight rows, and the badge that says "1" for it is the
+  // one nobody believes. Turns remain the fallback for a gateway too old to
+  // report `activityCount`. Sessions with nothing new are absent, not zero.
+  model.setUnseenProvider((sessions) => {
+    const unseen: Record<string, number> = {}
+    for (const [hostId, list] of Object.entries(sessions)) {
+      for (const info of list) {
+        const mark = watermarks.get(hostId, info.id)
+        if (!mark) continue
+        const fresh =
+          info.activityCount !== undefined
+            ? info.activityCount - mark.activity
+            : (info.numTurns ?? 0) - mark.turns
+        if (fresh > 0) unseen[`${hostId}:${info.id}`] = fresh
+      }
+    }
+    return unseen
   })
-  updateContexts()
+  // A poll that lands while the panel is visible is also a chance to catch the
+  // turn count up — vitals move on their own clock.
+  model.onDidChange(() => markSeen())
 
   // Panel and sidebar reference each other only through these delegates —
   // construction order breaks the cycle (panel's delegate closes over `sidebar`
@@ -77,9 +102,23 @@ export function activate(context: vscode.ExtensionContext): void {
     },
     vitals: (v) => {
       vitals = v
-      updateContexts()
+      markSeen()
       pushSections()
       pushStatusBar()
+    },
+    unseen: (hostId, sessionId) => {
+      const mark = watermarks.get(hostId, sessionId)
+      return mark ? { itemCount: mark.itemCount, since: mark.seenAt } : undefined
+    },
+    visibilityChanged: () => {
+      markSeen()
+      // Hiding the panel freezes the mark where it is, which is what makes the
+      // next visit have something to catch up on. One catch: the mark is written
+      // from the last *poll*, so anything produced since it landed would count
+      // as unread even though it was on screen. Refresh and mark once more —
+      // `force`, because the panel is already hidden by then and the rule is
+      // about what was visible, not what is.
+      void model.refresh().then(() => markSeen(true))
     },
   })
   // Title and cost come from the REST rollup, the live readings from vitals —
@@ -101,12 +140,15 @@ export function activate(context: vscode.ExtensionContext): void {
       vitals,
     )
   }
-  sidebar = new SidebarProvider(context.extensionUri, store, model, {
+  sidebar = new SidebarProvider(context, context.extensionUri, store, model, {
     selectSession: async (hostId, sessionId) => {
       const host = store.get(hostId)
       if (!host) return
       const info = model.sessionsOf(hostId).find((s) => s.id === sessionId)
-      vitals = undefined
+      // Only a REAL change drops the readings. Re-clicking the session already
+      // on screen doesn't remount the panel, so nothing would ever re-send them
+      // — Context and Usage would sit empty until the next event moved one.
+      if (!panel.isShowing(hostId, sessionId)) vitals = undefined
       model.setSelected({ hostId, sessionId })
       await panel.show({ host, sessionId, cwd: info?.cwd })
     },
@@ -129,6 +171,16 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     startDevReload(context, [panel, sidebar, ...Object.values(sections)]),
+    // The typeface is baked into the panel's HTML (it must be right on the first
+    // paint), so changing it means re-rendering it — the same re-render the dev
+    // reloader does, after which the webview re-announces itself. The panel
+    // alone: the sidebar and section views follow VS Code's UI font.
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('workerdeck.fontFamily')) panel.reloadWebview()
+      // Which badges the window bar carries is a per-render read, so showing
+      // and hiding one is just a re-render against the readings we already hold.
+      if (e.affectsConfiguration('workerdeck.statusBar')) statusBar.refresh()
+    }),
     model,
     panel,
     sidebar,
@@ -154,13 +206,56 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('workerdeck.gateways', () =>
       sidebar.navigate({ kind: 'wd-navigate', screen: 'gateways' }),
     ),
-    vscode.commands.registerCommand('workerdeck.toggleViewConfig', () =>
-      sidebar.toggleViewConfig(),
-    ),
     vscode.commands.registerCommand('workerdeck.newSession', () =>
       sidebar.navigate({ kind: 'wd-navigate', screen: 'new-session' }),
     ),
     vscode.commands.registerCommand('workerdeck.refreshSessions', () => model.refresh()),
+
+    // The status bar's two pickers. A StatusBarItem carries one command and no
+    // dropdown, so the native shape for this is command → QuickPick — the same
+    // one the language-mode and encoding items use. The options come from the
+    // panel's own vitals, so the list is exactly what its composer would offer.
+    vscode.commands.registerCommand('workerdeck.selectModel', async () => {
+      const models = vitals?.models ?? []
+      if (models.length === 0) {
+        void vscode.window.showInformationMessage('WorkerDeck: no models to switch to yet.')
+        return
+      }
+      const current = currentModel(vitals)
+      const picked = await vscode.window.showQuickPick(
+        models.map((m) => ({
+          label: m.displayName,
+          description: m.value === current?.value ? 'current' : undefined,
+          detail: m.description ?? m.resolvedModel ?? m.value,
+          value: m.value,
+        })),
+        { title: 'WorkerDeck: model', placeHolder: modelLabel(vitals) },
+      )
+      if (picked) panel.setModel(picked.value)
+    }),
+    vscode.commands.registerCommand('workerdeck.selectPermissionMode', async () => {
+      const modes = vitals?.permissionModes ?? []
+      if (modes.length === 0) {
+        void vscode.window.showInformationMessage('WorkerDeck: this session has no mode switch.')
+        return
+      }
+      const current = vitals?.permissionMode
+      const picked = await vscode.window.showQuickPick(
+        modes.map((m) => ({
+          label: m.dangerous ? `$(warning) ${m.label}` : m.label,
+          description: m.value === current ? 'current' : undefined,
+          detail: m.description,
+          mode: m.value,
+          // A mode the session can never be granted stays visible and unpickable
+          // — the reason is in its detail line.
+          alwaysShow: true,
+          picked: m.value === current,
+          disabled: m.disabled,
+        })),
+        { title: 'WorkerDeck: permission mode' },
+      )
+      if (picked && !picked.disabled) panel.setPermissionMode(picked.mode)
+    }),
 
     vscode.commands.registerCommand('workerdeck.openProjectFolder', async () => {
       const active = panel.active

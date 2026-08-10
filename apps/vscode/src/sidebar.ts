@@ -6,7 +6,11 @@ import { clientFor } from './gateway.ts'
 import { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import type { HostToSidebar, SidebarToHost } from './bridge-protocol.ts'
+import { DEFAULT_VIEW_CONFIG, buildRows, filterRows, type ViewConfig } from './view-config.ts'
 import { webviewHtml } from './webview-html.ts'
+
+/** The webview's own filter, mirrored here for the badge (see `wd-view-config`). */
+const VIEW_CONFIG_KEY = 'workerdeck.viewConfig.v1'
 
 export type SidebarDelegate = {
   /** A session was chosen — show it in the agent panel. */
@@ -39,19 +43,31 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
   #transports: WebviewTransportHost | undefined
   /** Queued while the view is closed; delivered on wd-ready. */
   #pendingNavigate: Extract<HostToSidebar, { kind: 'wd-navigate' }> | undefined
-  /** Same, for a view-config toggle that arrived before the webview existed. */
-  #pendingToggleConfig = false
+  readonly #context: vscode.ExtensionContext
+  /**
+   * The list's filter, as last reported by the webview — a *copy*, for counting
+   * the badge only. The webview owns it and renders from its own state; this
+   * side never sends it back, so the two cannot fight over it. Restored from
+   * globalState so a window badges correctly before the sidebar is ever opened.
+   */
+  #viewConfig: ViewConfig
 
   constructor(
+    context: vscode.ExtensionContext,
     extensionUri: vscode.Uri,
     store: HostStore,
     model: SessionsModel,
     delegate: SidebarDelegate,
   ) {
+    this.#context = context
     this.#extensionUri = extensionUri
     this.#store = store
     this.#model = model
     this.#delegate = delegate
+    this.#viewConfig = {
+      ...DEFAULT_VIEW_CONFIG,
+      ...context.globalState.get<ViewConfig>(VIEW_CONFIG_KEY),
+    }
     model.onDidChange(() => this.#pushState())
   }
 
@@ -84,12 +100,30 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
 
   #pushState(): void {
     if (!this.#view || !this.#ready) return
-    this.#post({ kind: 'wd-sidebar-state', state: this.#model.sidebarState() })
+    const state = this.#model.sidebarState()
+    this.#post({ kind: 'wd-sidebar-state', state })
+    // The activity-bar badge: everything new, in rows — the same unit the cards
+    // and the panel's recap count in, so the numbers add up across surfaces. It
+    // is deliberately every session on every gateway, not the filtered list: a
+    // filter is a view preference, this is "how much has happened".
+    // Sessions waiting on a human are the more urgent thing but not a bigger
+    // number, so they lead the tooltip rather than replacing the count.
+    // Only the rows the list is actually showing: a badge announcing work in a
+    // session the filter (or the workspace scope, which is on by default) is
+    // hiding sends you looking for something that isn't there.
+    const visible = filterRows(buildRows(state), this.#viewConfig, state.scope)
+    const rows = visible.reduce(
+      (total, row) => total + (state.unseen?.[`${row.hostId}:${row.info.id}`] ?? 0),
+      0,
+    )
     const waiting = this.#model.attentionCount()
-    this.#view.badge =
-      waiting > 0
-        ? { value: waiting, tooltip: `${waiting} session${waiting === 1 ? '' : 's'} awaiting approval` }
-        : undefined
+    const tooltip = [
+      waiting > 0 ? `${waiting} session${waiting === 1 ? '' : 's'} awaiting approval` : undefined,
+      rows > 0 ? `${rows} new row${rows === 1 ? '' : 's'} since you last looked` : undefined,
+    ]
+      .filter(Boolean)
+      .join(' · ')
+    this.#view.badge = rows > 0 ? { value: rows, tooltip } : undefined
   }
 
   /** Reveal the sidebar and push a screen (commands, tree-parity actions). */
@@ -102,17 +136,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     }
   }
 
-
-  /** Show/hide the view config. The icon is a VS Code view-title button, so the
-   * toggle can only arrive from the extension host. */
-  async toggleViewConfig(): Promise<void> {
-    this.#pendingToggleConfig = true
-    await vscode.commands.executeCommand(`${SidebarProvider.viewId}.focus`)
-    if (!this.#ready) return
-    this.#pendingToggleConfig = false
-    this.#post({ kind: 'wd-toggle-view-config' })
-  }
-
   async #onMessage(msg: SidebarToHost): Promise<void> {
     if (await this.#transports?.handle(msg)) return
     switch (msg.kind) {
@@ -123,10 +146,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
           this.#post(this.#pendingNavigate)
           this.#pendingNavigate = undefined
         }
-        if (this.#pendingToggleConfig) {
-          this.#pendingToggleConfig = false
-          this.#post({ kind: 'wd-toggle-view-config' })
-        }
+        return
+      case 'wd-view-config':
+        // The badge counts what the list shows. Persisted so a fresh window
+        // badges correctly before the sidebar has been opened even once.
+        this.#viewConfig = msg.config
+        void this.#context.globalState.update(VIEW_CONFIG_KEY, msg.config)
+        this.#pushState()
         return
       case 'wd-refresh':
         await this.#model.refresh()
@@ -140,10 +166,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
         return
       case 'wd-stop-session':
         return this.#stopSession(msg.hostId, msg.sessionId)
-      case 'wd-delete-session':
-        return this.#deleteSession(msg.hostId, msg.sessionId)
       case 'wd-rename-session':
         return this.#renameSession(msg.hostId, msg.sessionId, msg.title)
+      case 'wd-delete-session':
+        return this.#deleteSession(msg.hostId, msg.sessionId)
       case 'wd-submit-gateway':
         return this.#submitGateway(msg)
       case 'wd-edit-gateway': {
@@ -265,8 +291,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
   }
 
 
-  /** Dev hot-reload: re-render this webview from the freshly built bundle. The
-   * webview re-announces `wd-ready`, which is what re-pushes its state. */
+  /** Re-render this webview from disk — the dev reloader after a rebuild, and
+   * a font-setting change (the typeface is baked into the HTML). The webview
+   * re-announces `wd-ready`, which is what re-pushes its state. */
   reloadWebview(): void {
     const view = this.#view
     if (!view) return

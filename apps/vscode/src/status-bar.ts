@@ -8,7 +8,7 @@
 // how full is the window, how much plan is left) and each has its own section
 // view to focus. One item would mean one click target for three destinations.
 import * as vscode from 'vscode'
-import type { ContextUsage, RateLimitInfo, SessionStatus } from '@workerdeck/protocol'
+import type { ContextUsage, ModelOption, RateLimitInfo, SessionStatus } from '@workerdeck/protocol'
 import type { SessionVitals } from '@workerdeck/ui'
 import { formatCost, formatCountdown, formatTokens } from '@workerdeck/ui/format'
 
@@ -122,6 +122,16 @@ function usageTooltip(rateLimits: Record<string, RateLimitInfo>, now: number): v
  * bar ticks at the same rate; a minute-resolution countdown needs no finer. */
 const TICK_MS = 30_000
 
+/** The three badges, each its own boolean setting — checkboxes in the Settings
+ * UI, which an array-of-enum or an object map would not be. Read per render
+ * rather than cached: `activate` re-renders the bar on a config change, and the
+ * live read is what makes that one line. */
+export type StatusBadge = 'status' | 'context' | 'usage' | 'model' | 'mode'
+
+export function badgeEnabled(badge: StatusBadge): boolean {
+  return vscode.workspace.getConfiguration('workerdeck.statusBar').get<boolean>(badge, true)
+}
+
 export type StatusBarSubject = {
   title: string | undefined
   hostName: string
@@ -137,6 +147,8 @@ export class SessionStatusBar implements vscode.Disposable {
   readonly #status: vscode.StatusBarItem
   readonly #context: vscode.StatusBarItem
   readonly #usage: vscode.StatusBarItem
+  readonly #model: vscode.StatusBarItem
+  readonly #mode: vscode.StatusBarItem
   #subject: StatusBarSubject | undefined
   #vitals: SessionVitals | undefined
   #timer: ReturnType<typeof setInterval> | undefined
@@ -148,11 +160,18 @@ export class SessionStatusBar implements vscode.Disposable {
     this.#status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50)
     this.#context = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49)
     this.#usage = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 48)
+    // The two controls, after the gauges. A status bar item has one command and
+    // no dropdown of its own — the native pattern (language mode, encoding) is
+    // command → QuickPick, which is what these open.
+    this.#model = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 47)
+    this.#mode = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 46)
     // Each gauge leads to the view that answers *its* question — the same
     // targets the panel's bar routed to before it moved out here.
     this.#status.command = 'workerdeck.sessionInfo.focus'
     this.#context.command = 'workerdeck.context.focus'
     this.#usage.command = 'workerdeck.usage.focus'
+    this.#model.command = 'workerdeck.selectModel'
+    this.#mode.command = 'workerdeck.selectPermissionMode'
   }
 
   /** `subject: undefined` = no session selected; everything hides. */
@@ -162,12 +181,17 @@ export class SessionStatusBar implements vscode.Disposable {
     this.#render()
   }
 
+  /** Re-render against unchanged readings — for a settings change. */
+  refresh(): void {
+    this.#render()
+  }
+
   #render(): void {
     const subject = this.#subject
     if (!subject) {
-      this.#status.hide()
-      this.#context.hide()
-      this.#usage.hide()
+      for (const item of [this.#status, this.#context, this.#usage, this.#model, this.#mode]) {
+        item.hide()
+      }
       this.#stopTicking()
       return
     }
@@ -175,20 +199,27 @@ export class SessionStatusBar implements vscode.Disposable {
     const now = Date.now()
     const name = subject.title ?? 'Session'
 
-    const presentation = statusPresentation(vitals)
-    this.#status.text = `$(${presentation.icon}) ${presentation.label}`
-    this.#status.backgroundColor = severityBackground(presentation.severity)
-    const tip = new vscode.MarkdownString()
-    tip.appendMarkdown(`**${name}** on ${subject.hostName}\n\n`)
-    tip.appendMarkdown(`Status: ${presentation.label}\n\n`)
-    if (vitals?.model) tip.appendMarkdown(`Model: \`${vitals.model}\`\n\n`)
-    if (subject.cost !== undefined) tip.appendMarkdown(`Cost: ${formatCost(subject.cost)}`)
-    this.#status.tooltip = tip
-    this.#status.show()
+    if (badgeEnabled('status')) {
+      const presentation = statusPresentation(vitals)
+      this.#status.text = `$(${presentation.icon}) ${presentation.label}`
+      this.#status.backgroundColor = severityBackground(presentation.severity)
+      const tip = new vscode.MarkdownString()
+      tip.appendMarkdown(`**${name}** on ${subject.hostName}\n\n`)
+      tip.appendMarkdown(`Status: ${presentation.label}\n\n`)
+      if (vitals?.model) tip.appendMarkdown(`Model: \`${vitals.model}\`\n\n`)
+      if (subject.cost !== undefined) tip.appendMarkdown(`Cost: ${formatCost(subject.cost)}`)
+      this.#status.tooltip = tip
+      this.#status.show()
+    } else {
+      this.#status.hide()
+    }
 
     // Capability gating, same rule as the panel: an engine that reports no
     // context window gets no context item, rather than an empty one.
-    const usage = vitals?.capabilities?.contextUsage ? vitals.contextUsage : undefined
+    const usage =
+      badgeEnabled('context') && vitals?.capabilities?.contextUsage
+        ? vitals.contextUsage
+        : undefined
     if (usage) {
       this.#context.text = `$(dashboard) ${formatTokens(usage.totalTokens)}`
       this.#context.backgroundColor = severityBackground(meterSeverity(usage.percentage))
@@ -200,7 +231,7 @@ export class SessionStatusBar implements vscode.Disposable {
 
     const rateLimits = vitals?.rateLimits
     const tightest = tightestWindow(rateLimits)
-    if (rateLimits && tightest) {
+    if (badgeEnabled('usage') && rateLimits && tightest) {
       const pct = tightest.info.utilization
       // No made-up 0%: the CLI omits utilization on some updates, and an
       // invented number here would read as a real one.
@@ -215,6 +246,29 @@ export class SessionStatusBar implements vscode.Disposable {
     } else {
       this.#usage.hide()
       this.#stopTicking()
+    }
+
+    // The two pickers. Each is shown only where switching is actually possible:
+    // an item that opens an empty QuickPick is worse than no item.
+    if (badgeEnabled('model') && vitals?.models.length) {
+      this.#model.text = `$(sparkle) ${modelLabel(vitals)}`
+      this.#model.tooltip = 'WorkerDeck: switch model'
+      this.#model.show()
+    } else {
+      this.#model.hide()
+    }
+
+    const mode = vitals?.permissionMode
+    if (badgeEnabled('mode') && mode && vitals.permissionModes.length > 1) {
+      const meta = vitals.permissionModes.find((m) => m.value === mode)
+      this.#mode.text = `$(shield) ${meta?.label ?? mode}`
+      this.#mode.backgroundColor = severityBackground(
+        mode === 'bypassPermissions' ? 'warning' : 'none',
+      )
+      this.#mode.tooltip = 'WorkerDeck: switch permission mode'
+      this.#mode.show()
+    } else {
+      this.#mode.hide()
     }
   }
 
@@ -233,8 +287,32 @@ export class SessionStatusBar implements vscode.Disposable {
 
   dispose(): void {
     this.#stopTicking()
-    this.#status.dispose()
-    this.#context.dispose()
-    this.#usage.dispose()
+    for (const item of [this.#status, this.#context, this.#usage, this.#model, this.#mode]) {
+      item.dispose()
+    }
   }
+}
+
+/**
+ * The catalog row the session is actually running, or `undefined` for a model
+ * the list doesn't name. Matched leniently, the way the panel's own picker does
+ * it: a session reports the *resolved* id (`claude-sonnet-5`) where the row may
+ * be keyed on the alias (`sonnet`), and either can carry a `[1m]` context-window
+ * suffix.
+ */
+export function currentModel(vitals: SessionVitals | undefined): ModelOption | undefined {
+  const id = vitals?.model
+  if (!id) return undefined
+  const bare = (value: string) => value.replace(/\[.*\]$/, '')
+  const wanted = bare(id)
+  return vitals.models.find(
+    (m) => bare(m.value) === wanted || (m.resolvedModel && bare(m.resolvedModel) === wanted),
+  )
+}
+
+/** The session's model, named the way the picker names it. Falls back to the
+ * raw id, and to "Default" while the session is on the CLI's own pick. */
+export function modelLabel(vitals: SessionVitals | undefined): string {
+  if (!vitals?.model) return 'Default'
+  return currentModel(vitals)?.displayName ?? vitals.model
 }

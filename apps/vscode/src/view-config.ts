@@ -1,10 +1,15 @@
 import type { SessionInfo } from '@workerdeck/protocol'
-import type { SidebarState, WorkspaceScope } from '../../src/bridge-protocol.ts'
+import type { SidebarState, WorkspaceScope } from './bridge-protocol.ts'
 
 /**
  * How the sessions list is filtered, grouped and sorted — the whole of the view
  * config, kept pure and separate from the components so the sidebar renders one
  * derived list and nothing else decides what is visible.
+ *
+ * In `src/` rather than beside the components because **both sides** need it:
+ * the webview to render the list, and the extension host to count the
+ * activity-bar badge over the same rows. A badge that ignored the filter would
+ * announce work in sessions the list is deliberately hiding.
  *
  * Sessions are shown across ALL gateways by default; the gateway is a facet like
  * any other, not the frame the list lives in.
@@ -67,6 +72,9 @@ export type SessionRow = {
   adapter: string
   state: SessionState
   info: SessionInfo
+  /** Turns since this session was last on screen. 0 = nothing new (or never
+   * visited, which is not the same as unread — see `SidebarState.unseen`). */
+  unseen: number
 }
 
 export type SessionGroup = { key: string; label?: string; rows: SessionRow[] }
@@ -85,6 +93,7 @@ export function buildRows(state: SidebarState | undefined): SessionRow[] {
         adapter: info.engine ?? 'claude',
         state: sessionState(info),
         info,
+        unseen: state.unseen?.[`${host.id}:${info.id}`] ?? 0,
       })
     }
   }
@@ -247,7 +256,3 @@ export function clearFilters(config: ViewConfig): ViewConfig {
   }
 }
 
-/** Toggle one value of a multi-select facet filter (empty array = "all"). */
-export function toggleFilter<T extends string>(values: readonly T[], value: T): T[] {
-  return values.includes(value) ? values.filter((v) => v !== value) : [...values, value]
-}

@@ -1,9 +1,22 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
-import { SessionPanel, Toaster } from '@workerdeck/ui'
+import { SessionPanel, Toaster, type SessionControls } from '@workerdeck/ui'
 import { Bridge } from './bridge.ts'
 
-type Shown = { baseUrl: string; sessionId: string; hostName: string }
+/** An absolute path, optionally `:line` — what the extension host can open.
+ * One pattern for both the click and the hold-to-highlight, so nothing lights
+ * up that a click would ignore. */
+const PATH_PATTERN = /(\/[^\s:'"`()[\]{}]+)(?::(\d+))?/
+
+/** Marks the element under the pointer while Cmd/Ctrl is held (styles.css). */
+const LINKISH = 'wd-linkish'
+
+type Shown = {
+  baseUrl: string
+  sessionId: string
+  hostName: string
+  unseen?: { itemCount: number; since: number }
+}
 
 /**
  * The agent panel webview: purely the conversation. `SessionPanel` runs with
@@ -14,11 +27,18 @@ type Shown = { baseUrl: string; sessionId: string; hostName: string }
  */
 export function App({ bridge }: { bridge: Bridge }) {
   const [shown, setShown] = useState<Shown | undefined>(undefined)
+  // The panel owns the session's one attach, so it owns the only setters there
+  // are. The status bar's pickers reach them through here.
+  const controls = useRef<SessionControls | undefined>(undefined)
 
   useEffect(
     () =>
       bridge.onHostMessage((msg) => {
         if (msg.kind === 'wd-show-session') setShown(msg.session)
+        else if (msg.kind === 'wd-set-model') controls.current?.setModel(msg.model)
+        else if (msg.kind === 'wd-set-permission-mode') {
+          controls.current?.setPermissionMode(msg.mode)
+        }
       }),
     [bridge],
   )
@@ -41,8 +61,7 @@ export function App({ bridge }: { bridge: Bridge }) {
     // for remote ones). Capture phase, so it wins over text selection.
     const onClick = (e: MouseEvent) => {
       if (!e.metaKey && !e.ctrlKey) return
-      const text = (e.target as HTMLElement | null)?.textContent ?? ''
-      const match = /(\/[^\s:'"`()[\]{}]+)(?::(\d+))?/.exec(text)
+      const match = PATH_PATTERN.exec((e.target as HTMLElement | null)?.textContent ?? '')
       if (!match) return
       e.preventDefault()
       e.stopPropagation()
@@ -55,6 +74,53 @@ export function App({ bridge }: { bridge: Bridge }) {
     document.addEventListener('click', onClick, true)
     return () => document.removeEventListener('click', onClick, true)
   }, [bridge])
+
+  // Hold Cmd/Ctrl and the things that would open light up under the pointer —
+  // the editor's own ctrl-hover affordance. Marked in JS rather than CSS because
+  // "is this text a path" is not a selector; the element is only marked when the
+  // path is *most* of what it says, so holding the key doesn't underline a whole
+  // paragraph that happens to mention one.
+  useEffect(() => {
+    let hovered: HTMLElement | undefined
+
+    const unmark = () => {
+      hovered?.classList.remove(LINKISH)
+      hovered = undefined
+    }
+    const mark = (target: EventTarget | null) => {
+      const element = target instanceof HTMLElement ? target : undefined
+      if (element === hovered) return
+      unmark()
+      if (!element) return
+      const text = element.textContent?.trim() ?? ''
+      const match = PATH_PATTERN.exec(text)
+      // Mostly-a-path, or an element whose whole job is to be one (inline code).
+      if (!match || (match[0].length < text.length * 0.6 && element.tagName !== 'CODE')) return
+      hovered = element
+      element.classList.add(LINKISH)
+    }
+
+    const onMove = (e: MouseEvent) => {
+      if (e.metaKey || e.ctrlKey) mark(e.target)
+      else unmark()
+    }
+    // Releasing the key (or leaving the window with it down) has to clear it:
+    // an underline that outlives the modifier promises a click that won't work.
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.metaKey && !e.ctrlKey) unmark()
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('keyup', onKey)
+    window.addEventListener('blur', unmark)
+    return () => {
+      unmark()
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('keyup', onKey)
+      window.removeEventListener('blur', unmark)
+    }
+  }, [])
 
   if (!shown || !client) {
     return (
@@ -71,7 +137,23 @@ export function App({ bridge }: { bridge: Bridge }) {
         client={client}
         sessionId={shown.sessionId}
         className='h-full'
+        // A dock has no vertical space to spend on cards: every event is one
+        // full-width line behind a gutter glyph, the terminal treatment.
+        transcriptVariant='lines'
         panelSurface='external'
+        // Model and mode live in the window status bar (a click there opens a
+        // QuickPick), so the composer keeps no toolbar row and collapses to a
+        // single line — the vertical space a dock cannot spare.
+        controlsSurface='external'
+        // A dock is focussed in order to type in it: a click on anything that
+        // isn't itself a control puts the caret in the composer.
+        focusComposerOnClick
+        // What had been seen last time this session was on screen — the panel
+        // turns it into the recap row, the dimming and the catch-up bar.
+        unseen={shown.unseen}
+        onControls={(c) => {
+          controls.current = c
+        }}
         // The window status bar renders these instead (src/status-bar.ts) — a
         // second bar inside a panel that already sits in one is a bar too many.
         statusSurface='external'

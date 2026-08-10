@@ -6,6 +6,23 @@ import * as vscode from 'vscode'
  * KEYLESS gateways only — header auth cannot ride an `<img>`, the same trade
  * the iOS client makes.
  */
+/**
+ * The typeface the AGENT PANEL runs in, from settings. Stamped on `<html>` and
+ * read by `styles.css`, rather than pushed over the bridge: it has to be right
+ * on the first paint, and a message can't be. A change re-renders the HTML (see
+ * `activate`).
+ *
+ * The panel alone opts in (`{ font: true }`). The sidebar and the section views
+ * are ordinary VS Code UI and follow the editor's UI font like every other view
+ * — a monospace tree is a monospace tree, not a terminal.
+ */
+export function fontMode(): 'editor' | 'sans' {
+  return vscode.workspace.getConfiguration('workerdeck').get<'editor' | 'sans'>('fontFamily') ===
+    'sans'
+    ? 'sans'
+    : 'editor'
+}
+
 export function webviewHtml(
   webview: vscode.Webview,
   dist: vscode.Uri,
@@ -13,6 +30,8 @@ export function webviewHtml(
   rootAttrs: Record<string, string> = {},
   /** Bumped by the dev reloader: identical HTML would not re-fetch the bundle. */
   version = 0,
+  /** `font: true` honours `workerdeck.fontFamily` — the agent panel only. */
+  options: { font?: boolean } = {},
 ): string {
   const bust = version ? `?v=${version}` : ''
   const scriptUri = `${webview.asWebviewUri(vscode.Uri.joinPath(dist, script))}${bust}`
@@ -28,7 +47,7 @@ export function webviewHtml(
     `img-src ${webview.cspSource} data: blob: http: https:`,
   ].join('; ')
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en"${options.font ? ` data-font="${fontMode()}"` : ''}>
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
