@@ -43,3 +43,7 @@ apps/ios/App/WorkerDeckApp.entitlements
 DerivedData/
 xcuserdata/
 .silktree/
+# Throwaway UI harnesses: a real browser and a real layout engine for a component
+# that only misbehaves under one (the virtualized transcript). Useful, but not a
+# published surface of any package it happens to sit in.
+**/.virt-harness/

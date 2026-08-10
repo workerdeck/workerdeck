@@ -380,7 +380,9 @@ export function SessionPanel({
   // on every delta, and a fresh function would re-fetch each time.
   const hostImage = useHostImage(client, sessionId, state.producedFiles)
   const composerRef = useRef<ComposerHandle>(null)
-  const panelRef = useRef<HTMLDivElement>(null)
+  // The catch-up strip's way of scrolling the (virtualized, usually unmounted)
+  // recap row into view — the transcript fills it in. See TranscriptProps.
+  const jumpToRecap = useRef<(() => void) | null>(null)
 
   // "/model" is handled panel-side (see handleSend) — surface it in the autocomplete
   // even though the CLI's command list doesn't include it.
@@ -490,7 +492,6 @@ export function SessionPanel({
 
   return (
     <div
-      ref={panelRef}
       data-slot='session-panel'
       onClick={handleClick}
       className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}>
@@ -528,6 +529,7 @@ export function SessionPanel({
             ? { from: catchUp.itemCount, since: catchUp.since }
             : undefined
         }
+        jumpToRecapRef={jumpToRecap}
       />
       {/* The way back into what you missed. Above the composer because that is
           where the eye already is on returning, and because the transcript
@@ -546,7 +548,7 @@ export function SessionPanel({
             </span>
             <button
               type='button'
-              onClick={() => scrollToRecap(panelRef.current)}
+              onClick={() => jumpToRecap.current?.()}
               className='shrink-0 underline-offset-2 hover:text-fg-1 hover:underline'>
               jump
             </button>
@@ -769,21 +771,6 @@ const IMAGE_MEDIA_TYPES: Record<string, string> = {
   jpeg: 'image/jpeg',
   gif: 'image/gif',
   webp: 'image/webp',
-}
-
-/**
- * Scroll the recap row into view.
- *
- * Through the DOM rather than a ref threaded down through the transcript: the
- * row is rendered deep inside a virtualised-ish scroll container that the panel
- * does not own, and one query for a `data-slot` it also renders is less
- * machinery than a ref chain through three components for a button press.
- */
-function scrollToRecap(root: HTMLElement | null): void {
-  // Explicitly smooth: this one IS a journey, and seeing it travel is what tells
-  // you how far back the boundary was. (The container itself opens instantly —
-  // see `useSettled` in Transcript.)
-  root?.querySelector('[data-slot="recap"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
 /** A dismissible advisory strip above the transcript. */

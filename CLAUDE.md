@@ -126,7 +126,18 @@ protocol. Read these before changing scope or structure:
   glyph, no boxes, for a host where vertical space is scarce. It rides a **context**
   (`transcript-variant.tsx`), not a prop chain, so a row component composed by hand gets the
   right treatment too; every row component branches on `useLines()` rather than the embedder
-  restyling `data-slot`s from outside. `SessionVitals` carries `connection` precisely so an external bar
+  restyling `data-slot`s from outside. The transcript is **virtualized**
+  (`@tanstack/react-virtual`), and the rule that keeps it honest is that two parties want to
+  write `scrollTop`: `use-stick-to-bottom`'s follow spring and the virtualizer's size-change
+  correction. They are split by regime — **pinned, corrections are suppressed** (being at the
+  bottom is the whole scroll position, and a correction moving the viewport up reads as a user
+  scroll and breaks the lock); escaped, the virtualizer corrects so the scrollback holds still
+  under the reader. `anchorTo`/`followOnAppend` stay at their defaults so it never becomes a
+  second follow implementation. Two knock-ons: the catch-up "jump" is a closure the transcript
+  fills in (`jumpToRecapRef`) rather than a DOM query, because the recap row is usually
+  unmounted, and it must *re-aim* as the rows it crosses measure; and the card gap lives in each
+  row's padding, since flex `gap` cannot reach absolutely positioned children.
+  `SessionVitals` carries `connection` precisely so an external bar
   can obey the panel's own rule — a session status held over a dropped socket is a stale
   reading, and the link state has to win the slot. The VS Code extension is the reference
   consumer of both. Pure formatters ship from a third entry (`@workerdeck/ui/format`) so a

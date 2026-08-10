@@ -737,6 +737,27 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   therefore keeps serving the JS it was started with — a UI change needs the server restarted (or
   `pnpm dashboard` re-run), even though a server-side change would too. Symptoms look
   web-specific and are not.
+- **The transcript is virtualized, and two things want to write `scrollTop`.**
+  `use-stick-to-bottom`'s follow spring owns *staying at the bottom*; `@tanstack/react-virtual`
+  wants to *correct* the offset whenever a row measures differently from its estimate. They are
+  split by regime in `Transcript.tsx`: **pinned, corrections are suppressed outright** — being at
+  the bottom is the whole scroll position, and a correction that moves the viewport up is read by
+  the follow logic as a user scrolling away, which silently breaks the lock mid-stream. Escaped,
+  the virtualizer corrects so the scrollback holds still under the reader.
+  `anchorTo`/`followOnAppend` stay at their defaults so it never becomes a second follow
+  implementation, and `shouldAdjustScrollPositionOnItemSizeChange` restates virtual-core's own
+  default rules — supplying the callback *replaces* them, so a major bump there needs a re-read.
+- **`useFlushSync` looks like dead weight and is not.** It draws a React "flushSync was called
+  from inside a lifecycle method" error — corrections fire from `measureElement`'s ref callback,
+  inside the commit — which in an embedder's console reads as a WorkerDeck bug. Turning it off
+  silences that and costs anchoring: over the same walk up through unmeasured rows, on holds the
+  scrollback to the pixel, off let a step slide 112px under the reader.
+- **A row the reader cannot see is not in the DOM.** Find-in-page and select-all reach only
+  mounted rows, and a row's transient UI state (an expanded tool card) resets when it unmounts.
+  Anything that needs to *find* a row must go through the virtualizer, not `querySelector` —
+  which is why catch-up's "jump" is a closure the transcript fills in (`jumpToRecapRef`) rather
+  than a DOM query, and why it has to re-aim: the offset it first scrolls to is the sum of a few
+  hundred estimates, and only the rows it crosses make it true.
 - `SessionPanel`'s `header` prop takes a **function** when an embedder wants the session-actions
   (`⋯`) menu in its own chrome: it is called with the menu and the status bar then renders
   without it. The menu can only be built inside the panel (capability record, host-file verdict,
