@@ -1,0 +1,16 @@
+{
+  // F5 from THIS folder (File → Open… apps/vscode) launches an Extension
+  // Development Host with the extension loaded. Run `pnpm dev` first (or let
+  // the preLaunchTask build once) so dist/ exists.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run WorkerDeck Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js", "${workspaceFolder}/dist/**/*.cjs"],
+      "preLaunchTask": "workerdeck: build"
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import {
   useHostFileSearch,
   useToolCallHost,
   type ProducedFileRef,
+  type TranscriptState,
 } from '@workerdeck/react'
 import {
   ChartPie,
@@ -55,12 +56,43 @@ export interface SessionPanelProps {
    * of the session's controls, not stranded on the status line.
    */
   header?: ReactNode | ((slots: { actions: ReactNode }) => ReactNode)
+  /**
+   * Where the info/context/usage/MCP/skills/files surfaces live. `'internal'`
+   * (default) renders them as dialogs inside the panel. `'external'` renders
+   * NO dialogs and no `⋯` menu: every affordance that would open one calls
+   * {@link onOpenPanel} instead, so an embedder can host those surfaces in its
+   * own chrome (a VS Code sidebar, a drawer) and keep the panel purely a
+   * conversation surface.
+   */
+  panelSurface?: 'internal' | 'external'
+  /** Where `panelSurface: 'external'` routes opens. Absent = the affordances
+   * (status-bar clicks, `/mcp`) become inert rather than half-working. */
+  onOpenPanel?: (panel: SessionSurfacePanel) => void
+  /** Live session vitals, fired whenever they change — for embedders mirroring
+   * status/context/usage into chrome outside the panel (identity-stable via an
+   * internal ref, so an inline closure is fine). */
+  onVitals?: (vitals: SessionVitals) => void
   className?: string
 }
 
 /** The panels the session surface can raise. One at a time, by identity: a bag
  * of booleans would let two open at once. */
-type Panel = 'info' | 'context' | 'usage' | 'mcp' | 'files' | 'skills'
+export type SessionSurfacePanel = 'info' | 'context' | 'usage' | 'mcp' | 'files' | 'skills'
+type Panel = SessionSurfacePanel
+
+/** What {@link SessionPanelProps.onVitals} reports: the live readings a host
+ * chrome outside the panel would otherwise have to attach a second time for —
+ * which the tool bridge forbids (it asks the first attached client). */
+export type SessionVitals = {
+  status: TranscriptState['status']
+  engine: TranscriptState['engine']
+  capabilities: TranscriptState['capabilities']
+  model: string | undefined
+  permissionMode: TranscriptState['permissionMode']
+  cwd: TranscriptState['cwd']
+  contextUsage: TranscriptState['contextUsage']
+  rateLimits: TranscriptState['rateLimits']
+}
 
 /**
  * The all-in-one embeddable session surface: status bar, streaming transcript,
@@ -71,7 +103,16 @@ type Panel = 'info' | 'context' | 'usage' | 'mcp' | 'files' | 'skills'
  * the engine name — an absent capability hides the control instead of offering
  * one that can only fail.
  */
-export function SessionPanel({ client, sessionId, header, className }: SessionPanelProps) {
+export function SessionPanel({
+  client,
+  sessionId,
+  header,
+  panelSurface = 'internal',
+  onOpenPanel,
+  onVitals,
+  className,
+}: SessionPanelProps) {
+  const external = panelSurface === 'external'
   // Rejected commands (the CLI refusing a permission-mode switch, say) render INSIDE
   // the panel rather than through `toast`. The panel does not mount a `Toaster`, and
   // an embedder that doesn't either would drop the only signal that a command failed
@@ -97,6 +138,17 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
   // Callers are told to remount on a session switch, but a changed prop must not leave
   // the previous session's failure on screen.
   useEffect(() => setProtocolError(undefined), [sessionId])
+
+  // One router for every panel-opening affordance: internal surface opens the
+  // dialog, external hands the intent to the embedder (or drops it, absent a
+  // handler — inert beats half-working).
+  const openPanel = useCallback(
+    (target: SessionSurfacePanel) => {
+      if (external) onOpenPanel?.(target)
+      else setPanel(target)
+    },
+    [external, onOpenPanel],
+  )
   // A tab that was in the background has been sitting out the reconnect backoff;
   // coming back to it is exactly when waiting the rest of it out is wrong.
   useEffect(() => {
@@ -112,6 +164,33 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
   // which for them never comes.
   useToolCallHost(handle)
   const capabilities = state.capabilities
+
+  // Vitals out to the embedder, keyed on the readings themselves so an inline
+  // closure prop doesn't retrigger it every render.
+  const onVitalsRef = useRef(onVitals)
+  onVitalsRef.current = onVitals
+  const vitalsModel = effectiveModel ?? state.model
+  useEffect(() => {
+    onVitalsRef.current?.({
+      status: state.status,
+      engine: state.engine,
+      capabilities: state.capabilities,
+      model: vitalsModel,
+      permissionMode: state.permissionMode,
+      cwd: state.cwd,
+      contextUsage: state.contextUsage,
+      rateLimits: state.rateLimits,
+    })
+  }, [
+    state.status,
+    state.engine,
+    state.capabilities,
+    vitalsModel,
+    state.permissionMode,
+    state.cwd,
+    state.contextUsage,
+    state.rateLimits,
+  ])
   const busy = state.status === 'running' || state.status === 'awaiting_approval'
   const ended = state.status === 'failed' || state.status === 'closed'
   const attachments = useAttachments(client, sessionId, {
@@ -154,7 +233,7 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
       // the capability exists: elsewhere it is ordinary message text, like any
       // other slash command on an engine without them.
       if (capabilities.mcpStatus && text.trim() === '/mcp') {
-        setPanel('mcp')
+        openPanel('mcp')
         return
       }
     }
@@ -179,20 +258,20 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
       />
       <MenuContent>
         {capabilities.contextUsage ? (
-          <MenuItem onClick={() => setPanel('context')}>
+          <MenuItem onClick={() => openPanel('context')}>
             <ChartPie className='size-3.5 text-fg-3' /> Context
           </MenuItem>
         ) : null}
         {capabilities.rateLimits ? (
-          <MenuItem onClick={() => setPanel('usage')}>
+          <MenuItem onClick={() => openPanel('usage')}>
             <Gauge className='size-3.5 text-fg-3' /> Usage
           </MenuItem>
         ) : null}
-        <MenuItem onClick={() => setPanel('info')}>
+        <MenuItem onClick={() => openPanel('info')}>
           <Info className='size-3.5 text-fg-3' /> Session info
         </MenuItem>
         {capabilities.mcpStatus ? (
-          <MenuItem onClick={() => setPanel('mcp')}>
+          <MenuItem onClick={() => openPanel('mcp')}>
             <Plug className='size-3.5 text-fg-3' /> MCP servers
           </MenuItem>
         ) : null}
@@ -202,12 +281,12 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
             own explanation of that unreachable, which read as the feature being
             missing. The empty state says it instead. */}
         {capabilities.skillsList ? (
-          <MenuItem onClick={() => setPanel('skills')}>
+          <MenuItem onClick={() => openPanel('skills')}>
             <Sparkles className='size-3.5 text-fg-3' /> Skills
           </MenuItem>
         ) : null}
         {hostFiles.available ? (
-          <MenuItem onClick={() => setPanel('files')}>
+          <MenuItem onClick={() => openPanel('files')}>
             <FolderTree className='size-3.5 text-fg-3' /> Project files
           </MenuItem>
         ) : null}
@@ -216,20 +295,23 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
   )
 
   // A function header claims the menu; anything else leaves it on the status bar.
+  // The external surface has no menu to claim — those entries live in the
+  // embedder's own chrome, reached through onOpenPanel.
+  const menu = external ? null : actionsMenu
   const headerTakesActions = typeof header === 'function'
 
   return (
     <div
       data-slot='session-panel'
       className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}>
-      {headerTakesActions ? header({ actions: actionsMenu }) : header}
+      {headerTakesActions ? header({ actions: menu }) : header}
       <StatusBar
         state={state}
         connection={connection}
-        onOpenStatus={() => setPanel('info')}
-        onOpenContext={() => setPanel('context')}
-        onOpenUsage={() => setPanel('usage')}
-        actions={headerTakesActions ? undefined : actionsMenu}
+        onOpenStatus={external && !onOpenPanel ? undefined : () => openPanel('info')}
+        onOpenContext={external && !onOpenPanel ? undefined : () => openPanel('context')}
+        onOpenUsage={external && !onOpenPanel ? undefined : () => openPanel('usage')}
+        actions={headerTakesActions ? undefined : menu}
       />
       {protocolMismatch !== undefined ? (
         <Notice level='warning'>
@@ -254,7 +336,7 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
           the authority on whether an approval UI means anything here. */}
       {capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
         <div className='px-3 pb-2'>
-          <div className='mx-auto flex w-full max-w-3xl flex-col gap-2'>
+          <div className='mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] flex-col gap-2'>
             {state.pendingApprovals.map((request) =>
               request.toolName === 'AskUserQuestion' &&
               parseUserQuestions(request.input).length > 0 ? (
@@ -318,48 +400,54 @@ export function SessionPanel({ client, sessionId, header, className }: SessionPa
         }
       />
 
-      <SessionInfoDialog
-        state={state}
-        client={client}
-        sessionId={sessionId}
-        open={panel === 'info'}
-        onOpenChange={(next) => setPanel(next ? 'info' : undefined)}
-      />
-      <ContextDialog
-        usage={state.contextUsage}
-        open={panel === 'context'}
-        onOpenChange={(next) => setPanel(next ? 'context' : undefined)}
-      />
-      <UsageDialog
-        rateLimits={windows}
-        subscriptionType={state.subscriptionType}
-        engine={state.engine ?? 'claude'}
-        totalCostUsd={state.totalCostUsd}
-        updatedAt={state.rateLimitsUpdatedAt}
-        open={panel === 'usage'}
-        onOpenChange={(next) => setPanel(next ? 'usage' : undefined)}
-      />
-      <McpDialog
-        client={client}
-        sessionId={sessionId}
-        canManageServers={capabilities.mcpServerActions}
-        open={panel === 'mcp'}
-        onOpenChange={(next) => setPanel(next ? 'mcp' : undefined)}
-      />
-      <SkillsDialog
-        skills={state.skills}
-        open={panel === 'skills'}
-        onOpenChange={(next) => setPanel(next ? 'skills' : undefined)}
-        // Drafts into the composer; the operator sends it. There is no engine
-        // call that runs a skill, so there is nothing else this button could do.
-        onUse={(skill) => composerRef.current?.insertText(skillPrompt(skill))}
-      />
-      <HostFilesDialog
-        client={client}
-        cwd={state.cwd}
-        open={panel === 'files'}
-        onOpenChange={(next) => setPanel(next ? 'files' : undefined)}
-      />
+      {/* The internal dialog surface. The external one renders none of these —
+          the embedder hosts equivalent surfaces and is handed the intents. */}
+      {!external ? (
+        <>
+        <SessionInfoDialog
+          state={state}
+          client={client}
+          sessionId={sessionId}
+          open={panel === 'info'}
+          onOpenChange={(next) => setPanel(next ? 'info' : undefined)}
+        />
+        <ContextDialog
+          usage={state.contextUsage}
+          open={panel === 'context'}
+          onOpenChange={(next) => setPanel(next ? 'context' : undefined)}
+        />
+        <UsageDialog
+          rateLimits={windows}
+          subscriptionType={state.subscriptionType}
+          engine={state.engine ?? 'claude'}
+          totalCostUsd={state.totalCostUsd}
+          updatedAt={state.rateLimitsUpdatedAt}
+          open={panel === 'usage'}
+          onOpenChange={(next) => setPanel(next ? 'usage' : undefined)}
+        />
+        <McpDialog
+          client={client}
+          sessionId={sessionId}
+          canManageServers={capabilities.mcpServerActions}
+          open={panel === 'mcp'}
+          onOpenChange={(next) => setPanel(next ? 'mcp' : undefined)}
+        />
+        <SkillsDialog
+          skills={state.skills}
+          open={panel === 'skills'}
+          onOpenChange={(next) => setPanel(next ? 'skills' : undefined)}
+          // Drafts into the composer; the operator sends it. There is no engine
+          // call that runs a skill, so there is nothing else this button could do.
+          onUse={(skill) => composerRef.current?.insertText(skillPrompt(skill))}
+        />
+        <HostFilesDialog
+          client={client}
+          cwd={state.cwd}
+          open={panel === 'files'}
+          onOpenChange={(next) => setPanel(next ? 'files' : undefined)}
+        />
+        </>
+      ) : null}
     </div>
   )
 }
@@ -467,7 +555,7 @@ function Notice({
       <div
         role='alert'
         className={cn(
-          'mx-auto flex w-full max-w-3xl items-start gap-2 rounded-md border px-3 py-2 text-body-sm',
+          'mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] items-start gap-2 rounded-md border px-3 py-2 text-body-sm',
           level === 'error'
             ? 'border-danger/40 bg-danger-bg text-danger'
             : 'border-warning/40 bg-warning-bg text-warning',

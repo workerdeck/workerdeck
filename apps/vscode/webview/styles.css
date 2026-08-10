@@ -1,0 +1,73 @@
+@import 'tailwindcss';
+@import '@workerdeck/ui/theme.css';
+
+/* Monorepo dev: scan the ui package source for classnames (mirrors packages/web). */
+@source '../../../packages/ui/src';
+/* streamdown (markdown renderer inside @workerdeck/ui) styles itself with Tailwind
+ * classes — scan its whole dist dir. pnpm nests it under the ui package. */
+@source '../../../packages/ui/node_modules/streamdown/dist';
+/* This webview's own classnames. */
+@source './';
+
+/* No webfonts on purpose: the webview inherits VS Code's environment, and the
+ * ui tokens fall back through their system stacks. Keeps the bundle small and
+ * the look native to the editor. */
+
+/*
+ * Skin the ui tokens with the editor's own theme. VS Code injects `--vscode-*`
+ * variables into every webview, already resolved for the ACTIVE theme — so
+ * these overrides are theme-agnostic and live on :root unconditionally
+ * (`theme.ts` still stamps data-theme for the light/dark structural variants).
+ * Fallbacks are the ui defaults, for the day a theme omits a variable.
+ *
+ * Deliberately partial: canvas, surfaces, borders, text. Semantic colors
+ * (success/warning/danger) and badge tuning stay the ui's own — VS Code has no
+ * one-to-one equivalents and half-mapped semantics read worse than none.
+ */
+:root {
+  --bg: var(--vscode-panel-background, #ffffff);
+  --bg-surface: var(--vscode-editorWidget-background, #fafafa);
+  --bg-surface-hover: var(--vscode-list-hoverBackground, #f2f2f2);
+  --bg-code: var(--vscode-textCodeBlock-background, #f5f5f5);
+  --bg-elevated: var(--vscode-editorWidget-background, #ffffffcc);
+  --border: var(--vscode-panel-border, #ebebeb);
+  --border-light: var(--vscode-widget-border, #e0e0e0);
+  --fg-1: var(--vscode-foreground, #171717);
+  --fg-2: var(--vscode-foreground, #454545);
+  --fg-3: var(--vscode-descriptionForeground, #737373);
+  --fg-4: var(--vscode-descriptionForeground, #a1a1a1);
+  --accent: var(--vscode-foreground, #171717);
+
+  /* Edge-to-edge content: a bottom dock has no width to spare on centering. */
+  --wd-content-max-w: 100%;
+}
+
+/* Vertical space is the scarce resource in a bottom dock. */
+[data-slot='composer-hint'] {
+  display: none;
+}
+[data-slot='status-bar'] {
+  padding-block: 2px;
+}
+/* Composer flush to the panel edges: no gutter, and the prompt box's own
+ * rounding/side borders go with it (a floating card look needs the gutter). */
+[data-slot='composer'] {
+  padding: 0;
+}
+[data-slot='composer'] .rounded-lg {
+  border-radius: 0;
+  border-left-width: 0;
+  border-right-width: 0;
+  border-bottom-width: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+}

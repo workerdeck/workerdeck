@@ -64,15 +64,15 @@ export {
 } from './components/prompt-area/index.ts'
 
 // Agent-control components
-export { SessionPanel, type SessionPanelProps } from './components/agent/SessionPanel.tsx'
 export {
-  SessionWorkspace,
-  type SessionWorkspaceProps,
-} from './components/agent/SessionWorkspace.tsx'
-export { FileTree, type FileTreeProps } from './components/agent/FileTree.tsx'
-export { EditorTabs, type EditorTabsProps } from './components/agent/EditorTabs.tsx'
-export { FileViewer, type FileViewerProps } from './components/agent/FileViewer.tsx'
-export { CodeEditor, type CodeEditorProps } from './components/agent/CodeEditor.tsx'
+  SessionPanel,
+  type SessionPanelProps,
+  type SessionSurfacePanel,
+  type SessionVitals,
+} from './components/agent/SessionPanel.tsx'
+// The workspace layout and its Monaco editor live at `@workerdeck/ui/workspace`
+// — deliberately unreachable from here, so importing this entry never drags
+// Monaco into the bundle. See `src/workspace.ts`.
 export { Transcript, type TranscriptProps } from './components/agent/Transcript.tsx'
 export {
   Conversation,

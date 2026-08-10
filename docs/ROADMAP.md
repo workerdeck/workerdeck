@@ -164,7 +164,43 @@ master; 0.7.0 is the latest published).
   overwrite in either direction, and `hostFiles.write` still gates whether the editor is
   writable at all. Monaco's worker-backed language services are aliased out of the dashboard
   build (8.8MB, `ts.worker` alone being 6.7MB of TypeScript compiler); syntax highlighting is a
-  separate main-thread mechanism and is unaffected.
+  separate main-thread mechanism and is unaffected. The workspace layer later moved to its own
+  entry point (`@workerdeck/ui/workspace`, Monaco an optional peer dep): Vite emits Monaco's
+  ~9MB of worker assets while *transforming* the module — before tree-shaking — so only
+  unreachability from the root entry actually keeps them out of an embedder's build.
+- **VS Code extension (`apps/vscode`, side-loaded .vsix).** Sessions in the bottom panel — the
+  real `SessionPanel` on a real `WorkerDeckClient` whose `fetchImpl`/`WebSocketImpl` are
+  postMessage shims executed extension-host-side (Node fetch/`ws` + `Authorization: Bearer`;
+  keys in `SecretStorage`, webview CSP with no external `connect-src`, bridge refuses
+  non-gateway URLs). The sidebar is native-shaped: a Sessions webview listing **every
+  gateway's sessions at once** (the gateway is a facet, not the frame) — one view-title icon
+  toggles the whole view config (search + gateway/adapter/state filters + group/sort,
+  persisted in webview state), a second opens the Gateways screen that is the only place a
+  gateway is viewed/added/edited/removed, and cards are renameable in place — plus
+  push-screen New Session / gateway forms, and **four separate section views** — Session Info, Context, Usage, MCP Servers — each
+  its own VS Code view off one shared bundle, `when`-gated on selection and the engine's
+  capability record, so collapse/reorder/drag-anywhere are VS Code's own. The agent panel
+  is purely the conversation: `SessionPanel` grew `panelSurface: 'external'` + `onOpenPanel`
+  + `onVitals` seams in `ui`, so the panel renders no dialogs and relays intents and live
+  vitals outward instead (a status-bar context click focuses the Context view). Sessions data is REST rollups on a poll with an
+  awaiting-approval badge (`pendingPermissionCount` — already in the protocol, no addition
+  needed); notifications for permission asks tapped from frames already crossing the bridge,
+  answered over REST `resolvePermission`, no second attach anywhere (interrupt from a card is
+  the one deliberate exception: a transient attach that sends the frame and detaches). Remote gateways mount as
+  a `workerdeck://` FileSystemProvider over `/fs/*` (conditional writes, 409 = the agent got
+  there first; no mkdir/delete/rename routes → NoPermissions), and `extensionKind:
+  ["workspace","ui"]` makes Remote SSH windows the full-fidelity tier with zero extension
+  code. There is no implicit localhost gateway: an unconfigured install shows an empty list
+  with an add affordance (prefilled with the loopback URL) rather than a phantom entry that is
+  usually unreachable. Renaming a session is a gateway edit, not a local one —
+  `PATCH /sessions/:id` (`UpdateSessionRequest`, `Runner.setTitle`) writes `meta.title` and
+  `null` restores the derived title, so the dashboard and the phone see the same name.
+  The dev loop is the extension's own: in development mode it watches its `dist/`
+  (`src/dev-reload.ts`) and re-renders the webviews in place on a webview rebuild, reloading
+  the window only when the extension-host bundle changes; `pnpm dev:host` opens an Extension
+  Development Host from a terminal. Not yet: live-verified end to end (a real gateway in a dev
+  host), agent→IDE tools (PRD §7), Marketplace publishing. PRD in
+  `_docs/plans/VSCODE-EXTENSION-PRD.md`.
 
 ## Next
 

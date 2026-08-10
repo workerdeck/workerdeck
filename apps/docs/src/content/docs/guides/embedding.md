@@ -60,10 +60,12 @@ param via `buildWsUrl(sessionId, afterSeq)` or with cookies.
 
 Five levels, from most batteries-included to most raw:
 
-0. **`SessionWorkspace`** (`@workerdeck/ui`) — a VS Code-shaped layout *around* the panel:
-   project tree and fuzzy search on the left, editor tabs above, the agent below, with the agent
-   claiming the whole column when nothing is open.
-   `<SessionWorkspace client={client} sessionId={session.id} />`. It needs the gateway's
+0. **`SessionWorkspace`** (`@workerdeck/ui/workspace`) — a VS Code-shaped layout *around* the
+   panel: project tree and fuzzy search on the left, editor tabs above, the agent below, with the
+   agent claiming the whole column when nothing is open.
+   `<SessionWorkspace client={client} sessionId={session.id} />`. It sits at its own entry point
+   and takes **`monaco-editor` as an optional peer dependency**, so a host that only wants the
+   panel installs neither. It needs the gateway's
    `hostFiles` routes (without them the rail is absent and you get the panel), and editing
    additionally needs `hostFiles.write`, which is a separate opt-in defaulting to off — the
    editor renders read-only otherwise. Saves are conditional on the hash the tab read, so a

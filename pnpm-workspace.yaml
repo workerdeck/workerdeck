@@ -18,6 +18,11 @@ allowBuilds:
   '@swc/core': true
   # sharp: Astro's default image service (apps/docs). Prebuilt binaries fetched on install.
   sharp: true
+  # vsce internals (apps/vscode packaging). Neither build script is needed for
+  # `vsce package`: vsce-sign only verifies downloads, keytar only backs
+  # `vsce publish` credential storage — and we side-load the .vsix.
+  '@vscode/vsce-sign': false
+  keytar: false
 
 minimumReleaseAgeExclude:
   - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.217'

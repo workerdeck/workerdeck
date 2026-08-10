@@ -4,7 +4,8 @@ Styled agent-control component library for WorkerDeck hosts: `SessionPanel` (sta
 streaming transcript + tool-call cards + permission prompts + composer with attachments and
 `@file` / `/command` completion, plus the panels behind it — session info, context, plan usage,
 MCP servers, project files), `SessionWorkspace` (a VS Code-shaped layout *around* that panel —
-file tree, editor tabs, Monaco), `SessionList`, and the underlying primitives (Button, Badge,
+file tree, editor tabs, Monaco — at `@workerdeck/ui/workspace`, so Monaco stays out of hosts that
+don't want it), `SessionList`, and the underlying primitives (Button, Badge,
 Card, Select, Dialog, AlertDialog, …). Built on **Tailwind v4 + Base UI + cva**, themed by CSS
 tokens with light/dark via `<html data-theme>`.
 
@@ -70,8 +71,15 @@ const client = new WorkerDeckClient({ baseUrl: `${location.origin}/v1` })
 open files above, agent below — and is **strictly additive**: `SessionPanel` is untouched and
 still complete on its own, so pick whichever fits. An app with its own file tree keeps the panel.
 
+It lives at its **own entry point**, and Monaco is an **optional peer dependency** — install it
+alongside `@workerdeck/ui` if you want the workspace, and skip both if you don't:
+
+```sh
+npm install monaco-editor
+```
+
 ```tsx
-import { SessionWorkspace } from '@workerdeck/ui'
+import { SessionWorkspace } from '@workerdeck/ui/workspace'
 
 <SessionWorkspace key={sessionId} client={client} sessionId={sessionId} />
 ```
@@ -93,10 +101,16 @@ Monaco then *silently* runs worker code on the main thread:
 export default defineConfig({ optimizeDeps: { exclude: ['monaco-editor'] } })
 ```
 
-Monaco is loaded through a dynamic `import()`, so it costs nothing until a file is opened. Our
-own dashboard additionally aliases away Monaco's four worker-backed language services
+Monaco is loaded through a dynamic `import()`, so it costs nothing at runtime until a file is
+opened. Our own dashboard additionally aliases away Monaco's four worker-backed language services
 (TypeScript/JSON/CSS/HTML) — 8.8MB of build output for IntelliSense and schema validation, with
 syntax highlighting unaffected — see `packages/web/vite.config.ts` if you want the same trade.
+
+None of this reaches you through the root entry. That separation is why the workspace has its own
+subpath rather than living in `@workerdeck/ui`: tree-shaking alone is not enough. Rollup does drop
+`CodeEditor` from a `SessionPanel`-only bundle, but Vite resolves Monaco's worker URLs while
+*transforming* the module — before tree-shaking runs — and emits ~9MB of worker assets that are
+never retracted. Keeping Monaco unreachable from the root entry is what actually prevents that.
 
 Every component takes `className` and carries `data-slot` attributes for targeted overrides.
 
@@ -113,3 +127,14 @@ lose by forgetting a second mount isn't one.
   scoping — file an issue with your case.
 - Dark mode is driven **only** by `[data-theme='dark']` on the root element (the Tailwind
   `dark:` variant is remapped to it); `prefers-color-scheme` is not consulted at CSS level.
+- The session surface centers its content at `--wd-content-max-w` (default `48rem`).
+  Embedders in narrow docks (a VS Code bottom panel, a drawer) set it to `100%` for
+  edge-to-edge content. Every component also carries `data-slot` attributes for targeted
+  overrides — e.g. `[data-slot='composer-hint']` is the "Enter to send" line, which a host
+  whose vertical space is precious can `display: none`.
+- `SessionPanel` can hand its dialog surfaces to the embedder: `panelSurface: 'external'`
+  renders no dialogs and no `⋯` menu — every affordance that would open one calls
+  `onOpenPanel(panel)` instead, and `onVitals` streams the live readings (status, context,
+  rate limits, capabilities) those external surfaces need, so host chrome never has to
+  attach a second time (the tool bridge asks the first attached client). The VS Code
+  extension's sidebar sections are the reference consumer.

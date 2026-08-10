@@ -104,9 +104,21 @@ protocol. Read these before changing scope or structure:
   whole session surface — transcript, composer (attachments, `/` and `@` completion), and the
   panels behind its status bar and `⋯` menu (session info, context, plan usage, MCP, project
   files) — each gated on the capability record, so one component is correct for every engine.
+  `panelSurface: 'external'` hands that dialog surface to the embedder: no dialogs, no `⋯`
+  menu, intents via `onOpenPanel`, live readings via `onVitals` (what lets external chrome
+  render context/usage without a second attach — the tool bridge asks the first attached
+  client). The VS Code extension's sidebar is the reference consumer.
   `SessionWorkspace` is the VS Code-shaped layout *around* it (file rail, tabs, read-only viewer,
   hand-rolled `Splitter` — Base UI ships none) and is **strictly additive**: an embedder picks the
-  panel or the workspace, and `SessionPanel` is untouched by it. Two invariants there — the editor
+  panel or the workspace, and `SessionPanel` is untouched by it. It ships from a **second entry
+  point** (`@workerdeck/ui/workspace` ← `src/workspace.ts`; tsdown builds both), with
+  `monaco-editor` an **optional peer dep** — a host that only wants the panel (a VS Code extension
+  webview, say) installs neither. Keep Monaco unreachable from `src/index.ts`: tree-shaking alone
+  does *not* cover this. Rollup does drop `CodeEditor` from a `SessionPanel`-only bundle, but Vite
+  resolves Monaco's worker `new URL(…)`s while **transforming** the module — before tree-shaking
+  runs — and emits ~9MB of worker assets it never retracts (measured: 11M → 2.7M of output, 3682 →
+  2444 modules, once the subpath landed; `sideEffects: false` does nothing for it). Two invariants
+  there — the editor
   region is *absent* from the layout when no file is open (not zero-height), and `SessionPanel`
   keeps its child index across that transition, because remounting it drops the WS attach and the
   whole transcript. The embedder's `header` is portalled out of the panel to the top of the
@@ -157,6 +169,27 @@ protocol. Read these before changing scope or structure:
   files here stay literal — no env indirection, they are meant to be edited). `docs/assets` —
   brand assets (rules in `BRAND.md`); the mark is inlined in `BrandMark.tsx`, `Header.astro` and
   both favicons — keep geometry identical.
+- `apps/vscode` — the VS Code extension (side-loaded `.vsix`; CI uploads it as an artifact,
+  no Marketplace yet). A workspace member like any package (esbuild for the extension host,
+  Vite for the webview, both from `@workerdeck/source`), importing `client`/`react`/`ui`/
+  `protocol` and **never** `core`/`server`. The webview runs an *unmodified* `WorkerDeckClient`
+  + `SessionPanel` (root entry — no Monaco; VS Code is the workspace): its `fetchImpl`/
+  `WebSocketImpl` are postMessage shims, executed on the extension-host side with Node fetch /
+  `ws` plus the gateway's `Authorization: Bearer` header — keys stay in `SecretStorage`, the
+  webview CSP has no external `connect-src`, and the bridge refuses URLs not belonging to a
+  registered gateway. One live attach per session, owned by the panel: sidebar/status
+  bar/notifications read REST rollups (`pendingPermissionCount`) or tap frames already flowing
+  through the bridge — never a second attach. Remote gateways mount as a `workerdeck://`
+  FileSystemProvider over `/fs/*` (hash-guarded conditional writes; no mkdir/delete/rename —
+  no such routes); local-vs-remote is decided from the gateway URL (`isLoopbackHost`), never
+  by probing paths, which is also what makes `extensionKind: ["workspace","ui"]` the whole
+  Remote SSH story. The Sessions view lists every gateway's sessions at once — gateway is a
+  facet (filter/group/sort) beside adapter and state, not the frame — and gateways are managed
+  only on their own screen; there is **no implicit localhost gateway**. A session rename is a
+  gateway edit (`PATCH /sessions/:id` → `meta.title`), never a local override, so every client
+  sees the same name. `src/dev-reload.ts` is development-mode only: a webview rebuild
+  re-renders the webviews in place, an extension-host rebuild reloads the window (VS Code
+  cannot swap extension code in a live host). PRD: `_docs/plans/VSCODE-EXTENSION-PRD.md`.
 - `apps/ios` — native iOS remote control (SwiftUI + XcodeGen; invisible to pnpm/turbo — no
   package.json). `WorkerDeckKit/` is a hand-written Swift mirror of `packages/protocol` plus a
   client and a port of the react transcript reducer — protocol or transcript changes must be

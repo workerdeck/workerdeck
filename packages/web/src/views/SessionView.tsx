@@ -11,9 +11,9 @@ import {
   Badge,
   Button,
   CopyButton,
-  SessionWorkspace,
   toast,
 } from '@workerdeck/ui'
+import { SessionWorkspace } from '@workerdeck/ui/workspace'
 import { ArrowLeft, Trash2 } from 'lucide-react'
 import { client } from '@/lib/client.ts'
 

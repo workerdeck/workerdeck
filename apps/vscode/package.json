@@ -1,0 +1,197 @@
+{
+  "name": "workerdeck-vscode",
+  "displayName": "WorkerDeck",
+  "version": "0.10.0",
+  "description": "Watch, steer, and approve WorkerDeck agent sessions from VS Code: sessions in the bottom panel, gateways in the sidebar, remote projects as a virtual workspace.",
+  "publisher": "workerdeck",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/extension.cjs",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace",
+    "ui"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": true,
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "WorkerDeck talks to a gateway you configure; it does not execute workspace content."
+    }
+  },
+  "activationEvents": [
+    "onFileSystem:workerdeck"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "workerdeck",
+          "title": "WorkerDeck",
+          "icon": "media/sidebar.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "workerdeck-panel",
+          "title": "WorkerDeck",
+          "icon": "media/sidebar.svg"
+        }
+      ]
+    },
+    "views": {
+      "workerdeck": [
+        {
+          "id": "workerdeck.sessions",
+          "type": "webview",
+          "name": "Sessions",
+          "icon": "media/sidebar.svg"
+        },
+        {
+          "id": "workerdeck.sessionInfo",
+          "type": "webview",
+          "name": "Session Info",
+          "icon": "media/sidebar.svg",
+          "when": "workerdeck.sessionSelected"
+        },
+        {
+          "id": "workerdeck.context",
+          "type": "webview",
+          "name": "Context",
+          "icon": "media/sidebar.svg",
+          "when": "workerdeck.sessionSelected && workerdeck.capContext"
+        },
+        {
+          "id": "workerdeck.usage",
+          "type": "webview",
+          "name": "Usage",
+          "icon": "media/sidebar.svg",
+          "when": "workerdeck.sessionSelected && workerdeck.capUsage"
+        },
+        {
+          "id": "workerdeck.mcp",
+          "type": "webview",
+          "name": "MCP Servers",
+          "icon": "media/sidebar.svg",
+          "when": "workerdeck.sessionSelected && workerdeck.capMcp"
+        }
+      ],
+      "workerdeck-panel": [
+        {
+          "id": "workerdeck.sessionPanel",
+          "type": "webview",
+          "name": "Agent",
+          "icon": "media/sidebar.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "workerdeck.newSession",
+        "title": "New Session",
+        "category": "WorkerDeck",
+        "icon": "$(add)"
+      },
+      {
+        "command": "workerdeck.gateways",
+        "title": "Gateways",
+        "category": "WorkerDeck",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "workerdeck.toggleViewConfig",
+        "title": "Filter, Group and Sort Sessions",
+        "category": "WorkerDeck",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "workerdeck.addGateway",
+        "title": "Add Gateway",
+        "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.refreshSessions",
+        "title": "Refresh Sessions",
+        "category": "WorkerDeck",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "workerdeck.openProjectFolder",
+        "title": "Open Session Project Folder",
+        "category": "WorkerDeck"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "workerdeck.newSession",
+          "when": "view == workerdeck.sessions",
+          "group": "navigation@1"
+        },
+        {
+          "command": "workerdeck.toggleViewConfig",
+          "when": "view == workerdeck.sessions",
+          "group": "navigation@2"
+        },
+        {
+          "command": "workerdeck.gateways",
+          "when": "view == workerdeck.sessions",
+          "group": "navigation@3"
+        },
+        {
+          "command": "workerdeck.refreshSessions",
+          "when": "view == workerdeck.sessions",
+          "group": "1_workerdeck@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "WorkerDeck",
+      "properties": {
+        "workerdeck.dev.autoReload": {
+          "type": "boolean",
+          "default": true,
+          "description": "In an Extension Development Host window, re-render the webviews (or reload the window) when the extension is rebuilt. No effect in an installed extension."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "node esbuild.mjs && vite build",
+    "dev": "node esbuild.mjs --watch & vite build --watch",
+    "typecheck": "tsgo -p tsconfig.json && tsgo -p tsconfig.webview.json",
+    "package": "pnpm build && vsce package --no-dependencies -o workerdeck.vsix",
+    "dev:host": "node scripts/dev-host.mjs",
+    "install:local": "pnpm package && code --install-extension workerdeck.vsix --force"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.1",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/vscode": "^1.90.0",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react-swc": "^3.9.0",
+    "@vscode/vsce": "^3.6.2",
+    "@workerdeck/client": "workspace:*",
+    "@workerdeck/protocol": "workspace:*",
+    "@workerdeck/react": "workspace:*",
+    "@workerdeck/ui": "workspace:*",
+    "esbuild": "^0.25.0",
+    "lucide-react": "^1.21.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "rimraf": "^6.1.3",
+    "tailwindcss": "^4.3.1",
+    "vite": "^6.3.0",
+    "ws": "^8.18.0"
+  }
+}

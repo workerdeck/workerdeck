@@ -290,7 +290,7 @@ export function Composer({
           pick(e.dataTransfer.files)
         }}
         className={cn(
-          'mx-auto w-full max-w-3xl overflow-hidden rounded-lg border border-border bg-bg shadow-(--shadow-xs)',
+          'mx-auto w-full max-w-[var(--wd-content-max-w,48rem)] overflow-hidden rounded-lg border border-border bg-bg shadow-(--shadow-xs)',
           'transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30',
           dragging && 'border-ring ring-2 ring-ring/30',
           disabled && 'opacity-60',
@@ -363,7 +363,7 @@ export function Composer({
         </div>
       </div>
       {attachments?.error ? (
-        <div className='mx-auto mt-1 flex w-full max-w-3xl items-center gap-2 text-label text-danger'>
+        <div className='mx-auto mt-1 flex w-full max-w-[var(--wd-content-max-w,48rem)] items-center gap-2 text-label text-danger'>
           <TriangleAlert className='size-3 shrink-0' />
           <span className='min-w-0 flex-1'>{attachments.error}</span>
           <button
@@ -375,7 +375,9 @@ export function Composer({
           </button>
         </div>
       ) : (
-        <div className='mx-auto mt-1 w-full max-w-3xl text-center text-label text-fg-4'>
+        <div
+          data-slot='composer-hint'
+          className='mx-auto mt-1 w-full max-w-[var(--wd-content-max-w,48rem)] text-center text-label text-fg-4'>
           Enter to send · Shift+Enter for a new line
         </div>
       )}

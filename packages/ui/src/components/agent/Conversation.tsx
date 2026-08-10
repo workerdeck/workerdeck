@@ -32,7 +32,7 @@ export function ConversationContent({
   return (
     <StickToBottom.Content
       data-slot='conversation-content'
-      className={cn('mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-4', className)}
+      className={cn('mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] flex-col gap-4 px-4 py-4', className)}
       {...props}>
       {children}
     </StickToBottom.Content>

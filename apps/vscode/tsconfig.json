@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "customConditions": ["@workerdeck/source"],
+    "allowImportingTsExtensions": true,
+    // DOM + jsx: the host code is Node, but its type-only imports of
+    // SessionVitals/SessionSurfacePanel resolve @workerdeck/ui to TSX source
+    // under the @workerdeck/source condition (same precedent as
+    // packages/client, which also compiles with DOM in lib).
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "types": ["node", "vscode"]
+  },
+  "include": ["src/**/*.ts", "esbuild.mjs"],
+  "exclude": ["node_modules", "dist", "webview"]
+}
