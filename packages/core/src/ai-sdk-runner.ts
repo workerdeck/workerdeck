@@ -18,6 +18,7 @@ import {
   type SessionInfo,
   type SessionStatus,
   type ToolExecutionBackend,
+  transcriptActivity,
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import { type AttachmentInput, attachmentRef, normalizeMediaType } from './attachments.ts'
@@ -139,6 +140,7 @@ export class AiSdkRunner implements Runner {
   #events: SessionEvent[] = []
   #listeners = new Set<SessionEventListener>()
   #seq = 0
+  #activityCount = 0
   #status: SessionStatus = 'starting'
   #permissionMode: PermissionMode
   #messages: ModelMessage[] = []
@@ -191,6 +193,9 @@ export class AiSdkRunner implements Runner {
     }
     this.#seq = snapshot.seq
     this.#events = [...snapshot.events]
+    // Recomputed rather than carried in the snapshot: the log IS the count, and
+    // deriving it here means a rehydrated session cannot disagree with itself.
+    this.#activityCount = this.#events.reduce((total, event) => total + transcriptActivity(event), 0)
     this.#messages = [...state.messages]
     for (const call of state.pendingToolCalls) this.#pendingToolCalls.set(call.toolCallId, call)
     // Already handed to a backend before the teardown: re-dispatching would run
@@ -253,6 +258,7 @@ export class AiSdkRunner implements Runner {
       permissionMode: this.#permissionMode,
       createdAt: this.createdAt,
       lastSeq: this.#seq,
+      activityCount: this.#activityCount,
       pendingPermissionCount: 0,
       meta: this.#config.meta,
       title: this.#title(),
@@ -899,6 +905,8 @@ export class AiSdkRunner implements Runner {
   #emit(body: SessionEventBody): void {
     const event: SessionEvent = { ...body, seq: ++this.#seq, ts: Date.now() }
     this.#lastActivityAt = event.ts
+    // Rows, not events: what a client diffs to know how much it missed.
+    this.#activityCount += transcriptActivity(body)
     this.#events.push(event)
     for (const listener of this.#listeners) {
       try {

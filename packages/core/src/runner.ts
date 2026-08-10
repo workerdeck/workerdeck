@@ -20,6 +20,7 @@ import {
   type SessionEventBody,
   type SessionInfo,
   type SessionStatus,
+  transcriptActivity,
 } from '@workerdeck/protocol'
 import {
   type AttachmentInput,
@@ -86,6 +87,7 @@ export class SessionRunner implements Runner {
   #events: SessionEvent[] = []
   #listeners = new Set<SessionEventListener>()
   #seq = 0
+  #activityCount = 0
   #status: SessionStatus = 'starting'
   #statusDetail: string | undefined
   #sdkSessionId: string | undefined
@@ -154,6 +156,7 @@ export class SessionRunner implements Runner {
       apiKeySource: this.#apiKeySource,
       createdAt: this.createdAt,
       lastSeq: this.#seq,
+      activityCount: this.#activityCount,
       pendingPermissionCount: this.#pending.size,
       meta: this.#config.meta,
       title: this.#title(),
@@ -684,6 +687,8 @@ export class SessionRunner implements Runner {
   #emit(body: SessionEventBody): void {
     const event: SessionEvent = { ...body, seq: ++this.#seq, ts: Date.now() }
     this.#lastActivityAt = event.ts
+    // Rows, not events: what a client diffs to know how much it missed.
+    this.#activityCount += transcriptActivity(body)
     this.#events.push(event)
     for (const listener of this.#listeners) {
       try {

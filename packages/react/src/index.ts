@@ -38,3 +38,4 @@ export {
   seedFromSessionInfo,
 } from './transcript.ts'
 export type { ProducedFileRef, TranscriptItem, TranscriptState } from './transcript.ts'
+export { recapLine, summarizeSince, type RecapInput, type RecapSummary } from './recap.ts'

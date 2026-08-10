@@ -1144,8 +1144,59 @@ export type SessionInfo = {
   totalCostUsd?: number
   /** Cumulative turn count across the session. */
   numTurns?: number
+  /**
+   * How many transcript rows this session has produced (see
+   * {@link transcriptActivity}) — a monotonic counter a client can diff against
+   * a remembered value to answer "how much happened while I wasn't looking",
+   * without attaching.
+   *
+   * `numTurns` cannot answer it: five tool calls inside one turn are one turn.
+   * `lastSeq` cannot either — it counts every event, and with token streaming on
+   * that is hundreds per reply. Absent on an older server; a client should fall
+   * back to `numTurns` rather than showing nothing.
+   */
+  activityCount?: number
   /** Epoch ms of the most recent emitted event. */
   lastActivityAt?: number
+}
+
+/**
+ * How many transcript rows an event materializes — the unit behind
+ * {@link SessionInfo.activityCount}.
+ *
+ * Deliberately the *reducer's* rule (`@workerdeck/react`'s `transcript.ts`), not
+ * a server-side approximation: one row per content block of an assistant
+ * message (a text, a thought, each tool call), one for a user message, one per
+ * turn result, delivered file or error. Everything else — status changes, usage
+ * readings, stream deltas, permission bookkeeping — is state, not a row, and
+ * counts zero.
+ *
+ * It lives in `protocol` because both sides need it and neither may import the
+ * other: the runners count with it, and any client compares the totals. If the
+ * reducer's row rule changes, change this with it.
+ */
+export function transcriptActivity(body: SessionEventBody): number {
+  switch (body.type) {
+    case 'assistant_message': {
+      const content = body.message.content
+      // A string body is one text row. Blocks are one row each, except tool
+      // results (which land inside the call's own row) and unknown blocks.
+      if (typeof content === 'string') return content.trim() === '' ? 0 : 1
+      const rows = content.filter(
+        (block) => block.type === 'text' || block.type === 'thinking' || block.type === 'tool_use',
+      ).length
+      return rows
+    }
+    case 'user_message':
+      // Tool results arrive as synthetic user messages; they are not rows.
+      return body.synthetic ? 0 : 1
+    case 'turn_result':
+    case 'file_delivered':
+    case 'session_error':
+      return 1
+    default:
+      return 0
+  }
 }
 
 /**

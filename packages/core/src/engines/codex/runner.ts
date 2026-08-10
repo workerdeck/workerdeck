@@ -17,6 +17,7 @@ import {
   type SessionStatus,
   type SkillInfo,
   type UserQuestion,
+  transcriptActivity,
 } from '@workerdeck/protocol'
 import {
   attachmentKind,
@@ -653,6 +654,7 @@ export class CodexRunner implements Runner {
   #events: SessionEvent[] = []
   #listeners = new Set<SessionEventListener>()
   #seq = 0
+  #activityCount = 0
   #status: SessionStatus = 'starting'
   #sdkSessionId: string | undefined
   #model: string | undefined
@@ -768,6 +770,7 @@ export class CodexRunner implements Runner {
       canBypassPermissions: true,
       createdAt: this.createdAt,
       lastSeq: this.#seq,
+      activityCount: this.#activityCount,
       pendingPermissionCount: this.#approvals.size,
       meta: this.#config.meta,
       title: this.#title(),
@@ -2093,6 +2096,8 @@ export class CodexRunner implements Runner {
     }
     const event: SessionEvent = { ...body, seq: ++this.#seq, ts: Date.now() }
     this.#lastActivityAt = event.ts
+    // Rows, not events: what a client diffs to know how much it missed.
+    this.#activityCount += transcriptActivity(body)
     this.#events.push(event)
     for (const listener of this.#listeners) {
       try {
