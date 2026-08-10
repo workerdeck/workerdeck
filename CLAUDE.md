@@ -13,7 +13,10 @@ protocol. Read these before changing scope or structure:
 ## Layouts
 
 - `packages/protocol` — wire types (events/commands/REST). Dependency-free, browser-safe, depends
-  on nothing and everything depends on it. Breaking → bump `PROTOCOL_VERSION`.
+  on nothing and everything depends on it. Breaking → bump `PROTOCOL_VERSION`. It also owns the
+  few *rules* both sides must agree on rather than each guess: `transcriptActivity(event)` is
+  the row-count rule the react reducer renders by and the runners count with
+  (`SessionInfo.activityCount`) — change one, change both.
 - `packages/core` — the engines, shipped as **adapters** (`src/engines/`): one `EngineAdapter`
   per engine (capability record pinned by identity to protocol's `ENGINE_CAPABILITIES`, a model
   catalog versioned with the release, a credential-availability probe, a runner factory), looked
@@ -83,7 +86,10 @@ protocol. Read these before changing scope or structure:
   call throws `WorkerDeckError` (an `Error` subclass carrying `status`), which is what lets a
   caller tell "this server has no such route" (404 — stop asking) from "that file was too big".
 - `packages/react` — headless: `useClaudeSession`, the pure transcript reducer
-  (`src/transcript.ts`, framework-free, unit-tested — keep rendering out), the composer's two
+  (`src/transcript.ts`, framework-free, unit-tested — keep rendering out), the recap counters
+  behind catch-up (`src/recap.ts`: `summarizeSince` + `recapLine` — **counted, never written**;
+  a prose recap would spend a turn on a summary nobody asked for, and would be worst in the
+  case that matters most, a session that failed unattended), the composer's two
   companions (`useAttachments` — staging + upload, filtered by the capability record;
   `useHostFileSearch` — `@file` search rooted at the session cwd, self-disabling on a 404), the
   workspace's headless half (`useHostFileTree` + the pure `flattenHostTree`; `useOpenFiles` + the
@@ -110,7 +116,17 @@ protocol. Read these before changing scope or structure:
   client). `statusSurface: 'external'` is the *separate* opt-out for the bar itself, for an
   embedder whose chrome already has a status line (VS Code's window bar); it carries the `⋯`
   menu's only home, so combining it with `panelSurface: 'internal'` needs a **function**
-  `header` to take the menu. `SessionVitals` carries `connection` precisely so an external bar
+  `header` to take the menu. `controlsSurface: 'external'` is the third: model and permission mode leave the composer
+  (which then collapses to a single growing line, attach/send beside the field) for the
+  embedder's chrome — the *options* ride `SessionVitals` (`models`, `permissionModes`, already
+  filtered by the capability record and the bypass grant) and the setters come back through
+  `onControls`, because the panel owns the session's one attach and nothing else may open a
+  second. `transcriptVariant` is the fourth, independent seam: `'cards'`
+  (the chat convention) or `'lines'` — full-width transparent rows behind a fixed gutter
+  glyph, no boxes, for a host where vertical space is scarce. It rides a **context**
+  (`transcript-variant.tsx`), not a prop chain, so a row component composed by hand gets the
+  right treatment too; every row component branches on `useLines()` rather than the embedder
+  restyling `data-slot`s from outside. `SessionVitals` carries `connection` precisely so an external bar
   can obey the panel's own rule — a session status held over a dropped socket is a stale
   reading, and the link state has to win the slot. The VS Code extension is the reference
   consumer of both. Pure formatters ship from a third entry (`@workerdeck/ui/format`) so a
@@ -185,15 +201,41 @@ protocol. Read these before changing scope or structure:
   `WebSocketImpl` are postMessage shims, executed on the extension-host side with Node fetch /
   `ws` plus the gateway's `Authorization: Bearer` header — keys stay in `SecretStorage`, the
   webview CSP has no external `connect-src`, and the bridge refuses URLs not belonging to a
-  registered gateway. One live attach per session, owned by the panel: sidebar/status
+  registered gateway. It runs the panel with `transcriptVariant: 'lines'`, `focusComposerOnClick` (dead-space
+  clicks land in the input; controls and drag-selections keep their meaning) and, by default,
+  in the **editor font**: `workerdeck.fontFamily` is stamped on `<html>` by `webviewHtml`
+  (it must be right on the first paint, which a postMessage cannot be) and repoints the ui's
+  *sans* token; a change re-renders the panel through the same `reloadWebview()` the dev
+  reloader uses. The **panel alone** opts in — the sidebar and section views are workbench
+  UI and follow `--vscode-font-family`, which is the webview baseline `styles.css` sets. The
+  window status bar is the panel's bar, and each of its three badges is its own boolean
+  setting (`workerdeck.statusBar.*`), read per render so a change is just a re-render. Model
+  and mode are bar items too, opening **QuickPicks** — a `StatusBarItem` has one command and
+  no dropdown, so command → QuickPick is the only shape VS Code offers (and the one its own
+  language-mode item uses); the panel's `onControls` setters are what they drive.
+  One live attach per session, owned by the panel: sidebar/status
   bar/notifications read REST rollups (`pendingPermissionCount`) or tap frames already flowing
   through the bridge — never a second attach. Remote gateways mount as a `workerdeck://`
   FileSystemProvider over `/fs/*` (hash-guarded conditional writes; no mkdir/delete/rename —
   no such routes); local-vs-remote is decided from the gateway URL (`isLoopbackHost`), never
   by probing paths, which is also what makes `extensionKind: ["workspace","ui"]` the whole
   Remote SSH story. The Sessions view lists every gateway's sessions at once — gateway is a
-  facet (filter/group/sort) beside adapter and state, not the frame — and gateways are managed
-  only on their own screen; there is **no implicit localhost gateway**. The window's open
+  facet (filter/group/sort) beside adapter and state, not the frame — every facet a dropdown
+  behind a **funnel** next to an always-present search box (the Extensions view's shape,
+  rebuilt in the webview because that native row is workbench chrome: a view title takes
+  commands, never an input; the funnel's dot is how a list that hides rows by default still
+  says so) — and gateways are managed
+  only on their own screen; there is **no implicit localhost gateway**.
+  The activity-bar badge is the same count summed over the sessions the **filter is
+  showing** — the webview mirrors its view config to the host (`wd-view-config`, one-way;
+  the shared rules moved to `src/view-config.ts` so both sides filter identically), because a
+  badge counting rows in hidden sessions sends you looking for something that isn't there.
+  The cards carry it per session — an **unread badge** of transcript rows since that session was last on
+  screen (`src/watermarks.ts`, globalState, written **only while the panel is visible and
+  showing it**, and monotonic so a compaction can't resurrect read rows). Rows, from
+  `SessionInfo.activityCount`: turns undercount badly (five tool calls in one turn is one
+  turn), `lastSeq` overcounts absurdly (every stream delta). Turns stay the fallback for a
+  gateway too old to report it. The panel turns the same mark into catch-up. The window's open
   folders are a facet too, and the only one **on by default**: `workspaceScope()` turns them
   into scope roots, and a session is inside one only when the *gateway* could be — a `file:`
   folder scopes loopback gateways alone (a remote gateway's identical-looking path is another
@@ -204,9 +246,10 @@ protocol. Read these before changing scope or structure:
   for the chosen directory *and profile* — the engine store is per-engine, so another
   profile's ids mean nothing here — gated on the capability record's `listSessions`, and a
   pick is the same create call with `resume` set and no first prompt (the engine replays the
-  thread; a prompt on top would be an unasked-for turn). A session rename is a
-  gateway edit (`PATCH /sessions/:id` → `meta.title`), never a local override, so every client
-  sees the same name. `src/dev-reload.ts` is development-mode only: a webview rebuild
+  thread; a prompt on top would be an unasked-for turn). A session rename is a gateway edit
+  (`PATCH /sessions/:id` → `meta.title`), never a local override, so every client sees the
+  same name; it is reached by double-clicking the title, with Stop and Delete as hover icons
+  on the card's second line and state the first line's last item. `src/dev-reload.ts` is development-mode only: a webview rebuild
   re-renders the webviews in place, an extension-host rebuild reloads the window (VS Code
   cannot swap extension code in a live host). PRD: `_docs/plans/VSCODE-EXTENSION-PRD.md`.
 - `apps/ios` — native iOS remote control (SwiftUI + XcodeGen; invisible to pnpm/turbo — no

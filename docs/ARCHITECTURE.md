@@ -31,7 +31,11 @@ boundary: anything a client needs must be expressible as protocol events and com
 - **`packages/protocol`** — wire protocol types: session events, commands, REST request/response
   shapes, `JobInfo`/queue frames. Dependency-free and browser-safe. Breaking changes bump
   `PROTOCOL_VERSION`. SDK unions the protocol mirrors (e.g. `PermissionMode`) must stay
-  assignable both directions: SDK→protocol for events, protocol→SDK for options.
+  assignable both directions: SDK→protocol for events, protocol→SDK for options. It also holds
+  the few *rules* both sides must agree on rather than each reimplementing:
+  `transcriptActivity(event)` counts the transcript rows an event materializes — the react
+  reducer renders by that rule and the runners count `SessionInfo.activityCount` with it, so a
+  client can diff "how much happened while I wasn't looking" without attaching.
 - **`packages/core`** — the engines. `SessionRunner` (Claude) wraps the Agent SDK's `query()`
   with: a push-based async input queue (`sendMessage` feeds the SDK's streaming-input iterable),
   promotion of `canUseTool` callbacks into pending approvals that block the tool until resolved
@@ -179,6 +183,8 @@ boundary: anything a client needs must be expressible as protocol events and com
 - **`packages/react`** — the headless React layer: `useClaudeSession` plus `src/transcript.ts`,
   a pure framework-free reducer folding protocol events into transcript state (messages, tool
   calls, approvals, session meta). Rendering logic stays out of it; it is the unit-test surface.
+  `src/recap.ts` is the same shape for "what happened while you were away" —
+  `summarizeSince`/`recapLine`, counted from the transcript and never written by the model.
   Also the browser tool host (`createToolCallHost`, wrapped by `useToolCallHost`): it answers
   server-bridged tool calls by running them in the tab's own QuickJS guest, seeded from the
   request's VFS snapshot, so client-held documents can be evaluated without reaching the server.

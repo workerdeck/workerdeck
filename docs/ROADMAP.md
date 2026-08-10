@@ -176,13 +176,18 @@ unreleased.
   postMessage shims executed extension-host-side (Node fetch/`ws` + `Authorization: Bearer`;
   keys in `SecretStorage`, webview CSP with no external `connect-src`, bridge refuses
   non-gateway URLs). The sidebar is native-shaped: a Sessions webview listing **every
-  gateway's sessions at once** (the gateway is a facet, not the frame) — one view-title icon
-  toggles the whole view config (search + gateway/adapter/state filters + group/sort,
-  persisted in webview state), a second opens the Gateways screen that is the only place a
-  gateway is viewed/added/edited/removed, and cards are renameable in place — plus
+  gateway's sessions at once** (the gateway is a facet, not the frame) — with the Extensions
+  view's own shape rebuilt inside the webview, an always-present search box and a funnel
+  holding the facets (scope/gateway/adapter/state dropdowns plus group/sort, persisted in
+  webview state), because a view title can contribute commands but never an input; a
+  view-title icon opens the Gateways screen that is the only place a
+  gateway is viewed/added/edited/removed, and cards are renameable in place (double-click) — plus
   push-screen New Session / gateway forms, and **four separate section views** — Session Info, Context, Usage, MCP Servers — each
-  its own VS Code view off one shared bundle, `when`-gated on selection and the engine's
-  capability record, so collapse/reorder/drag-anywhere are VS Code's own. The agent panel
+  its own VS Code view off one shared bundle, so collapse/reorder/drag-anywhere are VS Code's
+  own. They are **always contributed and start collapsed** rather than appearing and
+  disappearing on `when` clauses — a sidebar that changes shape under the pointer as sessions
+  are selected is worse than one that says "no session" in a header description — and a view
+  the engine's capability record forswears renders an empty state instead of vanishing. The agent panel
   is purely the conversation: `SessionPanel` grew `panelSurface: 'external'` + `onOpenPanel`
   + `onVitals` seams in `ui`, so the panel renders no dialogs and relays intents and live
   vitals outward instead. The status bar went the same way — `statusSurface: 'external'`
@@ -212,6 +217,27 @@ unreleased.
   usually unreachable. Renaming a session is a gateway edit, not a local one —
   `PATCH /sessions/:id` (`UpdateSessionRequest`, `Runner.setTitle`) writes `meta.title` and
   `null` restores the derived title, so the dashboard and the phone see the same name.
+  The panel then went **terminal**: `transcriptVariant: 'lines'` in `ui` (full-width
+  transparent rows behind a fixed gutter glyph, markdown snapped to one line height, fenced
+  code and tables flattened out of their cards, payloads highlighted through the renderer's own
+  shiki), the editor font by default (`workerdeck.fontFamily`), and `controlsSurface:
+  'external'` moving model and permission mode into the window status bar as command →
+  QuickPick items — which is what lets the composer collapse to a single growing line. Two
+  seams came out of that pair: `onControls` hands the embedder the session's setters (the
+  panel owns the one attach, so commands travel *in* rather than a second attach going out),
+  and `SessionVitals` grew the options themselves.
+  **"What's new" is answered in one unit across every surface.** `SessionInfo.activityCount`
+  (new, additive) counts transcript *rows* server-side using `transcriptActivity()` in
+  `protocol` — deliberately the react reducer's own row rule, because `numTurns` undercounts
+  a turn that ran five tools and `lastSeq` counts every stream delta. The extension keeps a
+  per-session watermark (globalState, written only while the panel is visible and showing that
+  session), which becomes an unread badge on each card, the same count summed on the
+  activity-bar icon (over the rows the filter is actually showing — the webview mirrors its
+  view config to the host for exactly this), and, on returning, **catch-up**: a `※ recap:` row
+  at the boundary counting what happened, everything above it dimmed, and a jump/dismiss bar.
+  The recap is counted, never written — `summarizeSince`/`recapLine` in `react` — because a
+  prose recap would spend a turn on a summary nobody asked for and would be least trustworthy
+  for the session that failed unattended.
   The dev loop is the extension's own: in development mode it watches its `dist/`
   (`src/dev-reload.ts`) and re-renders the webviews in place on a webview rebuild, reloading
   the window only when the extension-host bundle changes; `pnpm dev:host` opens an Extension
