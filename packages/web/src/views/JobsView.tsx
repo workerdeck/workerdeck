@@ -3,9 +3,9 @@ import { useNavigate } from '@tanstack/react-router'
 import type {
   JobInfo,
   JobStatus,
-  PermissionMode,
   QuestionBehavior,
   QueueStats,
+  SessionInfo,
 } from '@workerdeck/protocol'
 import {
   Badge,
@@ -15,7 +15,6 @@ import {
   CardHeader,
   CardTitle,
   Input,
-  PermissionModeSelect,
   QUESTION_BEHAVIORS,
   ProgressRing,
   Select,
@@ -25,7 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
   Spinner,
-  Textarea,
   formatCost,
   formatRelativeTime,
   formatTokens,
@@ -33,16 +31,10 @@ import {
   type BadgeProps,
 } from '@workerdeck/ui'
 import { CalendarClock, Eye, ListChecks, Plus, RefreshCw, X } from 'lucide-react'
-import { ModelPicker } from '@/components/ModelPicker.tsx'
-import { ProfileSelect } from '@/components/ProfileSelect.tsx'
+import { RunFormFields, useRunForm } from '@/components/RunForm.tsx'
 import { client } from '@/lib/client.ts'
-import { engineFormOptions } from '@/lib/engine.ts'
-import { getDefaultModel, getDefaultPermissionMode } from '@/lib/settings.ts'
 import { useJobs } from '@/lib/useJobs.ts'
-import { useProfileChoice } from '@/lib/useProfiles.ts'
 import { useSessions } from '@/lib/useSessions.ts'
-
-const CWD_KEY = 'workerdeck.last-cwd'
 
 const JOB_STATUS_META: Record<JobStatus, { label: string; variant: BadgeProps['variant']; busy?: boolean }> = {
   queued: { label: 'Queued', variant: 'neutral' },
@@ -101,23 +93,24 @@ function QueueStatsStrip({ stats }: { stats: QueueStats }) {
   )
 }
 
-function ScheduleJobCard({ onScheduled }: { onScheduled: () => void }) {
-  const [cwd, setCwd] = useState(() => localStorage.getItem(CWD_KEY) ?? '')
-  const [prompt, setPrompt] = useState('')
-  const [mode, setMode] = useState<PermissionMode>(() => getDefaultPermissionMode('job'))
+function ScheduleJobCard({
+  sessions,
+  onScheduled,
+}: {
+  sessions: SessionInfo[]
+  onScheduled: () => void
+}) {
+  const form = useRunForm('job')
   const [questions, setQuestions] = useState<QuestionBehavior>('auto')
-  const [model, setModel] = useState(() => getDefaultModel('job'))
-  const [effort, setEffort] = useState('')
-  const { profiles, profile, selected, select: selectProfile } = useProfileChoice()
-  const engine = engineFormOptions(selected, mode, model)
   const [allowBypass, setAllowBypass] = useState(false)
   const [maxTokens, setMaxTokens] = useState('')
   const [attempts, setAttempts] = useState('')
   const [webhookUrl, setWebhookUrl] = useState('')
   const [creating, setCreating] = useState(false)
+  const { engine } = form
 
   const schedule = async () => {
-    if (!cwd.trim() || !prompt.trim()) {
+    if (!form.cwd.trim() || !form.prompt.trim()) {
       toast.error('Working directory and prompt are required')
       return
     }
@@ -133,33 +126,25 @@ function ScheduleJobCard({ onScheduled }: { onScheduled: () => void }) {
     }
     setCreating(true)
     try {
-      localStorage.setItem(CWD_KEY, cwd.trim())
+      form.rememberCwd(form.cwd.trim())
       await client.createJob({
         session: {
-          cwd: cwd.trim(),
-          profile: profile || undefined,
-          prompt: prompt.trim(),
-          permissionMode: engine.mode,
+          ...form.sessionFields({
+            // Opt-in per job, unlike an interactive session: nobody is present
+            // to make the call, so pre-authorizing it has to be deliberate.
+            allowBypass,
+          }),
+          // Restated rather than passed through: a job's prompt is required (it
+          // is the whole job), where a session's is optional.
+          prompt: form.prompt.trim(),
           // Meaningless without an approval channel — the record decides.
           questionBehavior: engine.capabilities.interactiveApprovals ? questions : undefined,
-          model: engine.model.trim() || undefined,
-          reasoningEffort:
-            effort && engine.reasoningEfforts.includes(effort) ? effort : undefined,
-          // CLI spawn options, offered when the record says they apply. Opt-in
-          // per job: pre-authorize bypassPermissions so someone watching the
-          // run can switch it on mid-run. Off by default for unattended runs.
-          ...(engine.capabilities.settingSources
-            ? {
-                settingSources: ['user' as const, 'project' as const],
-                allowDangerouslySkipPermissions: allowBypass || undefined,
-              }
-            : {}),
         },
         maxTokens: tokens,
         attempts: attemptCount,
         webhook: webhookUrl.trim() ? { url: webhookUrl.trim() } : undefined,
       })
-      setPrompt('')
+      form.setPrompt('')
       toast.success('Job scheduled')
       onScheduled()
     } catch (e) {
@@ -175,131 +160,77 @@ function ScheduleJobCard({ onScheduled }: { onScheduled: () => void }) {
         <CardTitle>Schedule a job</CardTitle>
       </CardHeader>
       <CardContent className='flex flex-col gap-3'>
-        <label className='flex flex-col gap-1'>
-          <span className='text-label font-medium text-fg-3'>Working directory</span>
-          <Input
-            value={cwd}
-            onChange={(e) => setCwd(e.target.value)}
-            placeholder='/path/to/project'
-            spellCheck={false}
-            className='font-mono'
-          />
-        </label>
-        <label className='flex flex-col gap-1'>
-          <span className='text-label font-medium text-fg-3'>Prompt (the task — runs unattended)</span>
-          <Textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={2}
-            placeholder='e.g. /verify-content 42, or a task description'
-          />
-        </label>
-        <div className='flex flex-wrap items-end gap-3'>
-          <ProfileSelect
-            profiles={profiles}
-            value={profile}
-            onChange={selectProfile}
-            className='min-w-32'
-          />
-          <label className='flex min-w-0 flex-col gap-1'>
-            <span className='text-label font-medium text-fg-3'>Permission mode</span>
-            <PermissionModeSelect
-              variant='form'
-              mode={engine.mode}
-              onModeChange={setMode}
-              modes={engine.modes}
-              className='min-w-44'
-            />
-          </label>
-          {/* Questions ride the approval channel; without one there is nothing
-              to configure. */}
-          {engine.capabilities.interactiveApprovals ? (
-            <label className='flex min-w-0 flex-col gap-1'>
-              <span className='text-label font-medium text-fg-3'>Questions</span>
-              <Select
-                items={QUESTION_BEHAVIORS.map((b) => ({ value: b.value, label: b.label }))}
-                value={questions}
-                onValueChange={(value) => setQuestions(value as QuestionBehavior)}>
-                <SelectTrigger className='min-w-36'>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {QUESTION_BEHAVIORS.map((b) => (
-                    <SelectItem key={b.value} value={b.value}>
-                      <SelectItemText>{`${b.label} — ${b.description}`}</SelectItemText>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-          ) : null}
-          <label className='flex min-w-0 flex-col gap-1'>
-            <span className='text-label font-medium text-fg-3'>Model</span>
-            <ModelPicker
-              value={engine.model}
-              onChange={setModel}
-              models={engine.models}
-              className='min-w-40'
-            />
-          </label>
-          {engine.reasoningEfforts.length > 0 ? (
-            <label className='flex min-w-0 flex-col gap-1'>
-              <span className='text-label font-medium text-fg-3'>Effort</span>
-              <Select
-                items={[
-                  { value: 'default', label: 'Default' },
-                  ...engine.reasoningEfforts.map((e) => ({ value: e, label: e })),
-                ]}
-                value={effort || 'default'}
-                onValueChange={(value) => setEffort(value === 'default' ? '' : String(value))}>
-                <SelectTrigger className='min-w-28'>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {['default', ...engine.reasoningEfforts].map((e) => (
-                    <SelectItem key={e} value={e}>
-                      <SelectItemText>{e}</SelectItemText>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-          ) : null}
-          <label className='flex min-w-0 flex-col gap-1'>
-            <span className='text-label font-medium text-fg-3'>Max tokens (optional)</span>
-            <Input
-              value={maxTokens}
-              onChange={(e) => setMaxTokens(e.target.value)}
-              placeholder='per-job cap'
-              inputMode='numeric'
-              className='min-w-28 font-mono'
-            />
-          </label>
-          <label className='flex min-w-0 flex-col gap-1'>
-            <span className='text-label font-medium text-fg-3'>Attempts (optional)</span>
-            <Input
-              value={attempts}
-              onChange={(e) => setAttempts(e.target.value)}
-              placeholder='1'
-              inputMode='numeric'
-              className='min-w-20 font-mono'
-            />
-          </label>
-          <label className='flex min-w-0 flex-1 flex-col gap-1'>
-            <span className='text-label font-medium text-fg-3'>Webhook URL (optional)</span>
-            <Input
-              value={webhookUrl}
-              onChange={(e) => setWebhookUrl(e.target.value)}
-              placeholder='https://…/hook'
-              spellCheck={false}
-              className='min-w-44 font-mono'
-            />
-          </label>
-          <Button onClick={() => void schedule()} disabled={creating}>
-            {creating ? <Spinner className='size-3.5 text-current' /> : <Plus className='size-4' />}
-            Schedule
-          </Button>
-        </div>
+        <RunFormFields
+          form={form}
+          sessions={sessions}
+          promptLabel='Prompt (the task — runs unattended)'
+          extras={
+            // Questions ride the approval channel; without one there is nothing
+            // to configure.
+            engine.capabilities.interactiveApprovals ? (
+              <label className='flex min-w-0 flex-col gap-1'>
+                <span className='text-label font-medium text-fg-3'>Questions</span>
+                <Select
+                  items={QUESTION_BEHAVIORS.map((b) => ({ value: b.value, label: b.label }))}
+                  value={questions}
+                  onValueChange={(value) => setQuestions(value as QuestionBehavior)}>
+                  <SelectTrigger className='min-w-36'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {QUESTION_BEHAVIORS.map((b) => (
+                      <SelectItem key={b.value} value={b.value}>
+                        <SelectItemText>{`${b.label} — ${b.description}`}</SelectItemText>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+            ) : null
+          }
+          actions={
+            <>
+              <label className='flex min-w-0 flex-col gap-1'>
+                <span className='text-label font-medium text-fg-3'>Max tokens (optional)</span>
+                <Input
+                  value={maxTokens}
+                  onChange={(e) => setMaxTokens(e.target.value)}
+                  placeholder='per-job cap'
+                  inputMode='numeric'
+                  className='min-w-28 font-mono'
+                />
+              </label>
+              <label className='flex min-w-0 flex-col gap-1'>
+                <span className='text-label font-medium text-fg-3'>Attempts (optional)</span>
+                <Input
+                  value={attempts}
+                  onChange={(e) => setAttempts(e.target.value)}
+                  placeholder='1'
+                  inputMode='numeric'
+                  className='min-w-20 font-mono'
+                />
+              </label>
+              <label className='flex min-w-0 flex-1 flex-col gap-1'>
+                <span className='text-label font-medium text-fg-3'>Webhook URL (optional)</span>
+                <Input
+                  value={webhookUrl}
+                  onChange={(e) => setWebhookUrl(e.target.value)}
+                  placeholder='https://…/hook'
+                  spellCheck={false}
+                  className='min-w-44 font-mono'
+                />
+              </label>
+              <Button onClick={() => void schedule()} disabled={creating}>
+                {creating ? (
+                  <Spinner className='size-3.5 text-current' />
+                ) : (
+                  <Plus className='size-4' />
+                )}
+                Schedule
+              </Button>
+            </>
+          }
+        />
         {/* The capability is a CLI spawn flag; the record says where it applies. */}
         {!engine.capabilities.settingSources ? null : (
           <label
@@ -399,13 +330,39 @@ function JobRow({
   )
 }
 
+/**
+ * Jobs run to completion and are kept, so this list only grows — a queue that has
+ * been up a week is mostly history. Search and a status filter are what make the
+ * two jobs you care about findable in it.
+ *
+ * Its own small model rather than the sessions list's: a job's statuses are the
+ * queue's (`queued`/`succeeded`/`canceled`), not a session's lifecycle, and
+ * collapsing them into the session buckets would lose the distinction the queue
+ * is actually about.
+ */
+const ACTIVE_JOB_STATUSES: JobStatus[] = ['queued', 'running', 'parked']
+
 export function JobsView() {
   const { jobs, stats, enabled, live, error, refresh } = useJobs()
   // Watch is only offered while the job's session is still in the registry —
   // completed jobs' sessions can be deleted from the Sessions view.
   const { sessions } = useSessions()
   const liveSessionIds = new Set(sessions.map((s) => s.id))
-  const sorted = [...jobs].sort((a, b) => b.createdAt - a.createdAt)
+  const [search, setSearch] = useState('')
+  const [statuses, setStatuses] = useState<JobStatus[]>([])
+  const needle = search.trim().toLowerCase()
+  const sorted = [...jobs]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .filter(
+      (job) =>
+        (statuses.length === 0 || statuses.includes(job.status)) &&
+        (!needle ||
+          job.prompt.toLowerCase().includes(needle) ||
+          job.cwd.toLowerCase().includes(needle) ||
+          (job.profile?.toLowerCase().includes(needle) ?? false) ||
+          job.id.startsWith(needle)),
+    )
+  const hiding = jobs.length - sorted.length
 
   return (
     <div className='flex-1 overflow-y-auto'>
@@ -450,10 +407,46 @@ export function JobsView() {
           <>
             {stats ? <QueueStatsStrip stats={stats} /> : null}
 
-            {sorted.length === 0 ? (
+            {jobs.length > 0 ? (
+              <div className='flex flex-wrap items-center gap-2'>
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder='Search jobs'
+                  aria-label='Search jobs'
+                  className='min-w-48 flex-1'
+                />
+                <Button
+                  variant={statuses.length ? 'default' : 'outline'}
+                  size='sm'
+                  onClick={() => setStatuses(statuses.length ? [] : ACTIVE_JOB_STATUSES)}>
+                  {statuses.length ? 'Showing active' : 'Active only'}
+                </Button>
+                {hiding > 0 ? (
+                  <span className='text-label text-fg-4'>
+                    {sorted.length} of {jobs.length}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+
+            {jobs.length === 0 ? (
               <div className='flex flex-col items-center gap-2 rounded-md border border-border bg-surface px-4 py-8 text-center'>
                 <ListChecks className='size-6 text-fg-4' />
                 <p className='text-body-sm text-fg-2'>No jobs yet. Schedule one below.</p>
+              </div>
+            ) : sorted.length === 0 ? (
+              <div className='flex flex-col items-center gap-2 rounded-md border border-border bg-surface px-4 py-8 text-center'>
+                <p className='text-body-sm text-fg-2'>No jobs match.</p>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  onClick={() => {
+                    setSearch('')
+                    setStatuses([])
+                  }}>
+                  Clear filters
+                </Button>
               </div>
             ) : (
               <ul className='flex flex-col gap-1 rounded-md border border-border bg-surface p-1'>
@@ -468,7 +461,7 @@ export function JobsView() {
               </ul>
             )}
 
-            <ScheduleJobCard onScheduled={() => void refresh()} />
+            <ScheduleJobCard sessions={sessions} onScheduled={() => void refresh()} />
           </>
         )}
       </div>

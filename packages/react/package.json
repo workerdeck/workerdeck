@@ -2,7 +2,7 @@
   "name": "@workerdeck/react",
   "version": "0.12.0",
   "type": "module",
-  "description": "Headless React layer for WorkerDeck: useClaudeSession hook + pure transcript reducer. No styling opinion — @workerdeck/ui is the styled layer on top.",
+  "description": "Headless React layer for WorkerDeck: session hook + pure transcript and sessions-list reducers. No styling opinion — @workerdeck/ui is the styled layer on top.",
   "license": "MIT",
   "main": "./build/index.mjs",
   "types": "./build/index.d.mts",

@@ -25,6 +25,10 @@ struct SessionView: View {
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.dismiss) private var dismiss
   @Environment(PushCoordinator.self) private var push
+  @Environment(UnreadModel.self) private var unread
+
+  /// The gateway this session belongs to — the watermark key's first half.
+  private let hostId: UUID
 
   @State private var vm: TranscriptViewModel
   @State private var draft = ""
@@ -62,8 +66,16 @@ struct SessionView: View {
   @State private var photoSelection: [PhotosPickerItem] = []
   @State private var photoPickerRequested = false
 
-  init(sessionId: String, client: WorkerClient) {
+  init(sessionId: String, hostId: UUID, client: WorkerClient) {
+    self.hostId = hostId
     _vm = State(initialValue: TranscriptViewModel(sessionId: sessionId, client: client))
+  }
+
+  /// One value whose change means "what has been seen changed": a new applied
+  /// event, or the attach snapshot arriving without one.
+  private struct SeenKey: Hashable {
+    var revision: Int
+    var attached: Bool
   }
 
   var body: some View {
@@ -101,8 +113,10 @@ struct SessionView: View {
       .onChange(of: scenePhase) { _, phase in
         if phase == .active { vm.reconnectNow() }
         // Backgrounding stops this session being "on screen": that is exactly
-        // when its notifications become useful again.
+        // when its notifications become useful again — and when the watermark
+        // stops moving, after one truing-up of what *was* visible.
         push.visibleSessionId = phase == .active ? vm.sessionId : nil
+        if phase != .active { finalizeSeen() }
       }
       // Claimed on appear and released on disappear, so notifications for the
       // session you are watching stay silent and nothing else does.
@@ -111,6 +125,13 @@ struct SessionView: View {
       }
       .onDisappear {
         if push.visibleSessionId == vm.sessionId { push.visibleSessionId = nil }
+        finalizeSeen()
+      }
+      // The unread watermark, written **only while this session is genuinely on
+      // screen** — this view visible and showing it. A mark from anywhere else
+      // is how an unread badge silently stops working.
+      .task(id: SeenKey(revision: vm.revision, attached: vm.session != nil)) {
+        markSeen()
       }
       // The cwd arrives with the session snapshot, which lands after this view
       // does — and changes on a resume into a different directory.
@@ -217,6 +238,40 @@ struct SessionView: View {
       } message: {
         Text("The run is terminated on the server.")
       }
+  }
+
+  // MARK: - Unread watermark
+
+  /// Record what is on screen as read — but only while it really is on screen.
+  ///
+  /// `itemCount` is the rows this transcript has rendered; `activity`/`turns`
+  /// come from the attach snapshot, the freshest rollup this screen holds (the
+  /// list's poll pauses while a session is open). Not before the attach: a
+  /// session opened over a dead link was never *seen*, and a zero mark would
+  /// turn its whole history unread.
+  private func markSeen() {
+    guard scenePhase == .active, let info = vm.session else { return }
+    unread.mark(
+      host: hostId, sessionId: vm.sessionId, itemCount: vm.state.items.count,
+      activity: info.activityCount, turns: info.numTurns)
+  }
+
+  /// Leaving (or backgrounding) trues the mark up once — the VS Code panel's
+  /// `visibilityChanged` discipline. The in-view marks ran off the attach
+  /// snapshot's `activityCount`, so anything the rollup counted since would
+  /// read as unread even though it was on screen. Refresh and mark once more;
+  /// the mark is about what *was* visible, not what is.
+  private func finalizeSeen() {
+    guard vm.session != nil else { return }
+    let vm = vm
+    let unread = unread
+    let hostId = hostId
+    Task { @MainActor in
+      guard let info = await vm.refreshSessionInfo() else { return }
+      unread.mark(
+        host: hostId, sessionId: vm.sessionId, itemCount: vm.state.items.count,
+        activity: info.activityCount, turns: info.numTurns)
+    }
   }
 
   // MARK: - The floating stack
@@ -447,8 +502,31 @@ struct SessionView: View {
       onOpenInfo: { sheet = .info })
   }
 
+  /// The request at the head of the queue, with its position when there is one.
+  ///
+  /// Only one prompt is ever on screen — an approval cannot be deferred, so a
+  /// stack of them would be a stack of things you must answer in order anyway,
+  /// and two tinted cards over a composer is unreadable on a phone. What was
+  /// missing is that the queue existed at all: answering one made a second
+  /// appear out of nowhere, which reads as the agent having asked twice. So the
+  /// head of the queue says how deep it is.
   @ViewBuilder
   private func approvalBanner(_ request: PermissionRequest) -> some View {
+    let waiting = vm.state.pendingApprovals.count
+    VStack(alignment: .leading, spacing: 4) {
+      if waiting > 1 {
+        Text("1 of \(waiting) waiting")
+          .font(.caption2.weight(.medium))
+          .foregroundStyle(.secondary)
+          .padding(.horizontal, 4)
+          .accessibilityLabel("\(waiting) requests waiting for you")
+      }
+      approvalPrompt(request)
+    }
+  }
+
+  @ViewBuilder
+  private func approvalPrompt(_ request: PermissionRequest) -> some View {
     let questions = parseUserQuestions(request)
     if questions.isEmpty {
       PermissionPromptView(

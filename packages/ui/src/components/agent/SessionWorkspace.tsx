@@ -24,10 +24,29 @@ export interface SessionWorkspaceProps {
   /** Passed straight through to {@link SessionPanel} — including the render-prop
    * form that claims the session-actions menu. */
   header?: SessionPanelProps['header']
+  /**
+   * Panel seams the workspace does not interpret, forwarded verbatim.
+   *
+   * They are listed rather than spread so the workspace stays explicit about
+   * what it passes on: the panel owns the session's one attach, and a seam that
+   * silently arrived here would be a second place to look for why a session
+   * renders the way it does.
+   */
+  transcriptVariant?: SessionPanelProps['transcriptVariant']
+  transcriptDensity?: SessionPanelProps['transcriptDensity']
+  unseen?: SessionPanelProps['unseen']
+  onVitals?: SessionPanelProps['onVitals']
   /** Rail width in pixels on first render. */
   defaultRailWidth?: number
   /** Start with the file rail collapsed even on a wide viewport. */
   defaultRailCollapsed?: boolean
+  /**
+   * The rail moved. Paired with the two defaults so an embedder can persist the
+   * layout — the workspace deliberately does not, because *where* to keep it (a
+   * Memento, localStorage, a workspace file) is the embedder's call, and a
+   * component that picked one would be wrong in the other hosts.
+   */
+  onRailChange?: (rail: { width: number; collapsed: boolean }) => void
   className?: string
 }
 
@@ -64,8 +83,13 @@ export function SessionWorkspace({
   client,
   sessionId,
   header,
+  transcriptVariant,
+  transcriptDensity,
+  unseen,
+  onVitals,
   defaultRailWidth = 260,
   defaultRailCollapsed,
+  onRailChange,
   className,
 }: SessionWorkspaceProps) {
   // The cwd is the tree's root, and it comes from the registry rather than from
@@ -95,6 +119,13 @@ export function SessionWorkspace({
   const wide = useIsWide()
   const [railCollapsed, setRailCollapsed] = useState(defaultRailCollapsed ?? false)
   const [railWidth, setRailWidth] = useState(defaultRailWidth)
+  // Reported rather than stored. Kept in a ref so the effect below fires on a
+  // real change instead of on every render an inline callback would cause.
+  const onRailChangeRef = useRef(onRailChange)
+  onRailChangeRef.current = onRailChange
+  useEffect(() => {
+    onRailChangeRef.current?.({ width: railWidth, collapsed: railCollapsed })
+  }, [railWidth, railCollapsed])
   const [editorHeight, setEditorHeight] = useState(360)
 
   // Closing every tab returns the agent to the full column; opening one again
@@ -231,6 +262,10 @@ export function SessionWorkspace({
           client={client}
           sessionId={sessionId}
           header={hoisted}
+          transcriptVariant={transcriptVariant}
+          transcriptDensity={transcriptDensity}
+          unseen={unseen}
+          onVitals={onVitals}
           className='min-h-0 flex-1'
         />
       </div>

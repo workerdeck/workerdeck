@@ -40,17 +40,13 @@ export type WireHost = {
 }
 
 /**
- * One folder open in this window, as a place sessions can live in.
- *
- * `hostId` present = the folder is a `workerdeck://<hostId>` mount, so only that
- * gateway's sessions can be inside it. Absent = a real local folder, which only
- * a loopback gateway's cwds can be inside: a remote gateway's paths are on
- * another machine, where an identical-looking path means nothing.
+ * The window's open folders, as places sessions can live in — the sessions
+ * list's intrinsic scope. Shared with the dashboard (and mirrored on iOS), so
+ * the shapes come from protocol; `workspaceScope()` is what fills them in from
+ * this window, mapping a `workerdeck://<hostId>` mount to a gateway-tagged root.
  */
-export type ScopeRoot = { hostId?: string; path: string }
-
-/** The window's open folders — the sessions list's intrinsic scope. */
-export type WorkspaceScope = { label: string; roots: ScopeRoot[] }
+import type { ScopeRoot, WorkspaceScope } from '@workerdeck/protocol'
+export type { ScopeRoot, WorkspaceScope }
 
 export type SidebarState = {
   hosts: WireHost[]

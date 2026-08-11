@@ -1,6 +1,6 @@
 ---
-title: Auth & Anthropic's terms
-description: WorkerDeck performs no Anthropic authentication of its own — what that means for operators and contributors.
+title: Auth & the providers' terms
+description: WorkerDeck performs no model-provider authentication of its own — what that means for operators and contributors.
 order: 7
 ---
 

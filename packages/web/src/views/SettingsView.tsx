@@ -1,5 +1,17 @@
 import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle, PermissionModeSelect } from '@workerdeck/ui'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  PermissionModeSelect,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectItemText,
+  SelectTrigger,
+  SelectValue,
+} from '@workerdeck/ui'
 import { ModelPicker } from '@/components/ModelPicker.tsx'
 import { ThemeToggle } from '@/components/shell/ThemeToggle.tsx'
 import {
@@ -7,7 +19,13 @@ import {
   getDefaultPermissionMode,
   setDefaultModel,
   setDefaultPermissionMode,
+  getTranscriptDensity,
+  getTranscriptVariant,
+  setTranscriptDensity,
+  setTranscriptVariant,
   type DefaultsKind,
+  type TranscriptDensity,
+  type TranscriptVariant,
 } from '@/lib/settings.ts'
 
 function DefaultsRow({ kind, label }: { kind: DefaultsKind; label: string }) {
@@ -39,6 +57,68 @@ function DefaultsRow({ kind, label }: { kind: DefaultsKind; label: string }) {
   )
 }
 
+/** The density preference. Read on open rather than applied live: the panel
+ * stamps it at mount, and re-rendering a mounted transcript under a reader to
+ * reflect a settings change made elsewhere is not worth the jump. */
+function DensitySelect() {
+  const [density, setDensity] = useState<TranscriptDensity>(getTranscriptDensity)
+  const options: { value: TranscriptDensity; label: string }[] = [
+    { value: 'comfortable', label: 'Comfortable' },
+    { value: 'compact', label: 'Compact' },
+  ]
+  return (
+    <Select
+      value={density}
+      onValueChange={(value) => {
+        const next = value as TranscriptDensity
+        setDensity(next)
+        setTranscriptDensity(next)
+      }}>
+      <SelectTrigger aria-label='Transcript density' className='min-w-40'>
+        <SelectValue>{options.find((o) => o.value === density)?.label}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            <SelectItemText>{option.label}</SelectItemText>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+/** The variant preference. Read on open, like density: the transcript stamps it
+ * at mount, and reshaping every row under a reader to reflect a change made on
+ * another screen is not worth the jump. */
+function VariantSelect() {
+  const [variant, setVariant] = useState<TranscriptVariant>(getTranscriptVariant)
+  const options: { value: TranscriptVariant; label: string }[] = [
+    { value: 'cards', label: 'Cards' },
+    { value: 'lines', label: 'Lines' },
+  ]
+  return (
+    <Select
+      value={variant}
+      onValueChange={(value) => {
+        const next = value as TranscriptVariant
+        setVariant(next)
+        setTranscriptVariant(next)
+      }}>
+      <SelectTrigger aria-label='Transcript style' className='min-w-40'>
+        <SelectValue>{options.find((o) => o.value === variant)?.label}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            <SelectItemText>{option.label}</SelectItemText>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
 export function SettingsView() {
   return (
     <div className='flex-1 overflow-y-auto'>
@@ -55,9 +135,25 @@ export function SettingsView() {
           <CardHeader>
             <CardTitle>Appearance</CardTitle>
           </CardHeader>
-          <CardContent className='flex items-center justify-between'>
-            <span className='text-body-sm text-fg-2'>Theme</span>
-            <ThemeToggle />
+          <CardContent className='flex flex-col gap-3'>
+            <div className='flex items-center justify-between'>
+              <span className='text-body-sm text-fg-2'>Theme</span>
+              <ThemeToggle />
+            </div>
+            <div className='flex items-center justify-between'>
+              <span className='text-body-sm text-fg-2'>Transcript style</span>
+              <VariantSelect />
+            </div>
+            <div className='flex items-center justify-between'>
+              <span className='text-body-sm text-fg-2'>Transcript density</span>
+              <DensitySelect />
+            </div>
+            <p className='text-label text-fg-4'>
+              Cards is the chat shape; Lines is the terminal one — full-width rows behind a gutter
+              glyph, no boxes. Comfortable leaves a blank line between messages, the way the CLI
+              does; Compact fits more of a long session on screen. Both take effect on the next
+              session you open.
+            </p>
           </CardContent>
         </Card>
 
@@ -71,7 +167,8 @@ export function SettingsView() {
             <p className='text-label text-fg-4'>
               Pre-fills the permission mode and model on the new-session and schedule-job forms
               (still editable per run). &quot;Default (recommended)&quot; leaves the model to the
-              CLI.
+              CLI. This list is the Claude aliases, so a profile running another engine will fall
+              back to its own default rather than the choice made here.
             </p>
           </CardContent>
         </Card>

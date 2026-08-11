@@ -365,6 +365,13 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   public let title: String?
   public let totalCostUsd: Double?
   public let numTurns: Int?
+  /// How many transcript rows this session has produced (`transcriptActivity`'s
+  /// unit) — a monotonic counter a client can diff against a remembered value to
+  /// answer "how much happened while I wasn't looking", without attaching.
+  /// `numTurns` cannot (five tool calls inside one turn are one turn) and
+  /// `lastSeq` cannot either (it counts every stream delta). Absent on an older
+  /// server; fall back to `numTurns` rather than showing nothing.
+  public let activityCount: Int?
   /// Epoch ms of the most recent emitted event.
   public let lastActivityAt: Double?
 
@@ -383,7 +390,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     apiKeySource: String? = nil,
     createdAt: Double, lastSeq: Int, pendingPermissionCount: Int,
     meta: [String: JSONValue]? = nil, title: String? = nil, totalCostUsd: Double? = nil,
-    numTurns: Int? = nil, lastActivityAt: Double? = nil
+    numTurns: Int? = nil, activityCount: Int? = nil, lastActivityAt: Double? = nil
   ) {
     self.id = id
     self.sdkSessionId = sdkSessionId
@@ -403,6 +410,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.title = title
     self.totalCostUsd = totalCostUsd
     self.numTurns = numTurns
+    self.activityCount = activityCount
     self.lastActivityAt = lastActivityAt
   }
 }
@@ -749,6 +757,36 @@ extension ResolvePermissionRequest: Encodable {
       try container.encode("deny", forKey: .behavior)
       try container.encodeIfPresent(message, forKey: .message)
       try container.encodeIfPresent(interrupt, forKey: .interrupt)
+    }
+  }
+}
+
+/// Body of `PATCH /sessions/:id` — mirrors protocol's `UpdateSessionRequest`.
+///
+/// `title` is a three-state field and the encoding has to keep all three: a
+/// string renames, an explicit `null` clears the override (restoring the derived
+/// title), and *absent* leaves it alone. `String?` alone would collapse the last
+/// two, so the wrapper spells the distinction out.
+public struct UpdateSessionRequest: Encodable, Sendable {
+  public enum TitleEdit: Sendable {
+    case set(String)
+    case clear
+  }
+
+  public let title: TitleEdit?
+
+  public init(title: TitleEdit?) {
+    self.title = title
+  }
+
+  private enum CodingKeys: String, CodingKey { case title }
+
+  public func encode(to encoder: any Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    switch title {
+    case .set(let value): try container.encode(value, forKey: .title)
+    case .clear: try container.encodeNil(forKey: .title)
+    case nil: break
     }
   }
 }

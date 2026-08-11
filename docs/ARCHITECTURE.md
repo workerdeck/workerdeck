@@ -36,6 +36,13 @@ boundary: anything a client needs must be expressible as protocol events and com
   `transcriptActivity(event)` counts the transcript rows an event materializes — the react
   reducer renders by that rule and the runners count `SessionInfo.activityCount` with it, so a
   client can diff "how much happened while I wasn't looking" without attaching.
+  `src/session-list.ts` and `src/watermarks.ts` are two more such rules, lifted out of the VS
+  Code extension when the dashboard needed them: the sessions-list view model (state buckets,
+  facets, filter/group/sort, the subset summary, workspace-scope containment) and the unread
+  model (monotonic marks behind a storage seam, plus `unseenCount`'s rows-not-turns
+  arithmetic). Every client must agree on them — the extension's activity-bar badge counts the
+  same rows its list shows, so a client filtering differently would announce hidden work.
+  Their tests live in `packages/react/test/`, which is where the vitest setup is.
 - **`packages/core`** — the engines. `SessionRunner` (Claude) wraps the Agent SDK's `query()`
   with: a push-based async input queue (`sendMessage` feeds the SDK's streaming-input iterable),
   promotion of `canUseTool` callbacks into pending approvals that block the tool until resolved
@@ -179,7 +186,10 @@ boundary: anything a client needs must be expressible as protocol events and com
   *agent* merely read is not a produced file and stays behind `/fs/*` — see `docs/GOTCHAS.md`.
 - **`packages/client`** — typed protocol client on platform `fetch`/`WebSocket`: REST session
   and job management, WS attach with auto-reconnect and replay-from-last-seq, `attachQueue()`
-  for the live queue stream. Zero runtime deps; browser and Node.
+  for the live queue stream. Zero runtime deps; browser and Node. `src/host-url.ts` normalizes
+  what an operator types into a `baseUrl` (`apiUrl`) and decides local-vs-remote from that URL
+  alone (`isLoopbackHost`) — never by probing paths, which two checkouts of one repo would
+  answer wrongly.
 - **`packages/react`** — the headless React layer: `useClaudeSession` plus `src/transcript.ts`,
   a pure framework-free reducer folding protocol events into transcript state (messages, tool
   calls, approvals, session meta). Rendering logic stays out of it; it is the unit-test surface.
@@ -193,7 +203,12 @@ boundary: anything a client needs must be expressible as protocol events and com
   opted into.
 - **`packages/ui`** — the styled layer: shadcn-style primitives (`src/components/ui`) and agent
   components (`src/components/agent`: SessionPanel, Transcript, ToolCallCard, PermissionPrompt,
-  QuestionPrompt, Composer, SessionList, StatusBar, ModelSelect). Tailwind v4 + Base UI + cva;
+  QuestionPrompt, Composer, SessionList, SessionBrowser, StatusBar, ModelSelect;
+  `SessionBrowser` is the sessions list with search, facets, grouping, the subset line, unread
+  badges and inline rename, rendering protocol's view model rather than a second copy of it).
+  `@workerdeck/ui/format` is a React-free entry carrying both the formatters and
+  `lib/status.ts`'s presentation rules (status severity, meter thresholds, the binding
+  rate-limit window, the lenient model match), so a non-React host spells them identically. Tailwind v4 + Base UI + cva;
   design tokens with light/dark on `<html data-theme>`. Ships source styles that the consumer's
   Tailwind build compiles (`@source` scanning — wiring in the package README). The composer's
   input is a vendored copy of just-marketing/prompt-area (MIT) under `src/components/prompt-area`.

@@ -8,3 +8,4 @@
  * costs nothing and keeps one truth for what "45.2k" and "2h 10m" mean.
  */
 export * from './lib/format.ts'
+export * from './lib/status.ts'

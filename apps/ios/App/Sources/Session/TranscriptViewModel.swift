@@ -274,5 +274,16 @@ final class TranscriptViewModel {
   /// Skip the reconnect backoff — what returning to the foreground should do.
   func reconnectNow() { handle?.reconnectNow() }
 
+  /// Re-fetch the REST rollup for this session.
+  ///
+  /// The watermark's leave-time truing-up needs `activityCount` fresher than the
+  /// attach snapshot: the in-view marks ran off that snapshot, so rows produced
+  /// since it landed would read as unread even though they were on screen.
+  func refreshSessionInfo() async -> SessionInfo? {
+    guard let info = try? await client.getSession(id: sessionId) else { return nil }
+    session = info
+    return info
+  }
+
   func dismissProtocolError() { lastProtocolError = nil }
 }

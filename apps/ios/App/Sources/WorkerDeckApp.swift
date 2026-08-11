@@ -10,6 +10,9 @@ import SwiftUI
 struct WorkerDeckApp: App {
   @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
   @State private var hosts = HostStore()
+  /// One unread memory for the whole process — the session screen writes marks
+  /// into it, the list and the app icon badge count from it.
+  @State private var unread = UnreadModel()
 
   init() {
     // Debug-only, and silent unless InjectionNext is set up — see HotReload.swift.
@@ -26,6 +29,7 @@ struct WorkerDeckApp: App {
       } else {
         RootView()
           .environment(hosts)
+          .environment(unread)
           .environment(delegate.push)
           // The delegate is built by UIKit before any of this exists, so the two
           // are introduced here rather than at either one's construction.

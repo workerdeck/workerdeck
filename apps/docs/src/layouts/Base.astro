@@ -9,6 +9,12 @@ interface Props {
 
 const { title, description } = Astro.props
 const base = import.meta.env.BASE_URL.replace(/\/$/, '')
+
+// Absolute, because a share card is fetched by a crawler that has no page
+// context to resolve a relative path against. `Astro.site` is the deploy origin;
+// falling back to the path alone keeps a local `astro dev` from crashing.
+const ogImage = new URL(`${base}/og.png`, Astro.site ?? 'http://localhost/').href
+const canonical = new URL(Astro.url.pathname, Astro.site ?? 'http://localhost/').href
 ---
 
 <!doctype html>
@@ -19,6 +25,19 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '')
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
+    <link rel="canonical" href={canonical} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="WorkerDeck" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="3200" />
+    <meta property="og:image:height" content="1040" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
     <script is:inline>
       ;(function () {
         var t = localStorage.getItem('cw-docs.theme')

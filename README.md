@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="WorkerDeck — Claude Code sessions your app can embed, watch, and control" width="100%" />
+  <img src="docs/assets/banner.png" alt="WorkerDeck — coding agent sessions you can watch, steer, and embed" width="100%" />
 </p>
 
 # WorkerDeck
@@ -12,308 +12,185 @@
   <img src="https://img.shields.io/badge/node-%E2%89%A522-black.svg" alt="Node >= 22" />
 </p>
 
-**Claude Code sessions your app can embed, watch, and control.** WorkerDeck runs a
-close-to-real Claude Code session via the
-[Anthropic Agent SDK](https://code.claude.com/docs/en/agent-sdk) and puts a session server, a
-typed wire protocol, and an approve/deny UI around it — so a browser can drive an agent working
-in a real checkout.
+**Coding agent sessions you can watch, steer, and embed.** A coding agent — Claude Code, OpenAI
+Codex, or any model provider — is a terminal program: it runs where you started it, and it is
+yours only while that terminal is open. WorkerDeck puts a session server, a typed wire protocol
+and an approve/deny UI around one, so the same session is reachable from a browser, your phone,
+your editor, or an app you build yourself.
 
-## Run it
+Self-hosted, MIT, and no credentials of its own: your agent's CLI resolves its own login exactly
+as it does in your terminal.
+
+## Quickstart
 
 ```bash
 npx workerdeck
 ```
 
-Gateway **and** dashboard on one port at `http://127.0.0.1:8787` — nothing to clone, no config.
-Point a session at a project directory, give it a prompt, watch the transcript stream, approve or
-deny the tool calls it wants to make.
+That is the whole install. Gateway **and** web dashboard on one port at `http://127.0.0.1:8787` —
+nothing to clone, no config file. Open it, point a session at a project directory, give it a
+prompt, and watch the transcript stream while you approve or deny the tool calls it wants to make.
+
+To reach it from another machine — your phone on the same tailnet, say — bind it and give it a
+secret:
 
 ```bash
-# Reachable, protected, and scoped to a directory tree:
 npx workerdeck --host 0.0.0.0 --auth-key "$SECRET" --cwd-root ~/projects
 ```
 
 `--auth-key` is one secret over two transports: browsers get a login page and an `HttpOnly`
-cookie, services send the same secret as `x-workerdeck-key`. Off loopback without a key, the
-instance generates one rather than serving open — printed once, kept in `<state-dir>/auth-key`,
-reused across restarts. Options that are *functions* — `authenticate`,
-`buildRunnerConfig`, `createEngineRunner` — go in a `workerdeck.config.mjs`
-([example](examples/workerdeck.config.mjs)). Full flag surface:
-[Run an instance](https://workerdeck.github.io/workerdeck/docs/getting-started/run-an-instance/).
+cookie, services send the same secret as a header. Off loopback *without* a key the instance
+generates one rather than serving open — printed once, kept in `<state-dir>/auth-key`, reused
+across restarts. `--cwd-root` is what confines sessions to a directory tree.
 
-**Docs: [workerdeck.github.io/workerdeck](https://workerdeck.github.io/workerdeck/)** —
-quickstart, embedding, permissions, profiles, job queue, protocol reference.
+**Docs: [workerdeck.github.io/workerdeck](https://workerdeck.github.io/workerdeck/)** — the full
+flag surface, embedding, permissions, profiles, the job queue, and the protocol reference.
+
+## One server, four ways in
+
+The gateway is the base layer: it owns the sessions, the approvals and the event stream. Every
+client above it is a view onto the same sessions — attach from three of them at once and they
+stay in step, because there is one ordered, seq-numbered stream and everything replays from it.
+
+<table>
+  <tr>
+    <td align="center" valign="top" width="25%">
+      <a href="packages/web"><img src="docs/assets/card-web.png" alt="Web App — the dashboard workspace: file rail, transcript with a live session, composer" /></a>
+      <br /><b><a href="packages/web">Web App</a></b>
+      <br /><sub>The dashboard <code>npx workerdeck</code> already serves: file tree, Monaco editor, and the session panel with approvals, jobs and profiles.</sub>
+    </td>
+    <td align="center" valign="top" width="25%">
+      <a href="apps/ios"><img src="docs/assets/card-ios.png" alt="iOS App — a phone showing the transcript and an Allow / Deny approval prompt" /></a>
+      <br /><b><a href="apps/ios">iOS App</a></b>
+      <br /><sub>Native SwiftUI remote for the gateways you run — every session in one list, approve or deny on the spot, APNs push to the lock screen.</sub>
+    </td>
+    <td align="center" valign="top" width="25%">
+      <a href="apps/vscode"><img src="docs/assets/card-vscode.png" alt="VS Code Extension — the editor with the agent session in the bottom panel and sessions in the sidebar" /></a>
+      <br /><b><a href="apps/vscode">VS Code Extension</a></b>
+      <br /><sub>The session rides the bottom panel, terminal-shaped; gateways and sessions in the sidebar, approvals as native notifications, remote projects as a virtual workspace.</sub>
+    </td>
+    <td align="center" valign="top" width="25%">
+      <a href="https://workerdeck.github.io/workerdeck/docs/guides/embedding/"><img src="docs/assets/card-embedded.png" alt="Embedded App — someone else's product with the WorkerDeck session panel docked inside it" /></a>
+      <br /><b><a href="https://workerdeck.github.io/workerdeck/docs/guides/embedding/">Embedded App</a></b>
+      <br /><sub>The same panel, hooks and raw typed stream as libraries in your own product — the <a href="https://workerdeck.github.io/workerdeck/docs/guides/embedding/">embedding guide</a> walks the rungs.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="4" align="center">
+      <a href="packages"><img src="docs/assets/card-server.png" alt="The server underneath: one gateway built from six packages — protocol, core, queue, server, cli, sandbox" /></a>
+      <br /><sub><a href="packages/protocol"><code>protocol</code></a> · <a href="packages/core"><code>core</code></a> · <a href="packages/queue"><code>queue</code></a> · <a href="packages/server"><code>server</code></a> · <a href="packages/cli"><code>cli</code></a> · <a href="packages/sandbox"><code>sandbox</code></a></sub>
+    </td>
+  </tr>
+</table>
 
 ## What it actually gives you
 
-- **Close-to-real sessions.** Same skills (`.claude/skills/`), same `CLAUDE.md`, same MCP surface,
-  same permission system as Claude Code launched in that directory.
+- **Close-to-real sessions.** A session behaves like the agent's own CLI launched in that
+  directory: the same skills, the same project instructions, the same MCP surface, the same
+  permission system.
 - **Human-in-the-loop permissions.** A tool call not covered by the session's permission mode
-  becomes a pending approval; the tool blocks until someone decides, deny-on-timeout by default.
-  This is what makes it safe to point at a real checkout.
+  becomes a pending approval, and the tool blocks until someone decides — deny-on-timeout by
+  default. This is what makes it safe to point at a real checkout.
 - **Attach, replay, resume.** One ordered stream of seq-numbered events. Clients reconnect and
-  replay from their last seen seq; closed sessions resume from the SDK's on-disk store with the
-  prior transcript backfilled.
-- **Three engines on one protocol.** Claude Code, **OpenAI Codex** (the codex CLI, driven the
-  same way the Agent SDK drives Claude Code), or any provider the [AI SDK](https://ai-sdk.dev)
-  supports through a host hook — same client, same panel, same queue. Clients render from each
-  engine's **capability record**, so an affordance an engine lacks is hidden, never a control
-  that silently does nothing.
+  replay from their last seen seq; a closed session resumes from the engine's own on-disk store
+  with the prior transcript backfilled.
+- **Three engines on one protocol.** Clients render from each engine's **capability record**, so
+  an affordance an engine lacks is hidden rather than a control that silently does nothing.
 - **Unattended runs.** A job queue with bounded concurrency, token budgets, retries, a wall-clock
-  watchdog, and webhooks.
+  watchdog, and webhooks. A job is an ordinary registry session, so the dashboard watches it
+  stream live.
 - **Work that outlives the turn.** A session can park on something nothing here is doing — a batch
-  job, a human approving on Monday — and wake days later, mid-turn, as itself.
-- **The host's files, in the trees sessions already run in.** `/v1/fs` serves browse, read and
-  fuzzy search over your `--cwd-root` directories — a remote client gets a real file tree instead
-  of guessing at paths. Reading needs no extra grant (you could already have the agent print those
-  files); `--fs-write` opts into saving, which is the part a `PUT` wouldn't otherwise ask
-  permission for.
+  job, a human approving on Monday — and wake days later, mid-turn, as itself. A parked run frees
+  its concurrency slot and stops its wall-clock budget.
+- **Reaching a person who isn't watching.** Server-wide webhooks for the four moments a human acts
+  on (permission requested, turn finished, error, closed). The permission payload carries the
+  whole request, so a consumer can answer it over REST — which is what makes an Approve button in
+  a chat message, or on a phone's lock screen, work. The server itself holds no push credentials.
+- **The host's files, in the trees sessions already run in.** Browse, read and fuzzy-search over
+  your `--cwd-root` directories, so a remote client gets a real file tree instead of guessing at
+  paths. Reading needs no extra grant; writing is a separate opt-in.
 
-## Embed it in your app
+## Engines
 
-```ts
-import { createWorkerServer } from '@workerdeck/server'
+A **profile** is what a session runs as, and it picks the engine.
 
-const worker = createWorkerServer({
-  authenticate: async (req) => verifyMyAppToken(req.headers.authorization),
-  allowedCwdRoots: ['/srv/checkouts'],
-  buildRunnerConfig: (req) => ({ ...req, env: { ...process.env } }),
-})
-await worker.listen(8787)
-```
+- **Claude Code**, via the [Anthropic Agent SDK](https://code.claude.com/docs/en/agent-sdk).
+- **OpenAI Codex** — the local `codex` binary, driven over its `app-server` JSON-RPC surface with
+  token streaming and interactive approvals. Its ask channels map onto the same permission
+  surface, with one difference carried honestly in the request itself: a codex command approval
+  is usually an *escalation after its sandbox already refused the command*, not a gate before
+  execution, and approving re-runs it unsandboxed.
+- **Any provider** the [AI SDK](https://ai-sdk.dev) supports, through a host hook — no CLI
+  process. This engine trades ambient authority for a sandbox: no shell, no host filesystem,
+  capability-scoped tools, and untrusted code confined to a QuickJS guest that can run in the
+  user's own browser tab so client-held documents never reach the server.
 
-```tsx
-import { WorkerDeckClient } from '@workerdeck/client'
-import { SessionPanel } from '@workerdeck/ui' // Tailwind v4 host: see packages/ui/README.md
-
-const client = new WorkerDeckClient({ baseUrl: 'https://my-app/worker/v1', headers: { … } })
-const session = await client.createSession({
-  cwd: '/srv/checkouts/my-repo',
-  prompt: '/verify-content 42',
-  settingSources: ['user', 'project'], // pick up the repo's skills + CLAUDE.md
-})
-// then render:
-<SessionPanel client={client} sessionId={session.id} />
-```
-
-There's a rung for every level of control: `SessionWorkspace` (the panel plus a VS Code-shaped
-file tree and Monaco editor around it), the styled `SessionPanel`, the headless
-`useClaudeSession` hook, the raw event stream (`client.attach(id).on('event', …)`), or
-`SessionRunner` from `@workerdeck/core` in-process with no server at all. See the
-[embedding guide](https://workerdeck.github.io/workerdeck/docs/guides/embedding/).
-
-## Three engines: Claude Code, Codex, and any provider
-
-A **profile** is what a session runs as — and it picks the engine. The default is Claude Code via
-the Agent SDK. `engine: 'codex'` runs OpenAI Codex the same way — the local codex binary driven
-over its `app-server` JSON-RPC surface, streaming token-by-token, resolving its own auth
-(`codex login` in your terminal) exactly as the Claude CLI resolves its own. `engine: 'provider'`
-runs the model-agnostic engine through a host hook: no CLI process, any AI SDK provider.
-
-```ts
-createWorkerServer({
-  profiles: [
-    { name: 'ada', configDir: '/home/ada/.claude' },                 // Claude Code
-    { name: 'codex', engine: 'codex' },                              // OpenAI Codex (~/.codex)
-    {
-      name: 'kimi',
-      engine: 'provider',
-      // apiKeyEnv is a variable NAME. No credential is stored here or put on the wire.
-      provider: { id: 'moonshotai', model: 'kimi-k3', apiKeyEnv: 'MOONSHOT_API_KEY' },
-      session: { capabilities: ['web_fetch', 'deliver_file'], mcpServers: ['deepwiki'] },
-    },
-  ],
-  // Provider profiles only — the one place a model SDK and its credentials are resolved
-  // (claude and codex ship as in-repo adapters and need no hook). May be async.
-  createEngineRunner: ({ config, profile, bridge }) => createEngineSession({ /* … */ }),
-})
-```
-
-Every profile answers `GET /profiles` with its engine's **capability record** (approvals, modes,
-resume, telemetry, attachments, reasoning efforts…), a **model catalog** shipped with the release
-— a real picker from the first request, no warm-up session — and whether its credentials
-currently **probe as usable** (`available`, with an actionable reason when not; display-only, so
-a stale probe can never block a create). Codex approvals are wired to the same permission
-surface as Claude's: the binary's ask channels (command escalations, file changes, permission
-grants, questions, MCP elicitations) arrive as pending approvals and are answered from any
-client — with one semantic difference carried honestly in the request itself: a codex command
-approval is usually an *escalation after its sandbox already refused the command* ("command
-failed; retry without sandbox?"), not a gate before execution, and approving re-runs it
-unsandboxed. Permission modes map onto the codex sandbox + ask policy (`default` → read-only,
-blocked actions ask; `acceptEdits` → workspace-write, escalations ask; `bypassPermissions` →
-full access, asks nothing).
-
-Two things a codex session has and a Claude one doesn't. **Skills** — `~/.codex/skills/**`, listed
-over the binary's `skills/list` and republished whenever its watcher says they changed. They reach
-clients on their own `skills` channel rather than as slash commands, because they *aren't*
-commands: codex has no command-listing RPC at all, and a skill is something the model chooses from
-its description, so there is no `/skillname` to send. Clients list them in a panel and offer them
-under `/` as a typing aid — picking one writes codex's own suggested opening line into the composer
-for you to edit and send. **Generated images** — codex's built-in `image_gen` reports a host path
-and never bytes, so the runner announces the file it wrote (`file_produced`) and the gateway serves
-it from `GET /sessions/:id/produced/:fileId`. No host-file root to declare and no byte cap to
-raise: the allowlist is the exact set of paths this session's own runner reported producing, which
-is a fact about one file rather than a guess about a directory. The picture just appears, in the
-dashboard and on the phone.
-
-The provider engine trades ambient authority for a sandbox:
-
-- **Capability-scoped tools.** No shell, no host filesystem. `fs_*` operate on an in-memory
-  scratch VFS; `web_search`, `download`, `web_fetch` and `deliver_file` exist only when the
-  profile grants them, and a session request may narrow that set but never widen it.
-- **Untrusted code runs in QuickJS — possibly not on your machine.** `eval_script` is the one
-  *sandboxed* tool, and it can execute in the **user's own browser tab** over the WS bridge, so
-  client-held documents never reach the server. Everything else is *authoritative*: server-side,
-  server credentials, never bridged. The split is enforced in types.
-- **Different vocabulary, honestly.** A provider session runs `default`, `bypassPermissions` and
-  `dontAsk`; asking for `acceptEdits`/`plan`/`auto` is a 400 rather than a silent coercion. The
-  model list is whatever the operator declared, and CLI-only affordances (resumable SDK sessions,
-  context/rate-limit telemetry, setting sources) simply don't exist — the dashboard hides them,
-  keying off the capability record on `ProfileInfo`/`SessionInfo`.
-
-All engines implement one `Runner` interface and speak the same protocol, so client, React layer,
-panel and queue are unchanged either way. Profiles also scope *who may run as what*:
-`allowedProfiles` on the authenticate principal, because each person under their own profile is
-each person using their own account. See
+Every profile answers with its engine's capability record, a model catalog shipped with the
+release (a real picker from the first request, no warm-up session), and whether its credentials
+currently probe as usable. All three implement one `Runner` interface and speak the same
+protocol, so the client, the React layer, the panel and the queue are unchanged either way.
+Profiles also scope *who may run as what*, because each person under their own profile is each
+person using their own account. See
 [Profiles](https://workerdeck.github.io/workerdeck/docs/guides/profiles/).
-
-## Unattended runs, and runs that park
-
-```ts
-createWorkerServer({
-  authenticate,
-  queue: {
-    maxConcurrency: 2,          // concurrent job sessions
-    sessionTokenLimit: 200_000, // tokens per job (input+output+cache); exceeding kills the run
-    dailyTokenLimit: 2_000_000, // global budget per UTC day; queued jobs held once exhausted
-    maxJobDurationMs: 1_800_000,          // wall-clock watchdog against a wedged CLI
-    retention: { maxAgeMs: 86_400_000 },  // expire terminal jobs
-  },
-})
-```
-
-```ts
-const job = await client.createJob({
-  session: { cwd: '/srv/checkout', prompt: '/verify-content 42' },
-  webhook: { url: 'https://my-app.test/hooks/claude', headers: { authorization: '…' } },
-  attempts: 3, // failed (not canceled) runs re-queue with exponential backoff
-})
-```
-
-A job is one unattended run, executing as an ordinary registry session — so the dashboard watches
-it stream live. `job_started` → `job_progress` → `job_completed` reach the webhook, or stream the
-whole queue over `/v1/queue/ws`.
-
-When a tool call can't answer in the next few seconds, the session **parks**: it snapshots, the
-runner is torn down, and the run resumes when the result arrives — same id, same transcript, same
-seq numbering, mid-turn.
-
-```ts
-selectExecutor: () => new DeferredExecutor({
-  timeoutMs: 86_400_000,                             // watchdog; a timeout reaches the agent as tool output
-  onDispatch: (call) => enqueueForYourWorkers(call), // call.executionId is the callback address
-})
-```
-
-```bash
-# Whenever the work is done — minutes or days later:
-curl -X POST $SERVER/v1/executions/$EXECUTION_ID/result \
-  -H 'content-type: application/json' \
-  -d '{"status":"ok","output":{"type":"json","value":{"rows":128}}}'
-```
-
-A parked job frees its concurrency slot and stops its wall-clock budget, so one worker can have a
-hundred runs waiting on the world and still only run three at a time. Failed results (the
-watchdog's timeout included) are ordinary tool output the agent adapts to, not a crashed session,
-and delivery is idempotent by `executionId`. `npx workerdeck` parks durably under
-`~/.workerdeck` by default; embedded hosts opt in with
-`parking: { store: createFileSessionStore({ dir }) }` — that directory holds whole transcripts in
-plaintext, so treat it like `~/.claude/projects`, not like a cache.
-
-A restart is still not free: a turn in flight dies with the process, as does a pending approval.
-`workerdeck guard` asks a live instance whether anything would be lost and exits non-zero while
-the answer is yes:
-
-```bash
-npx workerdeck guard --wait 300 --allow-parked && systemctl restart workerdeck
-```
-
-## Reaching a person who isn't watching
-
-A session blocked on an approval is useless if nobody is looking at it, and the live WebSocket
-only helps someone who has one open. `notifications` POSTs the four moments a human acts on —
-permission requested, turn finished, error, closed — to a URL you control:
-
-```ts
-const worker = createWorkerServer({
-  authenticate,
-  notifications: {
-    webhook: { url: 'https://my-app.test/hooks/session', headers: { authorization: '…' } },
-    // events: ['permission_requested'],  // default: all four
-  },
-})
-```
-
-Server-wide, unlike the queue's per-job webhook: the point is hearing about sessions you neither
-created nor are attached to. `permission_requested` carries the whole request, so a consumer can
-answer it over REST (`POST /v1/sessions/:id/permissions/:requestId`) — which is what makes an
-Approve button in a chat message, or on a phone's lock screen, work. The server itself holds no
-push credentials and knows nothing about APNs or Slack; it speaks HTTP to your URL.
 
 ## Packages
 
-Two tiers: `@workerdeck/*` are the libraries you embed, `workerdeck` is the instance you
-run. Each package has its own README.
+Two tiers: `@workerdeck/*` are the libraries you embed, `workerdeck` is the instance you run.
+Each package has its own README, with the code for using it.
 
 | Package | What it is |
 | --- | --- |
 | [`workerdeck`](packages/cli) | The turnkey instance: gateway + dashboard on one port, shared-secret auth, durable parking, restart guard. |
-| [`@workerdeck/protocol`](packages/protocol) | The wire protocol — events, commands, REST shapes. Dependency-free, browser-safe. **The product boundary**, versioned from day one. |
-| [`@workerdeck/core`](packages/core) | The engines, as adapters: `SessionRunner` (Agent SDK), `CodexRunner` (the codex binary over JSON-RPC; `@openai/codex` an optional peer) and `AiSdkRunner` (any provider) behind one `Runner` interface — each with a capability record, a shipped model catalog and a credential probe — plus tool execution on a swappable `ToolExecutor` seam and `park()`/`restore`. No transport. |
+| [`@workerdeck/protocol`](packages/protocol) | The wire protocol — events, commands, REST shapes, and the few rules every client must agree on. Dependency-free, browser-safe. **The product boundary**, versioned from day one. |
+| [`@workerdeck/core`](packages/core) | The engines, as adapters — each with a capability record, a shipped model catalog and a credential probe — behind one `Runner` interface, plus tool execution on a swappable seam and park/restore. No transport. |
 | [`@workerdeck/sandbox`](packages/sandbox) | The untrusted-code boundary: QuickJS-NG WASM guest, in-memory scratch VFS, by-value host bridge, interpreter-enforced memory and time limits. Runs server-side or in a tab. |
-| [`@workerdeck/queue`](packages/queue) | The job queue: concurrency, token budgets, retries, watchdog, retention, webhooks. Pluggable `QueueAdapter` (in-memory bundled). |
+| [`@workerdeck/queue`](packages/queue) | The job queue: concurrency, token budgets, retries, watchdog, retention, webhooks. Pluggable adapter (in-memory bundled). |
 | [`@workerdeck/server`](packages/server) | The gateway: HTTP + WebSocket, session registry, auth hook, profiles, job routes, session notifications, browser tool bridge, parked-session storage, opt-in host-file routes. |
 | [`@workerdeck/client`](packages/client) | Typed client for browsers and Node: REST + WS attach with auto-reconnect and replay-from-last-seq. Zero runtime deps. |
-| [`@workerdeck/react`](packages/react) | Headless React: `useClaudeSession`, attachment/host-file hooks, and a pure transcript reducer. No styling opinion. |
-| [`@workerdeck/ui`](packages/ui) | Styled agent-control components: session panel (transcript, tool-call cards, permission prompts, composer with attachments and `@file`/`/command` completion, plus the context / usage / MCP / project-file panels). Tailwind v4 + Base UI + cva. |
+| [`@workerdeck/react`](packages/react) | Headless React: the session hook, attachment and host-file hooks, and pure reducers for the transcript and the sessions list. No styling opinion. |
+| [`@workerdeck/ui`](packages/ui) | Styled agent-control components: the session panel (transcript, tool-call cards, permission prompts, composer with attachments and `@file` / `/command` completion), the sessions browser, and the workspace around them. Tailwind v4 + Base UI. |
 | [`@workerdeck/web`](packages/web) | The dashboard as prebuilt static files, for serving from your own host. Zero runtime deps. |
 
-## Auth & Anthropic's terms
+The apps — [`apps/ios`](apps/ios), [`apps/vscode`](apps/vscode) and the
+[docs site](apps/docs) — are not published to npm; each has its own README.
 
-**WorkerDeck performs no Anthropic authentication of its own — by design.** It spawns the
-official Agent SDK, which spawns the official CLI, which resolves whatever credentials the
-*operator's* environment provides: `ANTHROPIC_API_KEY`, Bedrock/Vertex, or the operator's own
-stored `claude login`. It never implements claude.ai OAuth, never reads, stores or proxies tokens,
-and never touches `~/.claude` credentials.
+## Auth & the providers' terms
+
+**WorkerDeck performs no model-provider authentication of its own — by design.** It spawns the
+official SDK or CLI, which resolves whatever credentials the *operator's* environment provides.
+It never implements a provider's OAuth flow, never reads, stores or proxies tokens, and never
+touches a credential store. `codex login` is likewise your job, in your own terminal.
 
 Our good-faith reading, not legal advice: **an API key (or Bedrock/Vertex) is the supported path**
 for anything that is a service — unattended runs, multi-user deployments, anything you expose to
 others — because Anthropic's Agent SDK docs are explicit that third-party developers may not offer
 claude.ai login or subscription rate limits in their products. Set `ANTHROPIC_API_KEY` and use
 `requireApiKey: true` to **fail closed** on subscription credentials. Your own subscription for
-your own single-user use (the equivalent of running `claude -p` yourself) is the one case where
-those may be appropriate; the server allows it with a one-time notice, and every session reports
-its provenance as `apiKeySource`. **The compliance and legal posture of this project is still
-under review** — with our own specialists and, where appropriate, Anthropic — so do your own
-diligence. [Full discussion](https://workerdeck.github.io/workerdeck/docs/guides/auth/).
+your own single-user use (the equivalent of running the CLI yourself) is the one case where those
+may be appropriate; the server allows it with a one-time notice, and every session reports its
+provenance. Whether OpenAI's terms restrict headless ChatGPT-subscription codex use the same way
+is unresolved, and we take the same posture there. **The compliance and legal posture of this
+project is still under review** — with our own specialists and, where appropriate, the providers
+— so do your own diligence.
+[Full discussion](https://workerdeck.github.io/workerdeck/docs/guides/auth/).
 
-**Red lines for contributors** (PRs crossing these are rejected): no claude.ai OAuth flows or
-login UI, no extraction/storage/forwarding of subscription tokens, no spoofing of Claude Code's
-client identity, no multi-account pooling or rate-limit circumvention. The auth layer stays 100%
-Anthropic-owned code.
+**Red lines for contributors** (PRs crossing these are rejected): no provider OAuth flows or login
+UI, no extraction/storage/forwarding of subscription tokens, no spoofing of an official client's
+identity, no multi-account pooling or rate-limit circumvention. The auth layer stays 100%
+provider-owned code.
 
 ## Honest constraints
 
-- **No serverless.** The SDK spawns the CLI as a long-running subprocess with filesystem state.
-  Realistic targets: a VM, a container with min-instances, any Node ≥22 host with a real disk.
+- **No serverless.** A CLI engine is a long-running subprocess with filesystem state. Realistic
+  targets: a VM, a container with min-instances, any Node ≥22 host with a real disk.
 - **Sessions are single-host.** Transcripts live on the server's local disk; resume works across
-  restarts on the same host via `resume: sdkSessionId`.
-- **The server trusts its host app.** For Claude sessions `CreateSessionRequest` accepts
-  `mcpServers` and tool policy — gate creation behind your own auth and clamp with
-  `allowedCwdRoots` + `buildRunnerConfig`. (Provider sessions are tighter by construction: MCP is
-  declared on the profile, never by the caller.)
+  restarts on the same host.
+- **The server trusts its host app.** For CLI engines a create request accepts MCP servers and
+  tool policy — gate creation behind your own auth and clamp it server-side. (Provider sessions
+  are tighter by construction: MCP is declared on the profile, never by the caller.)
 - **Parking is single-host either way.** The file store survives a restart, but two servers over
   one directory would race to rebuild the same sessions.
+- **Neither app is in a store.** iOS and VS Code are built and side-loaded from this repo today.
 
 ## Contributing
 
@@ -336,15 +213,13 @@ Dev never builds: apps and tests resolve packages straight to TS source via the
 
 ## Status
 
-**0.7.0** — early but real. Both engines, the protocol, server, client, headless React layer,
-styled UI, dashboard, job queue, sandbox, and deferred execution are all in and tested. 0.5 added
-the turnkey `npx workerdeck` instance, the dashboard as a published package, and durable parks;
-0.6 added server-wide session notifications and was the first release under this name — the
-project published as `claude-worker` / `@claude-worker/*` through 0.5, and those packages remain
-on npm, deprecated and frozen there. 0.7 adds the host-filesystem routes (`/v1/fs`) and, alongside
-them, the iOS remote's file browser and APNs push. Both of those last two are covered by tests but
-have not yet been exercised against a live gateway from a physical phone — treat them as new, not
-as settled. Expect the protocol to keep evolving — `PROTOCOL_VERSION` guards breaking changes and
-is at 4. See the [roadmap](docs/ROADMAP.md) for what's next.
+**0.12.0** — early but real. Three engines, the protocol, server, client, headless React layer,
+styled UI, dashboard, job queue, sandbox and deferred execution are all in and tested. 0.9 landed
+the engine adapters and the Codex engine; 0.10 added the session workspace and codex skills and
+generated images; 0.11 published the VS Code extension; 0.12 rebuilt its navigation around native
+editor chrome. The iOS app's APNs push is covered by tests but has not been exercised against a
+live gateway from a physical phone — treat it as new, not as settled. Expect the protocol to keep
+evolving: `PROTOCOL_VERSION` guards breaking changes and is at 7. See the
+[roadmap](docs/ROADMAP.md) for what's next.
 
 MIT © Tobias Strebitzer

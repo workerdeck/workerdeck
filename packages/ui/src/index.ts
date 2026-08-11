@@ -136,6 +136,7 @@ export {
   type SessionListItemProps,
   type SessionListProps,
 } from './components/agent/SessionList.tsx'
+export { SessionBrowser, type SessionBrowserProps } from './components/agent/SessionBrowser.tsx'
 export {
   SessionEmptyState,
   type SessionEmptyStateProps,

@@ -13,7 +13,7 @@ npx workerdeck
 That serves `http://127.0.0.1:8787` — the dashboard at the root, the API under `/v1` — and
 persists parked sessions under `~/.workerdeck` so a restart doesn't drop them. Anthropic
 credentials come from your environment, exactly as they would for `claude` in a terminal; see
-[Auth & Anthropic's terms](/workerdeck/docs/guides/auth/).
+[Auth & the providers' terms](/workerdeck/docs/guides/auth/).
 
 The `@workerdeck/*` packages are the libraries you embed. This one — the unscoped
 [`workerdeck`](https://www.npmjs.com/package/workerdeck) — is the service you run.
@@ -41,7 +41,7 @@ Neither transport establishes *who* the person is; the secret is a door key. Put
 identity-aware proxy in front if you need more than that.
 
 **Off loopback, auth is not optional — but the key is.** An unauthenticated gateway on a
-routable interface is a Claude Code shell for anyone who can reach the port, so binding one
+routable interface is a coding agent shell for anyone who can reach the port, so binding one
 without `--auth-key` generates a key instead of serving open: printed once at first start,
 stored in `<state-dir>/auth-key` (mode 600), and reused silently on later starts — a restart
 doesn't un-pair the clients that saved it. With `--no-parking-store` there is nowhere to keep

@@ -258,6 +258,39 @@ the session workspace and its Monaco editor) shipped before it.
   host), agent→IDE tools (PRD §7), Marketplace publishing. PRD in
   `_docs/plans/VSCODE-EXTENSION-PRD.md`.
 
+### Cross-client parity (unreleased)
+
+The extension's list model, generalized and taken to the other two clients. The rules moved
+into `protocol` (`session-list.ts`, `watermarks.ts`) rather than being copied, because they are
+rules and not preferences: the extension's activity-bar badge counts the *same* rows its list
+shows, so a client filtering differently would announce work it is hiding. `apiUrl`/
+`isLoopbackHost` moved to `client` (there were two copies and a third was coming) and the status
+presentation rules to `@workerdeck/ui/format`; the extension now consumes all of it, and its
+`view-config.ts` is down to the one thing that was genuinely its own.
+
+- **Dashboard**: `SessionBrowser` (in `ui`, so any embedder gets it) — search, gateway/engine/
+  state facets, grouping, sorting, the subset line, per-row unread badges, inline rename. Plus
+  catch-up (`unseen` into the panel, marks written only while the route is mounted and the tab
+  visible), an adaptive registry poll (5s idle / 1.2s busy) replacing the flat 5s, transcript
+  **style and density as settings** (`cards`/`lines`, `comfortable`/`compact`), a persisted file
+  rail, jobs search + an active-only filter, and one shared run form behind the session and job
+  screens instead of two that had drifted.
+- **iOS**: one list across every configured gateway — gateway as a facet, not the frame, so the
+  server switcher stops being a mode — with the same facets, subset line, unread badges, an app
+  icon badge summed over the rows the filter is showing, and rename. `SessionList.swift` and
+  `Watermarks.swift` mirror the protocol modules the way `Transcript.swift` mirrors the reducer.
+  The workspace scope is inert on a phone by construction rather than by a fake scope.
+
+Alongside it, the public surface was rebuilt around the fact that there are now **four** of
+them. "Claude Code sessions" is retired as the product-level noun — it named one engine on a
+three-engine product — in favour of **coding agent sessions**, across the banner, the README,
+the site and every package description; the auth guide became "Auth & the providers' terms" for
+the same reason. The README leads with a quickstart and a showcase table (four client cards over
+one server slab, rendered from HTML like the banner) and carries no code snippets — those belong
+in each package's own README. The site homepage gained the same four-ways-in section, and the
+docs finally have a social card: there was no `og:image` at all, so every shared link rendered
+bare. VS Code and iOS had been invisible on the entire public surface until now.
+
 ## Next
 
 0. **APNs push for the iOS app — released in 0.7.0, not yet proven on a device.** The forwarder half is in
@@ -308,7 +341,7 @@ with filesystem state), multi-tenant SaaS, and claude.ai authentication of any k
 ## Open questions
 
 - **Compliance posture.** Legal/compliance review of the auth stance is in progress — see
-  [Auth & Anthropic's terms](https://workerdeck.github.io/workerdeck/docs/guides/auth/).
+  [Auth & the providers' terms](https://workerdeck.github.io/workerdeck/docs/guides/auth/).
   That section stays honest as things settle. The same question now exists for Codex: whether
   OpenAI's terms restrict headless/gateway use of ChatGPT-subscription codex auth the way
   Anthropic's restrict claude.ai logins is unresolved — the posture mirrors the Anthropic one

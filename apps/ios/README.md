@@ -1,7 +1,7 @@
 # WorkerDeck for iOS
 
 Native iOS remote control for a self-hosted [WorkerDeck](../../README.md) server: watch and
-drive Claude Code sessions from your phone — streaming transcript, permission prompts, session
+drive coding agent sessions from your phone — streaming transcript, permission prompts, session
 creation/resume, context + rate-limit HUD, and a browser/editor for the host's project tree —
 over your own network (typically Tailscale). No relay, no cloud: the app is a plain HTTP/WS
 client to the gateway you already run.
@@ -22,9 +22,24 @@ Plan and research: `_docs/plans/MOBILE-CLIENT.md` (gitignored, local).
     cookie machinery the web dashboard uses.
   - `Transcript.swift` — pure transcript reducer, a 1:1 port of
     `packages/react/src/transcript.ts`. Keep the two in sync when transcript semantics change.
-  - `MarkdownBlocks.swift` — splits assistant text into prose and fenced code blocks, tolerating
-    the unterminated fence that streaming produces. Pure, so it lives here (this package is the
-    only part of the app under test); the SwiftUI rendering stays in `App/`.
+  - `MarkdownBlocks.swift` — splits assistant text into blocks: headings, lists, quotes, rules
+    and fenced code, with anything it doesn't model (tables included) falling through as prose
+    rather than being lost. Pure, so it lives here (this package is the only part of the app
+    under test); the SwiftUI rendering stays in `App/`. **Streaming is the design constraint**:
+    the classifier is strictly line-local, so a block renders in its final shape from its first
+    character — a bullet that appeared as a paragraph and snapped into place a token later would
+    be worse than not rendering it at all.
+  - `SessionList.swift` / `Watermarks.swift` — ports of `packages/protocol/src/session-list.ts`
+    and `watermarks.ts`, the same way `Transcript.swift` is a port of the react reducer. The
+    sessions-list view model (the `attention/working/idle/ended` buckets, the gateway/adapter/
+    state facets, filter/group/sort, `subsetSummary`) and the unread model (monotonic marks
+    behind a storage seam, `unseenCount`'s rows-not-turns arithmetic). These are **rules**, not
+    this app's preferences — the VS Code extension's activity-bar badge counts the same rows its
+    list shows and the dashboard renders the same list, so a client that filtered differently
+    would be announcing work it is hiding. Two Swift-specific notes: JS `sort` is stable and
+    Swift's is not, so both the row and the group sort carry an explicit insertion-index
+    tiebreak; and `ViewConfig` decodes leniently over its defaults, the Swift spelling of the
+    webview's spread.
   - `PromptToken.swift` — the `@file` and `/command` rules in one place: which words are tokens,
     which are being typed, which are finished, and how one is replaced. Here for the same reason
     as `MarkdownBlocks` — pure string logic whose interesting cases are all edges — and shared, so
@@ -35,6 +50,23 @@ Plan and research: `_docs/plans/MOBILE-CLIENT.md` (gitignored, local).
     may not contain a slash.
 - `App/` — the SwiftUI app (hosts, sessions, transcript, permissions, HUD). Hosts + auth keys
   are stored in the Keychain.
+  - `App/Sources/Sessions/{SessionListModel,SessionListView}.swift` — **one list across every
+    configured gateway**. The gateway is a facet of that list (filter/group/sort), never the
+    frame it lives in: there is no "current server" mode, and a gateway that is unreachable or
+    unauthorized is a banner beside the rows rather than a broken screen — on a tailnet the usual
+    failure is "the VPN dropped", not "the data is gone". Everything visible is derived through
+    the kit's shared rules (`rows → filtered → groups`, plus the subset line), with the workspace
+    scope passed as `nil` throughout: a phone has no open folders, so that filter is genuinely
+    inert here rather than hiding everything. The poll follows the work (2s while anything runs
+    or waits on a human, 5s otherwise) and runs only while the list itself is on screen — inside
+    a session, that session's socket is the fresher source. Each row carries an **unread count**
+    (`App/Sources/Model/UnreadModel.swift`, the kit's `Watermarks` over `UserDefaults`), and the
+    same sum — over the rows the filter is *showing*, never the hidden ones — is stamped on the
+    app icon. Marks are written only while a session is genuinely on screen and attached; the
+    session view re-fetches once on disappear and marks a final time, so rows produced after the
+    last snapshot don't come back as unread. Renaming is a leading swipe or a context menu →
+    `PATCH /sessions/:id`, a gateway edit rather than a local override, so the name reaches the
+    dashboard and the extension too (and an empty one restores the derived title).
   - `App/Sources/Session/SessionStatusBar.swift` — the mini status bar, one glass line floating
     just above the composer where a thumb reaches it: status, model, permission mode, usage. The
     status slot is **shared with connectivity, and connectivity wins it** — while the socket is

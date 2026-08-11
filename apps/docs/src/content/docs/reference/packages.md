@@ -1,6 +1,6 @@
 ---
 title: Packages
-description: The nine libraries, the instance you run, and the one dependency rule that holds them together.
+description: The ten libraries, the instance you run, the apps built on them, and the one dependency rule that holds it together.
 order: 1
 ---
 
@@ -9,7 +9,7 @@ order: 1
 | Package | What it is |
 | --- | --- |
 | [`@workerdeck/protocol`](https://www.npmjs.com/package/@workerdeck/protocol) | The wire protocol: session events, commands, REST shapes. Dependency-free, browser-safe. **This is the product boundary** — versioned from day one. |
-| [`@workerdeck/core`](https://www.npmjs.com/package/@workerdeck/core) | The engines. `SessionRunner` wraps `query()`, owns the streaming input, promotes `canUseTool` calls into pending approvals, normalizes SDK messages into protocol events, keeps a seq-numbered event log for attach/replay. `AiSdkRunner` is the model-agnostic engine over the AI SDK's `ToolLoopAgent`, with tool execution behind a swappable `ToolExecutor` seam (in-process sandbox, browser tab, or deferred) and `park()`/`restore` for work that outlives the runner. Both implement one `Runner` interface. Pure library, no transport. |
+| [`@workerdeck/core`](https://www.npmjs.com/package/@workerdeck/core) | The engines, shipped as adapters — each with a capability record, a model catalog and a credential probe. `SessionRunner` wraps the Agent SDK's `query()`, owns the streaming input, promotes `canUseTool` calls into pending approvals, normalizes messages into protocol events and keeps a seq-numbered event log for attach/replay. `CodexRunner` drives the codex binary over its `app-server` JSON-RPC surface. `AiSdkRunner` is the model-agnostic engine over the AI SDK, with tool execution behind a swappable `ToolExecutor` seam (in-process sandbox, browser tab, or deferred) and `park()`/`restore` for work that outlives the runner. All three implement one `Runner` interface. Pure library, no transport. |
 | [`@workerdeck/sandbox`](https://www.npmjs.com/package/@workerdeck/sandbox) | The untrusted-code boundary: a QuickJS-NG WASM guest with interpreter-enforced memory and time limits, an in-memory scratch VFS, and a by-value host bridge. A leaf like `protocol` — usable from the server or a browser tab, importing neither. |
 | [`@workerdeck/queue`](https://www.npmjs.com/package/@workerdeck/queue) | The job queue: remote services schedule one-shot runs; jobs execute as ordinary sessions with bounded concurrency and token budgets, delivering progress + completion via webhooks. A run waiting on a deferred execution parks — no slot, no ticking clock — and resumes when the result lands. Pluggable `QueueAdapter` (in-memory bundled; redis/bullmq/pubsub can implement the same contract). |
 | [`@workerdeck/server`](https://www.npmjs.com/package/@workerdeck/server) | The gateway: HTTP + WebSocket, session registry (create/list/attach/interrupt/kill), pluggable auth hook, profiles (which also pick the engine), optional job-queue routes, the browser tool-call bridge, and parked-session storage for deferred execution. Runs anywhere Node ≥22 runs. |
@@ -28,9 +28,17 @@ Everything above is a library you embed. This one is a service you run.
 
 ## The apps
 
+Three clients of the same gateway, plus this site. None is published to a store or registry —
+each is built from the repo.
+
 | App | What it is |
 | --- | --- |
-| `apps/docs` | This documentation site (Astro), deployed to GitHub Pages on push to `master`. |
+| [`apps/vscode`](https://github.com/workerdeck/workerdeck/tree/master/apps/vscode) | The VS Code extension: the session in the bottom panel, status in the window bar, gateways and sessions in the sidebar, approvals as native notifications, and a remote gateway's project as a virtual workspace. Imports `client`/`react`/`ui`/`protocol` and never the server side. Build the `.vsix` and side-load it. |
+| [`apps/ios`](https://github.com/workerdeck/workerdeck/tree/master/apps/ios) | The native iOS remote (SwiftUI): one session list across every gateway you have configured, the full transcript, approve/deny, a host file browser, and APNs push. Zero third-party Swift dependencies — `WorkerDeckKit` is a hand-written mirror of `protocol` plus ports of the transcript and sessions-list reducers. |
+| [`apps/docs`](https://github.com/workerdeck/workerdeck/tree/master/apps/docs) | This documentation site (Astro), deployed to GitHub Pages on push to `master`. |
+
+The web dashboard is not here because it is a package rather than an app: it ships as
+[`@workerdeck/web`](https://www.npmjs.com/package/@workerdeck/web) and the instance serves it.
 
 ## The dependency rule
 

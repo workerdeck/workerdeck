@@ -302,6 +302,31 @@ struct WorkerClientTests {
     }
   }
 
+  @Test func renameEncodesItsThreeStates() throws {
+    // A rename is a gateway edit, and `title` carries three meanings the wire
+    // has to keep apart: set it, clear the override (restoring the derived
+    // title), or leave it alone. A plain `String?` would encode the last two
+    // identically, and "clear" would silently become "don't touch".
+    let encode = { (patch: UpdateSessionRequest) in
+      String(decoding: try JSONEncoder().encode(patch), as: UTF8.self)
+    }
+    #expect(try encode(UpdateSessionRequest(title: .set("Parity work")))
+      == #"{"title":"Parity work"}"#)
+    #expect(try encode(UpdateSessionRequest(title: .clear)) == #"{"title":null}"#)
+    #expect(try encode(UpdateSessionRequest(title: nil)) == "{}")
+  }
+
+  @Test func renamePatchesTheSessionRoute() async throws {
+    StubStore.shared.install { _ in StubResponse(body: Data(sessionJSON.utf8)) }
+    let client = makeStubClient()
+
+    _ = try await client.updateSession(id: "sess_1", UpdateSessionRequest(title: .set("Named")))
+
+    let request = try #require(StubStore.shared.requests.first)
+    #expect(request.httpMethod == "PATCH")
+    #expect(request.url?.path == "/v1/sessions/sess_1")
+  }
+
   @Test func derivesTheWebSocketURLFromTheRestBase() throws {
     let insecure = WorkerClient(baseURL: URL(string: "http://host:8787/v1")!)
     #expect(

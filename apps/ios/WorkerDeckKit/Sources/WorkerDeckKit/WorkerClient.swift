@@ -79,6 +79,15 @@ public struct WorkerClient: Sendable {
     return try decode(SessionResponse.self, from: data).session
   }
 
+  /// Rename a session — a gateway edit, so the dashboard and the VS Code
+  /// extension see the same name. Never a local override: a title only this
+  /// device knows is a title nobody else can search for.
+  @discardableResult
+  public func updateSession(id: String, _ patch: UpdateSessionRequest) async throws -> SessionInfo {
+    let data = try await call("PATCH", "/sessions/\(Self.encodeComponent(id))", body: patch)
+    return try decode(SessionResponse.self, from: data).session
+  }
+
   /// Terminate a session. Returns its final snapshot.
   @discardableResult
   public func deleteSession(id: String) async throws -> SessionInfo {

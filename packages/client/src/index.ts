@@ -740,3 +740,6 @@ export class WorkerDeckClient {
     return payload
   }
 }
+
+export { apiUrl, isLoopbackHost } from './host-url.ts'
+export type { HostUrl } from './host-url.ts'

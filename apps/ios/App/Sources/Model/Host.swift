@@ -59,6 +59,16 @@ struct Host: Codable, Identifiable, Hashable, Sendable {
     return trimmed.isEmpty ? displayAddress : trimmed
   }
 
+  /// Whether this gateway's address points at this device itself. Feeds only
+  /// `SessionRow.local` in the shared list rules, where it gates the untagged
+  /// workspace-scope roots — and a phone has no open folders, so the scope is
+  /// permanently inert here. Computed honestly anyway rather than hardcoded, so
+  /// the row means what the shared rules say it means.
+  var isLoopback: Bool {
+    guard let host = apiURL?.host else { return false }
+    return host == "localhost" || host == "127.0.0.1" || host == "::1"
+  }
+
   /// `host:port` when the URL parses, else whatever the user typed.
   var displayAddress: String {
     let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)

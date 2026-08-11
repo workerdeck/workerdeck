@@ -10,7 +10,7 @@ order: 3
 - Anthropic credentials in your environment — WorkerDeck implements no auth of its own; the
   Agent SDK resolves whatever the operator's environment provides (`ANTHROPIC_API_KEY`,
   Bedrock/Vertex, or your own `claude login`). See
-  [Auth & Anthropic's terms](/workerdeck/docs/guides/auth/).
+  [Auth & the providers' terms](/workerdeck/docs/guides/auth/).
 
 If you only want WorkerDeck *running*, you don't need this page at all: `npx workerdeck`
 serves the gateway and the dashboard together, covered in

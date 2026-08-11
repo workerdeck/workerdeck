@@ -1,0 +1,147 @@
+<!doctype html>
+<!--
+  Source for card-ios.png (README showcase table). Render at 800x500 with 2x scaling:
+  see "Regenerating the README showcase cards" in BRAND.md.
+  One idea: a phone with the transcript and an approve/deny prompt under your thumb.
+  The phone is oversized and cropped at the bottom edge so its screen stays legible
+  at ~230px; "Allow"/"Deny" are the only real words in the art.
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 800px; height: 500px; overflow: hidden; }
+  body {
+    font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: #000;
+    position: relative;
+  }
+  .glow {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 460px 340px at 50% 42%, rgba(237,237,237,0.08), transparent 62%),
+      radial-gradient(ellipse 420px 260px at 12% 88%, rgba(237,237,237,0.04), transparent 60%);
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 640px 400px at 50% 50%, black 30%, transparent 78%);
+    -webkit-mask-image: radial-gradient(ellipse 640px 400px at 50% 50%, black 30%, transparent 78%);
+  }
+  .phone {
+    position: absolute; left: 50%; top: 40px; transform: translateX(-50%);
+    width: 296px; height: 560px; /* extends past the canvas bottom on purpose */
+    background: #0b0b0b; border: 2px solid #333; border-radius: 46px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.02) inset;
+    padding: 16px 14px 0; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .phone .btn-nub {
+    position: absolute; right: -2px; width: 3px; border-radius: 2px; background: #3a3a3a;
+  }
+  .island {
+    flex: none; width: 84px; height: 22px; border-radius: 999px; background: #1a1a1a;
+    margin: 0 auto 14px;
+  }
+  .shead { flex: none; display: flex; align-items: center; gap: 9px; padding: 0 6px 12px; }
+  .live {
+    width: 10px; height: 10px; border-radius: 50%; background: #2fbf71;
+    box-shadow: 0 0 12px rgba(47,191,113,0.55);
+  }
+  .tbar { height: 11px; width: 104px; border-radius: 5px; background: #3a3a3a; }
+
+  .scroll { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 2px 6px 0; }
+  .line { height: 11px; border-radius: 5px; background: #2c2c2c; }
+  .line.dim { background: #202020; }
+  .bubble {
+    align-self: flex-end; width: 150px; border-radius: 12px; background: #1d1d1d;
+    padding: 9px 11px; display: flex; flex-direction: column; gap: 7px;
+  }
+  .bubble .line { background: #343434; }
+
+  .approve {
+    margin-top: 6px; border: 1px solid #333; border-radius: 14px; background: #151515;
+    padding: 12px 12px 13px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .approve .head { display: flex; align-items: center; gap: 8px; }
+  .approve .head .name {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 13px; color: #d4d4d4;
+  }
+  .chip {
+    margin-left: auto; height: 17px; padding: 0 8px; border-radius: 999px;
+    display: flex; align-items: center;
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 9.5px; letter-spacing: 0.08em; color: #e8a33d;
+    border: 1px solid rgba(232,163,61,0.35); background: rgba(232,163,61,0.08);
+  }
+  .cmd {
+    padding: 8px 10px; display: flex; align-items: center; gap: 7px;
+    background: #000; border: 1px solid #1f1f1f; border-radius: 8px;
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    font-size: 11px; color: #565656;
+  }
+  .cmd .cbar { height: 9px; width: 130px; border-radius: 4px; background: #2f2f2f; }
+  .actions { display: flex; gap: 9px; }
+  .btn {
+    flex: 1; height: 34px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 600;
+  }
+  .btn.allow { background: #ededed; color: #0a0a0a; }
+  .btn.deny { border: 1px solid #3d3d3d; color: #a1a1a1; }
+
+  .composer {
+    flex: none; margin: 12px 6px 0; height: 40px; border-radius: 999px;
+    border: 1px solid #2e2e2e; background: #0e0e0e;
+    display: flex; align-items: center; gap: 9px; padding: 0 8px 0 14px;
+  }
+  .composer .ph { height: 10px; width: 110px; border-radius: 5px; background: #232323; }
+  .composer .send {
+    margin-left: auto; width: 26px; height: 26px; border-radius: 50%; background: #222;
+    display: flex; align-items: center; justify-content: center; color: #8f8f8f; font-size: 13px;
+  }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="grid"></div>
+  <div class="phone">
+    <div class="btn-nub" style="top: 120px; height: 40px;"></div>
+    <div class="btn-nub" style="top: 172px; height: 60px;"></div>
+    <div class="island"></div>
+    <div class="shead">
+      <div class="live"></div>
+      <div class="tbar"></div>
+    </div>
+    <div class="scroll">
+      <div class="bubble">
+        <div class="line" style="width: 100%"></div>
+        <div class="line" style="width: 62%"></div>
+      </div>
+      <div class="line" style="width: 92%"></div>
+      <div class="line" style="width: 70%"></div>
+      <div class="line dim" style="width: 48%"></div>
+      <div class="approve">
+        <div class="head">
+          <span class="name">Bash</span>
+          <div class="chip">APPROVAL</div>
+        </div>
+        <div class="cmd">$ <div class="cbar"></div></div>
+        <div class="actions">
+          <div class="btn allow">Allow</div>
+          <div class="btn deny">Deny</div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="ph"></div>
+        <div class="send">&#8593;</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -20,7 +20,7 @@
  *   pnpm server --host 0.0.0.0
  *
  * Auth off loopback is not optional theatre: anyone who can reach the port would
- * get a Claude Code session. Pass `--auth-key <secret>`, or let the CLI generate
+ * get a coding agent session. Pass `--auth-key <secret>`, or let the CLI generate
  * one — printed once, kept in the state dir (`examples/.workerdeck/auth-key`
  * here), reused on later starts. Native clients (the iOS app) send it as
  * `Authorization: Bearer <key>`; browsers post it once at the login page and ride a

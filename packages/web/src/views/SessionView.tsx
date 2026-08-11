@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from '@tanstack/react-router'
 import { useSessionInfo } from '@workerdeck/react'
 import {
@@ -16,6 +16,9 @@ import {
 import { SessionWorkspace } from '@workerdeck/ui/workspace'
 import { ArrowLeft, Trash2 } from 'lucide-react'
 import { client } from '@/lib/client.ts'
+import { getTranscriptDensity, getTranscriptVariant } from '@/lib/settings.ts'
+import { getRail, setRail } from '@/lib/rail.ts'
+import { useMarkSeen, unseenSince } from '@/lib/useUnseen.ts'
 
 export function SessionView() {
   const { sessionId } = useParams({ from: '/sessions/$sessionId' })
@@ -24,6 +27,16 @@ export function SessionView() {
   // but it is one small GET per session view, and the alternative is threading
   // the panel's session state back out through a prop nobody else wants.
   const { info, error } = useSessionInfo(client, sessionId)
+  const markSeen = useMarkSeen(sessionId)
+  // Read ONCE per session, on mount: the catch-up row marks where reading left
+  // off last time, and re-reading it as the mark moves would walk the row down
+  // the transcript under the reader.
+  const [unseen] = useState(() => unseenSince(sessionId))
+  const [density] = useState(getTranscriptDensity)
+  const [variant] = useState(getTranscriptVariant)
+  // Read once: the workspace owns the live value from here, and re-seeding it
+  // mid-session would yank the splitter out from under a drag.
+  const [rail] = useState(getRail)
 
   useEffect(() => {
     if (!error) return
@@ -49,6 +62,17 @@ export function SessionView() {
       key={sessionId}
       client={client}
       sessionId={sessionId}
+      transcriptVariant={variant}
+      transcriptDensity={density}
+      defaultRailWidth={rail.width}
+      defaultRailCollapsed={rail.collapsed}
+      onRailChange={setRail}
+      unseen={unseen}
+      // This route IS the session on screen, so its readings are what "read up
+      // to here" means. `useMarkSeen` still refuses while the tab is hidden.
+      onVitals={(vitals) =>
+        markSeen({ itemCount: vitals.itemCount, activity: info?.activityCount, turns: info?.numTurns })
+      }
       // A function, so the panel hands over its `⋯` menu instead of leaving it
       // on the status bar: this app has a real top bar, and the session's
       // controls belong together there rather than split across two rows.

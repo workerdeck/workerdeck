@@ -10,10 +10,42 @@ const repo = 'https://github.com/workerdeck/workerdeck'
 const cliPkg = fileURLToPath(new URL('../../../../packages/cli/package.json', import.meta.url))
 const version = (JSON.parse(readFileSync(cliPkg, 'utf8')) as { version: string }).version
 
+/**
+ * The three clients, above the one server.
+ *
+ * Laid out as cards over a base layer rather than as four peers, because that is
+ * the actual shape: the gateway owns the sessions and each client is a view onto
+ * the same ones. Anyone landing here should be able to see in one glance that
+ * their phone and their editor are looking at the same session.
+ */
+const surfaces = [
+  {
+    title: 'Web dashboard',
+    tag: 'included',
+    body: 'Served from the same port as the gateway — nothing separate to deploy. A workspace around each session: file tree, editor, transcript, approvals, plus the sessions list and the job queue.',
+    href: `${base}/docs/getting-started/run-an-instance/`,
+    cta: 'Run an instance',
+  },
+  {
+    title: 'iOS',
+    tag: 'build & side-load',
+    body: 'A native SwiftUI remote for the gateways you run. One list across all of them, the full transcript, approve or deny on the spot, and push so a session blocked on your decision reaches your lock screen.',
+    href: `${repo}/tree/master/apps/ios`,
+    cta: 'apps/ios',
+  },
+  {
+    title: 'VS Code',
+    tag: 'build & side-load',
+    body: 'The session in the bottom panel where a terminal would be, status in the window bar, gateways and sessions in the sidebar. Approvals as native notifications; a remote project mounts as a virtual workspace.',
+    href: `${repo}/tree/master/apps/vscode`,
+    cta: 'apps/vscode',
+  },
+]
+
 const features = [
   {
     title: 'Close-to-real sessions',
-    body: 'Sessions behave like Claude Code launched in the same directory: same skills, same CLAUDE.md, same MCP config surface, same permission system.',
+    body: 'A session behaves like the agent’s own CLI launched in that directory: same skills, same project instructions, same MCP config surface, same permission system.',
   },
   {
     title: 'Human-in-the-loop permissions',
@@ -24,16 +56,16 @@ const features = [
     body: 'One ordered stream of seq-numbered events plus a small command set. Versioned from day one — the protocol is the product boundary.',
   },
   {
-    title: 'Embeddable panel components',
-    body: 'A styled SessionPanel with streaming transcript, tool-call cards, and composer — or go headless with the hook and reducer.',
+    title: 'Three engines, one protocol',
+    body: 'Claude Code, OpenAI Codex, or any provider the AI SDK supports. Clients render from each engine’s capability record, so an affordance an engine lacks is hidden rather than a control that does nothing.',
   },
   {
-    title: 'Two engines, one protocol',
-    body: 'Claude Code via the Agent SDK, or a model-agnostic engine over the AI SDK with capability-scoped tools in a QuickJS sandbox — same client, same panel, same queue.',
+    title: 'Embeddable panel components',
+    body: 'A styled session panel with streaming transcript, tool-call cards and composer — or go headless with the hook and the reducers.',
   },
   {
     title: 'Attach, replay, resume',
-    body: 'Clients reconnect and replay from their last seen event; closed sessions resume from the SDK’s on-disk store with full history backfill.',
+    body: 'Clients reconnect and replay from their last seen event; closed sessions resume from the engine’s on-disk store with full history backfill.',
   },
   {
     title: 'Unattended job queue',
@@ -47,36 +79,37 @@ const features = [
 
 const packages = [
   ['workerdeck', 'the turnkey instance: gateway + dashboard, one port'],
-  ['@workerdeck/protocol', 'wire protocol types — events, commands, REST shapes'],
-  ['@workerdeck/core', 'both engines behind one Runner interface'],
+  ['@workerdeck/protocol', 'wire protocol types, and the rules clients agree on'],
+  ['@workerdeck/core', 'the engines, as adapters behind one Runner interface'],
   ['@workerdeck/sandbox', 'QuickJS-NG guest for untrusted code'],
   ['@workerdeck/queue', 'one-shot jobs, budgets, webhooks'],
   ['@workerdeck/server', 'HTTP + WebSocket gateway'],
   ['@workerdeck/client', 'typed client for browsers and Node'],
-  ['@workerdeck/react', 'headless hook + transcript reducer'],
+  ['@workerdeck/react', 'headless hooks + pure reducers'],
   ['@workerdeck/ui', 'styled agent-control components'],
   ['@workerdeck/web', 'the dashboard as prebuilt static files'],
 ]
 ---
 
 <Base
-  title="WorkerDeck · embed, watch, and control Claude Code sessions"
-  description="Run a close-to-real Claude Code session programmatically via the Anthropic Agent SDK, and embed it in your app: session server, typed wire protocol, and panel components."
+  title="WorkerDeck · coding agent sessions you can watch, steer, and embed"
+  description="Run a coding agent — Claude Code, OpenAI Codex, or any model provider — as a session your browser, phone, editor or app can watch, steer and embed. Self-hosted, MIT."
 >
   <main>
     <section class="mx-auto max-w-4xl px-4 pb-20 pt-24 text-center sm:px-6">
       <p
         class="mx-auto mb-6 w-fit rounded-full border border-border bg-surface px-3 py-1 text-[12px] font-medium text-fg-3"
       >
-        v{version} · MIT · powered by the official Anthropic Agent SDK
+        v{version} · MIT · self-hosted
       </p>
       <h1 class="text-balance text-4xl font-bold tracking-tight text-fg-1 sm:text-5xl">
-        Claude Code sessions your app can embed, watch, and control
+        Coding agent sessions you can watch, steer, and embed
       </h1>
       <p class="mx-auto mt-5 max-w-2xl text-pretty text-lg leading-relaxed text-fg-3">
-        WorkerDeck runs a close-to-real Claude Code session via the Agent SDK and exposes it to
-        your host app — a session server, a typed wire protocol, and embeddable panel components
-        with approve/deny controls.
+        A coding agent is a terminal program: it runs where you started it, and it is yours only
+        while that terminal is open. WorkerDeck puts a session server, a typed wire protocol and an
+        approve/deny UI around one — so the same session is reachable from a browser, your phone,
+        your editor, or an app you build yourself.
       </p>
       <div
         class="mx-auto mt-9 w-fit rounded-lg border border-border bg-code-bg px-5 py-3 font-mono text-[13px] text-fg-2"
@@ -101,6 +134,72 @@ const packages = [
     </section>
 
     <section class="border-t border-border bg-surface">
+      <div class="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+        <h2 class="text-xl font-bold tracking-tight text-fg-1">One server, four ways in</h2>
+        <p class="mt-2 max-w-2xl text-sm text-fg-3">
+          Attach from three of them at once and they stay in step — there is one ordered,
+          seq-numbered event stream, and everything replays from it.
+        </p>
+
+        <div class="mt-8 grid gap-4 md:grid-cols-3">
+          {
+            surfaces.map((s) => (
+              <a
+                href={s.href}
+                class="group flex flex-col rounded-xl border border-border bg-bg p-5 transition-colors hover:border-border-strong"
+              >
+                <div class="flex items-baseline justify-between gap-3">
+                  <h3 class="text-[15px] font-semibold text-fg-1">{s.title}</h3>
+                  <span class="shrink-0 rounded-full border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-fg-4">
+                    {s.tag}
+                  </span>
+                </div>
+                <p class="mt-2 flex-1 text-sm leading-relaxed text-fg-3">{s.body}</p>
+                <span class="mt-4 font-mono text-[12px] text-fg-4 transition-colors group-hover:text-fg-2">
+                  {s.cta} →
+                </span>
+              </a>
+            ))
+          }
+        </div>
+
+        {/* The base layer, drawn as one wide slab under the three cards: the
+            gateway is what they are all views onto, not a fourth peer. */}
+        <div class="mt-4 rounded-xl border border-border bg-bg p-5">
+          <div class="flex flex-wrap items-baseline justify-between gap-3">
+            <h3 class="text-[15px] font-semibold text-fg-1">The gateway</h3>
+            <span
+              class="rounded-full border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-fg-4"
+              >npx workerdeck</span
+            >
+          </div>
+          <p class="mt-2 max-w-3xl text-sm leading-relaxed text-fg-3">
+            Owns the sessions, the approvals and the event stream. Runs the engines, enforces the
+            permission mode, keeps the job queue, parks work that outlives a turn, and serves the
+            dashboard from the same port. Everything above is a view onto the sessions it holds —
+            and so is anything you build, at whatever level of control you want.
+          </p>
+          <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 font-mono text-[12px] text-fg-4">
+            <a
+              class="transition-colors hover:text-fg-2"
+              href={`${base}/docs/guides/embedding/`}>embedding →</a
+            >
+            <a
+              class="transition-colors hover:text-fg-2"
+              href={`${base}/docs/guides/permissions/`}>permissions →</a
+            >
+            <a class="transition-colors hover:text-fg-2" href={`${base}/docs/guides/job-queue/`}
+              >job queue →</a
+            >
+            <a class="transition-colors hover:text-fg-2" href={`${base}/docs/reference/protocol/`}
+              >protocol →</a
+            >
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="border-t border-border">
       <div class="mx-auto grid max-w-6xl gap-px overflow-hidden px-4 py-16 sm:px-6 md:grid-cols-2 lg:grid-cols-3">
         {
           features.map((f) => (
@@ -113,14 +212,12 @@ const packages = [
       </div>
     </section>
 
-    <section class="border-t border-border">
+    <section class="border-t border-border bg-surface">
       <div class="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-        <h2 class="text-xl font-bold tracking-tight text-fg-1">One instance, nine libraries</h2>
+        <h2 class="text-xl font-bold tracking-tight text-fg-1">One instance, ten libraries</h2>
         <p class="mt-2 max-w-2xl text-sm text-fg-3">
-          Run the turnkey instance, or take just the layers you need — from in-process
-          <code class="rounded bg-code-bg px-1.5 py-0.5 font-mono text-[12px]">SessionRunner</code>
-          to drop-in
-          <code class="rounded bg-code-bg px-1.5 py-0.5 font-mono text-[12px]">SessionPanel</code>.
+          Run the turnkey instance, or take just the layers you need — from the runner in-process
+          with no server at all, to a drop-in session panel.
         </p>
         <ul class="mt-6 grid gap-3 sm:grid-cols-2">
           {
@@ -128,7 +225,7 @@ const packages = [
               <li>
                 <a
                   href={`https://www.npmjs.com/package/${name}`}
-                  class="group flex items-baseline justify-between gap-4 rounded-lg border border-border px-4 py-3 transition-colors hover:border-border-strong"
+                  class="group flex items-baseline justify-between gap-4 rounded-lg border border-border bg-bg px-4 py-3 transition-colors hover:border-border-strong"
                 >
                   <span class="font-mono text-[13px] font-medium text-fg-1">{name}</span>
                   <span class="hidden text-right text-[12px] text-fg-4 sm:block">{blurb}</span>
@@ -146,8 +243,8 @@ const packages = [
       >
         <span>MIT © Tobias Strebitzer</span>
         <span>
-          Not affiliated with Anthropic — credentials stay with the operator’s official SDK/CLI
-          environment.
+          Not affiliated with Anthropic or OpenAI — credentials stay with the operator’s official
+          SDK/CLI environment.
         </span>
       </div>
     </footer>

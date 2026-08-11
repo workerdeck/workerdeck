@@ -1,0 +1,100 @@
+<!doctype html>
+<!--
+  Source for card-server.png (README showcase table, full-width row). Render at
+  1200x280 with 2x scaling: see "Regenerating the README showcase cards" in BRAND.md.
+  The base slab under the four client cards: four stems drop from the top edge at the
+  quarter-centres (where the cards sit in the table above), into one slab that lists
+  the six packages as labelled units. The only green is the mark's own live diamond.
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 280px; overflow: hidden; }
+  body {
+    font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: #000;
+    position: relative;
+  }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; }
+  .glow {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 700px 240px at 50% 60%, rgba(237,237,237,0.06), transparent 62%),
+      radial-gradient(ellipse 420px 200px at 8% 20%, rgba(237,237,237,0.04), transparent 60%);
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 900px 260px at 50% 50%, black 30%, transparent 80%);
+    -webkit-mask-image: radial-gradient(ellipse 900px 260px at 50% 50%, black 30%, transparent 80%);
+  }
+  .stem {
+    position: absolute; top: 10px; width: 2px; height: 56px; background: #333;
+  }
+  .stem::before {
+    content: ''; position: absolute; top: -7px; left: 50%; transform: translateX(-50%);
+    width: 8px; height: 8px; border-radius: 50%; background: #565656;
+  }
+  .stem::after {
+    content: ''; position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
+    width: 10px; height: 4px; border-radius: 2px 2px 0 0; background: #444;
+  }
+  .slab {
+    position: absolute; left: 32px; right: 32px; top: 66px; height: 176px;
+    background: #0d0d0d; border: 1px solid #2e2e2e; border-radius: 18px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.7), 0 1px 0 rgba(255,255,255,0.045) inset;
+    display: flex; align-items: center; gap: 26px; padding: 0 30px;
+  }
+  .badge { flex: none; display: flex; align-items: center; gap: 14px; }
+  .badge svg { display: block; }
+  .badge .t { display: flex; flex-direction: column; gap: 5px; }
+  .badge .name { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: #f5f5f5; }
+  .badge .sub { font-size: 12px; color: #8f8f8f; letter-spacing: 0.04em; }
+  .div { flex: none; width: 1px; height: 104px; background: #222; }
+  .chips { flex: 1; display: flex; gap: 14px; }
+  .chip {
+    flex: 1; height: 104px; border-radius: 12px;
+    background: #131313; border: 1px solid #2c2c2c;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  }
+  .chip .name { font-size: 19px; color: #ededed; }
+  .chip .sub { font-size: 12px; color: #6e6e6e; }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="grid"></div>
+  <div class="stem" style="left: calc(12.5% - 1px)"></div>
+  <div class="stem" style="left: calc(37.5% - 1px)"></div>
+  <div class="stem" style="left: calc(62.5% - 1px)"></div>
+  <div class="stem" style="left: calc(87.5% - 1px)"></div>
+  <div class="slab">
+    <div class="badge">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#b8b8b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3 20.5 7.75 12 12.5 3.5 7.75Z" />
+        <path d="M3.5 12.25 12 17l8.5-4.75" stroke="#6e6e6e" />
+        <path d="M3.5 16.5 12 21.25l8.5-4.75" stroke="#6e6e6e" />
+        <path d="M12 6.15 14.85 7.75 12 9.35 9.15 7.75Z" fill="#2fbf71" stroke="none" />
+      </svg>
+      <div class="t">
+        <div class="name">WorkerDeck</div>
+        <div class="sub mono">one gateway &#183; one stream</div>
+      </div>
+    </div>
+    <div class="div"></div>
+    <div class="chips">
+      <div class="chip"><div class="name mono">protocol</div><div class="sub">the wire</div></div>
+      <div class="chip"><div class="name mono">core</div><div class="sub">the engines</div></div>
+      <div class="chip"><div class="name mono">queue</div><div class="sub">unattended jobs</div></div>
+      <div class="chip"><div class="name mono">server</div><div class="sub">http + ws gateway</div></div>
+      <div class="chip"><div class="name mono">cli</div><div class="sub">turnkey instance</div></div>
+      <div class="chip"><div class="name mono">sandbox</div><div class="sub">untrusted code</div></div>
+    </div>
+  </div>
+</body>
+</html>

@@ -102,4 +102,4 @@ The server implements no Anthropic auth: the SDK/CLI resolves credentials from t
 environment (`ANTHROPIC_API_KEY`, Bedrock/Vertex, or a personal `claude login`). Each session's
 provenance surfaces as `apiKeySource` on `SessionInfo` and the `system_init` event — the full
 posture, including `requireApiKey` and the contributor red lines, is in
-[Auth & Anthropic's terms](/workerdeck/docs/guides/auth/).
+[Auth & the providers' terms](/workerdeck/docs/guides/auth/).

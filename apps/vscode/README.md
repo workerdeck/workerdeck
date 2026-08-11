@@ -117,8 +117,10 @@ pretends otherwise):
   **total new rows across the sessions the list is showing** — the webview mirrors its
   filter to the extension host (`wd-view-config`, one-way: the webview owns it, the host
   only counts with it), so a badge never announces work in a session the filter or the
-  workspace scope is hiding. The shared rules live in `src/view-config.ts`, imported by both
-  sides. Sessions waiting on a human lead its tooltip, since they are the more urgent thing
+  workspace scope is hiding. The rules themselves live in `@workerdeck/protocol`
+  (`session-list.ts`) — the dashboard renders the same list and iOS mirrors it in Swift —
+  and `src/view-config.ts` re-exports them beside the one thing that is ours, turning the
+  bridge state into rows. Sessions waiting on a human lead its tooltip, since they are the more urgent thing
   without being the bigger number. The **Sessions** view lists **every
   gateway's sessions at once**: the gateway is a facet, not the frame the list lives in.
   Above the list, the Extensions view's shape: a **search box that is always there** and a
@@ -168,14 +170,16 @@ deepseek, moonshot/kimi, gpt/o1/o3), and falls back to no mark rather than a wro
 
 ## Layout
 
-- `src/` — extension host (Node): `extension.ts` activation/commands, `hosts.ts` +
-  `host-url.ts` gateway store, `sessions-model.ts` the poll model, `sidebar.ts` +
+- `src/` — extension host (Node): `extension.ts` activation/commands, `hosts.ts` the gateway
+  store (URL normalization is `@workerdeck/client`'s `apiUrl`/`isLoopbackHost`),
+  `sessions-model.ts` the poll model, `sidebar.ts` +
   `panel.ts` the two webview providers, `webview-transports.ts` the shared bridge host side,
-  `fsp.ts` the virtual filesystem, `gateway.ts` host-side clients, `watermarks.ts` what each
-  session had shown when it was last on screen, `bridge-protocol.ts` the postMessage wire
-  (shared with the webviews, type-only) and `view-config.ts` the list's filter/group/sort
-  rules (shared and *executed* on both sides — the webview renders the list with them, the
-  host counts the badge with them).
+  `fsp.ts` the virtual filesystem, `gateway.ts` host-side clients, `watermarks.ts` the
+  `globalState` backing for protocol's unread model, `bridge-protocol.ts` the postMessage wire
+  (shared with the webviews, type-only) and `view-config.ts` the list's rows.
+  The filter/group/sort rules and the unread arithmetic are protocol's now
+  (`session-list.ts`, `watermarks.ts`) but still *executed* on both sides here — the webview
+  renders the list with them, the host counts the badge with them.
 - `webview/` — browser side: `bridge.ts` transport shims (shared), `App.tsx` the agent
   panel, `sidebar/` the sidebar app (cards, sections, push screens), `forms/` the two
   forms, `theme.ts` VS Code→`data-theme` mapping, `styles.css` Tailwind over the ui

@@ -6,7 +6,7 @@ order: 6
 
 ## No serverless — and why
 
-The Agent SDK spawns the Claude Code CLI as a **long-running subprocess with filesystem state**.
+A CLI engine runs as a **long-running subprocess with filesystem state**.
 Edge/serverless functions cannot host this. Realistic targets:
 
 - a VM,
@@ -104,7 +104,7 @@ use a ticket query param (`buildWsUrl` on the client) or cookies for socket auth
 Anthropic credentials are a separate concern entirely: the server implements no Anthropic auth;
 the SDK/CLI resolves credentials from the operator's environment. For services, set
 `ANTHROPIC_API_KEY` and consider `requireApiKey: true` to fail closed on subscription
-credentials — see [Auth & Anthropic's terms](/workerdeck/docs/guides/auth/).
+credentials — see [Auth & the providers' terms](/workerdeck/docs/guides/auth/).
 
 ## Clamp what clients may request
 

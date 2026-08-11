@@ -1,6 +1,11 @@
 /**
- * Pure URL logic for gateway hosts — the iOS `Host.apiURL` rules, ported.
- * Deliberately vscode-free so it loads (and smokes) outside the editor.
+ * Pure URL logic for gateway hosts — what an operator types, turned into the
+ * `baseUrl` a `WorkerDeckClient` takes.
+ *
+ * Here rather than in each client because there were already two copies (the iOS
+ * `Host.apiURL` and the VS Code extension's port) and a third was coming. Every
+ * host that lets someone type a gateway address has to normalize it the same
+ * way, or the same gateway saved on two devices is two gateways.
  */
 export type HostUrl = { baseUrl: string }
 
@@ -23,18 +28,22 @@ export function apiUrl(host: HostUrl): string | undefined {
 }
 
 /**
- * Whether this gateway is the machine the extension host runs on. Decided from
- * the URL, never by probing paths for existence — two checkouts of the same
- * repo would lie. In a Remote SSH window the extension host runs on the remote
- * box, so "loopback" correctly means *that* machine and transcript paths open
- * as real files there.
+ * Whether this gateway is the machine the caller runs on. Decided from the URL,
+ * never by probing paths for existence — two checkouts of the same repo would
+ * lie. In a remote development window the caller runs on the remote box, so
+ * "loopback" correctly means *that* machine and its paths are real files there.
  */
 export function isLoopbackHost(host: HostUrl): boolean {
   const api = apiUrl(host)
   if (!api) return false
   try {
     const { hostname } = new URL(api)
-    return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1' || hostname === '[::1]'
+    return (
+      hostname === '127.0.0.1' ||
+      hostname === 'localhost' ||
+      hostname === '::1' ||
+      hostname === '[::1]'
+    )
   } catch {
     return false
   }

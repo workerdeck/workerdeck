@@ -67,6 +67,9 @@ theme tokens — don't conflate them.
 | `app-icon-android-dark.svg` / `-light.svg` | Android adaptive-icon render (512 circle, glyph inside the 66/108 safe zone). |
 | `banner.html` | Source for the README/docs banner. |
 | `banner.png` | Rendered banner, 3200×1040. |
+| `card-{web,ios,vscode,embedded,server}.html` | Sources for the README "One server, four ways in" showcase cards. |
+| `card-{web,ios,vscode,embedded}.png` | Rendered client cards, 1600×1000 (shown ~230px wide — see the regen section). |
+| `card-server.png` | Rendered server slab, 2400×560, full README width. |
 | `claude-code.svg` | **Not ours.** Anthropic's Claude Code mark, in its own colour (`#D97757`). |
 
 `claude-code.svg` is here because a UI that reports a claude.ai plan's limits has
@@ -87,6 +90,11 @@ ships.
 - `apps/vscode/media/sidebar.svg` — the extension's activity-bar and panel icon
 - `apps/ios/App/Assets.xcassets/AppIcon.appiconset` — the iOS app icon (rendered PNGs, checked in)
 - `docs/assets/banner.html` → `banner.png` — the mark in the banner's badge
+- `docs/assets/card-server.html` → `card-server.png` — the mark on the README's server slab
+- `apps/docs/public/og.png` — **a copy of `banner.png`**, and the docs site's social card. It is
+  a copy rather than a build step because Astro serves `public/` verbatim and the banner lives
+  outside the app; re-copy it whenever the banner is re-rendered, or shared links will show the
+  old tagline long after the README stops.
 
 Keep all of these byte-identical in geometry to `icon.svg` — the mark has no
 per-surface variants besides stroke color (`currentColor` inline, adaptive in
@@ -106,6 +114,38 @@ the green back — you would only be writing a colour nobody ever sees.
   --disable-gpu --force-device-scale-factor=2 --window-size=1600,520 \
   --screenshot=docs/assets/banner.png "file://$PWD/docs/assets/banner.html"
 ```
+
+## The wordmark
+
+**`WorkerDeck`** — one word, two capitals, wherever the name is set as text: the docs site
+header, the README, a card. The banner's badge is the one deliberate exception, and it is a
+*badge* treatment rather than the wordmark: letterspaced mono uppercase (`WORKERDECK`), which
+reads as a label beside the mark rather than as the name itself. Lowercase `workerdeck` belongs
+only where it is literally an identifier — the npm package, a command, a URL.
+
+## Regenerating the README showcase cards
+
+Same recipe as the banner, one run per card. The four client cards are authored at
+800×500 and the server slab at 1200×280, both rendered at 2x:
+
+```sh
+C="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+for c in web ios vscode embedded; do
+  "$C" --headless=new --disable-gpu --force-device-scale-factor=2 --window-size=800,500 \
+    --screenshot=docs/assets/card-$c.png "file://$PWD/docs/assets/card-$c.html"
+done
+"$C" --headless=new --disable-gpu --force-device-scale-factor=2 --window-size=1200,280 \
+  --screenshot=docs/assets/card-server.png "file://$PWD/docs/assets/card-server.html"
+```
+
+The constraint that shaped them: in the README's 4-column table each client card
+renders ~230px wide, so the art is skeleton bars and silhouettes — few elements,
+one idea per card, and the only real words are the ones that survive the shrink
+("Allow"/"Deny", the panel tab, the package names on the slab, which renders near
+full width). Squint-test any change at ~230px before shipping it. Each card carries
+exactly one `#2fbf71` live signal (on the server slab it is the mark's own diamond);
+the VS Code card draws the mark monochrome because VS Code itself masks
+view-container icons to one colour (see "Where the mark is deployed").
 
 ## Regenerating the iOS app icon
 

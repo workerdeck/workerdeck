@@ -16,7 +16,17 @@ protocol. Read these before changing scope or structure:
   on nothing and everything depends on it. Breaking → bump `PROTOCOL_VERSION`. It also owns the
   few *rules* both sides must agree on rather than each guess: `transcriptActivity(event)` is
   the row-count rule the react reducer renders by and the runners count with
-  (`SessionInfo.activityCount`) — change one, change both.
+  (`SessionInfo.activityCount`) — change one, change both. Two more joined it, both lifted
+  out of the VS Code extension once a second client needed them: `session-list.ts` is the
+  **sessions-list view model** (the `attention/working/idle/ended` buckets, the
+  gateway/adapter/state facets, `filterRows`/`groupRows`/`subsetSummary`/`clearFilters`, and
+  the scope-containment rule where a gateway-tagged root scopes only that gateway and an
+  untagged one only loopback), and `watermarks.ts` is the **unread model** (monotonic marks
+  behind a `WatermarkStore` seam, and `unseenCount`'s rows-not-turns arithmetic). They are
+  rules, not preferences: the extension's activity-bar badge counts the *same* rows its list
+  shows, so a client that filtered differently would announce work it is hiding. Tests live
+  in `packages/react/test/session-list.test.ts` + `watermarks.test.ts` (protocol has no
+  vitest of its own); Swift mirrors in `WorkerDeckKit`.
 - `packages/core` — the engines, shipped as **adapters** (`src/engines/`): one `EngineAdapter`
   per engine (capability record pinned by identity to protocol's `ENGINE_CAPABILITIES`, a model
   catalog versioned with the release, a credential-availability probe, a runner factory), looked
@@ -85,6 +95,10 @@ protocol. Read these before changing scope or structure:
   the WS frame surface, so new frames need `SessionHandle` methods/events here. A refused REST
   call throws `WorkerDeckError` (an `Error` subclass carrying `status`), which is what lets a
   caller tell "this server has no such route" (404 — stop asking) from "that file was too big".
+  It also owns `apiUrl`/`isLoopbackHost` (`src/host-url.ts`): what an operator types turned into
+  a `baseUrl`, and whether that gateway is this machine — decided from the URL, never by probing
+  paths. Here because every host that lets someone type a gateway address must normalize it
+  identically, or the same gateway saved twice is two gateways.
 - `packages/react` — headless: `useClaudeSession`, the pure transcript reducer
   (`src/transcript.ts`, framework-free, unit-tested — keep rendering out), the recap counters
   behind catch-up (`src/recap.ts`: `summarizeSince` + `recapLine` — **counted, never written**;
@@ -163,7 +177,14 @@ protocol. Read these before changing scope or structure:
   reading, and the link state has to win the slot. The VS Code extension is the reference
   consumer of both. Pure formatters ship from a third entry (`@workerdeck/ui/format`) so a
   non-React host spells `45.2k` and `2h 10m` the same way the panel does, without pulling React
-  into an extension-host bundle.
+  into an extension-host bundle; `lib/status.ts` rides that entry too — `statusPresentation`
+  (connection outranks a stale status), the 80/95 `meterSeverity` thresholds, `tightestWindow`
+  and the lenient `[1m]`-stripping `currentModel`/`modelLabel` — typed structurally against
+  `SessionVitals` rather than importing it, so the React-free entry stays React-free.
+  `SessionBrowser` is the styled sessions list built on protocol's view model — search, facets,
+  grouping, the subset line, unread badges, inline rename — for a host that wants the
+  dashboard's look without reimplementing the rules; `SessionList` stays beside it for the
+  plain fixed-set case.
   `SessionWorkspace` is the VS Code-shaped layout *around* it (file rail, tabs, read-only viewer,
   hand-rolled `Splitter` — Base UI ships none) and is **strictly additive**: an embedder picks the
   panel or the workspace, and `SessionPanel` is untouched by it. It ships from a **second entry
@@ -193,9 +214,25 @@ protocol. Read these before changing scope or structure:
   config and not behind a hand-written Monaco entry because such an entry must also import two CSS
   files and monaco's exports map (`"./*": "./esm/vs/*.js"`) cannot resolve a `.css` subpath at all.
 - `packages/web` — dashboard (TanStack Router, hash history); create forms are engine-aware via
-  `src/lib/engine.ts`, reconciling sticky localStorage choices against the chosen profile. The
+  `src/lib/engine.ts`, reconciling sticky localStorage choices against the chosen profile, and
+  the session and job forms are **one** component now (`components/RunForm.tsx`: `useRunForm`
+  owns the state and builds the shared `CreateSessionRequest` half, `RunFormFields` renders it
+  with `extras`/`actions` slots). They had been two copies that already drifted; the one
+  difference that is real — an interactive session pre-authorizes `bypassPermissions` because
+  the operator is present, an unattended job makes it an opt-in — survives as a parameter rather
+  than being flattened away. The
   session runner is `@workerdeck/ui`'s `SessionWorkspace` — the dashboard adds only the header, so a
-  session feature belongs in `ui`/`react` and every embedder gets it too. Published
+  session feature belongs in `ui`/`react` and every embedder gets it too. The sessions list is
+  `SessionBrowser` over protocol's view model, with `useViewConfig` persisting the
+  filter/group/sort (minus `search`, which always starts empty, and `scoped`, which a dashboard
+  has no folders to mean anything against). Unread rides `useUnseen` — one module-scope
+  `Watermarks` over `localStorage`, because two hooks with two copies would each answer from
+  their own stale snapshot — and the session route both feeds it (`onVitals`, refusing while
+  `document.hidden`) and reads it once at mount for the panel's catch-up row. The registry poll
+  is adaptive (5s idle / 1.2s while anything is working or awaiting approval), re-armed on the
+  regime rather than per response. Rename is a gateway edit (`PATCH /sessions/:id`), reached
+  from the row's pencil rather than the extension's double-click: here a single click
+  navigates, so the first click of a double-click would already have left the page. Published
   as prebuilt static files with **zero runtime deps** — React/router/Tailwind are compiled into
   `dist/`, so every one of them is a devDep; the entry (`entry.mjs`, hand-written, never bundled) is
   a path to `dist/`, not a component. Two constraints are baked in at build time: no vite `base`, so
@@ -309,9 +346,24 @@ protocol. Read these before changing scope or structure:
   package.json). `WorkerDeckKit/` is a hand-written Swift mirror of `packages/protocol` plus a
   client and a port of the react transcript reducer — protocol or transcript changes must be
   mirrored there (`WorkerProtocol.version` tracks `PROTOCOL_VERSION`); see `apps/ios/README.md`.
+  `SessionList.swift` and `Watermarks.swift` are two more such mirrors — protocol's sessions-list
+  view model and unread model — so the phone's list is **one list across every configured
+  gateway**, gateway as a facet rather than the frame, with search/facets/group/sort, the subset
+  line, per-row unread and the app-icon badge summed over the rows the filter is *showing*. The
+  scope filter is passed `nil` throughout: a phone has no open folders, so it is genuinely inert
+  rather than hiding everything, and no fake scope is invented to fill the hole. Marks are only
+  written while a session is on screen *and attached*, with a re-fetch-and-mark on disappear —
+  the same discipline as the extension's `visibilityChanged`, and the thing an unread badge
+  silently dies of if you skip it. Rename is `PATCH /sessions/:id` (`UpdateSessionRequest`'s
+  title is three-state on the wire — set, explicit null to clear, absent to leave alone — so it
+  is a wrapper enum, not a `String?` that would collapse the last two).
   Zero third-party Swift deps — including for hot reload, where InjectionNext is wired in
   through its prebuilt bundle and a dozen lines of `HotReload.swift` rather than a package;
-  auth is the header transport (no cookie machinery).
+  auth is the header transport (no cookie machinery). Assistant text renders through
+  `MarkdownBlocks` (headings, lists, quotes, rules, fences; tables stay literal, and anything
+  unmodelled falls through as prose rather than being lost) — the classifier is **line-local by
+  design**, because the parser reruns on every streamed delta and a block that changed shape a
+  token after it appeared would be worse than one that never rendered.
   **When you change the app, push it to the phone**: `apps/ios/scripts/deploy.sh` (build +
   install + launch, over Wi-Fi, no cable) — the point is that Tobias can follow along on the real
   device rather than read about a simulator screenshot. Add `--no-launch` and it works on a
@@ -326,6 +378,13 @@ core/server, the Agent SDK, or any model SDK; `client` must never devDep on `rea
 the build-graph cycle turbo refuses.
 
 ## Tooling
+
+**Always `roam index --force` before reading roam's output.** It takes ~4s on this repo (493
+files, 4.8k symbols), and a stale index is worse than none: it reports metrics against a tree
+that no longer exists, and the alerts read as findings about your change when they predate it.
+One caveat when you do read it — this is a library monorepo, so a package's *public* exports
+have no in-repo caller and roam scores them as `dead_exports`. That number is not a defect
+count.
 
 pnpm workspace + turbo (`pnpm typecheck|test|build|lint`); typecheck is `tsgo` (TS 7 preview) and
 covers `smoke/` + `examples/` too via `typecheck:extras` (they have tsconfigs but aren't packages,
@@ -359,14 +418,21 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   (protocol **7** + the codex engine + the session-runner parity work; it absorbed the
   never-published 0.8.0). 0.10.0 added codex skills and generated images, the codex MCP panel and
   the session workspace. 0.11.0 published the VS Code extension, the session rename, the
-  terminal transcript (virtualized, keyboard-first prompts) and the Iso Deck mark. **0.12.0 is
-  tagged** — the extension's navigation rebuilt around "no webview draws its own header and no
-  view has screens" (native QuickPick create/resume, Gateways as its own view, a title-bar filter
-  toggle), plus transcript density and the brand pulse in `ui`; protocol stays **7**. The bump now
+  terminal transcript (virtualized, keyboard-first prompts) and the Iso Deck mark. **0.12.0** — the
+  extension's navigation rebuilt around "no webview draws its own header and no view has
+  screens" (native QuickPick create/resume, Gateways as its own view, a title-bar filter
+  toggle), transcript density and the brand pulse in `ui`, the cross-client parity work (the
+  sessions-list view model and unread model lifted into `protocol`, then taken to the dashboard
+  and iOS), and the branding pass that retired "Claude Code sessions" for **coding agent
+  sessions**; protocol stays **7**. The bump now
   covers `apps/vscode` too — `version:set` filtered `./packages/*` only, which is how the `.vsix`
-  came to report 0.10.0 against 0.11.0 packages. Always check `git log v<latest>..HEAD` before
-  assuming the number in `package.json` is unreleased — 0.9.0 sat on master for 15 commits
-  *after* it had shipped.
+  came to report 0.10.0 against 0.11.0 packages.
+
+  **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
+  and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`
+  land *above* `v0.5.0` and a `| tail` reads the newest tags as the oldest. 0.12.0 had a local
+  tag nobody had pushed, so npm's latest was still 0.11.0 while this file claimed it shipped. `git log v<latest>..HEAD` is the other half of the same
+  habit — 0.9.0 sat on master for 15 commits *after* it had shipped.
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees

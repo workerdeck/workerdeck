@@ -9,7 +9,7 @@ import { SectionViewProvider, type SectionKind } from './section-view.ts'
 import { WorkerdeckFileSystem } from './fsp.ts'
 import { startDevReload } from './dev-reload.ts'
 import { SessionStatusBar, currentModel, modelLabel } from './status-bar.ts'
-import { Watermarks } from './watermarks.ts'
+import { createWatermarks } from './watermarks.ts'
 import { createSession, resumeSession, type NewSessionDeps } from './new-session.ts'
 
 /** Section view ids — each its OWN view, so VS Code owns collapse/placement. */
@@ -30,7 +30,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // readings while its first snapshot is still in flight.
   let vitals: SessionVitals | undefined
   const statusBar = new SessionStatusBar()
-  const watermarks = new Watermarks(context)
+  const watermarks = createWatermarks(context)
 
   /**
    * Record what is on screen as read — but only while it really is on screen.

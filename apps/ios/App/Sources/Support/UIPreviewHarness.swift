@@ -27,6 +27,7 @@ enum UIPreview: String {
   case empty
   case addMedia
   case mcp
+  case markdown
 
   static var active: UIPreview? {
     ProcessInfo.processInfo.environment["UIPREVIEW"].flatMap(UIPreview.init(rawValue:))
@@ -187,6 +188,46 @@ struct UIPreviewHarness: View {
       McpServersView(
         load: { Self.mcpServers },
         act: { _, _ in Self.mcpServers })
+    case .markdown:
+      // Every block type on one screen, plus the two streaming frontiers that
+      // matter (an open fence, a bare bullet) — the shapes a turn passes
+      // through while the model is still typing.
+      ScrollView {
+        MarkdownText(
+          text: """
+            ## Block rendering
+
+            Plain prose with **bold**, `a span`, and a [link](https://example.com), \
+            plus an @file token and a /command one.
+
+            ### The plan
+
+            1. Read `MarkdownBlocks.swift`
+            2. Extend the parser
+               - keep fences working
+               - keep prose as the fallback
+            3. Render it
+
+            > Streaming is the design constraint — a block must render in its
+            > final shape from its first character.
+
+            ---
+
+            | a | b |
+            |---|---|
+            | tables | stay literal |
+
+            ```swift
+            let x = 1
+            ```
+
+            - a bullet still arriving:
+            -
+            ```ts
+            const streaming = true
+            """)
+          .padding()
+      }
     case .folders:
       let root = "/Users/you/projects"
       FolderPickerView(

@@ -1,6 +1,6 @@
 ---
 title: Profiles
-description: What a session runs as — a named Claude Code config directory, or a model provider for the model-agnostic engine.
+description: What a session runs as — which engine, whose config directory, and which model.
 order: 5
 ---
 
@@ -180,7 +180,7 @@ session and job creation (403 otherwise) and filters `GET /profiles` to it, so p
 show what the caller may use. On a multi-operator machine this scoping is what keeps one worker
 serving several people from degrading into account sharing — give each caller their own
 profile(s) rather than a free choice. See
-[Auth & Anthropic's terms](/workerdeck/docs/guides/auth/) for why that line matters.
+[Auth & the providers' terms](/workerdeck/docs/guides/auth/) for why that line matters.
 
 ## Credentials
 

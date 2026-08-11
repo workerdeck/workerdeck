@@ -1635,3 +1635,6 @@ export type CreateJobResponse = { job: JobInfo }
 export type GetJobResponse = { job: JobInfo }
 export type ListJobsResponse = { jobs: JobInfo[] }
 export type QueueStatsResponse = { stats: QueueStats }
+
+export * from './session-list.ts'
+export * from './watermarks.ts'

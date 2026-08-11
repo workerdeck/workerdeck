@@ -8,83 +8,30 @@
 // how full is the window, how much plan is left) and each has its own section
 // view to focus. One item would mean one click target for three destinations.
 import * as vscode from 'vscode'
-import type { ContextUsage, ModelOption, RateLimitInfo, SessionStatus } from '@workerdeck/protocol'
+import type { ContextUsage, RateLimitInfo } from '@workerdeck/protocol'
 import type { SessionVitals } from '@workerdeck/ui'
-import { formatCost, formatCountdown, formatTokens } from '@workerdeck/ui/format'
+import {
+  currentModel,
+  formatCost,
+  formatCountdown,
+  formatTokens,
+  meterSeverity,
+  modelLabel,
+  statusPresentation,
+  tightestWindow,
+  windowLabel,
+} from '@workerdeck/ui/format'
+import type { StatusSeverity } from '@workerdeck/ui/format'
 
-/** What the status item shows, before VS Code types get involved — pure, so the
- * mapping is readable in one place and testable without a window. */
-export type StatusPresentation = {
-  icon: string
-  label: string
-  /** Drives the item background. `none` leaves it in the bar's own colour. */
-  severity: 'none' | 'warning' | 'error'
-}
+// The status *presentation* rules — which icon and severity a status wears,
+// where the 80/95 meter thresholds sit, which rate-limit window is the binding
+// one, and the lenient model match — moved to `@workerdeck/ui/format`. Every
+// surface that draws a session's readings has to agree on them, and this bar is
+// only one of them. Re-exported because the QuickPick commands read them too.
+export { currentModel, meterSeverity, modelLabel, statusPresentation, tightestWindow }
+export type { StatusPresentation } from '@workerdeck/ui/format'
 
-const STATUS_META: Record<SessionStatus, StatusPresentation> = {
-  starting: { icon: 'loading~spin', label: 'Starting', severity: 'none' },
-  running: { icon: 'loading~spin', label: 'Running', severity: 'none' },
-  awaiting_approval: { icon: 'warning', label: 'Needs approval', severity: 'warning' },
-  idle: { icon: 'check', label: 'Idle', severity: 'none' },
-  parked: { icon: 'debug-pause', label: 'Parked', severity: 'none' },
-  failed: { icon: 'error', label: 'Failed', severity: 'error' },
-  closed: { icon: 'circle-slash', label: 'Closed', severity: 'none' },
-}
-
-/**
- * The status slot, connection first. A session status held over a dead socket is
- * the last thing we heard, not the current state — so a lost link takes the slot
- * rather than letting "Running" imply a turn is still streaming. Same rule the
- * panel's own bar follows.
- */
-export function statusPresentation(vitals: SessionVitals | undefined): StatusPresentation {
-  if (!vitals) return { icon: 'hubot', label: 'Connecting…', severity: 'none' }
-  if (vitals.connection === 'offline') {
-    return { icon: 'debug-disconnect', label: 'Offline', severity: 'error' }
-  }
-  if (vitals.connection === 'reconnecting') {
-    return { icon: 'sync~spin', label: 'Reconnecting…', severity: 'warning' }
-  }
-  return STATUS_META[vitals.status] ?? { icon: 'hubot', label: vitals.status, severity: 'none' }
-}
-
-/** 0–100 → the colour a meter wears. Mirrors the panel's 80/95 thresholds. */
-export function meterSeverity(pct: number | undefined): 'none' | 'warning' | 'error' {
-  if (pct === undefined) return 'none'
-  if (pct >= 95) return 'error'
-  if (pct >= 80) return 'warning'
-  return 'none'
-}
-
-/** The rate-limit window that gets the one visible slot: whichever is fullest,
- * since the binding constraint is the one worth glancing at. */
-export function tightestWindow(
-  rateLimits: Record<string, RateLimitInfo> | undefined,
-): { key: string; info: RateLimitInfo } | undefined {
-  const entries = Object.entries(rateLimits ?? {})
-  if (entries.length === 0) return undefined
-  let best: { key: string; info: RateLimitInfo } | undefined
-  for (const [key, info] of entries) {
-    // A rejected window outranks any utilization: it is the one actually blocking.
-    const rank = info.status === 'rejected' ? Number.POSITIVE_INFINITY : (info.utilization ?? -1)
-    const bestRank =
-      best === undefined
-        ? Number.NEGATIVE_INFINITY
-        : best.info.status === 'rejected'
-          ? Number.POSITIVE_INFINITY
-          : (best.info.utilization ?? -1)
-    if (rank > bestRank) best = { key, info }
-  }
-  return best
-}
-
-function windowLabel(key: string): string {
-  if (key === 'five_hour') return 'Session'
-  if (key === 'seven_day') return 'Weekly'
-  return key.replaceAll('_', ' ')
-}
-
-function severityBackground(severity: 'none' | 'warning' | 'error'): vscode.ThemeColor | undefined {
+function severityBackground(severity: StatusSeverity): vscode.ThemeColor | undefined {
   if (severity === 'warning') return new vscode.ThemeColor('statusBarItem.warningBackground')
   if (severity === 'error') return new vscode.ThemeColor('statusBarItem.errorBackground')
   return undefined
@@ -293,26 +240,3 @@ export class SessionStatusBar implements vscode.Disposable {
   }
 }
 
-/**
- * The catalog row the session is actually running, or `undefined` for a model
- * the list doesn't name. Matched leniently, the way the panel's own picker does
- * it: a session reports the *resolved* id (`claude-sonnet-5`) where the row may
- * be keyed on the alias (`sonnet`), and either can carry a `[1m]` context-window
- * suffix.
- */
-export function currentModel(vitals: SessionVitals | undefined): ModelOption | undefined {
-  const id = vitals?.model
-  if (!id) return undefined
-  const bare = (value: string) => value.replace(/\[.*\]$/, '')
-  const wanted = bare(id)
-  return vitals.models.find(
-    (m) => bare(m.value) === wanted || (m.resolvedModel && bare(m.resolvedModel) === wanted),
-  )
-}
-
-/** The session's model, named the way the picker names it. Falls back to the
- * raw id, and to "Default" while the session is on the CLI's own pick. */
-export function modelLabel(vitals: SessionVitals | undefined): string {
-  if (!vitals?.model) return 'Default'
-  return currentModel(vitals)?.displayName ?? vitals.model
-}

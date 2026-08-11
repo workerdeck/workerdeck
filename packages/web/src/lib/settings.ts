@@ -58,3 +58,45 @@ export function getDefaultPermissionMode(kind: DefaultsKind): PermissionMode {
 export function setDefaultPermissionMode(kind: DefaultsKind, mode: PermissionMode): void {
   localStorage.setItem(PERMISSION_MODE_KEYS[kind], mode)
 }
+
+/**
+ * Transcript density — how much air a session's rows get.
+ *
+ * A reader's preference, not a consequence of the surface: `comfortable` is what
+ * the Claude Code CLI leaves (one blank line between rows), `compact` is for a
+ * screen where vertical space is the scarce resource. Separate from the
+ * transcript *variant* (boxed cards vs terminal lines) on purpose — the variant
+ * follows from the surface, this follows from the person.
+ */
+export type TranscriptDensity = 'comfortable' | 'compact'
+
+const DENSITY_KEY = 'workerdeck.transcript-density'
+
+export function getTranscriptDensity(): TranscriptDensity {
+  return localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable'
+}
+
+export function setTranscriptDensity(density: TranscriptDensity): void {
+  localStorage.setItem(DENSITY_KEY, density)
+}
+
+/**
+ * Transcript variant — whether a session reads as chat or as a terminal.
+ *
+ * `cards` is the chat convention and the dashboard's default; `lines` is
+ * full-width transparent rows behind a fixed gutter glyph, no boxes, which is
+ * what the VS Code panel wears. Independent of density on purpose: the variant
+ * is the *shape* of a row, density is how much air it gets, and someone may well
+ * want terminal rows with room to breathe.
+ */
+export type TranscriptVariant = 'cards' | 'lines'
+
+const VARIANT_KEY = 'workerdeck.transcript-variant'
+
+export function getTranscriptVariant(): TranscriptVariant {
+  return localStorage.getItem(VARIANT_KEY) === 'lines' ? 'lines' : 'cards'
+}
+
+export function setTranscriptVariant(variant: TranscriptVariant): void {
+  localStorage.setItem(VARIANT_KEY, variant)
+}

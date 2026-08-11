@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-export { apiUrl, isLoopbackHost } from './host-url.ts'
+export { apiUrl, isLoopbackHost } from '@workerdeck/client'
 
 /**
  * A workerdeck gateway this window can drive — the iOS `Host` model, ported.
