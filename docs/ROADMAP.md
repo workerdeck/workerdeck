@@ -1,10 +1,10 @@
 # Roadmap & open questions
 
-What's shipped, what's next, and what's still undecided. Status as of 2026-08-10: **0.10.0** on
-master (codex skills and generated images, the codex MCP panel, the session workspace and its
-Monaco editor — protocol stays 7), tagged but not yet pushed; **0.9.0** is the latest published.
-The session rename (`PATCH /sessions/:id`) and the VS Code extension land after that tag and are
-unreleased.
+What's shipped, what's next, and what's still undecided. Status as of 2026-08-11: **0.11.0** on
+master and published — the VS Code extension, the session rename (`PATCH /sessions/:id`), the
+terminal transcript variant with a virtualized scroller and keyboard-first prompts, and the Iso
+Deck mark. Protocol stays **7**; 0.10.0 (codex skills and generated images, the codex MCP panel,
+the session workspace and its Monaco editor) shipped before it.
 
 ## Shipped
 
