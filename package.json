@@ -14,7 +14,7 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck && pnpm typecheck:extras",
     "typecheck:extras": "tsgo -p smoke/tsconfig.json && tsgo -p examples/tsconfig.json",
-    "version:set": "pnpm --filter \"./packages/*\" exec npm version --no-git-tag-version --force",
+    "version:set": "pnpm --filter \"./packages/*\" --filter \"./apps/vscode\" exec npm version --no-git-tag-version --force",
     "publish:all": "pnpm publish -r --access public",
     "test": "turbo run test",
     "lint": "oxlint",

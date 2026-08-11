@@ -1,6 +1,6 @@
 {
   "name": "@workerdeck/sandbox",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "type": "module",
   "description": "The WorkerDeck execution sandbox: QuickJS-NG-in-WASM guest for untrusted, LLM-generated scripts with an in-memory scratch VFS, a hardened by-value host bridge (capability host functions only — no ambient fs/network), and interpreter-enforced memory + wall-clock limits. Engine-variant-injected so server (Node asyncify) and browser (singlefile asyncify) share one guest engine. Leaf package: depends on neither core/server nor any model SDK.",
   "license": "MIT",

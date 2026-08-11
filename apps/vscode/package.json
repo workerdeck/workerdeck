@@ -1,7 +1,7 @@
 {
   "name": "workerdeck-vscode",
   "displayName": "WorkerDeck",
-  "version": "0.10.0",
+  "version": "0.12.0",
   "description": "Watch, steer, and approve WorkerDeck agent sessions from VS Code: sessions in the bottom panel, gateways in the sidebar, remote projects as a virtual workspace.",
   "publisher": "workerdeck",
   "private": true,
@@ -232,7 +232,7 @@
             "sans"
           ],
           "enumDescriptions": [
-            "The editor font (monospace) \u2014 matches the terminal and the code around it.",
+            "The editor font (monospace) — matches the terminal and the code around it.",
             "VS Code's UI font, like every other view."
           ],
           "default": "editor",
@@ -246,7 +246,7 @@
           ],
           "enumDescriptions": [
             "A blank line between messages, like the Claude Code CLI.",
-            "No blank line \u2014 every row tight against the next."
+            "No blank line — every row tight against the next."
           ],
           "default": "comfortable",
           "description": "Vertical spacing between messages in the WorkerDeck agent panel."

@@ -355,13 +355,18 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
 - test: `pnpm test`
 - push: yes — branch `master`, repo is public, and every push deploys the docs site.
 - version_bump: yes — `pnpm version:set <x.y.z> && pnpm install --lockfile-only` (the 10 packages
-  only; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.9.0 is published
+  plus `apps/vscode`; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.9.0 is published
   (protocol **7** + the codex engine + the session-runner parity work; it absorbed the
   never-published 0.8.0). 0.10.0 added codex skills and generated images, the codex MCP panel and
-  the session workspace. **0.11.0 is published** — the VS Code extension, the session rename, the
-  terminal transcript (virtualized, keyboard-first prompts) and the Iso Deck mark; protocol stays
-  **7**. Always check `git log v<latest>..HEAD` before assuming the number in `package.json`
-  is unreleased — 0.9.0 sat on master for 15 commits *after* it had shipped.
+  the session workspace. 0.11.0 published the VS Code extension, the session rename, the
+  terminal transcript (virtualized, keyboard-first prompts) and the Iso Deck mark. **0.12.0 is
+  tagged** — the extension's navigation rebuilt around "no webview draws its own header and no
+  view has screens" (native QuickPick create/resume, Gateways as its own view, a title-bar filter
+  toggle), plus transcript density and the brand pulse in `ui`; protocol stays **7**. The bump now
+  covers `apps/vscode` too — `version:set` filtered `./packages/*` only, which is how the `.vsix`
+  came to report 0.10.0 against 0.11.0 packages. Always check `git log v<latest>..HEAD` before
+  assuming the number in `package.json` is unreleased — 0.9.0 sat on master for 15 commits
+  *after* it had shipped.
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
