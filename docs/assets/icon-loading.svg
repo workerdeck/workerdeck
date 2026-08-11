@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#525252" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <style>
+    @media (prefers-color-scheme: dark) { svg { stroke: #d4d4d4; } }
+
+    /* ONE active layer, which persists and MOVES, rather than three that blink.
+       It is always the uncovered top of the stack, so it is always drawn as the
+       full rhombus and always carries the marker; the layers it leaves behind
+       fade in underneath as front edges, because something now covers them.
+
+       3.6s round, authored at the top-face position so translateY(0) IS the
+       resting mark:
+
+         0.0s  hold at level 1            translateY(8.75)
+         0.4s  glide up to level 2        translateY(4.5)
+         0.8s  level 1 fades in behind
+         1.0s  glide up to level 3        translateY(0)
+         1.4s  level 2 fades in behind    → the whole logo, held for a second
+         2.6s  level 1 fades out
+         2.75s level 2 fades out
+         2.9s  glide back down to level 1 → initial state */
+
+    .active { animation: wd-active 3.6s linear infinite; }
+
+    @keyframes wd-active {
+      0%,     11.11% { transform: translateY(8.75px); animation-timing-function: cubic-bezier(.65, 0, .35, 1); }
+      22.22%, 27.78% { transform: translateY(4.5px);  animation-timing-function: cubic-bezier(.65, 0, .35, 1); }
+      38.89%, 80.56% { transform: translateY(0);      animation-timing-function: cubic-bezier(.65, 0, .35, 1); }
+      100%           { transform: translateY(8.75px); }
+    }
+
+    /* The layers left behind. Fading in is the *arrival* of the one above, so
+       each starts exactly when the glide that covers it finishes. */
+    .back { opacity: 0; animation-duration: 3.6s; animation-timing-function: linear; animation-iteration-count: infinite; }
+    .back-1 { animation-name: wd-back-1; }
+    .back-2 { animation-name: wd-back-2; }
+
+    @keyframes wd-back-1 {
+      0%,     22.22% { opacity: 0; }
+      27.78%, 72.22% { opacity: 0.28; }
+      76.39%, 100%   { opacity: 0; }
+    }
+    @keyframes wd-back-2 {
+      0%,     38.89% { opacity: 0; }
+      44.44%, 76.39% { opacity: 0.28; }
+      80.56%, 100%   { opacity: 0; }
+    }
+
+    /* The marker pulses on its own 0.6s clock — six clean runs per round, so it
+       never lands mid-state at the loop boundary. Four states from two shapes:
+       an inner pip (⋄, and the pip inside ◈) and an outer diamond that is either
+       stroked (◇, ◈) or filled (◆). */
+    .d { animation-duration: 0.6s; animation-timing-function: linear; animation-iteration-count: infinite; }
+    .pip   { fill: #2fbf71; stroke: none; animation-name: wd-pip; }
+    .frame { fill: none; stroke: #2fbf71; stroke-width: 0.9; animation-name: wd-frame; }
+    .fill  { fill: #2fbf71; stroke: none; animation-name: wd-fill; }
+
+    @keyframes wd-pip {
+      0%,   24.99% { opacity: 1; }   /* ⋄ */
+      25%,  49.99% { opacity: 0; }   /* ◇ */
+      50%,  74.99% { opacity: 1; }   /* ◈ */
+      75%,  100%   { opacity: 0; }   /* ◆ */
+    }
+    @keyframes wd-frame {
+      0%,   24.99% { opacity: 0; }
+      25%,  74.99% { opacity: 1; }
+      75%,  100%   { opacity: 0; }
+    }
+    @keyframes wd-fill {
+      0%,   74.99% { opacity: 0; }
+      75%,  100%   { opacity: 1; }
+    }
+
+    /* Reduced motion is the resting mark: the built deck, full diamond on top. */
+    @media (prefers-reduced-motion: reduce) {
+      .active { animation: none; transform: none; }
+      .back { animation: none; opacity: 0.28; }
+      .pip, .frame { animation: none; opacity: 0; }
+      .fill { animation: none; opacity: 1; }
+    }
+  </style>
+
+  <!-- Left behind, drawn under the active layer. -->
+  <path class="back back-1" d="M3.5 16.5 12 21.25l8.5-4.75" />
+  <path class="back back-2" d="M3.5 12.25 12 17l8.5-4.75" />
+
+  <!-- The one layer that persists: full rhombus plus the marker, authored at the
+       top-face plane (y=7.75) and translated down to reach the lower ones. -->
+  <g class="active">
+    <path d="M12 3 20.5 7.75 12 12.5 3.5 7.75Z" />
+    <path class="d pip"   d="M12 7.02 13.3 7.75 12 8.48 10.7 7.75Z" />
+    <path class="d frame" d="M12 6.15 14.85 7.75 12 9.35 9.15 7.75Z" />
+    <path class="d fill"  d="M12 6.15 14.85 7.75 12 9.35 9.15 7.75Z" />
+  </g>
+</svg>
