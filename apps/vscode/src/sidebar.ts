@@ -1,7 +1,5 @@
 import * as vscode from 'vscode'
-import { randomUUID } from 'node:crypto'
 import type { HostStore } from './hosts.ts'
-import { apiUrl } from './hosts.ts'
 import { clientFor } from './gateway.ts'
 import { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
@@ -12,23 +10,44 @@ import { webviewHtml } from './webview-html.ts'
 /** The webview's own filter, mirrored here for the badge (see `wd-view-config`). */
 const VIEW_CONFIG_KEY = 'workerdeck.viewConfig.v1'
 
+/**
+ * Whether the search-and-filter bar is showing, as a `when`-clause key.
+ *
+ * A view-title toggle whose icon has to differ open vs. closed is really two
+ * commands with opposite `when` clauses — VS Code has no stateful title button
+ * — so the state has to be a context key, which means the host owns it and the
+ * webview is told. Persisted per window: a filter you opened should still be
+ * open when you come back to it.
+ */
+export const FILTER_CONTEXT_KEY = 'workerdeck.sessionsFilterOpen'
+const FILTER_OPEN_KEY = 'workerdeck.filterOpen.v1'
+
 export type SidebarDelegate = {
   /** A session was chosen — show it in the agent panel. */
   selectSession: (hostId: string, sessionId: string) => Promise<void>
   /** The active session was deleted out from under the panel. */
   clearPanelIfActive: (sessionId: string) => Promise<void>
   activeSessionId: () => string | undefined
+  /** Reveal the Gateways view — its own view now, so the list can only ask. */
+  revealGateways: (options: { add?: boolean }) => Promise<void>
 }
 
 /**
- * The Sessions webview: management and switching — gateway dropdown, session
- * cards, push-screen forms. The scoped Info/Context/Usage/MCP surfaces are
- * SEPARATE views (`SectionViewProvider`), so VS Code owns their headers,
- * collapse and placement. Data flows one way — the extension host pushes
- * `wd-sidebar-state` on every model change — while actions flow back as
- * intents. The sidebar runs its own bridged `WorkerDeckClient` for form REST
- * (profiles, create) but NEVER attaches: the agent panel owns the one live
- * attach per session.
+ * The Sessions webview: the session list, and the one form it needs (new
+ * session). Gateways and the scoped Info/Context/Usage/MCP surfaces are their
+ * own views, so VS Code owns their headers, collapse and placement.
+ *
+ * **The view has no screens.** Creating a session is a native QuickPick and
+ * gateways are their own view, so this webview is a list and nothing else —
+ * there is no title to retitle, no back chevron to contribute, and nowhere to be
+ * stranded. What this provider does own is the one piece of chrome VS Code will
+ * only accept from the extension host: the filter toggle, whose two icons are
+ * two commands gated on `FILTER_CONTEXT_KEY`.
+ *
+ * Data flows one way (the host pushes `wd-sidebar-state` on every model change)
+ * while actions flow back as intents. The sidebar runs its own bridged
+ * `WorkerDeckClient` for form REST (profiles, create) but NEVER attaches: the
+ * agent panel owns the one live attach per session.
  */
 export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewId = 'workerdeck.sessions'
@@ -41,8 +60,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
   #ready = false
   #htmlVersion = 0
   #transports: WebviewTransportHost | undefined
-  /** Queued while the view is closed; delivered on wd-ready. */
-  #pendingNavigate: Extract<HostToSidebar, { kind: 'wd-navigate' }> | undefined
+  /** Whether the filter bar is showing — this side's, because the toggle is a
+   * native title action. Persisted; pushed to the webview on every change. */
+  #filterOpen = false
   readonly #context: vscode.ExtensionContext
   /**
    * The list's filter, as last reported by the webview — a *copy*, for counting
@@ -68,6 +88,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
       ...DEFAULT_VIEW_CONFIG,
       ...context.globalState.get<ViewConfig>(VIEW_CONFIG_KEY),
     }
+    // Seeds the context key too, so the title bar shows the right one of the
+    // two toggle icons before the view is ever opened.
+    this.setFilterOpen(context.globalState.get<boolean>(FILTER_OPEN_KEY) ?? false)
     model.onDidChange(() => this.#pushState())
   }
 
@@ -81,17 +104,35 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     view.webview.options = { enableScripts: true, localResourceRoots: [dist] }
     view.webview.html = webviewHtml(view.webview, dist, 'sidebar.js')
     view.webview.onDidReceiveMessage((msg: SidebarToHost) => void this.#onMessage(msg))
-    view.onDidChangeVisibility(() => {
-      if (view.visible) this.#model.startPolling()
-      else this.#model.stopPolling()
-    })
-    if (view.visible) this.#model.startPolling()
+    view.onDidChangeVisibility(() =>
+      this.#model.setWatching(SidebarProvider.viewId, view.visible),
+    )
+    this.#model.setWatching(SidebarProvider.viewId, view.visible)
     view.onDidDispose(() => {
       this.#view = undefined
       this.#ready = false
       this.#transports?.dispose()
-      this.#model.stopPolling()
+      this.#model.setWatching(SidebarProvider.viewId, false)
     })
+  }
+
+  /**
+   * Show or hide the search-and-filter bar — the view title's toggle.
+   *
+   * Closing it does NOT clear the filters. That is deliberate and is why the
+   * subset line under the bar is unconditional: hiding the controls must not
+   * silently change what the list shows, and the list must keep saying that it
+   * is showing a subset once the thing doing it is off screen.
+   */
+  setFilterOpen(open: boolean): void {
+    this.#filterOpen = open
+    void this.#context.globalState.update(FILTER_OPEN_KEY, open)
+    void vscode.commands.executeCommand('setContext', FILTER_CONTEXT_KEY, open)
+    this.#post({ kind: 'wd-filter-open', open })
+  }
+
+  toggleFilter(): void {
+    this.setFilterOpen(!this.#filterOpen)
   }
 
   #post(msg: HostToSidebar): void {
@@ -142,26 +183,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     this.#view.badge = rows > 0 ? { value: rows, tooltip } : undefined
   }
 
-  /** Reveal the sidebar and push a screen (commands, tree-parity actions). */
-  async navigate(msg: Extract<HostToSidebar, { kind: 'wd-navigate' }>): Promise<void> {
-    this.#pendingNavigate = msg
-    await vscode.commands.executeCommand(`${SidebarProvider.viewId}.focus`)
-    if (this.#ready) {
-      this.#post(msg)
-      this.#pendingNavigate = undefined
-    }
-  }
-
   async #onMessage(msg: SidebarToHost): Promise<void> {
     if (await this.#transports?.handle(msg)) return
     switch (msg.kind) {
       case 'wd-ready':
         this.#ready = true
         this.#pushState()
-        if (this.#pendingNavigate) {
-          this.#post(this.#pendingNavigate)
-          this.#pendingNavigate = undefined
-        }
+        // The webview boots with the bar closed and learns otherwise from here
+        // — it cannot read a context key.
+        this.#post({ kind: 'wd-filter-open', open: this.#filterOpen })
+        return
+      case 'wd-reveal-gateways':
+        await this.#delegate.revealGateways({ add: msg.add })
         return
       case 'wd-view-config':
         // The badge counts what the list shows. Persisted so a fresh window
@@ -170,14 +203,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
         void this.#context.globalState.update(VIEW_CONFIG_KEY, msg.config)
         this.#pushState()
         return
-      case 'wd-refresh':
-        await this.#model.refresh()
-        return
       case 'wd-select-session':
-        await this.#delegate.selectSession(msg.hostId, msg.sessionId)
-        return
-      case 'wd-session-created':
-        await this.#model.refresh()
         await this.#delegate.selectSession(msg.hostId, msg.sessionId)
         return
       case 'wd-stop-session':
@@ -186,25 +212,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
         return this.#renameSession(msg.hostId, msg.sessionId, msg.title)
       case 'wd-delete-session':
         return this.#deleteSession(msg.hostId, msg.sessionId)
-      case 'wd-submit-gateway':
-        return this.#submitGateway(msg)
-      case 'wd-edit-gateway': {
-        const host = this.#store.get(msg.hostId)
-        if (!host) return
-        await this.navigate({
-          kind: 'wd-navigate',
-          screen: 'gateway',
-          gateway: {
-            id: host.id,
-            name: host.name,
-            baseUrl: host.baseUrl,
-            authKey: (await this.#store.authKey(host.id)) ?? '',
-          },
-        })
-        return
-      }
-      case 'wd-remove-gateway':
-        return this.#removeGateway(msg.hostId)
     }
   }
 
@@ -276,36 +283,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     await this.#delegate.clearPanelIfActive(sessionId)
     await this.#model.refresh()
   }
-
-  async #submitGateway(msg: Extract<SidebarToHost, { kind: 'wd-submit-gateway' }>): Promise<void> {
-    if (!apiUrl({ baseUrl: msg.baseUrl })) {
-      this.#post({ kind: 'wd-form-result', ok: false, error: 'not a valid gateway URL' })
-      return
-    }
-    if (!msg.name.trim()) {
-      this.#post({ kind: 'wd-form-result', ok: false, error: 'name is required' })
-      return
-    }
-    const id = msg.id || randomUUID()
-    await this.#store.save(
-      { id, name: msg.name.trim(), baseUrl: msg.baseUrl.trim() },
-      msg.authKey.trim() || undefined,
-    )
-    this.#post({ kind: 'wd-form-result', ok: true })
-    await this.#model.refresh()
-  }
-
-  async #removeGateway(hostId: string): Promise<void> {
-    const host = this.#store.get(hostId)
-    if (!host) return
-    const confirmed = await vscode.window.showWarningMessage(
-      `Remove gateway "${host.name}"? Its auth key is deleted from the keychain.`,
-      { modal: true },
-      'Remove',
-    )
-    if (confirmed === 'Remove') await this.#store.remove(hostId)
-  }
-
 
   /** Re-render this webview from disk — the dev reloader after a rebuild, and
    * a font-setting change (the typeface is baked into the HTML). The webview

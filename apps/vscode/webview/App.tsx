@@ -25,11 +25,35 @@ type Shown = {
  * scoped sections. Keyed by gateway+session so switching remounts the panel —
  * the documented way to move it between sessions.
  */
-export function App({ bridge }: { bridge: Bridge }) {
+export function App({
+  bridge,
+  density,
+}: {
+  bridge: Bridge
+  /** From `workerdeck.transcriptDensity`, stamped on `#root` so the first paint
+   * is right — see `SessionPanelProvider.#rootAttrs`. */
+  density: 'comfortable' | 'compact'
+}) {
   const [shown, setShown] = useState<Shown | undefined>(undefined)
   // The panel owns the session's one attach, so it owns the only setters there
   // are. The status bar's pickers reach them through here.
   const controls = useRef<SessionControls | undefined>(undefined)
+  /**
+   * A focus asked for while no composer could take it yet.
+   *
+   * Needed because `wd-focus-composer` is its own postMessage — a separate task
+   * from the `wd-show-session` before it — and switching sessions REMOUNTS the
+   * panel (the key changes). React flushes the new panel's effects, and therefore
+   * `onControls`, on its own schedule, which can be after this message lands. So
+   * the request is recorded and retried when a composer turns up, rather than
+   * fired once into whatever happens to be mounted.
+   */
+  const focusWanted = useRef(false)
+  const tryFocus = () => {
+    if (!focusWanted.current || !controls.current) return
+    focusWanted.current = false
+    controls.current.focusComposer()
+  }
 
   useEffect(
     () =>
@@ -38,6 +62,9 @@ export function App({ bridge }: { bridge: Bridge }) {
         else if (msg.kind === 'wd-set-model') controls.current?.setModel(msg.model)
         else if (msg.kind === 'wd-set-permission-mode') {
           controls.current?.setPermissionMode(msg.mode)
+        } else if (msg.kind === 'wd-focus-composer') {
+          focusWanted.current = true
+          tryFocus()
         }
       }),
     [bridge],
@@ -140,6 +167,10 @@ export function App({ bridge }: { bridge: Bridge }) {
         // A dock has no vertical space to spend on cards: every event is one
         // full-width line behind a gutter glyph, the terminal treatment.
         transcriptVariant='lines'
+        // From `workerdeck.transcriptDensity`. Independent of the variant: a
+        // dock draws its rows as lines, and may still leave a blank line between
+        // them the way the CLI does.
+        transcriptDensity={density}
         panelSurface='external'
         // Model and mode live in the window status bar (a click there opens a
         // QuickPick), so the composer keeps no toolbar row and collapses to a
@@ -153,6 +184,8 @@ export function App({ bridge }: { bridge: Bridge }) {
         unseen={shown.unseen}
         onControls={(c) => {
           controls.current = c
+          // A focus that arrived before this panel existed applies now.
+          tryFocus()
         }}
         // The window status bar renders these instead (src/status-bar.ts) — a
         // second bar inside a panel that already sits in one is a bar too many.

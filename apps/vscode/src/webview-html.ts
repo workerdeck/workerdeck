@@ -23,6 +23,23 @@ export function fontMode(): 'editor' | 'sans' {
     : 'editor'
 }
 
+/**
+ * How much room the transcript gives each message, from settings. Stamped on
+ * `<html>` for the same reason the typeface is — the panel reads it as its
+ * initial prop, and a first paint at the wrong density is a visible reflow of
+ * every row. A change re-renders the HTML (see `activate`).
+ *
+ * `comfortable` is the default because it is what the Claude Code CLI does, and
+ * the panel is trying to read like it.
+ */
+export function transcriptDensity(): 'comfortable' | 'compact' {
+  return vscode.workspace
+    .getConfiguration('workerdeck')
+    .get<'comfortable' | 'compact'>('transcriptDensity') === 'compact'
+    ? 'compact'
+    : 'comfortable'
+}
+
 export function webviewHtml(
   webview: vscode.Webview,
   dist: vscode.Uri,

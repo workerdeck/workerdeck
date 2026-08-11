@@ -11,8 +11,13 @@ const bridge = new Bridge(['wd-show-session'])
 const root = document.getElementById('root')
 if (!root) throw new Error('Root element #root not found')
 
+// Stamped by the provider from settings, and read here rather than awaited over
+// the bridge: density decides every row's height, so the first paint has to have
+// it. A change re-renders this HTML.
+const density = root.dataset.density === 'compact' ? 'compact' : 'comfortable'
+
 createRoot(root).render(
   <StrictMode>
-    <App bridge={bridge} />
+    <App bridge={bridge} density={density} />
   </StrictMode>,
 )

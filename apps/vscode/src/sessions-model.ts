@@ -11,11 +11,27 @@ type HostSnapshot =
   | { probe: 'unauthorized' }
   | { probe: 'unreachable' }
 
-const POLL_MS = 5000
+/**
+ * How often the rollups are re-fetched, and why it is two numbers.
+ *
+ * The list cannot ride the live socket: the agent panel owns the one attach a
+ * session gets (the tool bridge asks the *first* attached client), so a second
+ * one here would break it. That leaves polling — and a flat 5s meant "started
+ * working" and "finished" could take five seconds to show up in the cards, which
+ * reads as the extension being asleep.
+ *
+ * So the poll follows the work: while anything is running or waiting on a human,
+ * it tightens. An idle window is back to 5s and costs a request per gateway.
+ * `nudge()` covers the rest — the panel sees the *real* transition on its socket
+ * and says so, which is what makes the active session feel immediate.
+ */
+const POLL_IDLE_MS = 5000
+const POLL_BUSY_MS = 1200
 
 /**
  * The extension host's picture of every gateway's sessions: REST rollups on a
- * poll (~5s while the sidebar is visible), never a WS attach — the agent panel
+ * poll (~5s while any view that renders them is visible — see `setWatching`),
+ * never a WS attach — the agent panel
  * owns the one live attach per session. Consumers subscribe to `onDidChange`
  * and read `sidebarState()`.
  */
@@ -26,7 +42,13 @@ export class SessionsModel implements vscode.Disposable {
   readonly #snapshots = new Map<string, HostSnapshot>()
   #selected: { hostId: string; sessionId: string } | undefined
   #timer: NodeJS.Timeout | undefined
+  /** The interval the running timer was started with, so a change can restart it. */
+  #timerMs: number | undefined
+  /** Views that currently want fresh readings — see `setWatching`. */
+  readonly #watchers = new Set<string>()
   #refreshing = false
+  /** A coalescing timer for `nudge`. */
+  #nudge: NodeJS.Timeout | undefined
   readonly #folders: vscode.Disposable
 
   /** Supplied by `activate`: turns-since-last-seen per session. The model owns
@@ -47,15 +69,72 @@ export class SessionsModel implements vscode.Disposable {
     this.#onDidChange.fire()
   }
 
-  startPolling(): void {
+  /**
+   * Report whether a view needs fresh readings. Polling runs while **any** of
+   * them does, which is why this is a set and not a boolean: more than one view
+   * renders this state now (the sessions list and the Gateways view), each
+   * collapsible on its own, and gating the poll on one of them meant the other
+   * could sit showing probes frozen at `pending` — the very thing it exists to
+   * report. Cheap to call repeatedly; only the first and last watcher move the
+   * timer, and gaining the first also refreshes at once.
+   */
+  setWatching(key: string, watching: boolean): void {
+    const before = this.#watchers.size
+    if (watching) this.#watchers.add(key)
+    else this.#watchers.delete(key)
+    if (this.#watchers.size > 0 && before === 0) this.#startPolling()
+    else if (this.#watchers.size === 0 && before > 0) this.#stopPolling()
+  }
+
+  #startPolling(): void {
     if (this.#timer) return
-    this.#timer = setInterval(() => void this.refresh(), POLL_MS)
+    this.#retime()
     void this.refresh()
   }
 
-  stopPolling(): void {
+  #stopPolling(): void {
     if (this.#timer) clearInterval(this.#timer)
     this.#timer = undefined
+    this.#timerMs = undefined
+  }
+
+  /** Point the timer at the rate the current state deserves. A no-op unless the
+   * rate actually changed, so it is safe to call after every refresh. */
+  #retime(): void {
+    const wanted = this.#busy() ? POLL_BUSY_MS : POLL_IDLE_MS
+    if (this.#timer && this.#timerMs === wanted) return
+    if (this.#timer) clearInterval(this.#timer)
+    this.#timerMs = wanted
+    this.#timer = setInterval(() => void this.refresh(), wanted)
+  }
+
+  /** Is anything worth watching closely? */
+  #busy(): boolean {
+    for (const snap of this.#snapshots.values()) {
+      if (snap.probe !== 'connected') continue
+      for (const s of snap.sessions) {
+        if (s.status === 'running' || s.status === 'starting') return true
+        if (s.pendingPermissionCount > 0 || s.status === 'awaiting_approval') return true
+      }
+    }
+    return false
+  }
+
+  /**
+   * Something just happened that the rollups do not know about yet — refresh now
+   * rather than on the next tick.
+   *
+   * The caller is the agent panel, which sees the session's real events on its
+   * own socket. Coalesced on a short window because a turn produces a great many
+   * of them and each refresh is a request per gateway; the point is to collapse
+   * the delay from "up to a poll" to "one round-trip", not to poll per frame.
+   */
+  nudge(): void {
+    if (!this.#timer || this.#nudge) return
+    this.#nudge = setTimeout(() => {
+      this.#nudge = undefined
+      void this.refresh()
+    }, 150)
   }
 
   async refresh(): Promise<void> {
@@ -92,6 +171,8 @@ export class SessionsModel implements vscode.Disposable {
         if (!hosts.some((h) => h.id === id)) this.#snapshots.delete(id)
       }
       this.#onDidChange.fire()
+      // A turn that just started (or ended) changes what the right rate is.
+      if (this.#timer) this.#retime()
     } finally {
       this.#refreshing = false
     }
@@ -152,7 +233,8 @@ export class SessionsModel implements vscode.Disposable {
   }
 
   dispose(): void {
-    this.stopPolling()
+    if (this.#nudge) clearTimeout(this.#nudge)
+    this.#stopPolling()
     this.#folders.dispose()
     this.#onDidChange.dispose()
   }

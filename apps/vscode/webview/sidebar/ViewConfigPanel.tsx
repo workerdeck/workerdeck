@@ -6,15 +6,12 @@ import {
   SelectItemText,
   SelectTrigger,
   SelectValue,
-  cn,
 } from '@workerdeck/ui'
-import { Filter, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import type { WireHost, WorkspaceScope } from '../../src/bridge-protocol.ts'
 import {
   STATE_LABELS,
   STATE_ORDER,
-  clearFilters,
-  isFiltering,
   type GroupBy,
   type SortBy,
   type ViewConfig,
@@ -42,47 +39,45 @@ const SORT_LABELS: Record<SortBy, string> = {
  * wrap. A multi-select with nothing chosen means "all", which is why there is no
  * All entry to keep in sync with the rest of the list.
  *
- * The shape is the Extensions view's: a **search box that is always there**,
- * with the facets one click behind a funnel beside it. The funnel carries a dot
- * whenever a facet is hiding rows — this list is scoped by default, so a control
- * that is itself hidden would leave no sign of why the list is short. Expanded,
- * the facets are a settings sheet (label left, control right, one row each) on
- * the section-header surface VS Code uses for exactly this.
+ * Revealed by a **native view-title toggle**, not a control of its own. A
+ * toggle whose icon must visibly differ open vs. closed is a pair of commands
+ * gated on a context key, and commands live in the title bar — so the host owns
+ * the boolean and this panel simply is or is not mounted. That also frees the
+ * list of a permanent control row: a sidebar this narrow should spend its width
+ * on sessions until asked otherwise.
+ *
+ * Search sits at the top because it is what people reach for; the facets follow
+ * as a settings sheet (label left, control right, one row each) on the
+ * section-header surface VS Code uses for exactly this.
  */
 export function ViewConfigPanel({
   config,
   hosts,
   adapters,
   scope,
-  open,
-  onOpenChange,
   onChange,
 }: {
   config: ViewConfig
   hosts: readonly WireHost[]
   adapters: readonly string[]
   scope: WorkspaceScope | undefined
-  open: boolean
-  onOpenChange: (open: boolean) => void
   onChange: (next: ViewConfig) => void
 }) {
   const set = <K extends keyof ViewConfig>(key: K, value: ViewConfig[K]) =>
     onChange({ ...config, [key]: value })
-  const facets = facetCount(config, scope)
 
   return (
     <div className='shrink-0 border-b border-border'>
-      {/* The search row is always there and always usable, with the facets one
-          click behind the funnel — the shape VS Code's own Extensions view uses.
-          It lives in this webview because that native row is workbench chrome:
-          a view title can hold commands, never an input. */}
-      <div className='flex items-center gap-1 px-2 py-1.5'>
-        <div className='relative min-w-0 flex-1'>
+      {/* Search leads: it is what people reach for, and unlike the facets it
+          needs no explaining. */}
+      <div className='px-2 pb-1 pt-1.5'>
+        <div className='relative'>
           <Input
             value={config.search}
             onChange={(e) => set('search', e.target.value)}
             placeholder='Search sessions'
             className='h-6 w-full pr-6 text-body-sm'
+            autoFocus
           />
           {config.search ? (
             <button
@@ -94,111 +89,72 @@ export function ViewConfigPanel({
             </button>
           ) : null}
         </div>
-        <button
-          type='button'
-          aria-expanded={open}
-          aria-label='Filter, group and sort sessions'
-          title='Filter, group and sort sessions'
-          onClick={() => onOpenChange(!open)}
-          className={cn(
-            'relative shrink-0 rounded p-1 outline-none transition-colors hover:bg-surface-hover',
-            open ? 'bg-surface-hover text-fg-1' : 'text-fg-3 hover:text-fg-1',
-          )}>
-          <Filter className='size-3.5' />
-          {/* A facet is narrowing the list even when this is collapsed — the
-              list hides rows by default, so the funnel has to say so. */}
-          {facets > 0 ? (
-            <span className='absolute right-0.5 top-0.5 size-1.5 rounded-full bg-(--vscode-activityBarBadge-background,var(--accent))' />
-          ) : null}
-        </button>
       </div>
 
-      {open ? (
-        <div className='flex flex-col gap-1 border-t border-border bg-(--vscode-sideBarSectionHeader-background,var(--bg-surface)) px-2 py-1.5'>
-          {/* Only where there is a folder to be inside of — an inert control in a
-              folderless window would be one that does nothing. Single-select:
-              the list is either scoped to this window or it isn't. */}
-          {scope ? (
-            <Row label='Scope'>
-              <OneOf
-                value={config.scoped ? 'scoped' : 'all'}
-                options={[
-                  { value: 'scoped', label: scope.label },
-                  { value: 'all', label: 'All folders' },
-                ]}
-                onChange={(v) => set('scoped', v === 'scoped')}
-              />
-            </Row>
-          ) : null}
+      <div className='flex flex-col gap-1 px-2 pb-1.5'>
+        {/* Only where there is a folder to be inside of — an inert control in a
+            folderless window would be one that does nothing. Single-select:
+            the list is either scoped to this window or it isn't. */}
+        {scope ? (
+          <Row label='Scope'>
+            <OneOf
+              value={config.scoped ? 'scoped' : 'all'}
+              options={[
+                { value: 'scoped', label: scope.label },
+                { value: 'all', label: 'All folders' },
+              ]}
+              onChange={(v) => set('scoped', v === 'scoped')}
+            />
+          </Row>
+        ) : null}
 
-          {hosts.length > 1 ? (
-            <Row label='Gateway'>
-              <AnyOf
-                values={config.gateways}
-                options={hosts.map((host) => ({ value: host.id, label: host.name }))}
-                onChange={(v) => set('gateways', v)}
-              />
-            </Row>
-          ) : null}
-
-          {adapters.length > 1 ? (
-            <Row label='Adapter'>
-              <AnyOf
-                values={config.adapters}
-                options={adapters.map((adapter) => ({ value: adapter, label: adapter }))}
-                onChange={(v) => set('adapters', v)}
-              />
-            </Row>
-          ) : null}
-
-          <Row label='State'>
+        {hosts.length > 1 ? (
+          <Row label='Gateway'>
             <AnyOf
-              values={config.states}
-              options={STATE_ORDER.map((state) => ({ value: state, label: STATE_LABELS[state] }))}
-              onChange={(v) => set('states', v)}
+              values={config.gateways}
+              options={hosts.map((host) => ({ value: host.id, label: host.name }))}
+              onChange={(v) => set('gateways', v)}
             />
           </Row>
+        ) : null}
 
-          <Row label='Group'>
-            <OneOf
-              value={config.groupBy}
-              options={labelledOptions(GROUP_LABELS)}
-              onChange={(v) => set('groupBy', v)}
+        {adapters.length > 1 ? (
+          <Row label='Adapter'>
+            <AnyOf
+              values={config.adapters}
+              options={adapters.map((adapter) => ({ value: adapter, label: adapter }))}
+              onChange={(v) => set('adapters', v)}
             />
           </Row>
-          <Row label='Sort'>
-            <OneOf
-              value={config.sortBy}
-              options={labelledOptions(SORT_LABELS)}
-              onChange={(v) => set('sortBy', v)}
-            />
-          </Row>
+        ) : null}
 
-          {isFiltering(config, scope) ? (
-            <div className='flex justify-end pt-0.5'>
-              <button
-                type='button'
-                onClick={() => onChange(clearFilters(config))}
-                className='text-label text-fg-4 underline-offset-2 hover:text-fg-1 hover:underline'>
-                Clear filters
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+        <Row label='State'>
+          <AnyOf
+            values={config.states}
+            options={STATE_ORDER.map((state) => ({ value: state, label: STATE_LABELS[state] }))}
+            onChange={(v) => set('states', v)}
+          />
+        </Row>
+
+        <Row label='Group'>
+          <OneOf
+            value={config.groupBy}
+            options={labelledOptions(GROUP_LABELS)}
+            onChange={(v) => set('groupBy', v)}
+          />
+        </Row>
+        <Row label='Sort'>
+          <OneOf
+            value={config.sortBy}
+            options={labelledOptions(SORT_LABELS)}
+            onChange={(v) => set('sortBy', v)}
+          />
+        </Row>
+        {/* No "clear filters" here: the subset line below already carries the
+            one way out, and two of them is how the old design ended up with two
+            competing signals in the first place. */}
+      </div>
     </div>
-  )
-}
-
-/** How many facets are narrowing the list — what the funnel's dot reports.
- * Search is excluded on purpose: it has its own always-visible box, so counting
- * it would put a marker on the control that isn't doing the hiding. */
-function facetCount(config: ViewConfig, scope: WorkspaceScope | undefined): number {
-  return (
-    (config.scoped && scope ? 1 : 0) +
-    (config.gateways.length ? 1 : 0) +
-    (config.adapters.length ? 1 : 0) +
-    (config.states.length ? 1 : 0)
   )
 }
 

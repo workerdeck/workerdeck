@@ -55,6 +55,13 @@
           "icon": "media/sidebar.svg"
         },
         {
+          "id": "workerdeck.gateways",
+          "type": "webview",
+          "name": "Gateways",
+          "icon": "media/sidebar.svg",
+          "visibility": "collapsed"
+        },
+        {
           "id": "workerdeck.sessionInfo",
           "type": "webview",
           "name": "Session Info",
@@ -100,14 +107,26 @@
         "icon": "$(add)"
       },
       {
-        "command": "workerdeck.gateways",
-        "title": "Gateways",
+        "command": "workerdeck.resumeSession",
+        "title": "Resume Session",
         "category": "WorkerDeck",
-        "icon": "$(plug)"
+        "icon": "$(history)"
       },
       {
-        "command": "workerdeck.addGateway",
-        "title": "Add Gateway",
+        "command": "workerdeck.showFilter",
+        "title": "Filter Sessions",
+        "category": "WorkerDeck",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "workerdeck.hideFilter",
+        "title": "Hide Session Filter",
+        "category": "WorkerDeck",
+        "icon": "$(filter-filled)"
+      },
+      {
+        "command": "workerdeck.toggleFilter",
+        "title": "Toggle Session Filter",
         "category": "WorkerDeck"
       },
       {
@@ -115,6 +134,18 @@
         "title": "Refresh Sessions",
         "category": "WorkerDeck",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "workerdeck.showGateways",
+        "title": "Gateways",
+        "category": "WorkerDeck",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "workerdeck.addGateway",
+        "title": "Add Gateway",
+        "category": "WorkerDeck",
+        "icon": "$(add)"
       },
       {
         "command": "workerdeck.selectModel",
@@ -130,6 +161,12 @@
         "command": "workerdeck.openProjectFolder",
         "title": "Open Session Project Folder",
         "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.gatewaysBack",
+        "title": "Back to Gateways",
+        "category": "WorkerDeck",
+        "icon": "$(arrow-left)"
       }
     ],
     "menus": {
@@ -140,9 +177,48 @@
           "group": "navigation@1"
         },
         {
-          "command": "workerdeck.gateways",
+          "command": "workerdeck.showFilter",
+          "when": "view == workerdeck.sessions && !workerdeck.sessionsFilterOpen",
+          "group": "navigation@2"
+        },
+        {
+          "command": "workerdeck.hideFilter",
+          "when": "view == workerdeck.sessions && workerdeck.sessionsFilterOpen",
+          "group": "navigation@2"
+        },
+        {
+          "command": "workerdeck.refreshSessions",
           "when": "view == workerdeck.sessions",
           "group": "navigation@3"
+        },
+        {
+          "command": "workerdeck.resumeSession",
+          "when": "view == workerdeck.sessions",
+          "group": "1_workerdeck@1"
+        },
+        {
+          "command": "workerdeck.gatewaysBack",
+          "when": "view == workerdeck.gateways && workerdeck.gatewayFormOpen",
+          "group": "navigation@0"
+        },
+        {
+          "command": "workerdeck.addGateway",
+          "when": "view == workerdeck.gateways && !workerdeck.gatewayFormOpen",
+          "group": "navigation@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "workerdeck.showFilter",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.hideFilter",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.gatewaysBack",
+          "when": "false"
         }
       ]
     },
@@ -156,11 +232,24 @@
             "sans"
           ],
           "enumDescriptions": [
-            "The editor font (monospace) — matches the terminal and the code around it.",
+            "The editor font (monospace) \u2014 matches the terminal and the code around it.",
             "VS Code's UI font, like every other view."
           ],
           "default": "editor",
           "description": "Typeface for the WorkerDeck agent panel. The sidebar and the session views always follow VS Code's UI font."
+        },
+        "workerdeck.transcriptDensity": {
+          "type": "string",
+          "enum": [
+            "comfortable",
+            "compact"
+          ],
+          "enumDescriptions": [
+            "A blank line between messages, like the Claude Code CLI.",
+            "No blank line \u2014 every row tight against the next."
+          ],
+          "default": "comfortable",
+          "description": "Vertical spacing between messages in the WorkerDeck agent panel."
         },
         "workerdeck.statusBar.status": {
           "type": "boolean",

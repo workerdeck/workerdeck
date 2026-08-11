@@ -5,7 +5,7 @@ import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl, isLoopbackHost } from './hosts.ts'
 import { clientFor } from './gateway.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
-import { webviewHtml } from './webview-html.ts'
+import { transcriptDensity, webviewHtml } from './webview-html.ts'
 import type { HostToPanel, PanelToHost } from './bridge-protocol.ts'
 
 export type ActiveSession = {
@@ -51,6 +51,8 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
   #view: vscode.WebviewView | undefined
   #ready = false
   #htmlVersion = 0
+  /** A focus asked for before the webview could take it (see `show`). */
+  #focusPending = false
   #active: ActiveSession | undefined
   #transports: WebviewTransportHost | undefined
 
@@ -76,6 +78,17 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     return this.#active?.sessionId === sessionId && this.#active.host.id === hostId
   }
 
+  /**
+   * Settings the panel needs on its **first paint**, stamped onto `#root` for the
+   * webview to read synchronously — the same trick the section views use for
+   * which section they are. A postMessage cannot do this job: the density decides
+   * every row's height, so learning it one tick late reflows the whole transcript
+   * in front of the reader.
+   */
+  #rootAttrs(): Record<string, string> {
+    return { 'data-density': transcriptDensity() }
+  }
+
   resolveWebviewView(view: vscode.WebviewView): void {
     this.#view = view
     this.#ready = false
@@ -84,7 +97,9 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     this.#transports = new WebviewTransportHost(this.#store, post, (text) => this.#tapFrame(text))
     const dist = vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
     view.webview.options = { enableScripts: true, localResourceRoots: [dist] }
-    view.webview.html = webviewHtml(view.webview, dist, 'main.js', {}, 0, { font: true })
+    view.webview.html = webviewHtml(view.webview, dist, 'main.js', this.#rootAttrs(), 0, {
+      font: true,
+    })
     view.webview.onDidReceiveMessage((msg: PanelToHost) => void this.#onMessage(msg))
     view.onDidChangeVisibility(() => this.#delegate.visibilityChanged())
     view.onDidDispose(() => {
@@ -97,20 +112,30 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     })
   }
 
-  /** Show a session (revealing the panel), or clear it with undefined. */
-  async show(active: ActiveSession | undefined): Promise<void> {
-    // Re-selecting what is already on screen must not pull keyboard focus out
-    // of the sidebar — a second click on a card is not a request to leave it.
-    // Only when the view doesn't exist yet is the focus worth it: that is what
-    // materializes it.
-    const alreadyShown =
-      !!active && !!this.#view && this.isShowing(active.host.id, active.sessionId)
+  /**
+   * Show a session, or clear it with undefined.
+   *
+   * `focus` reveals the panel AND puts the caret in the composer — what clicking
+   * a session in the sidebar means: you picked it in order to talk to it. This
+   * used to be suppressed when the session was already on screen, on the theory
+   * that a second click on a card is not a request to leave the list. That was
+   * wrong in practice: re-clicking the active session is exactly how you go back
+   * to typing at it, and having to click the card and then the field is one click
+   * too many for the common case.
+   */
+  async show(active: ActiveSession | undefined, options: { focus?: boolean } = {}): Promise<void> {
+    const existed = !!this.#view
     this.#active = active
     this.#onDidChangeActive.fire(active)
-    if (active && !alreadyShown) {
-      // Focussing materializes the view if the panel has never been opened.
+    // Focussing also materializes the view if the panel has never been opened,
+    // which is why it happens even unasked for a first show.
+    if (active && (options.focus || !existed)) {
       await vscode.commands.executeCommand(`${SessionPanelProvider.viewId}.focus`)
     }
+    // Queued rather than posted: a panel opening for the first time has not said
+    // `wd-ready` yet, and a focus request that arrives before the composer exists
+    // is one that silently does nothing.
+    if (active && options.focus) this.#focusPending = true
     this.#pushActive()
   }
 
@@ -121,6 +146,10 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
       this.#post({ kind: 'wd-show-session', session: undefined })
       return
     }
+    // After the session, never before: focusing a composer that is about to be
+    // replaced by another session's would put the caret in a field on its way out.
+    const focus = this.#focusPending
+    this.#focusPending = false
     const base = apiUrl(active.host)
     if (!base) return
     this.#post({
@@ -132,6 +161,7 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
         unseen: this.#delegate.unseen(active.host.id, active.sessionId),
       },
     })
+    if (focus) this.#post({ kind: 'wd-focus-composer' })
   }
 
   #post(msg: HostToPanel): void {
@@ -218,7 +248,14 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     if (!view) return
     this.#ready = false
     const dist = vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
-    view.webview.html = webviewHtml(view.webview, dist, 'main.js', {}, ++this.#htmlVersion, { font: true })
+    view.webview.html = webviewHtml(
+      view.webview,
+      dist,
+      'main.js',
+      this.#rootAttrs(),
+      ++this.#htmlVersion,
+      { font: true },
+    )
   }
 
   dispose(): void {

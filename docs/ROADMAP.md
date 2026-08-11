@@ -175,14 +175,23 @@ the session workspace and its Monaco editor) shipped before it.
   real `SessionPanel` on a real `WorkerDeckClient` whose `fetchImpl`/`WebSocketImpl` are
   postMessage shims executed extension-host-side (Node fetch/`ws` + `Authorization: Bearer`;
   keys in `SecretStorage`, webview CSP with no external `connect-src`, bridge refuses
-  non-gateway URLs). The sidebar is native-shaped: a Sessions webview listing **every
-  gateway's sessions at once** (the gateway is a facet, not the frame) — with the Extensions
-  view's own shape rebuilt inside the webview, an always-present search box and a funnel
-  holding the facets (scope/gateway/adapter/state dropdowns plus group/sort, persisted in
-  webview state), because a view title can contribute commands but never an input; a
-  view-title icon opens the Gateways screen that is the only place a
-  gateway is viewed/added/edited/removed, and cards are renameable in place (double-click) — plus
-  push-screen New Session / gateway forms, and **four separate section views** — Session Info, Context, Usage, MCP Servers — each
+  non-gateway URLs). The sidebar is native-shaped, and the rule it
+  is built on is that **no webview draws its own header and no view has screens**: chrome is VS
+  Code's (`view.title` plus title actions gated on a `setContext` key — a stateful title button
+  does not exist, so a toggle is two commands with opposite `when` clauses). So the Sessions view
+  is a list of **every gateway's sessions at once** (the gateway is a facet, not the frame) and
+  nothing else — search and the facet dropdowns (scope/gateway/adapter/state, group/sort,
+  persisted in webview state) sit behind the title bar's filter toggle, and one `SubsetLine`
+  (`12 of 30 · <cause>` + "Show all") is the single signal that rows are hidden, shown whether
+  or not the bar is open because the list is scoped to the window's folders by default. Cards are
+  renameable in place (double-click). **Gateways is its own collapsible view** — a gateway is a
+  mode every session belongs to, so managing them sits beside the list permanently rather than
+  replacing it — and creating or resuming a session is a native multi-step **QuickPick**
+  (adapter → folder → optional first prompt), which is what let the list become a list. The
+  folder step asks the *gateway* for its roots (`GET /fs/roots`) and can browse a remote
+  filesystem over `/fs/list`, since a remote gateway's paths cannot be inferred from this
+  window. The `+` in a view title is the only way to create: no body grows a second button, so
+  empty states point at it in words. Plus **four separate section views** — Session Info, Context, Usage, MCP Servers — each
   its own VS Code view off one shared bundle, so collapse/reorder/drag-anywhere are VS Code's
   own. They are **always contributed and start collapsed** rather than appearing and
   disappearing on `when` clauses — a sidebar that changes shape under the pointer as sessions
@@ -220,7 +229,11 @@ the session workspace and its Monaco editor) shipped before it.
   The panel then went **terminal**: `transcriptVariant: 'lines'` in `ui` (full-width
   transparent rows behind a fixed gutter glyph, markdown snapped to one line height, fenced
   code and tables flattened out of their cards, payloads highlighted through the renderer's own
-  shiki), the editor font by default (`workerdeck.fontFamily`), and `controlsSurface:
+  shiki), the editor font by default (`workerdeck.fontFamily`), a transcript density
+  (`workerdeck.transcriptDensity` — `comfortable` leaves a blank line between messages the way
+  the Claude Code CLI does; both settings are stamped on the webview root because they must be
+  right on the first paint), the brand mark's own four-state pulse as the working marker
+  (`⋄ ◇ ◈ ◆` at 150ms — the 0.6s clock `icon-loading.svg` runs), and `controlsSurface:
   'external'` moving model and permission mode into the window status bar as command →
   QuickPick items — which is what lets the composer collapse to a single growing line. Two
   seams came out of that pair: `onControls` hands the embedder the session's setters (the
@@ -260,8 +273,12 @@ the session workspace and its Monaco editor) shipped before it.
    README says as much. The same caveat covers the iOS file browser released alongside it.
 1. **Finish the VS Code extension.** The surface is built and side-loadable, but three things
    are open, in order: (a) a live end-to-end run against a real gateway in an Extension
-   Development Host — every claim above is tested but none is *observed*, the same caveat that
-   keeps APNs out of Shipped; (b) agent→IDE tools (PRD §7), the thing that makes it more than a
+   Development Host. Partly done as of 0.11.x: a side-loaded build has been driven against a real
+   remote gateway, which is how the new-session QuickPick's folder step was found to be empty
+   there (no candidate source survives a non-loopback gateway with no sessions) and fixed. Still
+   unobserved: the virtualized transcript on a long session, the unread badge clearing with the
+   list closed, and the keyboard-first approval prompts — `apps/vscode` has no test suite, so
+   these can only be checked by hand; (b) agent→IDE tools (PRD §7), the thing that makes it more than a
    webview — selection/diagnostics/open-file as context, and edits arriving as VS Code edits
    rather than filesystem writes; (c) Marketplace publishing, which is a packaging and
    naming decision, not code. CI already uploads the `.vsix` as an artifact.

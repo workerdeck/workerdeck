@@ -9,10 +9,13 @@
  *
  * Surfaces (see the PRD's design): the **agent panel** is purely the
  * conversation (`SessionPanel` with `panelSurface: 'external'` — no dialogs);
- * the **sidebar** owns management — session list, push-view forms, and the
- * scoped Info/Context/Usage/MCP sections, fed by REST plus the vitals the
- * panel relays (the panel holds the one live attach; the sidebar must never
- * attach a second time).
+ * the **sidebar** is a session list and nothing else — no screens, no forms,
+ * no navigation — fed by REST plus the vitals the panel relays (the panel holds
+ * the one live attach; the sidebar must never attach a second time). Everything
+ * that used to be a screen it pushed is now either its own VS Code view
+ * (Gateways, and the scoped Info/Context/Usage/MCP sections) or a native
+ * QuickPick flow (new session, resume), so nowhere in this extension is there a
+ * place you navigate to and have to find your way back from.
  *
  * Dependency-free at runtime (type-only imports, erased at build). Imported by
  * BOTH tsconfigs: keep it to types and constants.
@@ -139,12 +142,20 @@ export type HostToPanel =
       model?: string
     }
   | { kind: 'wd-set-permission-mode'; mode: PermissionMode }
+  | {
+      /**
+       * Put the caret in the composer. Sent when a session is *chosen* — a click
+       * in the sidebar means "I want to talk to this one" — and never on a mere
+       * state push, which is why it is an event of its own rather than a field on
+       * `wd-show-session`.
+       */
+      kind: 'wd-focus-composer'
+    }
 
 /** Sidebar webview → host. */
 export type SidebarToHost =
   | TransportToHost
   | { kind: 'wd-ready' }
-  | { kind: 'wd-refresh' }
   | { kind: 'wd-select-session'; hostId: string; sessionId: string }
   | {
       /** Interrupt. Executed host-side over a transient attach. */
@@ -162,19 +173,10 @@ export type SidebarToHost =
       title: string
     }
   | {
-      /** Save a gateway (id present = edit). Key goes straight to the keychain. */
-      kind: 'wd-submit-gateway'
-      id?: string
-      name: string
-      baseUrl: string
-      authKey: string
-    }
-  | { kind: 'wd-remove-gateway'; hostId: string }
-  | {
-      /** Ask for the gateway edit screen — the host answers with wd-navigate,
-       * key prefilled from the keychain (the webview cannot read it itself). */
-      kind: 'wd-edit-gateway'
-      hostId: string
+      /** The list's empty states point at gateway management, which is its own
+       * view now — the host reveals it (and opens its add form on `add`). */
+      kind: 'wd-reveal-gateways'
+      add?: boolean
     }
   | {
       /**
@@ -186,34 +188,74 @@ export type SidebarToHost =
       kind: 'wd-view-config'
       config: ViewConfig
     }
-  | {
-      /** The new-session form created the session itself (its own bridged
-       * client) — this just selects it into the agent panel. */
-      kind: 'wd-session-created'
-      hostId: string
-      sessionId: string
-    }
 
 /** Host → sidebar webview. */
 export type HostToSidebar =
   | TransportToWebview
   | { kind: 'wd-sidebar-state'; state: SidebarState }
   | {
-      /** Push a screen (view-title buttons, palette commands, tree parity). */
-      kind: 'wd-navigate'
-      screen: 'new-session' | 'gateway' | 'gateways'
-      /** gateway screen: prefill for an edit (authKey from the keychain). */
-      gateway?: { id: string; name: string; baseUrl: string; authKey: string }
-      /** new-session screen: preselect this host. */
-      hostId?: string
+      /**
+       * Whether the search-and-filter bar is showing. The **host** owns this,
+       * not the webview: the toggle is a native view-title action, and a
+       * `view/title` entry is a command gated on a context key — so the key has
+       * to live where commands do. The webview renders what it is told.
+       */
+      kind: 'wd-filter-open'
+      open: boolean
     }
-  | { kind: 'wd-form-result'; ok: boolean; error?: string }
   | {
       /** Live vitals for the SELECTED session, relayed from the agent panel.
        * Absent vitals = selection changed and no reading exists yet. */
       kind: 'wd-vitals'
       vitals?: SessionVitals
     }
+
+/**
+ * Gateways view → host.
+ *
+ * Its own view, its own wire, and **no transports**: managing a gateway is
+ * entirely host-side work (globalState + the keychain), so this webview runs no
+ * `WorkerDeckClient` at all and cannot reach a gateway even if it tried.
+ */
+export type GatewaysToHost =
+  | { kind: 'wd-ready' }
+  | {
+      /** Save (id present = edit). The key goes straight to the keychain. */
+      kind: 'wd-submit-gateway'
+      id?: string
+      name: string
+      baseUrl: string
+      authKey: string
+    }
+  | { kind: 'wd-remove-gateway'; hostId: string }
+  | {
+      /** Ask for the edit form — the host answers with `wd-gateway-form`, key
+       * prefilled from the keychain (a webview cannot read it itself). */
+      kind: 'wd-edit-gateway'
+      hostId: string
+    }
+  | {
+      /**
+       * The form opened or closed. Mirrored because the host draws this view's
+       * chrome — the title, and the context key swapping `+` for a back chevron
+       * — exactly as it does for no view at all elsewhere: no webview in this
+       * extension draws its own header.
+       */
+      kind: 'wd-gateway-form-state'
+      open: boolean
+    }
+
+/** Host → gateways view. */
+export type HostToGateways =
+  | { kind: 'wd-gateways'; hosts: WireHost[]; sessionCounts: Record<string, number> }
+  | {
+      /** Open the add/edit form, or (`gateway: undefined`, `open: false`) go
+       * back to the list. Prefilled for an edit. */
+      kind: 'wd-gateway-form'
+      open: boolean
+      gateway?: { id: string; name: string; baseUrl: string; authKey: string }
+    }
+  | { kind: 'wd-form-result'; ok: boolean; error?: string }
 
 /** Section view (Session Info / Context / Usage / MCP) → host. */
 export type SectionToHost = TransportToHost | { kind: 'wd-ready' }
@@ -224,5 +266,5 @@ export type HostToSection =
   | { kind: 'wd-sidebar-state'; state: SidebarState }
   | { kind: 'wd-vitals'; vitals?: SessionVitals }
 
-export type WebviewToHost = PanelToHost | SidebarToHost | SectionToHost
-export type HostToWebview = HostToPanel | HostToSidebar | HostToSection
+export type WebviewToHost = PanelToHost | SidebarToHost | SectionToHost | GatewaysToHost
+export type HostToWebview = HostToPanel | HostToSidebar | HostToSection | HostToGateways

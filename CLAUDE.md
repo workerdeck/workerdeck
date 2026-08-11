@@ -126,7 +126,22 @@ protocol. Read these before changing scope or structure:
   glyph, no boxes, for a host where vertical space is scarce. It rides a **context**
   (`transcript-variant.tsx`), not a prop chain, so a row component composed by hand gets the
   right treatment too; every row component branches on `useLines()` rather than the embedder
-  restyling `data-slot`s from outside. The provider wraps the **whole panel**, not just the
+  restyling `data-slot`s from outside. `transcriptDensity` is the fifth seam and rides its own
+  context beside it — `'comfortable'` (default: one blank line between rows, what the Claude
+  Code CLI leaves) or `'compact'`. Separate from the variant on purpose: the variant follows
+  from the *surface* (boxed or not), density is the reader's *preference*, so a dock may be
+  roomy and a dashboard dense. `ROW_GAP` in `transcript-variant.tsx` is the whole feature — the
+  gap goes on the virtualizer's **measured** wrapper, so no pixel constant is load-bearing and
+  only `estimateSize` takes the `px` (scrollbar length before rows mount, replaced by a real
+  measurement the moment one does). VS Code exposes it as `workerdeck.transcriptDensity`,
+  stamped on `#root` like the font because it decides every row's height. The working marker is
+  the **brand mark's own pulse** (`pulse.tsx`: `⋄ ◇ ◈ ◆` at 150ms = the 0.6s clock in
+  `icon-loading.svg`), shared by the transcript's `Loader` and each running tool row's gutter
+  glyph so they beat together; it rests on `◆` under `prefers-reduced-motion`, free because the
+  last frame *is* the mark. BRAND.md's ambiguous-width caveat is why this is webview-only:
+  `LineGlyph` centres the glyph in a fixed box, a real terminal must use the ASCII set. The
+  `lines` tool row lost its right-edge `Spinner` when the gutter started moving — two spinners
+  on one row is one too many. The provider wraps the **whole panel**, not just the
   scroller, because the approval and question prompts render outside it and are line items in
   the same run: in `lines` they are keyboard-first rows built from `line-prompt.tsx` (roving
   `❯` marker, numbered rows, `↑↓`/digits/`esc`, `[x]` vs `(•)` for multi- vs one-of) rather
@@ -236,13 +251,29 @@ protocol. Read these before changing scope or structure:
   FileSystemProvider over `/fs/*` (hash-guarded conditional writes; no mkdir/delete/rename —
   no such routes); local-vs-remote is decided from the gateway URL (`isLoopbackHost`), never
   by probing paths, which is also what makes `extensionKind: ["workspace","ui"]` the whole
-  Remote SSH story. The Sessions view lists every gateway's sessions at once — gateway is a
-  facet (filter/group/sort) beside adapter and state, not the frame — every facet a dropdown
-  behind a **funnel** next to an always-present search box (the Extensions view's shape,
-  rebuilt in the webview because that native row is workbench chrome: a view title takes
-  commands, never an input; the funnel's dot is how a list that hides rows by default still
-  says so) — and gateways are managed
-  only on their own screen; there is **no implicit localhost gateway**.
+  Remote SSH story. **No webview in this extension draws its own header, and no view has
+  screens.** That is the navigation rule, and it is what the sidebar was rebuilt around: a
+  pushed screen left the native title still reading SESSIONS over a form, its `+` still
+  navigating sideways with no history, and a back chevron the extension had drawn itself.
+  So chrome is VS Code's — `view.title` plus title actions gated on a `setContext` key (a
+  stateful title button doesn't exist, so an open/closed toggle is *two* commands with
+  opposite `when` clauses) — and everything that used to be a screen is either its own view
+  or a native QuickPick. The Sessions view lists every gateway's sessions at once — gateway
+  is a facet (filter/group/sort) beside adapter and state, not the frame — with search and
+  the facet dropdowns behind the title bar's **filter toggle** (`$(filter)`/`$(filter-filled)`;
+  the *host* owns that boolean, since the key lives where commands do, and closing the bar
+  never clears the filters). **Gateways are their own collapsible view**, not a screen: a
+  gateway is a mode every session belongs to, so managing them sits beside the list
+  permanently, with the connected count in the view header's description. There is **no
+  implicit localhost gateway**. Creating a session is a native multi-step QuickPick
+  (`src/new-session.ts`: adapter → folder → optional first prompt, each step skipped when it
+  has nothing to ask and backed out of with `QuickInputButtons.Back`), which is what let the
+  list become a list and nothing else. The poll behind all of it is **ref-counted**
+  (`SessionsModel.setWatching`) rather than gated on the sidebar alone — two independently
+  collapsible views render it now, and gating on one leaves the other showing probes frozen
+  at `pending`. The `+` in a view title is the *only* way to create: no body ever grows a
+  second button for it, so an empty state points at the `+` in words and keeps its button
+  for what the header can't do (clear a filter, widen a scope).
   The activity-bar badge is the same count summed over the sessions the **filter is
   showing** — the webview mirrors its view config to the host (`wd-view-config`, one-way;
   the shared rules moved to `src/view-config.ts` so both sides filter identically), because a
@@ -257,13 +288,18 @@ protocol. Read these before changing scope or structure:
   into scope roots, and a session is inside one only when the *gateway* could be — a `file:`
   folder scopes loopback gateways alone (a remote gateway's identical-looking path is another
   machine's directory), a `workerdeck://<hostId>` mount scopes that gateway alone. Because it
-  hides by default it says so: a scope line above the list with a one-click way out, and a
-  scoped-empty list offers "show all folders" rather than the generic clear-filters dead end.
-  The new-session form doubles as the **resume** picker (as `web`'s does): `listSdkSessions`
-  for the chosen directory *and profile* — the engine store is per-engine, so another
-  profile's ids mean nothing here — gated on the capability record's `listSessions`, and a
-  pick is the same create call with `resume` set and no first prompt (the engine replays the
-  thread; a prompt on top would be an unasked-for turn). A session rename is a gateway edit
+  hides by default it says so — and in **one** place: a `SubsetLine` under the filter bar
+  reading `12 of 30 · <cause>` with a single "Show all", rendered whether or not the bar is
+  open (`subsetSummary` in `view-config.ts` is the rule). It replaced two competing signals,
+  a dot on the funnel and a separate scope line, which between them never said how many rows
+  were missing; with the controls now behind a toggle it is the only thing standing between a
+  scoped-by-default list and "my sessions are gone". A scoped-empty list still offers "show
+  all folders" rather than the generic clear-filters dead end.
+  **Resume** is the same QuickPick rails as create (`workerdeck.resumeSession`), diverging only
+  at the last step: `listSdkSessions` for the chosen directory *and profile* — the engine store
+  is per-engine, so another profile's ids mean nothing here — gated on the capability record's
+  `listSessions`, and a pick is the same create call with `resume` set and no first prompt (the
+  engine replays the thread; a prompt on top would be an unasked-for turn). A session rename is a gateway edit
   (`PATCH /sessions/:id` → `meta.title`), never a local override, so every client sees the
   same name; it is reached by double-clicking the title, with Stop and Delete as hover icons
   on the card's second line and state the first line's last item. `src/dev-reload.ts` is development-mode only: a webview rebuild

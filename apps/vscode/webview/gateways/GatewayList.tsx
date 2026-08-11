@@ -1,6 +1,7 @@
 import { Button, cn } from '@workerdeck/ui'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plug, Trash2 } from 'lucide-react'
 import type { WireHost } from '../../src/bridge-protocol.ts'
+import { Empty, Key } from '../ui/Empty.tsx'
 
 const PROBE_LABELS: Record<WireHost['probe'], string> = {
   connected: 'connected',
@@ -10,31 +11,42 @@ const PROBE_LABELS: Record<WireHost['probe'], string> = {
 }
 
 /**
- * The gateways screen: view, add, edit, remove. The sessions list is a view over
- * every gateway at once, so this is the only place a gateway is managed — the
- * list itself has no picker to keep in sync.
+ * The gateways a window can drive: view, add, edit, remove.
+ *
+ * Its own VS Code view rather than a screen inside the sessions list. A gateway
+ * is a **mode** every session belongs to, and the list is a view across all of
+ * them at once — so managing them is configuration sitting beside the list, not
+ * somewhere you navigate to and have to find your way back from. It is also the
+ * only place a gateway is managed: the list has no picker to keep in sync.
  */
-export function GatewaysScreen({
+export function GatewayList({
   hosts,
   sessionCounts,
-  onAdd,
   onEdit,
   onRemove,
 }: {
   hosts: readonly WireHost[]
   sessionCounts: Record<string, number>
-  onAdd: () => void
   onEdit: (hostId: string) => void
   onRemove: (hostId: string) => void
 }) {
+  if (hosts.length === 0) {
+    return (
+      <Empty
+        icon={<Plug />}
+        title='No gateways yet'
+        description={
+          <>
+            Start one with <code className='font-mono'>npx workerdeck</code>, then add it with{' '}
+            <Key>+</Key> above.
+          </>
+        }
+      />
+    )
+  }
+
   return (
     <div className='flex flex-col gap-1 p-2'>
-      {hosts.length === 0 ? (
-        <p className='px-1 py-2 text-body-sm text-fg-4'>
-          No gateways yet. Start one with <code className='font-mono'>npx workerdeck</code> and add
-          it here.
-        </p>
-      ) : null}
       {hosts.map((host) => (
         <div
           key={host.id}
@@ -74,9 +86,6 @@ export function GatewaysScreen({
           </Button>
         </div>
       ))}
-      <Button variant='ghost' size='sm' className='mt-1 self-start' onClick={onAdd}>
-        <Plus className='size-3.5' /> Add gateway
-      </Button>
     </div>
   )
 }

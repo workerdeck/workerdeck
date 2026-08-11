@@ -232,16 +232,55 @@ export function groupRows(rows: readonly SessionRow[], config: ViewConfig): Sess
   return [...groups.values()].sort((a, b) => a.rank.localeCompare(b.rank))
 }
 
-/** Whether the config hides anything — what the header icon's dot reports.
- * Scope counts only where it bites, and a window with a folder open is scoped
- * by default, so pass the scope to know. */
-export function isFiltering(config: ViewConfig, scope?: WorkspaceScope): boolean {
+/**
+ * What the list is hiding, and why — the one "you are seeing a subset" signal.
+ *
+ * There used to be two: a dot on the funnel and a scope line above the list.
+ * They competed (the scope line said one thing, the dot counted a superset of
+ * it) and neither said how much was missing. This is the single rule both the
+ * count and the wording come from: absent when nothing is hidden, and otherwise
+ * naming every cause, so the line is never "12 of 30" with no way to guess why.
+ *
+ * Search is a cause like any other. Its box is visible, but the *consequence*
+ * of it — rows gone from the list — is the thing being reported, and leaving it
+ * out would make the arithmetic wrong.
+ */
+export type SubsetSummary = { shown: number; total: number; causes: string[] }
+
+export function subsetSummary(
+  config: ViewConfig,
+  scope: WorkspaceScope | undefined,
+  shown: number,
+  total: number,
+): SubsetSummary | undefined {
+  if (shown >= total) return undefined
+  const causes: string[] = []
+  if (scope && scopeActive(config, scope)) causes.push(scope.label)
+  // The facets collapse to a count: naming three of them would wrap the line in
+  // a sidebar, and the funnel beside it is where their detail already lives.
+  const facets =
+    (config.gateways.length ? 1 : 0) +
+    (config.adapters.length ? 1 : 0) +
+    (config.states.length ? 1 : 0)
+  if (facets > 0) causes.push(`${facets} filter${facets === 1 ? '' : 's'}`)
+  if (config.search.trim()) causes.push('search')
+  return { shown, total, causes }
+}
+
+/**
+ * Is anything OTHER than the workspace scope narrowing the list?
+ *
+ * The distinction an empty list turns on: "this project has no sessions" wants a
+ * different sentence, and a different way out, from "your filters match none".
+ * Scope is excluded because it is on by default — it is the state, not a choice
+ * someone made.
+ */
+export function hasFacetFilter(config: ViewConfig): boolean {
   return (
     config.search.trim().length > 0 ||
     config.gateways.length > 0 ||
     config.adapters.length > 0 ||
-    config.states.length > 0 ||
-    scopeActive(config, scope)
+    config.states.length > 0
   )
 }
 

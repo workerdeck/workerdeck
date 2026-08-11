@@ -28,11 +28,13 @@ export default defineConfig({
     cssCodeSplit: false,
     rollupOptions: {
       input: {
-        // Three bundles, one stylesheet: the agent panel, the Sessions view,
-        // and the shared entry every section view (info/context/usage/mcp)
-        // boots with — the provider stamps which one onto the root element.
+        // Four bundles, one stylesheet: the agent panel, the Sessions view, the
+        // Gateways view, and the shared entry every section view
+        // (info/context/usage/mcp) boots with — the provider stamps which one
+        // onto the root element.
         main: fileURLToPath(new URL('./webview/main.tsx', import.meta.url)),
         sidebar: fileURLToPath(new URL('./webview/sidebar/main.tsx', import.meta.url)),
+        gateways: fileURLToPath(new URL('./webview/gateways/main.tsx', import.meta.url)),
         sections: fileURLToPath(new URL('./webview/sections/main.tsx', import.meta.url)),
       },
       output: {
