@@ -8,6 +8,7 @@ import { cn } from '../../lib/utils.ts'
 import { toolInputPreview } from '../../lib/format.ts'
 import { isMutatingTool, toolIcon } from '../../lib/tool-icon.ts'
 import { LINE_INDENT, LinePayload } from './line-prompt.tsx'
+import { usePulse } from './pulse.tsx'
 import { LineGlyph, useLines } from './transcript-variant.tsx'
 
 export type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
@@ -97,6 +98,10 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
   const status: Status = item.status ?? (item.result === undefined ? 'running' : 'settled')
   const badge = STATE_BADGE[status]
   const isError = status === 'failed' || item.result?.isError === true
+  // Ticks only while this row is actually running, and only in the variant with a
+  // gutter to pulse in — an idle transcript of a hundred settled tools starts no
+  // timers at all.
+  const pulse = usePulse(lines && badge.busy)
   const Icon = toolIcon(item.name)
 
   const resultText = item.result?.text ?? ''
@@ -162,7 +167,10 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
                 ? 'text-success'
                 : STATE_GLYPH[status]
             }>
-            {badge.busy ? '◐' : '●'}
+            {/* Running: the mark's own pulse, so a working tool row and the
+                transcript's working line beat together. Settled: a plain dot,
+                which reads as "done" precisely by not moving. */}
+            {badge.busy ? pulse : '●'}
           </LineGlyph>
           <span className='min-w-0 flex-1 truncate text-body-sm leading-5 text-fg-3'>
             <span className='font-medium text-fg-1'>{item.name}</span>
@@ -171,7 +179,8 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
           {item.backend && item.backend !== 'server' ? (
             <span className='shrink-0 text-label text-fg-4'>{item.backend}</span>
           ) : null}
-          {badge.busy ? <Spinner className='size-3 shrink-0 self-center text-fg-4' /> : null}
+          {/* No Spinner here: the gutter glyph animates now, and two spinners on
+              one row is one too many. `cards` keeps its own — it has no gutter. */}
           {status === 'deferred' ? <Clock className='size-3 shrink-0 self-center text-fg-4' /> : null}
           {isError && !badge.busy ? (
             <span className='shrink-0 text-label text-danger'>error</span>

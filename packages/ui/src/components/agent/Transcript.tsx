@@ -16,8 +16,10 @@ import { SessionEmptyState } from './SessionEmptyState.tsx'
 import { ToolCallCard } from './ToolCallCard.tsx'
 import {
   LineGlyph,
+  ROW_GAP,
   TranscriptVariantProvider,
   useLines,
+  type TranscriptDensity,
   type TranscriptVariant,
 } from './transcript-variant.tsx'
 
@@ -339,6 +341,7 @@ function TranscriptRows({
   boundary,
   since,
   lines,
+  gap,
   fileUrl,
   attachmentUrl,
   hostImage,
@@ -348,6 +351,8 @@ function TranscriptRows({
   boundary: number | undefined
   since: number | undefined
   lines: boolean
+  /** The inter-row gap for this variant and density (`ROW_GAP`). */
+  gap: { className?: string; px: number }
   fileUrl?: (path: string) => string
   attachmentUrl?: (attachmentId: string) => string
   hostImage?: (path: string) => Promise<string | undefined>
@@ -387,7 +392,10 @@ function TranscriptRows({
     // a measurement replaces them the moment a row mounts. A lines row is one
     // text line more often than not; cards vary too much for any constant to
     // be right, so that one is merely the order of magnitude.
-    estimateSize: () => (lines ? 32 : 100),
+    // Plus the gap, which is real height on the same measured element — an
+    // estimate that ignored it would make the scrollbar visibly too short on a
+    // long transcript before the rows mount.
+    estimateSize: () => (lines ? 32 : 100) + gap.px,
     overscan: 8,
     getItemKey: (index) => rows[index].key,
     // Explicit, and left at the default, because the obvious cleanup here is
@@ -484,13 +492,14 @@ function TranscriptRows({
             data-index={virtualRow.index}
             className={cn(
               'absolute inset-x-0 top-0',
-              // The card layout's inter-row gap, folded into each row so the
-              // measured height carries it: flex `gap` cannot reach absolutely
-              // positioned rows, and a pixel constant for the virtualizer's
-              // `gap` option would drift from the rem the layout is set in.
-              // On this outer wrapper, not the row div, so a nested row's left
-              // border still breaks across the gap as it did under flex.
-              !lines && virtualRow.index > 0 && 'pt-4',
+              // The inter-row gap, folded into each row so the measured height
+              // carries it: flex `gap` cannot reach absolutely positioned rows,
+              // and a pixel constant for the virtualizer's `gap` option would
+              // drift from the rem the layout is set in. On this outer wrapper,
+              // not the row div, so a nested row's left border still breaks
+              // across the gap as it did under flex. Skipped for the first row —
+              // a gap above it would be padding, not spacing.
+              virtualRow.index > 0 && gap.className,
             )}
             style={{ transform: `translateY(${virtualRow.start}px)` }}>
             {'item' in row ? (
@@ -542,6 +551,12 @@ export interface TranscriptProps {
    */
   variant?: TranscriptVariant
   /**
+   * How much air each row gets: `comfortable` (default — a blank line between
+   * messages, as the Claude Code CLI does) or `compact`. Independent of
+   * {@link TranscriptVariant}. See {@link TranscriptDensity}.
+   */
+  density?: TranscriptDensity
+  /**
    * Catch-up: `from` is how many items had been seen last time, `since` when
    * that was. A recap row is drawn at that boundary and everything above it is
    * dimmed. Omit (or pass a boundary at/after the end) and the transcript
@@ -566,11 +581,13 @@ export function Transcript({
   canBrowseFiles,
   hostImage,
   variant = 'cards',
+  density = 'comfortable',
   catchUp,
   jumpToRecapRef,
   className,
 }: TranscriptProps) {
   const lines = variant === 'lines'
+  const gap = ROW_GAP[variant][density]
   const runStartedAt = useRunStart(state.status)
   const following = useSettled(state.items.length, state.status)
   // A boundary at (or past) the end means nothing is new — no row, no dimming.
@@ -605,6 +622,7 @@ export function Transcript({
               boundary={boundary}
               since={catchUp?.since}
               lines={lines}
+              gap={gap}
               fileUrl={fileUrl}
               attachmentUrl={attachmentUrl}
               hostImage={hostImage}

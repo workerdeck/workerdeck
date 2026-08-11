@@ -49,7 +49,12 @@ import { QuestionPrompt, parseUserQuestions } from './QuestionPrompt.tsx'
 import { SessionInfoDialog } from './SessionInfoDialog.tsx'
 import { StatusBar } from './StatusBar.tsx'
 import { Transcript } from './Transcript.tsx'
-import { TranscriptVariantProvider, type TranscriptVariant } from './transcript-variant.tsx'
+import {
+  TranscriptDensityProvider,
+  TranscriptVariantProvider,
+  type TranscriptDensity,
+  type TranscriptVariant,
+} from './transcript-variant.tsx'
 import { UsageDialog } from './UsageDialog.tsx'
 
 export interface SessionPanelProps {
@@ -108,6 +113,14 @@ export interface SessionPanelProps {
    */
   transcriptVariant?: TranscriptVariant
   /**
+   * How much air the transcript gives each row — `'comfortable'` (default: a
+   * blank line between messages, as the Claude Code CLI leaves) or `'compact'`
+   * (rows tight against one another). Independent of `transcriptVariant`: the
+   * variant follows from the surface, density is the reader's preference, and a
+   * dock is allowed to be roomy.
+   */
+  transcriptDensity?: TranscriptDensity
+  /**
    * Where the session's own controls — model and permission mode — live.
    * `'internal'` (default) draws them in the composer's toolbar row.
    * `'external'` draws neither, and the composer collapses to a single line
@@ -156,6 +169,15 @@ export type SessionControls = {
   setModel: (model?: string) => void
   setPermissionMode: (mode: PermissionMode) => void
   interrupt: () => void
+  /**
+   * Put the caret in the composer.
+   *
+   * For an embedder whose own chrome is how you arrive at a session — clicking a
+   * row in VS Code's sidebar — where revealing the panel and being able to type
+   * are the same intention. The panel cannot infer it: from in here, a session
+   * appearing looks identical whether someone asked for it or it was restored.
+   */
+  focusComposer: () => void
 }
 
 /** Everything a click can mean other than "put the caret in the composer".
@@ -232,6 +254,7 @@ export function SessionPanel({
   onOpenPanel,
   onVitals,
   transcriptVariant = 'cards',
+  transcriptDensity = 'comfortable',
   controlsSurface = 'internal',
   onControls,
   focusComposerOnClick = false,
@@ -358,6 +381,7 @@ export function SessionPanel({
     setModel: (model) => setters.current.setModel(model),
     setPermissionMode: (mode) => setters.current.setPermissionMode(mode),
     interrupt: () => setters.current.interrupt(),
+    focusComposer: () => composerRef.current?.focus(),
   })
   useEffect(() => {
     const handler = onControlsRef.current
@@ -495,6 +519,7 @@ export function SessionPanel({
     // and question prompts live outside the scroller but are line items in the
     // same run, and they read `useLines()` like every other row.
     <TranscriptVariantProvider value={transcriptVariant}>
+      <TranscriptDensityProvider value={transcriptDensity}>
       <div
         data-slot='session-panel'
         onClick={handleClick}
@@ -528,6 +553,7 @@ export function SessionPanel({
           canBrowseFiles={hostFiles.available}
           hostImage={hostImage}
           variant={transcriptVariant}
+          density={transcriptDensity}
           catchUp={
             catchUp && newCount > 0
               ? { from: catchUp.itemCount, since: catchUp.since }
@@ -686,6 +712,7 @@ export function SessionPanel({
           </>
         ) : null}
       </div>
+      </TranscriptDensityProvider>
     </TranscriptVariantProvider>
   )
 }

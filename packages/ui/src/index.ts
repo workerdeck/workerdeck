@@ -83,8 +83,11 @@ export {
 } from './components/agent/Conversation.tsx'
 export { Message, MessageContent, type MessageProps } from './components/agent/Message.tsx'
 export {
+  TranscriptDensityProvider,
   TranscriptVariantProvider,
+  useTranscriptDensity,
   useTranscriptVariant,
+  type TranscriptDensity,
   type TranscriptVariant,
 } from './components/agent/transcript-variant.tsx'
 export { Response, type ResponseProps } from './components/agent/Response.tsx'
