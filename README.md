@@ -41,7 +41,8 @@ npx workerdeck --host 0.0.0.0 --auth-key "$SECRET" --cwd-root ~/projects
 `--auth-key` is one secret over two transports: browsers get a login page and an `HttpOnly`
 cookie, services send the same secret as a header. Off loopback *without* a key the instance
 generates one rather than serving open — printed once, kept in `<state-dir>/auth-key`, reused
-across restarts. `--cwd-root` is what confines sessions to a directory tree.
+across restarts. Browser logins persist beside it, so a restart does not sign every tab out;
+rotating the key invalidates them all. `--cwd-root` is what confines sessions to a directory tree.
 
 **Docs: [workerdeck.github.io/workerdeck](https://workerdeck.github.io/workerdeck/)** — the full
 flag surface, embedding, permissions, profiles, the job queue, and the protocol reference.

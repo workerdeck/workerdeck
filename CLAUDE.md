@@ -307,7 +307,10 @@ protocol. Read these before changing scope or structure:
   is load-bearing, not cosmetic — a tab can't put a header on a WS handshake, so a cookie is the
   only credential it can present on an attach, and cookies are per-origin. `--auth-key` is one
   secret over two transports (login-page cookie for browsers, header for services); a config file
-  supplying its own `authenticate` turns the built-in off entirely rather than layering. Loopback
+  supplying its own `authenticate` turns the built-in off entirely rather than layering. Browser
+  logins are durable (`auth-sessions.ts` → `<stateDir>/auth-sessions.json`, 0600) and the table is
+  keyed by `HMAC(secret, token)`, which is what makes the file worthless to a reader and makes key
+  rotation invalidate every cookie for free — see `docs/GOTCHAS.md`. Loopback
   runs keyless; off loopback the CLI *generates* a key rather than serving open (persisted at
   `<stateDir>/auth-key`, 0600), and only an explicit `--insecure` / `insecureHosts` declaration
   serves unauthenticated — `insecureHosts` entries double as accepted Host headers. The

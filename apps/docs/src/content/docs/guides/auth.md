@@ -65,7 +65,9 @@ principal or nothing, and it guards REST **and** the WebSocket upgrade. For the 
 [`workerdeck`](https://www.npmjs.com/package/workerdeck) instance it is `--auth-key`, one
 shared secret over two transports — a login page trades it for an `HttpOnly` cookie for browsers,
 while services send it as a header. Bound off loopback with no key supplied, the instance
-generates one and stores it under its state dir rather than serving open; the explicit opt-outs
+generates one and stores it under its state dir rather than serving open (browser logins persist
+there too, keyed by an HMAC under that secret, so a restart doesn't sign every tab out and
+rotating the secret invalidates them all); the explicit opt-outs
 (`--insecure`, `insecureHosts`) are covered in
 [Run an instance](/workerdeck/docs/getting-started/run-an-instance/#protecting-it).
 

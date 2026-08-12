@@ -30,6 +30,10 @@ The cookie is not a convenience. A browser cannot set a header on a WebSocket ha
 a cookie is the only credential a tab can present when it attaches to a session — and a cookie only
 rides requests to the origin that set it. That is why the dashboard and the API share a port.
 
+Those logins persist in `<state-dir>/auth-sessions.json` (mode 600), so a restart doesn't sign
+every open tab out. Each row is an HMAC of the cookie under the operator secret — so the file is
+worth nothing on its own, and rotating the secret invalidates every outstanding login.
+
 Neither transport authenticates *who* the person is; the secret is a door key. Put an
 identity-aware proxy in front if you need more than that.
 

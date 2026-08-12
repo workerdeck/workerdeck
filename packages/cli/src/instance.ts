@@ -5,6 +5,7 @@ import { createFileSessionStore, createWorkerServer, type WorkerServer } from '@
 import { dashboardDir } from '@workerdeck/web'
 import { createApnsForwarder } from './apns/forwarder.ts'
 import { materializeAuthKey, type MaterializedAuthKey } from './auth-key.ts'
+import { createAuthSessionStore } from './auth-sessions.ts'
 import { createCliAuth, type CliAuth } from './auth.ts'
 import { hostnameOf, isLoopbackHostname, type ResolvedConfig } from './config.ts'
 import { renderLoginPage } from './login-page.ts'
@@ -161,13 +162,19 @@ export async function startInstance(
     config.generateAuthKey && !config.hostAuthenticates
       ? await materializeAuthKey(config.stateDir)
       : null
-  const auth = createCliAuth(
-    config.hostAuthenticates
-      ? { ...config.auth, secret: undefined }
-      : generated
-        ? { ...config.auth, secret: generated.key }
-        : config.auth,
-  )
+  const authOptions = config.hostAuthenticates
+    ? { ...config.auth, secret: undefined }
+    : generated
+      ? { ...config.auth, secret: generated.key }
+      : config.auth
+  // Browser logins persist beside the key they were granted against, for the
+  // same reason the key does: a restart should not un-pair every client. Only
+  // meaningful when there is a secret to log in with and somewhere to write.
+  const sessions =
+    authOptions.secret !== undefined && config.stateDir
+      ? await createAuthSessionStore({ stateDir: config.stateDir })
+      : undefined
+  const auth = createCliAuth(sessions ? { ...authOptions, sessions } : authOptions)
   // The failure mode this seam must make impossible: a resolved config that
   // stood down the Host-header guard (allowedHosts null) believing auth would
   // be on, while `createCliAuth` ended up with no secret — that instance would

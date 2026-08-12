@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Authenticator } from '@workerdeck/server'
 
@@ -50,9 +50,9 @@ export type CliAuthOptions = {
    * Browser session lifetime, default 7 days. Fixed, not sliding: the auth
    * hooks only see the request, so a renewed cookie has nowhere to ride — and
    * for a dashboard whose whole login is retyping one secret, a periodic
-   * re-login is cheaper than a refresh endpoint. Expiry (or a process restart —
-   * sessions are in-memory by design) simply lands the operator back on the
-   * login page.
+   * re-login is cheaper than a refresh endpoint. Expiry simply lands the
+   * operator back on the login page — as does a restart, unless a `sessions`
+   * store is supplied (the CLI supplies one whenever it has a state dir).
    */
   ttlMs?: number
   /**
@@ -75,6 +75,30 @@ export type CliAuthOptions = {
   /** Login throttle tuning; defaults: 15 min window, 10 failures per IP, 100
    * globally. Exposed mainly so tests need not wait out real windows. */
   throttle?: { windowMs?: number; maxFailuresPerIp?: number; maxFailuresGlobal?: number }
+  /**
+   * Makes browser logins survive a restart. Absent, the session table is
+   * in-memory and a restart signs every browser out — see the table's own note.
+   * `createAuthSessionStore` is the CLI's file-backed implementation.
+   */
+  sessions?: CliSessionStore
+}
+
+/** One session-table row as it is handed to a store; the key is opaque here. */
+export type StoredSession = { expiresAt: number }
+
+/**
+ * The durability seam for browser logins. Deliberately narrow and
+ * fire-and-forget: the auth paths are synchronous, so a store may not make them
+ * wait, and a store that cannot write must degrade to "logins do not survive a
+ * restart" rather than refuse a login.
+ */
+export type CliSessionStore = {
+  /** Rows recovered at startup, already pruned of expired ones. */
+  initial?: Iterable<[string, StoredSession]>
+  /** The whole live table after a mutation. Must not throw. */
+  save(entries: [string, StoredSession][]): void
+  /** Resolves once queued writes have landed — for tests and shutdown. */
+  flush?(): Promise<void>
 }
 
 /** What `authenticate` hands the worker server as the request principal. */
@@ -156,13 +180,32 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
    * Browser sessions are a server-side table, not signed tokens: logout must
    * actually invalidate, and a stateless HMAC token stays valid until expiry no
    * matter what the server thinks. This is one long-lived process (multi-node
-   * is a non-goal), so "table" means one Map — the cost is that a restart signs
-   * every browser out, which for an operator dashboard one secret away from
-   * re-login is the right trade. Keys are token digests: recovering an entry's
-   * token from lookup timing would need a SHA-256 preimage.
+   * is a non-goal), so "table" means one Map — optionally mirrored to a
+   * `CliSessionStore` so a restart does not sign every browser out while the
+   * browser still holds a cookie the ttl says is good for a week.
+   *
+   * Keys are `HMAC-SHA256(secret, token)`, which buys three things at once:
+   * recovering a token from a key (or from lookup timing) needs a preimage;
+   * what a store writes to disk is not credential material; and rotating the
+   * operator secret invalidates every outstanding cookie **for free**, since
+   * rows written under the old secret can no longer be looked up and age out on
+   * their own expiry.
    */
-  const sessions = new Map<string, { expiresAt: number }>()
-  const tokenKey = (token: string): string => sha256(token).toString('hex')
+  const sessions = new Map<string, StoredSession>()
+  const store = options.sessions
+  const tokenKey = (token: string): string =>
+    secret === undefined ? sha256(token).toString('hex') : createHmac('sha256', secret).update(token).digest('hex')
+
+  if (store?.initial !== undefined) {
+    for (const [key, entry] of store.initial) {
+      if (sessions.size >= MAX_SESSIONS) break
+      sessions.set(key, { expiresAt: entry.expiresAt })
+    }
+  }
+
+  // Every mutation republishes the whole table: it is capped at MAX_SESSIONS,
+  // and a diff protocol would be a second source of truth to keep honest.
+  const persist = (): void => store?.save([...sessions])
 
   const createSession = (): string => {
     if (sessions.size >= MAX_SESSIONS) {
@@ -171,6 +214,7 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
     }
     const token = randomBytes(32).toString('base64url')
     sessions.set(tokenKey(token), { expiresAt: Date.now() + ttlMs })
+    persist()
     return token
   }
 
@@ -193,6 +237,7 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
     if (entry === undefined) return false
     if (entry.expiresAt <= Date.now()) {
       sessions.delete(key)
+      persist()
       return false
     }
     return true
@@ -493,7 +538,7 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
       const token = cookieToken(req)
       // Deleting the table entry is the invalidation; clearing the cookie is
       // just tidiness. A stale copy of the token is dead either way.
-      if (token !== undefined && token !== '') sessions.delete(tokenKey(token))
+      if (token !== undefined && token !== '' && sessions.delete(tokenKey(token))) persist()
     }
     const cookie = clearCookieValue(req)
     if (json) res.writeHead(204, { 'set-cookie': cookie, 'cache-control': 'no-store' }).end()

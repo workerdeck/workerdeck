@@ -47,6 +47,11 @@ stored in `<state-dir>/auth-key` (mode 600), and reused silently on later starts
 doesn't un-pair the clients that saved it. With `--no-parking-store` there is nowhere to keep
 it, so the key is ephemeral per run and the banner says so.
 
+Browser logins persist beside it, in `<state-dir>/auth-sessions.json` (mode 600), so a restart
+doesn't sign every open tab out either. What lands there is neither the cookie nor the key —
+each row is an HMAC of the cookie under the key — which is also why rotating `--auth-key`
+invalidates every outstanding login for free.
+
 Mind where that lands. The state dir defaults to `~/.workerdeck`, but *beside the config
 file* whenever there is one — so a `workerdeck.config.mjs` checked into a repo puts the key,
 and the plaintext parked transcripts next to it, inside that repo. Add `.workerdeck/` to its

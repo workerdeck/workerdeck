@@ -1,7 +1,7 @@
 import { createServer, request as httpRequest, type IncomingMessage, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createCliAuth, type CliAuth, type CliPrincipal } from '../src/auth.ts'
+import { createCliAuth, type CliAuth, type CliPrincipal, type CliSessionStore, type StoredSession } from '../src/auth.ts'
 
 const SECRET = 'correct-horse-battery-staple'
 
@@ -535,11 +535,81 @@ describe('expiry, logout, restart', () => {
     expect(out.status).toBe(204)
   })
 
-  it('a restart signs every browser out — sessions are in-memory by design', async () => {
+  it('a restart signs every browser out when nothing persists the table', async () => {
     const base = await startHost(createCliAuth({ secret: SECRET }))
     const { cookie } = await login(base, SECRET)
     const restarted = createCliAuth({ secret: SECRET })
     expect(await restarted.authenticate(fakeReq({ headers: { cookie } }))).toBeNull()
     expect(restarted.hasValidSession(fakeReq({ headers: { cookie } }))).toBe(false)
+  })
+})
+
+describe('durable sessions', () => {
+  /** The in-memory stand-in for `createAuthSessionStore`: same seam, no I/O. */
+  function fakeStore(): CliSessionStore & { rows: [string, StoredSession][] } {
+    const store = {
+      rows: [] as [string, StoredSession][],
+      get initial() {
+        return store.rows
+      },
+      save(entries: [string, StoredSession][]) {
+        store.rows = entries
+      },
+    }
+    return store
+  }
+
+  it('a login survives a rebuilt auth object with the same secret', async () => {
+    const store = fakeStore()
+    const base = await startHost(createCliAuth({ secret: SECRET, sessions: store }))
+    const { cookie } = await login(base, SECRET)
+    expect(store.rows).toHaveLength(1)
+
+    const restarted = createCliAuth({ secret: SECRET, sessions: store })
+    const principal = (await restarted.authenticate(fakeReq({ headers: { cookie } }))) as CliPrincipal
+    expect(principal.via).toBe('cookie')
+    expect(restarted.hasValidSession(fakeReq({ headers: { cookie } }))).toBe(true)
+  })
+
+  it('rotating the secret invalidates every stored cookie', async () => {
+    const store = fakeStore()
+    const base = await startHost(createCliAuth({ secret: SECRET, sessions: store }))
+    const { cookie } = await login(base, SECRET)
+
+    // Rows are keyed by HMAC(secret, token), so a table written under the old
+    // secret can no longer be looked up — no revocation list needed.
+    const rotated = createCliAuth({ secret: `${SECRET}-rotated`, sessions: store })
+    expect(await rotated.authenticate(fakeReq({ headers: { cookie } }))).toBeNull()
+  })
+
+  it('what is stored is neither the token nor the secret', async () => {
+    const store = fakeStore()
+    const base = await startHost(createCliAuth({ secret: SECRET, sessions: store }))
+    const { cookie } = await login(base, SECRET)
+    const token = cookie.split('=')[1]
+    const serialized = JSON.stringify(store.rows)
+    expect(token.length).toBeGreaterThan(20)
+    expect(serialized).not.toContain(token)
+    expect(serialized).not.toContain(SECRET)
+  })
+
+  it('logout removes the row, so a restart cannot resurrect it', async () => {
+    const store = fakeStore()
+    const base = await startHost(createCliAuth({ secret: SECRET, sessions: store }))
+    const { cookie } = await login(base, SECRET)
+    await request(`${base}/auth/logout`, { method: 'POST', headers: { cookie, accept: 'application/json' } })
+    expect(store.rows).toHaveLength(0)
+    const restarted = createCliAuth({ secret: SECRET, sessions: store })
+    expect(await restarted.authenticate(fakeReq({ headers: { cookie } }))).toBeNull()
+  })
+
+  it('an expired stored row is refused and swept', async () => {
+    const store = fakeStore()
+    const base = await startHost(createCliAuth({ secret: SECRET, sessions: store, ttlMs: 20 }))
+    const { cookie } = await login(base, SECRET)
+    await sleep(30)
+    const restarted = createCliAuth({ secret: SECRET, sessions: store })
+    expect(await restarted.authenticate(fakeReq({ headers: { cookie } }))).toBeNull()
+    expect(store.rows).toHaveLength(0)
   })
 })

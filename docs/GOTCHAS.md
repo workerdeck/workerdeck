@@ -473,6 +473,19 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - Cookie auth means ambient authority, so CSRF is live: WebSocket upgrades are **exempt from
   CORS**, which makes an explicit `Origin` check — not `SameSite` alone — the actual defense on an
   attach.
+- **The login-session table is keyed by `HMAC-SHA256(secret, token)`, and that keying is doing
+  three jobs at once** — do not "simplify" it back to a plain digest of the token. The table is
+  mirrored to `<stateDir>/auth-sessions.json` (`createAuthSessionStore`) so a restart does not
+  sign every browser out while the browser still holds a cookie the 7-day ttl says is good; but
+  what goes on disk must then be worth nothing to whoever reads it, and rotating `--auth-key`
+  must still invalidate every outstanding cookie. Keying by the secret gives all of it: the file
+  holds neither the cookie value nor the secret (inverting either needs a preimage of a
+  256-bit-entropy input), and rows written under an old secret simply stop matching any lookup
+  and age out on their own expiry — no revocation list, no fingerprint field. Logout still
+  deletes a row, which is why this stayed a server-side table rather than becoming a stateless
+  signed token. The store is fire-and-forget by contract: the auth paths are synchronous, so a
+  store that cannot write must degrade to "logins do not survive a restart", never refuse a
+  login.
 - The CLI's generated auth key is two halves of one promise. `resolveInstanceConfig` is pure (no
   I/O), so when auth is required off loopback with no key it only *records* `generateAuthKey` —
   and already stands the Host-header guard down (`allowedHosts: null`) on the strength of it.
