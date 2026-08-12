@@ -87,7 +87,7 @@ export function EditProfileCard({
     }
     setSaving(true)
     try {
-      onSaved(await client.updateProfile(profile.name, patch))
+      onSaved(await client()!.updateProfile(profile.name, patch))
       toast.success('Profile saved')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to save profile')

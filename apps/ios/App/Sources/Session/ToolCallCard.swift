@@ -11,6 +11,7 @@ struct ToolCallCard: View {
   @Binding var isExpanded: Bool
 
   @Environment(\.producedImageLoader) private var producedImages
+  @Environment(\.transcriptVariant) private var variant
 
   /// The host path this call says it wrote, when the engine reported one. Only
   /// `savedPath` — a file the agent merely *read* is not a produced file and
@@ -20,6 +21,28 @@ struct ToolCallCard: View {
   }
 
   var body: some View {
+    if variant.isLines {
+      // No box: the tool's own icon sits in the gutter and carries the row, the
+      // way `⎿` carries the result line under it in the CLI.
+      HStack(alignment: .firstTextBaseline, spacing: 6) {
+        Image(systemName: ToolIcon.symbol(for: call.name))
+          .font(.caption)
+          .foregroundStyle(call.status == .failed ? Color.red : .secondary)
+          .frame(width: LineGlyph.width)
+          .accessibilityHidden(true)
+        content
+      }
+    } else {
+      content
+        .padding(10)
+        .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+          RoundedRectangle(cornerRadius: 10)
+            .strokeBorder(call.status == .failed ? Color.red.opacity(0.35) : Color.clear))
+    }
+  }
+
+  private var content: some View {
     VStack(alignment: .leading, spacing: 8) {
       Button {
         isExpanded.toggle()
@@ -39,19 +62,18 @@ struct ToolCallCard: View {
         detail
       }
     }
-    .padding(10)
-    .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 10))
-    .overlay(
-      RoundedRectangle(cornerRadius: 10)
-        .strokeBorder(call.status == .failed ? Color.red.opacity(0.35) : Color.clear))
   }
 
   private var header: some View {
     HStack(alignment: .firstTextBaseline, spacing: 8) {
-      Image(systemName: ToolIcon.symbol(for: call.name))
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .frame(width: 16)
+      // In `lines` the icon has moved to the gutter, so the header starts at the
+      // name — two copies of it would break the column the gutter establishes.
+      if !variant.isLines {
+        Image(systemName: ToolIcon.symbol(for: call.name))
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .frame(width: 16)
+      }
       VStack(alignment: .leading, spacing: 2) {
         HStack(spacing: 6) {
           Text(call.name)

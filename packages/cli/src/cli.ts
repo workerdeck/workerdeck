@@ -52,6 +52,14 @@ Options
   -c, --config <path>       config file (default: ./workerdeck.config.mjs)
       --insecure            allow no-auth on a non-loopback address. Only when
                             something in front is doing the authenticating.
+      --cors-origin <o>     browser origin allowed to call /v1 cross-origin, for a
+                            dashboard served elsewhere (repeatable, exact origin, no
+                            wildcard; config: corsOrigins). Refused without auth. The
+                            key is still required — this only permits the call.
+      --no-web              don't serve the web dashboard (config: web: false).
+                            /v1 and the auth routes are unchanged; everything else
+                            404s. For a gateway reached only from the VS Code
+                            extension, the phone, or another host's dashboard.
       --open                open the dashboard in a browser once it is up
   -h, --help                show this
   -v, --version             print the version

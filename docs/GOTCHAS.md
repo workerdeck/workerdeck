@@ -448,12 +448,28 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - **A browser cannot authenticate a WebSocket attach with a header** — the `WebSocket` constructor
   takes `(url, subprotocols)` and nothing else, and the one `authenticate` hook guards REST *and*
   the upgrade. So a dashboard has exactly three options: a cookie (sent automatically on a
-  same-origin upgrade), a query-string ticket (`ClientOptions.buildWsUrl` exists for this, but
-  something has to issue the ticket), or a server-side proxy that stamps the credential on the
-  tab's behalf. Baking a key into the served JS is not one of them. `packages/cli` takes the cookie
-  route, which is the entire reason it serves the app and `/v1` from one origin via the `fallback`
-  option. Anything reached through `fallback` is outside `basePath` and gets no `authenticate`
-  call — that namespace is the host's to guard.
+  same-origin upgrade), a query-string credential (`ClientOptions.buildWsUrl` exists for this),
+  or a server-side proxy that stamps the credential on the tab's behalf. Baking a key into the
+  *served JS* is not one of them. `packages/cli` takes the cookie route for the dashboard it
+  serves itself, which is the entire reason it serves the app and `/v1` from one origin via the
+  `fallback` option. Anything reached through `fallback` is outside `basePath` and gets no
+  `authenticate` call — that namespace is the host's to guard.
+- **Two deployment shapes, two auth models. Do not mix them up.**
+  - **Tenant infra** — the operator's own clients (iOS, the VS Code extension, a dashboard on
+    another machine) talking to the operator's own gateway. These reuse the **one global gateway
+    key**. Node clients send it as a header on both transports. A *browser* client cannot, so
+    `createCliAuth` also accepts it as `?key=` **on WebSocket upgrades only** (`querySecret`),
+    and `hostAuth()` in `packages/client` is the one place that builds those URLs. Confined to
+    upgrades on purpose: a key in a query string is a permanent, replayable credential that
+    lands in reverse-proxy access logs, so what a leaked URL buys is a single attach and never a
+    REST call — `?key=` on REST is *not* authenticated and must stay that way.
+  - **Embedded infra** — WorkerDeck inside a host product, serving that product's end users. The
+    global key is exactly wrong here (every user would hold the operator's secret), so these
+    supply their **own** `authenticate`. That seam already exists and is total: a config file
+    with `authenticate` sets `hostAuthenticates`, `createCliAuth` is then built with
+    `secret: undefined`, and `instance.ts` routes the server's hook to the host's function — so
+    the built-in scheme, **cookie and `?key=` alike**, is not consulted at all. `packages/server`
+    itself never reads `?key=`; grep it before believing otherwise.
 - Cookie auth means ambient authority, so CSRF is live: WebSocket upgrades are **exempt from
   CORS**, which makes an explicit `Origin` check — not `SameSite` alone — the actual defense on an
   attach.

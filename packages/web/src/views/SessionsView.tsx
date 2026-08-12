@@ -1,22 +1,19 @@
 import { useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
-import type { SdkSessionSummary, SessionInfo, SessionRow } from '@workerdeck/protocol'
+import type { SdkSessionSummary, SessionInfo } from '@workerdeck/protocol'
 import {
   Button,
   Dialog,
   DialogBody,
   DialogContent,
   DialogHeader,
-  SessionBrowser,
   Spinner,
   formatRelativeTime,
   toast,
 } from '@workerdeck/ui'
-import { History, Plus, RefreshCw } from 'lucide-react'
+import { History, Plus } from 'lucide-react'
 import { RunFormFields, useRunForm } from '@/components/RunForm.tsx'
+import { BrandMark } from '@/components/shell/BrandMark.tsx'
 import { client } from '@/lib/client.ts'
-import { useSessionRows, useSessions } from '@/lib/useSessions.ts'
-import { useViewConfig } from '@/lib/useViewConfig.ts'
 
 function CreateSessionForm({
   sessions,
@@ -40,7 +37,7 @@ function CreateSessionForm({
     setCreating(true)
     try {
       form.rememberCwd(dir)
-      const session = await client.createSession({
+      const session = await client()!.createSession({
         ...form.sessionFields({
           prompt: resume ? undefined : form.prompt.trim() || undefined,
           resume: resume?.sessionId,
@@ -69,7 +66,7 @@ function CreateSessionForm({
       // Named so the server lists the CHOSEN profile's engine store (codex
       // threads vs Agent SDK sessions) rather than the legacy claude default.
       setSdkSessions(
-        await client.listSdkSessions({
+        await client()!.listSdkSessions({
           dir: form.cwd.trim(),
           limit: 20,
           profile: form.profile || undefined,
@@ -157,93 +154,51 @@ function CreateSessionForm({
   )
 }
 
-export function SessionsView() {
-  const navigate = useNavigate()
-  const { sessions, error, refresh } = useSessions()
-  const rows = useSessionRows(sessions)
-  const [config, setConfig] = useViewConfig()
-  const [creating, setCreating] = useState(false)
-
-  const open = (id: string) =>
-    void navigate({ to: '/sessions/$sessionId', params: { sessionId: id } })
-
-  const rename = (row: SessionRow, title: string) => {
-    // A gateway edit, never a local override: the phone and the extension read
-    // the same `meta.title`, so a name set here has to reach them.
-    void client
-      .updateSession(row.info.id, { title: title || null })
-      .then(() => refresh())
-      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Rename failed'))
-  }
-
+/**
+ * The create-session dialog, owned by whoever raises it.
+ *
+ * Extracted because the `+` that opens it now lives in the sessions sidebar
+ * (which is shell, not route) while the form itself belongs beside the rest of
+ * the session-creation code.
+ */
+export function CreateSessionDialog({
+  open,
+  onOpenChange,
+  sessions,
+  onCreated,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  sessions: SessionInfo[]
+  onCreated: (id: string) => void
+}) {
   return (
-    <div className='flex-1 overflow-y-auto'>
-      <div className='mx-auto flex w-full max-w-3xl flex-col gap-5 px-6 py-6'>
-        <header className='flex items-end justify-between gap-3'>
-          <div>
-            <h1 className='text-display-sm font-semibold tracking-tight text-text'>Sessions</h1>
-            <p className='mt-0.5 text-body-sm text-muted-foreground'>
-              Live Agent SDK sessions on this worker.
-            </p>
-          </div>
-          <div className='flex items-center gap-1'>
-            <Button
-              variant='ghost'
-              size='icon-sm'
-              aria-label='Refresh'
-              onClick={() => void refresh()}>
-              <RefreshCw className='size-4' />
-            </Button>
-            {/* The only way to create. The form used to sit under the list,
-                which meant scrolling past everything to start something. */}
-            <Button onClick={() => setCreating(true)}>
-              <Plus className='size-4' />
-              New session
-            </Button>
-          </div>
-        </header>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size='lg'>
+        <DialogHeader title='New session' description='Pick a directory and an engine.' />
+        <DialogBody>
+          <CreateSessionForm sessions={sessions} onCreated={onCreated} />
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
-        {error ? (
-          <div className='rounded-md bg-danger-bg px-3 py-2 text-body-sm text-danger'>
-            Can’t reach the worker server: {error}. Start it with{' '}
-            <code className='font-mono'>pnpm server</code>.
-          </div>
-        ) : null}
-
-        <SessionBrowser
-          rows={rows}
-          config={config}
-          onConfigChange={setConfig}
-          onSelect={(row) => open(row.info.id)}
-          onRename={rename}
-          onDelete={(row) => {
-            void client
-              .deleteSession(row.info.id)
-              .then(() => refresh())
-              .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Delete failed'))
-          }}
-          emptyState={
-            <div className='px-2.5 py-8 text-center text-body-sm text-fg-4'>
-              No live sessions yet. Start one with <strong className='text-fg-2'>New session</strong>.
-            </div>
-          }
-        />
-
-        <Dialog open={creating} onOpenChange={setCreating}>
-          <DialogContent size='lg'>
-            <DialogHeader title='New session' description='Pick a directory and an engine.' />
-            <DialogBody>
-              <CreateSessionForm
-                sessions={sessions}
-                onCreated={(id) => {
-                  setCreating(false)
-                  open(id)
-                }}
-              />
-            </DialogBody>
-          </DialogContent>
-        </Dialog>
-      </div>
+/**
+ * What fills the editor area when no session is open.
+ *
+ * The list itself is the sidebar now, so this route has nothing to list — it is
+ * VS Code's empty editor group: says where you are and points at the one control
+ * that does something.
+ */
+export function SessionsView() {
+  return (
+    <div className='flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center'>
+      <BrandMark className='size-8 text-fg-4' />
+      <p className='text-body-sm text-fg-3'>Select a session on the left to open it.</p>
+      <p className='text-label text-fg-4'>
+        Or start a new one with <strong className='text-fg-3'>+</strong> in the sidebar header.
+      </p>
     </div>
   )
 }

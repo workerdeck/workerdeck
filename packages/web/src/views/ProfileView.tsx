@@ -1,10 +1,21 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, useParams } from '@tanstack/react-router'
+import { useNavigate, useParams } from '@tanstack/react-router'
 import type { GetProfileResponse } from '@workerdeck/protocol'
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Spinner } from '@workerdeck/ui'
-import { ArrowLeft, Code } from 'lucide-react'
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Spinner,
+  toast,
+} from '@workerdeck/ui'
+import { Code, Trash2 } from 'lucide-react'
 import { EditProfileCard } from '@/components/EditProfileCard.tsx'
+import { DetailBar, DetailBody } from '@/components/shell/DetailBar.tsx'
 import { client } from '@/lib/client.ts'
+import { useProfileList } from '@/lib/useProfiles.ts'
 import { openInVsCode } from './ProfilesView.tsx'
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -35,13 +46,15 @@ function Chips({ items, empty }: { items: string[]; empty: string }) {
  * editor; ones declared in server options stay read-only, since they are code. */
 export function ProfileView() {
   const { profileName } = useParams({ from: '/profiles/$profileName' })
+  const navigate = useNavigate()
+  const { refresh } = useProfileList()
   const [detail, setDetail] = useState<GetProfileResponse | undefined>()
   const [error, setError] = useState<string | undefined>()
 
   useEffect(() => {
     let alive = true
-    client
-      .getProfile(profileName)
+    client()
+      ?.getProfile(profileName)
       .then((d) => {
         if (alive) setDetail(d)
       })
@@ -56,33 +69,48 @@ export function ProfileView() {
   const profile = detail?.profile
   const config = detail?.config
 
-  return (
-    <div className='flex-1 overflow-y-auto'>
-      <div className='mx-auto flex w-full max-w-3xl flex-col gap-5 px-6 py-6'>
-        <header className='flex items-end justify-between gap-3'>
-          <div className='min-w-0'>
-            <Link
-              to='/profiles'
-              className='mb-1 inline-flex items-center gap-1 text-label text-fg-3 hover:text-fg-1'>
-              <ArrowLeft className='size-3' />
-              Profiles
-            </Link>
-            <h1 className='truncate text-display-sm font-semibold tracking-tight text-text'>
-              {profileName}
-            </h1>
-            {profile?.description ? (
-              <p className='mt-0.5 text-body-sm text-muted-foreground'>{profile.description}</p>
-            ) : null}
-          </div>
-          {/* Provider profiles have no config dir to open. */}
-          {profile?.configDir ? (
-            <Button variant='outline' size='xs' onClick={() => openInVsCode(profile.configDir!)}>
-              <Code className='size-3' />
-              Open in VSCode
-            </Button>
-          ) : null}
-        </header>
+  const remove = async () => {
+    try {
+      await client()!.deleteProfile(profileName)
+      await refresh()
+      toast.success(`Profile '${profileName}' deleted`)
+      void navigate({ to: '/profiles' })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Delete failed')
+    }
+  }
 
+  return (
+    <div className='flex min-h-0 flex-1 flex-col'>
+      {/* No back link inside the body: the profiles list is the sidebar and
+          never left the screen, and the crumb names the section anyway. */}
+      <DetailBar
+        crumbs={[{ label: 'Profiles', to: '/profiles' }, { label: profileName }]}
+        actions={
+          <>
+            {/* Provider profiles have no config dir to open. */}
+            {profile?.configDir ? (
+              <Button variant='outline' size='xs' onClick={() => openInVsCode(profile.configDir!)}>
+                <Code className='size-3' />
+                Open in VSCode
+              </Button>
+            ) : null}
+            {/* Only store-backed profiles can be removed — declared ones live in
+                the server's options, where they are code. */}
+            {profile?.managed ? (
+              <Button variant='outline' size='xs' onClick={() => void remove()}>
+                <Trash2 className='size-3' />
+                Delete
+              </Button>
+            ) : null}
+          </>
+        }>
+        {profile?.description ? (
+          <span className='min-w-0 truncate text-label text-fg-4'>{profile.description}</span>
+        ) : null}
+      </DetailBar>
+
+      <DetailBody>
         {error ? (
           <div className='rounded-md bg-danger-bg px-3 py-2 text-body-sm text-danger'>{error}</div>
         ) : null}
@@ -239,7 +267,7 @@ export function ProfileView() {
             </p>
           </>
         ) : null}
-      </div>
+      </DetailBody>
     </div>
   )
 }

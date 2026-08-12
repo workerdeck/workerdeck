@@ -28,8 +28,11 @@ export interface StatusBarProps {
   onOpenStatus?: () => void
   onOpenContext?: () => void
   onOpenUsage?: () => void
-  /** Trailing slot — the session-actions menu, in the panel's top-right. */
+  /** Trailing slot — the session-actions menu, at the bar's trailing edge. */
   actions?: ReactNode
+  /** Which edge the bar sits on, so its separating rule goes on the other side.
+   * Placement is the panel's decision; this only styles it. */
+  placement?: 'top' | 'bottom'
   className?: string
 }
 
@@ -149,6 +152,7 @@ export function StatusBar({
   onOpenContext,
   onOpenUsage,
   actions,
+  placement = 'top',
   className,
 }: StatusBarProps) {
   const meta = STATUS_META[state.status]
@@ -160,7 +164,10 @@ export function StatusBar({
     <div
       data-slot='status-bar'
       className={cn(
-        'flex items-center gap-2 border-b border-border bg-surface px-3 py-1.5',
+        'flex items-center gap-2 border-border bg-surface px-3 py-1.5',
+        // The rule goes between the bar and the content, so which edge it sits
+        // on follows the placement.
+        placement === 'bottom' ? 'border-t' : 'border-b',
         className,
       )}>
       {/* One slot, two meanings: connection trouble wins it, because a session

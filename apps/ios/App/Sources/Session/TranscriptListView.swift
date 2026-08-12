@@ -13,6 +13,9 @@ struct TranscriptListView: View {
   /// Change signal that also fires for streaming text (which doesn't grow `items`).
   let revision: Int
 
+  @Environment(\.transcriptVariant) private var variant
+  @Environment(\.transcriptDensity) private var density
+
   @State private var expanded: Set<String> = []
   @State private var isNearBottom = true
 
@@ -21,7 +24,9 @@ struct TranscriptListView: View {
   var body: some View {
     ScrollViewReader { proxy in
       ScrollView {
-        LazyVStack(alignment: .leading, spacing: 12) {
+        // The one vertical separation between rows there is, which is what makes
+        // it the whole of the density feature.
+        LazyVStack(alignment: .leading, spacing: transcriptRowGap(variant, density)) {
           ForEach(items, id: \.rowID) { item in
             TranscriptItemView(item: item, isExpanded: expansion(item.rowID))
               .id(item.rowID)

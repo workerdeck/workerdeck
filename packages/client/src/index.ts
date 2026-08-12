@@ -743,3 +743,4 @@ export class WorkerDeckClient {
 
 export { apiUrl, isLoopbackHost } from './host-url.ts'
 export type { HostUrl } from './host-url.ts'
+export { hostAuth } from './host-auth.ts'

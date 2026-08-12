@@ -44,8 +44,8 @@ const CWD_KEY = 'workerdeck.last-cwd'
 function useCwdCandidates(sessions: SessionInfo[]): string[] {
   const [roots, setRoots] = useState<string[]>([])
   useEffect(() => {
-    client
-      .listHostRoots()
+    client()
+      ?.listHostRoots()
       .then((r) => setRoots(r.roots.map((root) => root.path)))
       // A gateway serving no host files is the normal case, not an error — the
       // field still takes a typed path.

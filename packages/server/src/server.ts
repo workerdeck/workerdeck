@@ -203,6 +203,24 @@ export type WorkerServerOptions = {
    * Upgrades are not routed here: anything outside `basePath` is still refused.
    */
   fallback?: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
+  /**
+   * Browser origins allowed to call this API cross-origin — for a dashboard
+   * served somewhere other than this gateway.
+   *
+   * Off unless configured, and even then it is *sharing policy, not a
+   * credential*: preflights are answered before auth (browsers strip
+   * credentials from them, so they would otherwise 401), but every real request
+   * still goes through `authenticate`, and an allowlisted page that does not
+   * hold the key gets nothing.
+   *
+   * Two rules the implementation must keep: **exact origins only**, no
+   * wildcards or suffix matching; and `Access-Control-Allow-Credentials` is
+   * **never** sent, which is what keeps an ambient cookie from becoming
+   * cross-origin authority. WebSocket upgrades are exempt from CORS entirely
+   * and are unaffected by this — their credential is whatever the host's
+   * `authenticate` accepts on the handshake.
+   */
+  cors?: { origins: string[] }
   /** Max JSON body size in bytes. Default 1 MiB. */
   maxBodyBytes?: number
   /**
@@ -573,6 +591,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   }
   const basePath = options.basePath ?? '/v1'
   const fallback = options.fallback
+  // Exact origins only — a `Set` because the check runs on every request, and
+  // exactness is the whole guarantee (no wildcards, no suffix matching).
+  const corsOrigins =
+    options.cors?.origins.length ? new Set(options.cors.origins) : undefined
   const maxBodyBytes = options.maxBodyBytes ?? 1024 * 1024
   /** The engine's adapter, honoring the test-only `engines` override. */
   const adapterFor = (engine: ProfileEngine | undefined): EngineAdapter =>
@@ -2013,6 +2035,41 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
 
   const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const pathname = new URL(req.url ?? '/', 'http://internal').pathname
+
+    // CORS, when the host configured it. Resource-sharing policy, not a
+    // credential: every route stays behind `authenticate`, and an allowlisted
+    // page still has to present the key. `Access-Control-Allow-Credentials` is
+    // never sent — that is what keeps the cookie transport same-origin-only, so
+    // opening this up cannot turn an ambient cookie into cross-origin authority.
+    const origin = req.headers.origin
+    const originAllowed =
+      typeof origin === 'string' && corsOrigins !== undefined && corsOrigins.has(origin)
+    if (originAllowed) {
+      res.setHeader('access-control-allow-origin', origin)
+      res.setHeader('vary', 'origin')
+    }
+    // Preflights arrive without credentials (browsers strip them), so they must
+    // be answered *before* `authenticate` or every cross-origin call 401s on the
+    // OPTIONS. Answering one grants nothing: no body, no side effect.
+    if (req.method === 'OPTIONS' && req.headers['access-control-request-method'] !== undefined) {
+      if (!originAllowed) {
+        res.writeHead(403)
+        res.end()
+        return
+      }
+      res.setHeader('access-control-allow-methods', 'GET, HEAD, POST, PATCH, PUT, DELETE')
+      res.setHeader('access-control-allow-headers', 'authorization, content-type, x-workerdeck-key')
+      res.setHeader('access-control-max-age', '600')
+      // Chrome's Private Network Access: a public page reaching a private
+      // address (a tailnet's 100.64/10, a LAN) preflights for this explicitly.
+      if (req.headers['access-control-request-private-network'] === 'true') {
+        res.setHeader('access-control-allow-private-network', 'true')
+      }
+      res.writeHead(204)
+      res.end()
+      return
+    }
+
     // Everything outside basePath belongs to the host, if it wants it. Checked
     // first so the fallback owns a total, contiguous namespace rather than
     // whatever the route table happens to leave over.

@@ -107,6 +107,7 @@ your home directory.
 | `--allowed-origin <o>` / `--allowed-host <name>` (repeatable) | — | loopback names only |
 | `--insecure-host <name>` (repeatable) | — | none (config: `insecureHosts`) |
 | `--no-parking-store` | — | durable parking on |
+| `--no-web` | — | dashboard served (config: `web`) |
 | `--config <path>` | — | `./workerdeck.config.mjs` |
 | `--insecure`, `--open`, `--help`, `--version` | | |
 
@@ -139,6 +140,14 @@ The dashboard's assets resolve from an absolute `/assets/…`, so it must be ser
 root**, not a subpath — a dedicated vhost reverse-proxying to the instance is the intended shape.
 The dashboard itself is [`@workerdeck/web`](https://www.npmjs.com/package/@workerdeck/web),
 an ordinary dependency of the CLI; point `webRoot` at your own build to serve a fork instead.
+
+## Running without the dashboard
+
+`--no-web` (or `web: false`) makes the instance a bare gateway: `/v1` and the auth routes
+answer exactly as before, everything else returns 404, and the dashboard build is never even
+looked for. Worth doing when this gateway is only ever reached from the VS Code extension, the
+iOS app, or a dashboard served somewhere else — a UI nobody opens is still surface. The banner
+says `dashboard: off` so the URL it prints doesn't read as a broken install.
 
 ## Restarting safely
 

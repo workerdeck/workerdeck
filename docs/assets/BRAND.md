@@ -44,6 +44,8 @@ follows the projection too:
 
 | Token | Value | Use |
 | --- | --- | --- |
+| Primary blue | `#0078d4` | The product's primary — buttons, selection, focus rings, badges. Same hue both themes. |
+| Primary blue (dark lift) | `#3794ff` | Hover and focus ring on dark grounds only; too light to carry white text. |
 | Live green | `#2fbf71` | The live marker — everywhere, both themes. Never recolor it. |
 | Stroke (light) | `#525252` | Mark strokes on light grounds |
 | Stroke (dark) | `#d4d4d4` | Mark strokes on dark grounds |
@@ -54,6 +56,17 @@ follows the projection too:
 `#2fbf71` is the *brand* live green (it matches the banner). The UI's semantic
 success colors (`--success` in `packages/ui/src/styles/theme.css`) are separate
 theme tokens — don't conflate them.
+
+The blue and the green answer different questions and must not be merged. The
+**blue is the primary**: it says "this is the thing to press, this is what is
+selected". The **green is a signal**: it says "this is live, right now". A
+primary that also meant "live" would have nothing left to say when a session
+started running — which is why the mark keeps its green diamond even though the
+product's primary is now blue. `--accent` in
+`packages/ui/src/styles/theme.css` is the blue; iOS carries it as the
+`AccentColor` asset; the VS Code webviews deliberately override it with
+`--vscode-*` theme colors, because a panel inside an editor follows the
+editor's theme rather than ours.
 
 ## Files
 

@@ -10,7 +10,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { EngineIcon } from './EngineIcon.tsx'
+import { EngineIcon } from '@workerdeck/ui'
 import { sessionLabel } from '../../src/view-config.ts'
 
 /**

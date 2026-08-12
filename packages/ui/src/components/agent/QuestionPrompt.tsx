@@ -182,7 +182,7 @@ export function QuestionPrompt({ request, onAnswer, onDismiss, className }: Ques
           return (
             <div key={index} className='flex flex-col'>
               <div className='flex items-baseline gap-2'>
-                <LineGlyph className='text-info'>?</LineGlyph>
+                <LineGlyph className='text-fg-3'>?</LineGlyph>
                 <span className='min-w-0 flex-1 text-body-sm leading-5 text-fg-1'>
                   {q.header ? <span className='text-fg-4'>{q.header} · </span> : null}
                   <span className='font-medium'>{q.question}</span>

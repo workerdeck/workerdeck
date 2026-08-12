@@ -98,6 +98,17 @@ export interface SessionPanelProps {
    * take the menu, or it has nowhere left to go.
    */
   statusSurface?: 'internal' | 'external'
+  /**
+   * Which end of the panel the status bar sits at. Default `top`.
+   *
+   * `bottom` is the editor convention — VS Code's status bar runs along the
+   * foot of the window — and suits a host where the panel *is* the editor area
+   * and the chrome above it already belongs to the app. Placement only; the bar
+   * is the same bar, with the same `⋯` menu in its trailing slot, so this
+   * composes with {@link statusSurface} rather than competing with it (external
+   * still means "there isn't one").
+   */
+  statusPlacement?: 'top' | 'bottom'
   /** Where `panelSurface: 'external'` routes opens. Absent = the affordances
    * (status-bar clicks, `/mcp`) become inert rather than half-working. */
   onOpenPanel?: (panel: SessionSurfacePanel) => void
@@ -161,6 +172,22 @@ export interface SessionPanelProps {
    * the number to remember through `SessionVitals.itemCount`.
    */
   unseen?: { itemCount: number; since?: number }
+  /**
+   * A viewer, not a seat at the session: transcript, status bar and panels as
+   * usual, but no composer and no approval prompts.
+   *
+   * For a surface that is *about* a run rather than in it — the dashboard's job
+   * detail, where the session belongs to the queue and typing into it would be a
+   * second operator arriving mid-run. Deliberately not "disabled controls": a
+   * greyed-out composer says the session is busy, an absent one says this screen
+   * does not drive it. The attach is still live and read paths are untouched,
+   * so the transcript streams and the file tree browses.
+   *
+   * It does **not** claim to be an authorization boundary. Anything holding this
+   * client can still send; what it removes is the affordance, and the honest
+   * enforcement lives on the gateway.
+   */
+  readOnly?: boolean
   className?: string
 }
 
@@ -251,6 +278,7 @@ export function SessionPanel({
   header,
   panelSurface = 'internal',
   statusSurface = 'internal',
+  statusPlacement = 'top',
   onOpenPanel,
   onVitals,
   transcriptVariant = 'cards',
@@ -259,6 +287,7 @@ export function SessionPanel({
   onControls,
   focusComposerOnClick = false,
   unseen,
+  readOnly = false,
   className,
 }: SessionPanelProps) {
   const external = panelSurface === 'external'
@@ -503,11 +532,26 @@ export function SessionPanel({
   const menu = external ? null : actionsMenu
   const headerTakesActions = typeof header === 'function'
 
+  // Built once and placed at one end or the other — the bar has a `⋯` menu and
+  // three open handlers, and two copies of that in the tree would be two things
+  // to keep in step.
+  const statusBar = statusExternal ? null : (
+    <StatusBar
+      state={state}
+      connection={connection}
+      placement={statusPlacement}
+      onOpenStatus={external && !onOpenPanel ? undefined : () => openPanel('info')}
+      onOpenContext={external && !onOpenPanel ? undefined : () => openPanel('context')}
+      onOpenUsage={external && !onOpenPanel ? undefined : () => openPanel('usage')}
+      actions={headerTakesActions ? undefined : menu}
+    />
+  )
+
   // Dead-space clicks land in the composer. Anything the user actually aimed at
   // — a control, a link, the end of a drag-selection — keeps its own meaning;
   // this only claims what was left over.
   const handleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (!focusComposerOnClick) return
+    if (!focusComposerOnClick || readOnly) return
     const target = event.target as HTMLElement | null
     if (target?.closest(INTERACTIVE)) return
     if (window.getSelection()?.isCollapsed === false) return
@@ -525,16 +569,7 @@ export function SessionPanel({
         onClick={handleClick}
         className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}>
         {headerTakesActions ? header({ actions: menu }) : header}
-        {statusExternal ? null : (
-          <StatusBar
-            state={state}
-            connection={connection}
-            onOpenStatus={external && !onOpenPanel ? undefined : () => openPanel('info')}
-            onOpenContext={external && !onOpenPanel ? undefined : () => openPanel('context')}
-            onOpenUsage={external && !onOpenPanel ? undefined : () => openPanel('usage')}
-            actions={headerTakesActions ? undefined : menu}
-          />
-        )}
+        {statusPlacement === 'top' ? statusBar : null}
         {protocolMismatch !== undefined ? (
           <Notice level='warning'>
             Server speaks protocol v{protocolMismatch}, this build renders v{PROTOCOL_VERSION}. Some
@@ -569,7 +604,12 @@ export function SessionPanel({
             <div
               data-slot='catch-up'
               className='mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] items-center gap-2 text-label text-fg-3'>
-              <span aria-hidden className='select-none text-accent'>
+              <span
+                aria-hidden
+                className={cn(
+                  'select-none',
+                  transcriptVariant === 'lines' ? 'text-fg-3' : 'text-accent',
+                )}>
                 ※
               </span>
               <span className='min-w-0 flex-1 truncate'>
@@ -594,7 +634,10 @@ export function SessionPanel({
         {/* An engine with no approval channel never raises these, but a stale
             pending request from a replayed log would still render — the record is
             the authority on whether an approval UI means anything here. */}
-        {capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
+        {/* A read-only surface has no answer to give: the status bar still says
+            `awaiting approval`, and the place that can act on it is wherever the
+            session is actually driven. */}
+        {!readOnly && capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
           <div className='px-3 pb-2'>
             <div className='mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] flex-col gap-2'>
               {state.pendingApprovals.map((request) =>
@@ -618,6 +661,7 @@ export function SessionPanel({
             </div>
           </div>
         ) : null}
+        {readOnly ? null : (
         <Composer
           ref={composerRef}
           onSend={handleSend}
@@ -662,6 +706,10 @@ export function SessionPanel({
             )
           }
         />
+        )}
+        {/* Below the composer, along the foot of the panel — the editor
+            convention. Last in the flex column, so it is the bottom edge. */}
+        {statusPlacement === 'bottom' ? statusBar : null}
 
         {/* The internal dialog surface. The external one renders none of these —
             the embedder hosts equivalent surfaces and is handed the intents. */}

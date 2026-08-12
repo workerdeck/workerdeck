@@ -162,7 +162,8 @@ pretends otherwise):
   renders in **VS Code's UI font** (`--vscode-font-family`) — it is workbench UI, and the
   panel's monospace setting deliberately does not reach it.
 
-Vendor marks (`webview/sidebar/EngineIcon.tsx`) are single-path `currentColor` SVGs inlined
+Vendor marks come from `@workerdeck/ui`'s `EngineIcon` (it moved out of this app once the
+dashboard needed the same glyphs) — single-path `currentColor` SVGs inlined
 from [`@lobehub/icons-static-svg`](https://lobehub.com/icons) (MIT) — the React package pulls
 antd and a whole UI kit, which is not a trade worth making for a few 12px glyphs. Claude and
 codex are named by engine; a `provider` session is identified from its model id (gemini,

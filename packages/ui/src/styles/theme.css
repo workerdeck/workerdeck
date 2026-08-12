@@ -24,6 +24,15 @@
   --bg-code: #f5f5f5;
   --bg-elevated: #ffffffcc;
 
+  /* A list row's hover and selected fills. **Alpha, not a flat colour**, because
+     a row sits on whatever its host paints — `bg-sidebar` in the dashboard,
+     `--vscode-sideBar-background` in the extension — and a flat value tuned for
+     one of those is invisible on the others. `--bg-surface-hover` was exactly
+     that mistake: on the dark sidebar (#131313) it lands on #141414, one step
+     of 255 away, so the hover state did not exist. */
+  --row-hover: rgb(0 0 0 / 0.05);
+  --row-active: rgb(0 0 0 / 0.08);
+
   /* ---------- Borders ---------- */
   --border: #ebebeb;
   --border-light: #e0e0e0;
@@ -36,12 +45,19 @@
   --fg-4: #a1a1a1;
   --fg-disabled: #c9c9c9;
 
-  /* ---------- Accent = the inverse of the canvas ---------- */
-  --accent: #171717;
-  --accent-hover: #000000;
-  --accent-dim: #737373;
-  --accent-bg: #f2f2f2;
-  --accent-ring: #17171733;
+  /* ---------- Accent ----------
+   * VS Code blue (`#0078d4`) — the product's primary. It is the *same* hue in
+   * both themes rather than the inverse of the canvas: a primary that flips
+   * from near-black to near-white is a contrast device, not a brand colour, and
+   * WorkerDeck now shares an editor's visual language.
+   *
+   * Not to be confused with the brand's live green (`docs/assets/BRAND.md`),
+   * which stays what it is — a *signal*, not a primary. */
+  --accent: #0078d4;
+  --accent-hover: #106ebe;
+  --accent-dim: #6ca9d8;
+  --accent-bg: #eff6fc;
+  --accent-ring: #0078d433;
 
   /* ---------- Semantic ---------- */
   --success: #0f7b4f;
@@ -72,7 +88,9 @@
   --accent-tint: var(--accent-bg);
   --accent-fg: #ffffff;
   --warn: var(--warning);
-  --ring: var(--fg-1);
+  /* Focus ring is the accent, as in an editor — the comment below already said
+   * "accent-derived"; before the blue it was indistinguishable from fg-1. */
+  --ring: var(--accent);
 }
 
 [data-theme='dark'] {
@@ -82,6 +100,9 @@
   --bg-surface-hover: #141414;
   --bg-code: #141414;
   --bg-elevated: #0a0a0acc;
+
+  --row-hover: rgb(255 255 255 / 0.06);
+  --row-active: rgb(255 255 255 / 0.10);
 
   /* ---------- Borders ---------- */
   --border: #1f1f1f;
@@ -95,12 +116,16 @@
   --fg-4: #6e6e6e;
   --fg-disabled: #454545;
 
-  /* ---------- Accent = the inverse of the canvas ---------- */
-  --accent: #ededed;
-  --accent-hover: #ffffff;
-  --accent-dim: #8f8f8f;
-  --accent-bg: #1f1f1f;
-  --accent-ring: #ffffff3d;
+  /* ---------- Accent ----------
+   * The same blue as light. `--accent` stays `#0078d4` because it is a *fill*
+   * carrying white text (4.6:1) — the brighter `#3794ff` would drop that to
+   * 2.9:1. The bright one is the hover and the ring, where nothing sits on top
+   * of it and the extra lift is what a dark canvas needs. */
+  --accent: #0078d4;
+  --accent-hover: #3794ff;
+  --accent-dim: #4a7ba0;
+  --accent-bg: #12283c;
+  --accent-ring: #3794ff4d;
 
   /* ---------- Semantic ---------- */
   --success: #3ecf8e;
@@ -131,9 +156,12 @@
   --text: var(--fg-1);
   --text-muted: var(--fg-3);
   --accent-tint: var(--accent-bg);
-  --accent-fg: #0a0a0a;
+  /* White on the blue fill in both themes — the accent no longer inverts. */
+  --accent-fg: #ffffff;
   --warn: var(--warning);
-  --ring: var(--fg-1);
+  /* Focus ring is the accent, as in an editor — the comment below already said
+   * "accent-derived"; before the blue it was indistinguishable from fg-1. */
+  --ring: var(--accent);
 }
 
 /* Theme-independent tokens — type tracking, easing, fonts.
@@ -188,6 +216,8 @@
   --color-ring: var(--ring);
 
   --color-surface-hover: var(--bg-surface-hover);
+  --color-row-hover: var(--row-hover);
+  --color-row-active: var(--row-active);
   /* Named code-bg (not code) so it can't shadow the --text-code font-size token:
      with a --color-code defined, `text-code` would resolve to the color namespace
      and paint text in the code *background* color — invisible in both themes. */

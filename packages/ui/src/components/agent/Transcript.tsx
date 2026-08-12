@@ -171,7 +171,7 @@ function RecapRow({ line, since }: { line: string; since?: number }) {
   if (lines) {
     return (
       <div data-slot='recap' className='flex items-baseline gap-2 py-0.5'>
-        <LineGlyph className='text-accent'>※</LineGlyph>
+        <LineGlyph className='text-fg-3'>※</LineGlyph>
         <span className='min-w-0 flex-1 text-label leading-5 text-fg-3'>
           <span className='text-fg-2'>recap:</span> {text}
         </span>
@@ -260,9 +260,8 @@ function SentAttachments({
   attachments: MessageAttachment[]
   attachmentUrl?: (attachmentId: string) => string
 }) {
-  const lines = useLines()
   return (
-    <div className={cn('mb-1 flex flex-wrap gap-1.5', lines ? 'justify-start' : 'justify-end')}>
+    <div className='mb-1 flex flex-wrap justify-start gap-1.5'>
       {attachments.map((attachment) => {
         const href = attachmentUrl?.(attachment.id)
         return attachment.mediaType.startsWith('image/') && href ? (

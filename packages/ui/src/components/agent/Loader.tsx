@@ -79,7 +79,10 @@ export function Loader({ label, startedAt, tokens, className }: LoaderProps) {
 
   return (
     <div data-slot='loader' className={cn('flex items-baseline gap-2', className)}>
-      <LineGlyph className='text-accent'>{pulse}</LineGlyph>
+      {/* `lines` is monochrome: the terminal treatment earns its calm by
+          spending no colour on decoration, and a pulsing glyph is already the
+          loudest thing on a still page. `cards` keeps the brand accent. */}
+      <LineGlyph className={lines ? 'text-fg-3' : 'text-accent'}>{pulse}</LineGlyph>
       <span className='min-w-0 flex-1 text-body-sm leading-5 text-fg-3'>
         {verb}…{' '}
         {readings.length ? <span className='text-label text-fg-4'>({readings.join(' · ')})</span> : null}

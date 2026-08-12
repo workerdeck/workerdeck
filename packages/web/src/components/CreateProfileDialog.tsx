@@ -2,10 +2,10 @@ import { useState } from 'react'
 import type { CreateProfileRequest, ProfileEngine, SessionCapability } from '@workerdeck/protocol'
 import {
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogHeader,
   Input,
   Select,
   SelectContent,
@@ -39,12 +39,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /**
- * Create a store-managed profile. Only rendered when the server reports it will
- * accept one (a profile store plus a principal allowed to manage) — the fields
- * here carry no credentials: `apiKeyEnv` is a variable name the server resolves,
- * and a config directory is a path bounded by the server's allowed roots.
+ * Create a store-managed profile. Only reachable where the server reports it
+ * will accept one (a profile store plus a principal allowed to manage) — the
+ * fields here carry no credentials: `apiKeyEnv` is a variable name the server
+ * resolves, and a config directory is a path bounded by the server's allowed
+ * roots.
  */
-export function CreateProfileCard({ onCreated }: { onCreated: () => Promise<void> | void }) {
+function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void }) {
   const [engine, setEngine] = useState<ProfileEngine>('provider')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -86,12 +87,9 @@ export function CreateProfileCard({ onCreated }: { onCreated: () => Promise<void
     }
     setSaving(true)
     try {
-      await client.createProfile(profile)
-      await onCreated()
-      setName('')
-      setDescription('')
-      setInstructions('')
+      await client()!.createProfile(profile)
       toast.success(`Profile '${profile.name}' created`)
+      onCreated(profile.name)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to create profile')
     } finally {
@@ -100,11 +98,7 @@ export function CreateProfileCard({ onCreated }: { onCreated: () => Promise<void
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>New profile</CardTitle>
-      </CardHeader>
-      <CardContent className='flex flex-col gap-3'>
+    <div className='flex flex-col gap-3'>
         <div className='flex flex-wrap items-end gap-3'>
           <Field label='Engine'>
             <Select
@@ -247,7 +241,33 @@ export function CreateProfileCard({ onCreated }: { onCreated: () => Promise<void
             Create profile
           </Button>
         </div>
-      </CardContent>
-    </Card>
+    </div>
+  )
+}
+
+/** The `+` in the Profiles sidebar header opens this — the shape every create
+ * in this app now takes. */
+export function CreateProfileDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onCreated: (name: string) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size='lg'>
+        <DialogHeader
+          title='New profile'
+          description='What a session runs as — a Claude config directory, or a model provider.'
+        />
+        <DialogBody>
+          {/* Remounted per opening so a cancelled draft does not come back. */}
+          {open ? <CreateProfileForm onCreated={onCreated} /> : null}
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   )
 }

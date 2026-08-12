@@ -34,7 +34,13 @@ export interface SessionWorkspaceProps {
    */
   transcriptVariant?: SessionPanelProps['transcriptVariant']
   transcriptDensity?: SessionPanelProps['transcriptDensity']
+  /** Which end of the panel the status bar sits at — see `SessionPanel`. */
+  statusPlacement?: SessionPanelProps['statusPlacement']
   unseen?: SessionPanelProps['unseen']
+  /** Viewer mode — no composer, no approval prompts. Forwarded verbatim to
+   * {@link SessionPanel}; the file tree and editor are unaffected, since reading
+   * a run's files is the point of a read-only view. */
+  readOnly?: SessionPanelProps['readOnly']
   onVitals?: SessionPanelProps['onVitals']
   /** Rail width in pixels on first render. */
   defaultRailWidth?: number
@@ -85,7 +91,9 @@ export function SessionWorkspace({
   header,
   transcriptVariant,
   transcriptDensity,
+  statusPlacement,
   unseen,
+  readOnly,
   onVitals,
   defaultRailWidth = 260,
   defaultRailCollapsed,
@@ -264,7 +272,9 @@ export function SessionWorkspace({
           header={hoisted}
           transcriptVariant={transcriptVariant}
           transcriptDensity={transcriptDensity}
+          statusPlacement={statusPlacement}
           unseen={unseen}
+          readOnly={readOnly}
           onVitals={onVitals}
           className='min-h-0 flex-1'
         />

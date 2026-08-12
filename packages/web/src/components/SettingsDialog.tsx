@@ -4,6 +4,10 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogHeader,
   PermissionModeSelect,
   Select,
   SelectContent,
@@ -13,7 +17,7 @@ import {
   SelectValue,
 } from '@workerdeck/ui'
 import { ModelPicker } from '@/components/ModelPicker.tsx'
-import { ThemeToggle } from '@/components/shell/ThemeToggle.tsx'
+import { ThemeToggle } from './shell/ThemeToggle.tsx'
 import {
   getDefaultModel,
   getDefaultPermissionMode,
@@ -119,18 +123,32 @@ function VariantSelect() {
   )
 }
 
-export function SettingsView() {
+/**
+ * Settings as a dialog rather than a destination.
+ *
+ * These are client-side preferences — theme, transcript shape, the defaults the
+ * create forms pre-fill — and none of them is somewhere you *work*. A nav entry
+ * that replaced the sidebar and the detail pane to show four rows of selects was
+ * spending the whole window on a preference sheet; a modal returns you to what
+ * you were doing when you close it, which is the only thing anyone wants from
+ * this screen.
+ */
+export function SettingsDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
   return (
-    <div className='flex-1 overflow-y-auto'>
-      <div className='mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 py-6'>
-        <header>
-          <h1 className='text-display-sm font-semibold tracking-tight text-text'>Settings</h1>
-          <p className='mt-0.5 text-body-sm text-muted-foreground'>
-            Client-side preferences. Server policy (auth, cwd roots, API-key requirements) is
-            configured where the worker runs.
-          </p>
-        </header>
-
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size='lg'>
+        <DialogHeader
+          title='Settings'
+          description='Client-side preferences. Server policy (auth, cwd roots, API-key requirements) is configured where the worker runs.'
+        />
+        <DialogBody>
+      <div className='flex flex-col gap-4'>
         <Card>
           <CardHeader>
             <CardTitle>Appearance</CardTitle>
@@ -190,6 +208,8 @@ export function SettingsView() {
           </CardContent>
         </Card>
       </div>
-    </div>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   )
 }

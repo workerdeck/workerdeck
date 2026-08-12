@@ -51,6 +51,46 @@ extension View {
   }
 }
 
+// MARK: - Line gutter
+
+/// The left gutter of a line item: one glyph in a fixed-width box, so every row's
+/// text starts on the same column no matter which kind of event it is. Decorative
+/// — the row's own text says what it is.
+///
+/// The glyph vocabulary is the web transcript's (`❯` typed, `●` said, `✻`
+/// thinking, `·` turn result, `!` notice, `◇` file), so the two surfaces read the
+/// same. Unlike a terminal, a fixed frame here makes the ambiguous-width
+/// characters safe.
+struct LineGlyph: View {
+  let glyph: String
+  var color: Color = .secondary
+
+  static let width: CGFloat = 14
+
+  var body: some View {
+    Text(glyph)
+      .font(.caption.monospaced())
+      .foregroundStyle(color)
+      .frame(width: Self.width)
+      .accessibilityHidden(true)
+  }
+}
+
+/// One `lines` row: a glyph gutter and the content beside it, full width.
+struct LineRow<Content: View>: View {
+  let glyph: String
+  var color: Color = .secondary
+  @ViewBuilder let content: Content
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 6) {
+      LineGlyph(glyph: glyph, color: color)
+      content
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+}
+
 // MARK: - Rows
 
 private struct UserBubble: View {
@@ -58,7 +98,36 @@ private struct UserBubble: View {
   /// Sent with the message; references only, so the thumbnails are fetched.
   let attachments: [MessageAttachment]
 
+  @Environment(\.transcriptVariant) private var variant
+
   var body: some View {
+    if variant.isLines {
+      lines
+    } else {
+      cards
+    }
+  }
+
+  /// Left-aligned behind a `❯`, on a band of its own — the CLI's own treatment.
+  /// No bubble: a prompt is already distinguishable by its marker, and the
+  /// bubble's padding is vertical space this variant refuses to spend.
+  private var lines: some View {
+    LineRow(glyph: "❯", color: .accentColor) {
+      VStack(alignment: .leading, spacing: 6) {
+        if !attachments.isEmpty {
+          SentAttachmentsView(attachments: attachments)
+        }
+        if !text.isEmpty {
+          Text(PromptTokenStyle.styled(text))
+            .font(.callout)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+      }
+    }
+  }
+
+  private var cards: some View {
     HStack {
       Spacer(minLength: 44)
       VStack(alignment: .trailing, spacing: 6) {
@@ -89,7 +158,17 @@ private struct AssistantText: View {
   let text: String
   let streaming: Bool
 
+  @Environment(\.transcriptVariant) private var variant
+
   var body: some View {
+    if variant.isLines {
+      LineRow(glyph: "●") { content }
+    } else {
+      content
+    }
+  }
+
+  private var content: some View {
     VStack(alignment: .leading, spacing: 4) {
       MarkdownText(text: text)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -109,7 +188,17 @@ private struct ThinkingRow: View {
   let text: String
   @Binding var isExpanded: Bool
 
+  @Environment(\.transcriptVariant) private var variant
+
   var body: some View {
+    if variant.isLines {
+      LineRow(glyph: "✻") { content }
+    } else {
+      content
+    }
+  }
+
+  private var content: some View {
     VStack(alignment: .leading, spacing: 6) {
       Button {
         isExpanded.toggle()
@@ -142,8 +231,24 @@ private struct TurnResultRow: View {
   let totalCostUsd: Double
   let errors: [String]?
 
+  @Environment(\.transcriptVariant) private var variant
+
   var body: some View {
-    VStack(spacing: 3) {
+    if variant.isLines {
+      // Left-aligned on the gutter with everything else: `lines` has no centred
+      // rows, because a centred row breaks the column the glyphs establish.
+      LineRow(glyph: "·", color: isError ? .red : .secondary) {
+        summary
+      }
+    } else {
+      summary
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 2)
+    }
+  }
+
+  private var summary: some View {
+    VStack(alignment: variant.isLines ? .leading : .center, spacing: 3) {
       HStack(spacing: 6) {
         Image(systemName: isError ? "xmark.circle.fill" : "checkmark.circle")
         Text("\(Fmt.duration(ms: durationMs)) · \(Fmt.cost(totalCostUsd))")
@@ -162,8 +267,6 @@ private struct TurnResultRow: View {
         }
       }
     }
-    .frame(maxWidth: .infinity, alignment: .center)
-    .padding(.vertical, 2)
   }
 }
 
@@ -171,14 +274,26 @@ private struct NoticeRow: View {
   let level: NoticeLevel
   let text: String
 
+  @Environment(\.transcriptVariant) private var variant
+
   var body: some View {
-    Text(text)
-      .font(.caption2)
-      .foregroundStyle(level == .error ? Color.red : Color.secondary)
-      .multilineTextAlignment(.center)
-      .textSelection(.enabled)
-      .frame(maxWidth: .infinity, alignment: .center)
-      .padding(.vertical, 2)
+    if variant.isLines {
+      LineRow(glyph: "!", color: level == .error ? .red : .secondary) {
+        Text(text)
+          .font(.caption2)
+          .foregroundStyle(level == .error ? Color.red : Color.secondary)
+          .multilineTextAlignment(.leading)
+          .textSelection(.enabled)
+      }
+    } else {
+      Text(text)
+        .font(.caption2)
+        .foregroundStyle(level == .error ? Color.red : Color.secondary)
+        .multilineTextAlignment(.center)
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 2)
+    }
   }
 }
 
@@ -191,15 +306,28 @@ private struct FileDeliveredCard: View {
   let description: String?
 
   @Environment(\.fileDownloader) private var downloader
+  @Environment(\.transcriptVariant) private var variant
 
   var body: some View {
+    if variant.isLines {
+      LineRow(glyph: "◇") { button }
+    } else {
+      button
+    }
+  }
+
+  private var button: some View {
     Button {
       downloader?.download(path)
     } label: {
       HStack(spacing: 10) {
-        Image(systemName: "doc.badge.arrow.up")
-          .imageScale(.large)
-          .foregroundStyle(Color.accentColor)
+        // The gutter glyph already marks this row as a file in `lines`; a second
+        // icon beside it would say the same thing twice.
+        if !variant.isLines {
+          Image(systemName: "doc.badge.arrow.up")
+            .imageScale(.large)
+            .foregroundStyle(Color.accentColor)
+        }
         VStack(alignment: .leading, spacing: 2) {
           Text(Fmt.lastComponent(path))
             .font(.callout.weight(.medium))
@@ -218,8 +346,11 @@ private struct FileDeliveredCard: View {
             .foregroundStyle(.secondary)
         }
       }
-      .padding(10)
-      .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+      .padding(variant.isLines ? 0 : 10)
+      .background(
+        variant.isLines ? Color.clear : Color.secondary.opacity(0.1),
+        in: RoundedRectangle(cornerRadius: 10)
+      )
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)

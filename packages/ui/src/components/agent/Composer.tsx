@@ -16,6 +16,7 @@ import { Spinner } from '../ui/Spinner.tsx'
 import { PromptArea } from '../prompt-area/prompt-area.tsx'
 import { usePromptAreaState } from '../prompt-area/use-prompt-area-state.ts'
 import { commandTrigger, mentionTrigger } from '../prompt-area/trigger-presets.ts'
+import { useLines } from './transcript-variant.tsx'
 import type { TriggerSuggestion } from '../prompt-area/types.ts'
 import { cn } from '../../lib/utils.ts'
 import { formatBytes } from '../../lib/format.ts'
@@ -140,6 +141,9 @@ export function Composer({
   ref,
 }: ComposerProps) {
   const inline = layout === 'inline'
+  // The transcript's variant reaches here through the panel-wide context, so
+  // the composer matches the rows above it without a prop chain.
+  const lines = useLines()
   const { bind, plainText, isEmpty, clear, focus } = usePromptAreaState()
   const fileInput = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -378,9 +382,19 @@ export function Composer({
           pick(e.dataTransfer.files)
         }}
         className={cn(
-          'mx-auto w-full max-w-[var(--wd-content-max-w,48rem)] overflow-hidden rounded-lg border border-border bg-bg shadow-(--shadow-xs)',
-          'transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30',
-          dragging && 'border-ring ring-2 ring-ring/30',
+          'mx-auto w-full max-w-[var(--wd-content-max-w,48rem)] overflow-hidden border border-border bg-bg',
+          'transition-colors',
+          // VS Code's input: a flat, near-square box that gains a 1px accent
+          // border on focus. No radius worth the name, no shadow, no glow ring —
+          // an editor's chrome sits *in* the surface rather than floating above
+          // it, and the `lines` transcript above it has no rounded box either.
+          lines
+            ? 'rounded-sm focus-within:border-accent'
+            : cn(
+                'rounded-lg shadow-(--shadow-xs)',
+                'focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30',
+              ),
+          dragging && (lines ? 'border-accent' : 'border-ring ring-2 ring-ring/30'),
           disabled && 'opacity-60',
         )}>
         {/* Above the field, like the picture you are talking about should be. */}
@@ -445,13 +459,7 @@ export function Composer({
             <X className='size-3' />
           </button>
         </div>
-      ) : (
-        <div
-          data-slot='composer-hint'
-          className='mx-auto mt-1 w-full max-w-[var(--wd-content-max-w,48rem)] text-center text-label text-fg-4'>
-          Enter to send · Shift+Enter for a new line
-        </div>
-      )}
+      ) : null}
     </div>
   )
 }

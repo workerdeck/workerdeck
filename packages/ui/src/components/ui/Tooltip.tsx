@@ -8,7 +8,7 @@ export const TooltipContent: FunctionComponent<
   TooltipPrimitive.Popup.Props & Pick<TooltipPrimitive.Positioner.Props, 'side' | 'sideOffset'>
 > = ({ className, side = 'top', sideOffset = 6, ...props }) => (
   <TooltipPrimitive.Portal>
-    <TooltipPrimitive.Positioner side={side} sideOffset={sideOffset} className='isolate z-60'>
+    <TooltipPrimitive.Positioner side={side} sideOffset={sideOffset} className='isolate z-90'>
       <TooltipPrimitive.Popup
         data-slot='tooltip-content'
         className={cn(

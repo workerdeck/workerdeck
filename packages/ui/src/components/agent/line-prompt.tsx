@@ -128,7 +128,7 @@ export function LineOptionList({
                 'flex w-full items-baseline gap-2 text-left outline-none',
                 isFocused ? 'bg-surface-hover' : 'hover:bg-surface-hover/60',
               )}>
-              <LineGlyph className={isFocused ? 'text-accent' : undefined}>
+              <LineGlyph className={isFocused ? 'text-fg-1' : undefined}>
                 {isFocused ? '❯' : ' '}
               </LineGlyph>
               <span className='shrink-0 font-mono text-label leading-5 text-fg-4'>{index + 1}</span>
@@ -184,7 +184,7 @@ export function LineInput({
 }) {
   return (
     <div className='flex items-baseline gap-2'>
-      <LineGlyph className='text-accent'>›</LineGlyph>
+      <LineGlyph className='text-fg-3'>›</LineGlyph>
       <input
         autoFocus
         value={value}

@@ -14,7 +14,7 @@ export const MenuContent: FunctionComponent<
       align={align}
       side={side}
       sideOffset={sideOffset}
-      className='isolate z-60 outline-none'>
+      className='isolate z-80 outline-none'>
       <MenuPrimitive.Popup
         data-slot='menu-content'
         className={cn(

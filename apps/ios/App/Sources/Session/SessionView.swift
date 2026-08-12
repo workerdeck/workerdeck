@@ -26,6 +26,7 @@ struct SessionView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(PushCoordinator.self) private var push
   @Environment(UnreadModel.self) private var unread
+  @Environment(AppSettings.self) private var settings
 
   /// The gateway this session belongs to — the watermark key's first half.
   private let hostId: UUID
@@ -100,6 +101,9 @@ struct SessionView: View {
       .environment(\.fileDownloader, downloader)
       .environment(\.attachmentLoader, attachmentLoader)
       .environment(\.producedImageLoader, producedImages)
+      // Reader preferences enter the transcript here, once, and every row below
+      // reads them from the environment.
+      .transcriptPreferences(settings)
       .fileDownloadPresentation(downloader)
       .task {
         downloader.access = vm.fileAccess

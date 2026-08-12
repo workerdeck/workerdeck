@@ -154,6 +154,48 @@ describe('header transport', () => {
   })
 })
 
+describe('query-string transport (browser WS attach)', () => {
+  const auth = createCliAuth({ secret: SECRET })
+  const ws = (url: string) => fakeReq({ url, headers: { upgrade: 'websocket' } })
+
+  it('accepts ?key= on a WebSocket upgrade', async () => {
+    const principal = (await auth.authenticate(
+      ws(`/v1/sessions/abc/ws?afterSeq=0&key=${encodeURIComponent(SECRET)}`),
+    )) as CliPrincipal
+    expect(principal.via).toBe('header')
+  })
+
+  it('does NOT authenticate REST with ?key=', async () => {
+    // The whole point of confining it to upgrades: a credential in a URL is
+    // logged by proxies, so what a leaked URL buys must be one attach — never
+    // the run of the API.
+    expect(
+      await auth.authenticate(fakeReq({ url: `/v1/sessions?key=${encodeURIComponent(SECRET)}` })),
+    ).toBeNull()
+    expect(
+      await auth.authenticate(
+        fakeReq({ method: 'POST', url: `/v1/sessions?key=${encodeURIComponent(SECRET)}` }),
+      ),
+    ).toBeNull()
+  })
+
+  it('rejects a wrong ?key= without falling through to the cookie', async () => {
+    expect(await auth.authenticate(ws('/v1/sessions/abc/ws?key=wrong'))).toBeNull()
+    expect(await auth.authenticate(ws('/v1/sessions/abc/ws?key='))).toBeNull()
+    expect(await auth.authenticate(ws('/v1/sessions/abc/ws'))).toBeNull()
+  })
+
+  it('is off entirely when the host supplies its own auth (no secret)', async () => {
+    // Embedded deployments never see this transport: `createCliAuth` is built
+    // with `secret: undefined`, and `instance.ts` routes to the host's hook.
+    const disabled = createCliAuth()
+    const principal = (await disabled.authenticate(
+      ws('/v1/sessions/abc/ws?key=anything'),
+    )) as CliPrincipal
+    expect(principal.via).toBe('open')
+  })
+})
+
 describe('login and cookie flow', () => {
   it('sets a hardened cookie and redirects to /', async () => {
     const base = await startHost(createCliAuth({ secret: SECRET }))

@@ -1,4 +1,4 @@
-import { cn } from '@workerdeck/ui'
+import { cn } from '../../lib/utils.ts'
 
 /**
  * The engine's own mark, monochrome.

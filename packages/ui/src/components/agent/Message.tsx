@@ -9,9 +9,12 @@ export interface MessageProps extends HTMLAttributes<HTMLDivElement> {
 /**
  * One chat turn row.
  *
- * `cards`: user messages sit right in a bubble; assistant content is flat,
- * full-width (the AI-chat convention — assistant output is the page, user input
- * is quoted).
+ * `cards`: user messages sit in a bubble, assistant content is flat and
+ * full-width. Both are **left-aligned**: the transcript is a log read top to
+ * bottom, and an editor-shaped host (a full-width session view beside a sessions
+ * rail) has no right edge to anchor to — a bubble drifting right in a 1600px
+ * column separates a prompt from the reply it produced. The bubble alone is
+ * enough to say who spoke.
  *
  * `lines`: both are left-aligned full-width line items behind a gutter glyph —
  * `❯` for what was typed, `●` for what the model said. No bubble: a prompt is
@@ -35,13 +38,13 @@ export function Message({ from, className, children, ...props }: MessageProps) {
               // inside it, and square-ish so it reads as a strip, not a bubble.
               from === 'user' && '-mx-1 rounded-sm bg-surface px-1',
             )
-          : cn('flex-col gap-1', from === 'user' ? 'items-end' : 'items-start'),
+          : 'flex-col items-start gap-1',
         className,
       )}
       {...props}>
       {lines ? (
         <>
-          <LineGlyph className={from === 'user' ? 'text-accent' : 'text-fg-3'}>
+          <LineGlyph className={from === 'user' ? 'text-fg-2' : 'text-fg-3'}>
             {from === 'user' ? '❯' : '●'}
           </LineGlyph>
           <div className='flex min-w-0 flex-1 flex-col gap-1'>{children}</div>
@@ -65,7 +68,8 @@ export function MessageContent({ className, ...props }: HTMLAttributes<HTMLDivEl
           : cn(
               'text-body-sm leading-6 text-fg-1',
               // Bubble treatment only within a user message row.
-              'in-data-[from=user]:max-w-[85%] in-data-[from=user]:rounded-lg in-data-[from=user]:rounded-br-sm',
+              // The tail points bottom-*left* now that the bubble is left-aligned.
+              'in-data-[from=user]:max-w-[85%] in-data-[from=user]:rounded-lg in-data-[from=user]:rounded-bl-sm',
               'in-data-[from=user]:bg-accent-bg in-data-[from=user]:px-3 in-data-[from=user]:py-2',
               'in-data-[from=user]:whitespace-pre-wrap',
               'in-data-[from=assistant]:w-full',

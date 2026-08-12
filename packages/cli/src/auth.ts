@@ -3,17 +3,32 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Authenticator } from '@workerdeck/server'
 
 /**
- * Gateway auth for the turnkey CLI: one shared operator secret, two transports.
+ * Gateway auth for the turnkey CLI: one shared operator secret, three transports.
  *
  * Services present the secret itself on every request (`x-workerdeck-key`,
- * or `Authorization: Bearer`). The dashboard cannot: the SPA is prebuilt to
- * call `location.origin + '/v1'` with no headers, and a browser WebSocket
+ * or `Authorization: Bearer`). The dashboard *served by this gateway* cannot:
+ * it calls `location.origin + '/v1'` with no headers, and a browser WebSocket
  * handshake carries no custom headers at all. So browsers POST the secret once
  * to `/auth/login`, get an HttpOnly cookie naming a server-side session, and
  * the cookie rides same-origin REST and the WS upgrade automatically. That
  * automatic ride is also the threat: the cookie is ambient authority, and the
  * WS handshake is exempt from CORS, so cross-origin misuse is fenced off by an
  * explicit Origin check here — not by the browser.
+ *
+ * The third transport exists for a dashboard served *elsewhere* attaching to
+ * this gateway: it holds the key (the operator typed it in) and can put it on
+ * REST as a header, but still cannot put it on the WS handshake — and the
+ * cookie is another origin's, so it does not ride either. Such a client passes
+ * the key as `?key=` on the upgrade URL, and `querySecret` below accepts it
+ * **on upgrades only**.
+ *
+ * That is a deliberate, narrow concession, and its cost should be understood
+ * rather than rediscovered: a key in a query string is a permanent, replayable
+ * credential sitting in reverse-proxy access logs, where a header would not be.
+ * It is confined to upgrades so a leaked URL buys an attach and nothing else,
+ * and the seam it arrives through (`ClientOptions.buildWsUrl`) is the same one
+ * a short-lived minted ticket would use — swapping to one later needs no client
+ * change.
  *
  * This file guards the operator's own gateway and nothing else. It never sees
  * an Anthropic credential — those are resolved by the SDK/CLI from the
@@ -250,12 +265,35 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
 
   const openPrincipal: CliPrincipal = { via: 'open', canManageProfiles: true }
 
+  const isUpgradeRequest = (req: IncomingMessage): boolean => {
+    const upgrade = req.headers.upgrade
+    return typeof upgrade === 'string' && upgrade.toLowerCase().includes('websocket')
+  }
+
+  /**
+   * The secret from `?key=` — **accepted on WebSocket upgrades only**.
+   *
+   * A browser cannot put a header on a WS handshake, so a tab attaching to a
+   * gateway that is not its own origin (where the cookie would ride) has no
+   * other way to present the key. That is the whole reason this exists.
+   *
+   * Restricting it to upgrades is what keeps the blast radius at "one attach":
+   * a key in a query string is not a transport we want anywhere else, because
+   * URLs land in proxy access logs and browser history in a way headers do not.
+   * A REST call with `?key=` is therefore *not* authenticated by it.
+   */
+  const querySecret = (req: IncomingMessage): string | undefined => {
+    if (!isUpgradeRequest(req)) return undefined
+    const key = new URL(req.url ?? '/', 'http://internal').searchParams.get('key')
+    return key !== null && key !== '' ? key : undefined
+  }
+
   const authenticate: Authenticator = (req) => {
     if (!enabled) return openPrincipal
     // Header first: the secret itself is not ambient — the sender chose to
     // attach it — so no Origin check applies. A present-but-wrong header is a
     // rejection, never a fall-through to the cookie.
-    const provided = headerSecret(req)
+    const provided = headerSecret(req) ?? querySecret(req)
     if (provided !== undefined) {
       return secretMatches(provided) ? ({ via: 'header', canManageProfiles: true } satisfies CliPrincipal) : null
     }
@@ -268,8 +306,7 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
     // State-changing methods and WS upgrades additionally require Origin to be
     // present: browsers always send it there, so absence means a non-browser
     // client replaying the cookie — which should be using the header transport.
-    const upgrade = req.headers.upgrade
-    const isUpgrade = typeof upgrade === 'string' && upgrade.toLowerCase().includes('websocket')
+    const isUpgrade = isUpgradeRequest(req)
     const unsafe = !SAFE_METHODS.has((req.method ?? 'GET').toUpperCase())
     if ((isUpgrade || unsafe) && verdict !== 'ok') return null
     return { via: 'cookie', canManageProfiles: true } satisfies CliPrincipal

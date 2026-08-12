@@ -1,0 +1,222 @@
+import { useState } from 'react'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
+import type { JobInfo, JobStatus } from '@workerdeck/protocol'
+import {
+  Badge,
+  Button,
+  Input,
+  Spinner,
+  cn,
+  formatCost,
+  formatRelativeTime,
+  toast,
+  type BadgeProps,
+} from '@workerdeck/ui'
+import { Plus, RefreshCw, X } from 'lucide-react'
+import { ScheduleJobDialog } from '@/views/JobsView.tsx'
+import { client } from '@/lib/client.ts'
+import { SidebarBody, SidebarEmpty, SidebarFrame } from './SidebarFrame.tsx'
+import { RowAction, SidebarRow } from './SidebarRow.tsx'
+import { useJobs } from '@/lib/useJobs.ts'
+
+export const JOB_STATUS_META: Record<
+  JobStatus,
+  { label: string; variant: BadgeProps['variant']; busy?: boolean }
+> = {
+  queued: { label: 'Queued', variant: 'neutral' },
+  running: { label: 'Running', variant: 'info', busy: true },
+  // Waiting on an external execution: still live, but nothing is burning here.
+  parked: { label: 'Parked', variant: 'accent' },
+  succeeded: { label: 'Succeeded', variant: 'success' },
+  failed: { label: 'Failed', variant: 'danger' },
+  canceled: { label: 'Canceled', variant: 'warning' },
+}
+
+/**
+ * Jobs run to completion and are kept, so this list only grows — a queue that
+ * has been up a week is mostly history. Search and an active-only toggle are
+ * what make the two jobs you care about findable in it.
+ *
+ * Its own small model rather than the sessions list's: a job's statuses are the
+ * queue's (`queued`/`succeeded`/`canceled`), not a session's lifecycle, and
+ * collapsing them into the session buckets would lose the distinction the queue
+ * is actually about.
+ */
+const ACTIVE_JOB_STATUSES: JobStatus[] = ['queued', 'running', 'parked']
+
+export function JobsSidebar() {
+  const navigate = useNavigate()
+  const activeId = useRouterState({
+    select: (s) => s.location.pathname.match(/^\/jobs\/(.+)$/)?.[1],
+  })
+  const { jobs, enabled, live, refresh } = useJobs()
+  const [creating, setCreating] = useState(false)
+  const [search, setSearch] = useState('')
+  const [activeOnly, setActiveOnly] = useState(false)
+
+  const needle = search.trim().toLowerCase()
+  const shown = [...jobs]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .filter(
+      (job) =>
+        (!activeOnly || ACTIVE_JOB_STATUSES.includes(job.status)) &&
+        (!needle ||
+          job.prompt.toLowerCase().includes(needle) ||
+          job.cwd.toLowerCase().includes(needle) ||
+          (job.profile?.toLowerCase().includes(needle) ?? false) ||
+          job.id.startsWith(needle)),
+    )
+  const hiding = jobs.length - shown.length
+
+  const create = enabled ? (
+    <Button variant='ghost' size='icon-sm' aria-label='Schedule a job' onClick={() => setCreating(true)}>
+      <Plus className='size-4' />
+    </Button>
+  ) : undefined
+
+  return (
+    <>
+      <SidebarFrame
+        section='jobs'
+        title='Jobs'
+        badge={
+          enabled ? (
+            <span
+              aria-hidden
+              title={live ? 'Streaming over the queue socket' : 'Polling'}
+              className={cn(
+                'size-1.5 shrink-0 rounded-full',
+                live ? 'bg-success' : 'bg-fg-4',
+              )}
+            />
+          ) : undefined
+        }
+        actions={
+          <>
+            <Button variant='ghost' size='icon-sm' aria-label='Refresh' onClick={() => void refresh()}>
+              <RefreshCw className='size-3.5' />
+            </Button>
+            {create}
+          </>
+        }
+        railActions={create}>
+        {!enabled ? (
+          <SidebarEmpty>The server has no job queue configured.</SidebarEmpty>
+        ) : (
+          <>
+            {jobs.length > 0 ? (
+              <div className='flex items-center gap-1 px-2 pb-2'>
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder='Search jobs'
+                  aria-label='Search jobs'
+                  className='h-7 min-w-0 flex-1 text-body-sm'
+                />
+                <Button
+                  variant={activeOnly ? 'default' : 'outline'}
+                  size='xs'
+                  aria-pressed={activeOnly}
+                  onClick={() => setActiveOnly(!activeOnly)}>
+                  Active
+                </Button>
+              </div>
+            ) : null}
+
+            <SidebarBody>
+              {jobs.length === 0 ? (
+                <SidebarEmpty>
+                  No jobs yet. Schedule one with <strong className='text-fg-3'>+</strong>.
+                </SidebarEmpty>
+              ) : shown.length === 0 ? (
+                <SidebarEmpty>No jobs match.</SidebarEmpty>
+              ) : null}
+              {shown.map((job) => (
+                <JobRow
+                  key={job.id}
+                  job={job}
+                  active={job.id === activeId}
+                  onOpen={() => void navigate({ to: '/jobs/$jobId', params: { jobId: job.id } })}
+                  onChanged={() => void refresh()}
+                />
+              ))}
+              {/* Said whenever the list is shorter than the queue — the control
+                  that explains a short list must not be the thing you have to
+                  guess at. */}
+              {hiding > 0 ? (
+                <p className='px-1 pt-2 text-center text-label text-fg-4'>
+                  {shown.length} of {jobs.length}
+                </p>
+              ) : null}
+            </SidebarBody>
+          </>
+        )}
+      </SidebarFrame>
+
+      <ScheduleJobDialog
+        open={creating}
+        onOpenChange={setCreating}
+        onScheduled={() => {
+          setCreating(false)
+          void refresh()
+        }}
+      />
+    </>
+  )
+}
+
+function JobRow({
+  job,
+  active,
+  onOpen,
+  onChanged,
+}: {
+  job: JobInfo
+  active: boolean
+  onOpen: () => void
+  onChanged: () => void
+}) {
+  const meta = JOB_STATUS_META[job.status]
+  // Parked jobs are live too — cancelling one is how you abandon a wait.
+  const cancellable = job.status === 'queued' || job.status === 'running' || job.status === 'parked'
+  // The age rides the description line rather than the status side: a job's
+  // status is a *word*, not a glyph the way a session's is, and a badge plus a
+  // timestamp on one line leaves the prompt — the only thing that tells two
+  // jobs apart — truncated to nothing.
+  const details = [
+    formatRelativeTime(job.finishedAt ?? job.startedAt ?? job.createdAt),
+    job.cwd.split('/').filter(Boolean).pop() ?? job.cwd,
+  ]
+  if (job.profile) details.push(`@${job.profile}`)
+  if (job.usage.totalCostUsd > 0) details.push(formatCost(job.usage.totalCostUsd))
+  return (
+    <SidebarRow
+      active={active}
+      onSelect={onOpen}
+      title={job.prompt}
+      status={
+        <Badge variant={meta.variant} dot={!meta.busy} className='shrink-0'>
+          {meta.busy ? <Spinner className='size-3 text-current' /> : null}
+          {meta.label}
+        </Badge>
+      }
+      description={details.join(' · ')}
+      actions={
+        cancellable ? (
+          <RowAction
+            label='Cancel job'
+            onClick={() => {
+              void client()
+                ?.cancelJob(job.id)
+                .then(onChanged)
+                .catch((e: unknown) =>
+                  toast.error(e instanceof Error ? e.message : 'Cancel failed'),
+                )
+            }}>
+            <X className='size-3' />
+          </RowAction>
+        ) : null
+      }
+    />
+  )
+}

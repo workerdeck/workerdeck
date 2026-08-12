@@ -71,7 +71,9 @@ export function createHostGuard(allowedHosts: Set<string> | null): (req: Incomin
  */
 function createFallback(
   auth: CliAuth,
-  webRoot: string,
+  /** Undefined when the dashboard is switched off — everything below the auth
+   * and APNs routes then 404s, and `/v1` is unaffected. */
+  webRoot: string | undefined,
   hostAllowed: (req: IncomingMessage) => boolean,
   apnsRoute?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
@@ -88,6 +90,15 @@ function createFallback(
     }
     if (await auth.handleAuthRequest(req, res)) return
     if (apnsRoute !== undefined && (await apnsRoute(req, res))) return
+
+    // Nothing below this point exists without a dashboard. Deliberately after
+    // the auth and APNs routes: turning the *dashboard* off must not turn off
+    // the gateway's own surfaces, and `/v1` never reaches this hook at all.
+    if (webRoot === undefined) {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
+      res.end('the web dashboard is disabled on this gateway\n')
+      return
+    }
 
     const pathname = new URL(req.url ?? '/', 'http://internal').pathname
 
@@ -141,7 +152,9 @@ export async function startInstance(
   config: ResolvedConfig,
   options: { quiet?: boolean } = {},
 ): Promise<Instance> {
-  const webRoot = config.webRoot ?? resolveWebRoot()
+  // Resolved lazily: `resolveWebRoot` throws when there is no build, and an
+  // instance told not to serve the dashboard should not need one to exist.
+  const webRoot = config.web ? (config.webRoot ?? resolveWebRoot()) : undefined
   // The other half of `generateAuthKey`: resolution promised auth without doing
   // I/O, this is where the key actually comes to exist.
   const generated: MaterializedAuthKey | null =
@@ -164,6 +177,16 @@ export async function startInstance(
     throw new Error(
       'refusing to serve: the resolved config expects auth but no shared secret was ' +
         'materialized — this instance would be open while believing itself authenticated',
+    )
+  }
+  // Sibling of the assert above, guarding the same promise from the other side.
+  // CORS on an open gateway would let any allowlisted page read and drive it
+  // with no credential at all — the sanctioned answer to "I want a remote
+  // dashboard on a keyless gateway" is to set a key.
+  if (config.corsOrigins.length > 0 && !config.hostAuthenticates && !auth.enabled) {
+    throw new Error(
+      'refusing to serve: corsOrigins is set but this instance has no auth — ' +
+        'a cross-origin page could drive it with no credential. Set --auth-key.',
     )
   }
   const hostAllowed = createHostGuard(config.allowedHosts)
@@ -215,6 +238,7 @@ export async function startInstance(
       },
     },
     fallback,
+    ...(config.corsOrigins.length ? { cors: { origins: config.corsOrigins } } : {}),
     // A config file's own `authenticate` wins outright — mixing two auth schemes
     // on one hook is how you end up with a bypass nobody meant to write. The
     // host guard still wraps it, but it is a no-op whenever auth is on.
@@ -253,6 +277,12 @@ export async function startInstance(
       line(`  auth: shared key from ${generated.path}`)
     } else if (auth.enabled) line('  auth: shared key — browsers sign in, services send a header')
     else line('  NO AUTH — anyone who can reach this port gets a session')
+    // Said plainly, because the URL above is the first thing an operator will
+    // paste into a browser and it now answers 404.
+    if (!config.web) line('  dashboard: off — bare gateway, /v1 and /auth only')
+    if (config.corsOrigins.length) {
+      line(`  cors: ${config.corsOrigins.join(', ')} may call /v1 (still key-gated)`)
+    }
     line(
       config.stateDir
         ? `  parked sessions persist in ${join(config.stateDir, 'parked')}`

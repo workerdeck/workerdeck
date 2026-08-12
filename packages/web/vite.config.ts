@@ -49,6 +49,10 @@ export default defineConfig({
     fs: { allow: ['../..'] },
     proxy: {
       '/v1': { target: workerUrl, changeOrigin: true, ws: true },
+      // The app asks `/auth/status` who served it, so the dev server has to look
+      // like a gateway too — without this the implicit host never appears and
+      // dev starts with an empty gateway list.
+      '/auth': { target: workerUrl, changeOrigin: true },
     },
   },
 })

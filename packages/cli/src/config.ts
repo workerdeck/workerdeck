@@ -57,6 +57,25 @@ export type WorkerDeckConfig = WorkerServerOptions & {
   /** Serve a dashboard build from here instead of the bundled one. */
   webRoot?: string
   /**
+   * Serve the web dashboard at all. Default true — being turnkey is the point
+   * of this package.
+   *
+   * `false` makes the instance a bare gateway: `/v1` and the auth routes answer
+   * exactly as before, everything else 404s, and the dashboard build is never
+   * even looked for (so a checkout with no `@workerdeck/web` build can still
+   * run one). For an operator who reaches this gateway only from the VS Code
+   * extension, the phone, or another machine's dashboard, the served copy is
+   * surface they were not using.
+   */
+  web?: boolean
+  /**
+   * Browser origins allowed to call this gateway cross-origin — for a dashboard
+   * served somewhere else. Exact origins (`https://deck.example`), never a
+   * wildcard. Refused unless auth is on: CORS on an open gateway would let any
+   * allowlisted page drive it with no credential at all.
+   */
+  corsOrigins?: string[]
+  /**
    * Forward session notifications to Apple Push Notification service, for the
    * iOS app. Absent turns the forwarder off entirely — including its
    * `/apns/devices` route, so a gateway without this answers 404 there and the
@@ -85,6 +104,8 @@ export type CliFlags = {
   stateDir?: string
   parking?: boolean
   insecure?: boolean
+  web?: boolean
+  corsOrigins: string[]
   open?: boolean
   help?: boolean
   version?: boolean
@@ -113,6 +134,7 @@ export function parseArgs(argv: string[]): CliFlags {
     allowedOrigins: [],
     allowedHosts: [],
     insecureHosts: [],
+    corsOrigins: [],
   }
   const next = (i: number, name: string): string => {
     const value = argv[i + 1]
@@ -199,6 +221,13 @@ export function parseArgs(argv: string[]): CliFlags {
         break
       case '--insecure':
         flags.insecure = true
+        break
+      case '--no-web':
+        flags.web = false
+        break
+      case '--cors-origin':
+        flags.corsOrigins.push(next(i, arg))
+        i++
         break
       case '--open':
         flags.open = true
@@ -288,6 +317,10 @@ export type ResolvedConfig = {
   allowedHosts: Set<string> | null
   /** Dashboard build to serve; resolved from the package when unset. */
   webRoot?: string
+  /** Whether to serve the dashboard at all. False makes this a bare gateway. */
+  web: boolean
+  /** Browser origins allowed to call this gateway cross-origin. Empty = off. */
+  corsOrigins: string[]
   /** APNs forwarder settings with `keyFile` made absolute, or undefined for an
    * instance that does not push. */
   apns?: ApnsConfig
@@ -447,6 +480,35 @@ export function resolveInstanceConfig(
         ...insecureHosts,
       ])
 
+  // Flag wins over config file, which wins over the turnkey default.
+  const web = flags.web ?? loaded.options.web ?? true
+
+  const corsOrigins = flags.corsOrigins.length
+    ? flags.corsOrigins
+    : (loaded.options.corsOrigins ?? [])
+  for (const origin of corsOrigins) {
+    // Exactness is the guarantee. A wildcard would hand the API to every page
+    // on the internet that can reach this port, and a bare hostname is not an
+    // origin — the browser sends scheme + host + port, and compares literally.
+    if (origin === '*') throw new ConfigError('--cors-origin does not accept "*"')
+    let parsed: URL
+    try {
+      parsed = new URL(origin)
+    } catch {
+      throw new ConfigError(`--cors-origin expects a full origin, got: ${origin}`)
+    }
+    if (parsed.origin !== origin) {
+      throw new ConfigError(
+        `--cors-origin expects scheme://host[:port] with no path, got: ${origin}`,
+      )
+    }
+  }
+  // Naming both is a mistake, not a preference to silently resolve: one of the
+  // two says what the operator meant and we cannot tell which.
+  if (!web && flags.open) {
+    throw new ConfigError('--open cannot be used with --no-web: there is no dashboard to open')
+  }
+
   // Strip the instance-level keys: what's left is exactly WorkerServerOptions.
   const {
     port: _p,
@@ -456,6 +518,8 @@ export function resolveInstanceConfig(
     allowedHosts: _ah,
     insecureHosts: _ih,
     webRoot: _w,
+    web: _web,
+    corsOrigins: _cors,
     apns: _ap,
     ...serverOptions
   } = loaded.options
@@ -483,6 +547,8 @@ export function resolveInstanceConfig(
     generateAuthKey,
     allowedHosts,
     webRoot: loaded.options.webRoot,
+    web,
+    corsOrigins,
     apns: resolveApns(loaded),
     open: flags.open ?? false,
     options,

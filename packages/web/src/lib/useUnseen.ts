@@ -16,12 +16,13 @@ import type { SessionInfo, Watermark, WatermarkStore } from '@workerdeck/protoco
 const KEY = 'workerdeck.watermarks.v1'
 
 /**
- * The gateway's id in the shared row shape. The dashboard is served same-origin
- * by the one gateway it talks to, so there is exactly one — but the shape is
- * multi-gateway (the VS Code sidebar lists several), and a constant is what
- * keeps the marks keyed the same way everywhere.
+ * Marks are keyed `(hostId, sessionId)` by `Watermarks` already, so going
+ * multi-gateway needed no storage change and no version bump: the gateway that
+ * served this page keeps the id the single-gateway build used
+ * (`IMPLICIT_HOST_ID`), and its existing marks keep counting. Added gateways
+ * simply introduce new ids, and the model's 30-day prune collects strays from
+ * one that gets removed.
  */
-export const LOCAL_HOST_ID = 'gateway'
 
 const listeners = new Set<() => void>()
 let version = 0
@@ -65,8 +66,8 @@ export function useUnseen() {
   )
 
   const unseenFor = useCallback(
-    (info: SessionInfo) =>
-      unseenCount(watermarks.get(LOCAL_HOST_ID, info.id), {
+    (hostId: string, info: SessionInfo) =>
+      unseenCount(watermarks.get(hostId, info.id), {
         activityCount: info.activityCount,
         turns: info.numTurns,
       }),
@@ -84,8 +85,11 @@ export function useUnseen() {
  * `undefined` for one opened for the first time, which has nothing to catch up
  * on.
  */
-export function unseenSince(sessionId: string): { itemCount: number; since: number } | undefined {
-  const mark = watermarks.get(LOCAL_HOST_ID, sessionId)
+export function unseenSince(
+  hostId: string,
+  sessionId: string,
+): { itemCount: number; since: number } | undefined {
+  const mark = watermarks.get(hostId, sessionId)
   return mark ? { itemCount: mark.itemCount, since: mark.seenAt } : undefined
 }
 
@@ -97,20 +101,23 @@ export function unseenSince(sessionId: string): { itemCount: number; since: numb
  * badge quietly stops working. The dashboard's session route is a whole page, so
  * "mounted" is the honest test, with `document.hidden` guarding the tab.
  */
-export function useMarkSeen(sessionId: string | undefined) {
+export function useMarkSeen(hostId: string, sessionId: string | undefined) {
   const seen = useRef<{ itemCount?: number; activity?: number; turns?: number }>({})
   return useCallback(
     (reading: { itemCount?: number; activity?: number; turns?: number }) => {
       if (!sessionId || document.hidden) return
       seen.current = { ...seen.current, ...reading }
-      watermarks.mark(LOCAL_HOST_ID, sessionId, seen.current)
+      watermarks.mark(hostId, sessionId, seen.current)
     },
-    [sessionId],
+    [hostId, sessionId],
   )
 }
 
-/** The unread total, for a caller that wants one number (a tab title, say). */
-export function useUnseenTotal(sessions: SessionInfo[]): number {
+/** The unread total across every gateway, for a caller that wants one number. */
+export function useUnseenTotal(rows: { hostId: string; info: SessionInfo }[]): number {
   const { unseenFor } = useUnseen()
-  return useMemo(() => sessions.reduce((total, s) => total + unseenFor(s), 0), [sessions, unseenFor])
+  return useMemo(
+    () => rows.reduce((total, r) => total + unseenFor(r.hostId, r.info), 0),
+    [rows, unseenFor],
+  )
 }

@@ -135,12 +135,17 @@ protocol. Read these before changing scope or structure:
   embedder's chrome — the *options* ride `SessionVitals` (`models`, `permissionModes`, already
   filtered by the capability record and the bypass grant) and the setters come back through
   `onControls`, because the panel owns the session's one attach and nothing else may open a
-  second. `transcriptVariant` is the fourth, independent seam: `'cards'`
+  second. `readOnly` is the fourth and the bluntest: no composer and no approval prompts, for a
+  surface that is *about* a run rather than in it (the dashboard's job detail, where typing
+  would be a second operator arriving mid-run). Absent, not disabled — a greyed-out composer
+  says the session is busy, an absent one says this screen does not drive it — and **not an
+  authorization boundary**: it removes the affordance, the gateway does the enforcing.
+  `transcriptVariant` is the fifth, independent seam: `'cards'`
   (the chat convention) or `'lines'` — full-width transparent rows behind a fixed gutter
   glyph, no boxes, for a host where vertical space is scarce. It rides a **context**
   (`transcript-variant.tsx`), not a prop chain, so a row component composed by hand gets the
   right treatment too; every row component branches on `useLines()` rather than the embedder
-  restyling `data-slot`s from outside. `transcriptDensity` is the fifth seam and rides its own
+  restyling `data-slot`s from outside. `transcriptDensity` is the sixth seam and rides its own
   context beside it — `'comfortable'` (default: one blank line between rows, what the Claude
   Code CLI leaves) or `'compact'`. Separate from the variant on purpose: the variant follows
   from the *surface* (boxed or not), density is the reader's *preference*, so a dock may be
@@ -220,7 +225,51 @@ protocol. Read these before changing scope or structure:
   with `extras`/`actions` slots). They had been two copies that already drifted; the one
   difference that is real — an interactive session pre-authorizes `bypassPermissions` because
   the operator is present, an unattended job makes it an opt-in — survives as a parameter rather
-  than being flattened away. The
+  than being flattened away. The layout is **four sections and a dialog**: every nav entry
+  (Sessions, Gateways, Jobs, Profiles) is a *list on the left, detail beside it* pair, so each
+  names its own sidebar in `AppShell`'s `NAV` rather than mounting one from a route —
+  navigating within a section must not replace the list you picked from, which is the whole
+  point of the shape. `components/shell/SidebarFrame.tsx` is the chrome they share (view
+  header, collapse toggle, per-section persisted width in `lib/sidebar.ts`) and deliberately
+  owns nothing else: the rows, filtering and empty state have nothing in common beyond sitting
+  in the box — except the row, which is `SidebarRow`: title top-left, status
+  top-right, description bottom-left, hover actions bottom-right, in a rounded
+  inset card. **Fill means hover and only hover** — it stays on the row whether
+  or not it is selected, because a selected row still has to answer the pointer.
+  Selection is an accent bar in the gutter instead, run flush to the sidebar
+  edge (squared left corners) with `ml-0` handing the border the 4px the margin
+  was holding, so text does not shift sideways as a row becomes the selected
+  one. The shape is `ui`'s
+  `rowShapeClass`, which `SessionBrowser` draws its own rows with — one spelling,
+  so the sessions list cannot drift from the three sidebars beside it. The fill
+  is the `row-hover` token and it is **alpha, not a flat colour**: a row sits on
+  whatever its host paints, so a value tuned for one ground is invisible on
+  another. That is not hypothetical — `bg-surface-hover` on the dark sidebar
+  resolved to #141414 against #131313, one step of 255, and the hover state
+  simply did not exist. The scroll container carries **no side padding**, so the
+  bar reaches the sidebar's edge; everything that is not a row (the filter bar,
+  the subset line, group labels, empty states) pads itself. No leading glyph — an icon in front of the title pushes the one
+  thing you are reading off the left edge, so an engine mark goes on the
+  description line where it lines up *under* the title. Both lines are real
+  buttons and the wrapper is only styling: a `div` with an `onClick` looks
+  identical and is unreachable by keyboard, and one button around everything
+  cannot hold the actions. Every detail page wears a `DetailBar` —
+  breadcrumbs left, the page's actions right — so the thing telling you where
+  you are does not scroll away, which is what an in-body `<h1>` did. Its
+  `rail` is optional *and its absence is meaningful* — sessions collapse to
+  engine mark + state icon because that really identifies a row, jobs and profiles collapse to
+  the expand button rather than a column of identical glyphs. Every `+` opens a **modal** (a
+  create is a decision you finish and return from, never a screen you navigate to), and
+  **Settings is a dialog at the foot of the nav**, not a fifth section — it is a preference
+  sheet, and a destination that spent the whole window on four rows of selects was the wrong
+  trade; `/settings` survives as a redirect for bookmarks. Gateways lives in exactly one place
+  now, its own section, having been a hover-icon strip pinned under the sessions list.
+  Jobs are **read-only**: a job's page is the session workspace under `readOnly`, so the
+  transcript streams and the files browse but nothing types into a run the queue owns —
+  Cancel stays, because abandoning a wait is a queue action rather than a turn. `useJobs` is a
+  module-scope store for the same reason `useSessions` is: the sidebar, the empty pane and a
+  job's page mount it at once, and three copies would be three queue sockets answering from
+  three snapshots. The
   session runner is `@workerdeck/ui`'s `SessionWorkspace` — the dashboard adds only the header, so a
   session feature belongs in `ui`/`react` and every embedder gets it too. The sessions list is
   `SessionBrowser` over protocol's view model, with `useViewConfig` persisting the
@@ -235,8 +284,24 @@ protocol. Read these before changing scope or structure:
   navigates, so the first click of a double-click would already have left the page. Published
   as prebuilt static files with **zero runtime deps** — React/router/Tailwind are compiled into
   `dist/`, so every one of them is a devDep; the entry (`entry.mjs`, hand-written, never bundled) is
-  a path to `dist/`, not a component. Two constraints are baked in at build time: no vite `base`, so
-  it must mount at a domain root, and `location.origin + '/v1'`, so the gateway must be same-origin.
+  a path to `dist/`, not a component. One constraint is still baked in at build time: no vite
+  `base`, so it must mount at a domain root.
+  It is **multi-gateway** (`src/lib/hosts.ts`), the mirror of the extension's `HostStore` and
+  iOS's — and the browser's constraint is what shapes it. There are two kinds of host. The
+  **implicit** one is the gateway that served the page: same origin, so the login cookie rides
+  its REST *and* its upgrades, no key is stored and none can be entered. It is **discovered**
+  (`GET /auth/status`, shape-checked — "it replied 200" is not "it is a gateway"), never
+  assumed, so a standalone build starts empty rather than inventing a localhost entry. **Added**
+  hosts are typed in with the gateway's key, and `hostAuth()` in `packages/client` is the one
+  place that builds their requests: `Authorization: Bearer` on REST, `?key=` on the WS upgrade,
+  because a tab cannot header an upgrade and the cookie is another origin's. Cross-origin REST
+  additionally needs the gateway to run with `--cors-origin` (see `packages/server`'s `cors`).
+  The implicit host keeps the id `'gateway'`, which is what the single-gateway build used, so
+  existing watermarks keep counting instead of resetting to unread; routes carry the gateway
+  (`/sessions/$hostId/$sessionId`) because a session id is unique only *within* one, with the
+  old bare path kept as a redirect. Everything not yet per-gateway — jobs, profiles, the create
+  form's pickers — goes through `primaryClient()` and says so; `lib/client.ts` is that accessor
+  now, not a module-scope singleton.
 - `packages/cli` — published unscoped as **`workerdeck`**, the turnkey instance (`npx
   WorkerDeck`): gateway + dashboard on ONE port via the server's `fallback` hook. Single-origin
   is load-bearing, not cosmetic — a tab can't put a header on a WS handshake, so a cookie is the

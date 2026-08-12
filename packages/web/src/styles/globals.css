@@ -17,3 +17,15 @@
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
 @import '@fontsource/jetbrains-mono/600.css';
+
+/* Edge-to-edge transcript and composer.
+ *
+ * `--wd-content-max-w` is the ui package's centering seam (see its README): the
+ * panel centres its transcript, composer and prompts in a column of this width.
+ * A dashboard whose session view is the editor area of a VS Code-shaped window
+ * wants none of that — the sessions sidebar already sets the left edge, and a
+ * 48rem column floating in the remaining space reads as an unfinished layout.
+ */
+:root {
+  --wd-content-max-w: 100%;
+}

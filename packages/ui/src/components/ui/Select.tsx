@@ -45,7 +45,7 @@ export const SelectContent: FunctionComponent<
       alignItemWithTrigger={alignItemWithTrigger}
       side={side}
       sideOffset={sideOffset}
-      className='isolate z-60 outline-none'>
+      className='isolate z-80 outline-none'>
       <SelectPrimitive.Popup
         data-slot='select-content'
         className={cn(

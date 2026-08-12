@@ -16,6 +16,7 @@ struct SessionListView: View {
   @State private var model: SessionListModel?
   @State private var path: [SessionRoute] = []
   @State private var showHostManager = false
+  @State private var showSettings = false
   @State private var pendingClose: SessionRow?
   /// The row being renamed, and the text so far. An alert with a text field
   /// rather than an inline editor: a List row is a navigation target on a phone,
@@ -74,6 +75,9 @@ struct SessionListView: View {
     .task(id: push.pendingRoute) { consumePushRoute() }
     .sheet(isPresented: $showHostManager) {
       NavigationStack { HostListView() }
+    }
+    .sheet(isPresented: $showSettings) {
+      NavigationStack { SettingsView() }
     }
   }
 
@@ -405,6 +409,11 @@ struct SessionListView: View {
     ToolbarItem(placement: .topBarLeading) {
       Button { showHostManager = true } label: {
         Label("Servers", systemImage: "server.rack")
+      }
+    }
+    ToolbarItem(placement: .topBarLeading) {
+      Button { showSettings = true } label: {
+        Label("Settings", systemImage: "gearshape")
       }
     }
     ToolbarItem(placement: .topBarTrailing) {

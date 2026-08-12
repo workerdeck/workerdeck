@@ -11,7 +11,10 @@ let inflight: Promise<ListProfilesResponse> | undefined
 const subscribers = new Set<(value: ListProfilesResponse) => void>()
 
 async function load(): Promise<ListProfilesResponse> {
-  const loaded = await client.listProfiles().catch(() => EMPTY)
+  // No gateway yet (the same-origin probe is still out, or a standalone build
+  // with none configured) — answer empty rather than throw, and let the caller
+  // refresh when one appears.
+  const loaded = await (client()?.listProfiles().catch(() => EMPTY) ?? Promise.resolve(EMPTY))
   cache = loaded
   for (const notify of subscribers) notify(loaded)
   return loaded

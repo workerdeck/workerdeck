@@ -13,6 +13,9 @@ struct WorkerDeckApp: App {
   /// One unread memory for the whole process — the session screen writes marks
   /// into it, the list and the app icon badge count from it.
   @State private var unread = UnreadModel()
+  /// Reader preferences (transcript variant and density) — one for the process,
+  /// because how a transcript should read is a property of the reader.
+  @State private var settings = AppSettings()
 
   init() {
     // Debug-only, and silent unless InjectionNext is set up — see HotReload.swift.
@@ -30,6 +33,7 @@ struct WorkerDeckApp: App {
         RootView()
           .environment(hosts)
           .environment(unread)
+          .environment(settings)
           .environment(delegate.push)
           // The delegate is built by UIKit before any of this exists, so the two
           // are introduced here rather than at either one's construction.

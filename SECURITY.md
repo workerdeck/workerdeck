@@ -49,6 +49,18 @@ Out of scope, because they are documented properties rather than defects:
   transcripts. Protect them like `~/.claude/projects`.
 - **Shared-secret auth not establishing identity.** `--auth-key` is a door key; put an
   identity-aware proxy in front if you need to know who is on the other end.
+- **The gateway key appearing in a WebSocket URL** (`?key=`), for a browser client attaching to a
+  gateway that is not its own origin. A tab cannot put a header on an upgrade handshake, so this
+  is the only transport available to it. It is accepted on **upgrades only** — never on REST —
+  and it is the same operator key the client already holds, not an escalation. Understand the
+  trade before enabling remote browser clients: unlike a header, a query string is recorded by
+  reverse proxies and intermediaries, and the key does not expire. Terminate TLS in front of any
+  gateway reached over a network you do not control.
+- **Every client of one gateway sharing one key.** That is the *tenant* model — your clients,
+  your gateway. Embedding WorkerDeck in a product for **other people's** users is the *embedded*
+  model, and it must supply its own `authenticate` (which turns the built-in scheme off
+  entirely); handing end users the operator's key would not be a defect in WorkerDeck but a
+  misuse of it.
 - Anything requiring **operator-level access** to the host or its environment variables.
 
 ## What WorkerDeck never touches
