@@ -71,7 +71,16 @@ export function SessionCard({
     <div
       role='button'
       tabIndex={0}
-      onClick={onSelect}
+      /* Only the FIRST click of a click-streak selects. Selecting reveals the
+         agent panel and focuses its composer (`panel.show({ focus: true })`),
+         so the second click of a double-click would steal focus a beat after
+         the rename editor mounted — the editor appearing and vanishing in the
+         same gesture. `detail` counts the streak; anything past the first is
+         the double-click the title is listening for. */
+      onClick={(e) => {
+        if (e.detail > 1) return
+        onSelect()
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') onSelect()
       }}
