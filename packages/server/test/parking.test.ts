@@ -225,7 +225,7 @@ describe('deferred execution: parking and result ingestion', () => {
     const session = await createSession(h.base)
     h.runners[0]!.defer('exec-1')
     await vi.waitFor(async () => {
-      expect((await running!.parking.get(session.id))?.parkedAt).toBeDefined()
+      expect((await running!.parking.get(session.id))?.kind).toBe('parked')
     })
 
     // The runner is gone from the registry...

@@ -39,6 +39,15 @@ export type EngineRunnerRequest = {
   /** Rebuild a parked session instead of starting fresh. Engines that cannot
    * rehydrate throw. */
   restore?: RunnerSnapshot
+  /**
+   * Adopt this session id instead of minting one. For rehydrating a session
+   * across a gateway restart: the transcript comes back from the *engine's* own
+   * store via `config.resume`, but every client keys its watermarks, unread
+   * counts and routes on the WorkerDeck id, so that id has to survive too
+   * (`SessionInfo.id` is documented as stable across resumes). A `restore`
+   * carries its own id in the snapshot and does not need this.
+   */
+  id?: string
 }
 
 /**

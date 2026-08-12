@@ -30,9 +30,9 @@ export const claudeAdapter: EngineAdapter = {
     }
     return { available: 'unknown' }
   },
-  createRunner({ config, restore }) {
+  createRunner({ config, restore, id }) {
     if (restore) throw new Error('the Claude engine cannot rebuild a parked session')
-    return new SessionRunner(config)
+    return new SessionRunner(config, id)
   },
   /**
    * The Agent SDK's on-disk session store, mapped browser-safe. The SDK reads

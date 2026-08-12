@@ -395,6 +395,33 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 
 ## Parking & bridged execution
 
+- **Two ways a session outlives its runner, and they are not interchangeable.** Parking preserves
+  *mid-task* state, which means a `RunnerSnapshot` — and `Runner.park()` is optional on the
+  interface for a reason: `AiSdkRunner` is the only implementation, because the claude and codex
+  engines run behind a binary that owns its own process state. Those two get **dormancy** instead:
+  a `DormantSessionRecord` with no transcript in it at all, just the id, the `sdkSessionId`, and
+  the config — rehydration is an ordinary create with `resume` set, and the transcript comes back
+  from the *engine's* store as `replay: true` events. Do not try to unify them, and do not read
+  "park everything on SIGTERM" as a plan: for the two engines anyone actually runs, `park()`
+  returns nothing. Four rules keep the shared machinery honest:
+  - **Records are written continuously, never on shutdown.** A shutdown hook is exactly what a
+    `kill -9`, an OOM, or a pulled cable do not run. `system_init` is the earliest a resume is
+    even possible (before the engine names its session there is nothing to come back to), and
+    every non-park status change refreshes it.
+  - **`listInfo` skips a record whose id the registry holds.** A live session has a dormant
+    record — that is the point — so without the filter the merged `GET /sessions` shows every
+    running session twice.
+  - **The `session_closed` discard is skipped while the manager is `#closed`.** `registry.remove`
+    (a DELETE) and `registry.closeAll` (a shutdown) both close runners with reason `'server'`, so
+    the *only* thing separating "this session is over" from "this process is over" is that
+    `parking.close()` runs first. Drop that guard and a graceful restart forgets precisely the
+    sessions it was preserving — which is how this was found.
+  - **Waking one re-runs `buildRunnerConfig`.** `env` is on `EPHEMERAL_CONFIG_KEYS` and never
+    reaches disk, so a claude profile's `CLAUDE_CONFIG_DIR` pin must be re-derived from the
+    profile rather than read back. Handing the stored config to the engine as-is would strand a
+    rehydrated session on the wrong credential store.
+  - A park's record is *consumed* on wake; a dormant one is refreshed in place, because the
+    session will need it again the next time the process dies.
 - Parking is a persistence boundary, not an ending, and its invariants are load-bearing:
   `park()` emits `status_changed: 'parked'` and NEVER `session_closed`, snapshots *after* that
   emit and keeps the seq counter (a rehydrated runner continuing at a reused seq is silently

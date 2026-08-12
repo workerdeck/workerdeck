@@ -11,6 +11,8 @@ import type { SessionInfo } from '@workerdeck/protocol'
  * snapshot, and what it is waiting for.
  */
 export type ParkedSessionRecord = {
+  /** Absent on records written before dormant sessions existed — those are all parked. */
+  kind?: 'parked'
   id: string
   /** Session info as of the park, with `status: 'parked'`. */
   info: SessionInfo
@@ -21,6 +23,52 @@ export type ParkedSessionRecord = {
   executions: ParkedExecution[]
   parkedAt: number
 }
+
+/**
+ * A live session, remembered so it can be brought back after a gateway restart.
+ *
+ * The counterpart to a park, and deliberately not the same mechanism. A park
+ * preserves *mid-task* state, which means a `RunnerSnapshot` — and only the
+ * provider engine can produce one, because the claude and codex engines run
+ * behind a binary that owns its own process state. What those two have instead
+ * is a session store of their own: the transcript is already on disk under an
+ * engine session id, and `CreateSessionRequest.resume` is how you get it back.
+ *
+ * So this record holds no transcript at all. It holds the id (every client keys
+ * its watermarks and routes on it), the engine session id to resume from, and
+ * the config to rebuild with — and rehydration is an ordinary create with
+ * `resume` set, done **lazily on first attach**, because eagerly respawning
+ * every session at boot is a fork bomb wearing a feature's clothes.
+ *
+ * Written only for engines whose capability record says `resume`, and only once
+ * an `sdkSessionId` exists: a record that would come back with an empty
+ * transcript is worse than no record.
+ */
+export type DormantSessionRecord = {
+  kind: 'dormant'
+  id: string
+  /** Session info as of the last save, with `status: 'idle'` — whatever it was
+   * doing, it is not doing it now. */
+  info: SessionInfo
+  profile?: string
+  /**
+   * The config the session was built from, minus the ephemeral keys. Fed back
+   * through the server's `buildRunnerConfig` on wake rather than used as-is, so
+   * the profile's env pin and the host hook's injections are **re-derived**
+   * instead of persisted (see {@link EPHEMERAL_CONFIG_KEYS}).
+   */
+  config: SessionRunnerConfig
+  /** Where the transcript actually lives. Without one there is nothing to resume. */
+  sdkSessionId: string
+  savedAt: number
+}
+
+/** What a {@link SessionStore} holds: a session waiting on deferred work, or one
+ * waiting to be asked for again. */
+export type StoredSessionRecord = ParkedSessionRecord | DormantSessionRecord
+
+export const isDormant = (record: StoredSessionRecord): record is DormantSessionRecord =>
+  record.kind === 'dormant'
 
 /**
  * Where parked sessions live. Two implementations ship: {@link MemorySessionStore}
@@ -34,26 +82,26 @@ export type ParkedSessionRecord = {
  * {@link toDurableRecord} is the filter the bundled file store applies — reuse it.
  */
 export interface SessionStore {
-  save(record: ParkedSessionRecord): Promise<void>
-  get(id: string): Promise<ParkedSessionRecord | null>
-  list(): Promise<ParkedSessionRecord[]>
+  save(record: StoredSessionRecord): Promise<void>
+  get(id: string): Promise<StoredSessionRecord | null>
+  list(): Promise<StoredSessionRecord[]>
   delete(id: string): Promise<boolean>
 }
 
 /** Single-process, no persistence: parks survive a client disconnect, not a restart. */
 export class MemorySessionStore implements SessionStore {
-  #records = new Map<string, ParkedSessionRecord>()
+  #records = new Map<string, StoredSessionRecord>()
 
-  save(record: ParkedSessionRecord): Promise<void> {
+  save(record: StoredSessionRecord): Promise<void> {
     this.#records.set(record.id, record)
     return Promise.resolve()
   }
 
-  get(id: string): Promise<ParkedSessionRecord | null> {
+  get(id: string): Promise<StoredSessionRecord | null> {
     return Promise.resolve(this.#records.get(id) ?? null)
   }
 
-  list(): Promise<ParkedSessionRecord[]> {
+  list(): Promise<StoredSessionRecord[]> {
     return Promise.resolve([...this.#records.values()])
   }
 
@@ -68,17 +116,22 @@ export class MemorySessionStore implements SessionStore {
  * and callbacks, and `env` is a credential-bearing map — the same rule
  * `profile-store.ts` follows, for the same reason.
  *
- * Dropping them costs a rehydrated session nothing: all four are consumed by the
- * Claude engine alone, and the Claude engine cannot park (the CLI owns its process
- * state — `buildRunner` refuses a `restore` for it). A provider session's
- * credentials are resolved by `createEngineRunner` from the operator's environment
- * on every build, wake included.
+ * Dropping them costs a rehydrated session nothing, but the reason differs by
+ * record kind and both halves matter. A provider session's credentials are
+ * resolved by `createEngineRunner` from the operator's environment on every
+ * build, wake included — so a parked record never needed them. A **dormant**
+ * record is a claude or codex session, which does consume `env` (the profile's
+ * `CLAUDE_CONFIG_DIR` pin lives there), and that is precisely why waking one
+ * feeds its config back through the server's `buildRunnerConfig` instead of
+ * handing it to the engine as-is: the pin and the host hook's injections are
+ * re-derived from the profile, never read back off disk. Persisting them would
+ * be a credential map in a file *and* a stale one.
  */
 const EPHEMERAL_CONFIG_KEYS = ['queryFn', 'historyFn', 'extraOptions', 'env'] as const
 
 /** The record as it may be persisted: same session, config narrowed to what is
  * safe and meaningful to keep (see {@link EPHEMERAL_CONFIG_KEYS}). */
-export function toDurableRecord(record: ParkedSessionRecord): ParkedSessionRecord {
+export function toDurableRecord<T extends StoredSessionRecord>(record: T): T {
   const config: SessionRunnerConfig = { ...record.config }
   for (const key of EPHEMERAL_CONFIG_KEYS) delete config[key]
   return { ...record, config }
@@ -123,7 +176,7 @@ export function createFileSessionStore(options: FileSessionStoreOptions = {}): S
   // would otherwise write outside `dir`.
   const fileFor = (id: string): string => join(dir, `${encodeURIComponent(id)}.json`)
 
-  const read = async (path: string): Promise<ParkedSessionRecord | null> => {
+  const read = async (path: string): Promise<StoredSessionRecord | null> => {
     let raw: string
     try {
       raw = await readFile(path, 'utf8')
@@ -200,7 +253,7 @@ export function createFileSessionStore(options: FileSessionStoreOptions = {}): S
             return null
           }),
       )
-      return records.filter((record): record is ParkedSessionRecord => record !== null)
+      return records.filter((record): record is StoredSessionRecord => record !== null)
     },
 
     delete: async (id) => {
@@ -222,14 +275,24 @@ const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).
 
 /** Shape-check a parsed file. A record missing any of these could not be rebuilt,
  * and half-restoring one is worse than skipping it. */
-function parseRecord(value: unknown): ParkedSessionRecord | null {
+function parseRecord(value: unknown): StoredSessionRecord | null {
   if (!value || typeof value !== 'object') return null
   const envelope = value as { version?: unknown; record?: unknown }
   if (envelope.version !== FORMAT_VERSION) return null
-  const record = envelope.record as Partial<ParkedSessionRecord> | null
+  const record = envelope.record as Partial<StoredSessionRecord> | null
   if (!record || typeof record !== 'object') return null
-  if (typeof record.id !== 'string' || typeof record.parkedAt !== 'number') return null
-  if (!record.info || !record.config || !record.snapshot) return null
-  if (!Array.isArray(record.executions)) return null
-  return record as ParkedSessionRecord
+  if (typeof record.id !== 'string') return null
+  if (!record.info || !record.config) return null
+  // The discriminator is optional on the wire: every record written before
+  // dormant sessions existed is a park, and those files must keep working
+  // across the upgrade that introduced this.
+  if (record.kind === 'dormant') {
+    const dormant = record as Partial<DormantSessionRecord>
+    if (typeof dormant.sdkSessionId !== 'string' || typeof dormant.savedAt !== 'number') return null
+    return dormant as DormantSessionRecord
+  }
+  const parked = record as Partial<ParkedSessionRecord>
+  if (typeof parked.parkedAt !== 'number' || !parked.snapshot) return null
+  if (!Array.isArray(parked.executions)) return null
+  return parked as ParkedSessionRecord
 }

@@ -4,16 +4,27 @@ import type {
   SessionRunnerConfig,
   ToolExecutionResult,
 } from '@workerdeck/core'
-import type { SessionInfo } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
 import type { SessionRegistry } from './registry.ts'
-import type { ParkedSessionRecord, SessionStore } from './session-store.ts'
+import {
+  isDormant,
+  type DormantSessionRecord,
+  type ParkedSessionRecord,
+  type SessionStore,
+  type StoredSessionRecord,
+} from './session-store.ts'
 
 export type SessionParkOptions = {
   registry: SessionRegistry
   store: SessionStore
-  /** Rebuild a parked session's runner. The snapshot rides in on
-   * `config.restore`, so the engine adopts the id, event log, and history. */
-  rebuild: (record: ParkedSessionRecord) => Promise<Runner>
+  /**
+   * Rebuild a stored session's runner. For a park the snapshot rides in on
+   * `config.restore`, so the engine adopts the id, event log, and history; for a
+   * dormant record there is no snapshot and the engine is asked to resume its
+   * own session under the stored id. Either way the runner it returns must carry
+   * `record.id` — {@link SessionParkManager} refuses one that does not.
+   */
+  rebuild: (record: StoredSessionRecord) => Promise<Runner>
   /** How many clients are attached to this session. A watched session stays live:
    * parking would pull the runner out from under the socket. */
   attachedCount: (sessionId: string) => number
@@ -32,14 +43,25 @@ export type SessionParkOptions = {
   /** The session is live again under a NEW runner object — anything holding the
    * old reference must rebind. */
   onResumed?: (sessionId: string, runner: Runner) => void
-  /** Park/resume failures. These are not session errors — the session is intact,
-   * the host's storage or engine assembly isn't. */
-  onError?: (error: unknown, context: { sessionId: string; phase: 'park' | 'resume' }) => void
+  /** Park/remember/resume failures. These are not session errors — the session
+   * is intact, the host's storage or engine assembly isn't. */
+  onError?: (
+    error: unknown,
+    context: { sessionId: string; phase: 'park' | 'remember' | 'resume' },
+  ) => void
 }
 
 /**
- * Deferred execution's other half: parking a session that is waiting on work no
+ * Two ways a session outlives its runner, behind one door.
+ *
+ * **Parking** is deferred execution's other half: a session waiting on work no
  * process in this server is doing.
+ *
+ * **Dormancy** is the restart story for the engines that cannot park. Every live
+ * claude or codex session leaves a small record naming its engine session id, so
+ * a gateway that comes back up lists them and resumes one the first time someone
+ * attaches. Both kinds live in the same store and come back through the same
+ * `ensureLive`, which is why there is one class here and not two.
  *
  * The runner announces the moment with `status_changed: 'parked'` — emitted only
  * once every dispatch of the batch has been handed over, so the snapshot can never
@@ -91,12 +113,19 @@ export class SessionParkManager {
     this.#configs.set(sessionId, config)
   }
 
-  /** Adopt the store's contents (a durable store after a restart): re-index the
+  /**
+   * Adopt the store's contents (a durable store after a restart): re-index the
    * executions and re-arm their watchdogs, no deadline sooner than the grace
-   * window — nothing could have been delivered while the process was down. */
+   * window — nothing could have been delivered while the process was down.
+   *
+   * Dormant records need nothing here, which is the point of them. They list
+   * from the store (`listInfo`) and come back on first attach (`ensureLive`), so
+   * a boot with fifty remembered sessions spawns nothing at all.
+   */
   async hydrate(): Promise<void> {
     const floor = Date.now() + (this.#options.expiredGraceMs ?? 60_000)
     for (const record of await this.#options.store.list()) {
+      if (isDormant(record)) continue
       for (const execution of record.executions) this.#track(record.id, execution, floor)
     }
   }
@@ -127,8 +156,22 @@ export class SessionParkManager {
           return
         case 'status_changed':
           if (event.status === 'parked') void this.#park(runner)
+          else void this.#rememberDormant(runner)
+          return
+        case 'system_init':
+          // The first moment a resume is even possible: before the engine names
+          // its session there is nothing to come back to.
+          void this.#rememberDormant(runner)
           return
         case 'session_closed':
+          // Not during shutdown. The registry closes every runner on the way
+          // down and the reason it gives is the same 'server' a DELETE produces,
+          // so the *only* thing separating "this session is over" from "this
+          // process is over" is that `close()` ran first — which is exactly why
+          // it does (`server.ts` closes parking before the registry). Without
+          // this guard a graceful restart forgets every dormant session it was
+          // supposed to preserve.
+          if (this.#closed) return
           void this.discard(runner.id)
           return
         default:
@@ -156,18 +199,24 @@ export class SessionParkManager {
     return this.#owners.get(executionId) ?? this.#settled.get(executionId)
   }
 
-  /** The parked session's record, for the read paths (GET, list, attach). */
-  get(id: string): Promise<ParkedSessionRecord | null> {
+  /** The stored session's record, for the read paths (GET, list, attach). */
+  get(id: string): Promise<StoredSessionRecord | null> {
     return this.#queue(id, () => this.#options.store.get(id))
   }
 
-  /** Every parked session's info, to merge into `GET {basePath}/sessions`. */
+  /** Every stored session's info, to merge into `GET {basePath}/sessions`. */
   async listInfo(): Promise<SessionInfo[]> {
     // A park mid-save belongs in the listing: it is neither in the registry nor
     // readable yet, and a caller that saw it there a moment ago must not see it
     // vanish. Waiting on the writes in flight is what keeps the two views joined.
     await Promise.all(this.#storeOps.values())
-    return (await this.#options.store.list()).map((record) => record.info)
+    const records = await this.#options.store.list()
+    // A live session has a dormant record too — that is what makes it survive a
+    // restart — so the registry wins and the record is skipped. Without this the
+    // merged listing would show every running session twice.
+    return records
+      .filter((record) => this.#options.registry.get(record.id) === undefined)
+      .map((record) => record.info)
   }
 
   /** The live runner for a session, rehydrating a parked one on demand. Undefined
@@ -232,6 +281,51 @@ export class SessionParkManager {
     this.#detachTimers.clear()
   }
 
+  /**
+   * Write (or refresh) the dormant record that lets this session survive a
+   * restart. Cheap and repeated on purpose — driven off `system_init` and every
+   * non-park status change — because the alternative is a shutdown hook, and a
+   * shutdown hook is exactly what a `kill -9`, an OOM or a pulled power cable
+   * do not run.
+   *
+   * Four gates, each of which would otherwise produce a record that is worse
+   * than none: the engine must be able to resume at all (a provider session
+   * would come back with an empty transcript — it has `park()` instead), it must
+   * have named its session, the host must remember the config to rebuild from,
+   * and the runner must still be the registry's. That last one is what keeps a
+   * park from being overwritten: `#park` evicts before it saves, so a late event
+   * from an evicted runner finds itself a stranger here and writes nothing.
+   */
+  async #rememberDormant(runner: Runner): Promise<void> {
+    if (this.#closed) return
+    const info = runner.info()
+    const sdkSessionId = info.sdkSessionId
+    if (sdkSessionId === undefined) return
+    const capabilities = info.capabilities ?? ENGINE_CAPABILITIES[info.engine ?? 'claude']
+    if (!capabilities.resume) return
+    const config = this.#configs.get(runner.id)
+    if (!config) return
+    if (this.#options.registry.get(runner.id) !== runner) return
+    const record: DormantSessionRecord = {
+      kind: 'dormant',
+      id: runner.id,
+      // Whatever it was doing, it is not doing it now: a record that came back
+      // saying `running` would show a spinner over a session with no process.
+      info: { ...info, status: 'idle' },
+      profile: info.profile,
+      config,
+      sdkSessionId,
+      savedAt: Date.now(),
+    }
+    try {
+      await this.#queue(runner.id, () => this.#options.store.save(record))
+    } catch (error) {
+      // Losing this costs the session its way back after a restart, and nothing
+      // else — the live session is untouched.
+      this.#options.onError?.(error, { sessionId: runner.id, phase: 'remember' })
+    }
+  }
+
   async #park(runner: Runner): Promise<void> {
     if (this.#closed || !runner.park) return
     const id = runner.id
@@ -251,6 +345,7 @@ export class SessionParkManager {
     const info = { ...runner.info(), status: 'parked' as const }
     this.#options.registry.evict(id)
     const record: ParkedSessionRecord = {
+      kind: 'parked',
       id,
       info,
       profile: info.profile,
@@ -294,12 +389,15 @@ export class SessionParkManager {
       throw error
     }
     if (runner.id !== id) {
-      // The factory ignored `restore` and built a fresh session: it has none of
-      // this one's history and would strand the execution we are waking for.
+      // The factory ignored `restore` (or, for a dormant record, the id): it
+      // built a fresh session with none of this one's history, which would
+      // strand the execution we are waking for and orphan every client's
+      // watermarks against an id that no longer exists.
       runner.close('error')
       const error = new Error(
         `rebuilt session has id '${runner.id}', expected '${id}' — the engine factory must ` +
-          'forward EngineRunnerContext.restore to the runner config',
+          'forward EngineRunnerContext.restore (or, without a snapshot, the session id) ' +
+          'to the runner config',
       )
       this.#options.onError?.(error, { sessionId: id, phase: 'resume' })
       throw error
@@ -308,9 +406,17 @@ export class SessionParkManager {
     // back up is missed by the queue or the watchers.
     this.#options.registry.register(runner)
     this.remember(id, record.config)
-    this.watch(runner, record.snapshot.seq)
+    // A park resumes mid-stream and must not re-arm watchdogs from its own
+    // replayed events; a dormant session starts a fresh event log (the history
+    // arrives as the engine's `replay: true` backfill), so there is no prior seq
+    // to skip and nothing deferred in it to re-index.
+    this.watch(runner, isDormant(record) ? 0 : record.snapshot.seq)
     this.#options.onResumed?.(id, runner)
-    await this.#queue(id, () => this.#options.store.delete(id))
+    // A park's record *is* the session — consumed on wake. A dormant one is a
+    // way back that the session still needs the next time the process dies, so
+    // it stays and is refreshed in place; `listInfo` already hides it while the
+    // registry has the session, and `discard` removes it when the session ends.
+    if (!isDormant(record)) await this.#queue(id, () => this.#options.store.delete(id))
     void runner.start()
     return runner
   }

@@ -247,17 +247,20 @@ export const codexAdapter: EngineAdapter = {
   capabilities: ENGINE_CAPABILITIES.codex,
   catalog: CODEX_CATALOG,
   checkAvailability: (profile, env) => checkCodexAvailability(profile, env),
-  createRunner({ config, profile, restore }) {
+  createRunner({ config, profile, restore, id }) {
     if (restore) throw new Error('the codex engine cannot rebuild a parked session')
     const executable =
       (config as { codexPathOverride?: string }).codexPathOverride ??
       resolveBundledCodexExecutable()
     if (!executable) throw new Error(NOT_INSTALLED)
-    return new CodexRunner({
-      ...config,
-      codexHome: profile?.codexHome,
-      connectFn: (options) => connectAppServer({ executable, ...options }),
-    })
+    return new CodexRunner(
+      {
+        ...config,
+        codexHome: profile?.codexHome,
+        connectFn: (options) => connectAppServer({ executable, ...options }),
+      },
+      id,
+    )
   },
   async listSessions(options) {
     const executable = resolveBundledCodexExecutable()

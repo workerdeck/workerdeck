@@ -50,7 +50,7 @@ describe('createFileSessionStore', () => {
     expect(read).toEqual(record('s1'))
     expect(await store.list()).toEqual([record('s1')])
     // The engine's opaque state survives verbatim — it is the continuation.
-    expect(read!.snapshot.state).toEqual({ messages: [{ role: 'assistant' }] })
+    expect((read as ParkedSessionRecord).snapshot.state).toEqual({ messages: [{ role: 'assistant' }] })
 
     expect(await store.delete('s1')).toBe(true)
     expect(await store.get('s1')).toBeNull()
@@ -63,7 +63,7 @@ describe('createFileSessionStore', () => {
     await store.save(record('s1'))
     await store.save({ ...record('s1'), parkedAt: 44 })
     expect(await readdir(dir)).toEqual(['s1.json'])
-    expect((await store.get('s1'))?.parkedAt).toBe(44)
+    expect(((await store.get('s1')) as ParkedSessionRecord).parkedAt).toBe(44)
   })
 
   it('never writes credentials, functions, or SDK options to disk', async () => {

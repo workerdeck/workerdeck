@@ -63,7 +63,7 @@ import { SessionRegistry } from './registry.ts'
 import { SessionNotifier, type SessionNotificationOptions } from './notifications.ts'
 import { BridgeHub, type BridgeHubOptions } from './bridge.ts'
 import { SessionParkManager } from './parking.ts'
-import { MemorySessionStore, type SessionStore } from './session-store.ts'
+import { isDormant, MemorySessionStore, type SessionStore } from './session-store.ts'
 import type { ProfileStore } from './profile-store.ts'
 
 export type SdkSessionLister = (options: {
@@ -299,8 +299,13 @@ export type WorkerServerOptions = {
     /** Grace given on boot to an execution whose deadline passed while the server
      * was down (durable stores only — nothing else survives a restart). Default 60000. */
     expiredGraceMs?: number
-    /** Park/resume failures — storage or engine-assembly problems, not session errors. */
-    onError?: (error: unknown, context: { sessionId: string; phase: 'park' | 'resume' }) => void
+    /** Park/remember/resume failures — storage or engine-assembly problems, not
+     * session errors. 'remember' is the write that lets a live session survive a
+     * restart; losing one costs that session its way back and nothing else. */
+    onError?: (
+      error: unknown,
+      context: { sessionId: string; phase: 'park' | 'remember' | 'resume' },
+    ) => void
   }
   /**
    * Build a runner for a `provider` profile (the model-agnostic engine).
@@ -343,6 +348,13 @@ export type EngineRunnerContext = {
    * numbering, history, and scratch filesystem instead of starting fresh.
    */
   restore?: RunnerSnapshot
+  /**
+   * Set when rehydrating a session across a gateway restart: build the runner
+   * under exactly this id rather than a fresh one. Never set together with
+   * `restore` (a snapshot carries its own id). Ignoring it strands every
+   * client's watermarks and routes, and the rebuild is refused.
+   */
+  id?: string
 }
 
 export type QueueServerOptions = {
@@ -909,6 +921,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const buildRunner = async (
     config: SessionRunnerConfig,
     restore?: RunnerSnapshot,
+    /** Adopt this id rather than minting one — rehydrating a dormant session. */
+    id?: string,
   ): Promise<Runner> => {
     const name = config.profile
     const profile = name !== undefined ? profileFor(name) : undefined
@@ -919,11 +933,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     }
     if (profile && isProviderProfile(profile)) {
       // Guaranteed present: startup refuses provider profiles without a factory.
-      return options.createEngineRunner!({ config, profile, bridge, restore })
+      return options.createEngineRunner!({ config, profile, bridge, restore, id })
     }
     // claude and codex ship as in-repo adapters; each refuses `restore` itself
     // (neither engine can rebuild a parked session — the binary owns its state).
-    return adapterFor(profile?.engine).createRunner({ config, profile, restore })
+    return adapterFor(profile?.engine).createRunner({ config, profile, restore, id })
   }
 
   const createRunner = async (config: SessionRunnerConfig): Promise<Runner> => {
@@ -1010,7 +1024,20 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     parkDelayMs: options.parking?.parkDelayMs,
     expiredGraceMs: options.parking?.expiredGraceMs,
     onError: options.parking?.onError,
-    rebuild: (record) => buildRunner(record.config, record.snapshot),
+    // A park restores from its snapshot; a dormant record has none, so it is
+    // rebuilt like an ordinary create — the config back through
+    // `buildRunnerConfig` (so the profile's env pin and the host hook's
+    // injections are re-derived rather than read off disk), `resume` pointed at
+    // the engine's own session, and the WorkerDeck id carried over by hand,
+    // because nothing in the config would otherwise preserve it.
+    rebuild: (record) =>
+      isDormant(record)
+        ? buildRunner(
+            buildRunnerConfig({ ...record.config, resume: record.sdkSessionId }),
+            undefined,
+            record.id,
+          )
+        : buildRunner(record.config, record.snapshot),
     attachedCount: (sessionId) => bridge.attachedCount(sessionId),
     // Accounting is the queue's: it frees the run's slot and stops its clock, and
     // refuses the park outright when the run is already finalizing.
@@ -2279,11 +2306,15 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         json(res, 405, { error: 'method not allowed' })
         return
       }
-      const snapshotFiles = parked?.snapshot.vfs
-      const vfs = runner?.vfs ?? (snapshotFiles && {
-        list: () => Object.keys(snapshotFiles).sort(),
-        read: (path: string) => snapshotFiles[path],
-      })
+      // A dormant session has no VFS to serve: its files, if it made any, live
+      // wherever the engine wrote them, not in a snapshot we kept.
+      const snapshotFiles = parked && !isDormant(parked) ? parked.snapshot.vfs : undefined
+      const vfs =
+        runner?.vfs ??
+        (snapshotFiles && {
+          list: () => Object.keys(snapshotFiles).sort(),
+          read: (path: string) => snapshotFiles[path]!,
+        })
       if (!vfs) {
         json(res, 404, { error: 'session has no file store' })
         return

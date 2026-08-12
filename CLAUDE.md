@@ -81,8 +81,21 @@ protocol. Read these before changing scope or structure:
   `SessionNotifier` (`notifications.ts`) — server-wide session webhooks for the four
   human-attention moments, subscribed through `SessionRegistry`'s `onRegister` so a rebuilt
   parked session is covered too; transport-agnostic on purpose (no push credentials here),
-  `SessionParkManager` (`parking.ts`) owning deferred execution over the `SessionStore` seam
-  (`session-store.ts`: memory + JSON-file, the file one durable across restarts). Imports no model
+  `SessionParkManager` (`parking.ts`) owning **both** ways a session outlives its runner, over the
+  one `SessionStore` seam (`session-store.ts`: memory + JSON-file, the file one durable across
+  restarts). **Parking** is deferred execution's other half and needs `Runner.park()` — which only
+  the provider engine has, because claude and codex run behind a binary that owns its process
+  state. **Dormancy** is the restart story for those two: a `DormantSessionRecord` holds no
+  transcript at all, just the id, the `sdkSessionId` to resume from and the config to rebuild
+  with, written continuously (off `system_init` + status changes, never a shutdown hook — a
+  `kill -9` doesn't run one) and woken **lazily on first attach**, because respawning every
+  session at boot is a fork bomb. Between them every engine survives a restart. Three things
+  hold it together and each is a bug if dropped: `listInfo` hides a record whose id the registry
+  has (or every live session lists twice), the `session_closed` discard is skipped while
+  `#closed` (the registry closes runners with the same 'server' reason a DELETE gives, so a
+  graceful shutdown would forget exactly what it was preserving), and waking one feeds its config
+  back through `buildRunnerConfig` rather than using it as-is — `env` is never persisted, so the
+  profile's `CLAUDE_CONFIG_DIR` pin has to be re-derived. Imports no model
   SDK — a provider profile is built by the host's `createEngineRunner` hook; claude and codex
   profiles go through core's adapters. A Claude profile pins
   `CLAUDE_CONFIG_DIR` *except* when that would be a no-op — setting it at all moves the CLI off the
