@@ -494,7 +494,7 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   came to report 0.10.0 against 0.11.0 packages. **0.13.0** — cross-origin gateway auth
   (`hostAuth`, server CORS, the CLI's `--cors-origin`) and the dashboard rebuilt as four
   sections and a dialog, with jobs read-only behind `SessionPanel`'s new `readOnly` seam;
-  committed and tagged, **not yet published**.
+  tagged and pushed, so the publish workflow ran for it.
 
   **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`
