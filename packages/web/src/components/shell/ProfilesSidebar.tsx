@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
-import { Badge, Button, EngineIcon } from '@workerdeck/ui'
-import { Plus } from 'lucide-react'
+import { Badge, Button, Empty, EmptyKey, EngineIcon } from '@workerdeck/ui'
+import { IdCard, Plus } from 'lucide-react'
 import { CreateProfileDialog } from '@/components/CreateProfileDialog.tsx'
-import { SidebarBody, SidebarEmpty, SidebarFrame } from './SidebarFrame.tsx'
+import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
 import { SidebarRow } from './SidebarRow.tsx'
 import { useProfileList } from '@/lib/useProfiles.ts'
 
@@ -45,15 +45,19 @@ export function ProfilesSidebar() {
         railActions={create}>
         <SidebarBody>
           {profiles.length === 0 ? (
-            <SidebarEmpty>
-              {canManage ? (
-                <>
-                  No profiles yet. Add one with <strong className='text-fg-3'>+</strong>.
-                </>
-              ) : (
-                'The server declares no profiles.'
-              )}
-            </SidebarEmpty>
+            <Empty
+              icon={<IdCard />}
+              title={canManage ? 'No profiles yet' : 'No profiles'}
+              description={
+                canManage ? (
+                  <>
+                    Add one with <EmptyKey>+</EmptyKey> above.
+                  </>
+                ) : (
+                  'This gateway declares none, and this login may not add them.'
+                )
+              }
+            />
           ) : null}
           {profiles.map((profile) => (
             <SidebarRow

@@ -14,7 +14,8 @@ export type SidebarSection = 'sessions' | 'gateways' | 'jobs' | 'profiles'
 
 export const SIDEBAR_MIN = 240
 export const SIDEBAR_MAX = 520
-const DEFAULT = 300
+/** Also what a double-click on the splitter snaps back to. */
+export const SIDEBAR_DEFAULT = 300
 
 /**
  * Sessions keeps the key it had when it was the only sidebar, so a width chosen
@@ -34,9 +35,9 @@ const collapsedKey = (section: SidebarSection) =>
 export function getSidebarWidth(section: SidebarSection): number {
   try {
     const stored = Number(localStorage.getItem(widthKey(section)))
-    return stored ? Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, stored)) : DEFAULT
+    return stored ? Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, stored)) : SIDEBAR_DEFAULT
   } catch {
-    return DEFAULT
+    return SIDEBAR_DEFAULT
   }
 }
 

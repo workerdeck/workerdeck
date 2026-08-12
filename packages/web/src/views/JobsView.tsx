@@ -7,6 +7,8 @@ import {
   DialogBody,
   DialogContent,
   DialogHeader,
+  Empty,
+  EmptyKey,
   Input,
   QUESTION_BEHAVIORS,
   ProgressRing,
@@ -278,11 +280,15 @@ export function JobsView() {
         </>
       ) : (
         <>
-          <ListChecks className='size-8 text-fg-4' />
-          <p className='text-body-sm text-fg-3'>Select a job on the left to watch it.</p>
-          <p className='text-label text-fg-4'>
-            Or schedule one with <strong className='text-fg-3'>+</strong> in the sidebar header.
-          </p>
+          <Empty
+            icon={<ListChecks />}
+            title='No job selected'
+            description={
+              <>
+                Pick one on the left, or schedule one with <EmptyKey>+</EmptyKey> above.
+              </>
+            }
+          />
           {stats ? (
             <div className='mt-2 w-full max-w-xl'>
               <QueueStatsStrip stats={stats} />

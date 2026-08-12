@@ -3,6 +3,7 @@ import { Button, Splitter, cn } from '@workerdeck/ui'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import {
   SIDEBAR_MAX,
+  SIDEBAR_DEFAULT,
   SIDEBAR_MIN,
   getSidebarCollapsed,
   getSidebarWidth,
@@ -117,6 +118,7 @@ export function SidebarFrame({
         }}
         min={SIDEBAR_MIN}
         max={SIDEBAR_MAX}
+        defaultValue={SIDEBAR_DEFAULT}
         aria-label={`Resize ${title.toLowerCase()} sidebar`}
       />
     </>
@@ -136,10 +138,3 @@ export function SidebarBody({
   )
 }
 
-/** A section's "nothing here yet" — pointed at the `+` in the header, which is
- * the only thing that creates (the extension's rule, kept). Carries its own
- * side padding, since the body gave up its own so a selected row's accent bar
- * can sit flush against the sidebar edge. */
-export function SidebarEmpty({ children }: { children: ReactNode }) {
-  return <p className='px-3 py-6 text-center text-label text-fg-4'>{children}</p>
-}

@@ -1,3 +1,4 @@
+import { Empty, EmptyKey } from '@workerdeck/ui'
 import { Plug } from 'lucide-react'
 
 /**
@@ -8,12 +9,16 @@ import { Plug } from 'lucide-react'
  */
 export function GatewaysView() {
   return (
-    <div className='flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center'>
-      <Plug className='size-8 text-fg-4' />
-      <p className='text-body-sm text-fg-3'>Select a gateway on the left to view or edit it.</p>
-      <p className='text-label text-fg-4'>
-        Or add one with <strong className='text-fg-3'>+</strong> in the sidebar header.
-      </p>
+    <div className='flex flex-1 items-center justify-center p-8'>
+      <Empty
+        icon={<Plug />}
+        title='No gateway selected'
+        description={
+          <>
+            Pick one on the left, or add one with <EmptyKey>+</EmptyKey> above.
+          </>
+        }
+      />
     </div>
   )
 }

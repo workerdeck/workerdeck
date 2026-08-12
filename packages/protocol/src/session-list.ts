@@ -104,6 +104,20 @@ export function sessionLabel(info: SessionInfo): string {
   return info.title ?? info.id.slice(0, 8)
 }
 
+/**
+ * This session is a job run — the queue created it, and `JobInfo.sessionId`
+ * points at it.
+ *
+ * A job run is an ordinary registry session in every other respect, which is
+ * what makes this worth spelling once: a client that renders jobs on their own
+ * surface should not list them again among the sessions, and a client with no
+ * jobs surface (the extension, the phone) should, or they would be invisible.
+ * The queue stamps `meta.jobId`; nothing else may write that key.
+ */
+export function isJobRun(info: SessionInfo): boolean {
+  return typeof info.meta?.jobId === 'string'
+}
+
 function matchesSearch(row: SessionRow, needle: string): boolean {
   if (!needle) return true
   return (

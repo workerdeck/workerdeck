@@ -3,10 +3,12 @@ import {
   BellRing,
   CircleAlert,
   CircleSlash,
+  Layers,
   Moon,
   PauseCircle,
   Pencil,
   Search,
+  SearchX,
   Trash2,
   X,
 } from 'lucide-react'
@@ -30,6 +32,7 @@ import type {
   WorkspaceScope,
 } from '@workerdeck/protocol'
 import { Button } from '../ui/Button.tsx'
+import { Empty } from '../ui/Empty.tsx'
 import { Input } from '../ui/Input.tsx'
 import { Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from '../ui/Select.tsx'
 import { Spinner } from '../ui/Spinner.tsx'
@@ -228,25 +231,23 @@ export function SessionBrowser({
       ) : null}
 
       {rows.length === 0 ? (
-        (emptyState ?? <Empty>No sessions yet.</Empty>)
+        (emptyState ?? <Empty icon={<Layers />} title='No sessions yet' />)
       ) : visible.length === 0 ? (
         // Two different dead ends, two different ways out. "Nothing matches" is
-        // a filter someone set; anything else is the state of the world.
-        <Empty>
-          {hasFacetFilter(config) ? (
-            <>
-              No sessions match.{' '}
-              <button
-                type='button'
-                className='underline underline-offset-2 hover:text-fg-1'
-                onClick={() => onConfigChange(clearFilters(config))}>
-                Clear filters
-              </button>
-            </>
-          ) : (
-            'No sessions here.'
-          )}
-        </Empty>
+        // a filter someone set; anything else is the state of the world — and
+        // only the first has a button, because an action that does nothing is
+        // worse than none.
+        hasFacetFilter(config) ? (
+          <Empty
+            icon={<SearchX />}
+            title='No matches'
+            description='No session matches the current search and filters.'
+            action='Clear filters'
+            onAction={() => onConfigChange(clearFilters(config))}
+          />
+        ) : (
+          <Empty icon={<Layers />} title='Nothing here' description='No session to show.' />
+        )
       ) : (
         <div className='flex flex-col gap-4'>
           {groups.map((group) => (
@@ -274,10 +275,6 @@ export function SessionBrowser({
       )}
     </div>
   )
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return <div className='px-3 py-6 text-center text-body-sm text-fg-4'>{children}</div>
 }
 
 interface SessionRowItemProps {

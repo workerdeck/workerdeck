@@ -42,6 +42,7 @@ export { CopyButton, type CopyButtonProps } from './components/ui/CopyButton.tsx
 export { Spinner } from './components/ui/Spinner.tsx'
 export { CodeBlock, type CodeBlockProps } from './components/ui/CodeBlock.tsx'
 export { Splitter, type SplitterProps } from './components/ui/Splitter.tsx'
+export { Empty, EmptyKey } from './components/ui/Empty.tsx'
 export { ProgressRing, type ProgressRingProps } from './components/ui/ProgressRing.tsx'
 // Prompt input (vendored just-marketing/prompt-area, themed to these tokens)
 export {

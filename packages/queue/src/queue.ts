@@ -397,7 +397,16 @@ export class JobQueue {
     const build = this.#options.buildRunnerConfig ?? ((req: CreateSessionRequest) => req)
     let runner: Runner
     try {
-      runner = await this.#options.createRunner(build(record.request.session))
+      // Stamped so the session says what it is. A job run is an ordinary
+      // registry session — attachable, listable, indistinguishable — and a
+      // client with a jobs surface of its own needs to know not to show it
+      // twice. `meta` is free-form and already rides SessionInfo, so this costs
+      // no protocol change; `isJobRun` is the one place the key is spelled.
+      const request: CreateSessionRequest = {
+        ...record.request.session,
+        meta: { ...record.request.session.meta, jobId: id },
+      }
+      runner = await this.#options.createRunner(build(request))
     } catch (error) {
       const failed = await this.#adapter.update(id, {
         status: 'failed',

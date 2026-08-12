@@ -3,13 +3,15 @@ import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { filterRows, sessionLabel, type SessionRow } from '@workerdeck/protocol'
 import {
   Button,
+  Empty,
+  EmptyKey,
   EngineIcon,
   SessionBrowser,
   SessionStatusIcon,
   cn,
   toast,
 } from '@workerdeck/ui'
-import { Filter, Plus, RefreshCw } from 'lucide-react'
+import { Filter, Layers, Plus, RefreshCw } from 'lucide-react'
 import { CreateSessionDialog } from '@/views/SessionsView.tsx'
 import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
 import { clientFor, primaryHost } from '@/lib/hosts.ts'
@@ -160,10 +162,15 @@ export function SessionsSidebar() {
                 )
             }}
             emptyState={
-              <div className='px-1 py-6 text-center text-label text-fg-4'>
-                No live sessions yet. Start one with the <strong className='text-fg-2'>+</strong>{' '}
-                above.
-              </div>
+              <Empty
+                icon={<Layers />}
+                title='No sessions yet'
+                description={
+                  <>
+                    Start one with <EmptyKey>+</EmptyKey> above.
+                  </>
+                }
+              />
             }
           />
         </SidebarBody>

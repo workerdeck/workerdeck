@@ -6,6 +6,8 @@ import {
   DialogBody,
   DialogContent,
   DialogHeader,
+  Empty,
+  EmptyKey,
   Spinner,
   formatRelativeTime,
   toast,
@@ -193,12 +195,16 @@ export function CreateSessionDialog({
  */
 export function SessionsView() {
   return (
-    <div className='flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center'>
-      <BrandMark className='size-8 text-fg-4' />
-      <p className='text-body-sm text-fg-3'>Select a session on the left to open it.</p>
-      <p className='text-label text-fg-4'>
-        Or start a new one with <strong className='text-fg-3'>+</strong> in the sidebar header.
-      </p>
+    <div className='flex flex-1 items-center justify-center p-8'>
+      <Empty
+        icon={<BrandMark />}
+        title='No session open'
+        description={
+          <>
+            Pick one on the left, or start a new one with <EmptyKey>+</EmptyKey> above.
+          </>
+        }
+      />
     </div>
   )
 }

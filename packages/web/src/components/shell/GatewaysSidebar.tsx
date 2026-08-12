@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
-import { Button, cn } from '@workerdeck/ui'
-import { Plus, Trash2 } from 'lucide-react'
+import { Button, Empty, EmptyKey, cn } from '@workerdeck/ui'
+import { Plus, Server, Trash2 } from 'lucide-react'
 import { ConfirmRemoveGateway, CreateGatewayDialog } from '@/components/GatewayForm.tsx'
-import { SidebarBody, SidebarEmpty, SidebarFrame } from './SidebarFrame.tsx'
+import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
 import { RowAction, SidebarRow } from './SidebarRow.tsx'
 import { useHosts, type GatewayHost } from '@/lib/hosts.ts'
 import { useSessions } from '@/lib/useSessions.ts'
@@ -55,9 +55,15 @@ export function GatewaysSidebar() {
           {ready && hosts.length === 0 ? (
             // No implicit localhost is invented here, exactly as the extension
             // refuses to: a gateway you did not configure is one you cannot reach.
-            <SidebarEmpty>
-              No gateways yet. Add one with <strong className='text-fg-3'>+</strong>.
-            </SidebarEmpty>
+            <Empty
+              icon={<Server />}
+              title='No gateways yet'
+              description={
+                <>
+                  Add one with <EmptyKey>+</EmptyKey> above.
+                </>
+              }
+            />
           ) : null}
           {hosts.map((host) => {
             const snapshot = snapshots.find((s) => s.host.id === host.id)

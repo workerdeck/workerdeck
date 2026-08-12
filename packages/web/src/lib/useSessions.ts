@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
-import { sessionState } from '@workerdeck/protocol'
-import type { SessionInfo, SessionRow } from '@workerdeck/protocol'
+import { isJobRun, sessionState, type SessionInfo, type SessionRow } from '@workerdeck/protocol'
 import { clientFor, currentHosts, isLocal, onHostsChange, type GatewayHost } from './hosts.ts'
 import { useUnseen } from './useUnseen.ts'
 
@@ -155,13 +154,20 @@ export function useSessions() {
  * The gateway is a **facet**, not the frame: protocol's view model groups,
  * filters and sorts by `hostId` already, and `SessionBrowser` lights those
  * controls up on its own once more than one gateway is present.
+ *
+ * Job runs are left out. They are ordinary sessions on the gateway and every
+ * other client lists them, but this dashboard renders them on their own
+ * section — where they carry their queue state, their retries and their
+ * cancel — so a second row here would be the same run under a worse view. The
+ * omission is *this composition's*, not the view model's: `filterRows` still
+ * filters whatever it is handed.
  */
 export function useSessionRows(snapshots: HostSnapshot[]): SessionRow[] {
   const { unseenFor } = useUnseen()
   return useMemo(
     () =>
       snapshots.flatMap(({ host, sessions }) =>
-        sessions.map((info) => ({
+        sessions.filter((info) => !isJobRun(info)).map((info) => ({
           hostId: host.id,
           hostName: host.name,
           // The honest answer, not a hardcoded `true`: a session on a remote

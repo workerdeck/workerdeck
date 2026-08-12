@@ -11,7 +11,6 @@ import {
 } from 'lucide-react'
 import { cn } from '@workerdeck/ui'
 import { SettingsDialog } from '@/components/SettingsDialog.tsx'
-import { APP_VERSION } from '@/lib/version.ts'
 import { BrandMark } from './BrandMark.tsx'
 import { GatewaysSidebar } from './GatewaysSidebar.tsx'
 import { JobsSidebar } from './JobsSidebar.tsx'
@@ -61,6 +60,10 @@ export function AppShell({ children }: { children?: ReactNode }) {
       return !prev
     })
   }
+  // One spelling for the three foot icons, so they sit on the same grid cell
+  // and answer the pointer identically.
+  const footIconClass =
+    'flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors outline-none hover:bg-row-hover hover:text-fg-1'
   const itemClass = (active: boolean) =>
     cn(
       'flex items-center rounded-md text-body-sm transition-colors outline-none',
@@ -97,31 +100,34 @@ export function AppShell({ children }: { children?: ReactNode }) {
             </Link>
           ))}
         </nav>
-        {/* Settings sits at the foot, below everything you can navigate *to*,
-            and opens a dialog rather than a screen — it is a preference sheet,
-            not a place to be. */}
-        <button
-          type='button'
-          onClick={() => setSettingsOpen(true)}
-          title={collapsed ? 'Settings' : undefined}
-          aria-label='Settings'
-          className={cn(itemClass(false), collapsed ? 'w-auto' : 'w-full')}>
-          <Settings className='size-4 shrink-0' />
-          {!collapsed && 'Settings'}
-        </button>
+        {/* The foot: three things that are not places you navigate to, so they
+            are icons rather than nav rows — Settings opens a dialog (a
+            preference sheet, not a destination), the theme toggle flips a
+            preference, and the last one folds this bar. Evenly spaced across
+            the bar's own axis: a column of three when collapsed, a row of three
+            when not. The version used to sit here and no longer does; it was
+            the only thing in the frame that answered a question nobody was
+            asking, and it left the icons unable to spread. */}
         <div
           className={cn(
-            'mt-1 flex items-center',
-            collapsed ? 'flex-col gap-1' : 'justify-between px-1',
+            'mt-1 grid place-items-center gap-1',
+            collapsed ? 'grid-rows-3' : 'grid-cols-3',
           )}>
-          {!collapsed && <span className='font-mono text-label text-fg-4'>v{APP_VERSION}</span>}
+          <button
+            type='button'
+            onClick={() => setSettingsOpen(true)}
+            title='Settings'
+            aria-label='Settings'
+            className={footIconClass}>
+            <Settings className='size-4' />
+          </button>
           <ThemeToggle />
           <button
             type='button'
             onClick={toggle}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className='flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors outline-none hover:bg-row-hover hover:text-fg-1'>
+            className={footIconClass}>
             {collapsed ? <PanelLeftOpen className='size-4' /> : <PanelLeftClose className='size-4' />}
           </button>
         </div>

@@ -1,3 +1,4 @@
+import { Empty } from '@workerdeck/ui'
 import { UsersRound } from 'lucide-react'
 
 /** Opens the profile's config dir in VSCode via the vscode:// URL scheme. */
@@ -13,14 +14,12 @@ export function openInVsCode(path: string): void {
  */
 export function ProfilesView() {
   return (
-    <div className='flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center'>
-      <UsersRound className='size-8 text-fg-4' />
-      <p className='text-body-sm text-fg-3'>Select a profile on the left to view it.</p>
-      <p className='max-w-sm text-label text-fg-4'>
-        A profile is what a session runs as: a named Claude Code config directory — its own
-        settings, memory, skills and credentials — or a model provider for the model-agnostic
-        engine.
-      </p>
+    <div className='flex flex-1 items-center justify-center p-8'>
+      <Empty
+        icon={<UsersRound />}
+        title='No profile selected'
+        description='A profile is what a session runs as — its config directory and credentials, or a model provider.'
+      />
     </div>
   )
 }

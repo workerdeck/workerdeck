@@ -225,6 +225,7 @@ export function SessionWorkspace({
           onValueChange={setRailWidth}
           min={RAIL_MIN}
           max={RAIL_MAX}
+          defaultValue={defaultRailWidth}
           aria-label='Resize the file tree'
         />
       ) : null}

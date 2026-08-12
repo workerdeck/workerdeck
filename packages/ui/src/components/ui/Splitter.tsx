@@ -20,6 +20,12 @@ export interface SplitterProps {
   max: number
   /** Keyboard step. */
   step?: number
+  /**
+   * Size to snap back to on a double-click — the convention every pane divider
+   * that can be dragged is expected to honour. Omit and a double-click does
+   * nothing, which is the honest behaviour when there is no default to mean.
+   */
+  defaultValue?: number
   /** Set when dragging the splitter *away* from the origin should shrink the
    * controlled pane — i.e. the pane is on the right or the bottom. */
   inverted?: boolean
@@ -52,6 +58,7 @@ export function Splitter({
   min,
   max,
   step = 16,
+  defaultValue,
   inverted,
   'aria-label': label,
   className,
@@ -84,6 +91,12 @@ export function Splitter({
     }
   }
 
+  // The second click of a double-click has already started a drag, so the reset
+  // has to land after `endDrag` — which it does: dblclick fires after pointerup.
+  const onDoubleClick = () => {
+    if (defaultValue !== undefined) onValueChange(clamp(defaultValue))
+  }
+
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     // The arrows that move *along* this splitter's axis of travel; the other
     // pair is left to the page, which is what a separator should do with them.
@@ -112,6 +125,7 @@ export function Splitter({
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
+      onDoubleClick={onDoubleClick}
       onKeyDown={onKeyDown}
       className={cn(
         // A 1px line that reads as a border, with a larger invisible grab area

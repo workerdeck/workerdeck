@@ -4,6 +4,8 @@ import type { JobInfo, JobStatus } from '@workerdeck/protocol'
 import {
   Badge,
   Button,
+  Empty,
+  EmptyKey,
   Input,
   Spinner,
   cn,
@@ -12,10 +14,10 @@ import {
   toast,
   type BadgeProps,
 } from '@workerdeck/ui'
-import { Plus, RefreshCw, X } from 'lucide-react'
+import { ListTodo, Plus, RefreshCw, SearchX, X } from 'lucide-react'
 import { ScheduleJobDialog } from '@/views/JobsView.tsx'
 import { client } from '@/lib/client.ts'
-import { SidebarBody, SidebarEmpty, SidebarFrame } from './SidebarFrame.tsx'
+import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
 import { RowAction, SidebarRow } from './SidebarRow.tsx'
 import { useJobs } from '@/lib/useJobs.ts'
 
@@ -101,7 +103,11 @@ export function JobsSidebar() {
         }
         railActions={create}>
         {!enabled ? (
-          <SidebarEmpty>The server has no job queue configured.</SidebarEmpty>
+          <Empty
+            icon={<ListTodo />}
+            title='No job queue'
+            description='This gateway runs without one, so there is nothing to schedule against.'
+          />
         ) : (
           <>
             {jobs.length > 0 ? (
@@ -125,11 +131,23 @@ export function JobsSidebar() {
 
             <SidebarBody>
               {jobs.length === 0 ? (
-                <SidebarEmpty>
-                  No jobs yet. Schedule one with <strong className='text-fg-3'>+</strong>.
-                </SidebarEmpty>
+                <Empty
+                  icon={<ListTodo />}
+                  title='No jobs yet'
+                  description={
+                    <>
+                      Schedule one with <EmptyKey>+</EmptyKey> above.
+                    </>
+                  }
+                />
               ) : shown.length === 0 ? (
-                <SidebarEmpty>No jobs match.</SidebarEmpty>
+                <Empty
+                  icon={<SearchX />}
+                  title='No matches'
+                  description='No job matches the active filter.'
+                  action='Show all'
+                  onAction={() => setActiveOnly(false)}
+                />
               ) : null}
               {shown.map((job) => (
                 <JobRow
