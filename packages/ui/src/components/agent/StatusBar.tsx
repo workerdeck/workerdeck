@@ -28,6 +28,13 @@ export interface StatusBarProps {
   onOpenStatus?: () => void
   onOpenContext?: () => void
   onOpenUsage?: () => void
+  /**
+   * The session's own controls (model, permission mode), for
+   * `controlsSurface: 'status'`. They sit at the end of the readings cluster —
+   * status, context, usage, then what you can *change* — rather than out by the
+   * actions menu, because they belong with the session facts they act on.
+   */
+  controls?: ReactNode
   /** Trailing slot — the session-actions menu, at the bar's trailing edge. */
   actions?: ReactNode
   /** Which edge the bar sits on, so its separating rule goes on the other side.
@@ -113,16 +120,22 @@ function RateLimitMeter({ label, info, now }: { label: string; info: RateLimitIn
           {info.status === 'rejected' ? <div className='text-danger'>Limit reached</div> : null}
         </div>
       }>
+      {/* Inline, not `inline-flex`: a flex container contributes its FIRST
+          item's baseline, and the first item here is the ring — so a flex
+          version hands the row a 13px circle's baseline instead of the number's,
+          and every reading beside it sits on a different line. Inline text has
+          only one baseline to give. `align-middle` centres the ring on the
+          x-height, which is where it looked right anyway. */}
       <span
         className={cn(
-          'inline-flex cursor-default items-center gap-1 font-mono text-label',
+          'cursor-default font-mono text-label whitespace-nowrap',
           info.status === 'rejected' ? 'text-danger' : utilizationColor(pct ?? 0),
         )}>
-        <ProgressRing value={pct ?? 0} />
+        <ProgressRing value={pct ?? 0} className='mr-1 inline-block align-middle' />
         {label}
         {pct !== undefined ? ` ${pct.toFixed(0)}%` : ''}
         {resetsAtMs !== undefined ? (
-          <span className='text-fg-4'>· {formatCountdown(resetsAtMs, now)}</span>
+          <span className='text-fg-4'> · {formatCountdown(resetsAtMs, now)}</span>
         ) : null}
       </span>
     </Tip>
@@ -138,7 +151,15 @@ function Slot({ onClick, hint, children }: { onClick?: () => void; hint: string;
       type='button'
       onClick={onClick}
       aria-label={hint}
-      className='rounded-md px-1 py-0.5 transition-colors outline-none hover:bg-surface-hover focus-visible:bg-surface-hover'>
+      // `leading-4` matches the label metrics inside: a button's own line box is
+      // the page's 24px one, and the extra strut was padding the bar by 2.5px
+      // that nothing was using.
+      // No horizontal padding: the bar's own 6px is the inset, and a slot that
+      // added its own would start the first reading 10px in. The hover surface
+      // hugs the text instead, which is what a status line's items do anyway.
+      // `leading-4` matches the label metrics inside — a button's own line box
+      // is the page's 24px one, and the strut padded the bar with nothing.
+      className='rounded-md py-0.5 leading-4 transition-colors outline-none hover:bg-surface-hover focus-visible:bg-surface-hover'>
       {children}
     </button>
   )
@@ -151,6 +172,7 @@ export function StatusBar({
   onOpenStatus,
   onOpenContext,
   onOpenUsage,
+  controls,
   actions,
   placement = 'top',
   className,
@@ -164,7 +186,17 @@ export function StatusBar({
     <div
       data-slot='status-bar'
       className={cn(
-        'flex items-center gap-2 border-border bg-surface px-3 py-1.5',
+        // Baselines, not boxes. `items-center` centres each child's *box*, and
+        // this bar's children are boxes of different heights for reasons that
+        // have nothing to do with their text — a badge's pill padding, a ring
+        // beside a number, a select's border and chevron. Centring those lands
+        // their text on four slightly different lines. A flex item's baseline is
+        // its first line's baseline, so aligning on it puts every reading on one
+        // line by construction, whatever is drawn around it.
+        // One explicit height, shared with the docked composer above it (see
+        // `Composer.tsx`) — the two strips along the foot of the panel read as
+        // one piece of chrome, and a pixel of drift between them shows.
+        'flex h-[38px] items-baseline gap-2 border-border bg-surface p-1.5',
         // The rule goes between the bar and the content, so which edge it sits
         // on follows the placement.
         placement === 'bottom' ? 'border-t' : 'border-b',
@@ -176,16 +208,22 @@ export function StatusBar({
           with which credentials — which is the question a status prompts. */}
       <Slot onClick={onOpenStatus} hint='Session info'>
         {link === 'live' ? (
-          <Badge variant={meta.variant} dot={!meta.busy}>
-            {meta.busy ? <Spinner className='size-3 text-current' /> : null}
+          // `items-baseline` so the badge answers the row with its label's
+          // baseline rather than its pill's box; the dot and the spinner keep
+          // their own centring.
+          <Badge variant={meta.variant} dot={!meta.busy} className='items-baseline'>
+            {meta.busy ? <Spinner className='size-3 self-center text-current' /> : null}
             {meta.label}
           </Badge>
         ) : (
-          <Badge variant={link === 'offline' ? 'danger' : 'warning'} dot={false}>
+          <Badge
+            variant={link === 'offline' ? 'danger' : 'warning'}
+            dot={false}
+            className='items-baseline'>
             {link === 'offline' ? (
-              <WifiOff className='size-3 text-current' />
+              <WifiOff className='size-3 self-center text-current' />
             ) : (
-              <RefreshCw className='size-3 animate-spin text-current' />
+              <RefreshCw className='size-3 animate-spin self-center text-current' />
             )}
             {link === 'offline' ? 'Offline' : 'Reconnecting…'}
           </Badge>
@@ -200,12 +238,13 @@ export function StatusBar({
       ) : null}
       {session || weekly ? (
         <Slot onClick={onOpenUsage} hint='Plan usage'>
-          <span className='inline-flex items-center gap-2'>
+          <span className='inline-flex items-baseline gap-2'>
             {session ? <RateLimitMeter label='Session' info={session} now={now} /> : null}
             {weekly ? <RateLimitMeter label='Weekly' info={weekly} now={now} /> : null}
           </span>
         </Slot>
       ) : null}
+      {controls}
       <span className='flex-1' />
       <span className='font-mono text-label text-fg-3'>{formatCost(state.totalCostUsd)}</span>
       {actions}

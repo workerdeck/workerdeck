@@ -28,11 +28,14 @@ type Shown = {
 export function App({
   bridge,
   density,
+  variant,
 }: {
   bridge: Bridge
   /** From `workerdeck.transcriptDensity`, stamped on `#root` so the first paint
    * is right — see `SessionPanelProvider.#rootAttrs`. */
   density: 'comfortable' | 'compact'
+  /** From `workerdeck.transcriptVariant`, stamped alongside it. */
+  variant: 'lines' | 'cards'
 }) {
   const [shown, setShown] = useState<Shown | undefined>(undefined)
   // The panel owns the session's one attach, so it owns the only setters there
@@ -164,9 +167,11 @@ export function App({
         client={client}
         sessionId={shown.sessionId}
         className='h-full'
-        // A dock has no vertical space to spend on cards: every event is one
-        // full-width line behind a gutter glyph, the terminal treatment.
-        transcriptVariant='lines'
+        // From `workerdeck.transcriptVariant`, defaulting to `lines`: a dock has
+        // no vertical space to spend on cards, so every event is one full-width
+        // line behind a gutter glyph — the terminal treatment. Someone who drags
+        // the panel out into the editor area can ask for the chat form instead.
+        transcriptVariant={variant}
         // From `workerdeck.transcriptDensity`. Independent of the variant: a
         // dock draws its rows as lines, and may still leave a blank line between
         // them the way the CLI does.

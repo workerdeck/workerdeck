@@ -196,6 +196,38 @@
   --radius: var(--radius-md);
 }
 
+/*
+ * The agent panel's typeface, from `SessionPanel`'s `transcriptFont` prop.
+ *
+ * `mono` repoints the **sans** token at the mono stack for that subtree, so the
+ * transcript and its composer render monospace and read as part of the terminal
+ * rather than as a web app beside one. The mono token itself is left alone: code
+ * was already mono, and pointing both at the same stack is what makes the two
+ * indistinguishable — which is the point.
+ *
+ * A subtree rule rather than `:root`, and deliberately: this is the *agent
+ * panel's* preference, not the app's. A host's sidebar, dialogs and lists keep
+ * their UI font, and nothing outside the panel can pick this up by accident.
+ * (VS Code's webview does the same thing one level up, at `html[data-font]`,
+ * because there the panel *is* the document.)
+ */
+[data-agent-font='mono'] {
+  --cw-font-sans: var(--cw-font-mono);
+  /* Tailwind's `font-sans` utility reads `--font-sans`, whose `:root` value is
+     `var(--cw-font-sans)` — and a `var()` inside a custom property is resolved
+     against the element that DECLARED it, not the one that inherits it. So
+     repointing `--cw-font-sans` here leaves `--font-sans` still holding the sans
+     stack it computed at `:root`. Both have to move. */
+  --font-sans: var(--cw-font-mono);
+  /* And the actual property, because the ambient typeface is not a token lookup
+     at all: `body { font-family: var(--cw-font-sans) }` computed once at `body`,
+     and every descendant inherits that *resolved* stack. Nothing under here
+     re-reads the token, so the subtree has to be told directly.
+     (VS Code's webview gets away with tokens alone only because its override
+     sits on `html` — the same element `:root` declares them on.) */
+  font-family: var(--cw-font-mono);
+}
+
 /* Drive dark: off the same <html data-theme> the tokens swap on. */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 

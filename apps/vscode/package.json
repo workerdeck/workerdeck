@@ -238,6 +238,19 @@
           "default": "editor",
           "description": "Typeface for the WorkerDeck agent panel. The sidebar and the session views always follow VS Code's UI font."
         },
+        "workerdeck.transcriptVariant": {
+          "type": "string",
+          "enum": [
+            "lines",
+            "cards"
+          ],
+          "enumDescriptions": [
+            "Full-width rows behind a gutter glyph, no boxes — the terminal form, and what a dock has the space for.",
+            "The chat form: your messages in bubbles, each tool call in a bordered card."
+          ],
+          "default": "lines",
+          "description": "How the WorkerDeck agent panel draws each event."
+        },
         "workerdeck.transcriptDensity": {
           "type": "string",
           "enum": [

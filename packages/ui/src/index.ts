@@ -89,6 +89,7 @@ export {
   useTranscriptDensity,
   useTranscriptVariant,
   type TranscriptDensity,
+  type TranscriptFont,
   type TranscriptVariant,
 } from './components/agent/transcript-variant.tsx'
 export { Response, type ResponseProps } from './components/agent/Response.tsx'

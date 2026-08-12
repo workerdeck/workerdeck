@@ -312,6 +312,14 @@ function SessionRowItem({
     <div
       data-slot='session-row'
       data-active={active || undefined}
+      // Selection lives on the whole row, not on the two text buttons inside
+      // it: the age, the unread badge and the state glyph sit outside them, and
+      // a row where a third of the surface silently does nothing is a row that
+      // feels broken. The buttons stay — they are what makes the row reachable
+      // by keyboard — but their activation now reaches this handler by
+      // bubbling, so there is one code path and no double-fire. Anything that
+      // is its own action (rename, close, the name editor) stops the event.
+      onClick={() => !editing && onSelect?.(row)}
       className={cn(
         'group flex cursor-pointer flex-col gap-0.5 text-left transition-colors',
         rowShapeClass(active === true),
@@ -334,7 +342,6 @@ function SessionRowItem({
         ) : (
           <button
             type='button'
-            onClick={() => onSelect?.(row)}
             className={cn(
               'min-w-0 flex-1 truncate text-left text-body-sm outline-none',
               active ? 'font-medium text-fg-1' : 'text-fg-2',
@@ -362,7 +369,7 @@ function SessionRowItem({
       <div className='flex items-center gap-1 text-label text-fg-4'>
         <button
           type='button'
-          onClick={() => !editing && onSelect?.(row)}
+          tabIndex={-1}
           className='min-w-0 flex-1 truncate text-left font-mono outline-none'>
           {details.join(' · ')}
         </button>
@@ -372,7 +379,10 @@ function SessionRowItem({
             size='icon-sm'
             aria-label='Rename session'
             className='size-5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100'
-            onClick={() => setEditing(true)}>
+            onClick={(e) => {
+              e.stopPropagation()
+              setEditing(true)
+            }}>
             <Pencil className='size-3 text-fg-3' />
           </Button>
         ) : null}
@@ -382,7 +392,10 @@ function SessionRowItem({
             size='icon-sm'
             aria-label='Close session'
             className='size-5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100'
-            onClick={() => onDelete(row)}>
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(row)
+            }}>
             <Trash2 className='size-3 text-fg-3' />
           </Button>
         ) : null}

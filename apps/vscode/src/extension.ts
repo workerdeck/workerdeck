@@ -222,7 +222,8 @@ export function activate(context: vscode.ExtensionContext): void {
       // either means re-rendering it — the same re-render the dev reloader does.
       if (
         e.affectsConfiguration('workerdeck.fontFamily') ||
-        e.affectsConfiguration('workerdeck.transcriptDensity')
+        e.affectsConfiguration('workerdeck.transcriptDensity') ||
+        e.affectsConfiguration('workerdeck.transcriptVariant')
       ) {
         panel.reloadWebview()
       }

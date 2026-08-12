@@ -793,6 +793,27 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   therefore keeps serving the JS it was started with — a UI change needs the server restarted (or
   `pnpm dashboard` re-run), even though a server-side change would too. Symptoms look
   web-specific and are not.
+- **A Tailwind theme token cannot be re-pointed on a subtree, and `font-family` is not a token
+  lookup at all.** `SessionPanel`'s `transcriptFont` scopes a monospace agent view to the panel
+  by stamping `data-agent-font='mono'` on its root, and the obvious rule — redefine
+  `--cw-font-sans` there — does nothing. Two reasons, both worth knowing before scoping any other
+  token this way. First, `--font-sans: var(--cw-font-sans)` is declared in `@theme` at `:root`,
+  and a `var()` inside a custom property is resolved against **the element that declared it**, not
+  the one that inherits it: `--font-sans` computed the sans stack at `:root` and carries that
+  resolved value down forever, so Tailwind's `font-sans` utility never sees the override. Second,
+  the ambient typeface comes from `body { font-family: var(--cw-font-sans) }`, resolved once at
+  `body`; every descendant inherits the *resolved stack*, and nothing under the panel re-reads the
+  token. So the rule sets all three — both tokens **and** `font-family` itself. The VS Code
+  webview's equivalent gets away with tokens alone only because its override sits on `html`, the
+  same element `:root` declares them on.
+- **A flex container hands its parent its FIRST item's baseline, not its text's.** The session
+  status bar aligns its readings with `items-baseline`, and that alone was not enough: a
+  rate-limit meter was an `inline-flex` whose first child is a 13px `ProgressRing`, so the row
+  received a circle's baseline and the number sat 2.5px high; the status `Badge` handed over its
+  dot's. The meters are plain inline text now (the ring is `inline-block align-middle`), and the
+  badge takes `items-baseline` with `self-center` on its dot/spinner — `self-center` being a no-op
+  under the default `items-center`, so `Badge` is unchanged for every other caller. The general
+  rule: if a row must align on text, nothing decorative may be the first flex item.
 - **The transcript is virtualized, and two things want to write `scrollTop`.**
   `use-stick-to-bottom`'s follow spring owns *staying at the bottom*; `@tanstack/react-virtual`
   wants to *correct* the offset whenever a row measures differently from its estimate. They are

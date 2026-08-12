@@ -24,6 +24,11 @@ struct SettingsView: View {
             Text(density.label).tag(density)
           }
         }
+        Picker("Font", selection: $settings.transcriptFont) {
+          ForEach(TranscriptFont.allCases, id: \.self) { font in
+            Text(font.label).tag(font)
+          }
+        }
       } header: {
         Text("Agent view")
       } footer: {
@@ -52,6 +57,13 @@ struct SettingsView: View {
       case .comfortable: "Comfortable leaves a blank line between rows."
       case .compact: "Compact closes the gaps."
       }
-    return "\(style) \(density)"
+    let font =
+      switch settings.transcriptFont {
+      case .regular: "Regular is the system font."
+      case .monospace: "Monospace puts the whole agent view in the code font."
+      }
+    // Says what applies where, once: these three shape a session you have open
+    // and nothing else in the app.
+    return "\(style) \(density) \(font) These apply to the agent view only."
   }
 }

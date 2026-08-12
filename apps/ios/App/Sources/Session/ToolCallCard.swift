@@ -25,11 +25,15 @@ struct ToolCallCard: View {
       // No box: the tool's own icon sits in the gutter and carries the row, the
       // way `⎿` carries the result line under it in the CLI.
       HStack(alignment: .firstTextBaseline, spacing: 6) {
-        Image(systemName: ToolIcon.symbol(for: call.name))
-          .font(.caption)
-          .foregroundStyle(call.status == .failed ? Color.red : .secondary)
-          .frame(width: LineGlyph.width)
-          .accessibilityHidden(true)
+        // A character, not an SF Symbol — and the same one the web transcript
+        // uses: the mark's pulse while the call is running, a plain `●` once it
+        // has settled, which reads as "done" precisely by not moving. The tool's
+        // *name* is right there saying which tool it is; a per-tool icon was
+        // the one drawn thing left in a variant whose claim is that it draws
+        // nothing.
+        LineGlyphBox(color: gutterColor) {
+          if call.status == .running { PulseGlyph() } else { Text("●") }
+        }
         content
       }
     } else {
@@ -64,6 +68,15 @@ struct ToolCallCard: View {
     }
   }
 
+  /// A settled write is green: skimming a run, "what did it change" is the
+  /// question you come back to, and the one you might need to undo. Everything
+  /// else keeps its own state colour — a failed write is a failure first.
+  private var gutterColor: Color {
+    if call.status == .failed { return .red }
+    if call.status == .settled, ToolIcon.isMutating(call.name) { return .green }
+    return .secondary
+  }
+
   private var header: some View {
     HStack(alignment: .firstTextBaseline, spacing: 8) {
       // In `lines` the icon has moved to the gutter, so the header starts at the
@@ -77,16 +90,16 @@ struct ToolCallCard: View {
       VStack(alignment: .leading, spacing: 2) {
         HStack(spacing: 6) {
           Text(call.name)
-            .font(.caption.weight(.semibold))
+            .rowFont(.caption.weight(.semibold), lines: lineTextStyle.weight(.semibold))
           if let backend = call.backend, backend != "server" {
             Text(backend)
-              .font(.caption2)
+              .rowFont(.caption2, lines: .caption)
               .foregroundStyle(.secondary)
           }
         }
         if let summary = call.input.toolInputSummary(toolName: call.name) {
           Text(summary)
-            .font(.caption.monospaced())
+            .rowFont(.caption.monospaced(), lines: lineTextStyle.monospaced())
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .truncationMode(.middle)
@@ -139,26 +152,40 @@ struct ToolCallCard: View {
 private struct StatusChip: View {
   let status: ToolCallStatus
 
+  @Environment(\.transcriptVariant) private var variant
+
   var body: some View {
     switch status {
     case .running:
-      ProgressView()
-        .controlSize(.mini)
+      // Nothing: in `lines` the gutter glyph is already pulsing, and two
+      // animations on one row is one too many. `cards` has no gutter, so it
+      // keeps the spinner.
+      if !variant.isLines {
+        ProgressView().controlSize(.mini)
+      }
     case .pending, .deferred:
-      Image(systemName: status == .deferred ? "clock.badge" : "clock")
-        .font(.caption)
+      glyph(text: status == .deferred ? "⧗" : "·", symbol: status == .deferred ? "clock.badge" : "clock")
         .foregroundStyle(.orange)
         .accessibilityLabel(status == .deferred ? "Deferred" : "Pending")
     case .settled:
-      Image(systemName: "checkmark")
-        .font(.caption.weight(.semibold))
+      glyph(text: "✓", symbol: "checkmark")
         .foregroundStyle(.green)
         .accessibilityLabel("Done")
     case .failed:
-      Image(systemName: "xmark")
-        .font(.caption.weight(.semibold))
+      glyph(text: "✗", symbol: "xmark")
         .foregroundStyle(.red)
         .accessibilityLabel("Failed")
+    }
+  }
+
+  /// The same state, spelled the way its variant spells things: a character in
+  /// `lines`, an SF Symbol in `cards`.
+  @ViewBuilder
+  private func glyph(text: String, symbol: String) -> some View {
+    if variant.isLines {
+      Text(text).font(lineTextStyle.weight(.semibold).monospaced())
+    } else {
+      Image(systemName: symbol).font(.caption.weight(.semibold))
     }
   }
 }

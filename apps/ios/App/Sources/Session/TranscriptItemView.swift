@@ -68,11 +68,51 @@ struct LineGlyph: View {
   static let width: CGFloat = 14
 
   var body: some View {
-    Text(glyph)
-      .font(.caption.monospaced())
+    LineGlyphBox(color: color) { Text(glyph) }
+  }
+}
+
+/// The gutter's box on its own, for a marker that is not a constant string —
+/// the pulse. Same width, same font, same baseline, so it holds the column.
+struct LineGlyphBox<Content: View>: View {
+  var color: Color = .secondary
+  @ViewBuilder let content: Content
+
+  var body: some View {
+    content
+      // The row's own text size, not a smaller one: `LineRow` aligns on the
+      // first baseline, and two different sizes on one baseline put the glyph's
+      // optical centre above the text's. Same size, same centre.
+      .font(lineTextStyle.monospaced())
       .foregroundStyle(color)
-      .frame(width: Self.width)
+      .frame(width: LineGlyph.width)
       .accessibilityHidden(true)
+  }
+}
+
+/// The brand mark's own pulse — `⋄ ◇ ◈ ◆` at 150ms, the same four frames on the
+/// same clock as the web transcript's `pulse.tsx`, so a working row beats the
+/// same way on both surfaces.
+///
+/// It is what a running tool wears in the gutter, which is why `lines` needs no
+/// spinner anywhere: a spinner is a drawn control, and this variant's whole claim
+/// is that a character can do the job. Rests on `◆` under Reduce Motion, free —
+/// the last frame *is* the mark.
+struct PulseGlyph: View {
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  private static let frames = ["⋄", "◇", "◈", "◆"]
+  private static let interval: TimeInterval = 0.15
+
+  var body: some View {
+    if reduceMotion {
+      Text(Self.frames[3])
+    } else {
+      TimelineView(.periodic(from: .now, by: Self.interval)) { context in
+        let step = Int(context.date.timeIntervalSinceReferenceDate / Self.interval)
+        Text(Self.frames[((step % 4) + 4) % 4])
+      }
+    }
   }
 }
 
@@ -119,7 +159,7 @@ private struct UserBubble: View {
         }
         if !text.isEmpty {
           Text(PromptTokenStyle.styled(text))
-            .font(.callout)
+            .font(lineTextStyle)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -204,19 +244,27 @@ private struct ThinkingRow: View {
         isExpanded.toggle()
       } label: {
         HStack(spacing: 6) {
-          Image(systemName: "brain")
+          // `lines` draws no SF Symbols: the gutter's `✻` already says what this
+          // row is, and the disclosure is a character like everything else here.
+          if !variant.isLines {
+            Image(systemName: "brain")
+          }
           Text("Thinking…")
-          Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-            .font(.caption2)
+          if variant.isLines {
+            Text(isExpanded ? "▾" : "▸")
+          } else {
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+              .font(.caption2)
+          }
         }
-        .font(.caption)
+        .rowFont(.caption)
         .foregroundStyle(.secondary)
       }
       .buttonStyle(.plain)
 
       if isExpanded {
         Text(text)
-          .font(.callout.italic())
+          .rowFont(.callout.italic(), lines: lineTextStyle.italic())
           .foregroundStyle(.secondary)
           .textSelection(.enabled)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -250,18 +298,22 @@ private struct TurnResultRow: View {
   private var summary: some View {
     VStack(alignment: variant.isLines ? .leading : .center, spacing: 3) {
       HStack(spacing: 6) {
-        Image(systemName: isError ? "xmark.circle.fill" : "checkmark.circle")
+        if variant.isLines {
+          Text(isError ? "✗" : "✓")
+        } else {
+          Image(systemName: isError ? "xmark.circle.fill" : "checkmark.circle")
+        }
         Text("\(Fmt.duration(ms: durationMs)) · \(Fmt.cost(totalCostUsd))")
           .monospacedDigit()
       }
-      .font(.caption2)
+      .rowFont(.caption2)
       .foregroundStyle(isError ? Color.red : Color.secondary)
 
       if let errors, !errors.isEmpty {
         VStack(alignment: .leading, spacing: 2) {
           ForEach(Array(errors.enumerated()), id: \.offset) { _, message in
             Text(message)
-              .font(.caption2)
+              .rowFont(.caption2)
               .foregroundStyle(.red)
           }
         }
@@ -280,7 +332,7 @@ private struct NoticeRow: View {
     if variant.isLines {
       LineRow(glyph: "!", color: level == .error ? .red : .secondary) {
         Text(text)
-          .font(.caption2)
+          .font(lineTextStyle)
           .foregroundStyle(level == .error ? Color.red : Color.secondary)
           .multilineTextAlignment(.leading)
           .textSelection(.enabled)
@@ -330,20 +382,28 @@ private struct FileDeliveredCard: View {
         }
         VStack(alignment: .leading, spacing: 2) {
           Text(Fmt.lastComponent(path))
-            .font(.callout.weight(.medium))
+            .rowFont(.callout.weight(.medium), lines: lineTextStyle.weight(.medium))
             .lineLimit(1)
           Text(description.map { "\($0) · \(Fmt.bytes(bytes))" } ?? Fmt.bytes(bytes))
-            .font(.caption2)
+            .rowFont(.caption2, lines: .caption)
             .foregroundStyle(.secondary)
             .lineLimit(2)
         }
         Spacer(minLength: 0)
         if downloader?.inFlight == path {
-          ProgressView().controlSize(.mini)
+          if variant.isLines {
+            PulseGlyph().rowFont(.caption).foregroundStyle(.secondary)
+          } else {
+            ProgressView().controlSize(.mini)
+          }
         } else if downloader != nil {
-          Image(systemName: "square.and.arrow.down")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+          if variant.isLines {
+            Text("↓").rowFont(.caption).foregroundStyle(.secondary)
+          } else {
+            Image(systemName: "square.and.arrow.down")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
         }
       }
       .padding(variant.isLines ? 0 : 10)

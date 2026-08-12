@@ -25,6 +25,17 @@ struct RichTextEditor: UIViewRepresentable {
   /// separate `onChange` would race the text it belongs to.
   var onEdit: (String, NSRange) -> Void = { _, _ in }
 
+  /// The reader's typeface preference, the same one the transcript above reads.
+  /// A `UITextView` is outside SwiftUI's font environment entirely, so unlike
+  /// every other piece of text in the panel this one has to be told.
+  @Environment(\.transcriptFont) private var transcriptFont
+  @Environment(\.transcriptVariant) private var transcriptVariant
+
+  /// What `DraftStyle` should be set to for this render.
+  private var wantedTextStyle: UIFont.TextStyle {
+    transcriptVariant.isLines ? lineTextUIStyle : .body
+  }
+
   func makeCoordinator() -> Coordinator { Coordinator(self) }
 
   func makeUIView(context: Context) -> UITextView {
@@ -32,9 +43,11 @@ struct RichTextEditor: UIViewRepresentable {
     view.delegate = context.coordinator
     view.backgroundColor = .clear
     view.isScrollEnabled = false
-    view.textContainerInset = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+    view.textContainerInset = DraftStyle.containerInset
     view.textContainer.lineFragmentPadding = 0
     view.adjustsFontForContentSizeCategory = true
+    DraftStyle.design = transcriptFont.uiDesign
+    DraftStyle.textStyle = wantedTextStyle
     view.font = DraftStyle.base
     view.typingAttributes = DraftStyle.baseAttributes
     // A prompt carries paths, code and flags: curly quotes and em-dashes would
@@ -53,6 +66,13 @@ struct RichTextEditor: UIViewRepresentable {
 
     if view.text != text {
       view.text = text
+    }
+    // Before the restyle, which paints `baseAttributes` over the whole draft:
+    // that is what carries a font change through to text already typed.
+    if DraftStyle.design != transcriptFont.uiDesign || DraftStyle.textStyle != wantedTextStyle {
+      DraftStyle.design = transcriptFont.uiDesign
+      DraftStyle.textStyle = wantedTextStyle
+      view.font = DraftStyle.base
     }
     DraftStyle.restyle(view)
 
@@ -139,7 +159,34 @@ struct RichTextEditor: UIViewRepresentable {
 /// vocabulary UIKit needs, so a token looks identical before and after sending.
 @MainActor
 enum DraftStyle {
-  static var base: UIFont { .preferredFont(forTextStyle: .body) }
+  /// The typeface the draft is typed in — the UIKit half of `transcriptFont`.
+  ///
+  /// Static, and deliberately: `restyle` runs from a `UITextViewDelegate` with
+  /// nothing in hand but the view, and the preference is process-wide anyway
+  /// (`AppSettings` is one object for the whole app). `RichTextEditor` is the
+  /// only writer, and it writes it from the environment before reading `base`.
+  static var design: UIFontDescriptor.SystemDesign = .default
+
+  /// The draft's size, likewise written by `RichTextEditor` from the variant:
+  /// `lines` types at the transcript's own size, `cards` at body.
+  static var textStyle: UIFont.TextStyle = .body
+
+  /// Dynamic Type's body font in the chosen design. Built from the descriptor
+  /// rather than `monospacedSystemFont(ofSize:)` so it keeps tracking the
+  /// content-size category — `adjustsFontForContentSizeCategory` needs a font
+  /// that came from a text style.
+  static var base: UIFont {
+    let body = UIFont.preferredFont(forTextStyle: textStyle)
+    guard let descriptor = body.fontDescriptor.withDesign(design) else { return body }
+    return UIFont(descriptor: descriptor, size: 0)
+  }
+
+  /// The field's own padding. Named here rather than written at the call site
+  /// because three places need to agree with it: the text view, the placeholder
+  /// that has to land exactly where the first character will, and the composer's
+  /// glyph buttons, which sit on the *last line's* box rather than on the field's
+  /// bottom edge.
+  static let containerInset = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
 
   static var baseAttributes: [NSAttributedString.Key: Any] {
     [.font: base, .foregroundColor: UIColor.label]

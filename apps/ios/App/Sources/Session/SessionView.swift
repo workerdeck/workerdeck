@@ -281,23 +281,38 @@ struct SessionView: View {
   // MARK: - The floating stack
 
   private var footer: some View {
-    VStack(spacing: 8) {
+    // In `lines` the composer is *docked*: edge to edge, flush with the bottom,
+    // its own opaque bar. So the gutter that makes the rest of the stack float
+    // moves onto the floating items themselves rather than wrapping everything —
+    // padding the whole footer would inset the very thing that must not be.
+    let docked = settings.transcriptVariant.isLines
+    let gutter: CGFloat = 12
+    // No gap under the status bar when docked: it and the composer are two bands
+    // of one strip, and the rule between them is the composer's own.
+    return VStack(spacing: docked ? 0 : 8) {
       if let serverVersion = vm.protocolMismatch {
         WarningStrip(
           text:
-            "Server speaks protocol v\(serverVersion), this app mirrors v\(WorkerProtocol.version). Some events may not render.")
+            "Server speaks protocol v\(serverVersion), this app mirrors v\(WorkerProtocol.version). Some events may not render."
+        )
+        .padding(.horizontal, docked ? gutter : 0)
       }
       if let message = vm.lastProtocolError {
         WarningStrip(text: message) { vm.dismissProtocolError() }
+          .padding(.horizontal, docked ? gutter : 0)
       }
       if let request = vm.pendingApproval, !isPickerOpen {
         // No wrapper: both prompt views bring their own tinted glass panel, so
         // the coloured card is the floating surface rather than a card inside one.
         approvalBanner(request)
+          .padding(.horizontal, docked ? gutter : 0)
+          .padding(.bottom, docked ? 8 : 0)
       }
       // The picker gets the screen while it is open: it is a list you are reading,
       // and the status bar is not something you consult mid-completion.
       if !isPickerOpen {
+        // Edge to edge in the terminal shape — it draws its own surface and its
+        // own hairline, so a gutter would make it a card again.
         statusBar
       }
       ComposerView(
@@ -315,8 +330,9 @@ struct SessionView: View {
         onStop: { vm.interrupt() },
         onAddMedia: { sheet = .addMedia })
     }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 8)
+    .padding(.horizontal, docked ? 0 : gutter)
+    .padding(.top, 8)
+    .padding(.bottom, docked ? 0 : 8)
   }
 
   private var measuredFooter: some View {

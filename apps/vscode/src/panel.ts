@@ -5,7 +5,7 @@ import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl, isLoopbackHost } from './hosts.ts'
 import { clientFor } from './gateway.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
-import { transcriptDensity, webviewHtml } from './webview-html.ts'
+import { transcriptDensity, transcriptVariant, webviewHtml } from './webview-html.ts'
 import type { HostToPanel, PanelToHost } from './bridge-protocol.ts'
 
 export type ActiveSession = {
@@ -86,7 +86,7 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
    * in front of the reader.
    */
   #rootAttrs(): Record<string, string> {
-    return { 'data-density': transcriptDensity() }
+    return { 'data-density': transcriptDensity(), 'data-variant': transcriptVariant() }
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {

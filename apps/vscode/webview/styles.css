@@ -88,21 +88,10 @@ html[data-font='editor'] {
 [data-slot='status-bar'] {
   padding-block: 2px;
 }
-/* Composer flush to the panel edges: no gutter, and the prompt box's own
- * rounding/side borders go with it (a floating card look needs the gutter). */
-[data-slot='composer'] {
-  padding: 0;
-}
-[data-slot='composer'] .rounded-lg {
-  border-radius: 0;
-  border-left-width: 0;
-  border-right-width: 0;
-  border-bottom-width: 0;
-  /* The frame's drop shadow AND its focus ring are both box-shadows. With only a
-     top border left, the ring drew a second line above the first — one blue rule
-     is the whole affordance here. */
-  box-shadow: none;
-}
+/* The composer's docked treatment — flush to the panel edges, one accent rule
+ * along the top — is the `lines` variant's own now (`Composer.tsx`), shared with
+ * every other host that draws the terminal form. Nothing to override here: a
+ * panel switched to `cards` gets the card, gutter and all. */
 
 html,
 body,

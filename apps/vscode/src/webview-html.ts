@@ -40,6 +40,24 @@ export function transcriptDensity(): 'comfortable' | 'compact' {
     : 'comfortable'
 }
 
+/**
+ * How the panel draws a turn, from settings. Stamped on `#root` beside the
+ * density and for the same reason — the variant decides every row's shape, so a
+ * first paint at the wrong one reflows the whole transcript.
+ *
+ * `lines` is the default because this is a dock: full-width rows behind a gutter
+ * glyph cost the least vertical space, and the terminal is the reference. `cards`
+ * is there for a panel dragged out into the editor area, where the chat form has
+ * the width it wants.
+ */
+export function transcriptVariant(): 'lines' | 'cards' {
+  return vscode.workspace
+    .getConfiguration('workerdeck')
+    .get<'lines' | 'cards'>('transcriptVariant') === 'cards'
+    ? 'cards'
+    : 'lines'
+}
+
 export function webviewHtml(
   webview: vscode.Webview,
   dist: vscode.Uri,

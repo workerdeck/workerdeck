@@ -1,4 +1,12 @@
-import { useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
+import {
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+  type Ref,
+} from 'react'
 import type { SkillInfo, SlashCommandInfo } from '@workerdeck/protocol'
 import type { StagedAttachment, UseAttachmentsResult } from '@workerdeck/react'
 import {
@@ -314,7 +322,7 @@ export function Composer({
   const attach = canAttach ? (
     <>
       {fileField}
-      {inline ? (
+      {lines ? (
         // The glyph sits in the same 14px gutter the transcript's markers use,
         // so the typed line starts on the column the conversation does.
         <GlyphButton label='Attach files' disabled={disabled} onClick={() => fileInput.current?.click()}>
@@ -334,7 +342,7 @@ export function Composer({
   ) : null
 
   const interrupting = busy && !canSend
-  const submitButton = inline ? (
+  const submitButton = lines ? (
     // Terminal furniture rather than chat furniture: a glyph that lights up on
     // hover/focus instead of a filled pill. `↵` is what sends, `■` is what stops
     // — the same two symbols the keyboard and a shell already use.
@@ -365,36 +373,107 @@ export function Composer({
     </Button>
   )
 
+  const dropHandlers = {
+    onDragOver: (e: DragEvent) => {
+      if (attachments && !attachments.disabled) {
+        e.preventDefault()
+        setDragging(true)
+      }
+    },
+    onDragLeave: () => setDragging(false),
+    onDrop: (e: DragEvent) => {
+      if (!attachments || attachments.disabled) return
+      e.preventDefault()
+      setDragging(false)
+      pick(e.dataTransfer.files)
+    },
+  }
+
+  const errorRow = attachments?.error ? (
+    <div
+      className={cn(
+        'mx-auto mt-1 flex w-full max-w-[var(--wd-content-max-w,48rem)] items-center gap-2 text-label text-danger',
+        lines && 'px-2',
+      )}>
+      <TriangleAlert className='size-3 shrink-0' />
+      <span className='min-w-0 flex-1'>{attachments.error}</span>
+      <button
+        type='button'
+        onClick={attachments.dismissError}
+        aria-label='Dismiss'
+        className='shrink-0 opacity-70 hover:opacity-100'>
+        <X className='size-3' />
+      </button>
+    </div>
+  ) : null
+
+  if (lines) {
+    // Docked, not floating: the composer is the foot of the panel rather than a
+    // card sitting on it. No gutter, no radius, no shadow, and **one** border —
+    // the rule along the top — which turns accent while anything inside has
+    // focus. That single blue line is the whole affordance, which is what VS
+    // Code's own agent view does and what the transcript above (no boxes) asks
+    // for. The bar spans the panel; its contents stay in the transcript's
+    // column, so the typed line starts where the conversation does.
+    return (
+      <div data-slot='composer' className={cn('shrink-0', className)}>
+        <div
+          {...dropHandlers}
+          className={cn(
+            // `min-h`, not `h`: one line matches the status bar below it exactly
+            // — two strips of one piece of chrome — and it still grows with the
+            // message, which a fixed height would not.
+            'flex min-h-[38px] flex-col justify-center',
+            'border-t border-border bg-bg transition-colors',
+            'focus-within:border-t-accent',
+            dragging && 'border-t-accent',
+            disabled && 'opacity-60',
+          )}>
+          <div className='mx-auto w-full max-w-[var(--wd-content-max-w,48rem)] px-2 py-1'>
+            {staged.length > 0 && attachments ? (
+              <AttachmentStrip attachments={attachments} />
+            ) : null}
+            {/* One row until the message needs more: the field grows into the
+                space rather than the frame reserving it, and the buttons stay
+                bottom-aligned as it does. */}
+            <div className='flex items-end gap-1'>
+              {attach}
+              <PromptArea
+                {...bind}
+                triggers={triggers}
+                onSubmit={submit}
+                disabled={disabled}
+                placeholder={disabled ? 'Session ended' : placeholder}
+                minHeight={20}
+                maxHeight={192}
+                aria-label='Message the agent'
+                className='min-w-0 flex-1 py-0.5 text-body-sm text-text'
+                onImagePaste={(file) => attachments?.add([file])}
+              />
+              {submitButton}
+            </div>
+            {/* Model and mode under the field, where an editor's chat puts them.
+                Absent entirely under `controlsSurface: 'external'`, which is how
+                the VS Code panel keeps the composer one row tall. */}
+            {toolbar ? (
+              <div className='flex min-w-0 items-center gap-1 pt-1'>{toolbar}</div>
+            ) : null}
+          </div>
+        </div>
+        {errorRow}
+      </div>
+    )
+  }
+
   return (
     <div data-slot='composer' className={cn('px-3 pb-3', className)}>
       <div
-        onDragOver={(e) => {
-          if (attachments && !attachments.disabled) {
-            e.preventDefault()
-            setDragging(true)
-          }
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          if (!attachments || attachments.disabled) return
-          e.preventDefault()
-          setDragging(false)
-          pick(e.dataTransfer.files)
-        }}
+        {...dropHandlers}
         className={cn(
           'mx-auto w-full max-w-[var(--wd-content-max-w,48rem)] overflow-hidden border border-border bg-bg',
-          'transition-colors',
-          // VS Code's input: a flat, near-square box that gains a 1px accent
-          // border on focus. No radius worth the name, no shadow, no glow ring —
-          // an editor's chrome sits *in* the surface rather than floating above
-          // it, and the `lines` transcript above it has no rounded box either.
-          lines
-            ? 'rounded-sm focus-within:border-accent'
-            : cn(
-                'rounded-lg shadow-(--shadow-xs)',
-                'focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30',
-              ),
-          dragging && (lines ? 'border-accent' : 'border-ring ring-2 ring-ring/30'),
+          'transition-colors rounded-lg shadow-(--shadow-xs)',
+          'focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30',
+          dragging && 'border-ring ring-2 ring-ring/30',
           disabled && 'opacity-60',
         )}>
         {/* Above the field, like the picture you are talking about should be. */}
@@ -447,19 +526,7 @@ export function Composer({
           </>
         )}
       </div>
-      {attachments?.error ? (
-        <div className='mx-auto mt-1 flex w-full max-w-[var(--wd-content-max-w,48rem)] items-center gap-2 text-label text-danger'>
-          <TriangleAlert className='size-3 shrink-0' />
-          <span className='min-w-0 flex-1'>{attachments.error}</span>
-          <button
-            type='button'
-            onClick={attachments.dismissError}
-            aria-label='Dismiss'
-            className='shrink-0 opacity-70 hover:opacity-100'>
-            <X className='size-3' />
-          </button>
-        </div>
-      ) : null}
+      {errorRow}
     </div>
   )
 }

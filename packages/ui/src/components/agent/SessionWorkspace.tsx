@@ -34,8 +34,10 @@ export interface SessionWorkspaceProps {
    */
   transcriptVariant?: SessionPanelProps['transcriptVariant']
   transcriptDensity?: SessionPanelProps['transcriptDensity']
+  transcriptFont?: SessionPanelProps['transcriptFont']
   /** Which end of the panel the status bar sits at — see `SessionPanel`. */
   statusPlacement?: SessionPanelProps['statusPlacement']
+  controlsSurface?: SessionPanelProps['controlsSurface']
   unseen?: SessionPanelProps['unseen']
   /** Viewer mode — no composer, no approval prompts. Forwarded verbatim to
    * {@link SessionPanel}; the file tree and editor are unaffected, since reading
@@ -91,7 +93,9 @@ export function SessionWorkspace({
   header,
   transcriptVariant,
   transcriptDensity,
+  transcriptFont,
   statusPlacement,
+  controlsSurface,
   unseen,
   readOnly,
   onVitals,
@@ -273,6 +277,8 @@ export function SessionWorkspace({
           header={hoisted}
           transcriptVariant={transcriptVariant}
           transcriptDensity={transcriptDensity}
+          transcriptFont={transcriptFont}
+          controlsSurface={controlsSurface}
           statusPlacement={statusPlacement}
           unseen={unseen}
           readOnly={readOnly}

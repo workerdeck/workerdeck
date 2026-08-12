@@ -148,7 +148,11 @@ protocol. Read these before changing scope or structure:
   embedder's chrome — the *options* ride `SessionVitals` (`models`, `permissionModes`, already
   filtered by the capability record and the bypass grant) and the setters come back through
   `onControls`, because the panel owns the session's one attach and nothing else may open a
-  second. `readOnly` is the fourth and the bluntest: no composer and no approval prompts, for a
+  second. `'status'` is the same trade for a host that has no chrome to put them in: the pickers
+  move into the panel's **own** status bar, at the end of the readings cluster (status → context
+  → usage → model → mode) so what you can *change* sits beside the facts it acts on, and the
+  composer collapses the same way. With `statusSurface: 'external'` there is no bar to hold them,
+  so that combination falls back to the composer rather than hiding them. `readOnly` is the fourth and the bluntest: no composer and no approval prompts, for a
   surface that is *about* a run rather than in it (the dashboard's job detail, where typing
   would be a second operator arriving mid-run). Absent, not disabled — a greyed-out composer
   says the session is busy, an absent one says this screen does not drive it — and **not an
@@ -166,7 +170,19 @@ protocol. Read these before changing scope or structure:
   gap goes on the virtualizer's **measured** wrapper, so no pixel constant is load-bearing and
   only `estimateSize` takes the `px` (scrollbar length before rows mount, replaced by a real
   measurement the moment one does). VS Code exposes it as `workerdeck.transcriptDensity`,
-  stamped on `#root` like the font because it decides every row's height. The working marker is
+  stamped on `#root` like the font because it decides every row's height (`transcriptVariant`
+  is stamped beside it now — the dock defaults to `lines`, but it is a setting, not a
+  hardcode). `transcriptFont` is the seventh seam and the one with **no JS at all**:
+  `'sans'`/`'mono'`, one `data-agent-font` attribute on the panel root, and a rule in
+  `theme.css` repointing `--cw-font-sans` at the mono stack for that subtree. A subtree rule
+  rather than `:root` is the whole claim — a monospace agent view inside an ordinary app, so
+  a host's sidebars and dialogs cannot pick it up. All three clients expose the same three
+  preferences, and only for a running session. The `lines` variant also owns the **docked
+  composer**: flush to the panel edges, no radius, no shadow, and one rule along the top that
+  turns accent on focus, with `+`/`↵` glyphs in place of the round pills. It lives in
+  `Composer.tsx` keyed on `useLines()` — it had been CSS overrides in the VS Code webview,
+  which meant only that one host had it and a panel switched to `cards` would have kept the
+  flattening. The working marker is
   the **brand mark's own pulse** (`pulse.tsx`: `⋄ ◇ ◈ ◆` at 150ms = the 0.6s clock in
   `icon-loading.svg`), shared by the transcript's `Loader` and each running tool row's gutter
   glyph so they beat together; it rests on `◆` under `prefers-reduced-motion`, free because the
@@ -275,7 +291,15 @@ protocol. Read these before changing scope or structure:
   create is a decision you finish and return from, never a screen you navigate to), and
   **Settings is a dialog at the foot of the nav**, not a fifth section — it is a preference
   sheet, and a destination that spent the whole window on four rows of selects was the wrong
-  trade; `/settings` survives as a redirect for bookmarks. Gateways lives in exactly one place
+  trade; `/settings` survives as a redirect for bookmarks. What is left in it is only what this
+  *browser* holds: theme and the three agent-view preferences (style, density, font). The run
+  **defaults moved to the profile** — `ProfileInfo.defaults` already existed and the gateway
+  already applies it to any field a create request omits, so a per-browser copy was a second
+  answer to a question that had one. The profile editor picks the model from *that profile's*
+  catalog (the same `engineFormOptions` resolver the create forms use) rather than a text box that
+  could name a model the engine has never heard of, and `useRunForm` resolves the permission mode
+  most-specific-first: this run's pick → the profile's default → a per-kind fallback that stays
+  hardcoded, because an unattended job stopping at every file write has not run. Gateways lives in exactly one place
   now, its own section, having been a hover-icon strip pinned under the sessions list.
   Jobs are **read-only**: a job's page is the session workspace under `readOnly`, so the
   transcript streams and the files browse but nothing types into a run the queue owns —
@@ -427,6 +451,11 @@ protocol. Read these before changing scope or structure:
   package.json). `WorkerDeckKit/` is a hand-written Swift mirror of `packages/protocol` plus a
   client and a port of the react transcript reducer — protocol or transcript changes must be
   mirrored there (`WorkerProtocol.version` tracks `PROTOCOL_VERSION`); see `apps/ios/README.md`.
+  The three agent-view preferences are mirrored too (`AppSettings.swift`): variant and density as
+  environment values the rows read, and the font as one `fontDesign` on the session view — with
+  the composer's `UITextView` told separately, since UIKit sits outside SwiftUI's font
+  environment. In `lines` every row is one type size (`lineTextStyle`) and every marker is a
+  character rather than an SF Symbol, because a terminal has one size and draws nothing.
   `SessionList.swift` and `Watermarks.swift` are two more such mirrors — protocol's sessions-list
   view model and unread model — so the phone's list is **one list across every configured
   gateway**, gateway as a facet rather than the frame, with search/facets/group/sort, the subset

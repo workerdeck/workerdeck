@@ -17,7 +17,7 @@ import { SessionWorkspace } from '@workerdeck/ui/workspace'
 import { Trash2 } from 'lucide-react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import { clientFor, useHosts } from '@/lib/hosts.ts'
-import { getTranscriptDensity, getTranscriptVariant } from '@/lib/settings.ts'
+import { getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
 import { useMarkSeen, unseenSince } from '@/lib/useUnseen.ts'
 import { nudgeSessions } from '@/lib/useSessions.ts'
@@ -70,6 +70,7 @@ function SessionViewInner({
   const [unseen] = useState(() => unseenSince(hostId, sessionId))
   const [density] = useState(getTranscriptDensity)
   const [variant] = useState(getTranscriptVariant)
+  const [font] = useState(getTranscriptFont)
   // Read once: the workspace owns the live value from here, and re-seeding it
   // mid-session would yank the splitter out from under a drag.
   const [rail] = useState(getRail)
@@ -100,8 +101,12 @@ function SessionViewInner({
       sessionId={sessionId}
       transcriptVariant={variant}
       transcriptDensity={density}
+      transcriptFont={font}
       // Along the foot of the editor area, as an editor puts it.
       statusPlacement='bottom'
+      // Model and mode ride that bar too, beside the readings they act on —
+      // the VS Code arrangement, and it buys the composer its second row back.
+      controlsSurface='status'
       defaultRailWidth={rail.width}
       defaultRailCollapsed={rail.collapsed}
       onRailChange={setRail}

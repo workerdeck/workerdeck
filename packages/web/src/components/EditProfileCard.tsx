@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import {
-  ENGINE_CAPABILITIES,
   type PermissionMode,
   type ProfileInfo,
   type SessionCapability,
@@ -19,6 +18,8 @@ import {
 } from '@workerdeck/ui'
 import { Save } from 'lucide-react'
 import { client } from '@/lib/client.ts'
+import { ModelPicker } from '@/components/ModelPicker.tsx'
+import { engineFormOptions } from '@/lib/engine.ts'
 
 const CAPABILITIES: SessionCapability[] = ['web_search', 'download', 'web_fetch', 'deliver_file']
 
@@ -61,6 +62,24 @@ export function EditProfileCard({
   const [mcpServers, setMcpServers] = useState((profile.session?.mcpServers ?? []).join(', '))
   const [instructions, setInstructions] = useState(profile.session?.instructions ?? '')
   const [saving, setSaving] = useState(false)
+
+  // The same resolver the create forms use, so "what this profile offers" has
+  // one answer: its served catalog, else its declared provider ids, else the
+  // static Claude aliases. Its `models` carries the "Profile default" row, whose
+  // '' value is exactly what an unset default means here too.
+  const form = engineFormOptions(profile, mode ?? 'default', defaultModel)
+  // The shared resolver names its empty row "Profile default", which is what a
+  // create form means by it. Inside the profile editor that would be circular —
+  // here the empty row means *this* setting is unset, and the engine decides.
+  const modelRows = form.models.map((row) =>
+    row.value === 'default'
+      ? {
+          ...row,
+          displayName: 'Unset',
+          description: profile.defaultModel ?? "whatever the engine's own config picks",
+        }
+      : row,
+  )
 
   const save = async () => {
     const patch: UpdateProfileRequest = {
@@ -107,12 +126,22 @@ export function EditProfileCard({
         </Field>
         <div className='flex flex-wrap items-end gap-3'>
           <Field label='Default model'>
-            <Input
-              value={defaultModel}
-              onChange={(e) => setDefaultModel(e.target.value)}
-              placeholder='unset — request / engine default'
-              className='font-mono'
-            />
+            {/* This profile's OWN catalog, the same list its create form
+                offers — a free-text field here could name a model this engine
+                has never heard of, and the run would fail at spawn rather than
+                at the point someone typed it. A provider profile whose ids the
+                operator is still declaring below has nothing to list yet, so it
+                keeps the text box. */}
+            {modelRows.length > 1 ? (
+              <ModelPicker value={defaultModel} onChange={setDefaultModel} models={modelRows} />
+            ) : (
+              <Input
+                value={defaultModel}
+                onChange={(e) => setDefaultModel(e.target.value)}
+                placeholder='unset — request / engine default'
+                className='font-mono'
+              />
+            )}
           </Field>
           <Field label='Default permission mode'>
             <PermissionModeSelect
@@ -121,7 +150,7 @@ export function EditProfileCard({
               onModeChange={setMode}
               // The record, not the engine name — the one source of truth for
               // which modes this profile's engine can honor.
-              modes={(profile.capabilities ?? ENGINE_CAPABILITIES[profile.engine ?? 'claude']).permissionModes}
+              modes={form.modes}
             />
           </Field>
         </div>

@@ -44,7 +44,10 @@ export function Message({ from, className, children, ...props }: MessageProps) {
       {...props}>
       {lines ? (
         <>
-          <LineGlyph className={from === 'user' ? 'text-fg-2' : 'text-fg-3'}>
+          {/* The prompt marker is accent, the same blue VS Code's own chat and
+              the iOS app give it: in a column of grey rows it is the one thing
+              that says "you said this", and it is what the eye scrolls back to. */}
+          <LineGlyph className={from === 'user' ? 'text-accent' : 'text-fg-3'}>
             {from === 'user' ? '❯' : '●'}
           </LineGlyph>
           <div className='flex min-w-0 flex-1 flex-col gap-1'>{children}</div>

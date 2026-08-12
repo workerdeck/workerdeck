@@ -37,8 +37,10 @@ enum ConnectionState: Equatable {
   }
 }
 
-/// The session's mini status bar: a glass strip that floats above the composer,
-/// where a thumb can reach it.
+/// The session's mini status bar, in whichever shape the transcript is wearing:
+/// a glass strip floating above the composer in `cards`, and in `lines` a flat
+/// edge-to-edge rule-topped strip sitting directly on the docked composer — the
+/// terminal's own status line, which is not a card either.
 ///
 /// It carries the four things worth a glance mid-run — how the session is doing,
 /// which model is answering, which permission mode is in force, and how much
@@ -50,6 +52,10 @@ enum ConnectionState: Equatable {
 /// the first turn completes, and rate limits only exist for subscription sessions
 /// — both are simply absent rather than shown at zero.
 struct SessionStatusBar: View {
+  /// Same environment the rows and the composer read, so the bar cannot end up
+  /// in a different idiom from the two things it sits between.
+  @Environment(\.transcriptVariant) private var variant
+
   let status: SessionStatus
   let pendingCount: Int
   let connection: ConnectionState
@@ -81,8 +87,8 @@ struct SessionStatusBar: View {
       usageCluster
     }
     .padding(.horizontal, 12)
-    .padding(.vertical, 7)
-    .glassPanel(cornerRadius: 18)
+    .padding(.vertical, variant.isLines ? 5 : 7)
+    .modifier(StatusBarShell(lines: variant.isLines))
   }
 
   /// One slot, two meanings: connection trouble wins it, because a session status
@@ -215,7 +221,34 @@ struct SessionStatusBar: View {
 
 /// A tappable chip on the status bar: a label plus the chevron that says it opens
 /// a menu.
+/// The bar's own surface.
+///
+/// `cards` gets the glass panel it always had. `lines` gets no panel at all: an
+/// opaque strip the width of the screen, separated from the transcript by a
+/// hairline and from the composer below by the composer's own rule. Two flat
+/// bands with rules between them is what a terminal's status line looks like, and
+/// a rounded translucent pill wedged between the transcript and a docked composer
+/// was the one piece of chat furniture left in the terminal shape.
+private struct StatusBarShell: ViewModifier {
+  let lines: Bool
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if lines {
+      content
+        .background(Color(.systemBackground))
+        .overlay(alignment: .top) {
+          Rectangle().fill(Color.primary.opacity(0.15)).frame(height: 0.5)
+        }
+    } else {
+      content.glassPanel(cornerRadius: 18)
+    }
+  }
+}
+
 private struct ChipLabel: View {
+  @Environment(\.transcriptVariant) private var variant
+
   let text: String
   var tint: Color = .secondary
 
@@ -230,9 +263,12 @@ private struct ChipLabel: View {
         .foregroundStyle(.tertiary)
     }
     .foregroundStyle(tint)
-    .padding(.horizontal, 8)
+    .padding(.horizontal, variant.isLines ? 4 : 8)
     .padding(.vertical, 4)
-    .glassPill()
+    // No pill in the terminal shape: a chip's job here is to be *readable and
+    // tappable*, and on a flat strip the label alone does that. The chevron is
+    // what still says it opens something.
+    .glassPill(opacity: variant.isLines ? 0 : 0.10)
   }
 }
 

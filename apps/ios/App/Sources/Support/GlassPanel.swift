@@ -27,9 +27,12 @@ extension View {
   /// The pill behind a control that sits *inside* a glass panel — a chip, a round
   /// button. Deliberately a flat tint rather than more glass: blur over blur has
   /// nothing left to refract, and on iOS 26 it renders as very nearly nothing.
-  func glassPill(cornerRadius: CGFloat = 999) -> some View {
+  /// `opacity: 0` is a real caller (the `lines` status bar): a chip on a flat
+  /// terminal strip keeps its label and its chevron and drops the pill, and
+  /// spelling that as "no fill" beats branching the whole chip in two.
+  func glassPill(cornerRadius: CGFloat = 999, opacity: Double = 0.10) -> some View {
     background(
-      Color.primary.opacity(0.10),
+      Color.primary.opacity(opacity),
       in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
   }
 }

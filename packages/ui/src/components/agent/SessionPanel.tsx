@@ -53,6 +53,7 @@ import {
   TranscriptDensityProvider,
   TranscriptVariantProvider,
   type TranscriptDensity,
+  type TranscriptFont,
   type TranscriptVariant,
 } from './transcript-variant.tsx'
 import { UsageDialog } from './UsageDialog.tsx'
@@ -132,17 +133,35 @@ export interface SessionPanelProps {
    */
   transcriptDensity?: TranscriptDensity
   /**
+   * The panel's typeface — `'sans'` (default, the host's UI font) or `'mono'`,
+   * which repoints the sans token at the mono stack **for this subtree only**.
+   *
+   * The third reader preference beside variant and density, and the same kind of
+   * thing: how a transcript should read is a property of the person reading it.
+   * Scoped to the panel because that is the whole claim — a monospace agent view
+   * next to an ordinary app, not a monospace app.
+   */
+  transcriptFont?: TranscriptFont
+  /**
    * Where the session's own controls — model and permission mode — live.
    * `'internal'` (default) draws them in the composer's toolbar row.
-   * `'external'` draws neither, and the composer collapses to a single line
-   * with its attach/send buttons beside the field: the embedder renders the
-   * pickers in its own chrome (VS Code's status bar, where a click opens a
-   * QuickPick) and drives them through {@link onControls}.
+   * `'status'` draws them in the panel's OWN status bar, beside the readings
+   * they act on; the composer collapses to a single line either way. That is
+   * VS Code's arrangement without VS Code — a host whose panel carries a status
+   * bar of its own (`statusPlacement: 'bottom'`) gets the same streamlined
+   * shape without having to host the pickers itself.
+   * `'external'` draws neither: the embedder renders the pickers in its own
+   * chrome (VS Code's window status bar, where a click opens a QuickPick) and
+   * drives them through {@link onControls}.
+   *
+   * `'status'` needs a status bar to put them in — with
+   * `statusSurface: 'external'` there is none, and the two together would hide
+   * the controls entirely, so that combination falls back to the composer.
    *
    * The options themselves ride {@link SessionVitals} — an embedder must not
    * attach a second time to learn what the models are.
    */
-  controlsSurface?: 'internal' | 'external'
+  controlsSurface?: 'internal' | 'external' | 'status'
   /**
    * Handed the session's setters once the panel is live, and `undefined` on
    * unmount. The counterpart to `controlsSurface: 'external'`: vitals carry the
@@ -283,6 +302,7 @@ export function SessionPanel({
   onVitals,
   transcriptVariant = 'cards',
   transcriptDensity = 'comfortable',
+  transcriptFont = 'sans',
   controlsSurface = 'internal',
   onControls,
   focusComposerOnClick = false,
@@ -292,7 +312,10 @@ export function SessionPanel({
 }: SessionPanelProps) {
   const external = panelSurface === 'external'
   const statusExternal = statusSurface === 'external'
-  const controlsExternal = controlsSurface === 'external'
+  // Both non-internal surfaces take the pickers out of the composer, which is
+  // what collapses it to a single line.
+  const controlsInStatus = controlsSurface === 'status' && !statusExternal
+  const controlsExternal = controlsSurface === 'external' || controlsInStatus
   // Rejected commands (the CLI refusing a permission-mode switch, say) render INSIDE
   // the panel rather than through `toast`. The panel does not mount a `Toaster`, and
   // an embedder that doesn't either would drop the only signal that a command failed
@@ -535,11 +558,46 @@ export function SessionPanel({
   // Built once and placed at one end or the other — the bar has a `⋯` menu and
   // three open handlers, and two copies of that in the tree would be two things
   // to keep in step.
+  // Built once, placed by `controlsSurface`: the composer's toolbar row, or the
+  // status bar beside the readings they act on, or nowhere at all when the host
+  // draws them in its own chrome.
+  const sessionControls = (
+    <>
+      {/* Codex reports no `capabilities` event, so its models arrive from the
+          profile catalog instead — without that fallback its picker would be
+          permanently empty and the session unswitchable. */}
+      {models.length ? (
+        <ModelSelect
+          models={models}
+          model={effectiveModel}
+          onModelChange={setModel}
+          disabled={ended}
+          // The bar is one line of label-sized text; a 24px trigger would set
+          // its height instead of fitting in it.
+          className={controlsInStatus ? 'h-5' : undefined}
+        />
+      ) : null}
+      {state.permissionMode ? (
+        <PermissionModeSelect
+          mode={state.permissionMode}
+          onModeChange={setPermissionMode}
+          // Only what this engine implements — the rest would come back as a
+          // protocol_error.
+          modes={capabilities.permissionModes}
+          canBypass={state.session?.canBypassPermissions}
+          disabled={ended}
+          className={controlsInStatus ? 'h-5' : undefined}
+        />
+      ) : null}
+    </>
+  )
+
   const statusBar = statusExternal ? null : (
     <StatusBar
       state={state}
       connection={connection}
       placement={statusPlacement}
+      controls={controlsInStatus && !readOnly ? sessionControls : undefined}
       onOpenStatus={external && !onOpenPanel ? undefined : () => openPanel('info')}
       onOpenContext={external && !onOpenPanel ? undefined : () => openPanel('context')}
       onOpenUsage={external && !onOpenPanel ? undefined : () => openPanel('usage')}
@@ -566,6 +624,10 @@ export function SessionPanel({
       <TranscriptDensityProvider value={transcriptDensity}>
       <div
         data-slot='session-panel'
+        // The typeface is a cascade fact, not a React one — one attribute here,
+        // and the `[data-agent-font]` rule in theme.css does the rest. Nothing
+        // outside this subtree can pick it up.
+        data-agent-font={transcriptFont}
         onClick={handleClick}
         className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}>
         {headerTakesActions ? header({ actions: menu }) : header}
@@ -677,34 +739,7 @@ export function SessionPanel({
               : undefined
           }
           layout={controlsExternal ? 'inline' : 'stacked'}
-          toolbar={
-            controlsExternal ? undefined : (
-            <>
-              {/* Codex reports no `capabilities` event, so its models arrive from
-                  the profile catalog instead — without that fallback its picker
-                  would be permanently empty and the session unswitchable. */}
-              {models.length ? (
-                <ModelSelect
-                  models={models}
-                  model={effectiveModel}
-                  onModelChange={setModel}
-                  disabled={ended}
-                />
-              ) : null}
-              {state.permissionMode ? (
-                <PermissionModeSelect
-                  mode={state.permissionMode}
-                  onModeChange={setPermissionMode}
-                  // Only what this engine implements — the rest would come back as
-                  // a protocol_error.
-                  modes={capabilities.permissionModes}
-                  canBypass={state.session?.canBypassPermissions}
-                  disabled={ended}
-                />
-              ) : null}
-            </>
-            )
-          }
+          toolbar={controlsExternal ? undefined : sessionControls}
         />
         )}
         {/* Below the composer, along the foot of the panel — the editor

@@ -15,7 +15,7 @@ import { ModelPicker } from '@/components/ModelPicker.tsx'
 import { ProfileSelect } from '@/components/ProfileSelect.tsx'
 import { client } from '@/lib/client.ts'
 import { engineFormOptions } from '@/lib/engine.ts'
-import { getDefaultModel, getDefaultPermissionMode, type DefaultsKind } from '@/lib/settings.ts'
+import { type DefaultsKind } from '@/lib/settings.ts'
 import { useProfileChoice } from '@/lib/useProfiles.ts'
 
 /**
@@ -64,15 +64,36 @@ function useCwdCandidates(sessions: SessionInfo[]): string[] {
   }, [sessions, roots])
 }
 
+/**
+ * Where the permission mode lands when neither the run nor its profile says.
+ *
+ * Not a preference and not configurable — the one thing that genuinely differs
+ * between the two forms. An operator is watching an interactive session, so it
+ * asks; an unattended job that stops at every file write has not run, so it
+ * accepts edits. A profile default overrides both.
+ */
+const MODE_FALLBACK: Record<DefaultsKind, PermissionMode> = {
+  session: 'default',
+  job: 'acceptEdits',
+}
+
 export type RunForm = ReturnType<typeof useRunForm>
 
 export function useRunForm(kind: DefaultsKind) {
   const [cwd, setCwd] = useState(() => localStorage.getItem(CWD_KEY) ?? '')
   const [prompt, setPrompt] = useState('')
-  const [mode, setMode] = useState<PermissionMode>(() => getDefaultPermissionMode(kind))
-  const [model, setModel] = useState(() => getDefaultModel(kind))
+  // Empty means "whatever the profile says": the gateway fills `model` and
+  // `permissionMode` from `ProfileInfo.defaults` for any field the request
+  // leaves out, so an unset picker is a real choice rather than a missing one.
+  const [model, setModel] = useState('')
+  const [modeChoice, setModeChoice] = useState<PermissionMode | undefined>(undefined)
   const [effort, setEffort] = useState('')
   const { profiles, profile, selected, select: selectProfile } = useProfileChoice()
+  // What the mode select shows, most specific first: this run's own pick, then
+  // the profile's default, then the per-kind fallback. The fallback is not a
+  // preference — an unattended job that stops at every file write has not run,
+  // so it accepts edits unless something above it says otherwise.
+  const mode = modeChoice ?? selected?.defaults?.permissionMode ?? MODE_FALLBACK[kind]
   const engine = engineFormOptions(selected, mode, model)
 
   /**
@@ -113,8 +134,8 @@ export function useRunForm(kind: DefaultsKind) {
     setCwd,
     prompt,
     setPrompt,
-    mode,
-    setMode,
+    mode: engine.mode,
+    setMode: setModeChoice as (mode: PermissionMode) => void,
     model,
     setModel,
     effort,

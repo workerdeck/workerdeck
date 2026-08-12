@@ -1,17 +1,26 @@
 import WorkerDeckKit
 import SwiftUI
 
-/// The input card: a glass shell around a growing rich-text field.
+/// The prompt input, in whichever shape the transcript above it is wearing.
 ///
-/// It has two shapes. At rest it is the field and nothing else, so a session being
-/// read is not competing with a row of buttons. Once it has focus, a draft, or a
-/// turn to stop, an action row unfolds underneath: attach on the left, dismiss the
-/// keyboard and the one send/stop button on the right.
+/// In `cards` it is a floating glass card. At rest it is the field and nothing
+/// else, so a session being read is not competing with a row of buttons; once it
+/// has focus, a draft, or a turn to stop, an action row unfolds underneath —
+/// attach on the left, dismiss the keyboard and the one send/stop button on the
+/// right.
+///
+/// In `lines` it is docked along the foot of the screen instead: flat, opaque,
+/// edge to edge, its buttons plain glyphs on the field's own row, and a single
+/// rule along the top that turns accent on focus. See `docked`.
 ///
 /// The draft, the caret and the focus flag are all the caller's: the `/command`
 /// and `@file` picker is a screen-level overlay (`PromptSuggestionList`), and it
 /// edits the same three things this does.
 struct ComposerView: View {
+  /// The transcript's variant reaches here through the same environment the rows
+  /// read, so the composer matches what is above it without a parameter.
+  @Environment(\.transcriptVariant) private var variant
+
   @Binding var text: String
   /// Caret in UTF-16 units — it decides which token is being completed and where
   /// an accepted suggestion lands.
@@ -31,7 +40,13 @@ struct ComposerView: View {
   let onStop: () -> Void
   let onAddMedia: () -> Void
 
+  @ViewBuilder
   var body: some View {
+    if variant.isLines { docked } else { card }
+  }
+
+  /// The chat shape: a floating glass card that unfolds an action row.
+  private var card: some View {
     VStack(spacing: 6) {
       // Above the field, like the picture you are talking about should be.
       if !attachments.isEmpty {
@@ -50,6 +65,76 @@ struct ComposerView: View {
     .animation(.easeOut(duration: 0.18), value: isExpanded)
   }
 
+  /// The terminal shape, and the same one VS Code's agent view wears: the
+  /// composer is the *foot of the panel* rather than a card floating on it.
+  ///
+  /// Edge to edge, opaque, no radius and no glass — and **one** border, the rule
+  /// along the top, which turns accent while the field has focus. That single
+  /// blue line is the whole affordance, which is what an editor does and what a
+  /// transcript with no boxes in it asks for.
+  ///
+  /// The buttons stop hiding, too. A glass circle is chat furniture; here they
+  /// are characters on the same line as the field — `+` to attach, `↵` to send —
+  /// so an empty composer is one row tall instead of two, which is the point of
+  /// this variant everywhere else in the app as well.
+  private var docked: some View {
+    VStack(spacing: 4) {
+      if !attachments.isEmpty {
+        AttachmentStrip(store: attachments)
+      }
+      HStack(alignment: .bottom, spacing: 4) {
+        if canAddMedia {
+          GlyphButton(systemImage: "plus", label: "Add media", action: onAddMedia)
+            .padding(.bottom, glyphBaseline)
+            .disabled(!isEnabled)
+        }
+        field
+        dockedSendButton
+          .padding(.bottom, glyphBaseline)
+      }
+    }
+    .padding(.horizontal, 6)
+    .padding(.vertical, 6)
+    // Opaque and reaching past the home indicator: a docked bar with the
+    // transcript's background showing under it is not docked.
+    .background(Color(.systemBackground).ignoresSafeArea(edges: .bottom))
+    .overlay(alignment: .top) {
+      Rectangle()
+        .fill(isFocused ? Color.accentColor : Color.primary.opacity(0.15))
+        .frame(height: isFocused ? 1.5 : 0.5)
+    }
+    .animation(.easeOut(duration: 0.15), value: isFocused)
+  }
+
+  /// How far a glyph has to lift off the bottom to sit on the field's **last
+  /// line** rather than on the field's bottom edge.
+  ///
+  /// `.bottom` alignment centres a 34pt button on the field's bottom 34pt, which
+  /// includes the text container's 8pt inset — so the glyph rides low by exactly
+  /// half the difference. Computed from the live font rather than nudged by a
+  /// constant, because `DraftStyle.base` is a Dynamic Type font: at accessibility
+  /// sizes a hardcoded offset would be wrong in the other direction.
+  private var glyphBaseline: CGFloat {
+    let inset = DraftStyle.containerInset.bottom
+    return max(0, inset + DraftStyle.base.lineHeight / 2 - GlyphButton.side / 2)
+  }
+
+  /// Send and stop as glyphs rather than filled circles — the docked shape's
+  /// counterpart to `sendButton`, keeping the same one-button-two-jobs rule.
+  @ViewBuilder
+  private var dockedSendButton: some View {
+    if isBusy, !canSend {
+      GlyphButton(
+        systemImage: "stop.fill", label: "Stop the current turn", tint: .red, action: onStop)
+    } else {
+      GlyphButton(
+        systemImage: "return", label: "Send", tint: canSend ? Color.accentColor : nil,
+        action: onSend
+      )
+      .disabled(!canSend)
+    }
+  }
+
   /// Expanded whenever there is something to act on: the keyboard is up, a draft
   /// is waiting, a photo is staged, or a turn is running and stopping it must stay
   /// one tap away.
@@ -64,8 +149,8 @@ struct ComposerView: View {
         // sits exactly where the first character will.
         Text("Message")
           .foregroundStyle(.tertiary)
-          .padding(.horizontal, 12)
-          .padding(.vertical, 8)
+          .padding(.horizontal, DraftStyle.containerInset.left)
+          .padding(.vertical, DraftStyle.containerInset.top)
           .allowsHitTesting(false)
       }
       RichTextEditor(
@@ -158,6 +243,44 @@ private struct CircleButton: View {
     }
     .buttonStyle(.plain)
     .opacity(isEnabled ? 1 : 0.45)
+    .accessibilityLabel(label)
+  }
+}
+
+/// A composer action as a **character**, for the docked (terminal) shape: no
+/// pill, no glass, nothing drawn behind it — a glyph the size of the transcript's
+/// own gutter markers, so the typed row's furniture lines up with the
+/// conversation above it rather than towering over it.
+private struct GlyphButton: View {
+  /// Square, and public to the composer because the alignment maths needs it:
+  /// 34pt is the smallest that still reads as a button you can hit with a thumb.
+  static let side: CGFloat = 34
+
+  let systemImage: String
+  let label: String
+  /// `nil` = the neutral secondary; set for the two states worth colouring, an
+  /// armed send and a running turn's stop.
+  var tint: Color?
+  let action: () -> Void
+
+  @Environment(\.isEnabled) private var isEnabled
+
+  var body: some View {
+    Button(action: action) {
+      Image(systemName: systemImage)
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(tint ?? .secondary)
+        .frame(width: Self.side, height: Self.side)
+        // A faint surface rather than none: a bare glyph on a flat bar reads as
+        // decoration, and there is nothing else here to say where to press. Faint
+        // enough that the field, not the furniture, is still what draws the eye.
+        .background(
+          Color.primary.opacity(0.07),
+          in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .opacity(isEnabled ? 1 : 0.4)
     .accessibilityLabel(label)
   }
 }

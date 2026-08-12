@@ -1,7 +1,6 @@
 /** Client-side preferences persisted in localStorage (see SettingsView). */
 
-import type { ModelOption, PermissionMode } from '@workerdeck/protocol'
-import { PERMISSION_MODES } from '@workerdeck/ui'
+import type { ModelOption } from '@workerdeck/protocol'
 
 /** Pre-session model choices: aliases the CLI resolves to current model ids, mirroring
  * its supportedModels shape (a 'default' sentinel row first). Live sessions get the
@@ -17,47 +16,17 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { value: 'haiku', displayName: 'Haiku', description: 'Haiku 4.5 · Fastest for quick answers' },
 ]
 
-/** Which creation form a default applies to: interactive sessions or queue jobs. */
+/**
+ * Which creation form we are filling: an interactive session or a queue job.
+ *
+ * All that still turns on it is the `bypassPermissions` pre-authorization (the
+ * operator is present for one and not the other) and the fallback permission
+ * mode. The *configurable* defaults moved to the profile — model and permission
+ * mode are `ProfileInfo.defaults`, which the gateway applies to any field a
+ * create request leaves out, so every client agrees on them instead of each
+ * browser holding its own.
+ */
 export type DefaultsKind = 'session' | 'job'
-
-const MODEL_KEYS: Record<DefaultsKind, string> = {
-  session: 'workerdeck.default-session-model',
-  job: 'workerdeck.default-job-model',
-}
-
-/** Default model pre-filled in the new-session / schedule-job forms. '' = CLI default. */
-export function getDefaultModel(kind: DefaultsKind): string {
-  return localStorage.getItem(MODEL_KEYS[kind]) ?? ''
-}
-
-export function setDefaultModel(kind: DefaultsKind, model: string): void {
-  const trimmed = model.trim()
-  if (trimmed) localStorage.setItem(MODEL_KEYS[kind], trimmed)
-  else localStorage.removeItem(MODEL_KEYS[kind])
-}
-
-const PERMISSION_MODE_KEYS: Record<DefaultsKind, string> = {
-  session: 'workerdeck.default-session-permission-mode',
-  job: 'workerdeck.default-job-permission-mode',
-}
-
-/** Built-in fallbacks: interactive sessions ask by default; unattended jobs
- * auto-approve edits so they don't stall on every file write. */
-const PERMISSION_MODE_FALLBACKS: Record<DefaultsKind, PermissionMode> = {
-  session: 'default',
-  job: 'acceptEdits',
-}
-
-/** Default permission mode pre-selected in the new-session / schedule-job forms. */
-export function getDefaultPermissionMode(kind: DefaultsKind): PermissionMode {
-  const stored = localStorage.getItem(PERMISSION_MODE_KEYS[kind])
-  const valid = PERMISSION_MODES.some((m) => m.value === stored)
-  return valid ? (stored as PermissionMode) : PERMISSION_MODE_FALLBACKS[kind]
-}
-
-export function setDefaultPermissionMode(kind: DefaultsKind, mode: PermissionMode): void {
-  localStorage.setItem(PERMISSION_MODE_KEYS[kind], mode)
-}
 
 /**
  * Transcript density — how much air a session's rows get.
@@ -99,4 +68,25 @@ export function getTranscriptVariant(): TranscriptVariant {
 
 export function setTranscriptVariant(variant: TranscriptVariant): void {
   localStorage.setItem(VARIANT_KEY, variant)
+}
+
+/**
+ * The agent panel's typeface — the third reader preference beside variant and
+ * density, and the same kind of thing.
+ *
+ * `mono` applies to the **session panel alone**: the sidebars, dialogs and lists
+ * around it keep the app's UI font, because the claim is a monospace agent view
+ * inside an ordinary dashboard, not a monospace dashboard. `SessionPanel` scopes
+ * it with one `data-agent-font` attribute; see `ui`'s `theme.css`.
+ */
+export type TranscriptFont = 'sans' | 'mono'
+
+const FONT_KEY = 'workerdeck.transcript-font'
+
+export function getTranscriptFont(): TranscriptFont {
+  return localStorage.getItem(FONT_KEY) === 'mono' ? 'mono' : 'sans'
+}
+
+export function setTranscriptFont(font: TranscriptFont): void {
+  localStorage.setItem(FONT_KEY, font)
 }

@@ -73,6 +73,20 @@ export function useTranscriptDensity(): TranscriptDensity {
 }
 
 /**
+ * The typeface the panel runs in.
+ *
+ * `sans` is the host's UI font; `mono` repoints the sans token at the mono stack
+ * for the panel's subtree (see the `[data-agent-font='mono']` rule in
+ * `theme.css`), so the transcript reads as part of a terminal rather than as a
+ * web app beside one.
+ *
+ * No context and no hook, unlike variant and density: nothing branches on it in
+ * JS. It is one attribute on the panel root and the cascade does the rest, which
+ * is also what keeps it from leaking past the panel.
+ */
+export type TranscriptFont = 'sans' | 'mono'
+
+/**
  * The gap between two rows, per variant and density — the whole of the density
  * feature, since it is the only vertical spacing between rows that exists.
  *

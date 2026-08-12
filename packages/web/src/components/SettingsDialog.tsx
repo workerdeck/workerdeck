@@ -1,14 +1,9 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   Dialog,
   DialogBody,
   DialogContent,
   DialogHeader,
-  PermissionModeSelect,
   Select,
   SelectContent,
   SelectItem,
@@ -16,70 +11,47 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@workerdeck/ui'
-import { ModelPicker } from '@/components/ModelPicker.tsx'
 import { ThemeToggle } from './shell/ThemeToggle.tsx'
 import {
-  getDefaultModel,
-  getDefaultPermissionMode,
-  setDefaultModel,
-  setDefaultPermissionMode,
   getTranscriptDensity,
+  getTranscriptFont,
   getTranscriptVariant,
   setTranscriptDensity,
+  setTranscriptFont,
   setTranscriptVariant,
-  type DefaultsKind,
   type TranscriptDensity,
+  type TranscriptFont,
   type TranscriptVariant,
 } from '@/lib/settings.ts'
 
-function DefaultsRow({ kind, label }: { kind: DefaultsKind; label: string }) {
-  const [model, setModel] = useState(() => getDefaultModel(kind))
-  const [mode, setMode] = useState(() => getDefaultPermissionMode(kind))
-  return (
-    <div className='flex flex-wrap items-center justify-between gap-x-3 gap-y-2'>
-      <span className='text-body-sm text-fg-2'>{label}</span>
-      <div className='flex flex-wrap items-center gap-2'>
-        <PermissionModeSelect
-          variant='form'
-          mode={mode}
-          onModeChange={(value) => {
-            setMode(value)
-            setDefaultPermissionMode(kind, value)
-          }}
-          className='min-w-40'
-        />
-        <ModelPicker
-          value={model}
-          onChange={(value) => {
-            setModel(value)
-            setDefaultModel(kind, value)
-          }}
-          className='min-w-44'
-        />
-      </div>
-    </div>
-  )
-}
-
-/** The density preference. Read on open rather than applied live: the panel
- * stamps it at mount, and re-rendering a mounted transcript under a reader to
- * reflect a settings change made elsewhere is not worth the jump. */
-function DensitySelect() {
-  const [density, setDensity] = useState<TranscriptDensity>(getTranscriptDensity)
-  const options: { value: TranscriptDensity; label: string }[] = [
-    { value: 'comfortable', label: 'Comfortable' },
-    { value: 'compact', label: 'Compact' },
-  ]
+/**
+ * One reader preference, one select.
+ *
+ * All three read their stored value **on open** rather than tracking it live:
+ * the panel stamps variant, density and font at mount, and reshaping every row
+ * under someone reading another screen's transcript is not worth the jump.
+ */
+function PrefSelect<T extends string>({
+  label,
+  options,
+  read,
+  write,
+}: {
+  label: string
+  options: { value: T; label: string }[]
+  read: () => T
+  write: (value: T) => void
+}) {
+  const [value, setValue] = useState<T>(read)
   return (
     <Select
-      value={density}
-      onValueChange={(value) => {
-        const next = value as TranscriptDensity
-        setDensity(next)
-        setTranscriptDensity(next)
+      value={value}
+      onValueChange={(next) => {
+        setValue(next as T)
+        write(next as T)
       }}>
-      <SelectTrigger aria-label='Transcript density' className='min-w-40'>
-        <SelectValue>{options.find((o) => o.value === density)?.label}</SelectValue>
+      <SelectTrigger aria-label={label} className='min-w-40'>
+        <SelectValue>{options.find((o) => o.value === value)?.label}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => (
@@ -92,34 +64,21 @@ function DensitySelect() {
   )
 }
 
-/** The variant preference. Read on open, like density: the transcript stamps it
- * at mount, and reshaping every row under a reader to reflect a change made on
- * another screen is not worth the jump. */
-function VariantSelect() {
-  const [variant, setVariant] = useState<TranscriptVariant>(getTranscriptVariant)
-  const options: { value: TranscriptVariant; label: string }[] = [
-    { value: 'cards', label: 'Cards' },
-    { value: 'lines', label: 'Lines' },
-  ]
+/**
+ * A group of rows under a label.
+ *
+ * A label and nothing else — no card, no border. Every row in this sheet is one
+ * control with its name beside it, and a box drawn around a list of those says
+ * they are a *thing* when they are only a heading's worth of grouping. The
+ * explanations went the same way: a select whose two options are "Cards" and
+ * "Lines" is answered by trying it, not by a paragraph under it.
+ */
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Select
-      value={variant}
-      onValueChange={(value) => {
-        const next = value as TranscriptVariant
-        setVariant(next)
-        setTranscriptVariant(next)
-      }}>
-      <SelectTrigger aria-label='Transcript style' className='min-w-40'>
-        <SelectValue>{options.find((o) => o.value === variant)?.label}</SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            <SelectItemText>{option.label}</SelectItemText>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <section className='flex flex-col gap-3'>
+      <h3 className='text-label font-medium tracking-wide text-fg-3 uppercase'>{title}</h3>
+      {children}
+    </section>
   )
 }
 
@@ -142,72 +101,59 @@ export function SettingsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size='lg'>
+      {/* A column of one-line rows, so it is sized to the widest control rather
+          than to a reading measure. Wider than this and each label drifts a
+          screen away from the select it names. */}
+      <DialogContent size='md' className='w-[min(30rem,calc(100vw-2rem))]'>
         <DialogHeader
           title='Settings'
-          description='Client-side preferences. Server policy (auth, cwd roots, API-key requirements) is configured where the worker runs.'
+          description='Preferences held by this browser. What a run defaults to lives on its profile; server policy lives where the gateway runs.'
         />
         <DialogBody>
-      <div className='flex flex-col gap-4'>
-        <Card>
-          <CardHeader>
-            <CardTitle>Appearance</CardTitle>
-          </CardHeader>
-          <CardContent className='flex flex-col gap-3'>
-            <div className='flex items-center justify-between'>
-              <span className='text-body-sm text-fg-2'>Theme</span>
-              <ThemeToggle />
-            </div>
-            <div className='flex items-center justify-between'>
-              <span className='text-body-sm text-fg-2'>Transcript style</span>
-              <VariantSelect />
-            </div>
-            <div className='flex items-center justify-between'>
-              <span className='text-body-sm text-fg-2'>Transcript density</span>
-              <DensitySelect />
-            </div>
-            <p className='text-label text-fg-4'>
-              Cards is the chat shape; Lines is the terminal one — full-width rows behind a gutter
-              glyph, no boxes. Comfortable leaves a blank line between messages, the way the CLI
-              does; Compact fits more of a long session on screen. Both take effect on the next
-              session you open.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Defaults</CardTitle>
-          </CardHeader>
-          <CardContent className='flex flex-col gap-3'>
-            <DefaultsRow kind='session' label='New session' />
-            <DefaultsRow kind='job' label='Queue job' />
-            <p className='text-label text-fg-4'>
-              Pre-fills the permission mode and model on the new-session and schedule-job forms
-              (still editable per run). &quot;Default (recommended)&quot; leaves the model to the
-              CLI. This list is the Claude aliases, so a profile running another engine will fall
-              back to its own default rather than the choice made here.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Worker server</CardTitle>
-          </CardHeader>
-          <CardContent className='flex flex-col gap-1 text-body-sm text-fg-2'>
-            <div>
-              Endpoint: <code className='font-mono text-code'>{location.origin}/v1</code> (dev
-              proxy → <code className='font-mono text-code'>WORKER_URL</code>, default{' '}
-              <code className='font-mono text-code'>http://127.0.0.1:8787</code>)
-            </div>
-            <div className='text-label text-fg-4'>
-              Anthropic credentials are resolved by the SDK from the server operator’s
-              environment — this app never handles them.
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <div className='flex flex-col gap-6'>
+            <Section title='Appearance'>
+              <div className='flex items-center justify-between'>
+                <span className='text-body-sm text-fg-2'>Theme</span>
+                <ThemeToggle />
+              </div>
+              <div className='flex items-center justify-between'>
+                <span className='text-body-sm text-fg-2'>Agent view style</span>
+                <PrefSelect<TranscriptVariant>
+                  label='Agent view style'
+                  options={[
+                    { value: 'cards', label: 'Cards' },
+                    { value: 'lines', label: 'Lines' },
+                  ]}
+                  read={getTranscriptVariant}
+                  write={setTranscriptVariant}
+                />
+              </div>
+              <div className='flex items-center justify-between'>
+                <span className='text-body-sm text-fg-2'>Agent view density</span>
+                <PrefSelect<TranscriptDensity>
+                  label='Agent view density'
+                  options={[
+                    { value: 'comfortable', label: 'Comfortable' },
+                    { value: 'compact', label: 'Compact' },
+                  ]}
+                  read={getTranscriptDensity}
+                  write={setTranscriptDensity}
+                />
+              </div>
+              <div className='flex items-center justify-between'>
+                <span className='text-body-sm text-fg-2'>Agent view font</span>
+                <PrefSelect<TranscriptFont>
+                  label='Agent view font'
+                  options={[
+                    { value: 'sans', label: 'Regular' },
+                    { value: 'mono', label: 'Monospace' },
+                  ]}
+                  read={getTranscriptFont}
+                  write={setTranscriptFont}
+                />
+              </div>
+            </Section>
+          </div>
         </DialogBody>
       </DialogContent>
     </Dialog>

@@ -18,7 +18,7 @@ import { JOB_STATUS_META } from '@/components/shell/JobsSidebar.tsx'
 import { client } from '@/lib/client.ts'
 import { primaryHost } from '@/lib/hosts.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
-import { getTranscriptDensity, getTranscriptVariant } from '@/lib/settings.ts'
+import { getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
 import { useJobs } from '@/lib/useJobs.ts'
 import { useSessions } from '@/lib/useSessions.ts'
 
@@ -66,6 +66,7 @@ export function JobView() {
 
   const [density] = useState(getTranscriptDensity)
   const [variant] = useState(getTranscriptVariant)
+  const [font] = useState(getTranscriptFont)
   // Read once: the workspace owns the live value from here, and re-seeding it
   // mid-view would yank the splitter out from under a drag.
   const [rail] = useState(getRail)
@@ -101,6 +102,7 @@ export function JobView() {
       readOnly
       transcriptVariant={variant}
       transcriptDensity={density}
+      transcriptFont={font}
       statusPlacement='bottom'
       defaultRailWidth={rail.width}
       defaultRailCollapsed={rail.collapsed}

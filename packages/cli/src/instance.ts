@@ -313,6 +313,13 @@ export async function startInstance(
     closed,
     close: async () => {
       await server.close()
+      // The session table's writes are queued, not awaited by the request that
+      // caused them — a login should not wait on a disk write. So shutdown is
+      // where the queue has to be drained: without this, a login or logout in
+      // the last moments of a process is simply lost, and `close()` resolves
+      // while a `writeFile` is still in flight (which is how the CLI's own
+      // teardown came to race its temp directory).
+      await sessions?.flush?.()
       apns?.close()
       resolveClosed()
     },

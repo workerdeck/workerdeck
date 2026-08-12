@@ -48,6 +48,13 @@ export function SidebarRow({
     <div
       data-slot='sidebar-row'
       data-active={active || undefined}
+      // The whole row selects, including the status corner: `status` and
+      // `actions` sit outside the two text buttons, so with the handler on the
+      // buttons alone the right-hand third of every row did nothing. The
+      // buttons stay for keyboard reach — activating one fires a click that
+      // bubbles here, so there is one path and no double-fire — and `RowAction`
+      // stops the event, since an action is not a slower way of opening a thing.
+      onClick={onSelect}
       onDoubleClick={onDoubleClick}
       className={cn(
         'group flex cursor-pointer flex-col gap-0.5 text-left transition-colors',
@@ -65,7 +72,6 @@ export function SidebarRow({
       <div className='flex items-center gap-1.5'>
         <button
           type='button'
-          onClick={onSelect}
           className={cn(
             'min-w-0 flex-1 truncate text-left text-body-sm outline-none',
             active ? 'font-medium text-fg-1' : 'text-fg-2',
@@ -77,7 +83,6 @@ export function SidebarRow({
       <div className='flex items-center gap-1 text-label text-fg-4'>
         <button
           type='button'
-          onClick={onSelect}
           tabIndex={-1}
           className='flex min-w-0 flex-1 items-center gap-1.5 truncate text-left font-mono outline-none'>
           {description}

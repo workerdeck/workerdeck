@@ -94,6 +94,14 @@ export function AppShell({ children }: { children?: ReactNode }) {
               to={item.path}
               title={collapsed ? item.label : undefined}
               aria-label={item.label}
+              // Already in this section: do nothing. Navigating to the section
+              // root from inside it would throw away the thing you have open —
+              // clicking Sessions while reading a session closed the session —
+              // and "take me where I already am" has no useful answer other
+              // than staying put.
+              onClick={(e) => {
+                if (item.id === section?.id) e.preventDefault()
+              }}
               className={itemClass(item.id === section?.id)}>
               <item.icon className='size-4 shrink-0' />
               {!collapsed && item.label}
