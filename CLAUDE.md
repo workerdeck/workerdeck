@@ -599,7 +599,9 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   run is safe to re-run, and a prerelease tag goes out under `next`. Manual fallback is `pnpm
   publish:all`. Gatekeeper audit first. MIT (ui ships `src/` — allowlisted in gatekeeper.json).
 - docs: root CLAUDE.md + README.md + docs/ + apps/docs (keep site content in sync with README)
-- frontend_smoke: no (manual via `pnpm dev:server` + `pnpm dev:web`; `apps/embedded` has its own `pnpm dev`)
+- frontend_smoke: no (manual via `pnpm dev:server` + `pnpm dev:web`, which bind `$WD_DEV_HOST`
+  and default to loopback — set it in your shell to reach them from a phone or tailnet, never in
+  the committed script; `apps/embedded` has its own `pnpm dev`)
 - co_authored_by: no (global)
 
 ## Auth red lines (non-negotiable)
