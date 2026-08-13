@@ -81,6 +81,28 @@ protocol. Read these before changing scope or structure:
   `SessionNotifier` (`notifications.ts`) — server-wide session webhooks for the four
   human-attention moments, subscribed through `SessionRegistry`'s `onRegister` so a rebuilt
   parked session is covered too; transport-agnostic on purpose (no push credentials here),
+  **session scope** — `CreateSessionRequest.scope`, opaque string tags assigned at create,
+  immutable after, echoed on `SessionInfo`, and the only intra-deployment scoping primitive there
+  is. The split is the design: WorkerDeck stores and *enforces* the tags, the embedder's
+  `authorizeSession(principal, session)` decides what they *mean* — "space" and "user" are one
+  app's vocabulary and the next has tenants. The predicate is **synchronous on purpose** (it runs
+  per route and per row of every list; an expensive lookup belongs in `authenticate` and lands on
+  the principal), the default rule is "every key the principal pins must match" with an unset
+  principal scope unrestricted (`allowedProfiles`' precedent, so the operator's dashboard is
+  untouched), and a miss is **404, never 403**. Enforced at the `/sessions/:id/*` gate, the list,
+  the WS attach *before* the wake (waking rebuilds a runner and reconnects MCP — not for someone
+  about to get a 404), `POST /executions/:id/result`, and the job routes via `JobInfo.scope`; the
+  operator surfaces (`/fs/*`, `/sdk-sessions`, `/queue`, `/queue/ws`) are refused outright to a
+  scoped principal, because they answer about the *gateway* and there is nothing to filter. Two
+  guards keep it honest: `buildRunnerConfig` re-stamps the scope over the host hook's output, and
+  `buildRunner` — the one chokepoint for create, dormant rebuild and parked rebuild — asserts the
+  runner echoes it, because a runner that dropped it would be invisible to every check and
+  therefore visible to everyone. **Visibility is full control**, not a read level: an attach can
+  send `user_message`, `permission_decision`, `interrupt` and `close`. `sandboxedProviderProfile()`
+  is the other half — a provider profile with `capabilities: []` and `mcpServers: []` (empty
+  arrays, never absent, which would grant whatever the host wired), and `EngineCapabilities.hostCwd`
+  is what makes `cwd` optional for it: `allowedCwdRoots` is not the boundary for a filesystem-less
+  engine and must not be mistaken for one.
   `SessionParkManager` (`parking.ts`) owning **both** ways a session outlives its runner, over the
   one `SessionStore` seam (`session-store.ts`: memory + JSON-file, the file one durable across
   restarts). **Parking** is deferred execution's other half and needs `Runner.park()` — which only
@@ -362,7 +384,7 @@ protocol. Read these before changing scope or structure:
   the forwarder does not exist. Environment is per device token, never a flag —
   `docs/GOTCHAS.md` §APNs.
 - `apps/docs` — Astro site → Pages via `docs.yml`. `examples` — dev entries with root-level deps
-  the packages must not take, plus `dev-server.config.mjs`, which is what `pnpm server` runs: dev
+  the packages must not take, plus `dev-server.config.mjs`, which is what `pnpm dev:server` runs: dev
   goes through the real CLI, so there is no second server entry point to keep in sync (config
   files here stay literal — no env indirection, they are meant to be edited). `docs/assets` —
   brand assets (rules in `BRAND.md`); the mark is inlined in `BrandMark.tsx`, `Header.astro` and
@@ -447,6 +469,30 @@ protocol. Read these before changing scope or structure:
   on the card's second line and state the first line's last item. `src/dev-reload.ts` is development-mode only: a webview rebuild
   re-renders the webviews in place, an extension-host rebuild reloads the window (VS Code
   cannot swap extension code in a live host). PRD: `_docs/plans/VSCODE-EXTENSION-PRD.md`.
+- `apps/embedded` — **the reference embedding**, and the thing to read before designing another
+  one: a wiki SPA whose right-hand rail is a sandboxed agent, with the gateway inside the app's
+  own server. Everything non-`/v1` (the `/api` wiki, the MCP endpoint, the built SPA) is served
+  through the gateway's `fallback`, so it is **one port** — a tab cannot header a WS upgrade, so a
+  cookie is the only credential an attach can carry and a cookie is per-origin. `authenticate`
+  turns the app's cookie into `{ scope: { user } }` and that is the *entire* ownership model: the
+  SPA calls `listSessions()` with no filter, because a check the client performs is a check the
+  client can skip. The agent runs the provider engine under `sandboxedProviderProfile()` raised
+  exactly twice (`web_fetch`, the `wiki` MCP server) — no shell, no host FS, `eval_script` in an
+  in-process QuickJS guest with no network. The wiki is a **real** silkweave MCP server
+  (`@silkweave/core` + `@silkweave/mcp`'s mountable `mcpTransport` handler, not a port of its
+  own) rather than a plain `ToolSet`, because the seam is the point; identity rides a per-session
+  bearer token minted in `createEngineRunner` off `config.scope.user` and revoked in `onClose`, so
+  no wiki tool takes a `userId` the model could choose. **UI state is the app's, not the bridge's**
+  (`src/app-state.ts`): "which doc am I looking at" and "open that one for me" travel as a
+  server-held per-*user* record the tab `PUT`s on change plus an SSE stream of intents back down
+  — `whoami` / `open_doc` are two more MCP tools over the same token. The tool bridge looks like
+  the natural home and is wrong twice: a bridged tool is by definition `sandboxed`, and the bridge
+  asks the *first attached client*, so two tabs means an arbitrary one answers. `open_doc` reports
+  `shown: false` when no tab was listening rather than claiming a navigation. Two gotchas it paid for in blood: the MCP
+  client opens the SSE stream with `GET` and the stateless transport must answer **405**, not
+  Express's default 404, or the whole connect fails; and a model told to omit an optional `id`
+  sends `""`, so "create vs overwrite" must test truthiness. Storage is `node:sqlite`, one file,
+  zero deps. `EMBEDDED_MODEL` (default `gpt-5.6-luna`) is env, not a constant.
 - `apps/ios` — native iOS remote control (SwiftUI + XcodeGen; invisible to pnpm/turbo — no
   package.json). `WorkerDeckKit/` is a hand-written Swift mirror of `packages/protocol` plus a
   client and a port of the react transcript reducer — protocol or transcript changes must be
@@ -553,7 +599,7 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   run is safe to re-run, and a prerelease tag goes out under `next`. Manual fallback is `pnpm
   publish:all`. Gatekeeper audit first. MIT (ui ships `src/` — allowlisted in gatekeeper.json).
 - docs: root CLAUDE.md + README.md + docs/ + apps/docs (keep site content in sync with README)
-- frontend_smoke: no (manual via `pnpm server` + `pnpm web`)
+- frontend_smoke: no (manual via `pnpm dev:server` + `pnpm dev:web`; `apps/embedded` has its own `pnpm dev`)
 - co_authored_by: no (global)
 
 ## Auth red lines (non-negotiable)

@@ -51,6 +51,9 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
   /// Absent = the effort control is not offered.
   public let reasoningEfforts: [String]?
   public let vfs: Bool
+  /// The engine runs against a host directory, so a create must name a `cwd`.
+  /// Absent = true (an older gateway), which is the always-required behaviour.
+  public let hostCwd: Bool?
   /// 'token' | 'item' | 'none' — anything ≠ 'token' renders without a typing cursor.
   public let streaming: String
 
@@ -61,7 +64,8 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     mcpServerActions: Bool = false,
     sessionMcpServers: Bool, slashCommands: Bool, skillsList: Bool = false,
     settingSources: Bool, budgets: Bool,
-    attachments: [String], reasoningEfforts: [String]? = nil, vfs: Bool, streaming: String
+    attachments: [String], reasoningEfforts: [String]? = nil, vfs: Bool,
+    hostCwd: Bool? = nil, streaming: String
   ) {
     self.interactiveApprovals = interactiveApprovals
     self.permissionModes = permissionModes
@@ -81,6 +85,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     self.attachments = attachments
     self.reasoningEfforts = reasoningEfforts
     self.vfs = vfs
+    self.hostCwd = hostCwd
     self.streaming = streaming
   }
 
@@ -114,6 +119,9 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     attachments = try c.decode([String].self, forKey: .attachments)
     reasoningEfforts = try c.decodeIfPresent([String].self, forKey: .reasoningEfforts)
     vfs = try c.decode(Bool.self, forKey: .vfs)
+    // decodeIfPresent, and absent reads as `true`: an older gateway required a
+    // cwd from everyone, so nil must not be mistaken for "no host filesystem".
+    hostCwd = try c.decodeIfPresent(Bool.self, forKey: .hostCwd)
     streaming = try c.decode(String.self, forKey: .streaming)
   }
 }
@@ -374,6 +382,9 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   public let activityCount: Int?
   /// Epoch ms of the most recent emitted event.
   public let lastActivityAt: Double?
+  /// Opaque tags naming what this session belongs to. Assigned at create,
+  /// immutable, and enforced by the gateway — a client only ever echoes them.
+  public let scope: [String: String]?
 
   public var resolvedEngine: ProfileEngine { engine ?? .claude }
   /// The record to render from: the runner-reported copy when present, else the
@@ -390,7 +401,8 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     apiKeySource: String? = nil,
     createdAt: Double, lastSeq: Int, pendingPermissionCount: Int,
     meta: [String: JSONValue]? = nil, title: String? = nil, totalCostUsd: Double? = nil,
-    numTurns: Int? = nil, activityCount: Int? = nil, lastActivityAt: Double? = nil
+    numTurns: Int? = nil, activityCount: Int? = nil, lastActivityAt: Double? = nil,
+    scope: [String: String]? = nil
   ) {
     self.id = id
     self.sdkSessionId = sdkSessionId
@@ -412,6 +424,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.numTurns = numTurns
     self.activityCount = activityCount
     self.lastActivityAt = lastActivityAt
+    self.scope = scope
   }
 }
 
@@ -422,7 +435,9 @@ public enum SettingSource: String, Codable, Sendable {
 }
 
 public struct CreateSessionRequest: Encodable, Sendable {
-  /// Directory the session is rooted at. Required.
+  /// Directory the session is rooted at. Optional on the wire — an engine whose
+  /// capability record says `hostCwd: false` has no host filesystem — but kept
+  /// required here: every session this app starts runs on a real machine.
   public var cwd: String
   /// Required when the server declares more than one profile.
   public var profile: String?

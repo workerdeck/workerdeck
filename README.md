@@ -110,6 +110,13 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
 - **The host's files, in the trees sessions already run in.** Browse, read and fuzzy-search over
   your `--cwd-root` directories, so a remote client gets a real file tree instead of guessing at
   paths. Reading needs no extra grant; writing is a separate opt-in.
+- **Sessions you can put in front of your own users.** A gateway embedded in an app's backend can
+  run the provider engine with nothing granted — no shell, no host filesystem, no egress, just the
+  QuickJS guest and an in-memory VFS (`sandboxedProviderProfile()`) — and tag each session with
+  opaque `scope` tags the gateway then enforces at every route, the WS attach and the job queue. A
+  scope miss answers 404. What the tags *mean* is your `authorizeSession` policy: "space" and
+  "user" are your app's vocabulary, not ours. This is scoped embedding, not multi-tenant SaaS —
+  your edge is still the authorization boundary and this is defense in depth behind it.
 
 ## Engines
 
@@ -152,8 +159,15 @@ Each package has its own README, with the code for using it.
 | [`@workerdeck/ui`](packages/ui) | Styled agent-control components: the session panel (transcript, tool-call cards, permission prompts, composer with attachments and `@file` / `/command` completion), the sessions browser, and the workspace around them. Tailwind v4 + Base UI. |
 | [`@workerdeck/web`](packages/web) | The dashboard as prebuilt static files, for serving from your own host. Zero runtime deps. |
 
-The apps — [`apps/ios`](apps/ios), [`apps/vscode`](apps/vscode) and the
-[docs site](apps/docs) — are not published to npm; each has its own README.
+The apps — [`apps/ios`](apps/ios), [`apps/vscode`](apps/vscode), the
+[docs site](apps/docs) and [`apps/embedded`](apps/embedded) — are not published to npm; each has
+its own README.
+
+**Putting an agent in front of your own users?** Read
+[`apps/embedded`](apps/embedded) first. It is a small wiki whose right-hand sidebar is a sandboxed
+agent, with the gateway inside the app's own server — one port, the app's cookie as the only
+credential, `scope` as the entire ownership model, and the app's data reaching the loop as a real
+MCP server. It is a working app, not a snippet: `pnpm --filter @workerdeck/embedded-example dev`.
 
 ## Auth & the providers' terms
 
@@ -197,8 +211,8 @@ provider-owned code.
 
 ```bash
 pnpm install
-pnpm server   # gateway + dashboard on http://127.0.0.1:8787, no auth (loopback only!)
-pnpm web      # optional: vite dashboard on :5191 with HMR, proxying /v1 to the gateway
+pnpm dev:server   # gateway on http://127.0.0.1:8787, no auth (loopback only!)
+pnpm dev:web      # optional: vite dashboard on :5191 with HMR, proxying /v1 to the gateway
 
 pnpm typecheck   # tsgo (TypeScript 7 native preview)
 pnpm test        # vitest — core runner, server integration, transcript reducer

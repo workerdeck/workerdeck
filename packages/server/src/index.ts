@@ -7,6 +7,7 @@ export type {
   WorkerServer,
   WorkerServerOptions,
 } from './server.ts'
+export { sandboxedProviderProfile } from './sandboxed-profile.ts'
 export { SessionRegistry } from './registry.ts'
 export type { SessionRegistryOptions } from './registry.ts'
 export { AttachmentStore } from './attachments.ts'

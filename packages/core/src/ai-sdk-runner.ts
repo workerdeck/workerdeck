@@ -250,7 +250,10 @@ export class AiSdkRunner implements Runner {
     return {
       id: this.id,
       status: this.#status,
-      cwd: this.#config.cwd ?? process.cwd(),
+      // Never process.cwd(): this engine opens no directory, and reporting the
+      // gateway's own deploy path to every client would leak host layout into
+      // a surface that has no business seeing it.
+      cwd: this.#config.cwd ?? '',
       profile: this.#config.profile,
       engine: 'provider',
       capabilities: ENGINE_CAPABILITIES.provider,
@@ -261,6 +264,7 @@ export class AiSdkRunner implements Runner {
       activityCount: this.#activityCount,
       pendingPermissionCount: 0,
       meta: this.#config.meta,
+      scope: this.#config.scope,
       title: this.#title(),
       numTurns: this.#numTurns || undefined,
       lastActivityAt: this.#lastActivityAt,

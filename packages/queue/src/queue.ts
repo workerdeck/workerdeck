@@ -164,7 +164,10 @@ export class JobQueue {
   async submit(request: CreateJobRequest): Promise<JobInfo> {
     if (this.#closed) throw new Error('queue is closed')
     if (!request.session?.prompt?.trim()) throw new Error('session.prompt is required')
-    if (!request.session.cwd) throw new Error('session.cwd is required')
+    // No `cwd` check: whether one is required depends on the engine's
+    // capability record, which the gateway resolves at the door (see the
+    // server's `checkCwd`). A second, engine-blind copy of the rule here would
+    // refuse the filesystem-less engine outright.
     if (request.session.resume || request.session.forkSession) {
       throw new Error('resume/forkSession are not supported for queued jobs')
     }
@@ -178,7 +181,7 @@ export class JobQueue {
     const info: JobInfo = {
       id: randomUUID(),
       status: 'queued',
-      cwd: request.session.cwd,
+      cwd: request.session.cwd ?? '',
       profile: request.session.profile,
       prompt: request.session.prompt,
       createdAt: Date.now(),
@@ -186,6 +189,10 @@ export class JobQueue {
       maxAttempts: attempts,
       usage: { tokens: 0, totalCostUsd: 0, numTurns: 0 },
       meta: request.meta,
+      // Copied from the request so the job routes can be gated by the same rule
+      // as the session routes — the run's session inherits it at claim time
+      // through `record.request.session`.
+      scope: request.session.scope,
     }
     const record: JobRecord = { info, request }
     await this.#adapter.add(record)

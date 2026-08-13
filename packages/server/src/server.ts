@@ -33,6 +33,7 @@ import {
   type CreateJobRequest,
   type CreateSessionRequest,
   type JobEvent,
+  type JobInfo,
   type PermissionMode,
   type ProfileEngine,
   type ProfileConfigSnapshot,
@@ -80,6 +81,18 @@ export type SdkSessionLister = (options: {
  * without it the caller may use every declared profile. It may also carry
  * `canManageProfiles: true` to allow creating/editing/deleting managed profiles
  * (requires the `profileStore` option); anything else means no.
+ *
+ * It may also carry `scope: Record<string, string>` — the opaque tags deciding
+ * which *sessions* this caller may see at all (see
+ * {@link WorkerServerOptions.authorizeSession}). A principal carrying a scope is
+ * an embedded end user rather than the operator, and is refused the
+ * operator-privileged surfaces outright: `/fs/*`, `/sdk-sessions`, `/queue` and
+ * `/queue/ws`.
+ *
+ * **This is the place to be expensive.** It is already async and already runs
+ * once per request, so a lookup (which spaces is this user in?) belongs here,
+ * landing its answer on the principal. The visibility check itself is
+ * synchronous by design: it runs on every route and every row of every list.
  */
 export type Authenticator = (
   req: IncomingMessage,
@@ -90,6 +103,47 @@ export type WorkerServerOptions = {
   authenticate?: Authenticator
   /** Explicit opt-in to run without auth (local dev only). */
   allowUnauthenticated?: boolean
+  /**
+   * Whether a principal may see one session — the policy half of
+   * {@link CreateSessionRequest.scope}. WorkerDeck stores the opaque tags and
+   * enforces the answer at every door; what the tags *mean* is the host's, and
+   * has to be, because "space" and "user" are one app's vocabulary and the next
+   * embedder has tenants or projects or nothing.
+   *
+   * **Synchronous, deliberately.** It runs per route and per row of every list,
+   * so resolving it against a database per request is the failure mode this
+   * signature designs out: do the lookup in {@link Authenticator} and put the
+   * answer on the principal.
+   *
+   * Unset, the default rule applies: every key the principal's `scope` pins must
+   * equal the session's, and a principal with no scope (`undefined` or `{}`) is
+   * unrestricted — the same "unset means all" rule `allowedProfiles` uses, so an
+   * operator's dashboard is unaffected. A consequence worth stating: a session
+   * carrying *no* scope is invisible to a scoped principal, which is the right
+   * fail direction — sessions predating this feature never leak into an
+   * end user's list.
+   *
+   * **False means the session does not exist**: every refusal answers 404, never
+   * 403, matching `host-files.ts`' uniform-disclosure discipline. A predicate
+   * that *throws* has not said yes — it is caught and read as false, so one
+   * surprising row cannot turn a hundred-row list into a page-wide error.
+   *
+   * **Declaring this withdraws the unscoped-means-operator default.** The
+   * gateway-wide surfaces (`/fs/*`, `/sdk-sessions`, `/queue`, `/queue/ws`) key
+   * on {@link Authenticator}'s principal carrying no `scope` — but a host may
+   * well write this predicate over its own principal shape and never set one,
+   * and reading that as "everyone is the operator" would serve the host
+   * filesystem to every end user whose sessions this correctly walls off. So
+   * with a policy declared, operator principals must say `operator: true`.
+   *
+   * **True means full control, not read access.** An attach can send
+   * `user_message`, `permission_decision`, `interrupt` and `close`, and a
+   * bridged client can settle a tool call — so this is one boolean over "may
+   * drive this session", not a visibility level. A read-only-for-my-team policy
+   * is not expressible here yet; do not approximate it with `readOnly`, which is
+   * affordance removal in a client and not an authorization boundary.
+   */
+  authorizeSession?: (principal: unknown, session: SessionInfo) => boolean
   /** If set, session cwd must resolve inside one of these roots. Strongly recommended. */
   allowedCwdRoots?: string[]
   /**
@@ -595,6 +649,70 @@ function cwdAllowed(cwd: string, roots: string[] | undefined): boolean {
   })
 }
 
+/** Most tags one session (or one principal) may carry, and the longest a key or
+ * value may be. Not a security property — a bound so an opaque map cannot become
+ * an unbounded store that every list response then carries. */
+const MAX_SCOPE_KEYS = 16
+const MAX_SCOPE_LEN = 200
+
+/** A `Record<string, string>` or nothing. Duck-typed the same way
+ * `allowedProfiles` is: a malformed value is ignored, never half-applied. */
+function readScope(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const entries = Object.entries(value as Record<string, unknown>)
+  if (entries.some(([, v]) => typeof v !== 'string')) return undefined
+  return Object.fromEntries(entries) as Record<string, string>
+}
+
+/** Validate a caller-supplied scope. Returns an error string, or null when it is
+ * well-formed (including when it is absent). */
+function checkScope(value: unknown): string | null {
+  if (value === undefined) return null
+  const scope = readScope(value)
+  if (!scope) return 'scope must be an object of string values'
+  const entries = Object.entries(scope)
+  if (entries.length > MAX_SCOPE_KEYS) return `scope may carry at most ${MAX_SCOPE_KEYS} keys`
+  for (const [key, val] of entries) {
+    if (key.length === 0) return 'scope keys must not be empty'
+    if (key.length > MAX_SCOPE_LEN || val.length > MAX_SCOPE_LEN) {
+      return `scope keys and values must be at most ${MAX_SCOPE_LEN} characters`
+    }
+  }
+  return null
+}
+
+/** Key-order-independent equality — a host runner that rebuilt the record
+ * rather than echoing the reference must still pass the build-time check. */
+function sameScope(
+  a: Record<string, string> | undefined,
+  b: Record<string, string> | undefined,
+): boolean {
+  const left = Object.entries(a ?? {}).sort(([x], [y]) => (x < y ? -1 : 1))
+  const right = Object.entries(b ?? {}).sort(([x], [y]) => (x < y ? -1 : 1))
+  return (
+    left.length === right.length &&
+    left.every(([key, value], i) => right[i]![0] === key && right[i]![1] === value)
+  )
+}
+
+/**
+ * The default visibility rule, used whenever the host supplies no
+ * `authorizeSession`: every key the principal pins must match the session's, and
+ * an unset principal scope sees everything.
+ *
+ * The asymmetry is intended — a session may carry tags the principal says
+ * nothing about (an app that tags `{space, user, conversation}` while the
+ * principal only pins `{space, user}` still works), but a session missing a key
+ * the principal pins is not this caller's.
+ */
+function scopeMatches(
+  principal: Record<string, string> | undefined,
+  session: Record<string, string> | undefined,
+): boolean {
+  if (!principal) return true
+  return Object.entries(principal).every(([key, value]) => session?.[key] === value)
+}
+
 export function createWorkerServer(options: WorkerServerOptions = {}): WorkerServer {
   if (!options.authenticate && !options.allowUnauthenticated) {
     throw new Error(
@@ -888,18 +1006,96 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     }
   }
 
+  /**
+   * Validate the request's scope and merge the principal's into it.
+   *
+   * A scoped principal's keys are *filled in* when the request omits them and
+   * *refused* when the request disagrees: a caller inside a scope may narrow
+   * itself with extra tags, never claim to be somewhere else. That makes an
+   * embedder's stamping proxy defense in depth rather than the only line — a
+   * request that slipped past it still cannot create a session in another
+   * scope. An unscoped principal (the operator) may write any tags.
+   */
+  const applyScope = (
+    req: CreateSessionRequest,
+    auth: AuthContext,
+  ): { status: number; error: string } | null => {
+    const invalid = checkScope(req.scope)
+    if (invalid) return { status: 400, error: invalid }
+    if (!auth.scope) return null
+    const merged: Record<string, string> = { ...req.scope }
+    for (const [key, value] of Object.entries(auth.scope)) {
+      const claimed = merged[key]
+      if (claimed !== undefined && claimed !== value) {
+        return { status: 403, error: `scope '${key}' does not match the caller's` }
+      }
+      merged[key] = value
+    }
+    // Re-checked after the merge, so the advertised bound is the real ceiling
+    // rather than one the principal's own keys can push past.
+    const tooBig = checkScope(merged)
+    if (tooBig) return { status: 400, error: tooBig }
+    req.scope = merged
+    return null
+  }
+
+  /**
+   * `cwd`, required or not depending on the engine's capability record — the
+   * record rather than the engine name, so a host engine that has no host
+   * filesystem gets the same treatment without this file learning its name.
+   *
+   * When one *is* supplied it is validated even for an engine that will not read
+   * it: a path the caller went out of their way to name should not be quietly
+   * exempt from the operator's roots. And note what this check is not — for a
+   * filesystem-less engine `allowedCwdRoots` guards nothing at all. The
+   * boundary there is the capability wiring, not a path prefix.
+   */
+  const checkCwd = (
+    req: CreateSessionRequest,
+    profile: ProfileInfo | undefined,
+  ): { status: number; error: string } | null => {
+    if (req.cwd !== undefined && typeof req.cwd !== 'string') {
+      return { status: 400, error: 'cwd must be a string' }
+    }
+    if (!req.cwd) {
+      // Absent = true, so an engine record that predates the field keeps the old
+      // always-required behaviour.
+      return adapterFor(profile?.engine).capabilities.hostCwd === false
+        ? null
+        : { status: 400, error: 'cwd is required' }
+    }
+    return cwdAllowed(req.cwd, options.allowedCwdRoots)
+      ? null
+      : { status: 403, error: 'cwd is outside the allowed roots' }
+  }
+
+  /**
+   * Re-stamp the request's scope onto whatever the host's `buildRunnerConfig`
+   * returned. The hook is host code and may rewrite the config wholesale; a
+   * hook that dropped `scope` would silently *widen* a session's visibility,
+   * which is the one direction a bug here must not go. Same posture as the
+   * profile's env pin winning over the hook.
+   */
+  const withScope = (
+    config: SessionRunnerConfig,
+    scope: Record<string, string> | undefined,
+  ): SessionRunnerConfig => (scope === undefined ? config : { ...config, scope })
+
   /** Profile-aware config hook: fill the profile's defaults into unset request fields,
    * run the host hook, then pin CLAUDE_CONFIG_DIR — the profile wins even when the
    * host hook set its own env (see `claudeSessionEnv` for the one case the pin is
    * skipped, and why). Handed to the queue too, so jobs inherit profiles. */
   const buildRunnerConfig = (req: CreateSessionRequest): SessionRunnerConfig => {
     const profile = req.profile !== undefined ? profileFor(req.profile) : undefined
-    if (!profile) return hostBuildRunnerConfig(req)
-    const config = hostBuildRunnerConfig({
-      ...req,
-      model: req.model ?? profile.defaults?.model ?? profile.provider?.model,
-      permissionMode: req.permissionMode ?? profile.defaults?.permissionMode,
-    })
+    if (!profile) return withScope(hostBuildRunnerConfig(req), req.scope)
+    const config = withScope(
+      hostBuildRunnerConfig({
+        ...req,
+        model: req.model ?? profile.defaults?.model ?? profile.provider?.model,
+        permissionMode: req.permissionMode ?? profile.defaults?.permissionMode,
+      }),
+      req.scope,
+    )
     // Only claude profiles have a config dir to pin. Provider credentials come
     // from the operator's environment through the engine factory; a codex
     // profile's CODEX_HOME pin is applied by its adapter (the runner builds the
@@ -931,13 +1127,25 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       // wake-up, and the session cannot be rebuilt without the one it ran on.
       throw new Error(`unknown profile: ${name}`)
     }
-    if (profile && isProviderProfile(profile)) {
-      // Guaranteed present: startup refuses provider profiles without a factory.
-      return options.createEngineRunner!({ config, profile, bridge, restore, id })
+    const runner =
+      profile && isProviderProfile(profile)
+        ? // Guaranteed present: startup refuses provider profiles without a factory.
+          await options.createEngineRunner!({ config, profile, bridge, restore, id })
+        : // claude and codex ship as in-repo adapters; each refuses `restore` itself
+          // (neither engine can rebuild a parked session — the binary owns its state).
+          await adapterFor(profile?.engine).createRunner({ config, profile, restore, id })
+    // The single chokepoint for create, dormant rebuild and parked rebuild, so
+    // it is the one place worth checking that the runner reports the scope it
+    // was built with. A host-supplied runner that forgot to echo it would be
+    // invisible to every enforcement point below and visible to everyone.
+    const reported = runner.info().scope
+    if (!sameScope(reported, config.scope)) {
+      throw new Error(
+        `runner for session ${runner.id} reports scope ${JSON.stringify(reported)}, ` +
+          `expected ${JSON.stringify(config.scope)} — echo config.scope from info()`,
+      )
     }
-    // claude and codex ship as in-repo adapters; each refuses `restore` itself
-    // (neither engine can rebuild a parked session — the binary owns its state).
-    return adapterFor(profile?.engine).createRunner({ config, profile, restore, id })
+    return runner
   }
 
   const createRunner = async (config: SessionRunnerConfig): Promise<Runner> => {
@@ -1216,14 +1424,39 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     }
   }
 
-  type AuthContext = { ok: boolean; allowedProfiles?: string[]; canManageProfiles?: boolean }
+  type AuthContext = {
+    ok: boolean
+    allowedProfiles?: string[]
+    canManageProfiles?: boolean
+    /** Whatever the host's `authenticate` returned, handed back to
+     * `authorizeSession` verbatim — the host wrote both, and should get its own
+     * object rather than this parsed shape. */
+    principal?: unknown
+    /** Parsed off the principal, duck-typed exactly like `allowedProfiles`.
+     * Undefined = unrestricted. */
+    scope?: Record<string, string>
+    /** `principal.operator`, when the host stated it. Undefined = infer (see
+     * {@link isOperator}). */
+    operator?: boolean
+  }
   const authenticate = async (req: IncomingMessage): Promise<AuthContext> => {
     if (!options.authenticate) return { ok: true }
     const principal = await options.authenticate(req)
     if (principal === null || principal === undefined || principal === false) return { ok: false }
     const allowed = (principal as { allowedProfiles?: unknown }).allowedProfiles
+    const scope = readScope((principal as { scope?: unknown }).scope)
     return {
       ok: true,
+      principal,
+      // An empty object pins nothing, so it is unrestricted like an absent one —
+      // an embedder must never read `{}` as "sees no sessions".
+      scope: scope && Object.keys(scope).length > 0 ? scope : undefined,
+      // Three-state on purpose: absent lets `isOperator` infer, and only an
+      // actual boolean overrides the inference in either direction.
+      operator:
+        typeof (principal as { operator?: unknown }).operator === 'boolean'
+          ? ((principal as { operator: boolean }).operator)
+          : undefined,
       allowedProfiles:
         Array.isArray(allowed) && allowed.every((p) => typeof p === 'string')
           ? (allowed as string[])
@@ -1234,6 +1467,83 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         (principal as { canManageProfiles?: unknown }).canManageProfiles === true,
     }
   }
+
+  /**
+   * May this caller see — and therefore drive — this session? The one rule
+   * behind the list filter, every `/sessions/:id/*` route, the WS attach, the
+   * execution-result door and the job routes: three callers, one predicate, so
+   * they cannot drift into three subtly different answers.
+   */
+  const canSee = (auth: AuthContext, session: SessionInfo): boolean => {
+    if (!options.authorizeSession) return scopeMatches(auth.scope, session.scope)
+    try {
+      return options.authorizeSession(auth.principal, session) === true
+    } catch {
+      // A policy that threw has not said yes. Fail closed rather than 500 the
+      // route — a list of a hundred rows must not become a page-wide error
+      // because one row's tags surprised the host's rule.
+      return false
+    }
+  }
+
+  /**
+   * The job flavour of {@link canSee}. Once the run has started, the live
+   * session's info is the real subject and the host's rule decides on it. Before
+   * that (queued) and after (finished, session gone) there is no session to
+   * hand over, so the predicate gets a **stub** built from what the job records:
+   * its scope, its profile, its cwd.
+   *
+   * A stub rather than a fallback to the default rule, which is what this did
+   * first and was wrong: a host policy *narrower* than plain tag-match (tags
+   * plus a role, say) would have had queued jobs admitted — and cancelable — by
+   * a peer it rejects. The predicate must be the only rule wherever it exists.
+   * A host reading fields a queued job cannot have (model, status detail) gets
+   * `undefined` and should treat the id and the scope as the load-bearing ones.
+   */
+  const canSeeJob = (auth: AuthContext, job: JobInfo): boolean => {
+    const live = job.sessionId ? registry.get(job.sessionId)?.info() : undefined
+    if (live) return canSee(auth, live)
+    if (!options.authorizeSession) return scopeMatches(auth.scope, job.scope)
+    return canSee(auth, {
+      id: job.sessionId ?? job.id,
+      status:
+        job.status === 'running'
+          ? 'running'
+          : job.status === 'parked'
+            ? 'parked'
+            : job.status === 'queued'
+              ? 'starting'
+              : 'closed',
+      cwd: job.cwd,
+      profile: job.profile,
+      createdAt: job.createdAt,
+      lastSeq: 0,
+      pendingPermissionCount: 0,
+      scope: job.scope,
+    })
+  }
+
+  /**
+   * Is this caller the operator, rather than someone embedded inside a scope?
+   *
+   * It decides the surfaces that answer about the **gateway** instead of about
+   * one session — the host filesystem, the engine's own on-disk session store,
+   * the queue and its firehose. There is nothing to filter on those and no
+   * honest way to narrow them, so a non-operator is refused outright (404, like
+   * every other miss).
+   *
+   * Two ways to be one, and the second exists because the first is not enough.
+   * A principal carrying `scope` is an end user; a principal carrying neither
+   * `scope` nor a policy is the operator — that is the unscoped default every
+   * existing deployment relies on. But a host may write `authorizeSession` over
+   * its *own* principal shape and never set `scope` at all, and reading that as
+   * "everyone is the operator" is how a locked-down gateway ends up serving its
+   * filesystem to end users. So **declaring a policy withdraws the default**,
+   * and such a host marks its operator principals explicitly with
+   * `operator: true` (`operator: false` forces the other way, at any time).
+   */
+  const isOperator = (auth: AuthContext): boolean =>
+    auth.operator ?? (auth.scope === undefined && !options.authorizeSession)
 
   // Route pattern: {basePath}/sessions[/:id[/ws | /permissions/:requestId |
   //   /files[/<path>] | /attachments[/:attachmentId] | /mcp[/:serverName] |
@@ -1917,13 +2227,21 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         json(res, 405, { error: 'method not allowed' })
         return
       }
+      // Gateway-wide counters across every scope, with no id to filter on.
+      if (!isOperator(auth)) {
+        json(res, 404, { error: 'not found' })
+        return
+      }
       json(res, 200, { stats: await queue.stats() })
       return
     }
     const rest = pathname.slice((basePath + '/jobs').length).replace(/^\//, '')
     if (rest === '') {
       if (req.method === 'GET') {
-        json(res, 200, { jobs: await queue.list() })
+        // Same rule as the sessions list, over the job's copy of the tags: the
+        // queue must not be a side door into a session the caller cannot attach to.
+        const jobs = await queue.list()
+        json(res, 200, { jobs: jobs.filter((job) => canSeeJob(auth, job)) })
         return
       }
       if (req.method === 'POST') {
@@ -1932,16 +2250,13 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           json(res, 400, { error: 'session is required' })
           return
         }
-        if (!body.session.cwd || typeof body.session.cwd !== 'string') {
-          json(res, 400, { error: 'session.cwd is required' })
-          return
-        }
         if (!body.session.prompt || typeof body.session.prompt !== 'string') {
           json(res, 400, { error: 'session.prompt is required' })
           return
         }
-        if (!cwdAllowed(body.session.cwd, options.allowedCwdRoots)) {
-          json(res, 403, { error: 'cwd is outside the allowed roots' })
+        const refusedScope = applyScope(body.session, auth)
+        if (refusedScope) {
+          json(res, refusedScope.status, { error: refusedScope.error })
           return
         }
         const refused = applyBypassPolicy(body.session)
@@ -1952,6 +2267,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         const resolved = resolveProfile(body.session.profile, auth.allowedProfiles)
         if (!resolved.ok) {
           json(res, resolved.status, { error: resolved.error })
+          return
+        }
+        const refusedCwd = checkCwd(body.session, resolved.profile)
+        if (refusedCwd) {
+          json(res, refusedCwd.status, { error: refusedCwd.error })
           return
         }
         const badRequest =
@@ -1982,11 +2302,18 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     }
     if (req.method === 'GET') {
       const job = await queue.get(id)
-      if (job) json(res, 200, { job })
+      if (job && canSeeJob(auth, job)) json(res, 200, { job })
       else json(res, 404, { error: 'job not found' })
       return
     }
     if (req.method === 'DELETE') {
+      // Checked before the cancel, not after: a refused caller must not be able
+      // to kill a run and then be told it does not exist.
+      const existing = await queue.get(id)
+      if (!existing || !canSeeJob(auth, existing)) {
+        json(res, 404, { error: 'job not found' })
+        return
+      }
       const job = await queue.cancel(id)
       if (job) json(res, 200, { job })
       else json(res, 404, { error: 'job not found' })
@@ -2039,15 +2366,24 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       json(res, 400, { error: "status must be 'ok' or 'failed'" })
       return
     }
-    if (auth.allowedProfiles) {
+    if (auth.allowedProfiles || auth.scope || options.authorizeSession) {
       const owner = parking.sessionFor(executionId)
-      const profile =
+      const info =
         owner === undefined
           ? undefined
-          : (registry.get(owner)?.info().profile ?? (await parking.get(owner))?.profile)
+          : (registry.get(owner)?.info() ?? (await parking.get(owner))?.info)
+      const profile = info?.profile
       // Indistinguishable from an unknown id on purpose: whether an execution
-      // exists elsewhere is not this caller's business.
-      if (owner === undefined || (profile !== undefined && !auth.allowedProfiles.includes(profile))) {
+      // exists elsewhere is not this caller's business. Scope is checked as well
+      // as the profile because a result is trusted tool input — settling another
+      // scope's execution is a way to steer its loop, not merely to read it.
+      const refused =
+        owner === undefined ||
+        (auth.allowedProfiles !== undefined &&
+          profile !== undefined &&
+          !auth.allowedProfiles.includes(profile)) ||
+        (info !== undefined && !canSee(auth, info))
+      if (refused) {
         json(res, 404, { error: 'execution not found' })
         return
       }
@@ -2170,7 +2506,16 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         return
       }
       if (req.method === 'GET') {
-        json(res, 200, { profile: withManagedFlag(profile), config: readProfileConfig(profile) })
+        // The config snapshot is the operator's own config directory read back —
+        // skill, agent and command names, hook names, the *keys* of the env in
+        // `settings.json`. A profile a scoped end user is allowed to *run* is
+        // not thereby a directory they may inventory, so the snapshot is
+        // withheld from a non-operator while the profile record itself (name,
+        // engine, model catalog) still answers, because a create form needs it.
+        json(res, 200, {
+          profile: withManagedFlag(profile),
+          config: isOperator(auth) ? readProfileConfig(profile) : undefined,
+        })
         return
       }
       if (req.method === 'PATCH' || req.method === 'DELETE') {
@@ -2209,14 +2554,28 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         json(res, 401, { error: 'unauthorized' })
         return
       }
+      // The engine's own on-disk store, which is the operator's and spans every
+      // scope: there is no per-session id here to filter by.
+      if (!isOperator(auth)) {
+        json(res, 404, { error: 'not found' })
+        return
+      }
       await handleSdkSessions(req, res, auth)
       return
     }
     if (pathname.startsWith(basePath + '/fs/')) {
       // Authenticated before the 404-when-unconfigured answer, so an unauthenticated
       // caller cannot learn whether this server exposes a filesystem at all.
-      if (!(await authenticate(req)).ok) {
+      const auth = await authenticate(req)
+      if (!auth.ok) {
         json(res, 401, { error: 'unauthorized' })
+        return
+      }
+      // Operator privilege by design (see `hostFiles`), so a scoped principal is
+      // simply not who these routes are for — and it answers the same 404 an
+      // unconfigured gateway does.
+      if (!isOperator(auth)) {
+        json(res, 404, { error: 'not found' })
         return
       }
       await handleHostFiles(req, res, pathname)
@@ -2237,17 +2596,15 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       if (req.method === 'GET') {
         // Parked sessions are live sessions that happen to have no runner right
         // now — leaving them out would read as "gone".
-        json(res, 200, { sessions: [...registry.list(), ...(await parking.listInfo())] })
+        const sessions = [...registry.list(), ...(await parking.listInfo())]
+        json(res, 200, { sessions: sessions.filter((session) => canSee(auth, session)) })
         return
       }
       if (req.method === 'POST') {
         const body = (await readJsonBody(req, maxBodyBytes)) as CreateSessionRequest
-        if (!body.cwd || typeof body.cwd !== 'string') {
-          json(res, 400, { error: 'cwd is required' })
-          return
-        }
-        if (!cwdAllowed(body.cwd, options.allowedCwdRoots)) {
-          json(res, 403, { error: 'cwd is outside the allowed roots' })
+        const refusedScope = applyScope(body, auth)
+        if (refusedScope) {
+          json(res, refusedScope.status, { error: refusedScope.error })
           return
         }
         const refused = applyBypassPolicy(body)
@@ -2258,6 +2615,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         const resolved = resolveProfile(body.profile, auth.allowedProfiles)
         if (!resolved.ok) {
           json(res, resolved.status, { error: resolved.error })
+          return
+        }
+        const refusedCwd = checkCwd(body, resolved.profile)
+        if (refusedCwd) {
+          json(res, refusedCwd.status, { error: refusedCwd.error })
           return
         }
         const badRequest =
@@ -2284,6 +2646,15 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     // serves its files from the snapshot, and only waking it needs a rebuild.
     const parked = runner ? null : await parking.get(route.id)
     if (!runner && !parked) {
+      json(res, 404, { error: 'session not found' })
+      return
+    }
+    // One gate for every `/sessions/:id/*` subroute below — GET, PATCH, DELETE,
+    // files, produced, attachments, mcp, and the permission decision that would
+    // otherwise let another scope answer this session's approvals. Byte-identical
+    // to the unknown-id answer above: whether a session exists elsewhere is not
+    // this caller's business.
+    if (!canSee(auth, runner?.info() ?? parked!.info)) {
       json(res, 404, { error: 'session not found' })
       return
     }
@@ -2426,8 +2797,19 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           socket.destroy()
           return
         }
-        if (!(await authenticate(req)).ok) {
+        const queueAuth = await authenticate(req)
+        if (!queueAuth.ok) {
           socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
+          socket.destroy()
+          return
+        }
+        // Every job's events — prompts, progress previews, result text — are
+        // fanned to every socket here. There is no per-socket filter yet, so a
+        // scoped principal is refused the firehose outright rather than being
+        // handed other scopes' runs. (Per-socket filtering is the later fix; a
+        // 404 now is the honest version of not having built it.)
+        if (!isOperator(queueAuth)) {
+          socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
           socket.destroy()
           return
         }
@@ -2448,15 +2830,29 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         socket.destroy()
         return
       }
-      if (!(await authenticate(req)).ok) {
+      const auth = await authenticate(req)
+      if (!auth.ok) {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
+        socket.destroy()
+        return
+      }
+      // Scope is checked *before* the wake, off the record's stored info: waking
+      // rebuilds the runner and reconnects its MCP servers, and doing that for a
+      // caller who is about to get a 404 spends the session's resources on
+      // someone with no claim to it.
+      const known = registry.get(route.id)?.info() ?? (await parking.get(route.id))?.info
+      if (known && !canSee(auth, known)) {
+        socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
         socket.destroy()
         return
       }
       // Attaching to a parked session wakes it: the client wants to drive it, and
       // its whole event log comes back with it, so `afterSeq` still lines up.
       const runner = await parking.ensureLive(route.id).catch(() => undefined)
-      if (!runner) {
+      // Re-checked after the wake as well: the pre-check can only consult what
+      // the registry and the store already know, and this is the socket that
+      // can drive the session.
+      if (!runner || !canSee(auth, runner.info())) {
         socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
         socket.destroy()
         return

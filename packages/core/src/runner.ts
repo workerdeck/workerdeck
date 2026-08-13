@@ -84,6 +84,8 @@ export class SessionRunner implements Runner {
   readonly createdAt: number
 
   #config: SessionRunnerConfig
+  /** {@link SessionRunnerConfig.cwd}, checked once in the constructor. */
+  readonly #cwd: string
   #events: SessionEvent[] = []
   #listeners = new Set<SessionEventListener>()
   #seq = 0
@@ -109,6 +111,12 @@ export class SessionRunner implements Runner {
   #runPromise: Promise<void> | undefined
 
   constructor(config: SessionRunnerConfig, id: string = randomUUID()) {
+    // Optional on the wire (an engine with no host filesystem takes none) but
+    // required here: this one spawns the CLI in a real directory. The gateway
+    // enforces it off `EngineCapabilities.hostCwd`, so reaching this throw means
+    // a host built a runner around that check.
+    if (!config.cwd) throw new Error('the claude engine requires a cwd')
+    this.#cwd = config.cwd
     this.#config = config
     this.#permissionMode = config.permissionMode
     this.id = id
@@ -141,7 +149,7 @@ export class SessionRunner implements Runner {
       id: this.id,
       sdkSessionId: this.#sdkSessionId,
       status: this.#status,
-      cwd: this.#config.cwd,
+      cwd: this.#cwd,
       profile: this.#config.profile,
       engine: 'claude',
       capabilities: ENGINE_CAPABILITIES.claude,
@@ -159,6 +167,7 @@ export class SessionRunner implements Runner {
       activityCount: this.#activityCount,
       pendingPermissionCount: this.#pending.size,
       meta: this.#config.meta,
+      scope: this.#config.scope,
       title: this.#title(),
       totalCostUsd: this.#totalCostUsd,
       numTurns: this.#numTurns,
@@ -355,7 +364,7 @@ export class SessionRunner implements Runner {
       ?? ((sessionId: string, options: { dir?: string }) => getSessionMessages(sessionId, options))
     let messages: SessionMessage[]
     try {
-      messages = await historyFn(c.resume, { dir: c.cwd })
+      messages = await historyFn(c.resume, { dir: this.#cwd })
     } catch {
       // Best-effort: a missing/unreadable transcript must not block the resume itself.
       return
@@ -385,7 +394,7 @@ export class SessionRunner implements Runner {
   #buildOptions(): Options {
     const c = this.#config
     const options: Options = {
-      cwd: c.cwd,
+      cwd: this.#cwd,
       permissionMode: c.permissionMode,
       allowedTools: c.allowedTools,
       disallowedTools: c.disallowedTools,

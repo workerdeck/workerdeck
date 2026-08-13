@@ -651,6 +651,8 @@ export class CodexRunner implements Runner {
   readonly createdAt: number
 
   #config: CodexRunnerConfig
+  /** {@link CodexRunnerConfig.cwd}, checked once in the constructor. */
+  readonly #cwd: string
   #events: SessionEvent[] = []
   #listeners = new Set<SessionEventListener>()
   #seq = 0
@@ -718,6 +720,10 @@ export class CodexRunner implements Runner {
     if (config.forkSession) {
       throw new Error('the codex engine cannot fork a resumed thread')
     }
+    // Optional on the wire, required here — the codex binary runs in a real
+    // directory (see the same check in `SessionRunner`).
+    if (!config.cwd) throw new Error('the codex engine requires a cwd')
+    this.#cwd = config.cwd
     this.#config = config
     this.#permissionMode = mode
     this.#model = config.model
@@ -761,7 +767,7 @@ export class CodexRunner implements Runner {
       id: this.id,
       sdkSessionId: this.#sdkSessionId,
       status: this.#status,
-      cwd: this.#config.cwd,
+      cwd: this.#cwd,
       profile: this.#config.profile,
       engine: 'codex',
       capabilities: ENGINE_CAPABILITIES.codex,
@@ -773,6 +779,7 @@ export class CodexRunner implements Runner {
       activityCount: this.#activityCount,
       pendingPermissionCount: this.#approvals.size,
       meta: this.#config.meta,
+      scope: this.#config.scope,
       title: this.#title(),
       totalCostUsd: this.#totalCostUsd,
       numTurns: this.#numTurns || undefined,
@@ -1115,7 +1122,7 @@ export class CodexRunner implements Runner {
     }
     if (!this.#threadLoaded) {
       const options: Record<string, unknown> = {
-        cwd: this.#config.cwd,
+        cwd: this.#cwd,
         approvalPolicy: APPROVAL_POLICY_BY_MODE[this.#permissionMode],
         sandbox: THREAD_SANDBOX_BY_MODE[this.#permissionMode],
       }
@@ -1174,7 +1181,7 @@ export class CodexRunner implements Runner {
     const run = (async () => {
       try {
         const result = (await connection.request('skills/list', {
-          cwds: [this.#config.cwd],
+          cwds: [this.#cwd],
         })) as AppServerSkillsListResponse
         if (this.#closed) return
         const entries = Array.isArray(result?.data) ? result.data : []
@@ -1417,7 +1424,7 @@ export class CodexRunner implements Runner {
       const params: Record<string, unknown> = {
         threadId: this.#sdkSessionId,
         input: turn.input,
-        cwd: this.#config.cwd,
+        cwd: this.#cwd,
         approvalPolicy: APPROVAL_POLICY_BY_MODE[this.#permissionMode],
         sandboxPolicy: TURN_SANDBOX_BY_MODE[this.#permissionMode],
       }

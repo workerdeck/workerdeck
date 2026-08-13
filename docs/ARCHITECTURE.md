@@ -262,6 +262,48 @@ boundary: anything a client needs must be expressible as protocol events and com
    messages by uuid. `SessionInfo.id` (server id) ≠ `sdkSessionId` (Agent SDK id used for
    `resume`).
 
+## Embedding: sandboxed sessions and session scope
+
+A gateway embedded in someone else's app — a loop running in the host's own backend, driven from
+that app's UI by its end users rather than by an operator at a terminal — is not the multi-tenant
+SaaS the non-goals rule out. It is **one gateway, one trust domain, one operator**, with sessions
+belonging to something narrower than the gateway. Two mechanisms, deliberately separate:
+
+**What a session can reach** is the `provider` engine plus the capability wiring. A profile built
+by `sandboxedProviderProfile()` (`packages/server`) grants `capabilities: []` and
+`mcpServers: []`, so a session under it gets the QuickJS guest and the in-memory VFS and nothing
+else: no host path, no process, no egress, no MCP. The empty arrays are load-bearing — *absent*
+means "no declaration", which grants whatever the host wired. `EngineCapabilities.hostCwd` is
+`false` for that engine, so a create needs no `cwd` at all and `SessionInfo.cwd` reports `''`;
+`allowedCwdRoots` is not the boundary here and must not be mistaken for one.
+
+**Who can reach a session** is `CreateSessionRequest.scope`: opaque string tags, assigned at
+create, immutable afterwards, echoed on `SessionInfo`, and carried through parking and dormancy
+(both records embed `info` and `config`, so a restart cannot un-scope anything). WorkerDeck never
+interprets a key — one embedder writes `{space, user}`, the next writes `{tenant}`. What the tags
+*mean* is the host's `authorizeSession(principal, session)` predicate: synchronous by design,
+because it runs per route and per row of every list, so an expensive lookup belongs in
+`authenticate` and lands on the principal. Unset, the default rule is that every key the principal
+pins must match, and an unset principal scope is unrestricted — the "unset means all" rule
+`allowedProfiles` already uses, so an operator's dashboard is unaffected.
+
+Enforcement is at every door, not just the list: the `/sessions/:id/*` gate (which covers GET,
+PATCH, DELETE, files, produced, attachments, mcp, and the permission decision), the WS attach
+(checked *before* the wake, so a refused caller cannot spend a session's resources rebuilding it),
+`POST /executions/:id/result`, and the job routes via `JobInfo.scope`. Every miss answers **404**,
+byte-identical to an unknown id. The operator-privileged surfaces — `/fs/*`, `/sdk-sessions`,
+`/queue`, `/queue/ws` — are refused outright to anyone who is not the operator: they answer about
+the gateway rather than about one session, so there is nothing to filter. "Operator" is
+`scope === undefined` **and** no `authorizeSession` declared; a host that writes a policy over its
+own principal shape marks its operator principals with `operator: true`, because reading "no scope
+field" as "the operator" is how a locked-down gateway ends up serving its filesystem to end users.
+
+**Visibility is full control.** An attach can send `user_message`, `permission_decision`,
+`interrupt` and `close`, and a bridged client can settle a tool call — so the predicate is one
+boolean over "may drive this session", not a read level. A read-only-for-my-team policy is not
+expressible yet, and `readOnly` is not it (that is affordance removal in a client; the gateway
+enforces).
+
 ## Job lifecycle
 
 `POST /v1/jobs` → adapter enqueues → `JobQueue` claims (`claimNext`) when a concurrency slot

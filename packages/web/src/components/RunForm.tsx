@@ -109,7 +109,10 @@ export function useRunForm(kind: DefaultsKind) {
     resume?: string
     allowBypass?: boolean
   }): CreateSessionRequest => ({
-    cwd: cwd.trim(),
+    // Omitted entirely for an engine with no host filesystem: the gateway takes
+    // no cwd there, and sending one would put a path on a session that never
+    // opens a directory (and drag it through `allowedCwdRoots` for nothing).
+    cwd: engine.capabilities.hostCwd === false ? undefined : cwd.trim(),
     profile: profile || undefined,
     prompt: options.prompt,
     permissionMode: engine.mode,
@@ -178,22 +181,24 @@ export function RunFormFields({
 
   return (
     <>
-      <label className='flex flex-col gap-1'>
-        <span className='text-label font-medium text-fg-3'>Working directory</span>
-        <Input
-          value={form.cwd}
-          list={listId}
-          onChange={(e) => form.setCwd(e.target.value)}
-          placeholder='/path/to/project'
-          spellCheck={false}
-          className='font-mono'
-        />
-        <datalist id={listId}>
-          {candidates.map((path) => (
-            <option key={path} value={path} />
-          ))}
-        </datalist>
-      </label>
+      {engine.capabilities.hostCwd !== false && (
+        <label className='flex flex-col gap-1'>
+          <span className='text-label font-medium text-fg-3'>Working directory</span>
+          <Input
+            value={form.cwd}
+            list={listId}
+            onChange={(e) => form.setCwd(e.target.value)}
+            placeholder='/path/to/project'
+            spellCheck={false}
+            className='font-mono'
+          />
+          <datalist id={listId}>
+            {candidates.map((path) => (
+              <option key={path} value={path} />
+            ))}
+          </datalist>
+        </label>
+      )}
       <label className='flex flex-col gap-1'>
         <span className='text-label font-medium text-fg-3'>{promptLabel}</span>
         <Textarea

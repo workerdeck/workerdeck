@@ -299,6 +299,17 @@ describe('AiSdkRunner', () => {
     expect(roles).toEqual(['user', 'assistant', 'tool', 'user', 'assistant'])
   })
 
+  it('echoes its scope and reports no cwd rather than the gateway’s', () => {
+    const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: textResponse('x') })
+    const scope = { space: 'a', user: 'alice' }
+    // The echo is what every gateway-side scope check reads; `buildRunner`
+    // refuses a runner that drops it, so this is that contract from below.
+    expect(new AiSdkRunner({ languageModel: model, scope }).info().scope).toEqual(scope)
+    // Never process.cwd(): this engine opens no directory, and reporting the
+    // gateway's deploy path would leak host layout to every client.
+    expect(new AiSdkRunner({ languageModel: model }).info().cwd).toBe('')
+  })
+
   it('rejects unsupported permission modes at construction and via setPermissionMode', async () => {
     const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: textResponse('x') })
     expect(() => new AiSdkRunner({ languageModel: model, permissionMode: 'plan' })).toThrow(

@@ -711,6 +711,16 @@ export type EngineCapabilities = {
   reasoningEfforts?: readonly string[]
   /** Sessions expose a scratch VFS (GET /sessions/:id/files, deliverables panel). */
   vfs: boolean
+  /**
+   * The engine runs against a host directory, so `CreateSessionRequest.cwd` is
+   * required and meaningful (and a create form should ask for it). False: the
+   * engine has no host filesystem — the gateway accepts a session with no
+   * `cwd`, `SessionInfo.cwd` reports `''`, and there is no path to validate.
+   *
+   * Absent = true, so a wire copy from an older gateway keeps the old
+   * always-required behaviour rather than silently relaxing it.
+   */
+  hostCwd?: boolean
   /** stream_delta granularity: per-token, coarse item updates (no typing
    * cursor), or none. */
   streaming: 'token' | 'item' | 'none'
@@ -750,6 +760,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     // catalog rows, and the CLI silently downgrades an effort a model lacks.
     reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     vfs: false,
+    hostCwd: true,
     streaming: 'token',
   },
   codex: {
@@ -818,6 +829,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     // ModelOption.reasoningEfforts from the catalog.
     reasoningEfforts: ['minimal', 'low', 'medium', 'high', 'xhigh'],
     vfs: false,
+    hostCwd: true,
     // item/agentMessage/delta and the reasoning deltas arrive token-by-token.
     streaming: 'token',
   },
@@ -839,6 +851,11 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     budgets: false,
     attachments: ['image', 'pdf', 'text'],
     vfs: true,
+    // No host filesystem at all: the tools run against the in-memory VFS, and
+    // the runner never opens a path. A required `cwd` here would be a field
+    // nothing reads, and `allowedCwdRoots` would look like the sandbox boundary
+    // when the capability wiring is what actually bounds this engine.
+    hostCwd: false,
     streaming: 'token',
   },
 }
@@ -1061,9 +1078,13 @@ export type McpServerActionRequest = { action: 'reconnect' | 'enable' | 'disable
 export type UploadAttachmentResponse = { attachment: MessageAttachment }
 
 export type CreateSessionRequest = {
-  /** Directory the session is rooted at. Required: `cwd` is per-query in the SDK
-   * and the server re-pins it on every call. */
-  cwd: string
+  /** Directory the session is rooted at. Required for any engine whose
+   * capability record declares {@link EngineCapabilities.hostCwd} — `cwd` is
+   * per-query in the SDK and the server re-pins it on every call. Omittable for
+   * an engine that has no host filesystem at all (the provider engine, whose
+   * tools run against the in-memory VFS): there the field would be a required
+   * lie, and `allowedCwdRoots` would look like a sandbox boundary it is not. */
+  cwd?: string
   /** Profile (named Claude Code config dir) to run under. Required when the server
    * declares more than one profile; implicit when exactly one exists. */
   profile?: string
@@ -1104,6 +1125,25 @@ export type CreateSessionRequest = {
   capabilities?: SessionCapability[]
   /** Free-form metadata echoed back on SessionInfo (host app bookkeeping). */
   meta?: Record<string, unknown>
+  /**
+   * Opaque string tags naming what this session *belongs to* — the gateway's
+   * only intra-deployment scoping primitive. Assigned at create, **immutable
+   * afterwards** (no route writes it), echoed on {@link SessionInfo}, and
+   * carried through parking/dormancy so a restart cannot un-scope a session.
+   *
+   * WorkerDeck never interprets a key: an embedder writes `{ space, user }` or
+   * `{ tenant }` or nothing at all. What the tags *mean* is the host's
+   * `authorizeSession` predicate; absent one, the default rule is that every
+   * key the authenticated principal pins must match here (an unset principal
+   * scope is unrestricted — the same "unset means all" rule `allowedProfiles`
+   * uses, so an operator's dashboard keeps working unchanged).
+   *
+   * NOT `meta`: `meta` is free-form, client-settable and echoed, and an
+   * enforcement rule whose input the caller supplies is not an enforcement
+   * rule. Values are visible to any principal the policy admits a session to,
+   * so use opaque ids rather than names you would not show that audience.
+   */
+  scope?: Record<string, string>
 }
 
 export type SessionInfo = {
@@ -1112,6 +1152,10 @@ export type SessionInfo = {
   /** Underlying Agent SDK session id, once known; use for `resume`. */
   sdkSessionId?: string
   status: SessionStatus
+  /** Empty string for a session whose engine has no host filesystem (see
+   * {@link CreateSessionRequest.cwd}). Deliberately not optional: every client
+   * renders and searches it, and a synthetic path would send the workspace and
+   * `@file` search probing a directory that does not exist. */
   cwd: string
   /** Profile the session runs under (resolved name, present even when implicit). */
   profile?: string
@@ -1158,6 +1202,10 @@ export type SessionInfo = {
   activityCount?: number
   /** Epoch ms of the most recent emitted event. */
   lastActivityAt?: number
+  /** Opaque scope tags this session was created with — see
+   * {@link CreateSessionRequest.scope}. Echoed by the runner, re-stamped by the
+   * gateway, and never editable. */
+  scope?: Record<string, string>
 }
 
 /**
@@ -1552,6 +1600,8 @@ export type JobResult = {
 export type JobInfo = {
   id: string
   status: JobStatus
+  /** `''` when the run's engine has no host filesystem (see
+   * {@link CreateSessionRequest.cwd}). */
   cwd: string
   /** Profile the run executes under (resolved name, present even when implicit). */
   profile?: string
@@ -1578,6 +1628,11 @@ export type JobInfo = {
   /** Failure or cancellation reason (for a queued retry: the previous attempt's error). */
   error?: string
   meta?: Record<string, unknown>
+  /** Scope tags of the session this job runs (see
+   * {@link CreateSessionRequest.scope}) — copied from the request at submit so
+   * the job routes can be gated by the same rule as the session routes. Without
+   * it the queue would be a side door into an unscoped session. */
+  scope?: Record<string, string>
 }
 
 /** Latest mid-run activity, carried on job_progress deliveries. */

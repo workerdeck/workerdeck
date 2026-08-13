@@ -17,7 +17,7 @@ function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
     info: (): SessionInfo => ({
       id,
       status: 'idle',
-      cwd: config.cwd,
+      cwd: config.cwd ?? '',
       profile: config.profile,
       model: config.model,
       createdAt: Date.now(),

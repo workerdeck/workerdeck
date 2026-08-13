@@ -56,6 +56,17 @@ describe('ENGINE_CAPABILITIES invariants', () => {
     }
   })
 
+  it('declares hostCwd for the engines that spawn a binary, and against the one that does not', () => {
+    // The gateway requires `cwd` off this flag, and both runners throw without
+    // one — so a record that got this wrong would 400 a legitimate create or
+    // let a broken one reach the constructor.
+    expect(ENGINE_CAPABILITIES.claude.hostCwd).toBe(true)
+    expect(ENGINE_CAPABILITIES.codex.hostCwd).toBe(true)
+    expect(ENGINE_CAPABILITIES.provider.hostCwd).toBe(false)
+    // Absent must read as true (an older wire copy), never as "no filesystem".
+    for (const engine of ENGINES) expect(ENGINE_CAPABILITIES[engine].hostCwd).toBeDefined()
+  })
+
   it('declares approvals for claude and codex, and token streaming for codex', () => {
     expect(ENGINE_CAPABILITIES.claude.interactiveApprovals).toBe(true)
     // Codex streams token-wise (app-server deltas) AND asks: the server→client

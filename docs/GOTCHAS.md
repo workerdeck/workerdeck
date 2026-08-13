@@ -393,6 +393,58 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   default (`capabilities.deliverFiles: false` withholds it). Delivered files are downloadable
   only while the session lives — in-memory VFS; durability is the persistence tier.
 
+## Session scope (embedded deployments)
+
+- **Scope is not `meta`.** `meta` is free-form, client-settable and echoed; an enforcement rule
+  whose input the caller supplies is not an enforcement rule. `scope` is validated at the door,
+  merged with the principal's (a scoped caller may add narrower tags, never contradict its own —
+  403), and written by no route afterwards. `UpdateSessionRequest` must stay scope-free.
+- **A runner that forgets to echo `config.scope` is invisible to every check and therefore
+  visible to everyone.** That is why `buildRunner` — the one chokepoint for create, dormant
+  rebuild and parked rebuild — asserts the runner's `info().scope` equals the config's, and why
+  the server re-stamps the scope onto whatever the host's `buildRunnerConfig` hook returned. Same
+  posture as the profile's `CLAUDE_CONFIG_DIR` pin winning over the hook.
+- **The WS attach checks scope before `parking.ensureLive`.** Waking rebuilds the runner and
+  reconnects its MCP servers; doing that for a caller about to get a 404 spends the session's
+  resources on someone with no claim to it. Checked again after the wake, because that socket can
+  drive the session.
+- **The default rule's asymmetry is intended**: a session may carry keys the principal says
+  nothing about, but a session missing a key the principal pins is not that caller's. A session
+  with *no* scope is invisible to a scoped principal — the right fail direction, so sessions
+  predating the feature never leak into an end user's list. And `scope: {}` on a principal pins
+  nothing, so it is unrestricted like an absent one; never read `{}` as "sees nothing".
+- **Scope is on the wire, and that is a decision.** `SessionInfo.scope` is what makes the parked
+  and dormant records carry it for free (both embed `info`), what lets `parking.listInfo()` be
+  filtered without a sidecar map, and what lets a notification observer route per user. The cost
+  is that any principal the policy admits sees the tags — so an embedder should use opaque ids as
+  values, not names it would not show that audience.
+- **Jobs are the queue's copy of the same tags** (`JobInfo.scope`, stamped at `submit`). Without
+  them the queue is a side door into an unscoped session. Once a run has started the live
+  session's info is the subject; before and after, `canSeeJob` hands the predicate a **stub**
+  built from the job (id, scope, profile, cwd). It used to fall back to the default rule there,
+  which was wrong in the dangerous direction: a policy *narrower* than tag-match (tags plus a
+  role, say) would have had queued jobs listed and cancelable by a peer it rejects. Wherever the
+  predicate exists it is the only rule.
+- **Declaring `authorizeSession` withdraws the unscoped-means-operator default.** The
+  operator-only surfaces key on `isOperator`, which is `scope === undefined && no policy` — so a
+  host that writes a policy over its *own* principal shape and never sets `scope` would otherwise
+  read as "everyone is the operator" and serve `/fs/*` and the queue firehose to end users. With
+  a policy declared, operator principals must say so: `operator: true` (and `operator: false`
+  forces the other way). Also: a scoped principal can still read `GET /profiles`, which is gated
+  by `allowedProfiles`, a *separate* opt-in — set it. The per-profile **config snapshot** is
+  withheld from a non-operator, since a profile you may run is not a directory you may inventory.
+- **A policy that throws has not said yes.** `canSee` catches and returns false rather than 500ing
+  the route: one surprising row must not turn a hundred-row list into a page-wide error.
+- **The queue firehose has no per-socket filter.** `/queue/ws` fans every job's events — prompts,
+  progress previews, result text — to every socket, so a scoped principal is refused it outright
+  rather than handed other scopes' runs. Same for `/queue`, `/sdk-sessions` (the operator's
+  on-disk engine store) and `/fs/*`.
+- **An idle provider session still does not survive a gateway restart.** Dormancy needs
+  `capabilities.resume`, which provider sets `false`, and `park()` refuses unless the loop is
+  resting on deferred calls. So for an embedded deployment on k8s, conversation lifetime is pod
+  lifetime unless the embedder rebuilds the thread itself. Park-at-rest for the provider engine
+  is the fix and is not built.
+
 ## Parking & bridged execution
 
 - **Two ways a session outlives its runner, and they are not interchangeable.** Parking preserves
@@ -787,9 +839,9 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   off-screen textarea: deprecated, universally implemented, and the only thing that works here.
   The textarea must be *off-screen* rather than `display: none` — a hidden element cannot hold a
   selection, so the copy would silently do nothing.
-- **The dashboard is a build artifact; the packages are not.** `pnpm server` is
+- **The dashboard is a build artifact; the packages are not.** `pnpm dev:server` is
   `pnpm dashboard && pnpm cli …`, so the gateway serves `packages/web/dist/` while every package
-  resolves to source through the `@workerdeck/source` condition. A long-running `pnpm server`
+  resolves to source through the `@workerdeck/source` condition. A long-running `pnpm dev:server`
   therefore keeps serving the JS it was started with — a UI change needs the server restarted (or
   `pnpm dashboard` re-run), even though a server-side change would too. Symptoms look
   web-specific and are not.

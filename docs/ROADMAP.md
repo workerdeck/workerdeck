@@ -338,6 +338,13 @@ bare. VS Code and iOS had been invisible on the entire public surface until now.
 Settled, not open for relitigation: serverless hosting (the SDK spawns a long-running subprocess
 with filesystem state), multi-tenant SaaS, and claude.ai authentication of any kind.
 
+**Scoped embedding is not multi-tenant SaaS**, and the distinction is worth stating rather than
+leaving to inference. `CreateSessionRequest.scope` plus `authorizeSession` let a gateway embedded
+in one app keep its end users out of each other's sessions — one gateway, one trust domain, one
+operator, with sessions belonging to something narrower than the gateway. What stays a non-goal is
+mutually-distrusting customers sharing infrastructure: the host's own edge is the authorization
+boundary, and scope is defense in depth behind it. See `docs/ARCHITECTURE.md` §Embedding.
+
 ## Open questions
 
 - **Compliance posture.** Legal/compliance review of the auth stance is in progress — see
