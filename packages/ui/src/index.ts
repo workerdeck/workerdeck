@@ -76,6 +76,38 @@ export {
 // — deliberately unreachable from here, so importing this entry never drags
 // Monaco into the bundle. See `src/workspace.ts`.
 export { Transcript, type TranscriptProps } from './components/agent/Transcript.tsx'
+// The terminal theme. `SessionPanel`/`Transcript` reach it through
+// `variant: 'terminal'` and most embedders need nothing else — these are for a
+// host composing the surface by hand (a prompt outside the panel, a status line
+// in its own chrome) and for the primitives, so a host's own row lands on the
+// same character cell as ours.
+export {
+  TerminalSurface,
+  type TerminalSurfaceProps,
+} from './components/terminal/surface.tsx'
+export {
+  TerminalTranscript,
+  TerminalItemView,
+  type TerminalTranscriptProps,
+} from './components/terminal/TerminalTranscript.tsx'
+export { TerminalStatusLine, type TerminalStatusLineProps } from './components/terminal/StatusLine.tsx'
+export {
+  TerminalPermissionPrompt,
+  type TerminalPermissionPromptProps,
+} from './components/terminal/PermissionPrompt.tsx'
+export {
+  TerminalQuestionPrompt,
+  type TerminalQuestionPromptProps,
+} from './components/terminal/QuestionPrompt.tsx'
+export { TerminalDiff, previewPatch } from './components/terminal/diff.tsx'
+export { TerminalMarkdown, type TerminalMarkdownProps } from './components/terminal/markdown.tsx'
+export { Band, Blank, Ink, Row, type RowProps, type Tone } from './components/terminal/row.tsx'
+export {
+  CopyAction,
+  WithActions,
+  useAffordances,
+  type TerminalAffordances,
+} from './components/terminal/affordances.tsx'
 export {
   Conversation,
   ConversationContent,

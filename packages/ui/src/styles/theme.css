@@ -15,6 +15,12 @@
  * data-theme re-themes with zero JS).
  */
 
+/* The terminal theme's geometry and palette — see the file's own header. Its
+ * tokens are deliberately independent of the app palette below: a terminal
+ * looks like a terminal wherever it is embedded. First, because `@import` is
+ * only valid ahead of rules. */
+@import './terminal.css';
+
 :root,
 [data-theme='light'] {
   /* ---------- Backgrounds ---------- */

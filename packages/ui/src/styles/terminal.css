@@ -1,0 +1,563 @@
+/*
+ * The terminal theme's geometry and palette.
+ *
+ * Plain CSS classes rather than Tailwind utilities, and deliberately. This is a
+ * *renderer*: every row it draws lands on the same character cell, and a grid
+ * that has to be reassembled from `gap-2 pl-[calc(...)] -mx-1` at each call site
+ * is a grid that drifts the first time someone edits one row. The components in
+ * `components/terminal/` are therefore thin — they choose a class and a tone,
+ * and the geometry lives here in one place where it can be read as a whole.
+ *
+ * It also means an embedder gets the geometry without configuring Tailwind's
+ * `@source` scanning: these class names exist whether or not the scanner found
+ * the components that use them.
+ *
+ * ── The two rules everything else follows ────────────────────────────────────
+ *
+ * 1. **Horizontal measures are `ch`, never px or rem.** `1ch` in a monospace
+ *    face is exactly one cell, so a gutter is `2ch` and an indent level is
+ *    `2ch`, and text lands on a column rather than near one. A wrapped line
+ *    hangs under its own first character because the body is its own grid
+ *    column — not because a padding and a negative text-indent were tuned
+ *    against each other.
+ * 2. **Vertical measures are whole multiples of `--term-line`, never padding.**
+ *    Blank space between blocks is a *blank line* (an empty row), the way it is
+ *    in a terminal. Nothing has margins, so no two blocks can disagree about
+ *    the rhythm, and a row's height is always an integer number of lines — the
+ *    thing that keeps text off half-pixels and out of the blur.
+ *
+ * `--term-font-size` and `--term-line` must both be whole pixels. A line height
+ * of `1.5 × 13px` is 19.5px, and every second row of a long transcript then
+ * renders on a half-pixel: the text visibly softens and hard-edged backgrounds
+ * (the diff bands) show a seam. Integers are not a preference here.
+ */
+
+[data-terminal] {
+  /* Metrics. Overridable per host — VS Code hands its editor font down, and a
+     phone wants a larger cell — but always in whole pixels. */
+  --term-font-size: 13px;
+  --term-line: 18px;
+  /* One indent level, and the width of a gutter. The same value on purpose:
+     a child row's marker sits exactly where its parent's text began. */
+  --term-cell: 2ch;
+
+  font-family: var(--cw-font-mono);
+  font-size: var(--term-font-size);
+  line-height: var(--term-line);
+  color: var(--term-fg);
+  /* Ligatures turn `=>` and `!=` into glyphs that no longer occupy the cells
+     they were measured as. A grid renderer cannot have that. */
+  font-variant-ligatures: none;
+  font-feature-settings: 'liga' 0, 'calt' 0;
+  /* `ch` is the advance of `0`, so tabular figures keep digit columns — the
+     diff's line numbers — genuinely aligned. */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  tab-size: 2;
+}
+
+/* ── Palette ─────────────────────────────────────────────────────────────────
+ *
+ * The terminal's own colours, not the app's. `--accent` is VS Code blue because
+ * WorkerDeck's chrome shares an editor's visual language; a terminal shares a
+ * terminal's, and the two must not be forced to agree. Anything reading a
+ * `--term-*` token therefore keeps its colour when the surrounding app is
+ * re-themed, which is the point: the transcript looks like the CLI wherever it
+ * is embedded.
+ *
+ * Values are read off the Claude Code CLI on a dark terminal: body text is a
+ * light grey rather than white (white is reserved for emphasis, so bold has
+ * somewhere to go), meta lines are one step down again, and the working mark is
+ * the product's coral.
+ */
+[data-terminal] {
+  --term-fg: #d4d4d4;
+  --term-bright: #ffffff;
+  --term-dim: #8a8a8a;
+  --term-faint: #6a6a6a;
+
+  --term-mark: #d97757;
+  --term-blue: #4a9eff;
+  --term-green: #4ec9a0;
+  --term-red: #f14c4c;
+  --term-yellow: #d7ba7d;
+  --term-magenta: #c586c0;
+
+  /* Diff bands. Full-bleed backgrounds, so they are tuned to sit under body
+     text rather than to be looked at: the CLI's added block is a dark green
+     wash the text stays legible on, not a highlight. */
+  --term-add-fg: #b5e8a9;
+  --term-add-bg: #16301a;
+  --term-del-fg: #f0a6a6;
+  --term-del-bg: #3a1518;
+  /* The unchanged context inside a diff, and the line-number column. */
+  --term-diff-fg: #9a9a9a;
+  --term-diff-num: #5a5a5a;
+
+  /* A band of code or output. Barely there — one step off the canvas. */
+  --term-band-bg: rgb(255 255 255 / 0.04);
+  /* The user's own prompt row. */
+  --term-user-bg: rgb(255 255 255 / 0.05);
+  --term-row-hover: rgb(255 255 255 / 0.05);
+}
+
+[data-theme='light'] [data-terminal],
+[data-terminal][data-theme='light'] {
+  --term-fg: #2f2f2f;
+  --term-bright: #000000;
+  --term-dim: #6b6b6b;
+  --term-faint: #8d8d8d;
+
+  --term-mark: #bf5b3d;
+  --term-blue: #0a66c2;
+  --term-green: #16794a;
+  --term-red: #c62828;
+  --term-yellow: #8a6d00;
+  --term-magenta: #8b3a8b;
+
+  --term-add-fg: #12492a;
+  --term-add-bg: #e2f6e5;
+  --term-del-fg: #7a1f24;
+  --term-del-bg: #fbe6e7;
+  --term-diff-fg: #4a4a4a;
+  --term-diff-num: #9a9a9a;
+
+  --term-band-bg: rgb(0 0 0 / 0.04);
+  --term-user-bg: rgb(0 0 0 / 0.05);
+  --term-row-hover: rgb(0 0 0 / 0.04);
+}
+
+/* ── Rows ────────────────────────────────────────────────────────────────────
+ *
+ * One row = a gutter cell and a body cell. The gutter holds the marker (`●`,
+ * `⎿`, `>`) or nothing at all; the body holds the text and wraps inside its own
+ * column, which is what gives every row its hanging indent for free.
+ */
+.term-row {
+  display: grid;
+  grid-template-columns: var(--term-cell) minmax(0, 1fr);
+  align-items: start;
+  min-height: var(--term-line);
+}
+
+/* Indent levels. A nested row steps one cell per level — the same 2 columns a
+   marker occupies, so a child's marker sits under its parent's first letter. */
+.term-row[data-indent='1'] { padding-left: var(--term-cell); }
+.term-row[data-indent='2'] { padding-left: calc(2 * var(--term-cell)); }
+.term-row[data-indent='3'] { padding-left: calc(3 * var(--term-cell)); }
+
+.term-gutter {
+  /* `pre` so a space-only gutter keeps its cell — an unmarked row must still
+     start its text on the same column as a marked one. */
+  white-space: pre;
+  user-select: none;
+  color: var(--term-dim);
+}
+
+.term-body {
+  min-width: 0;
+  /* Preserve the run's own spacing, wrap at the viewport edge. `break-word`
+     rather than `anywhere`: a long path should wrap, a sentence should not be
+     chopped mid-word when a shorter break exists. */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* A blank line — the only vertical spacing in the theme. Exactly one row tall
+   and holding nothing, which is what a terminal's blank line is. */
+.term-blank {
+  height: var(--term-line);
+}
+
+/* The same blank line, as padding on a virtualized row's measured wrapper.
+   Identical height, and it must be padding there rather than a `<Blank/>`: the
+   virtualizer measures one element per item, so space between two items has to
+   be part of one of them or it is not measured at all. */
+[data-terminal] .term-row-gap {
+  padding-top: var(--term-line);
+}
+
+/* ── Bands ───────────────────────────────────────────────────────────────────
+ *
+ * A run of rows carrying a background: a code block, a command's output, a diff
+ * hunk. Full-bleed — the wash reaches the scroller's edges rather than stopping
+ * at a content gutter, because in a terminal the line *is* the full width.
+ * `--term-bleed` is how far out that is; the transcript sets it to its own
+ * padding and the band cancels it with matched negative margin and padding.
+ */
+.term-band {
+  background: var(--term-band-bg);
+  margin-inline: calc(-1 * var(--term-bleed, 0px));
+  padding-inline: var(--term-bleed, 0px);
+}
+
+/* ── Tones ───────────────────────────────────────────────────────────────────
+ *
+ * Colour as an attribute rather than a class per palette entry: a row component
+ * takes `tone` and passes it straight through, so adding a colour is one line
+ * here and nothing in the components.
+ */
+[data-terminal] [data-tone='fg'] { color: var(--term-fg); }
+[data-terminal] [data-tone='bright'] { color: var(--term-bright); }
+[data-terminal] [data-tone='dim'] { color: var(--term-dim); }
+[data-terminal] [data-tone='faint'] { color: var(--term-faint); }
+[data-terminal] [data-tone='mark'] { color: var(--term-mark); }
+[data-terminal] [data-tone='blue'] { color: var(--term-blue); }
+[data-terminal] [data-tone='green'] { color: var(--term-green); }
+[data-terminal] [data-tone='red'] { color: var(--term-red); }
+[data-terminal] [data-tone='yellow'] { color: var(--term-yellow); }
+[data-terminal] [data-tone='magenta'] { color: var(--term-magenta); }
+
+/* Weight is the only other axis. A terminal has one type size, so emphasis has
+   to be carried by weight and colour — never by a larger glyph. */
+[data-terminal] [data-weight='bold'] { font-weight: 600; }
+
+/* The scroller. Its horizontal padding IS `--term-bleed` — that is the whole
+   contract a full-bleed band relies on — and its vertical padding is a line, so
+   the first row starts one blank line down like every other block. */
+[data-terminal].term-transcript {
+  padding-inline: var(--term-bleed, 0px);
+  padding-block: var(--term-line);
+}
+
+/* ── Interaction ─────────────────────────────────────────────────────────────
+ *
+ * A terminal has no buttons, but a transcript does have things you can open. The
+ * affordance is the hover fill on the row itself — nothing gains a border, a
+ * radius or a focus box that would take it off the grid.
+ */
+[data-terminal] .term-press {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* The hover fill lives with the other affordances below — it is one, and it is
+   switchable for the same reason. */
+[data-terminal] .term-press:focus-visible {
+  outline: none;
+}
+
+/* ── Affordances ─────────────────────────────────────────────────────────────
+ *
+ * What a real terminal cannot do. Every one of these costs **no layout** — a
+ * fill is a background, an action is an absolutely positioned overlay one line
+ * tall — so switching them off leaves every glyph on the cell it was already on.
+ * See `components/terminal/affordances.tsx`.
+ */
+
+/* The hover fill, gated on the surface's declaration. Without `hover` in the
+   list the selector never matches and a pressable row is inert to the pointer,
+   which is what a host projecting to a real terminal wants. */
+[data-terminal][data-affordances~='hover'] .term-press:hover > .term-row,
+[data-terminal][data-affordances~='hover'] .term-press:focus-visible > .term-row {
+  background: var(--term-row-hover);
+  margin-inline: calc(-1 * var(--term-bleed, 0px));
+  padding-inline: var(--term-bleed, 0px);
+}
+
+.term-hoverable {
+  position: relative;
+}
+/* Pinned to the block's first line at its right edge. Absolute, so the rows
+   below are exactly where they would have been without it. */
+[data-terminal] .term-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: var(--term-line);
+  display: flex;
+  gap: 1ch;
+  padding-inline: 1ch;
+  background: var(--bg, transparent);
+  opacity: 0;
+  transition: opacity var(--motion-fast, 120ms);
+}
+[data-terminal] .term-hoverable:hover .term-actions,
+[data-terminal] .term-hoverable:focus-within .term-actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  /* No pointer to hover with: showing them always is the only way they exist at
+     all, and a phone has the room. */
+  [data-terminal] .term-actions {
+    opacity: 1;
+  }
+}
+[data-terminal] .term-action {
+  font: inherit;
+  line-height: var(--term-line);
+  color: var(--term-dim);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+[data-terminal] .term-action:hover {
+  color: var(--term-fg);
+}
+
+/* What you typed, on a band of its own — the CLI's own treatment. */
+[data-terminal] .term-user {
+  background: var(--term-user-bg);
+  margin-inline: calc(-1 * var(--term-bleed, 0px));
+  padding-inline: var(--term-bleed, 0px);
+}
+
+[data-terminal] .term-link {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* A status-line reading that leads somewhere. Inline and unstyled until hovered
+   — the line is meant to be quiet, and five underlined segments would make it
+   the loudest row on screen. */
+[data-terminal] .term-reading {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+[data-terminal][data-affordances~='hover'] .term-reading:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ── Prompts ─────────────────────────────────────────────────────────────────
+ *
+ * The affordances a form needs, drawn without a single box or border that would
+ * take a row off the grid. Strokes are backgrounds (zero layout), the focused
+ * row is a fill, and the only "control" is a row you can press a number on.
+ */
+
+/* One line tall with the stroke through its middle, full-bleed — the boundary
+   between the run and the decision. */
+[data-terminal] .term-rule-row {
+  height: var(--term-line);
+  margin-inline: calc(-1 * var(--term-bleed, 0px));
+  background: linear-gradient(var(--term-dim), var(--term-dim)) left center / 100% 1px no-repeat;
+}
+/* Dashed, for a boundary *within* a prompt. A repeating gradient rather than a
+   dashed border, for the same no-layout reason. */
+[data-terminal] .term-rule-dashed {
+  background: repeating-linear-gradient(
+      to right,
+      var(--term-faint) 0 4px,
+      transparent 4px 8px
+    )
+    left center / 100% 1px no-repeat;
+}
+
+/* The focused option. A fill, never an outline: an outline is 2px of layout the
+   row does not have, and the browser's own focus ring would land between cells. */
+[data-terminal] .term-row[data-focused] {
+  background: var(--term-row-hover);
+  margin-inline: calc(-1 * var(--term-bleed, 0px));
+  padding-inline: var(--term-bleed, 0px);
+}
+
+/* An option's expanded detail (a preview, a reason field) lines up with the
+   option's own text — one gutter in, so it reads as belonging to that row. */
+[data-terminal] .term-detail {
+  padding-left: 5ch;
+}
+
+/* A framed payload: four 1px strokes as backgrounds, so the frame costs no
+   layout and the text inside stays on the cell it would have been on. */
+[data-terminal] .term-box {
+  padding-inline: var(--term-cell);
+  /* Sized to its content, never to the viewport: a preview is a sample, and a
+     frame stretched across a wide screen reads as a panel the reader is meant
+     to work in. */
+  width: max-content;
+  max-width: 100%;
+  background:
+    linear-gradient(var(--term-faint), var(--term-faint)) top left / 100% 1px no-repeat,
+    linear-gradient(var(--term-faint), var(--term-faint)) bottom left / 100% 1px no-repeat,
+    linear-gradient(var(--term-faint), var(--term-faint)) top left / 1px 100% no-repeat,
+    linear-gradient(var(--term-faint), var(--term-faint)) top right / 1px 100% no-repeat;
+}
+
+/* A question chip. Inline so the strip is one row; the active one is filled the
+   way the CLI fills it. */
+[data-terminal] .term-tab {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0 1ch;
+  margin: 0;
+  cursor: pointer;
+}
+[data-terminal] .term-tab-active {
+  background: var(--term-blue);
+  color: var(--bg, #000);
+}
+
+/* The bare text field — a caret and a rule, no box. */
+[data-terminal] .term-input {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  color: var(--term-fg);
+  background: none;
+  border: 0;
+  padding: 0;
+  outline: none;
+  background: linear-gradient(var(--term-faint), var(--term-faint)) bottom left / 100% 1px no-repeat;
+}
+[data-terminal] .term-input:focus {
+  background-image: linear-gradient(var(--term-blue), var(--term-blue));
+}
+[data-terminal] .term-input::placeholder {
+  color: var(--term-faint);
+}
+
+/* ── Diff ────────────────────────────────────────────────────────────────────
+ *
+ * An added or removed line is a **band**, not coloured text: the wash runs the
+ * full width of the screen, the way it does in a terminal, so the shape of a
+ * change is readable from the scrollbar without reading a word of it. The line
+ * numbers ride inside the wash — they are part of the changed line.
+ */
+/* A diff belongs to the call above it, so it steps in one cell like any other
+   tool output. */
+[data-terminal] .term-diff {
+  padding-left: var(--term-cell);
+}
+
+/* The wash bleeds **right** only. Left it stops at the diff's own edge, because
+   that edge is the line-number column and a band running past it would swallow
+   the indent that says which tool call this diff belongs to. Right there is
+   nothing to preserve, and stopping at the longest line would make the shape of
+   the change depend on its text. */
+[data-terminal] .term-diff .term-row[data-diff='add'],
+[data-terminal] .term-diff .term-row[data-diff='remove'] {
+  margin-right: calc(-1 * var(--term-bleed, 0px));
+  padding-right: var(--term-bleed, 0px);
+}
+[data-terminal] .term-diff .term-row[data-diff='add'] {
+  background: var(--term-add-bg);
+  color: var(--term-add-fg);
+}
+[data-terminal] .term-diff .term-row[data-diff='remove'] {
+  background: var(--term-del-bg);
+  color: var(--term-del-fg);
+}
+[data-terminal] .term-diff .term-row[data-diff='context'] {
+  color: var(--term-diff-fg);
+}
+/* The number column is dimmer than the line it belongs to in every case — it is
+   an address, not content. `.term-gutter`'s own colour would flatten all three
+   to one grey, so each state dims its own. */
+[data-terminal] .term-diff .term-row > .term-gutter {
+  color: var(--term-diff-num);
+}
+[data-terminal] .term-diff .term-row[data-diff='add'] > .term-gutter {
+  color: color-mix(in srgb, var(--term-add-fg) 65%, transparent);
+}
+[data-terminal] .term-diff .term-row[data-diff='remove'] > .term-gutter {
+  color: color-mix(in srgb, var(--term-del-fg) 65%, transparent);
+}
+
+/* ── Markdown ────────────────────────────────────────────────────────────────
+ *
+ * The element map is in `components/terminal/markdown.tsx`; this is the little
+ * CSS it needs. Nothing here is an override — the renderer is told what to emit,
+ * so there is no default to undo and no `!important` anywhere in the theme.
+ */
+
+/* react-markdown emits the source's newlines as text nodes between blocks. The
+   surrounding rows are `pre-wrap` (a plain line of output must keep its own
+   spacing), which would render every one of those as a visible blank line — so
+   markdown bodies opt back out, and only a fenced block opts back in. */
+.term-md {
+  white-space: normal;
+}
+
+/* The one vertical rule: consecutive blocks are one blank line apart. A margin
+   rather than an inserted row, because this row list belongs to the markdown
+   renderer — but it is exactly one line, so the grid holds. */
+.term-md .term-block + .term-block {
+  margin-top: var(--term-line);
+}
+
+.term-md .term-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.term-md .term-list-ordered {
+  counter-reset: term-ol;
+}
+/* Markers live in the row's gutter cell, so they cost columns rather than a
+   typographic indent: `- ` is two, `1. ` is three. */
+.term-md .term-li > .term-gutter::before {
+  content: '-';
+}
+.term-md .term-list-ordered > .term-li {
+  --term-cell: 3ch;
+  counter-increment: term-ol;
+}
+.term-md .term-list-ordered > .term-li > .term-gutter::before {
+  content: counter(term-ol) '.';
+}
+
+/* A quote's rule is a background, not a border: a 1px border would push the
+   text 1px off the column it shares with every other line. */
+.term-md .term-quote {
+  padding-left: var(--term-cell);
+  background: linear-gradient(var(--term-faint), var(--term-faint)) left / 1px 100% no-repeat;
+}
+
+/* A horizontal rule is one line tall with the rule through its middle — the row
+   it occupies is a whole line either way. */
+.term-md .term-rule {
+  height: var(--term-line);
+  background: linear-gradient(var(--term-faint), var(--term-faint)) left center / 100% 1px no-repeat;
+}
+
+.term-md .term-pre {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  color: var(--term-dim);
+}
+
+.term-md .term-inline-code {
+  font: inherit;
+  background: none;
+  padding: 0;
+}
+
+.term-md .term-em {
+  font-style: italic;
+}
+
+.term-md .term-table-wrap {
+  overflow-x: auto;
+}
+.term-md .term-table {
+  border-collapse: collapse;
+  width: max-content;
+  max-width: 100%;
+}
+.term-md .term-table :is(th, td) {
+  /* Columns are cells, rows are lines. No vertical padding, ever. */
+  padding: 0 var(--term-cell) 0 0;
+  text-align: left;
+  vertical-align: top;
+}
+.term-md .term-thead {
+  /* The header rule, again as a shadow so it costs no layout. */
+  box-shadow: inset 0 -1px var(--term-diff-num);
+}

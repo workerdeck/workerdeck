@@ -1,0 +1,45 @@
+@import 'tailwindcss';
+@import '../src/styles/theme.css';
+
+/* Scan this package's own source for classnames (an external consumer points
+ * this at node_modules/@workerdeck/ui — see the README). */
+@source '../src';
+@source '../node_modules/streamdown/dist';
+
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/600.css';
+
+/*
+ * The character-cell overlay.
+ *
+ * Two repeating gradients at exactly one cell — `1ch` across, `--term-line`
+ * down — laid over the transcript. It is the only honest check that the theme
+ * is on the grid: text that sits on the lines everywhere except one row is a
+ * fractional metric or a stray padding, and it is invisible until you draw the
+ * cells and look.
+ *
+ * Anchored to the surface's own padding box, so the columns start where column
+ * zero actually is rather than where the viewport happens to.
+ */
+.term-grid-overlay {
+  position: relative;
+}
+.term-grid-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(to right, rgb(255 0 128 / 0.14) 0 1px, transparent 1px 1ch),
+    repeating-linear-gradient(
+      to bottom,
+      rgb(0 200 255 / 0.16) 0 1px,
+      transparent 1px var(--term-line)
+    );
+  background-position: var(--term-bleed, 0px) var(--term-line);
+}

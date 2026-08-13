@@ -47,6 +47,11 @@ import {
 } from './PermissionModeSelect.tsx'
 import { PermissionPrompt } from './PermissionPrompt.tsx'
 import { QuestionPrompt, parseUserQuestions } from './QuestionPrompt.tsx'
+import { TerminalPermissionPrompt } from '../terminal/PermissionPrompt.tsx'
+import { TerminalQuestionPrompt } from '../terminal/QuestionPrompt.tsx'
+import { TerminalSurface } from '../terminal/surface.tsx'
+import type { TerminalAffordances } from '../terminal/affordances.tsx'
+
 import { SessionInfoDialog } from './SessionInfoDialog.tsx'
 import { StatusBar } from './StatusBar.tsx'
 import { Transcript } from './Transcript.tsx'
@@ -58,6 +63,37 @@ import {
   type TranscriptVariant,
 } from './transcript-variant.tsx'
 import { UsageDialog } from './UsageDialog.tsx'
+
+/**
+ * The box the pending prompts sit in.
+ *
+ * Under the terminal theme they are rows of the same run as the transcript, so
+ * they need that theme's cell — and its `--term-bleed`, so an approval's diff
+ * bands reach the same edges the transcript's do. Every other variant keeps the
+ * centred content column the panel uses everywhere else.
+ */
+function PromptSurface({
+  terminal,
+  affordances,
+  children,
+}: {
+  terminal: boolean
+  affordances?: TerminalAffordances | boolean
+  children: ReactNode
+}) {
+  if (!terminal) {
+    return (
+      <div className='mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] flex-col gap-2'>
+        {children}
+      </div>
+    )
+  }
+  return (
+    <TerminalSurface affordances={affordances} bleed='1ch' className='term-transcript'>
+      {children}
+    </TerminalSurface>
+  )
+}
 
 export interface SessionPanelProps {
   client: WorkerDeckClient
@@ -125,6 +161,13 @@ export interface SessionPanelProps {
    * (the VS Code panel) wants `'lines'`; a full-width dashboard usually doesn't.
    */
   transcriptVariant?: TranscriptVariant
+  /**
+   * Terminal theme only: the pointer affordances a real terminal cannot offer —
+   * the hover fill, the hover-revealed copy. `false` for none. None of them
+   * costs layout, so turning them off changes no glyph's position. See
+   * {@link TerminalAffordances}.
+   */
+  affordances?: TerminalAffordances | boolean
   /**
    * How much air the transcript gives each row — `'comfortable'` (default: a
    * blank line between messages, as the Claude Code CLI leaves) or `'compact'`
@@ -320,6 +363,7 @@ export function SessionPanel({
   transcriptVariant = 'cards',
   transcriptDensity = 'comfortable',
   transcriptFont = 'sans',
+  affordances,
   controlsSurface = 'internal',
   onControls,
   focusComposerOnClick = false,
@@ -398,6 +442,7 @@ export function SessionPanel({
   // client. Free for Claude sessions: the guest loads lazily on the first call,
   // which for them never comes.
   useToolCallHost(handle, toolHost === false ? { enabled: false } : toolHost)
+  const terminal = transcriptVariant === 'terminal'
   const capabilities = state.capabilities
 
   // Vitals out to the embedder, keyed on the readings themselves so an inline
@@ -669,6 +714,7 @@ export function SessionPanel({
           hostImage={hostImage}
           variant={transcriptVariant}
           density={transcriptDensity}
+          affordances={affordances}
           catchUp={
             catchUp && newCount > 0
               ? { from: catchUp.itemCount, since: catchUp.since }
@@ -718,11 +764,30 @@ export function SessionPanel({
             `awaiting approval`, and the place that can act on it is wherever the
             session is actually driven. */}
         {!readOnly && capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
-          <div className='px-3 pb-2'>
-            <div className='mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] flex-col gap-2'>
-              {state.pendingApprovals.map((request) =>
-                request.toolName === 'AskUserQuestion' &&
-                parseUserQuestions(request.input).length > 0 ? (
+          <div className={cn(terminal ? 'pb-2' : 'px-3 pb-2')}>
+            <PromptSurface terminal={terminal} affordances={affordances}>
+              {state.pendingApprovals.map((request) => {
+                const isQuestion =
+                  request.toolName === 'AskUserQuestion' &&
+                  parseUserQuestions(request.input).length > 0
+                if (terminal) {
+                  return isQuestion ? (
+                    <TerminalQuestionPrompt
+                      key={request.id}
+                      request={request}
+                      onAnswer={approve}
+                      onDismiss={(id) => deny(id, 'Question dismissed by user')}
+                    />
+                  ) : (
+                    <TerminalPermissionPrompt
+                      key={request.id}
+                      request={request}
+                      onApprove={approve}
+                      onDeny={deny}
+                    />
+                  )
+                }
+                return isQuestion ? (
                   <QuestionPrompt
                     key={request.id}
                     request={request}
@@ -736,9 +801,9 @@ export function SessionPanel({
                     onApprove={approve}
                     onDeny={deny}
                   />
-                ),
-              )}
-            </div>
+                )
+              })}
+            </PromptSurface>
           </div>
         ) : null}
         {readOnly ? null : (

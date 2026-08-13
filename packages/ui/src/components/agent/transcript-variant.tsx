@@ -16,7 +16,14 @@ import { cn } from '../../lib/utils.ts'
  * exported on their own, so an embedder composing them by hand gets the right
  * treatment for free.
  */
-export type TranscriptVariant = 'cards' | 'lines'
+/**
+ * `terminal` is the third, and it is not a third set of branches in these
+ * components: it is its own renderer (`components/terminal/`) that the shell
+ * mounts instead of them. So {@link useLines} stays false under it — a card
+ * component asking "am I in lines?" must not accidentally answer yes for a
+ * variant it never draws.
+ */
+export type TranscriptVariant = 'cards' | 'lines' | 'terminal'
 
 const VariantContext = createContext<TranscriptVariant>('cards')
 
@@ -103,6 +110,15 @@ export const ROW_GAP: Record<
   TranscriptVariant,
   Record<TranscriptDensity, { className?: string; px: number }>
 > = {
+  // The terminal theme has no gap scale: the space between blocks is a **blank
+  // line**, decided per pair by `needsBlank` (a tool call and its output get
+  // none), so it is a class the shell applies conditionally rather than a
+  // constant it applies to every row. Density does not reach it — a terminal
+  // has one line height, which is the whole premise.
+  terminal: {
+    comfortable: { className: 'term-row-gap', px: 18 },
+    compact: { className: 'term-row-gap', px: 18 },
+  },
   cards: {
     comfortable: { className: 'pt-4', px: 16 },
     compact: { className: 'pt-2', px: 8 },

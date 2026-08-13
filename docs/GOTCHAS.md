@@ -863,6 +863,35 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   the running CLI; nothing is written to a `.mcp.json`. The iOS screen's footer says this, because
   "Disable" on a server list otherwise reads as an edit to config.
 
+## Terminal theme (`transcriptVariant: 'terminal'`)
+
+- **`--term-font-size` and `--term-line` must be whole pixels.** They are the character cell, and a
+  line height of `1.5 × 13px` is 19.5px: every second row of a long transcript then lands on a
+  half-pixel, the text visibly softens, and the diff bands show a seam along their edge. This is
+  the reason `TerminalSurface` rounds what it is handed rather than passing it through.
+- **`--term-bleed` is a contract between the scroller and every band.** A full-bleed run of rows (a
+  diff hunk, the user's prompt band, a hover fill) cancels it with matched negative margin *and*
+  padding, so its value must equal the scroller's own horizontal padding. `TerminalSurface` sets
+  both together for exactly this reason; a host that pads the scrolling element itself will see
+  every band stop short of the edge with no error anywhere.
+- **A diff's line numbers come from the wire, never from the client.** They are protocol's
+  `FilePatch` hunks, which the *engine* produced — this code has never read the file, so anything
+  it computed would look authoritative and point at the wrong line. A patch whose hunks all start
+  at `0` is the approval case (the edit has not happened yet); `TerminalDiff` reads that back and
+  renders **without** a number column rather than printing a column of zeroes.
+- **`useLines()` stays false under `terminal`.** The terminal theme is a separate renderer, not a
+  third branch inside the card components, and a card component asking "am I in lines?" must not
+  get a yes for a variant it never draws.
+- **The blank line between blocks is a row, not a margin — except inside the virtualizer.** The
+  virtualizer measures one element per item, so space between two items has to be *part of* one of
+  them or it goes unmeasured and the scrollbar drifts. Hence `term-row-gap` as padding on the
+  measured wrapper, applied conditionally via `needsBlank` so a tool call and its output stay
+  flush the way the CLI leaves them.
+- **Affordances must cost no layout.** The hover fill is a background and the copy actions are
+  absolutely positioned overlays one line tall, so `affordances={false}` changes no glyph's
+  position. That is what makes "off" the pure article rather than a degraded mode — and the reason
+  a new affordance may not be added as anything that occupies space.
+
 ## Web dashboard
 
 - **`navigator.clipboard` does not exist on the origin this dashboard actually runs on.** It is

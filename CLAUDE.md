@@ -17,7 +17,13 @@ protocol. Read these before changing scope or structure:
   few *rules* both sides must agree on rather than each guess: `transcriptActivity(event)` is
   the row-count rule the react reducer renders by and the runners count with
   (`SessionInfo.activityCount`) — change one, change both. Two more joined it, both lifted
-  out of the VS Code extension once a second client needed them: `session-list.ts` is the
+  out of the VS Code extension once a second client needed them. `FilePatch`/`PatchHunk` joined
+  them for the same reason: a diff's line numbers are the *engine's*, carried on
+  `user_message.patch`, because no client has read the file and one that computed them would point
+  confidently at the wrong line. What rides there is only the hunks — the Claude SDK's
+  `FileEditOutput` also carries `originalFile`, the entire pre-edit file, and this log is replayed
+  on every attach and captured into parking snapshots, so that is the attachment-bytes rule again.
+  `session-list.ts` is the
   **sessions-list view model** (the `attention/working/idle/ended` buckets, the
   gateway/adapter/state facets, `filterRows`/`groupRows`/`subsetSummary`/`clearFilters`, and
   the scope-containment rule where a gateway-tagged root scopes only that gateway and an
@@ -47,7 +53,10 @@ protocol. Read these before changing scope or structure:
   row, names derived from resolved ids (`claude-haiku-4-5-20251001` → "Haiku 4.5"), newest of
   each family `primary` — and the live `capabilities` event still exists for the in-session
   model switcher and slash commands (both truths are load-bearing, see `docs/GOTCHAS.md`).
-  No transport. Tool execution rides the
+  `src/patch.ts` is where both engines' edit output becomes protocol's one `FilePatch`
+  (`filePatchFromToolResult` off the Claude SDK's `tool_use_result`, `parseUnifiedDiff` off codex's
+  `fileChange.diff`), so a client renders one shape with no per-engine branch and no diff parser of
+  its own. No transport. Tool execution rides the
   `ToolExecutor` seam (`QuickJsExecutor` in-process, `BrowserBridgeExecutor` to a tab,
   `DeferredExecutor` for work outliving the runner); `createToolContext` builds the
   capability-scoped tool set with the `sandboxed`/`authoritative` trust split, and
@@ -203,7 +212,23 @@ protocol. Read these before changing scope or structure:
   would be a second operator arriving mid-run). Absent, not disabled — a greyed-out composer
   says the session is busy, an absent one says this screen does not drive it — and **not an
   authorization boundary**: it removes the affordance, the gateway does the enforcing.
-  `transcriptVariant` is the fifth, independent seam: `'cards'`
+  `transcriptVariant: 'terminal'` is the **terminal theme** (`src/components/terminal/`, geometry
+  and palette in `src/styles/terminal.css`) and it is a *renderer*, not a third set of branches:
+  it draws every row itself, so `useLines()` stays false under it. Two rules hold the whole thing
+  up — horizontal measures are `ch` (one cell) and vertical measures are whole multiples of
+  `--term-line`, both of which must be whole pixels — and everything is built from three
+  primitives: `Row` (gutter cell + body cell, which is what gives every wrap its hanging indent),
+  `Blank` (one empty line, the theme's only spacing) and `Band` (a full-bleed wash). Markdown goes
+  through Streamdown with a **component map** rather than the sixty `!important` overrides `lines`
+  needed, `TerminalDiff` renders protocol's `FilePatch` with the engine's own line numbers (and
+  without a number column when the hunks start at 0 — an approval, where the edit has not
+  happened), and the prompts are the CLI's: one question at a time behind a chip strip, ending in
+  a review step, answerable entirely from the keyboard. `affordances` is the seam for what a real
+  terminal *cannot* do (hover fill, hover-revealed copy) and every one of them costs no layout, so
+  `false` is the pure article rather than a degraded mode. `packages/ui/dev/` is its playground —
+  fixtures, a character-cell overlay and `grid-audit.ts`, which asserts every row starts on and
+  spans a whole multiple of the line; it is dev-only and unpublished (`files` is `build` + `src`).
+  `transcriptVariant` is otherwise the fifth, independent seam: `'cards'`
   (the chat convention) or `'lines'` — full-width transparent rows behind a fixed gutter
   glyph, no boxes, for a host where vertical space is scarce. It rides a **context**
   (`transcript-variant.tsx`), not a prop chain, so a row component composed by hand gets the

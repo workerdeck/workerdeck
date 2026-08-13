@@ -164,6 +164,24 @@ lose by forgetting a second mount isn't one.
 - **`statusSurface: 'external'` takes the `⋯` menu's only home with it.** Combining it with
   `panelSurface: 'internal'` needs a *function* `header` to receive the menu, or those panels
   become unreachable.
+- **The terminal theme (`variant: 'terminal'`) is a renderer, not a third set of branches.** It
+  draws every row itself from `components/terminal/`, so `useLines()` stays *false* under it — a
+  card component asking "am I in lines?" must not answer yes for a variant it never draws.
+- **Its two metrics must be whole pixels.** `--term-font-size` and `--term-line` are the character
+  cell; a line height of `1.5 x 13px` is 19.5px and puts every other row on a half-pixel, which
+  softens the text and shows a seam through the diff bands. Horizontal measures are `ch` and
+  vertical measures are whole multiples of `--term-line` — nothing in the theme is a px constant.
+- **`--term-bleed` is a contract, not a decoration.** A full-bleed band (a diff hunk, a user
+  prompt, a hover fill) cancels it with matched negative margin and padding, so it must equal the
+  scroller's own horizontal padding. `TerminalSurface` sets both; a host that pads the scroller
+  itself will see bands stop short.
+- **Line numbers come from the wire and nowhere else.** A diff renders `protocol`'s `FilePatch`,
+  whose hunks are the engine's own; this package has never read the file, so a number it computed
+  would be authoritative-looking and wrong. A patch whose hunks all start at 0 (an approval, where
+  the edit has not happened yet) renders *without* a number column rather than a column of zeroes.
+- **Affordances cost no layout, which is what makes `false` a real option.** The hover fill is a
+  background and the copy actions are absolutely-positioned overlays one line tall, so
+  `affordances={false}` changes no glyph's position — it is the pure article, not a degraded mode.
 - **Keep `monaco-editor` unreachable from `src/index.ts`.** Tree-shaking does not cover it: Vite
   resolves Monaco's worker `new URL(...)`s while *transforming* the module, before shaking, and
   emits megabytes of worker assets it never retracts. That is what the `/workspace` entry point is

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
 import type { MessageAttachment } from '@workerdeck/protocol'
@@ -14,6 +14,10 @@ import { Reasoning } from './Reasoning.tsx'
 import { Response } from './Response.tsx'
 import { SessionEmptyState } from './SessionEmptyState.tsx'
 import { ToolCallCard } from './ToolCallCard.tsx'
+import type { TerminalAffordances } from '../terminal/affordances.tsx'
+import { WorkingRow, needsBlank } from '../terminal/items.tsx'
+import { TerminalSurface } from '../terminal/surface.tsx'
+import { TerminalItemView } from '../terminal/TerminalTranscript.tsx'
 import {
   LineGlyph,
   ROW_GAP,
@@ -109,12 +113,17 @@ function TranscriptItemView({
   fileUrl,
   attachmentUrl,
   hostImage,
+  terminal,
 }: {
   item: TranscriptItem
   fileUrl?: (path: string) => string
   attachmentUrl?: (attachmentId: string) => string
   hostImage?: (path: string) => Promise<string | undefined>
+  terminal?: boolean
 }) {
+  // The terminal theme is a renderer, not a branch: it draws every kind itself,
+  // so the switch below is never reached under it.
+  if (terminal) return <TerminalItemView item={item} fileUrl={fileUrl} />
   switch (item.kind) {
     case 'user':
       return (
@@ -283,6 +292,57 @@ function SentAttachments({
   )
 }
 
+/**
+ * The terminal theme's root, when that is the variant, and a passthrough when it
+ * is not.
+ *
+ * It has to live *inside* the scroller's content element rather than around the
+ * whole `Conversation`: `--term-line` and `1ch` are inherited, and the rows are
+ * rendered by the virtualizer several levels down. Wrapping the scroller instead
+ * would work identically for the cells and break the full-bleed bands, whose
+ * negative margins are measured against this element's padding.
+ */
+function TerminalShell({
+  active,
+  fontSize,
+  lineHeight,
+  affordances,
+  children,
+}: {
+  active: boolean
+  fontSize?: number
+  lineHeight?: number
+  affordances?: TerminalAffordances | boolean
+  children: ReactNode
+}) {
+  if (!active) return <>{children}</>
+  return (
+    <TerminalSurface
+      fontSize={fontSize}
+      lineHeight={lineHeight}
+      affordances={affordances}
+      bleed='1ch'
+      className='term-transcript'>
+      {children}
+    </TerminalSurface>
+  )
+}
+
+/**
+ * Does a blank line go above this row, in the terminal theme?
+ *
+ * The recap row always earns one — it is a boundary, and a boundary flush
+ * against the row above reads as part of it. Otherwise the pair decides
+ * (`needsBlank`): consecutive tool calls are one block in the CLI and get none.
+ */
+function gapBefore(rows: TranscriptRow[], index: number): boolean {
+  const row = rows[index]
+  const previous = rows[index - 1]
+  if (!row || !previous) return true
+  if (!('item' in row) || !('item' in previous)) return true
+  return needsBlank(previous.item, row.item)
+}
+
 /** Rows produced inside a subagent (`parentToolUseId != null`) are stepped in
  * behind a rule, so a Task's own output reads as belonging to the tool call
  * above it rather than as the main thread carrying on. */
@@ -340,6 +400,7 @@ function TranscriptRows({
   boundary,
   since,
   lines,
+  terminal,
   gap,
   fileUrl,
   attachmentUrl,
@@ -350,6 +411,8 @@ function TranscriptRows({
   boundary: number | undefined
   since: number | undefined
   lines: boolean
+  /** The terminal theme draws its own rows; see {@link TranscriptItemView}. */
+  terminal: boolean
   /** The inter-row gap for this variant and density (`ROW_GAP`). */
   gap: { className?: string; px: number }
   fileUrl?: (path: string) => string
@@ -394,7 +457,9 @@ function TranscriptRows({
     // Plus the gap, which is real height on the same measured element — an
     // estimate that ignored it would make the scrollbar visibly too short on a
     // long transcript before the rows mount.
-    estimateSize: () => (lines ? 32 : 100) + gap.px,
+    // A terminal row is one or two lines far more often than not; cards vary too
+    // much for any constant to be right, so that one is merely the magnitude.
+    estimateSize: () => (terminal ? 36 : lines ? 32 : 100) + gap.px,
     overscan: 8,
     getItemKey: (index) => rows[index].key,
     // Explicit, and left at the default, because the obvious cleanup here is
@@ -498,7 +563,12 @@ function TranscriptRows({
               // not the row div, so a nested row's left border still breaks
               // across the gap as it did under flex. Skipped for the first row —
               // a gap above it would be padding, not spacing.
-              virtualRow.index > 0 && gap.className,
+              // Every variant but terminal spaces every row alike. Terminal
+              // asks whether the pair belongs together — a tool call and its
+              // output get no blank line, exactly as the CLI leaves none.
+              virtualRow.index > 0 &&
+                (!terminal || gapBefore(rows, virtualRow.index)) &&
+                gap.className,
             )}
             style={{ transform: `translateY(${virtualRow.start}px)` }}>
             {'item' in row ? (
@@ -516,6 +586,7 @@ function TranscriptRows({
                   fileUrl={fileUrl}
                   attachmentUrl={attachmentUrl}
                   hostImage={hostImage}
+                  terminal={terminal}
                 />
               </div>
             ) : (
@@ -555,6 +626,13 @@ export interface TranscriptProps {
    * {@link TranscriptVariant}. See {@link TranscriptDensity}.
    */
   density?: TranscriptDensity
+  /** Terminal theme only: the character cell, in whole pixels. See
+   * {@link TerminalSurface}. */
+  fontSize?: number
+  lineHeight?: number
+  /** Terminal theme only: the pointer affordances a real terminal cannot offer.
+   * `false` for none. See {@link TerminalAffordances}. */
+  affordances?: TerminalAffordances | boolean
   /**
    * Catch-up: `from` is how many items had been seen last time, `since` when
    * that was. A recap row is drawn at that boundary and everything above it is
@@ -581,11 +659,15 @@ export function Transcript({
   hostImage,
   variant = 'cards',
   density = 'comfortable',
+  fontSize,
+  lineHeight,
+  affordances,
   catchUp,
   jumpToRecapRef,
   className,
 }: TranscriptProps) {
   const lines = variant === 'lines'
+  const terminal = variant === 'terminal'
   const gap = ROW_GAP[variant][density]
   const runStartedAt = useRunStart(state.status)
   const following = useSettled(state.items.length, state.status)
@@ -607,7 +689,12 @@ export function Transcript({
   return (
     <TranscriptVariantProvider value={variant}>
       <Conversation className={className} resize={following ? 'smooth' : 'instant'}>
-        <ConversationContent className={cn(lines && 'gap-0 px-2 py-1.5')}>
+        <ConversationContent className={cn(lines && 'gap-0 px-2 py-1.5', terminal && 'gap-0 p-0')}>
+          <TerminalShell
+            active={terminal}
+            fontSize={fontSize}
+            lineHeight={lineHeight}
+            affordances={affordances}>
           {state.items.length === 0 && state.status !== 'starting' ? (
             <SessionEmptyState
               cwd={state.cwd}
@@ -621,6 +708,7 @@ export function Transcript({
               boundary={boundary}
               since={catchUp?.since}
               lines={lines}
+              terminal={terminal}
               gap={gap}
               fileUrl={fileUrl}
               attachmentUrl={attachmentUrl}
@@ -629,13 +717,28 @@ export function Transcript({
             />
           )}
           {showLoader(state) ? (
-            <Loader
-              label={state.status === 'starting' ? 'Starting session…' : undefined}
-              startedAt={runStartedAt}
-              tokens={state.contextUsage?.totalTokens}
-              className={cn(lines && 'py-0.5')}
-            />
+            terminal ? (
+              // The CLI's own working line, and it is a *row of the transcript*
+              // rather than a spinner floating over it — one blank line down,
+              // like every other block.
+              <>
+                {state.items.length > 0 ? <div className='term-blank' aria-hidden /> : null}
+                <WorkingRow
+                  label={state.status === 'starting' ? 'Starting…' : 'Working…'}
+                  startedAt={runStartedAt}
+                  tokens={state.contextUsage?.totalTokens}
+                />
+              </>
+            ) : (
+              <Loader
+                label={state.status === 'starting' ? 'Starting session…' : undefined}
+                startedAt={runStartedAt}
+                tokens={state.contextUsage?.totalTokens}
+                className={cn(lines && 'py-0.5')}
+              />
+            )
           ) : null}
+          </TerminalShell>
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
