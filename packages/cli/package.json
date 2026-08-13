@@ -1,6 +1,6 @@
 {
   "name": "workerdeck",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "type": "module",
   "description": "Turnkey WorkerDeck instance: `npx workerdeck` runs the session gateway and the full dashboard on one port. The @workerdeck/* packages are the libraries you embed; this is the service you run.",
   "license": "MIT",

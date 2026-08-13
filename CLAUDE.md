@@ -633,11 +633,21 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   tagged and pushed, so the publish workflow ran for it. **0.14.0** — session scope
   (`CreateSessionRequest.scope` + `authorizeSession`, enforced at every door, 404 on a miss),
   `EngineCapabilities.hostCwd` so a filesystem-less engine need not name a `cwd`,
-  `sandboxedProviderProfile()`, and `apps/embedded` — the reference embedding. Bumped and
-  committed, **tag not pushed**: nothing is on npm for it yet, so `npm latest` still reads 0.13.0
-  until someone pushes `v0.14.0`. `version:set` now covers `apps/embedded` too — it is not
+  `sandboxedProviderProfile()`, and `apps/embedded` — the reference embedding. **Never released**:
+  bumped and committed but never tagged, so nothing under that number reached npm and its content
+  ships inside 0.15.0. The registry goes 0.13.0 → 0.15.0, and that gap is deliberate — do not
+  publish a v0.14.0 after the fact. `version:set` now covers `apps/embedded` too — it is not
   idempotent (a re-run at the same version fails on "Version not changed"), so add a new workspace
-  member to the filter *before* the bump, not after. Protocol stays **7**.
+  member to the filter *before* the bump, not after.
+  **0.15.0** — the embedding seams the DEV-UX assessment asked for: a loud MCP failure
+  (`connectMcpTools`'s `required`, `McpConnection.servers`, a build that refuses a declared server
+  that is not there, and `provider.mcpStatus` flipping to `true` so `/sessions/:id/mcp` answers
+  instead of 501ing), `createEngineSession({ tools })` at a stated trust, `seedVfs`/`id`,
+  `createProviderRunner`, `requireAvailableProfile`, and `SessionPanel`'s `toolHost`. Plus the
+  documentation half — a "Rules you cannot infer from the types" section in every package README,
+  and three new pages in `apps/docs` (the app-embedding guide, engines-and-executors,
+  writing-tools) — and `apps/embedded` rebuilt on one silkweave action set behind two adapters.
+  Protocol stays **7**.
 
   **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`
