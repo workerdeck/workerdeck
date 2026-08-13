@@ -656,6 +656,45 @@ describe('transcript reducer', () => {
       expect(call(failed)).toMatchObject({ status: 'failed', result: { isError: true } })
     })
 
+    it('carries the file patch onto the call it belongs to', () => {
+      // The line numbers a diff renders come from here and nowhere else: a
+      // client has never seen the file, so anything dropped on this path is a
+      // diff that renders without them.
+      seq = 0
+      const patch = {
+        path: '/repo/a.ts',
+        kind: 'update' as const,
+        hunks: [{ oldStart: 4, oldLines: 1, newStart: 4, newLines: 1, lines: ['-a', '+b'] }],
+      }
+      const state = run(initialTranscriptState, [
+        toolUse('t1'),
+        {
+          type: 'user_message',
+          message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'updated' }] },
+          parentToolUseId: null,
+          synthetic: true,
+          patch,
+          uuid: 'r1',
+        },
+      ])
+      expect(call(state)).toMatchObject({ status: 'settled', patch })
+    })
+
+    it('leaves a result with no patch alone rather than carrying an empty one', () => {
+      seq = 0
+      const state = run(initialTranscriptState, [
+        toolUse('t1'),
+        {
+          type: 'user_message',
+          message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
+          parentToolUseId: null,
+          synthetic: true,
+          uuid: 'r1',
+        },
+      ])
+      expect(call(state)).not.toHaveProperty('patch')
+    })
+
     it('ignores execution events for an unknown id instead of inventing an item', () => {
       seq = 0
       const state = run(initialTranscriptState, [

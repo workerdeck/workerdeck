@@ -3,6 +3,7 @@ import type {
   ContentBlock,
   ContextUsage,
   EngineCapabilities,
+  FilePatch,
   MessageAttachment,
   ModelOption,
   PermissionMode,
@@ -51,6 +52,16 @@ export type TranscriptItem =
        */
       status: 'running' | 'pending' | 'deferred' | 'settled' | 'failed'
       result?: { text: string; isError: boolean }
+      /**
+       * What this call changed on disk, when it was a file edit — the engine's
+       * own hunks and line numbers (see protocol's {@link FilePatch}).
+       *
+       * Only ever set from the wire. A client cannot derive it: it has never
+       * seen the file, so a diff it computed from the tool's *input* would have
+       * no line numbers, and one parsed out of the result prose would be welded
+       * to an engine's text formatting.
+       */
+      patch?: FilePatch
       /** Correlation id when this call is executed outside the model loop. */
       executionId?: string
       /** Which backend is executing it, when known. */
@@ -331,6 +342,9 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
                   ...item,
                   status: isError ? 'failed' : 'settled',
                   result: { text: blockText(toolResult.content), isError },
+                  // Absent on most results; the runner sets it only for a file
+                  // edit, and only when the message answers one call.
+                  ...(event.patch && { patch: event.patch }),
                 }
               : item,
           )

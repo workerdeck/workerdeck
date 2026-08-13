@@ -7,6 +7,7 @@ import {
   PROTOCOL_VERSION,
   type ContentBlock,
   type CreateSessionRequest,
+  type FilePatch,
   type PermissionDecisionSource,
   type PermissionMode,
   type PermissionRequest,
@@ -25,6 +26,7 @@ import {
   normalizeMediaType,
   type AttachmentInput,
 } from '../../attachments.ts'
+import { parseUnifiedDiff } from '../../patch.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
 import { JsonRpcError } from './jsonrpc.ts'
 import type {
@@ -1868,10 +1870,16 @@ export class CodexRunner implements Runner {
           const kind = typeof change.kind === 'string' ? change.kind : change.kind?.type
           return `${kind ?? 'change'}: ${change.path}`
         })
+        // Codex reports a unified diff per change, so the wire can carry the
+        // same `FilePatch` the Claude engine sends and every client renders one
+        // shape. Only for a single-file change: the patch names one file, and a
+        // multi-file edit has no honest way to say which.
+        const only = item.changes.length === 1 ? item.changes[0] : undefined
         this.#emitToolResult(
           id,
           lines.join('\n') || item.status,
           item.status === 'failed' || item.status === 'declined',
+          only?.diff ? parseUnifiedDiff(only.diff, only.path) : undefined,
         )
         return
       }
@@ -1960,7 +1968,12 @@ export class CodexRunner implements Runner {
     })
   }
 
-  #emitToolResult(toolUseId: string, content: string, isError: boolean): void {
+  #emitToolResult(
+    toolUseId: string,
+    content: string,
+    isError: boolean,
+    patch?: FilePatch,
+  ): void {
     this.#emit({
       type: 'user_message',
       message: {
@@ -1971,6 +1984,7 @@ export class CodexRunner implements Runner {
       },
       parentToolUseId: null,
       synthetic: true,
+      patch,
       uuid: `${toolUseId}-result`,
     })
   }

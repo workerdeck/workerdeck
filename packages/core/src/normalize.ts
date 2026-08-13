@@ -6,6 +6,16 @@ import type {
   ModelOption,
   SessionEventBody,
 } from '@workerdeck/protocol'
+import { filePatchFromToolResult } from './patch.ts'
+
+/** Does this message answer exactly one tool call? A patch is per-file-edit and
+ * the message says nothing about which of two results it describes, so anything
+ * else gets no patch rather than a diff pinned to the wrong call. */
+function singleToolResult(message: ApiMessage): boolean {
+  const content = message.content
+  if (!Array.isArray(content)) return false
+  return content.filter((block) => block.type === 'tool_result').length === 1
+}
 
 export function toApiMessage(message: unknown): ApiMessage {
   const m = message as {
@@ -263,15 +273,22 @@ export function normalizeSdkMessage(msg: SDKMessage): SessionEventBody | null {
         parentToolUseId: msg.parent_tool_use_id,
         uuid: msg.uuid,
       }
-    case 'user':
+    case 'user': {
+      const message = toApiMessage(msg.message)
       return {
         type: 'user_message',
-        message: toApiMessage(msg.message),
+        message,
         parentToolUseId: msg.parent_tool_use_id,
         replay: 'isReplay' in msg && msg.isReplay === true ? true : undefined,
         synthetic: msg.isSynthetic === true ? true : undefined,
+        // The engine's own line numbers, projected down to the hunks — see
+        // `filePatchFromToolResult` for why the rest of `tool_use_result` stays
+        // off the wire. Only with a single tool_result block, because nothing
+        // in the message says which call a patch belongs to.
+        patch: singleToolResult(message) ? filePatchFromToolResult(msg.tool_use_result) : undefined,
         uuid: msg.uuid,
       }
+    }
     case 'stream_event':
       return {
         type: 'stream_delta',

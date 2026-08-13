@@ -61,6 +61,49 @@ export type ToolResultBlock = {
 /** Forward-compatible fallback for block types this protocol version doesn't model. */
 export type UnknownBlock = { type: string; [key: string]: unknown }
 
+/**
+ * One hunk of a file edit, in unified-diff terms.
+ *
+ * The numbers are the engine's own, not the client's: `newStart` is where this
+ * hunk begins in the file *after* the edit, which is what a reader needs to jump
+ * to the change. A client cannot compute them — it has never seen the file — so
+ * a diff rendered without this is a diff with no line numbers.
+ */
+export type PatchHunk = {
+  oldStart: number
+  oldLines: number
+  newStart: number
+  newLines: number
+  /** Body lines, each prefixed ' ' (context), '-' (removed) or '+' (added), as
+   * unified diff spells them. The prefix is part of the string. */
+  lines: string[]
+}
+
+/**
+ * What a file-editing tool changed — the renderable half of an engine's edit
+ * output, and deliberately only that half.
+ *
+ * Both engines can say far more: the Claude SDK's `FileEditOutput` carries
+ * `originalFile`, the **entire** contents of the file before the edit. That must
+ * not travel here. This log is replayed to every attaching client and captured
+ * into parking snapshots, so a whole file on every edit is paid for again on
+ * every attach, forever — the same reason attachment bytes are references (see
+ * {@link MessageAttachment}) rather than inline base64.
+ *
+ * So the runner projects the engine's output down to the hunks, which is exactly
+ * what a diff renders and nothing more.
+ */
+export type FilePatch = {
+  /** Absolute path the engine reported, when it named one. */
+  path?: string
+  /** `create` when the file did not exist before this edit. */
+  kind?: 'create' | 'update'
+  hunks: PatchHunk[]
+  /** Hunks were dropped to keep the event small. A renderer must say so rather
+   * than present a partial diff as the whole change. */
+  truncated?: boolean
+}
+
 export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock | UnknownBlock
 
 /**
@@ -426,6 +469,16 @@ export type SessionEventBody =
        * `message.content` carries the typed text only — the attachment bytes went
        * to the model, not into this log. */
       attachments?: MessageAttachment[]
+      /**
+       * What a file-editing tool changed, when this message carries that tool's
+       * result (see {@link FilePatch}). Set by the runner from the engine's own
+       * structured output — never derived by a client from the result text.
+       *
+       * Only when the message carries exactly one `tool_result` block, which is
+       * what both engines send: with two, there is nothing that says which one
+       * the patch belongs to, and guessing would attach a diff to the wrong call.
+       */
+      patch?: FilePatch
       uuid?: string
     }
   /** Raw Anthropic streaming event (message_start/content_block_delta/...); emitted only
