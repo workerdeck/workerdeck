@@ -64,6 +64,16 @@ header on a WebSocket upgrade, so a cookie is the only credential a tab can pres
 attach — and a cookie only rides same-origin requests. Split them across two origins and the
 sidebar cannot attach.
 
+**…and one origin means every cookie-authed surface owes a CSRF check.** A cookie rides any
+request the browser is induced to send, and `SameSite=Lax` stops only *cross-site* — a page on
+another port of the same site sends it, and a `text/plain` body makes the request "simple" so CORS
+is never consulted. The attacker never has to read the response: a forged `POST /v1/sessions` runs
+a prompt of their choosing **as the victim**, with the victim's own wiki tools. So both
+`authenticate` hooks — the gateway's in `src/gateway.ts` and the wiki API's in `src/wiki-api.ts` —
+call `sameOrigin()` (`src/users.ts`) before resolving the cookie, and *decline* rather than throw
+so a forged request gets a plain 401 that explains nothing. Copying the cookie without copying this
+is the mistake this app most invites.
+
 **2. `scope` is the whole ownership model.** `authenticate` resolves the app's cookie and returns
 `{ scope: { user: user.id } }`. That single line is why `GET /v1/sessions` returns only your
 sessions, why another user's session id 404s on every route and on the WS attach, and why
@@ -167,3 +177,11 @@ that would make the agent feel unsafe to use.
 - **Tool results are untrusted input.** A sandbox bounds what a tool can reach, not what a fetched
   page can talk the model into asking for. The system prompt says so; a production app should
   think harder about it than a demo does.
+- **`web_fetch` is not pinned against DNS rebinding, and that is a loopback-demo trade.** Core's
+  `web_fetch` resolves the hostname and refuses private, loopback and link-local addresses, but
+  Node's `fetch` then resolves it *again* — so an attacker-controlled domain that answers a public
+  address to the guard and `169.254.169.254` to the fetch gets through. On this demo the only thing
+  behind that is the app's own loopback `/mcp`, which 401s without a bearer token. **In a cloud
+  deployment it is the metadata service**, reachable by a prompt-injected loop. Pass a `fetchImpl`
+  backed by a resolve-and-pin agent (or an allowlist) to the capability before running a copy of
+  this app anywhere with an IMDS endpoint; core leaves the hook open precisely for that.

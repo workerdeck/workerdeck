@@ -11,7 +11,7 @@ import {
   type WorkerServerOptions,
 } from '@workerdeck/server'
 import type { ProfileInfo } from '@workerdeck/protocol'
-import type { CookieAuth } from './users.ts'
+import { type CookieAuth, sameOrigin } from './users.ts'
 import type { WikiMcp } from './wiki-mcp.ts'
 
 export const PROFILE_NAME = 'wiki-agent'
@@ -148,7 +148,17 @@ export async function createEmbeddedGateway(deps: GatewayDeps): Promise<Embedded
     profiles: [profile],
     fallback: deps.fallback,
 
+    /**
+     * The cookie is the only credential a WebSocket attach can carry, so this
+     * surface is cookie-authenticated — which makes it CSRF-able, and the guard
+     * is ours to write. It matters more here than on `/trpc`: a forged
+     * `POST /v1/sessions` runs a prompt of the attacker's choosing *as the
+     * victim*, with the victim's own wiki tools and `web_fetch` to carry the
+     * results out, and a forged upgrade drives an existing session. See
+     * {@link sameOrigin} for why `SameSite=Lax` does not cover it.
+     */
     authenticate: (req) => {
+      if (!sameOrigin(req)) return null
       const user = deps.auth.resolve(req)
       if (!user) return null
       return {

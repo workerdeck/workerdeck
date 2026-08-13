@@ -3,7 +3,7 @@ import { silkweave } from '@silkweave/core'
 import { type InferTrpcRouter, type TrpcNodeAdapter, trpcNode } from '@silkweave/trpc'
 import type { AppState } from './app-state.ts'
 import type { WikiDb } from './db.ts'
-import type { CookieAuth } from './users.ts'
+import { type CookieAuth, sameOrigin } from './users.ts'
 import { createWikiActions } from './wiki-actions.ts'
 
 /**
@@ -80,25 +80,3 @@ export function createWikiApi(db: WikiDb, state: AppState, auth: CookieAuth): Wi
   }
 }
 
-/**
- * `Sec-Fetch-Site` is the modern signal and every browser this app targets sends
- * it; `Origin` is the fallback for a request that carries one instead. A request
- * with neither is not a browser request, and this endpoint exists for browsers —
- * the agent has its own, on a token.
- */
-function sameOrigin(req: IncomingMessage): boolean {
-  const site = req.headers['sec-fetch-site']
-  // 'none' is a direct navigation (the user typed the URL); same-origin is the
-  // SPA's own fetch. 'same-site' and 'cross-site' are not this app's.
-  if (typeof site === 'string') return site === 'same-origin' || site === 'none'
-  const origin = req.headers.origin
-  if (typeof origin === 'string') {
-    const host = req.headers.host
-    try {
-      return Boolean(host) && new URL(origin).host === host
-    } catch {
-      return false
-    }
-  }
-  return false
-}
