@@ -8,6 +8,8 @@ export type {
   WorkerServerOptions,
 } from './server.ts'
 export { sandboxedProviderProfile } from './sandboxed-profile.ts'
+export { createProviderRunner } from './provider-runner.ts'
+export type { ProviderRunnerOptions } from './provider-runner.ts'
 export { SessionRegistry } from './registry.ts'
 export type { SessionRegistryOptions } from './registry.ts'
 export { AttachmentStore } from './attachments.ts'

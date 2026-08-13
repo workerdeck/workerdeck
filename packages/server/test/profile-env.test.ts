@@ -241,3 +241,59 @@ describe('credential preflight', () => {
     expect(probed[0]!.CLAUDE_CONFIG_DIR).toBe(iso)
   })
 })
+
+/**
+ * The probe is display-only by default, on purpose. `requireAvailableProfile` is
+ * the deployment that has an end user in front of it rather than an operator:
+ * there, a create that succeeds and dies mid-turn on a raw provider error is
+ * worse than a refusal that says what is wrong.
+ */
+describe('requireAvailableProfile', () => {
+  const withProbe = (
+    requireAvailableProfile: boolean,
+    status: ClaudeAuthStatus,
+  ): WorkerServer => {
+    const harness = captureHarness()
+    return createWorkerServer({
+      allowUnauthenticated: true,
+      profiles: [{ name: 'iso', configDir: temp('cw-iso-') }],
+      buildRunnerConfig: (req) => ({ ...req, queryFn: harness.queryFn }),
+      requireAvailableProfile,
+      checkCredentials: { probe: async () => status },
+    })
+  }
+
+  it('refuses a create on a profile the probe reported unavailable', async () => {
+    running = withProbe(true, 'logged_out')
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { port } = await running.listen(0, '127.0.0.1')
+    // The verdict lands asynchronously; before it does the profile is 'unknown'
+    // and creates go through, which is the documented behaviour.
+    await vi.waitFor(async () => {
+      const res = await createSession(port, 'iso')
+      expect(res.status).toBe(503)
+      expect(((await res.json()) as { error: string }).error).toContain('unavailable')
+    })
+  })
+
+  it("lets the same create through when the option is off — the probe can't close a door", async () => {
+    running = withProbe(false, 'logged_out')
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { port } = await running.listen(0, '127.0.0.1')
+    // Wait for the same verdict to land — it is served, and it is still only
+    // a display value.
+    await vi.waitFor(async () => {
+      const { profiles } = (await (await fetch(`http://127.0.0.1:${port}/v1/profiles`)).json()) as {
+        profiles: Array<{ available?: boolean }>
+      }
+      expect(profiles[0]!.available).toBe(false)
+    })
+    expect((await createSession(port, 'iso')).status).toBe(201)
+  })
+
+  it("allows a profile whose probe couldn't run — unknown is not unavailable", async () => {
+    running = withProbe(true, 'unknown')
+    const { port } = await running.listen(0, '127.0.0.1')
+    expect((await createSession(port, 'iso')).status).toBe(201)
+  })
+})

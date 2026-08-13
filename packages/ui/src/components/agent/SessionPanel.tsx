@@ -18,6 +18,7 @@ import {
   type ConnectionState,
   type ProducedFileRef,
   type TranscriptState,
+  type UseToolCallHostOptions,
 } from '@workerdeck/react'
 import {
   ChartPie,
@@ -207,6 +208,22 @@ export interface SessionPanelProps {
    * enforcement lives on the gateway.
    */
   readOnly?: boolean
+  /**
+   * Options for the browser tool host this panel runs on its own attach — or
+   * `false` to run none at all.
+   *
+   * The panel hosts server-bridged tool calls itself, because the bridge asks
+   * the *first attached client* and the panel owns the session's one attach: an
+   * embedder subscribing to the same handle separately would find this host
+   * already answering, and refusing, anything outside its allow-list. So the
+   * options come through here.
+   *
+   * Merged over the defaults, which host `eval_script` alone. Widening `tools`
+   * is a real grant — this tab will execute what the gateway asks it to for
+   * every name in the list — so it names them explicitly rather than accepting
+   * a wildcard.
+   */
+  toolHost?: UseToolCallHostOptions | false
   className?: string
 }
 
@@ -308,6 +325,7 @@ export function SessionPanel({
   focusComposerOnClick = false,
   unseen,
   readOnly = false,
+  toolHost,
   className,
 }: SessionPanelProps) {
   const external = panelSurface === 'external'
@@ -379,7 +397,7 @@ export function SessionPanel({
   // SAME handle the panel attached with — the bridge asks the first attached
   // client. Free for Claude sessions: the guest loads lazily on the first call,
   // which for them never comes.
-  useToolCallHost(handle)
+  useToolCallHost(handle, toolHost === false ? { enabled: false } : toolHost)
   const capabilities = state.capabilities
 
   // Vitals out to the embedder, keyed on the readings themselves so an inline

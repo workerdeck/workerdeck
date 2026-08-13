@@ -230,18 +230,80 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
 /** Add host-side MCP tools to a context. They are ALWAYS authoritative: they run
  * server-side with server credentials, and must never be handed to a browser. */
 export function withMcpTools(context: ToolContext, mcpTools: ToolSet): ToolContext {
+  return withHostTools(
+    context,
+    Object.fromEntries(
+      Object.entries(mcpTools).map(([name, mcpTool]) => [
+        name,
+        { tool: mcpTool, trust: 'authoritative' as const },
+      ]),
+    ),
+    'MCP tool',
+  )
+}
+
+/** A tool the host supplies, with the trust level it is to run at. */
+export type HostToolDefinition = {
+  tool: Tool
+  /**
+   * Where this tool may run. `authoritative` tools execute inline in the
+   * gateway and MUST declare `execute`; `sandboxed` ones must NOT, because the
+   * loop hands them to the {@link ToolExecutor} seam instead — which is what
+   * makes them bridgeable to an untrusted tab.
+   */
+  trust: ToolTrust
+}
+
+/**
+ * Add host-supplied tools to a context at an explicit trust level.
+ *
+ * The trust level is the whole point of the seam: {@link withMcpTools} can only
+ * produce authoritative tools, so a host tool that *should* be sandboxed — and
+ * therefore executable in the browser tab that asked for it — had no way to be
+ * expressed at all. Here the host says which it is, and the contradictions are
+ * refused rather than silently resolved:
+ *
+ * - a `sandboxed` tool carrying `execute` would run inline in this process with
+ *   the gateway's ambient authority, which is exactly what sandboxing it was
+ *   meant to prevent;
+ * - an `authoritative` tool *without* `execute` would park the turn on a call no
+ *   executor claims, and the session would simply stop.
+ */
+export function withHostTools(
+  context: ToolContext,
+  hostTools: Record<string, HostToolDefinition>,
+  /** What to call these in error messages ('MCP tool', 'host tool'). */
+  kind = 'host tool',
+): ToolContext {
+  const entries = Object.entries(hostTools)
+  if (entries.length === 0) return context
   const definitions = [...context.definitions]
   const tools: ToolSet = { ...context.tools }
-  for (const [name, mcpTool] of Object.entries(mcpTools)) {
-    if (context.sandboxedToolNames.includes(name)) {
-      // A sandboxed name colliding with an MCP name would silently promote
-      // untrusted execution to authoritative — refuse rather than guess.
-      throw new Error(`MCP tool '${name}' collides with a sandboxed tool of the same name`)
+  const sandboxedToolNames = [...context.sandboxedToolNames]
+  for (const [name, { tool: hostTool, trust }] of entries) {
+    if (name in tools) {
+      // Silently overwriting would let a host tool shadow `eval_script` — or an
+      // MCP name promote untrusted execution to authoritative. Refuse instead.
+      throw new Error(`${kind} '${name}' collides with an existing tool of the same name`)
     }
-    definitions.push({ name, trust: 'authoritative', tool: mcpTool })
-    tools[name] = mcpTool
+    const executes = typeof (hostTool as { execute?: unknown }).execute === 'function'
+    if (trust === 'sandboxed' && executes) {
+      throw new Error(
+        `${kind} '${name}' is declared sandboxed but has an \`execute\` — it would run in ` +
+          'this process with full authority. Drop `execute` so it rides the ToolExecutor seam.',
+      )
+    }
+    if (trust === 'authoritative' && !executes) {
+      throw new Error(
+        `${kind} '${name}' is declared authoritative but has no \`execute\` — nothing would ` +
+          'ever answer its calls and the turn would stall.',
+      )
+    }
+    definitions.push({ name, trust, tool: hostTool })
+    tools[name] = hostTool
+    if (trust === 'sandboxed') sandboxedToolNames.push(name)
   }
-  return { ...context, tools, definitions }
+  return { ...context, tools, definitions, sandboxedToolNames }
 }
 
 function truncate(text: string): string {

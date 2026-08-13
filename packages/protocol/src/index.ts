@@ -842,7 +842,12 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     listSessions: false,
     contextUsage: false,
     rateLimits: false,
-    mcpStatus: false,
+    // The one engine whose MCP is entirely host-wired, and so the one that can
+    // always answer: `AiSdkRunner` reports what the host assembled the session
+    // from (an empty list when that was nothing). Acting on a server is a
+    // different power and stays absent — the host owns those connections and
+    // this engine has no channel to renegotiate one.
+    mcpStatus: true,
     mcpServerActions: false,
     sessionMcpServers: false,
     slashCommands: false,

@@ -308,6 +308,24 @@ export type WorkerServerOptions = {
    * CLI turns it on. Pass an object to inject the probe (tests) or a timeout.
    */
   checkCredentials?: boolean | { probe?: ClaudeAuthProbe; timeoutMs?: number }
+  /**
+   * Refuse to create a session or submit a job on a profile the credential
+   * probe has reported **unavailable** — 503 with the probe's own reason —
+   * rather than letting the run start and die mid-turn on a raw provider error.
+   *
+   * Off by default, and that default is right for an operator's own gateway:
+   * the verdict can be stale in both directions, the operator may be three
+   * seconds from finishing a login, and turning a probe bug into an outage is
+   * worse than one confusing failure. It is wrong in front of an **end user**,
+   * who cannot read a provider stack trace and did not choose the deployment's
+   * credentials — which is why every embedder otherwise grows its own
+   * `available` flag in front of the create button.
+   *
+   * Requires `checkCredentials`; without probes nothing is ever unavailable.
+   * A profile whose verdict is 'unknown' (never probed, probe couldn't run) is
+   * always allowed through — "couldn't check" is not "not available".
+   */
+  requireAvailableProfile?: boolean
   /** Injectable lister for GET /sdk-sessions (tests) — honored for the CLAUDE
    * engine only, like the injectable claude auth probe (it predates the adapter
    * layer). Defaults to the claude adapter's lister (the SDK's on-disk session
@@ -1407,6 +1425,21 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       })
   }
 
+  /**
+   * The create-time half of `requireAvailableProfile`. Only a definite `false`
+   * refuses: an unprobed profile ('unknown', or probes turned off entirely) is
+   * not evidence of anything and must not become a closed door.
+   */
+  const checkAvailable = (profile: ProfileInfo | undefined): Refusal | null => {
+    if (!options.requireAvailableProfile || !profile) return null
+    const verdict = availability.get(profile.name)?.verdict
+    if (!verdict || verdict.available !== false) return null
+    return {
+      status: 503,
+      error: `profile '${profile.name}' is unavailable: ${verdict.reason ?? 'no usable credentials'}`,
+    }
+  }
+
   /** Launch-time sweep, concurrent and fire-and-forget. */
   const preflightCredentials = (): void => {
     for (const profile of allProfiles()) probeProfile(profile)
@@ -2269,6 +2302,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           json(res, resolved.status, { error: resolved.error })
           return
         }
+        const unavailable = checkAvailable(resolved.profile)
+        if (unavailable) {
+          json(res, unavailable.status, { error: unavailable.error })
+          return
+        }
         const refusedCwd = checkCwd(body.session, resolved.profile)
         if (refusedCwd) {
           json(res, refusedCwd.status, { error: refusedCwd.error })
@@ -2615,6 +2653,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         const resolved = resolveProfile(body.profile, auth.allowedProfiles)
         if (!resolved.ok) {
           json(res, resolved.status, { error: resolved.error })
+          return
+        }
+        const unavailable = checkAvailable(resolved.profile)
+        if (unavailable) {
+          json(res, unavailable.status, { error: unavailable.error })
           return
         }
         const refusedCwd = checkCwd(body, resolved.profile)

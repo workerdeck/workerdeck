@@ -30,8 +30,18 @@ export { DeferredExecutor } from './deferred-executor.ts'
 export type { DeferredDispatch, DeferredExecutorOptions } from './deferred-executor.ts'
 export { connectMcpTools, createEngineSession } from './engine.ts'
 export type { EngineSessionOptions, McpConnection } from './engine.ts'
-export { createToolContext, withMcpTools } from './tools.ts'
-export type { ToolContext, ToolContextOptions, ToolDefinition, ToolTrust } from './tools.ts'
+/** Re-exported so a host wiring the provider engine can type its model factory
+ * and tool sets without reaching past this package for the AI SDK itself —
+ * `core` is the only package in the graph that depends on it. */
+export type { LanguageModel, Tool, ToolSet } from 'ai'
+export { createToolContext, withHostTools, withMcpTools } from './tools.ts'
+export type {
+  HostToolDefinition,
+  ToolContext,
+  ToolContextOptions,
+  ToolDefinition,
+  ToolTrust,
+} from './tools.ts'
 export { createWebFetch, htmlToMarkdown, isPrivateAddress } from './web-fetch.ts'
 export type { WebFetchDigest, WebFetchFn, WebFetchOptions, WebFetchResult } from './web-fetch.ts'
 export { PendingRequestRegistry } from './pending-registry.ts'

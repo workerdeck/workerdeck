@@ -11,6 +11,7 @@ import {
   ENGINE_CAPABILITIES,
   type ContentBlock,
   type CreateSessionRequest,
+  type McpServerStatusInfo,
   type PermissionMode,
   type PermissionRequest,
   type SessionEvent,
@@ -69,6 +70,18 @@ export type AiSdkRunnerConfig = Omit<CreateSessionRequest, 'cwd'> & {
   executionBackend?: ToolExecutionBackend
   /** Swap models mid-session (`set_model`). Unset = setModel() is rejected. */
   resolveModel?: (modelId: string | undefined) => LanguageModel
+  /**
+   * Live MCP status for this session, when the host wired MCP at all. Unlike
+   * the CLI engines — which ask their binary — this engine's MCP is entirely
+   * host-assembled, so the host is the only party that can answer. Unset means
+   * "no MCP here", which reads as an empty list rather than an error: a session
+   * with no servers is a fact, not a missing feature.
+   *
+   * Named apart from the inherited `mcpServers` request field on purpose —
+   * that one is the *wire configuration* a client asked for, this one is what
+   * the host actually connected.
+   */
+  reportMcpServers?: () => Promise<McpServerStatusInfo[] | undefined>
   /** Called once when the session closes — release per-session resources the
    * host attached (an MCP connection, a watcher). Errors are swallowed. Also
    * runs when the session parks: parking releases the same resources. */
@@ -888,6 +901,18 @@ export class AiSdkRunner implements Runner {
     const prompt = this.#config.prompt
     if (!prompt) return undefined
     return prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt
+  }
+
+  /**
+   * This session's MCP servers, as the host assembled them.
+   *
+   * Always answers — an empty list when no MCP was wired — because the
+   * alternative (undefined, which the server turns into a 501) says "this
+   * engine cannot tell you", and this engine can: the host that built the
+   * session is the only party who knows, and it has been asked.
+   */
+  async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
+    return (await this.#config.reportMcpServers?.()) ?? []
   }
 
   /** Host-facing rename: writes `meta.title`, which `#title()` prefers. Clearing

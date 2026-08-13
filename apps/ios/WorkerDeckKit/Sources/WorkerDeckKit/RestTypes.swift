@@ -174,7 +174,9 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     permissionModes: [.default, .bypassPermissions, .dontAsk],
     defaultPermissionMode: .default,
     resume: false, resumeBackfill: false, listSessions: false,
-    contextUsage: false, rateLimits: false, mcpStatus: false, mcpServerActions: false,
+    // Host-wired MCP: the runner reports what the host assembled the session
+    // from, so this engine can always answer — but never act on a connection.
+    contextUsage: false, rateLimits: false, mcpStatus: true, mcpServerActions: false,
     sessionMcpServers: false,
     slashCommands: false, skillsList: false, settingSources: false, budgets: false,
     attachments: ["image", "pdf", "text"], vfs: true, streaming: "token"

@@ -5,7 +5,12 @@ import { z } from 'zod'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
 import { createVfs, loadEngine, type SandboxEngine } from '@workerdeck/sandbox'
 import type { SessionEvent } from '@workerdeck/protocol'
-import { QuickJsExecutor, connectMcpTools, createEngineSession } from '../src/index.ts'
+import {
+  QuickJsExecutor,
+  connectMcpTools,
+  createEngineSession,
+  type McpConnection,
+} from '../src/index.ts'
 
 let engine: SandboxEngine
 beforeAll(async () => {
@@ -284,6 +289,186 @@ describe('createEngineSession grants', () => {
   }, 30_000)
 })
 
+/**
+ * A session's tools ARE its authority, and the two ways a host adds to them are
+ * the two ways that authority can silently go wrong: a declared MCP server that
+ * never connected (the agent quietly cannot do its job), and a host tool whose
+ * declared trust does not match how it would actually run.
+ */
+describe('createEngineSession host tools and MCP declarations', () => {
+  const model = () => new MockLanguageModelV3({ modelId: 'mock-1', doStream: [say('ok')] })
+  const build = (options: Partial<Parameters<typeof createEngineSession>[0]>) => {
+    const m = model()
+    return createEngineSession({
+      config: { cwd: '/tmp', languageModel: m },
+      resolveModel: () => m,
+      selectExecutor: () => new QuickJsExecutor({ engine }),
+      ...options,
+    } as Parameters<typeof createEngineSession>[0])
+  }
+  const connected = (name: string): McpConnection => ({
+    tools: {},
+    servers: [{ name, status: 'connected' }],
+    close: async () => {},
+  })
+
+  it('refuses to build when a declared MCP server never connected', () => {
+    const mcp: McpConnection = {
+      tools: {},
+      servers: [{ name: 'wiki', status: 'failed', error: 'ECONNREFUSED' }],
+      close: async () => {},
+    }
+    expect(() =>
+      build({ profile: { name: 'p', engine: 'provider', session: { mcpServers: ['wiki'] } }, mcp }),
+    ).toThrow(/wiki \(ECONNREFUSED\)/)
+  })
+
+  it('accepts a connected server that happens to expose no tools', () => {
+    expect(() =>
+      build({
+        profile: { name: 'p', engine: 'provider', session: { mcpServers: ['wiki'] } },
+        mcp: connected('wiki'),
+      }),
+    ).not.toThrow()
+  })
+
+  it('falls back to the namespace check when handed only a tool set', () => {
+    const mcpTool = () => tool({ inputSchema: z.object({}), execute: async () => ({ ok: true }) })
+    const profile = { name: 'p', engine: 'provider' as const, session: { mcpServers: ['wiki'] } }
+    expect(() => build({ profile, mcpTools: { crm__push: mcpTool() } })).toThrow(/not connected/)
+    expect(() => build({ profile, mcpTools: { wiki__ask: mcpTool() } })).not.toThrow()
+  })
+
+  it('reports only the MCP servers this profile was granted', async () => {
+    const mcp: McpConnection = {
+      tools: {},
+      servers: [
+        { name: 'wiki', status: 'connected' },
+        { name: 'crm', status: 'connected' },
+      ],
+      close: async () => {},
+    }
+    const runner = build({
+      profile: { name: 'p', engine: 'provider', session: { mcpServers: ['wiki'] } },
+      mcp,
+    })
+    // A /mcp screen must not advertise a connection the session cannot reach.
+    expect((await runner.mcpServers())?.map((s) => s.name)).toEqual(['wiki'])
+  })
+
+  it('answers with an empty list, not a 501, when no MCP was wired at all', async () => {
+    expect(await build({}).mcpServers()).toEqual([])
+  })
+
+  it('runs a sandboxed host tool through the executor rather than in process', async () => {
+    const dispatched: string[] = []
+    const m = new MockLanguageModelV3({
+      modelId: 'mock-1',
+      doStream: [callTool('c1', 'lookup', { q: 'acme' }), say('done')],
+    })
+    const runner = createEngineSession({
+      config: { cwd: '/tmp', languageModel: m },
+      resolveModel: () => m,
+      // The seam under test: a host tool declared `sandboxed` must reach the
+      // executor, which is what makes it bridgeable to a tab. Nothing else in
+      // the API could express this — `mcpTools` is authoritative by construction.
+      selectExecutor: () => ({
+        dispatch: async (call) => {
+          dispatched.push(call.tool)
+          return {
+            executionId: call.executionId,
+            status: 'settled' as const,
+            result: { status: 'ok' as const, output: { hit: true } },
+          }
+        },
+      }),
+      tools: {
+        // No `execute` — that is what makes it the executor's to run.
+        lookup: { trust: 'sandboxed', tool: tool({ inputSchema: z.object({ q: z.string() }) }) },
+      },
+    })
+    void runner.start()
+    runner.sendMessage('go')
+    await vi.waitFor(() => expect(dispatched).toEqual(['lookup']), { timeout: 15_000 })
+    runner.close()
+  }, 30_000)
+
+  it('refuses a sandboxed tool that would run in this process anyway', () => {
+    expect(() =>
+      build({
+        tools: {
+          danger: {
+            trust: 'sandboxed',
+            tool: tool({ inputSchema: z.object({}), execute: async () => ({}) }),
+          },
+        },
+      }),
+    ).toThrow(/declared sandboxed but has an `execute`/)
+  })
+
+  it('refuses an authoritative tool nothing would ever answer', () => {
+    expect(() =>
+      build({ tools: { stuck: { trust: 'authoritative', tool: tool({ inputSchema: z.object({}) }) } } }),
+    ).toThrow(/no `execute`/)
+  })
+
+  it('refuses a host tool that would shadow a built-in', () => {
+    expect(() =>
+      build({
+        tools: {
+          eval_script: {
+            trust: 'authoritative',
+            tool: tool({ inputSchema: z.object({}), execute: async () => ({}) }),
+          },
+        },
+      }),
+    ).toThrow(/collides/)
+  })
+})
+
+/**
+ * `seedVfs` and `id` exist because both were runtime-only correctness rules a
+ * host had to know independently: seed over a restore and the parked turn's work
+ * is gone; drop the id and the rebuilt session is a different session.
+ */
+describe('createEngineSession rehydration', () => {
+  const build = (options: Partial<Parameters<typeof createEngineSession>[0]>) => {
+    const m = new MockLanguageModelV3({ modelId: 'mock-1', doStream: [say('ok')] })
+    return createEngineSession({
+      config: { cwd: '/tmp', languageModel: m },
+      resolveModel: () => m,
+      selectExecutor: () => new QuickJsExecutor({ engine }),
+      ...options,
+    } as Parameters<typeof createEngineSession>[0])
+  }
+
+  it('seeds the scratch filesystem for a new session', () => {
+    const runner = build({ seedVfs: { '/README.md': 'hello' } })
+    expect(runner.vfs?.read('/README.md')).toBe('hello')
+  })
+
+  it('ignores the seed on a restore, so a parked turn keeps what it wrote', () => {
+    const snapshot = {
+      engine: 'provider' as const,
+      id: 'sess-1',
+      createdAt: 1,
+      seq: 0,
+      events: [],
+      vfs: { '/README.md': 'written by the parked turn' },
+      parked: [],
+      state: { messages: [], pendingToolCalls: [] },
+    }
+    const runner = build({ config: { cwd: '/tmp', restore: snapshot } as never, seedVfs: { '/README.md': 'hello' } })
+    expect(runner.vfs?.read('/README.md')).toBe('written by the parked turn')
+    // And the identity comes back with it, seed or no seed.
+    expect(runner.id).toBe('sess-1')
+  })
+
+  it('adopts the id the gateway is rebuilding under', () => {
+    expect(build({ id: 'sess-42' }).id).toBe('sess-42')
+  })
+})
+
 describe('connectMcpTools', () => {
   it('is a no-op with no servers, so MCP stays an optional dependency', async () => {
     const connection = await connectMcpTools({})
@@ -303,6 +488,29 @@ describe('connectMcpTools', () => {
     // matters is that it is reported and the session goes on without it.
     expect(errors.length).toBeGreaterThan(0)
     expect(new Set(errors)).toEqual(new Set(['broken']))
+  }, 20_000)
+
+  it('reports every configured server, connected or not', async () => {
+    const connection = await connectMcpTools(
+      { broken: { type: 'http', url: 'http://127.0.0.1:1/mcp' } },
+      { onError: () => {} },
+    )
+    // The status list is the whole point of the loud path: "it degraded" has to
+    // be inspectable, not just logged.
+    expect(connection.servers).toHaveLength(1)
+    expect(connection.servers[0]).toMatchObject({
+      name: 'broken',
+      status: 'failed',
+      transport: 'http',
+      url: 'http://127.0.0.1:1/mcp',
+    })
+    expect(connection.servers[0]!.error).toBeTruthy()
+  }, 20_000)
+
+  it("rejects with `required` — an embedder's own server failing is not a degraded session", async () => {
+    await expect(
+      connectMcpTools({ broken: { type: 'http', url: 'http://127.0.0.1:1/mcp' } }, { required: true }),
+    ).rejects.toThrow(/MCP server 'broken' failed to connect/)
   }, 20_000)
 
   it('rejects stdio servers explicitly rather than dropping them silently', async () => {
