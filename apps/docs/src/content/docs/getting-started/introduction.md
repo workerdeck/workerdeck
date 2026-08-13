@@ -10,7 +10,7 @@ Codex, or any model provider — and exposes it as something you can **watch, st
 It comes in two shapes. `npx workerdeck` is a
 [turnkey instance](/workerdeck/docs/getting-started/run-an-instance/): gateway plus the full
 dashboard on one port, nothing to clone. The `@workerdeck/*` packages are the libraries behind
-it, for [embedding](/workerdeck/docs/guides/embedding/) the same machinery in your own product.
+it, for [embedding](/workerdeck/docs/guides/embed-in-your-app/) the same machinery in your own product.
 The [iOS app](https://github.com/workerdeck/workerdeck/tree/master/apps/ios) and the
 [VS Code extension](https://github.com/workerdeck/workerdeck/tree/master/apps/vscode) are two
 more clients of the same gateway, built from this repo.
@@ -121,6 +121,8 @@ The browser side never imports the server side; the protocol is the only bridge.
   the flags, and the config file.
 - [Quickstart](/workerdeck/docs/getting-started/quickstart/) — the workspace from source, a
   first session, a minimal embed.
-- [Embedding](/workerdeck/docs/guides/embedding/) — put the panel in your own app.
+- [Embed WorkerDeck in your app](/workerdeck/docs/guides/embed-in-your-app/) — the gateway
+  inside your own server, in front of your own users.
+- [Embedding the UI](/workerdeck/docs/guides/embedding/) — put the panel in your own app.
 - [Permissions](/workerdeck/docs/guides/permissions/) — the sharp edge that makes it safe to
   point at a real checkout.

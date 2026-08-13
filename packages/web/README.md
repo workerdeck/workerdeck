@@ -59,3 +59,15 @@ pnpm --filter @workerdeck/web run build   # -> packages/web/dist
 `workerdeck` will serve a custom build if you point its config at one (`webRoot`).
 
 MIT
+
+## Rules you cannot infer from the types
+
+- **It must mount at a domain root.** The build sets no Vite `base`, so serving it from a subpath
+  produces a page whose assets 404.
+- **The entry is a path, not a component.** `dashboardDir` points at prebuilt static files; React,
+  the router and Tailwind are compiled into `dist/`, which is why every one of them is a devDep and
+  the package has zero runtime dependencies.
+- **`primaryClient()` marks what is not yet per-gateway.** Jobs, profiles and the create form's
+  pickers all answer from one gateway while the sessions list spans them all — the accessor exists
+  to make that visible rather than to hide it.
+

@@ -85,6 +85,19 @@ path to the host's `require()`.
 If you extend the bridge, keep to it: marshal by value, freeze or null-prototype anything you
 construct for the guest, and give every capability its own timeout.
 
+## Rules you cannot infer from the types
+
+- **The VFS is a map, not a filesystem.** It is deliberately not a `node:fs` emulation: the
+  tab-side host runs it unpolyfilled, and one shared implementation across server and browser is
+  the point.
+- **The engine variant is injected, never imported here.** The browser single-file build and the
+  server WASM-file build are different artifacts; only the host knows which side it is on.
+- **The deadline preempts between bytecode ops, on whichever thread the guest runs.** In a tab
+  that is the UI thread unless you supply your own `execute` running the same engine in a Worker —
+  a time-boxed evaluation still blocks paint while it runs.
+- **Guest results are untrusted input.** Whatever the sandbox returns was produced by the party you
+  sandboxed against, which is the whole reason it may be bridged to a browser at all.
+
 ## License
 
 MIT

@@ -50,8 +50,20 @@ protocol. Read these before changing scope or structure:
   No transport. Tool execution rides the
   `ToolExecutor` seam (`QuickJsExecutor` in-process, `BrowserBridgeExecutor` to a tab,
   `DeferredExecutor` for work outliving the runner); `createToolContext` builds the
-  capability-scoped tool set with the `sandboxed`/`authoritative` trust split; `park()` →
-  `RunnerSnapshot` + `restore` are the two halves of rehydration.
+  capability-scoped tool set with the `sandboxed`/`authoritative` trust split, and
+  `createEngineSession({ tools })` is where a *host's* own tool joins it **at a stated trust** —
+  the only way to express a sandboxed (therefore bridgeable) host tool, since `mcpTools` is
+  authoritative by construction; both contradictions (sandboxed-with-`execute`,
+  authoritative-without) are refused at assembly rather than discovered at runtime. MCP is handed
+  over as a **connection**, not a tool set (`connectMcpTools` → `McpConnection.servers`, with
+  `required: true` to reject a failed connect instead of degrading): a profile declaring a server
+  that did not connect refuses to build, and `AiSdkRunner.mcpServers()` answers `/sessions/:id/mcp`
+  with what the host actually assembled — an empty list, never a 501, which is why
+  `ENGINE_CAPABILITIES.provider.mcpStatus` is now `true`. `park()` →
+  `RunnerSnapshot` + `restore` are the two halves of rehydration, and `seedVfs`/`id` are the two
+  options that make the *other* rehydration rules unmissable — `seedVfs` is ignored on a restore
+  (seeding over a parked turn's files destroys exactly what was preserved) and `id` is what a
+  session comes back as itself under.
 - `packages/sandbox` — untrusted-code boundary: QuickJS-NG WASM guest, in-memory map VFS (not a
   node-fs emulation — the tab-side host runs it unpolyfilled), by-value host bridge,
   interpreter-enforced limits. Leaf like `protocol`; engine variant injected, so server and
@@ -125,7 +137,15 @@ protocol. Read these before changing scope or structure:
   profile's `codexHome` pin has no such trap (the auth store is chosen by config *inside* the
   home) and is applied by the runner, not `buildRunnerConfig`, because codex replaces the child
   env wholesale. `checkCredentials` probes each profile at launch and on a ~60s TTL, and the
-  verdicts serve `GET /profiles` as `available`/`unavailableReason` — display-only by design.
+  verdicts serve `GET /profiles` as `available`/`unavailableReason` — display-only by design,
+  because a stale probe must not become an outage; `requireAvailableProfile` is the opposite
+  trade for a deployment with an *end user* in front of it (503 on create with the probe's
+  reason, and only on a definite `false` — unprobed stays allowed). `createProviderRunner(ctx,
+  opts)` is the 80% case of `createEngineRunner`: it forwards `restore`, adopts `id`, seeds the
+  VFS only when not restoring, and disposes via `onClose` — the four obligations that are
+  invisible in the hook's types and fail only at runtime. Its `executor` is **required**
+  (`ToolExecutor` or `'browser'`): defaulting it would make `@jitl/quickjs-*` a server dependency
+  and would silently answer an architectural question the embedder should be asked.
 - `packages/client` — REST + WS client on platform `fetch`/`WebSocket`; zero runtime deps. Owns
   the WS frame surface, so new frames need `SessionHandle` methods/events here. A refused REST
   call throws `WorkerDeckError` (an `Error` subclass carrying `status`), which is what lets a
@@ -174,7 +194,11 @@ protocol. Read these before changing scope or structure:
   move into the panel's **own** status bar, at the end of the readings cluster (status → context
   → usage → model → mode) so what you can *change* sits beside the facts it acts on, and the
   composer collapses the same way. With `statusSurface: 'external'` there is no bar to hold them,
-  so that combination falls back to the composer rather than hiding them. `readOnly` is the fourth and the bluntest: no composer and no approval prompts, for a
+  so that combination falls back to the composer rather than hiding them. `toolHost` is the
+  escape hatch for the panel's own browser tool host — options through to `useToolCallHost`, or
+  `false` for none — because the panel owns the session's one attach, so an embedder subscribing
+  separately would find this host already refusing anything outside its allow-list.
+  `readOnly` is the fourth and the bluntest: no composer and no approval prompts, for a
   surface that is *about* a run rather than in it (the dashboard's job detail, where typing
   would be a second operator arriving mid-run). Absent, not disabled — a greyed-out composer
   says the session is busy, an absent one says this screen does not drive it — and **not an
@@ -478,11 +502,25 @@ protocol. Read these before changing scope or structure:
   SPA calls `listSessions()` with no filter, because a check the client performs is a check the
   client can skip. The agent runs the provider engine under `sandboxedProviderProfile()` raised
   exactly twice (`web_fetch`, the `wiki` MCP server) — no shell, no host FS, `eval_script` in an
-  in-process QuickJS guest with no network. The wiki is a **real** silkweave MCP server
-  (`@silkweave/core` + `@silkweave/mcp`'s mountable `mcpTransport` handler, not a port of its
-  own) rather than a plain `ToolSet`, because the seam is the point; identity rides a per-session
-  bearer token minted in `createEngineRunner` off `config.scope.user` and revoked in `onClose`, so
-  no wiki tool takes a `userId` the model could choose. **UI state is the app's, not the bridge's**
+  in-process QuickJS guest with no network. The wiki's operations are **one silkweave action set**
+  (`src/wiki-actions.ts`) projected onto two transports: `@silkweave/mcp`'s mountable
+  `mcpTransport` for the agent, and `@silkweave/trpc`'s `trpcNode()` (5.1.0 — a `node:http`
+  handler, so it mounts on the gateway's own port rather than binding one) for the SPA, typed end
+  to end via `InferTrpcRouter` with no codegen. That is the shape an app with many tools needs and
+  the reason it was worth the dependency: `write_doc` and `PATCH /api/docs/:id` had been one
+  operation spelled twice. **Identity resolves per adapter onto the same context key** — a
+  per-session bearer token minted in `createEngineRunner` off `config.scope.user` (revoked in
+  `onClose`) for MCP, the login cookie in `trpcNode`'s `authenticate` for the browser — so an
+  action's `run()` cannot tell which caller it serves, and no wiki tool takes a `userId` the model
+  could choose. `whoami`/`open_doc` are MCP-only: a shared action set is not an identical one, and
+  the SPA knows what it is showing. The cookie makes `/trpc` CSRF-able, so `sameOrigin()` checks
+  `Sec-Fetch-Site` (falling back to `Origin`) and **declines** rather than throws — a forged
+  request falls through to a plain 401. **No operation depends on a field being absent**: `write_doc` (create when `id`
+  was missing, overwrite when present) was split into `create_doc`/`update_doc` after a live model
+  sent `id: " "` twenty times and every create tried to overwrite a document named `" "`.
+  `z.string().min(1).optional()` is *not* the fix — a space has length 1, and a provider that marks
+  every property required leaves the model no way to omit anything. Optional strings are trimmed
+  and blank-checked in `run` (`text()` in `wiki-actions.ts`), as a second layer under the split. **UI state is the app's, not the bridge's**
   (`src/app-state.ts`): "which doc am I looking at" and "open that one for me" travel as a
   server-held per-*user* record the tab `PUT`s on change plus an SSE stream of intents back down
   — `whoami` / `open_doc` are two more MCP tools over the same token. The tool bridge looks like
@@ -491,8 +529,15 @@ protocol. Read these before changing scope or structure:
   `shown: false` when no tab was listening rather than claiming a navigation. Two gotchas it paid for in blood: the MCP
   client opens the SSE stream with `GET` and the stateless transport must answer **405**, not
   Express's default 404, or the whole connect fails; and a model told to omit an optional `id`
-  sends `""`, so "create vs overwrite" must test truthiness. Storage is `node:sqlite`, one file,
-  zero deps. `EMBEDDED_MODEL` (default `gpt-5.6-luna`) is env, not a constant.
+  sends `""` or `" "`, so no tool may infer its operation from an absent field. The MCP connect is
+  `required: true` and the runner is built by `createProviderRunner` — this app is where both
+  seams came from, and it was the thing dropping `ctx.id`. Storage is `node:sqlite`, one file,
+  zero deps. `EMBEDDED_MODEL` (default `gpt-5.6-luna`) is env, not a constant; there is **one**
+  provider and one key, deliberately — the openai-compatible branch was removed because every
+  branch in a reference app is a branch a reader must hold that teaches nothing about embedding.
+  The one thing still deferred upstream is an express-free
+  `mcpTransport` mount; express stays here purely as a mounting mechanism for `/mcp` and the
+  static SPA.
 - `apps/ios` — native iOS remote control (SwiftUI + XcodeGen; invisible to pnpm/turbo — no
   package.json). `WorkerDeckKit/` is a hand-written Swift mirror of `packages/protocol` plus a
   client and a port of the react transcript reducer — protocol or transcript changes must be

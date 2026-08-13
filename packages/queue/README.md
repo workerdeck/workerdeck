@@ -100,6 +100,17 @@ Per-request, `CreateJobRequest` adds `attempts`, `retryDelayMs`, `maxTokens`, `m
 (the stricter of request and queue limits wins), `webhook.progress: 'completion'` to quiet
 progress deliveries, and free-form `meta`.
 
+## Rules you cannot infer from the types
+
+- **`claimNext` must be atomic, and must skip a future `nextRunAt`.** Those two properties are the
+  entire contract a custom `QueueAdapter` has to hold; get either wrong and a job runs twice or a
+  retry runs early.
+- **Jobs are one-shot, but parking is not failure.** A run that parks frees its concurrency slot
+  and stops its duration clock — the watchdog must not kill work that is waiting on a deferred
+  result by design.
+- **Retention is not optional with the bundled adapter.** In-memory terminal jobs accumulate for
+  the life of the process; set `retention` or accept the growth knowingly.
+
 ## License
 
 MIT © Tobias Strebitzer — see

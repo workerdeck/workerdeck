@@ -186,6 +186,32 @@ services and any unattended use. Without it the server logs a one-time notice in
 OAuth, never reads or forwards tokens — see the repo README's
 ["Auth & Anthropic's terms"](https://github.com/workerdeck/workerdeck#auth--anthropics-terms).
 
+## Rules you cannot infer from the types
+
+- **A scope miss answers 404, never 403.** Whether a session exists in another scope is not the
+  caller's business, so the out-of-scope answer is byte-identical to the unknown-id one.
+- **Visibility is full control.** There is no read-only attach: a client that can see a session can
+  send `user_message`, `permission_decision`, `interrupt` and `close`. `SessionPanel`'s `readOnly`
+  removes the affordance, not the authority — enforce at the gateway or not at all.
+- **`authorizeSession` is synchronous on purpose.** It runs per route and per row of every list. An
+  expensive lookup belongs in `authenticate`, where it happens once and lands on the principal.
+- **`sandboxedProviderProfile()`'s empty arrays are load-bearing.** `capabilities: []` and
+  `mcpServers: []` mean "nothing"; *absent* means "whatever the host wired". Do not normalise one
+  into the other.
+- **A Claude profile does not pin `CLAUDE_CONFIG_DIR` when that would be a no-op.** Setting the
+  variable at all moves the CLI off the macOS Keychain, so pinning the default directory breaks a
+  working `claude login`. "Pin the default dir" and "don't pin" are different logins.
+- **`checkCredentials` is display-only** unless you also set `requireAvailableProfile`. A create
+  against an unavailable profile otherwise proceeds and fails with the engine's own error — right
+  for an operator (the probe can be stale), wrong in front of an end user.
+- **`createEngineRunner` has four invisible obligations**: forward `restore`, adopt `id`, seed the
+  VFS only when *not* restoring, and dispose per-session resources via `onClose`. Every one is a
+  runtime-only failure. `createProviderRunner()` does all four; reach for the raw hook only when it
+  genuinely doesn't fit.
+- **One origin is not a convenience.** A browser cannot put an `Authorization` header on a
+  WebSocket upgrade, so a cookie is the only credential a tab can present on an attach, and a
+  cookie is per-origin. That is what `fallback` is for — an app served from the gateway's own port.
+
 ## License
 
 MIT © Tobias Strebitzer —

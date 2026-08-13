@@ -109,3 +109,17 @@ a normal dependency of this package. Point `webRoot` in the config file at your 
 a fork instead.
 
 MIT
+
+## Rules you cannot infer from the types
+
+- **Single origin is load-bearing.** The gateway and the dashboard share one port because a tab
+  cannot header a WebSocket handshake, so a cookie is the only credential an attach can carry —
+  and cookies are per-origin. This is why there is no "dashboard on another port" mode.
+- **Loopback runs keyless; off loopback the CLI generates a key rather than serving open.** Only an
+  explicit `--insecure` / `insecureHosts` declaration serves unauthenticated, and those entries
+  double as accepted `Host` headers.
+- **Browser logins are keyed by `HMAC(secret, token)`.** That is what makes the session file
+  worthless to a reader — and what makes rotating the auth key invalidate every cookie for free.
+- **A config file supplying its own `authenticate` turns the built-in auth off entirely**, rather
+  than layering on top of it. Two auth systems agreeing is harder to reason about than one.
+

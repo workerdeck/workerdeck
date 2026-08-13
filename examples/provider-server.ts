@@ -7,12 +7,12 @@
  * route back if they return as bespoke adapters. Claude and codex profiles
  * need none of this: their adapters ship in `@workerdeck/core`.
  *
- * Drop-in replacement for `pnpm server` (same port, NO AUTH, loopback only). Unlike
- * `pnpm server` this is a bare gateway, not the CLI, so it serves no dashboard —
- * pair it with `pnpm web`:
+ * Drop-in replacement for `pnpm dev:server` (same port, NO AUTH, loopback only). Unlike
+ * `pnpm dev:server` this is a bare gateway, not the CLI, so it serves no dashboard —
+ * pair it with `pnpm dev:web`:
  *
  *   pnpm example:server        # reads .env for provider keys (see below)
- *   pnpm web                   # then open http://localhost:5191
+ *   pnpm dev:web                   # then open http://localhost:5191
  *
  * Declares one Claude profile (the operator's own ~/.claude) plus a provider
  * profile per API key found in the environment / repo .env:
@@ -221,4 +221,4 @@ console.log(
     ? `[provider-example] MCP tools: ${mcpToolNames.join(', ')}`
     : '[provider-example] no MCP tools (DeepWiki unreachable or NO_MCP set)',
 )
-console.log('\n[provider-example] next: `pnpm web`, open http://localhost:5191, and follow examples/README.md')
+console.log('\n[provider-example] next: `pnpm dev:web`, open http://localhost:5191, and follow examples/README.md')

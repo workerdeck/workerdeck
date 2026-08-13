@@ -1,7 +1,7 @@
 ---
 title: Job queue
 description: One-shot unattended runs with bounded concurrency, token budgets, retries, webhooks, and a live queue stream.
-order: 3
+order: 4
 ---
 
 The job queue lets remote services schedule unattended runs. A job is **one-shot**: the session

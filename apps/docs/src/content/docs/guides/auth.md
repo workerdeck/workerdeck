@@ -1,7 +1,7 @@
 ---
 title: Auth & the providers' terms
 description: WorkerDeck performs no model-provider authentication of its own — what that means for operators and contributors.
-order: 7
+order: 8
 ---
 
 **WorkerDeck performs no Anthropic authentication of its own — by design.** It spawns the

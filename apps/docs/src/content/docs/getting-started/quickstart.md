@@ -82,11 +82,13 @@ const session = await client.createSession({
 
 `@workerdeck/ui` ships source styles that your app's Tailwind v4 build compiles — the wiring
 (theme import, `@source` directives, theme attribute) is covered in
-[Embedding](/workerdeck/docs/guides/embedding/).
+[Embedding the UI](/workerdeck/docs/guides/embedding/).
 
 ## Next steps
 
-- [Embedding](/workerdeck/docs/guides/embedding/) — the full options ladder, from styled
+- [Embed WorkerDeck in your app](/workerdeck/docs/guides/embed-in-your-app/) — an agent inside
+  your own product: gateway in your server, sessions owned by your users.
+- [Embedding the UI](/workerdeck/docs/guides/embedding/) — the full options ladder, from styled
   panel down to in-process `SessionRunner`.
 - [Permissions](/workerdeck/docs/guides/permissions/) — approvals, modes, tool allowlists.
 - [Job queue](/workerdeck/docs/guides/job-queue/) — unattended one-shot runs with webhooks.

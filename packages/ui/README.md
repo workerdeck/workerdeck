@@ -150,3 +150,22 @@ lose by forgetting a second mount isn't one.
   `2h 10m`) with no React in the graph — for a host that renders session readings outside
   React, like an extension host drawing them into a window status bar, and wants them spelled
   exactly as the panel spells them.
+
+## Rules you cannot infer from the types
+
+- **Remount `SessionPanel` by key when the session id changes**, and never let its position in the
+  tree change otherwise: a remount drops the WebSocket attach and the whole transcript. That is why
+  the workspace keeps the panel's child index across the editor appearing and disappearing.
+- **The panel owns the session's one attach.** External chrome reads live values through
+  `onVitals` and changes them through `onControls`; opening a second attach to render a status bar
+  means the tool bridge may ask the wrong client.
+- **`transcriptVariant` and `transcriptDensity` ride context, not props.** A row component composed
+  by hand still gets the right treatment; restyling `data-slot`s from outside is not the seam.
+- **`statusSurface: 'external'` takes the `⋯` menu's only home with it.** Combining it with
+  `panelSurface: 'internal'` needs a *function* `header` to receive the menu, or those panels
+  become unreachable.
+- **Keep `monaco-editor` unreachable from `src/index.ts`.** Tree-shaking does not cover it: Vite
+  resolves Monaco's worker `new URL(...)`s while *transforming* the module, before shaking, and
+  emits megabytes of worker assets it never retracts. That is what the `/workspace` entry point is
+  for, and why Vite hosts need `optimizeDeps: { exclude: ['monaco-editor'] }`.
+

@@ -71,9 +71,9 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
       <br /><sub>The session rides the bottom panel, terminal-shaped; gateways and sessions in the sidebar, approvals as native notifications, remote projects as a virtual workspace.</sub>
     </td>
     <td align="center" valign="top" width="25%">
-      <a href="https://workerdeck.github.io/workerdeck/docs/guides/embedding/"><img src="docs/assets/card-embedded.png" alt="Embedded App — someone else's product with the WorkerDeck session panel docked inside it" /></a>
-      <br /><b><a href="https://workerdeck.github.io/workerdeck/docs/guides/embedding/">Embedded App</a></b>
-      <br /><sub>The same panel, hooks and raw typed stream as libraries in your own product — the <a href="https://workerdeck.github.io/workerdeck/docs/guides/embedding/">embedding guide</a> walks the rungs.</sub>
+      <a href="https://workerdeck.github.io/workerdeck/docs/guides/embed-in-your-app/"><img src="docs/assets/card-embedded.png" alt="Embedded App — someone else's product with the WorkerDeck session panel docked inside it" /></a>
+      <br /><b><a href="https://workerdeck.github.io/workerdeck/docs/guides/embed-in-your-app/">Embedded App</a></b>
+      <br /><sub>An agent inside your own product: gateway in your server, sessions owned by your users — the <a href="https://workerdeck.github.io/workerdeck/docs/guides/embed-in-your-app/">embedding guide</a> walks it end to end.</sub>
     </td>
   </tr>
   <tr>
@@ -163,9 +163,10 @@ The apps — [`apps/ios`](apps/ios), [`apps/vscode`](apps/vscode), the
 [docs site](apps/docs) and [`apps/embedded`](apps/embedded) — are not published to npm; each has
 its own README.
 
-**Putting an agent in front of your own users?** Read
-[`apps/embedded`](apps/embedded) first. It is a small wiki whose right-hand sidebar is a sandboxed
-agent, with the gateway inside the app's own server — one port, the app's cookie as the only
+**Putting an agent in front of your own users?** Start with
+[Embed WorkerDeck in your app](https://workerdeck.github.io/workerdeck/docs/guides/embed-in-your-app/),
+then read [`apps/embedded`](apps/embedded), which is the guide as a working app. It is a small wiki
+whose right-hand sidebar is a sandboxed agent, with the gateway inside the app's own server — one port, the app's cookie as the only
 credential, `scope` as the entire ownership model, and the app's data reaching the loop as a real
 MCP server. It is a working app, not a snippet: `pnpm --filter @workerdeck/embedded-example dev`.
 

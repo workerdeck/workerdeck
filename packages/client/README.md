@@ -84,6 +84,22 @@ The queue stream has no replay: on (re)connect, re-list jobs and treat the strea
 - Browsers cannot set WS headers: authenticate the socket with a ticket query param via
   `buildWsUrl(sessionId, afterSeq)` (and `buildQueueWsUrl`) or with cookies.
 
+## Rules you cannot infer from the types
+
+- **One client per gateway.** Session ids are unique within a gateway, not across them; two
+  clients for one gateway means two of everything that is meant to be shared.
+- **A refused call throws `WorkerDeckError`, and its `status` is the useful part.** 404 means this
+  gateway has no such route — stop asking, disable the feature — while 413 means that one file was
+  too big. Collapsing them into "request failed" is how a client ends up polling a route that will
+  never exist.
+- **Browsers cannot header a WebSocket upgrade.** Same-origin gateways authenticate the socket
+  with the login cookie; a gateway on another origin needs the key in the query string
+  (`hostAuth()` builds both forms), and its REST calls additionally need the gateway to run with
+  `--cors-origin`.
+- **`apiUrl`/`isLoopbackHost` decide from the URL, never by probing.** What the operator typed
+  becomes a `baseUrl` by one rule, in one place — because the same gateway normalised two ways is
+  two gateways, with two sets of unread marks.
+
 ## License
 
 MIT © Tobias Strebitzer — see

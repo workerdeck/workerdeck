@@ -1,7 +1,7 @@
 ---
 title: Profiles
 description: What a session runs as — which engine, whose config directory, and which model.
-order: 5
+order: 6
 ---
 
 A **profile** is what a session runs as. Most commonly it binds a name to a Claude Code config

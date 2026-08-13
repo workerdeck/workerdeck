@@ -1,7 +1,7 @@
 ---
 title: Permissions
 description: Pending approvals, deny-on-timeout, permission modes, tool allowlists, and AskUserQuestion policies.
-order: 2
+order: 3
 ---
 
 Permissions are the sharp edge: they are what makes it safe to point a session at a real
@@ -65,7 +65,7 @@ Two modes have extra conditions the CLI enforces:
 Sessions can be constrained with `allowedTools` / `disallowedTools` on `CreateSessionRequest`,
 and the server clamps where sessions may run with `allowedCwdRoots`. Use `buildRunnerConfig` on
 the server to enforce policy regardless of what clients request — see
-[Embedding](/workerdeck/docs/guides/embedding/).
+[Embedding the UI](/workerdeck/docs/guides/embedding/).
 
 ## The REST resolve endpoint
 

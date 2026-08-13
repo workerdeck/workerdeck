@@ -21,7 +21,7 @@ MOONSHOT_API_KEY=...    # → profile 'moonshot'  (kimi-k3)
 pnpm example:server
 ```
 
-This replaces `pnpm server` (same port 8787, gateway only — pair it with `pnpm web` for a
+This replaces `pnpm dev:server` (same port 8787, gateway only — pair it with `pnpm dev:web` for a
 dashboard). It logs the profiles it built — you want at
 least one `(provider: ...)` line. Keys never leave the server; the profile only carries the
 env var *name*.
@@ -29,7 +29,7 @@ env var *name*.
 ## 3. Start the web app
 
 ```bash
-pnpm web
+pnpm dev:web
 ```
 
 Open http://localhost:5191 (vite proxies `/v1` REST + WS to the worker).

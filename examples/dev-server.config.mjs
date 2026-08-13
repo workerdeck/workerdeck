@@ -2,8 +2,8 @@
  * The dev gateway, as a `workerdeck` config file. Edit it directly — it is a
  * starting point to change, not a knob panel to configure.
  *
- *   pnpm server    # gateway + dashboard on http://127.0.0.1:8787
- *   pnpm web       # optional: vite dashboard on :5191 with HMR, proxying /v1 here
+ *   pnpm dev:server    # gateway + dashboard on http://127.0.0.1:8787
+ *   pnpm dev:web       # optional: vite dashboard on :5191 with HMR, proxying /v1 here
  *
  * There is no separate dev entry point any more: this runs the same `workerdeck`
  * binary a user gets from `npx workerdeck`, so the thing you develop against and
@@ -15,22 +15,26 @@
  *
  * ## Reaching it from another device (the iOS app, over Tailscale)
  *
- * `--host` picks the interface to bind; the default is loopback only.
+ * `WD_DEV_HOST` is the one knob: `pnpm dev:server` binds it *and* declares it as
+ * an accepted Host header, and `pnpm dev:web` points the dashboard's proxy at it.
+ * The default is loopback only. Set it in your shell, never in the committed
+ * script — it names one person's machine.
  *
- *   pnpm server --host 0.0.0.0
+ *   export WD_DEV_HOST=toby
+ *   pnpm dev:server
  *
- * Auth off loopback is not optional theatre: anyone who can reach the port would
- * get a coding agent session. Pass `--auth-key <secret>`, or let the CLI generate
- * one — printed once, kept in the state dir (`examples/.workerdeck/auth-key`
- * here), reused on later starts. Native clients (the iOS app) send it as
- * `Authorization: Bearer <key>`; browsers post it once at the login page and ride a
- * cookie. Then point the client at `http://<your-tailscale-name>:8787`.
+ * That form is unauthenticated, because the script also passes `--insecure-host`:
+ * one declaration waives the key for that host and doubles as an accepted Host
+ * header (an unauthenticated instance otherwise only answers to loopback names).
+ * Fine on a tailnet, and only there.
  *
- * If you really want no auth on a trusted tailnet, declare the bind host — one
- * declaration waives the key for that host and doubles as an accepted Host header
- * (an unauthenticated instance otherwise only answers to loopback names):
- *
- *   pnpm server --host toby --insecure-host toby
+ * Auth off loopback is otherwise not optional theatre: anyone who can reach the
+ * port would get a coding agent session. Pass `--auth-key <secret>`, or let the
+ * CLI generate one — printed once, kept in the state dir
+ * (`examples/.workerdeck/auth-key` here), reused on later starts. Native clients
+ * (the iOS app) send it as `Authorization: Bearer <key>`; browsers post it once at
+ * the login page and ride a cookie. Then point the client at
+ * `http://<your-tailscale-name>:8787`.
  */
 /** @type {import('workerdeck').WorkerDeckConfig} */
 export default {

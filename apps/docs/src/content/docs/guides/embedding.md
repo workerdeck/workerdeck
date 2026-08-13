@@ -1,7 +1,7 @@
 ---
-title: Embedding
-description: Host WorkerDeck in your own app, from the styled SessionPanel down to an in-process SessionRunner.
-order: 1
+title: Embedding the UI
+description: Point a UI at a gateway — the SessionWorkspace/SessionPanel ladder, the client, and Tailwind wiring.
+order: 2
 ---
 
 ## Server side

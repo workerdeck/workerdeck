@@ -72,7 +72,7 @@ static files. No browser code is imported, only served.
   [Run an instance](/workerdeck/docs/getting-started/run-an-instance/).
 - Embedding a panel in a web app: `@workerdeck/client` + `@workerdeck/ui` (which pulls in
   `react`), against a running `@workerdeck/server`. See
-  [Embedding](/workerdeck/docs/guides/embedding/).
+  [Embedding the UI](/workerdeck/docs/guides/embedding/).
 - Custom rendering: `@workerdeck/client` + `@workerdeck/react` (headless).
 - Sessions in-process with no server: `@workerdeck/core` directly.
 - Scheduling unattended runs: the `queue` option on the server plus the client's job methods —

@@ -135,6 +135,24 @@ client, so a second, separately-created handle would sit idle while the real one
 `createToolCallHost` is the same logic without React. Results returned from a tab are untrusted
 input by construction: fine for the user's own data, never a source of server-authoritative state.
 
+## Rules you cannot infer from the types
+
+- **Companions must ride the hook's own `handle`.** The server's tool bridge asks the *first
+  attached client*, so a second `useClaudeSession` for the same session is a second attach that
+  will never be asked anything. `useAttachments`, `useHostFileSearch` and `useToolCallHost` all
+  take the handle you already have.
+- **`TranscriptState.capabilities` is always populated**, engine record or protocol default. Render
+  every surface from it rather than branching on the engine name — that is what makes one component
+  correct for all three engines.
+- **`useToolCallHost` refuses tool names outside its allow-list** (default `['eval_script']`). It is
+  a grant, not a filter: every name you add is one this tab will execute on the gateway's say-so.
+- **`useOpenFiles` keeps `content` (disk) and `draft` (edits) apart, and `/fs/write` is conditional
+  always.** A 409 is a *choice* to offer the user — reload, keep mine, dismiss — never a toast, and
+  nothing but `revert` or an explicit reload may discard a draft.
+- **The recap is counted, never written.** `summarizeSince` returns numbers because generating
+  prose would spend a turn on a summary nobody asked for, and would be worst exactly where it
+  matters most: a session that failed while unattended.
+
 ## License
 
 MIT © Tobias Strebitzer — see

@@ -88,26 +88,64 @@ supports — no CLI process, no config directory. `createEngineSession()` assemb
 the capability-scoped tool set, and the executor that runs tool calls.
 
 ```ts
+import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
+import { loadEngine } from '@workerdeck/sandbox'
 import { createEngineSession, QuickJsExecutor } from '@workerdeck/core'
+
+// Server-side, the WASM guest is loaded once for the process and shared by every
+// session. The variant package is a peer dependency you install yourself — core
+// does not pick one for you, because the browser build and the server build are
+// different artifacts and only you know which side this is.
+const executor = new QuickJsExecutor({ engine: await loadEngine(variant), defaultTimeoutMs: 15_000 })
 
 const runner = createEngineSession({
   config: { ...createSessionRequest, languageModel: anthropic('claude-sonnet-5') },
-  selectExecutor: () => new QuickJsExecutor({ timeoutMs: 15_000 }),
+  selectExecutor: () => executor,
   capabilities: { webFetch: {} },  // backends, not grants
+  seedVfs: { '/README.md': 'scratch space' },
 })
 ```
 
-Two seams matter here:
+Three seams matter here:
 
 - **Capabilities are grants, wired separately from backends.** `createToolContext` builds the tool
   set from what a profile grants (`fs_*`, `eval_script`, `web_search`, `download`, `web_fetch`,
   `deliver_file`) over what the host actually wired. There is no shell and no host filesystem: the
   files a session sees are an in-memory scratch VFS. Every tool is typed `sandboxed` or
   `authoritative`, and only sandboxed calls may leave the server.
-- **`ToolExecutor` decides where code runs.** `QuickJsExecutor` runs it in-process in the
-  [QuickJS guest](https://www.npmjs.com/package/@workerdeck/sandbox); `BrowserBridgeExecutor`
-  ships it to the user's own tab, so client-held documents never reach the server; and
-  `DeferredExecutor` hands the call off to something that will answer later.
+- **Your own tools go in at a stated trust level.** `tools: { name: { tool, trust } }` is the seam
+  for anything that is neither a built-in capability nor MCP. `authoritative` means it runs here
+  with this process's authority and must declare `execute`; `sandboxed` means it rides the executor
+  seam and must *not*. Both contradictions are refused at assembly rather than at runtime, because
+  a sandboxed tool that quietly ran in-process would defeat the only thing sandboxing it was for.
+- **`ToolExecutor` decides where code runs**, and that is a real architectural choice — see below.
+
+### Which executor?
+
+| | `QuickJsExecutor` (in-process) | `BrowserBridgeExecutor` (the tab) | `DeferredExecutor` |
+|---|---|---|---|
+| Runs where | this Node process, WASM guest | the attached client | wherever you send it |
+| Needs a client attached | no | **yes** | no |
+| Data locality | data must reach the server | client-held data never leaves the tab | n/a |
+| Trust | you own both sides | results are **untrusted input** — the sandboxed party answers | depends |
+| Latency | in-process | a WS round trip | unbounded (the session parks) |
+
+The question to ask is **where the data the loop reasons over already lives**:
+
+- In your database or on your disk → in-process. Pushing execution into the tab buys nothing and
+  hands an executor to the party you are sandboxing against.
+- In the user's browser — a document they are editing, a file they dropped, something you would
+  rather not receive at all → the bridge. This is the case it exists for.
+- Somewhere that answers in minutes or hours (a queue, a human, a build) → deferred, and let the
+  session park.
+
+Two constraints that decide it for you regardless: an **unattended job** has no attached client, so
+the bridge is not available to it; and a bridged result is by definition produced by the sandboxed
+party, so nothing authoritative may ever be routed there.
+
+An executor is chosen per *call*, not per session (`selectExecutor` runs at assembly, but a routing
+executor may keep `eval_script` in-process and defer a long-running tool), which is what lets one
+session mix all three.
 
 ## Work that outlives the runner
 
@@ -126,6 +164,36 @@ selectExecutor: () => new DeferredExecutor({
 [`@workerdeck/server`](https://www.npmjs.com/package/@workerdeck/server) drives both halves
 for you — a `SessionStore` plus `POST /executions/:id/result` — but the mechanism is here, and works
 with no server at all.
+
+## Rules you cannot infer from the types
+
+Things the compiler will not tell you, each of which has cost someone real time:
+
+- **A declared MCP server that never connected is refused, not degraded.** If a profile's
+  `session.mcpServers` names a server and it isn't there, `createEngineSession` throws. The old
+  behaviour — start anyway, minus those tools — produced a session that reported perfectly healthy
+  while the agent apologised its way through every request that needed it. Pass
+  `connectMcpTools(servers, { required: true })` to fail at connect time instead, and hand the
+  resulting connection over as `mcp` (not just `mcp.tools`) so the check is exact.
+- **A stateless MCP server must answer `GET` with 405.** The client opens the SSE stream with a
+  `GET` before it sends anything. Mounted under a framework's default 404, the whole connect fails
+  with an error that names neither the method nor the route.
+- **Never seed the VFS by hand on a restore.** Use `seedVfs`, which is ignored when
+  `config.restore` is set. Building `config.vfs` yourself still works and still wins — and then
+  overwriting the files the parked turn wrote is yours to avoid.
+- **Forward the host's `id`.** `createEngineSession({ id })` is how a session comes back as
+  *itself* across a gateway restart. Dropping it strands every client's route and unread mark, and
+  the rebuild is refused.
+- **`onClose` runs on park as well as close.** Parking releases the same resources; a disposer that
+  assumes the session is over will close an MCP connection the woken session still needs to rebuild.
+- **Authoritative tools are never bridged.** `withMcpTools` marks everything authoritative by
+  construction. If you want a host tool the tab may run, declare it `sandboxed` in `tools` — and
+  then treat its results as untrusted input, because the tab produced them.
+- **Never make a tool's operation depend on a field being absent.** "Create when `id` is missing,
+  overwrite when it is present" is the shape that breaks: models send `""` — and, observed live,
+  `" "` — rather than omitting, and some providers mark every property required so the model
+  *cannot* omit. `z.string().min(1).optional()` does not save it (a space has length 1). Split it
+  into two tools with required arguments, and trim-and-blank-check optional strings inside `run`.
 
 ## Also exported
 

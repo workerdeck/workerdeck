@@ -1,7 +1,7 @@
 ---
 title: Notifications
 description: Reach a person who isn't watching — permission requests, finished turns, errors and closes, POSTed to a webhook.
-order: 4
+order: 5
 ---
 
 A session that needs an approval is useless if nobody is looking at it. The session WebSocket is

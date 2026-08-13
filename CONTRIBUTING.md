@@ -7,23 +7,39 @@ reports with a reproduction, and PRs that stay inside one package's boundary.
 
 ```bash
 pnpm install
-pnpm server   # gateway + dashboard on http://127.0.0.1:8787, no auth (loopback only!)
-pnpm web      # optional: vite dashboard on :5191 with HMR, proxying /v1 to the gateway
+pnpm dev:server   # gateway + dashboard on http://127.0.0.1:8787, no auth (loopback only!)
+pnpm dev:web      # optional: vite dashboard on :5191 with HMR, proxying /v1 to the gateway
 ```
 
-`pnpm server` is the real `workerdeck` CLI pointed at
+`pnpm dev:server` is the real `workerdeck` CLI pointed at
 [`examples/dev-server.config.mjs`](examples/dev-server.config.mjs) — there is no separate dev
 entry point, so what you develop against and what `npx workerdeck` ships are one code path.
-Edit that config directly; flags still win (`pnpm server --port 9000`). The dashboard is the one
-thing that must be compiled, so the script builds it first (`pnpm dashboard`, turbo-cached); run
-`pnpm web` alongside when you want HMR.
+Edit that config directly; flags still win (`pnpm dev:server --port 9000`). The dashboard is the
+one thing that must be compiled, so the script builds it first (`pnpm dashboard`, turbo-cached);
+run `pnpm dev:web` alongside when you want HMR.
 
-To reach the gateway from another device — a phone on the same Tailscale network, say — bind a
-routable interface:
+To reach the gateway from another device — a phone on the same Tailscale network, say — set
+`WD_DEV_HOST` in your shell and both dev scripts bind and target it:
 
 ```bash
-pnpm server --host 0.0.0.0
+export WD_DEV_HOST=my-machine   # never commit this into the scripts
+pnpm dev:server                 # binds my-machine, and accepts it as a Host header
 ```
+
+### Dev ports in this workspace
+
+Several things listen at once, and two of them used to collide silently. The registry:
+
+| Port | What | Started by |
+|---|---|---|
+| 8787 | dev gateway (+ dashboard) | `pnpm dev:server`, `pnpm example:server` |
+| 8788 | the embedded reference app (gateway **and** wiki, one origin) | `apps/embedded`'s `pnpm dev` |
+| 5191 | dashboard Vite (HMR, proxies `/v1` to 8787) | `pnpm dev:web` |
+| 5192 | docs site (Astro) | `apps/docs`'s `pnpm dev` |
+| 5193 | embedded app Vite | `apps/embedded`'s `pnpm dev` |
+
+Take a new one rather than reusing these: shadowing a running dev server is silent, and the
+symptom is a page that looks stale rather than an error.
 
 Auth off loopback is not optional: anyone who can reach the port would get a Claude Code
 session. Pass `--auth-key <secret>`, or let the CLI generate one — printed once, kept in the

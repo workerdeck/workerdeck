@@ -106,6 +106,15 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   now `SessionInfo.capabilities` — is reported by each runner itself (not looked up from the
   profile) so any session surface can gate engine-specific affordances; no event carries them,
   the attach snapshot is the only source.
+- `createEngineRunner` has four obligations invisible in its types, and each is a runtime-only
+  failure: forward `restore` (else a woken session starts empty), adopt `id` (else the rebuild is
+  refused and every client's route and watermark is stranded), seed the VFS only when *not*
+  restoring (else the wake overwrites what the parked turn wrote), and dispose per-session
+  resources in `onClose` (which **also runs on park** — parking releases the same things). Two of
+  those now have first-class options — `createEngineSession({ seedVfs, id })`, where `seedVfs` is
+  ignored outright on a restore — and `createProviderRunner` (server) does all four. Hand-building
+  `config.vfs` still works and still wins, and then the `restore ? undefined : createVfs(...)`
+  dance is yours to get right.
 - The `'provider'` engine remains the **host-assembled escape hatch** behind `createEngineRunner`
   — its adapter in core is a pseudo-adapter (capabilities, an `apiKeyEnv` presence probe, an
   empty catalog) whose `createRunner` throws; the server routes provider creates to the hook.
@@ -347,9 +356,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - Catalogs are versioned with releases; the release checklist re-runs each catalog's extraction
   (documented in the catalog file headers) and diffs. Availability probing is gated on
   `checkCredentials` (a library must spawn nothing in tests), cached ~60s, refreshed lazily on
-  `GET /profiles`, and **display-only**: create against an unavailable profile still proceeds and
-  fails with the engine's own error — a stale probe must never become an outage. The `engines`
-  server option overrides adapters *for tests only*; it is not an extension point.
+  `GET /profiles`, and **display-only by default**: create against an unavailable profile still
+  proceeds and fails with the engine's own error — a stale probe must never become an outage. That
+  default is an *operator's* trade, and it is wrong in front of an end user who cannot read a
+  provider stack trace, which is why `requireAvailableProfile` exists: it 503s the create with the
+  probe's reason. It refuses only on a definite `false` — an unprobed or unprobeable profile stays
+  allowed, because "couldn't check" is not "not available". The `engines` server option overrides
+  adapters *for tests only*; it is not an extension point.
 - `createEngineRunner` may return a promise, so per-session assembly (an MCP connect, a
   credential lookup) can be awaited there, disposed via `AiSdkRunnerConfig.onClose`; a rejection
   fails the create (session POST 500s with the message, a job goes straight to `failed`). The
@@ -380,9 +393,30 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `QuickJsExecutor#fetchText`). Host↔guest values cross **by value only**; never hand the guest a
   host object by reference (that prototype-chain leak is the CVE-2026-5752 failure shape, covered
   by a red-team test).
+- Host tools go in through `createEngineSession({ tools })` **with a stated trust**, and the two
+  contradictions are refused at assembly, not at runtime: a `sandboxed` tool carrying `execute`
+  would run in-process with the gateway's authority (defeating the point), and an `authoritative`
+  one without `execute` would park the turn on a call no executor claims. `mcpTools` cannot express
+  a sandboxed tool at all — everything in it is authoritative by construction.
 - AI SDK MCP lives in `@ai-sdk/mcp` (not `ai`) as of v7, is imported lazily, and supports
   **http/sse only** — stdio is local-only upstream and is rejected explicitly. Claude-engine
   sessions still do stdio, since the CLI spawns those itself.
+- **A stateless MCP server must answer `GET` with 405.** The client opens the SSE stream with a
+  `GET` before it sends anything; mounted under a framework's default 404 the entire connect fails
+  with an error naming neither the method nor the route. Cost an hour in `apps/embedded`, and it
+  will cost every embedder who mounts a POST-only server — which is the common case.
+- **A declared MCP server that didn't connect refuses the build.** `profile.session.mcpServers` is
+  a *declaration*; honouring it partially was the worst failure mode this engine had — the session
+  reports healthy and the agent apologises through every request that needed the server, with one
+  warning line in a log nobody reads. `connectMcpTools(…, { required: true })` fails at connect
+  time instead (closing the clients that did open, or an embedder leaks a socket per failed
+  create). Hand the **connection** to `createEngineSession` as `mcp`, not just `mcp.tools`: a tool
+  set alone cannot tell "connected, exposes nothing" from "never connected", so the fallback check
+  is the cruder namespace one.
+- The provider engine's `mcpStatus` capability is `true` and `AiSdkRunner.mcpServers()` always
+  answers — an **empty list** when no MCP was wired, never `undefined`. Undefined becomes a 501
+  meaning "this engine cannot tell you", and this is the one engine that always can: the host
+  assembled the session and the host is being asked.
 - `web_fetch` is layered: `createWebFetch` (core) does the SSRF-guarded fetch (DNS-resolved,
   private/link-local denied per redirect hop; cross-host redirects surface a notice instead of
   following; 15-min page cache by URL) and the digest pass runs on the **session's own model**
