@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { randomUUID } from 'node:crypto'
-import type { Doc } from './shared.ts'
+import type { Doc } from '../shared.ts'
 
 /**
  * The wiki's storage: `node:sqlite`, so the reference app carries no database

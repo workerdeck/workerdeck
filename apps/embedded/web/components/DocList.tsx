@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Doc, User } from '../api.ts'
+import type { Doc, User } from '../lib/api.ts'
 
 export type DocListProps = {
   docs: Doc[]

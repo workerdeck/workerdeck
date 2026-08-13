@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { silkweave } from '@silkweave/core'
 import { type InferTrpcRouter, type TrpcNodeAdapter, trpcNode } from '@silkweave/trpc'
-import type { AppState } from './app-state.ts'
+import type { AppState } from '../app/state.ts'
 import type { WikiDb } from './db.ts'
-import { type CookieAuth, sameOrigin } from './users.ts'
-import { createWikiActions } from './wiki-actions.ts'
+import { type CookieAuth, sameOrigin } from '../auth/cookie.ts'
+import { createWikiActions } from './actions.ts'
 
 /**
  * The **SPA's** view of the wiki: the same actions the agent gets (minus the
@@ -17,7 +17,7 @@ import { createWikiActions } from './wiki-actions.ts'
  * would have needed a second credential the browser cannot supply on an upgrade.
  *
  * The client gets its types from {@link WikiRouter} with no code generation —
- * see `web/trpc.ts`.
+ * see `web/lib/trpc.ts`.
  */
 
 function buildServer(api: TrpcNodeAdapter, db: WikiDb, state: AppState) {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Doc } from '../api.ts'
+import type { Doc } from '../lib/api.ts'
 
 export type DocEditorProps = {
   doc: Doc

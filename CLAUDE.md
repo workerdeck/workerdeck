@@ -503,7 +503,7 @@ protocol. Read these before changing scope or structure:
   client can skip. The agent runs the provider engine under `sandboxedProviderProfile()` raised
   exactly twice (`web_fetch`, the `wiki` MCP server) — no shell, no host FS, `eval_script` in an
   in-process QuickJS guest with no network. The wiki's operations are **one silkweave action set**
-  (`src/wiki-actions.ts`) projected onto two transports: `@silkweave/mcp`'s mountable
+  (`src/wiki/actions.ts`) projected onto two transports: `@silkweave/mcp`'s mountable
   `mcpTransport` for the agent, and `@silkweave/trpc`'s `trpcNode()` (5.1.0 — a `node:http`
   handler, so it mounts on the gateway's own port rather than binding one) for the SPA, typed end
   to end via `InferTrpcRouter` with no codegen. That is the shape an app with many tools needs and
@@ -520,8 +520,8 @@ protocol. Read these before changing scope or structure:
   sent `id: " "` twenty times and every create tried to overwrite a document named `" "`.
   `z.string().min(1).optional()` is *not* the fix — a space has length 1, and a provider that marks
   every property required leaves the model no way to omit anything. Optional strings are trimmed
-  and blank-checked in `run` (`text()` in `wiki-actions.ts`), as a second layer under the split. **UI state is the app's, not the bridge's**
-  (`src/app-state.ts`): "which doc am I looking at" and "open that one for me" travel as a
+  and blank-checked in `run` (`text()` in `wiki/actions.ts`), as a second layer under the split. **UI state is the app's, not the bridge's**
+  (`src/app/state.ts`): "which doc am I looking at" and "open that one for me" travel as a
   server-held per-*user* record the tab `PUT`s on change plus an SSE stream of intents back down
   — `whoami` / `open_doc` are two more MCP tools over the same token. The tool bridge looks like
   the natural home and is wrong twice: a bridged tool is by definition `sandboxed`, and the bridge

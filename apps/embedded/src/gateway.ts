@@ -11,8 +11,8 @@ import {
   type WorkerServerOptions,
 } from '@workerdeck/server'
 import type { ProfileInfo } from '@workerdeck/protocol'
-import { type CookieAuth, sameOrigin } from './users.ts'
-import type { WikiMcp } from './wiki-mcp.ts'
+import { type CookieAuth, sameOrigin } from './auth/cookie.ts'
+import type { WikiMcp } from './wiki/mcp.ts'
 
 export const PROFILE_NAME = 'wiki-agent'
 

@@ -13,7 +13,7 @@ actually take to put an agent loop in front of your own users?*
           └─ /*      the SPA
 ```
 
-The wiki's operations are written **once**, in `src/wiki-actions.ts`, and projected onto both
+The wiki's operations are written **once**, in `src/wiki/actions.ts`, and projected onto both
 transports. `update_doc` and "save this document" are the same function, not two implementations
 that drift.
 
@@ -69,8 +69,8 @@ request the browser is induced to send, and `SameSite=Lax` stops only *cross-sit
 another port of the same site sends it, and a `text/plain` body makes the request "simple" so CORS
 is never consulted. The attacker never has to read the response: a forged `POST /v1/sessions` runs
 a prompt of their choosing **as the victim**, with the victim's own wiki tools. So both
-`authenticate` hooks — the gateway's in `src/gateway.ts` and the wiki API's in `src/wiki-api.ts` —
-call `sameOrigin()` (`src/users.ts`) before resolving the cookie, and *decline* rather than throw
+`authenticate` hooks — the gateway's in `src/gateway.ts` and the wiki API's in `src/wiki/trpc.ts` —
+call `sameOrigin()` (`src/auth/cookie.ts`) before resolving the cookie, and *decline* rather than throw
 so a forged request gets a plain 401 that explains nothing. Copying the cookie without copying this
 is the mistake this app most invites.
 
@@ -83,17 +83,17 @@ check the client performs is a check the client can skip.
 
 **3. Identity reaches the tools through the transport, never through an argument.**
 `createEngineRunner` reads `config.scope.user`, mints a per-session bearer token, and connects an
-MCP client with it (`src/gateway.ts` → `src/wiki-mcp.ts`). No wiki tool takes a `userId` parameter,
+MCP client with it (`src/gateway.ts` → `src/wiki/mcp.ts`). No wiki tool takes a `userId` parameter,
 because a parameter is something the model chooses. The token is revoked in `onClose` when the
 runner is disposed, so it cannot outlive its session.
 
 **4. Two independent checks on two different questions.** The gateway decides who may *drive a
-session*; every SQL statement in `src/db.ts` carries its own `user_id`. Neither substitutes for the
+session*; every SQL statement in `src/wiki/db.ts` carries its own `user_id`. Neither substitutes for the
 other, and an agent that talked its way into the wrong tool arguments still comes up empty.
 
 **5. UI state travels in both directions, and neither one is the tool bridge.** The agent runs on
 the server; "which document am I looking at" is browser state and "open that one" is a browser
-action. So the app owns its UI state *on the server* (`src/app-state.ts`): the tab `PUT`s it on
+action. So the app owns its UI state *on the server* (`src/app/state.ts`): the tab `PUT`s it on
 change, `wiki__Whoami` reads it, and `wiki__OpenDoc` records an intent that goes back down a
 Server-Sent Events stream the tab subscribes to. WorkerDeck's own tool bridge would have looked
 like the natural home for this and is the wrong one twice over: a bridged tool is by definition
@@ -103,9 +103,9 @@ while the tab is shut still leaves the user on the right document. `open_doc` re
 `shown: false` when nothing was listening, so the model can say "I've queued that" rather than
 claim a navigation that never happened.
 
-**6. One action set, two callers.** `src/wiki-actions.ts` defines the wiki's six operations as
-silkweave actions — a name, a Zod schema, a function. `src/wiki-mcp.ts` projects them onto MCP for
-the agent; `src/wiki-api.ts` projects them onto tRPC for the SPA, typed end to end with no codegen
+**6. One action set, two callers.** `src/wiki/actions.ts` defines the wiki's six operations as
+silkweave actions — a name, a Zod schema, a function. `src/wiki/mcp.ts` projects them onto MCP for
+the agent; `src/wiki/trpc.ts` projects them onto tRPC for the SPA, typed end to end with no codegen
 (`InferTrpcRouter` off the action list). Before this the app had two implementations of the same
 six operations, already drifting: `update_doc` and `PATCH /api/docs/:id` were one operation spelled
 twice. At six operations that is untidy; at fifty it is the product's whole maintenance cost.
@@ -120,7 +120,7 @@ MCP adapter only. The SPA knows which document it is showing, because it is show
 action set is not an identical one.
 
 The cookie is also what makes `/trpc` **CSRF-able**, and that guard is the app's to write — see
-`sameOrigin()` in `src/wiki-api.ts`, which checks `Sec-Fetch-Site` (falling back to `Origin`) and
+`sameOrigin()` in `src/wiki/trpc.ts`, which checks `Sec-Fetch-Site` (falling back to `Origin`) and
 declines rather than throws, so a forged request gets a plain 401 that explains nothing.
 
 **7. The agent writes documents you may have open.** `DocEditor.tsx` keeps the loaded copy and your
@@ -130,19 +130,35 @@ that would make the agent feel unsafe to use.
 
 ## Layout
 
-| | |
-|---|---|
-| `src/main.ts` | composition — one port, the `fallback` wiring |
-| `src/gateway.ts` | `createWorkerServer`, the profile, `createEngineRunner` |
-| `src/wiki-actions.ts` | **the wiki's operations, written once** — read this first |
-| `src/wiki-mcp.ts` | those actions as an MCP server, for the agent (per-session token) |
-| `src/wiki-api.ts` | those actions as tRPC, for the SPA (login cookie, CSRF guard) |
-| `src/app-routes.ts` | login, app state, agent config, static SPA |
-| `src/app-state.ts` | what the user is looking at, and the channel that moves them |
-| `src/db.ts` | `node:sqlite`, one file, no dependency |
-| `src/users.ts` | three users, a signed cookie |
-| `web/trpc.ts` | the typed client — `WikiRouter` comes straight off the actions |
-| `web/` | the SPA — `AgentSidebar.tsx` is the part to read |
+The folders are the architecture: **one `wiki/` action set with its two transports beside it**,
+the app's own surface in `app/`, and identity in `auth/`. `gateway.ts` stays at the top because it
+is the file you came here to read.
+
+```
+src/
+  main.ts        composition — one port, the `fallback` wiring
+  gateway.ts     createWorkerServer, the profile, createEngineRunner
+  shared.ts      the types the SPA also imports — the src ↔ web contract
+  wiki/
+    actions.ts   the wiki's operations, written once — READ THIS FIRST
+    mcp.ts       those actions as MCP, for the agent  (per-session token)
+    trpc.ts      those actions as tRPC, for the SPA   (cookie + CSRF guard)
+    db.ts        node:sqlite, one file, no dependency
+  app/
+    routes.ts    login, app state, agent config, static SPA
+    state.ts     what the user is looking at, and the channel that moves them
+  auth/
+    users.ts     three users in the source — delete this to swap in real auth
+    cookie.ts    the signed cookie and `sameOrigin`, the guard that makes it safe
+web/
+  lib/
+    trpc.ts      the typed client — `WikiRouter` comes straight off the actions
+    api.ts       the plain-fetch half (login, app state, the SSE stream)
+  components/    the SPA — `AgentSidebar.tsx` is the part to read
+```
+
+`auth/` splits on purpose: `users.ts` is the demo and is meant to be deleted, `cookie.ts` is the
+part worth keeping whatever ends up resolving the identity.
 
 ## Known edges
 
@@ -165,7 +181,7 @@ that would make the agent feel unsafe to use.
   provider may rewrite the schema so every property is required, leaving the model no way to omit
   anything at all. So there are now two tools, `create_doc` and `update_doc`, each with required
   arguments — the intent lives in the name, where it cannot be lost — and `text()` in
-  `wiki-actions.ts` trims-and-blank-checks every optional string as a second layer.
+  `wiki/actions.ts` trims-and-blank-checks every optional string as a second layer.
 - **A destructive tool here cannot ask.** The provider engine's capability record says
   `interactiveApprovals: false`, so `DeleteDoc` has no approval channel to sit behind — the honest
   choice is to grant it or not. What this app does instead is narrow the blast radius: it takes an

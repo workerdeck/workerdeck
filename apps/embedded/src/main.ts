@@ -1,11 +1,12 @@
 import { fileURLToPath } from 'node:url'
-import { createAppRoutes } from './app-routes.ts'
-import { createAppState } from './app-state.ts'
-import { openWikiDb } from './db.ts'
+import { createAppRoutes } from './app/routes.ts'
+import { createAppState } from './app/state.ts'
+import { openWikiDb } from './wiki/db.ts'
 import { createEmbeddedGateway, PROFILE_NAME } from './gateway.ts'
-import { createCookieAuth, USERS } from './users.ts'
-import { createWikiApi } from './wiki-api.ts'
-import { createWikiMcp } from './wiki-mcp.ts'
+import { createCookieAuth } from './auth/cookie.ts'
+import { USERS } from './auth/users.ts'
+import { createWikiApi } from './wiki/trpc.ts'
+import { createWikiMcp } from './wiki/mcp.ts'
 import type { AgentConfigResponse } from './shared.ts'
 
 /**
@@ -14,7 +15,7 @@ import type { AgentConfigResponse } from './shared.ts'
  *   :PORT ─┬─ /v1/*  the WorkerDeck gateway (REST + the session WebSocket)
  *          └─ everything else, via the gateway's `fallback`:
  *             ├─ /trpc   the wiki's data API, for the SPA   ┐ ONE action set
- *             ├─ /mcp    the wiki as an MCP server, for the agent ┘ (wiki-actions.ts)
+ *             ├─ /mcp    the wiki as an MCP server, for the agent ┘ (wiki/actions.ts)
  *             ├─ /api/*  login, app state, agent config
  *             └─ /*      the built SPA
  *

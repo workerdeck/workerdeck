@@ -1,8 +1,8 @@
 import { createAction, badRequest, notFound } from '@silkweave/core'
 import z from 'zod/v4'
-import type { AppState } from './app-state.ts'
+import type { AppState } from '../app/state.ts'
 import type { WikiDb } from './db.ts'
-import type { User } from './shared.ts'
+import type { User } from '../shared.ts'
 
 /**
  * The wiki's operations, written **once**, as silkweave actions.
@@ -10,9 +10,9 @@ import type { User } from './shared.ts'
  * This file is the point of the whole app. Each action is a name, a schema and a
  * function; two adapters project them onto two transports:
  *
- * - `wiki-mcp.ts` → MCP over HTTP, for the **agent**, authenticated by a bearer
+ * - `wiki/mcp.ts` → MCP over HTTP, for the **agent**, authenticated by a bearer
  *   token minted per session and never seen by the model.
- * - `wiki-api.ts` → tRPC over the same origin, for the **SPA**, authenticated by
+ * - `wiki/trpc.ts` → tRPC over the same origin, for the **SPA**, authenticated by
  *   the app's own login cookie.
  *
  * They were two implementations before — `update_doc` and `PATCH /api/docs/:id`

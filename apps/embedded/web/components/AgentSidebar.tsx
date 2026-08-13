@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
 import type { SessionInfo } from '@workerdeck/protocol'
 import { SessionPanel } from '@workerdeck/ui'
-import { api } from '../api.ts'
+import { api } from '../lib/api.ts'
 import type { AgentConfigResponse } from '../../src/shared.ts'
 
 export type AgentSidebarProps = {

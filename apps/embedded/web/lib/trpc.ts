@@ -1,7 +1,7 @@
 import { QueryClient } from '@tanstack/react-query'
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import { createTRPCOptionsProxy } from '@trpc/tanstack-react-query'
-import type { WikiRouter } from '../src/wiki-api.ts'
+import type { WikiRouter } from '../../src/wiki/trpc.ts'
 
 /**
  * The wiki's data API, typed straight off the server's actions.

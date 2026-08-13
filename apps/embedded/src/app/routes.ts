@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs'
 import express, { type Express, type RequestHandler } from 'express'
-import type { AppState, UiState } from './app-state.ts'
-import type { CookieAuth } from './users.ts'
-import { USERS, userById } from './users.ts'
-import type { AgentConfigResponse, LoginRequest, User } from './shared.ts'
+import type { AppState, UiState } from './state.ts'
+import type { CookieAuth } from '../auth/cookie.ts'
+import { USERS, userById } from '../auth/users.ts'
+import type { AgentConfigResponse, LoginRequest, User } from '../shared.ts'
 
 export type AppRoutesDeps = {
   auth: CookieAuth
@@ -20,7 +20,7 @@ export type AppRoutesDeps = {
  * Everything outside the gateway's `/v1` that is *not* an action: login, the
  * app-state channel, the MCP endpoint, and the built SPA. The wiki's own data
  * API is not here — it is `/trpc`, mounted in `main.ts` from the same actions
- * the agent gets (see `wiki-actions.ts`).
+ * the agent gets (see `wiki/actions.ts`).
  *
  * Handed to `createWorkerServer` as its `fallback`, which is
  * what puts all of it on **one origin** — not a convenience, but the reason the
@@ -78,7 +78,7 @@ export function createAppRoutes(deps: AppRoutesDeps): Express {
 
   // --- wiki ------------------------------------------------------------------
   //
-  // There is nothing here any more. The wiki's CRUD lives in `wiki-actions.ts`
+  // There is nothing here any more. The wiki's CRUD lives in `wiki/actions.ts`
   // and reaches the SPA over tRPC at `/trpc`, which is the *same* action set the
   // agent reaches over MCP at `/mcp`. What used to be here was a second
   // implementation of those operations — `PATCH /api/docs/:id` and

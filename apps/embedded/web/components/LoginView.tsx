@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, type User } from '../api.ts'
+import { api, type User } from '../lib/api.ts'
 
 /**
  * Pick one of three users. No password: this stands in for whatever real auth an

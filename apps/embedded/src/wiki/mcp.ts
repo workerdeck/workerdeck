@@ -2,13 +2,13 @@ import { randomBytes } from 'node:crypto'
 import { createContext } from '@silkweave/core'
 import { AUTH_REQUEST_KEY, mcpTransport } from '@silkweave/mcp/server'
 import express, { type RequestHandler } from 'express'
-import type { AppState } from './app-state.ts'
+import type { AppState } from '../app/state.ts'
 import type { WikiDb } from './db.ts'
-import { createAgentActions, createWikiActions } from './wiki-actions.ts'
-import type { User } from './shared.ts'
+import { createAgentActions, createWikiActions } from './actions.ts'
+import type { User } from '../shared.ts'
 
 /**
- * The **agent's** view of the wiki: the shared actions from `wiki-actions.ts`
+ * The **agent's** view of the wiki: the shared actions from `wiki/actions.ts`
  * plus the two agent-only ones, served as a real MCP server over streamable HTTP.
  *
  * It would have been cheaper to hand `createEngineSession` a plain `ToolSet` —
