@@ -4,6 +4,7 @@ import { createAppState } from './app-state.ts'
 import { openWikiDb } from './db.ts'
 import { createEmbeddedGateway, PROFILE_NAME } from './gateway.ts'
 import { createCookieAuth, USERS } from './users.ts'
+import { createWikiApi } from './wiki-api.ts'
 import { createWikiMcp } from './wiki-mcp.ts'
 import type { AgentConfigResponse } from './shared.ts'
 
@@ -12,13 +13,16 @@ import type { AgentConfigResponse } from './shared.ts'
  *
  *   :PORT ─┬─ /v1/*  the WorkerDeck gateway (REST + the session WebSocket)
  *          └─ everything else, via the gateway's `fallback`:
- *             ├─ /api/*  the wiki's own API
- *             ├─ /mcp    the wiki as an MCP server, for the agent only
+ *             ├─ /trpc   the wiki's data API, for the SPA   ┐ ONE action set
+ *             ├─ /mcp    the wiki as an MCP server, for the agent ┘ (wiki-actions.ts)
+ *             ├─ /api/*  login, app state, agent config
  *             └─ /*      the built SPA
  *
  * One port is load-bearing. The tab drives sessions over a WebSocket, a browser
  * cannot put an Authorization header on an upgrade, and a cookie only rides
  * same-origin requests — so single-origin is what makes the sidebar work at all.
+ * It is also what lets `/trpc` be cookie-authenticated at all, which is what lets
+ * the SPA and the agent share one implementation of the wiki.
  */
 
 const port = Number(process.env.PORT ?? 8788)
@@ -30,6 +34,9 @@ const db = openWikiDb(dbFile)
 const auth = createCookieAuth(process.env.EMBEDDED_SECRET)
 const state = createAppState()
 const wikiMcp = createWikiMcp(db, state, USERS)
+// The same actions, for the browser: cookie-authenticated, typed end to end.
+const wikiApi = createWikiApi(db, state, auth)
+await wikiApi.start()
 
 // Resolved after listen, when the real port is known — but `createEngineRunner`
 // only reads it when a session is created, which is necessarily later.
@@ -38,7 +45,6 @@ let mcpUrl = ''
 let agentConfig: AgentConfigResponse = { baseUrl: '/v1', profile: PROFILE_NAME, available: false }
 
 const app = createAppRoutes({
-  db,
   auth,
   state,
   mcp: wikiMcp.handler,
@@ -54,7 +60,13 @@ const gateway = await createEmbeddedGateway({
   },
   // Express apps are `(req, res)` handlers, so the gateway's fallback can be
   // one directly — no proxy hop, no second port, no WS upgrade to forward.
+  // `/trpc` is checked first because silkweave's node handler slices its own
+  // prefix off unconditionally: it must only ever see URLs that belong to it.
   fallback: (req, res) => {
+    if (req.url === '/trpc' || req.url?.startsWith('/trpc/') || req.url?.startsWith('/trpc?')) {
+      wikiApi.handler(req, res)
+      return
+    }
     app(req, res)
   },
 })
@@ -94,7 +106,8 @@ console.log(`\n  Embedded WorkerDeck example`)
 console.log(`  ──────────────────────────────────────────────`)
 console.log(`  app       http://${host}:${bound}`)
 console.log(`  gateway   http://${host}:${bound}/v1`)
-console.log(`  wiki mcp  ${mcpUrl}  (agent sessions only)`)
+console.log(`  wiki api  http://${host}:${bound}/trpc  (the SPA, on your cookie)`)
+console.log(`  wiki mcp  ${mcpUrl}  (agent sessions only, on a per-session token)`)
 console.log(`  database  ${dbFile}`)
 console.log(`  model     ${process.env.EMBEDDED_MODEL ?? 'gpt-5.6-luna'}${gateway.available ? '' : `  ⚠ ${gateway.unavailableReason}`}`)
 console.log(`  users     ${USERS.map((u) => u.id).join(', ')}\n`)

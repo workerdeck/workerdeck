@@ -1,19 +1,11 @@
 import { existsSync } from 'node:fs'
 import express, { type Express, type RequestHandler } from 'express'
 import type { AppState, UiState } from './app-state.ts'
-import type { WikiDb } from './db.ts'
 import type { CookieAuth } from './users.ts'
 import { USERS, userById } from './users.ts'
-import type {
-  AgentConfigResponse,
-  CreateDocRequest,
-  LoginRequest,
-  UpdateDocRequest,
-  User,
-} from './shared.ts'
+import type { AgentConfigResponse, LoginRequest, User } from './shared.ts'
 
 export type AppRoutesDeps = {
-  db: WikiDb
   auth: CookieAuth
   /** What the user is looking at, and the channel that moves them. */
   state: AppState
@@ -25,8 +17,12 @@ export type AppRoutesDeps = {
 }
 
 /**
- * Everything outside the gateway's `/v1`: the wiki's own API, the MCP endpoint,
- * and the built SPA. Handed to `createWorkerServer` as its `fallback`, which is
+ * Everything outside the gateway's `/v1` that is *not* an action: login, the
+ * app-state channel, the MCP endpoint, and the built SPA. The wiki's own data
+ * API is not here — it is `/trpc`, mounted in `main.ts` from the same actions
+ * the agent gets (see `wiki-actions.ts`).
+ *
+ * Handed to `createWorkerServer` as its `fallback`, which is
  * what puts all of it on **one origin** — not a convenience, but the reason the
  * browser can authenticate a WebSocket attach at all: a tab cannot put a header
  * on an upgrade, so a cookie is the only credential it has, and a cookie only
@@ -42,7 +38,7 @@ export function createAppRoutes(deps: AppRoutesDeps): Express {
 
   app.use(express.json({ limit: '1mb' }))
 
-  /** Resolves the cookie, or 401s. Everything under /api/docs is behind it. */
+  /** Resolves the cookie, or 401s. The /api routes below are behind it. */
   const requireUser: RequestHandler = (req, res, next) => {
     const user = deps.auth.resolve(req)
     if (!user) {
@@ -81,48 +77,16 @@ export function createAppRoutes(deps: AppRoutesDeps): Express {
   })
 
   // --- wiki ------------------------------------------------------------------
-
-  app.get('/api/docs', requireUser, (_req, res) => {
-    res.json({ docs: deps.db.listDocs(currentUser(res).id) })
-  })
-
-  app.post('/api/docs', requireUser, (req, res) => {
-    const { title } = req.body as CreateDocRequest
-    const doc = deps.db.createDoc(currentUser(res).id, (title ?? '').trim() || 'Untitled')
-    res.status(201).json({ doc })
-  })
-
-  app.get('/api/docs/:id', requireUser, (req, res) => {
-    const doc = deps.db.getDoc(currentUser(res).id, String(req.params.id))
-    // 404, not 403, for a document belonging to another user — the same
-    // uniform-disclosure rule the gateway follows for a session out of scope.
-    if (!doc) {
-      res.status(404).json({ error: 'not found' })
-      return
-    }
-    res.json({ doc })
-  })
-
-  app.patch('/api/docs/:id', requireUser, (req, res) => {
-    const { title, body } = req.body as UpdateDocRequest
-    const doc = deps.db.updateDoc(currentUser(res).id, String(req.params.id), {
-      title: title?.trim() || undefined,
-      body,
-    })
-    if (!doc) {
-      res.status(404).json({ error: 'not found' })
-      return
-    }
-    res.json({ doc })
-  })
-
-  app.delete('/api/docs/:id', requireUser, (req, res) => {
-    if (!deps.db.deleteDoc(currentUser(res).id, String(req.params.id))) {
-      res.status(404).json({ error: 'not found' })
-      return
-    }
-    res.status(204).end()
-  })
+  //
+  // There is nothing here any more. The wiki's CRUD lives in `wiki-actions.ts`
+  // and reaches the SPA over tRPC at `/trpc`, which is the *same* action set the
+  // agent reaches over MCP at `/mcp`. What used to be here was a second
+  // implementation of those operations — `PATCH /api/docs/:id` and
+  // `update_doc` being two spellings of one thing, already drifting.
+  //
+  // The 404-not-403 rule the routes carried is not lost: `db` scopes every query
+  // by user id, so another user's document is a plain not-found — the same
+  // uniform-disclosure rule the gateway follows for a session out of scope.
 
   // --- agent -----------------------------------------------------------------
 

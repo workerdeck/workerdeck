@@ -7,10 +7,15 @@ actually take to put an agent loop in front of your own users?*
 ```
 :8788 ─┬─ /v1/*   the WorkerDeck gateway (REST + the session WebSocket)
        └─ everything else, through the gateway's `fallback`:
-          ├─ /api/*  the wiki's own API      (cookie auth, three demo users)
-          ├─ /mcp    the wiki as an MCP server  (agent sessions only)
+          ├─ /trpc   the wiki, for the SPA    (cookie auth) ┐ ONE action set,
+          ├─ /mcp    the wiki, for the agent  (session token) ┘ two adapters
+          ├─ /api/*  login, app state, agent config
           └─ /*      the SPA
 ```
+
+The wiki's operations are written **once**, in `src/wiki-actions.ts`, and projected onto both
+transports. `update_doc` and "save this document" are the same function, not two implementations
+that drift.
 
 ```bash
 pnpm install
@@ -27,7 +32,6 @@ the server says so and suggests the next port; `PORT=8790 pnpm dev` moves it.
 |---|---|---|
 | `OPENAI_API_KEY` | — | required |
 | `EMBEDDED_MODEL` | `gpt-5.6-luna` | any model the key can reach |
-| `EMBEDDED_BASE_URL` | — | set it to run against an OpenAI-**compatible** endpoint (`EMBEDDED_API_KEY` then names its key) |
 | `PORT` / `HOST` | `8788` / `127.0.0.1` | |
 | `EMBEDDED_DB` | `.embedded/wiki.db` | **data, not build output** — `pnpm clean` leaves it alone; `pnpm reset` is how you wipe it |
 | `EMBEDDED_SECRET` | random per process | set it and logins survive a restart |
@@ -40,7 +44,7 @@ It runs the **provider engine** — no CLI subprocess, no host filesystem — un
 
 | Granted | |
 |---|---|
-| `wiki__ListDocs/ReadDoc/WriteDoc/RenameDoc` | the signed-in user's documents, over MCP |
+| `wiki__ListDocs/ReadDoc/CreateDoc/UpdateDoc/RenameDoc` | the signed-in user's documents, over MCP |
 | `wiki__DeleteDoc` | permanent, id-only (see below), and there is no confirmation step to gate it behind |
 | `wiki__Whoami` | who the user is and which document is on their screen |
 | `wiki__OpenDoc` | navigate the user's app to a document |
@@ -52,7 +56,7 @@ Not granted, and not reachable: a shell, the host's files, an internal address, 
 wiki, `deliver_file`, or any MCP server but this one. Asked to read `/etc/passwd`, the agent has no
 tool that could — that is a capability record, not a system-prompt instruction.
 
-## The six things worth copying
+## The seven things worth copying
 
 **1. One origin, because of WebSockets.** The gateway serves the SPA and the API through its
 `fallback` hook (`src/main.ts`). This is not tidiness: a browser cannot put an `Authorization`
@@ -89,7 +93,27 @@ while the tab is shut still leaves the user on the right document. `open_doc` re
 `shown: false` when nothing was listening, so the model can say "I've queued that" rather than
 claim a navigation that never happened.
 
-**6. The agent writes documents you may have open.** `DocEditor.tsx` keeps the loaded copy and your
+**6. One action set, two callers.** `src/wiki-actions.ts` defines the wiki's six operations as
+silkweave actions — a name, a Zod schema, a function. `src/wiki-mcp.ts` projects them onto MCP for
+the agent; `src/wiki-api.ts` projects them onto tRPC for the SPA, typed end to end with no codegen
+(`InferTrpcRouter` off the action list). Before this the app had two implementations of the same
+six operations, already drifting: `update_doc` and `PATCH /api/docs/:id` were one operation spelled
+twice. At six operations that is untidy; at fifty it is the product's whole maintenance cost.
+
+What makes it work is that **identity resolves per adapter and lands in the same place**. The MCP
+mount stamps `{ token, userId }` from a per-session bearer token; the tRPC mount resolves the app's
+login cookie in `authenticate`. Both become `context.get('auth')`, so an action's `run()` cannot
+tell — and must not care — which caller it is serving.
+
+What is *not* shared is where the two callers genuinely differ: `whoami` and `open_doc` are on the
+MCP adapter only. The SPA knows which document it is showing, because it is showing it. A shared
+action set is not an identical one.
+
+The cookie is also what makes `/trpc` **CSRF-able**, and that guard is the app's to write — see
+`sameOrigin()` in `src/wiki-api.ts`, which checks `Sec-Fetch-Site` (falling back to `Origin`) and
+declines rather than throws, so a forged request gets a plain 401 that explains nothing.
+
+**7. The agent writes documents you may have open.** `DocEditor.tsx` keeps the loaded copy and your
 draft apart, and when they diverge it offers the choice instead of picking — the same split
 `useOpenFiles` makes in `@workerdeck/react`. Silently discarding either side is the one behaviour
 that would make the agent feel unsafe to use.
@@ -100,11 +124,14 @@ that would make the agent feel unsafe to use.
 |---|---|
 | `src/main.ts` | composition — one port, the `fallback` wiring |
 | `src/gateway.ts` | `createWorkerServer`, the profile, `createEngineRunner` |
-| `src/wiki-mcp.ts` | the wiki as a silkweave MCP server, mounted as an Express handler |
-| `src/app-routes.ts` | `/api/*`, static SPA |
+| `src/wiki-actions.ts` | **the wiki's operations, written once** — read this first |
+| `src/wiki-mcp.ts` | those actions as an MCP server, for the agent (per-session token) |
+| `src/wiki-api.ts` | those actions as tRPC, for the SPA (login cookie, CSRF guard) |
+| `src/app-routes.ts` | login, app state, agent config, static SPA |
 | `src/app-state.ts` | what the user is looking at, and the channel that moves them |
 | `src/db.ts` | `node:sqlite`, one file, no dependency |
 | `src/users.ts` | three users, a signed cookie |
+| `web/trpc.ts` | the typed client — `WikiRouter` comes straight off the actions |
 | `web/` | the SPA — `AgentSidebar.tsx` is the part to read |
 
 ## Known edges
@@ -118,7 +145,17 @@ that would make the agent feel unsafe to use.
 - **The MCP endpoint is stateless and answers `405` to `GET`.** Silkweave's transport serves one
   request/response per call with no standing SSE stream, and MCP requires 405 (not 404) from a
   server that offers none — without it the client reads "wrong endpoint" and the whole connect
-  fails.
+  fails. Silkweave 5.1.0 ships the responder (`transport.methodNotAllowed`) rather than leaving
+  every host to rediscover the rule.
+- **No tool infers its operation from an absent field**, and this one was paid for in blood. There
+  was a single `write_doc` that created when `id` was missing and overwrote when it was present. A
+  live model sent `id: " "` — one space — on twenty consecutive attempts to create a document, so
+  every one of them tried to overwrite a document named `" "` and failed with "no such document".
+  `z.string().min(1).optional()` looks like the fix and is not: a space has length 1. Worse, a
+  provider may rewrite the schema so every property is required, leaving the model no way to omit
+  anything at all. So there are now two tools, `create_doc` and `update_doc`, each with required
+  arguments — the intent lives in the name, where it cannot be lost — and `text()` in
+  `wiki-actions.ts` trims-and-blank-checks every optional string as a second layer.
 - **A destructive tool here cannot ask.** The provider engine's capability record says
   `interactiveApprovals: false`, so `DeleteDoc` has no approval channel to sit behind — the honest
   choice is to grant it or not. What this app does instead is narrow the blast radius: it takes an

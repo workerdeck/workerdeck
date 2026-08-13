@@ -1,10 +1,10 @@
 import { createOpenAI } from '@ai-sdk/openai'
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
 import type { LanguageModel } from 'ai'
-import { connectMcpTools, createEngineSession, QuickJsExecutor } from '@workerdeck/core'
-import { createVfs, loadEngine } from '@workerdeck/sandbox'
+import { connectMcpTools, QuickJsExecutor } from '@workerdeck/core'
+import { loadEngine } from '@workerdeck/sandbox'
 import {
+  createProviderRunner,
   createWorkerServer,
   sandboxedProviderProfile,
   type WorkerServer,
@@ -19,9 +19,11 @@ export const PROFILE_NAME = 'wiki-agent'
 const INSTRUCTIONS = `You are the assistant embedded in a personal wiki app.
 
 You have five kinds of tool and no others:
-- wiki__ListDocs, wiki__ReadDoc, wiki__WriteDoc, wiki__RenameDoc — the signed-in
-  user's own documents. This is the only place their notes live. Read before you
-  write: WriteDoc replaces a body wholesale rather than appending to it.
+- wiki__ListDocs, wiki__ReadDoc, wiki__CreateDoc, wiki__UpdateDoc, wiki__RenameDoc
+  — the signed-in user's own documents. This is the only place their notes live.
+  CreateDoc makes a new one and needs no id; UpdateDoc changes an existing one and
+  needs its id from ListDocs. Read before you update: UpdateDoc replaces a body
+  wholesale rather than appending to it.
 - wiki__DeleteDoc — permanent, with no confirmation step and no undo. Only when
   the user has clearly asked for that document to go. Name the document you are
   deleting before you delete it, and never delete one you merely inferred.
@@ -54,7 +56,15 @@ export type GatewayDeps = {
   fallback: WorkerServerOptions['fallback']
 }
 
-/** Which model to run, and how to build it. */
+/**
+ * Which model to run, and how to build it.
+ *
+ * One provider, one key, deliberately: this app is a *reference embedding*, and
+ * every branch here is a branch a reader has to hold in their head that teaches
+ * them nothing about embedding WorkerDeck. Point it at a different provider by
+ * swapping `createOpenAI` for that provider's factory — the engine takes any AI
+ * SDK `LanguageModel`, and nothing below this function knows which one it got.
+ */
 function resolveModelFactory(): {
   modelId: string
   /** The variable the key is actually read from — also what the profile declares
@@ -65,24 +75,9 @@ function resolveModelFactory(): {
   build: (id: string) => LanguageModel
 } {
   // The model id is configuration, not a constant, so retargeting the app at
-  // another OpenAI model — or at a compatible endpoint — needs no code edit.
+  // another OpenAI model needs no code edit.
   const modelId = process.env.EMBEDDED_MODEL ?? 'gpt-5.6-luna'
-  const baseURL = process.env.EMBEDDED_BASE_URL
   const apiKey = process.env.OPENAI_API_KEY
-
-  if (baseURL) {
-    // An OpenAI-compatible gateway in front of the model. Its key may be a
-    // different one, so it gets its own variable and falls back to OPENAI_API_KEY.
-    const key = process.env.EMBEDDED_API_KEY ?? apiKey
-    const provider = createOpenAICompatible({ name: 'embedded', baseURL, apiKey: key })
-    return {
-      modelId,
-      apiKeyEnv: process.env.EMBEDDED_API_KEY ? 'EMBEDDED_API_KEY' : 'OPENAI_API_KEY',
-      available: Boolean(key),
-      unavailableReason: key ? undefined : 'set EMBEDDED_API_KEY (or OPENAI_API_KEY)',
-      build: (id) => provider(id),
-    }
-  }
   const provider = createOpenAI({ apiKey })
   return {
     modelId,
@@ -171,9 +166,9 @@ export async function createEmbeddedGateway(deps: GatewayDeps): Promise<Embedded
     // a session create still proceeds and fails with the engine's own error.
     checkCredentials: true,
 
-    createEngineRunner: async ({ config, profile: sessionProfile, restore }) => {
+    createEngineRunner: async (ctx) => {
       if (!model.available) throw new Error(model.unavailableReason ?? 'no model credentials')
-      const userId = config.scope?.user
+      const userId = ctx.config.scope?.user
       if (!userId) {
         // Unreachable through the routes — `authenticate` stamps the scope on
         // every principal — but a runner that guessed here would be a runner
@@ -186,37 +181,46 @@ export async function createEmbeddedGateway(deps: GatewayDeps): Promise<Embedded
       // *transport* carry the identity instead of every tool taking a userId
       // argument the model could change.
       const { token, revoke } = deps.wikiMcp.issueToken(userId)
+      // `required`: this app's own MCP server IS the wiki. A session that came
+      // up without it would look completely healthy and spend the conversation
+      // apologising for not finding the user's documents, so a failed connect
+      // fails the create instead — where it is visible and says why.
       const mcp = await connectMcpTools(
         { wiki: { type: 'http', url: deps.mcpUrl, headers: { authorization: `Bearer ${token}` } } },
-        { onError: (name, error) => console.warn(`[embedded] MCP '${name}': ${String(error)}`) },
-      )
-
-      return createEngineSession({
-        config: {
-          ...config,
-          languageModel: model.build(config.model ?? model.modelId),
-          // A restored session brings its own scratch filesystem; seeding here
-          // would undo whatever the parked turn already wrote.
-          vfs: restore ? undefined : createVfs({ '/notes/README.md': SCRATCH_README }),
-          restore,
-          // Disposed with the runner: the MCP socket closes and the token stops
-          // working, so a leaked token cannot outlive the session that held it.
-          onClose: async () => {
-            revoke()
-            await mcp.close().catch(() => {})
-          },
+        {
+          required: true,
+          onError: (name, error) => console.warn(`[embedded] MCP '${name}': ${String(error)}`),
         },
-        profile: sessionProfile,
-        resolveModel: (_p, c) => model.build(c.model ?? model.modelId),
-        selectExecutor: () => quickjs,
-        backend: 'server',
+      ).catch(async (error: unknown) => {
+        // The token outlives nothing: the connect failed, so nothing will ever
+        // close a connection that would have revoked it.
+        revoke()
+        throw error
+      })
+
+      return createProviderRunner(ctx, {
+        model: (id) => model.build(id ?? model.modelId),
+        // In-process, not the tab: the data this loop reasons over is in this
+        // pod's database, so pushing execution into the browser buys nothing and
+        // hands an executor to the party being sandboxed against.
+        executor: quickjs,
         // The only host-side capability backend wired at all. Its own guard
         // refuses loopback, RFC1918, CGNAT and 169.254/16 per redirect hop, so
         // the loop cannot reach this process's own MCP endpoint or a cloud
         // metadata service through it.
         capabilities: { webFetch: {} },
-        mcpTools: mcp.tools,
+        // The connection, not just its tools: the profile declares `wiki`, and
+        // handing over the connection is what lets that declaration be enforced.
+        mcp,
+        // Ignored on a rehydration, so a parked turn's files survive.
+        seedVfs: { '/notes/README.md': SCRATCH_README },
         executionLimits: { timeoutMs: 5_000 },
+        // Disposed with the runner: the MCP socket closes and the token stops
+        // working, so a leaked token cannot outlive the session that held it.
+        onClose: async () => {
+          revoke()
+          await mcp.close().catch(() => {})
+        },
       })
     },
   })

@@ -1,5 +1,11 @@
 /**
- * The wire shapes the SPA and the server agree on.
+ * The wire shapes the SPA and the server agree on **by hand**.
+ *
+ * Deliberately small: the wiki's own request/response types used to live here and
+ * are gone, because the documents API is now tRPC procedures inferred from
+ * `wiki-actions.ts` — the schema is the contract, and a hand-written mirror of it
+ * is a second source of truth waiting to drift. What is left is what no action
+ * describes: the login exchange (which sets a cookie), and the agent config.
  *
  * Imported by both tsconfigs (node and browser), so it must stay dependency-free
  * and type-only — the same discipline `@workerdeck/protocol` follows for the
@@ -24,10 +30,6 @@ export type Doc = {
 
 export type MeResponse = { user: User | null }
 export type LoginRequest = { userId: string }
-export type DocsResponse = { docs: Doc[] }
-export type DocResponse = { doc: Doc }
-export type CreateDocRequest = { title?: string }
-export type UpdateDocRequest = { title?: string; body?: string }
 
 /** `GET /api/agent` — what the SPA needs to talk to the gateway. */
 export type AgentConfigResponse = {

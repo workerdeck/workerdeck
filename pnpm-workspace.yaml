@@ -34,3 +34,7 @@ minimumReleaseAgeExclude:
   - '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.217'
   - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.217'
   - '@anthropic-ai/claude-agent-sdk@0.3.217'
+  - '@silkweave/auth@5.1.0'
+  - '@silkweave/core@5.1.0'
+  - '@silkweave/trpc@5.1.0'
+  - '@silkweave/mcp@5.1.0'

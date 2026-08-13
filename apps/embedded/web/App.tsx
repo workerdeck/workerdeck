@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, ApiError, type Doc, type UiIntent, type User } from './api.ts'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api, type UiIntent, type User } from './api.ts'
+import { isNotFound, trpc } from './trpc.ts'
 import { AgentSidebar } from './components/AgentSidebar.tsx'
 import { DocEditor } from './components/DocEditor.tsx'
 import { DocList } from './components/DocList.tsx'
@@ -11,53 +13,55 @@ import { LoginView } from './components/LoginView.tsx'
  * The app deliberately holds no agent state beyond "which session is showing" —
  * the transcript, the connection and the approvals all live inside
  * `SessionPanel`, and the sessions themselves live in the gateway.
+ *
+ * The documents come from tRPC procedures generated off the server's actions —
+ * the *same* actions the agent calls over MCP — so "the agent wrote a document"
+ * and "the user wrote a document" are one code path on the server and two cache
+ * invalidations here.
  */
 export function App() {
   const [user, setUser] = useState<User | null | undefined>()
-  const [docs, setDocs] = useState<Doc[]>([])
   const [openId, setOpenId] = useState<string | undefined>()
-  const [openDoc, setOpenDoc] = useState<Doc | undefined>()
+  const queryClient = useQueryClient()
 
   useEffect(() => {
-    api.me().then((r) => setUser(r.user)).catch(() => setUser(null))
+    api
+      .me()
+      .then((r) => setUser(r.user))
+      .catch(() => setUser(null))
   }, [])
 
-  const loadDocs = useCallback(async () => {
-    if (!user) return
-    const list = await api.listDocs().catch(() => [])
-    setDocs(list)
-    setOpenId((current) => current ?? list[0]?.id)
-  }, [user])
+  const docs = useQuery({ ...trpc.listDocs.queryOptions({}), enabled: Boolean(user) })
+  const docList = docs.data?.docs ?? []
 
+  const openDoc = useQuery({
+    ...trpc.readDoc.queryOptions({ id: openId ?? '' }),
+    enabled: Boolean(user && openId),
+  })
+
+  // Everything the agent touches invalidates the same two queries, so a turn
+  // that wrote a document and a click that wrote one converge on one refresh
+  // path rather than two hand-rolled reload functions.
+  const refresh = useCallback(() => {
+    void queryClient.invalidateQueries()
+  }, [queryClient])
+
+  const createDoc = useMutation(trpc.createDoc.mutationOptions({ onSuccess: refresh }))
+  const updateDoc = useMutation(trpc.updateDoc.mutationOptions({ onSuccess: refresh }))
+  const renameDoc = useMutation(trpc.renameDoc.mutationOptions({ onSuccess: refresh }))
+
+  // Selecting the first document once the list arrives, without clobbering a
+  // selection the user (or the agent) has since made.
   useEffect(() => {
-    void loadDocs()
-  }, [loadDocs])
+    if (!openId && docList.length > 0) setOpenId(docList[0]!.id)
+  }, [openId, docList])
 
-  const loadOpenDoc = useCallback(async () => {
-    if (!openId) {
-      setOpenDoc(undefined)
-      return
-    }
-    try {
-      setOpenDoc(await api.getDoc(openId))
-    } catch (e) {
-      // The agent (or another tab) may have deleted it out from under us.
-      if (e instanceof ApiError && e.status === 404) {
-        setOpenId(undefined)
-        setOpenDoc(undefined)
-      }
-    }
-  }, [openId])
-
+  // The agent (or another tab) may have deleted what we are showing. `readDoc`
+  // answers NOT_FOUND rather than an empty document, which is the signal to let
+  // the list pick the next one.
   useEffect(() => {
-    void loadOpenDoc()
-  }, [loadOpenDoc])
-
-  /** The agent finished a turn — it may have written something. */
-  const refreshFromAgent = useCallback(() => {
-    void loadDocs()
-    void loadOpenDoc()
-  }, [loadDocs, loadOpenDoc])
+    if (openDoc.error && isNotFound(openDoc.error)) setOpenId(undefined)
+  }, [openDoc.error])
 
   // Push what is on screen up to the server, so the agent's `whoami` can answer
   // "the document I'm looking at" without being able to see the screen.
@@ -75,75 +79,80 @@ export function App() {
       const intent = JSON.parse(event.data) as UiIntent
       if (intent.type === 'open_doc') {
         setOpenId(intent.docId)
-        // The agent usually created or edited it in the same turn, so the list
+        // The agent usually created or edited it in the same turn, so the cache
         // is stale by exactly this document.
-        void loadDocs()
+        refresh()
       } else if (intent.type === 'doc_deleted') {
         // Clear the editor first. Leaving a deleted document on screen invites
-        // an edit-and-save against an id that no longer exists, which would 404
+        // an edit-and-save against an id that no longer exists, which would fail
         // and read as the app being broken rather than as the document being
-        // gone. `loadDocs` then picks the next one, as it does at startup.
+        // gone. The list effect above then picks the next one.
         setOpenId((current) => (current === intent.docId ? undefined : current))
-        setOpenDoc((current) => (current?.id === intent.docId ? undefined : current))
-        void loadDocs()
+        refresh()
       }
     }
     return () => source.close()
-  }, [user, loadDocs])
+  }, [user, refresh])
 
   if (user === undefined) return <div className='h-full bg-bg' />
   if (user === null) return <LoginView onSignedIn={setUser} />
 
-  const createDoc = async () => {
-    const doc = await api.createDoc('Untitled')
-    await loadDocs()
+  const newDoc = async () => {
+    const doc = await createDoc.mutateAsync({ title: 'Untitled', body: '' })
     setOpenId(doc.id)
   }
 
   const signOut = async () => {
     await api.logout()
     setUser(null)
-    setDocs([])
     setOpenId(undefined)
-    setOpenDoc(undefined)
+    // The next user must not see this one's documents in a warm cache.
+    queryClient.clear()
   }
 
   return (
     <div className='flex h-full w-full overflow-hidden bg-bg text-text'>
       <DocList
-        docs={docs}
+        docs={docList}
         selectedId={openId}
         user={user}
         onSelect={setOpenId}
-        onCreate={() => void createDoc()}
+        onCreate={() => void newDoc()}
         onRename={(id, title) => {
-          void api.updateDoc(id, { title }).then(loadDocs).then(loadOpenDoc)
+          renameDoc.mutate({ id, title })
         }}
         onSignOut={() => void signOut()}
       />
 
-      {openDoc ? (
+      {openDoc.data ? (
         <DocEditor
-          doc={openDoc}
+          doc={openDoc.data}
           onSave={async (patch) => {
-            const saved = await api.updateDoc(openDoc.id, patch)
-            // The editor and this both adopt the same server record, so the
-            // next render carries no stale copy for the editor to "restore".
-            setOpenDoc(saved)
-            await loadDocs()
-            return saved
+            // `update_doc`, the same procedure the agent uses to edit — it cannot
+            // create, so a stale id fails loudly instead of silently forking a
+            // new document. The body is required, so an untouched editor still
+            // sends what is on screen.
+            await updateDoc.mutateAsync({
+              id: openDoc.data.id,
+              title: patch.title,
+              body: patch.body ?? openDoc.data.body,
+            })
+            const fresh = await queryClient.fetchQuery(
+              trpc.readDoc.queryOptions({ id: openDoc.data.id }),
+            )
+            return fresh
           }}
-          onReload={() => void loadOpenDoc()}
+          onReload={() => void openDoc.refetch()}
         />
       ) : (
         <section className='flex flex-1 items-center justify-center bg-bg'>
           <p className='text-sm text-fg-3'>
-            {docs.length === 0 ? 'Create a document to get started.' : 'Pick a document.'}
+            {docList.length === 0 ? 'Create a document to get started.' : 'Pick a document.'}
           </p>
         </section>
       )}
 
-      <AgentSidebar onWikiMaybeChanged={refreshFromAgent} />
+      <AgentSidebar onWikiMaybeChanged={refresh} />
     </div>
   )
 }

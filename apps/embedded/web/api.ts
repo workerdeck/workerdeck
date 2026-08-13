@@ -1,15 +1,16 @@
-import type {
-  AgentConfigResponse,
-  Doc,
-  DocResponse,
-  DocsResponse,
-  MeResponse,
-  User,
-} from '../src/shared.ts'
+import type { AgentConfigResponse, Doc, MeResponse, User } from '../src/shared.ts'
 
 /**
- * The wiki's own API. Same origin as the gateway, so the session cookie rides
- * every call and there is no token to hold in the tab.
+ * The app's non-data endpoints: login, agent config, and the UI-state channel.
+ *
+ * The wiki's own documents are NOT here — they are tRPC procedures generated
+ * from the server's actions (`web/trpc.ts`), the same ones the agent reaches
+ * over MCP. What is left is everything that is not an action: login sets a
+ * cookie (a response header, not a return value), and the UI-state pair is this
+ * app's own navigation channel rather than a wiki operation.
+ *
+ * Same origin as the gateway, so the session cookie rides every call and there
+ * is no token to hold in the tab.
  */
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -47,18 +48,6 @@ export const api = {
   login: (userId: string) =>
     call<MeResponse>('/api/login', { method: 'POST', body: JSON.stringify({ userId }) }),
   logout: () => call<MeResponse>('/api/logout', { method: 'POST' }),
-
-  listDocs: () => call<DocsResponse>('/api/docs').then((r) => r.docs),
-  getDoc: (id: string) => call<DocResponse>(`/api/docs/${id}`).then((r) => r.doc),
-  createDoc: (title?: string) =>
-    call<DocResponse>('/api/docs', { method: 'POST', body: JSON.stringify({ title }) }).then(
-      (r) => r.doc,
-    ),
-  updateDoc: (id: string, patch: { title?: string; body?: string }) =>
-    call<DocResponse>(`/api/docs/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }).then(
-      (r) => r.doc,
-    ),
-  deleteDoc: (id: string) => call<void>(`/api/docs/${id}`, { method: 'DELETE' }),
 
   agent: () => call<AgentConfigResponse>('/api/agent'),
 
