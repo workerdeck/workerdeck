@@ -585,7 +585,14 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   came to report 0.10.0 against 0.11.0 packages. **0.13.0** — cross-origin gateway auth
   (`hostAuth`, server CORS, the CLI's `--cors-origin`) and the dashboard rebuilt as four
   sections and a dialog, with jobs read-only behind `SessionPanel`'s new `readOnly` seam;
-  tagged and pushed, so the publish workflow ran for it.
+  tagged and pushed, so the publish workflow ran for it. **0.14.0** — session scope
+  (`CreateSessionRequest.scope` + `authorizeSession`, enforced at every door, 404 on a miss),
+  `EngineCapabilities.hostCwd` so a filesystem-less engine need not name a `cwd`,
+  `sandboxedProviderProfile()`, and `apps/embedded` — the reference embedding. Bumped and
+  committed, **tag not pushed**: nothing is on npm for it yet, so `npm latest` still reads 0.13.0
+  until someone pushes `v0.14.0`. `version:set` now covers `apps/embedded` too — it is not
+  idempotent (a re-run at the same version fails on "Version not changed"), so add a new workspace
+  member to the filter *before* the bump, not after. Protocol stays **7**.
 
   **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`

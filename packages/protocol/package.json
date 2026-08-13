@@ -1,6 +1,6 @@
 {
   "name": "@workerdeck/protocol",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "type": "module",
   "description": "The WorkerDeck wire protocol: typed session events, commands, and REST shapes shared by server and clients. Dependency-free, browser-safe. This protocol is the product boundary — versioned from day one.",
   "license": "MIT",
