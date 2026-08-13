@@ -85,6 +85,43 @@ Five levels, from most batteries-included to most raw:
 4. **In-process `SessionRunner`** (`@workerdeck/core`) — no server at all: subscribe to
    events, `sendMessage()`, `resolvePermission()` directly in your Node process.
 
+## Fitting `SessionPanel` to your chrome
+
+The panel is one component for every engine — each affordance is gated on the session's
+capability record — and it owns the session's **one** attach. That last part is the rule behind
+most of these props: an embedder that subscribed separately would open a second attach, and the
+tool bridge only ever asks the *first* attached client, so the second sees nothing. Everything
+your chrome needs therefore comes *out* of the panel rather than from a second connection.
+
+Independent seams, each defaulting to the batteries-included behavior:
+
+| Prop | What it moves |
+| --- | --- |
+| `panelSurface: 'external'` | Hands the dialog surface to you: no dialogs and no `⋯` menu, intents arrive via `onOpenPanel`, and live readings via `onVitals` — which is what lets external chrome render context and usage without a second attach. |
+| `statusSurface: 'external'` | Drops the status bar itself, for a host whose chrome already has a status line (VS Code's window bar). It carries the `⋯` menu's only home, so combining it with an internal panel surface needs a **function** `header` to take the menu. |
+| `controlsSurface` | `'external'` moves model and permission mode out to your chrome — the *options* ride `SessionVitals` (already filtered by the capability record and the bypass grant) and the setters come back through `onControls`. `'status'` is the same trade for a host with no chrome to put them in: the pickers move into the panel's own status bar, beside the readings they act on. Either way the composer collapses to a single growing line. |
+| `readOnly` | No composer and no approval prompts — for a surface that is *about* a run rather than in it (the dashboard's job detail). Absent, not disabled: a greyed-out composer says the session is busy, an absent one says this screen does not drive it. **Not an authorization boundary** — it removes the affordance, the gateway does the enforcing. |
+| `transcriptVariant` | `'cards'` (the chat convention) or `'lines'` — full-width transparent rows behind a fixed gutter glyph, no boxes, for a host where vertical space is scarce. `lines` also brings a docked composer and keyboard-first approval prompts instead of dialogs. |
+| `transcriptDensity` | `'comfortable'` (a blank line between rows, what the Claude Code CLI leaves) or `'compact'`. Separate from the variant on purpose: the variant follows from the *surface*, density is the reader's *preference*. |
+| `transcriptFont` | `'sans'` or `'mono'` — one attribute on the panel root repointing the font token for that subtree only, so a monospace agent view cannot leak into your sidebars and dialogs. |
+| `toolHost` | Options for the panel's own browser tool host, or `false` for none — the escape hatch for a host that wants to run the bridge itself. |
+
+`SessionVitals` carries `connection` precisely so an external bar can obey the panel's own rule: a
+session status held over a dropped socket is a stale reading, and the link state has to win the
+slot. If you are building a non-React status line, `@workerdeck/ui/format` is a third,
+React-free entry with the same formatters and `statusPresentation` / `meterSeverity` rules the
+panel uses — so an extension host bundle spells `45.2k` and `2h 10m` identically without pulling
+React in.
+
+## Listing sessions
+
+`SessionBrowser` (`@workerdeck/ui`) is the styled sessions list built on the protocol's
+[view model](/workerdeck/docs/reference/protocol/#the-shared-view-models): search, the
+gateway/adapter/state facets, grouping, the "12 of 30" subset line, unread badges and inline
+rename. Use it when you want the dashboard's list without reimplementing the rules — the rules
+being the point, since a client that filtered differently would announce work it is hiding.
+`SessionList` stays beside it for the plain fixed-set case.
+
 ## Tailwind v4 wiring for @workerdeck/ui
 
 The package ships **source styles + source classnames** — your app's Tailwind build compiles

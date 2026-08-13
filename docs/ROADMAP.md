@@ -1,10 +1,13 @@
 # Roadmap & open questions
 
-What's shipped, what's next, and what's still undecided. Status as of 2026-08-11: **0.11.0** on
-master and published — the VS Code extension, the session rename (`PATCH /sessions/:id`), the
-terminal transcript variant with a virtualized scroller and keyboard-first prompts, and the Iso
-Deck mark. Protocol stays **7**; 0.10.0 (codex skills and generated images, the codex MCP panel,
-the session workspace and its Monaco editor) shipped before it.
+What's shipped, what's next, and what's still undecided. Status as of 2026-08-13: **0.15.0** on
+master, tagged and published — the embedding seams (session `scope`, `sandboxedProviderProfile()`,
+a loud MCP failure, host tools at a stated trust) and `apps/embedded` as the reference embedding.
+Protocol stays **7** and has since 0.9.0.
+
+The registry goes 0.13.0 → 0.15.0 with no 0.14.0, and that gap is deliberate: 0.14.0 was bumped
+and committed but never tagged, so nothing under that number ever reached npm and its content
+ships inside 0.15.0. Do not publish a v0.14.0 after the fact.
 
 ## Shipped
 
@@ -255,10 +258,9 @@ the session workspace and its Monaco editor) shipped before it.
   (`src/dev-reload.ts`) and re-renders the webviews in place on a webview rebuild, reloading
   the window only when the extension-host bundle changes; `pnpm dev:host` opens an Extension
   Development Host from a terminal. Not yet: live-verified end to end (a real gateway in a dev
-  host), agent→IDE tools (PRD §7), Marketplace publishing. PRD in
-  `_docs/plans/VSCODE-EXTENSION-PRD.md`.
+  host), agent→IDE tools, Marketplace publishing — see **Next** below for all three.
 
-### Cross-client parity (unreleased)
+### Cross-client parity (0.12.0)
 
 The extension's list model, generalized and taken to the other two clients. The rules moved
 into `protocol` (`session-list.ts`, `watermarks.ts`) rather than being copied, because they are
@@ -291,6 +293,78 @@ in each package's own README. The site homepage gained the same four-ways-in sec
 docs finally have a social card: there was no `og:image` at all, so every shared link rendered
 bare. VS Code and iOS had been invisible on the entire public surface until now.
 
+### Cross-origin gateways and the four-section dashboard (0.13.0)
+
+A gateway reachable from a page it did not serve. `hostAuth()` in `client` is the one place an
+added host's requests are built — `Authorization: Bearer` on REST, `?key=` on the WS upgrade,
+because a tab cannot header an upgrade and the cookie belongs to another origin — with the server
+half as `cors: { origins }` and the CLI's `--cors-origin`. Exact origins only, and
+`Access-Control-Allow-Credentials` is never sent, so an ambient cookie cannot become cross-origin
+authority.
+
+The dashboard was rebuilt as **four sections and a dialog**: Sessions, Gateways, Jobs and Profiles,
+each a list-on-the-left/detail-beside-it pair, because navigating within a section must not replace
+the list you picked from. Every create is a modal rather than a screen, Settings became a dialog at
+the foot of the nav rather than a fifth section, and the run defaults moved onto the profile — the
+gateway already applied `ProfileInfo.defaults` to any omitted field, so a per-browser copy was a
+second answer to a settled question. Gateways got their own section instead of a hover strip under
+the sessions list. Jobs became **read-only**, which is what `SessionPanel`'s new `readOnly` seam is
+for: the transcript streams and the files browse, but nothing types into a run the queue owns.
+
+### Session scope and the sandboxed profile (0.15.0, bumped as 0.14.0)
+
+The primitives for putting a session in front of someone who is not the operator.
+
+- **`CreateSessionRequest.scope`** — opaque string tags assigned at create, immutable after, echoed
+  on `SessionInfo`, and the only intra-deployment scoping primitive there is. WorkerDeck stores and
+  *enforces* the tags; the embedder's `authorizeSession(principal, session)` decides what they
+  mean, because "space" and "user" are one app's vocabulary and the next has tenants. Enforced at
+  the `/sessions/:id/*` gate, the list, the WS attach **before** the wake, `POST
+  /executions/:id/result`, and the job routes via `JobInfo.scope`; the operator surfaces (`/fs/*`,
+  `/sdk-sessions`, `/queue`, `/queue/ws`) are refused outright to a scoped principal, since they
+  answer about the *gateway* and there is nothing to filter. A miss is **404, never 403**. Two
+  guards keep it honest: `buildRunnerConfig` re-stamps the scope over the host hook's output, and
+  `buildRunner` — the one chokepoint for create, dormant rebuild and parked rebuild — asserts the
+  runner echoes it, because a runner that dropped it would be invisible to every check and
+  therefore visible to everyone.
+- **`sandboxedProviderProfile()`** — a provider profile with `capabilities: []` and
+  `mcpServers: []` (empty arrays, never absent, which would grant whatever the host wired), plus
+  `EngineCapabilities.hostCwd`, which is what makes `cwd` optional: `allowedCwdRoots` is not the
+  boundary for a filesystem-less engine and must not be mistaken for one.
+- **`apps/embedded`** — the reference embedding, and the thing to read before designing another
+  one. A wiki SPA whose right-hand rail is a sandboxed agent, gateway inside the app's own server,
+  one port, the app's cookie as the only credential an attach can carry, and `scope` as the entire
+  ownership model.
+
+### The embedding seams the DEV-UX assessment asked for (0.15.0)
+
+Written straight out of building `apps/embedded` against 0.13.0, where two thirds of the time went
+into reverse-engineering patterns that should have been one helper and one guide — and the worst
+moment was a **silent** failure: an MCP server that failed to connect, producing a working-looking
+session with no tools.
+
+- **MCP is handed over as a connection, not a tool set** — `connectMcpTools` → `McpConnection.servers`,
+  with `required: true` to reject a failed connect instead of degrading. A profile declaring a server
+  that did not connect now refuses to build. `AiSdkRunner.mcpServers()` answers `/sessions/:id/mcp`
+  with what the host actually assembled — an empty list, never a 501 — which is why
+  `ENGINE_CAPABILITIES.provider.mcpStatus` is now `true`.
+- **`createEngineSession({ tools })`** — where a host's own tool joins the set at a *stated* trust,
+  the only way to express a sandboxed (therefore bridgeable) host tool, since `mcpTools` is
+  authoritative by construction. Both contradictions — sandboxed-with-`execute`,
+  authoritative-without — are refused at assembly rather than discovered at runtime.
+- **`createProviderRunner(ctx, opts)`** — the 80% case of `createEngineRunner`, carrying the four
+  obligations that are invisible in the hook's types and fail only at runtime: forward `restore`,
+  adopt `id`, seed the VFS only when not restoring, dispose via `onClose`. `seedVfs` and `id` are
+  the two options that make the rehydration rules unmissable.
+- **`requireAvailableProfile`** — 503 on create with the credential probe's own reason, for a
+  deployment with an end user in front of it. Off by default and only a definite `false` blocks,
+  because turning a probe bug into an outage is worse than one confusing failure.
+- **`SessionPanel`'s `toolHost`** — options through, or `false` for none, since the panel owns the
+  session's one attach and an embedder subscribing separately would find this host already refusing
+  anything outside its allow-list.
+- The documentation half: a "Rules you cannot infer from the types" section in every package
+  README, and three new site pages — the app-embedding guide, engines and executors, writing tools.
+
 ## Next
 
 0. **APNs push for the iOS app — released in 0.7.0, not yet proven on a device.** The forwarder half is in
@@ -311,10 +385,33 @@ bare. VS Code and iOS had been invisible on the entire public surface until now.
    there (no candidate source survives a non-loopback gateway with no sessions) and fixed. Still
    unobserved: the virtualized transcript on a long session, the unread badge clearing with the
    list closed, and the keyboard-first approval prompts — `apps/vscode` has no test suite, so
-   these can only be checked by hand; (b) agent→IDE tools (PRD §7), the thing that makes it more than a
+   these can only be checked by hand; (b) **agent→IDE tools**, the thing that makes it more than a
    webview — selection/diagnostics/open-file as context, and edits arriving as VS Code edits
    rather than filesystem writes; (c) Marketplace publishing, which is a packaging and
    naming decision, not code. CI already uploads the `.vsix` as an artifact.
+
+   (b) splits by engine, and the split is the whole design question. For **provider** sessions the
+   browser tool-host seam already runs tab-side tools over the existing WS, so `ide_open_file` /
+   `ide_get_diagnostics` executed by the extension are a natural fit and NAT-proof by construction
+   (the client connects out); it needs core work to define the tools, but the seam holds. For
+   **claude and codex** sessions tools arrive only over MCP, and an extension-hosted MCP server
+   works only when the *gateway can reach it* — trivially true for a local gateway, false for a
+   remote one, which would need a reverse path into the user's machine. The two candidates there
+   are riding the deferred-execution seam (`DeferredExecutor` + `POST /executions/:id/result` is
+   out-of-band tool execution by design) or an MCP-over-WS bridge. Unsettled on purpose.
+
+6. **Staleness signalling in the workspace.** `/fs/write` is conditional on the hash the tab read
+   precisely because the agent edits the same tree, but nothing tells a client the file changed
+   underneath it — so an open tab goes stale silently and the 409 at save time, though correct, is
+   the worst moment to discover it. Editing shipped ahead of this knowingly. There is no change
+   notification on the wire and building one per engine would make the workspace codex-only
+   (codex's app-server has `fs/watch`; the Claude engine has no equivalent). Cheapest first:
+   re-read and compare the hash on tab/window focus; poll open tabs' hashes while the session runs;
+   or a `file_changed` event. The interesting shortcut is that **the transcript already names every
+   file the agent touched** — `Edit`/`Write` tool calls carry paths — so a workspace could mark
+   tabs stale off the stream it is already subscribed to, with no new backend at all. Check what
+   those tool inputs actually carry before committing. Whatever is chosen: never silently reload a
+   tab with unsaved edits.
 2. **Shared-backend `QueueAdapter`** (BullMQ or plain redis) — the reason the adapter contract
    exists. `claimNext` must stay atomic (BullMQ free; raw redis needs LMOVE/Lua) and honor
    `nextRunAt` (BullMQ delayed jobs); daily counters map to `INCRBY` on a dated key with TTL.
@@ -332,6 +429,13 @@ bare. VS Code and iOS had been invisible on the entire public surface until now.
    rebuild. What's left is a shared-backend store (redis/sqlite/a table) with a claim on rebuild
    and, for Claude-engine sessions, cross-host resume over the SDK's on-disk transcripts. Also
    unproven against a real provider: a live park → POST result → finish smoke.
+
+7. **Decide on shell execution.** Remote clients keep wanting a "run this command on the host"
+   affordance. The CLI's `!` is a *terminal-mode behavior*, not a wire feature — `user_message`
+   text goes straight to the engine — so a real one needs a new operator-privileged endpoint with
+   the same trust story as `hostFiles.write`. It is the most security-sensitive thing on this list
+   and the one the repo's auth red lines do **not** cover: those are about provider credentials,
+   this is about operator privilege. Treat it as its own design pass, not a sub-task of a client.
 
 ## Non-goals
 

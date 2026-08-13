@@ -229,13 +229,17 @@ Dev never builds: apps and tests resolve packages straight to TS source via the
 
 ## Status
 
-**0.12.0** — early but real. Three engines, the protocol, server, client, headless React layer,
+**0.15.0** — early but real. Three engines, the protocol, server, client, headless React layer,
 styled UI, dashboard, job queue, sandbox and deferred execution are all in and tested. 0.9 landed
 the engine adapters and the Codex engine; 0.10 added the session workspace and codex skills and
 generated images; 0.11 published the VS Code extension; 0.12 rebuilt its navigation around native
-editor chrome. The iOS app's APNs push is covered by tests but has not been exercised against a
-live gateway from a physical phone — treat it as new, not as settled. Expect the protocol to keep
-evolving: `PROTOCOL_VERSION` guards breaking changes and is at 7. See the
-[roadmap](docs/ROADMAP.md) for what's next.
+editor chrome and lifted the sessions-list and unread models into the protocol so every client
+shows the same list; 0.13 added cross-origin gateway auth and rebuilt the dashboard; 0.14 and 0.15
+shipped together as **0.15.0** — session `scope` enforced at every door, `sandboxedProviderProfile()`,
+a loud MCP failure instead of a silently tool-less session, host tools at a stated trust, and
+[`apps/embedded`](apps/embedded) as the reference embedding. The iOS app's APNs push is covered
+by tests but has not been exercised against a live gateway from a physical phone — treat it as
+new, not as settled. Expect the protocol to keep evolving: `PROTOCOL_VERSION` guards breaking
+changes and is at 7. See the [roadmap](docs/ROADMAP.md) for what's next.
 
 MIT © Tobias Strebitzer

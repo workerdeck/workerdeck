@@ -5,7 +5,7 @@ import type { ModelOption } from '@workerdeck/protocol'
 /** Pre-session model choices: aliases the CLI resolves to current model ids, mirroring
  * its supportedModels shape (a 'default' sentinel row first). Live sessions get the
  * CLI's own list via the capabilities event; forms and settings use this static one. */
-// Copy kept in sync with the Claude Code CLI's model picker (see _docs/TODO.md).
+// Copy kept in sync with the Claude Code CLI's model picker.
 /** Static Claude alias rows — the fallback for the profile-less settings
  * defaults only; create forms serve the profile's catalog (`ProfileInfo.models`). */
 export const MODEL_OPTIONS: ModelOption[] = [

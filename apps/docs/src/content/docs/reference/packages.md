@@ -28,13 +28,14 @@ Everything above is a library you embed. This one is a service you run.
 
 ## The apps
 
-Three clients of the same gateway, plus this site. None is published to a store or registry —
-each is built from the repo.
+Three clients of the same gateway, a reference embedding, and this site. None is published to a
+store or registry — each is built from the repo.
 
 | App | What it is |
 | --- | --- |
 | [`apps/vscode`](https://github.com/workerdeck/workerdeck/tree/master/apps/vscode) | The VS Code extension: the session in the bottom panel, status in the window bar, gateways and sessions in the sidebar, approvals as native notifications, and a remote gateway's project as a virtual workspace. Imports `client`/`react`/`ui`/`protocol` and never the server side. Build the `.vsix` and side-load it. |
 | [`apps/ios`](https://github.com/workerdeck/workerdeck/tree/master/apps/ios) | The native iOS remote (SwiftUI): one session list across every gateway you have configured, the full transcript, approve/deny, a host file browser, and APNs push. Zero third-party Swift dependencies — `WorkerDeckKit` is a hand-written mirror of `protocol` plus ports of the transcript and sessions-list reducers. |
+| [`apps/embedded`](https://github.com/workerdeck/workerdeck/tree/master/apps/embedded) | **The reference embedding** — read it before designing another one. A wiki SPA whose right-hand rail is a sandboxed agent, with the gateway inside the app's own server: one port, the app's own cookie as the only credential an attach can carry, `scope` as the entire ownership model, and the app's data reaching the loop as a real MCP server. The [embedding guide](/workerdeck/docs/guides/embed-in-your-app/) as a working app rather than a snippet. |
 | [`apps/docs`](https://github.com/workerdeck/workerdeck/tree/master/apps/docs) | This documentation site (Astro), deployed to GitHub Pages on push to `master`. |
 
 The web dashboard is not here because it is a package rather than an app: it ships as

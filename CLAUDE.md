@@ -492,7 +492,7 @@ protocol. Read these before changing scope or structure:
   same name; it is reached by double-clicking the title, with Stop and Delete as hover icons
   on the card's second line and state the first line's last item. `src/dev-reload.ts` is development-mode only: a webview rebuild
   re-renders the webviews in place, an extension-host rebuild reloads the window (VS Code
-  cannot swap extension code in a live host). PRD: `_docs/plans/VSCODE-EXTENSION-PRD.md`.
+  cannot swap extension code in a live host).
 - `apps/embedded` — **the reference embedding**, and the thing to read before designing another
   one: a wiki SPA whose right-hand rail is a sandboxed agent, with the gateway inside the app's
   own server. Everything non-`/v1` (the `/api` wiki, the MCP endpoint, the built SPA) is served

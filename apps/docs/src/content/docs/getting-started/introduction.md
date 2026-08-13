@@ -108,10 +108,14 @@ The browser side never imports the server side; the protocol is the only bridge.
 - **Sessions are single-host.** Transcripts live on the server's local disk (the engine's own
   default); resume works across process restarts on the same host. Parked
   sessions survive a restart with the bundled file store, but one directory serves one process.
-- **The server trusts its host app.** `CreateSessionRequest` accepts `mcpServers` and tool
-  policy; gate session creation behind your own auth and use `allowedCwdRoots` +
-  `buildRunnerConfig` to clamp what clients may request. See
-  [Deployment](/workerdeck/docs/guides/deployment/).
+- **The server trusts its host app.** For CLI engines `CreateSessionRequest` accepts `mcpServers`
+  and tool policy; gate session creation behind your own auth and use `allowedCwdRoots` +
+  `buildRunnerConfig` to clamp what clients may request. Provider sessions are tighter by
+  construction — MCP is declared on the profile, never by the caller. To put sessions in front of
+  your own end users, `scope` + `authorizeSession` keep them out of each other's sessions, but
+  your own edge stays the authorization boundary. See
+  [Deployment](/workerdeck/docs/guides/deployment/) and
+  [Embed WorkerDeck in your app](/workerdeck/docs/guides/embed-in-your-app/).
 - **No model-provider auth of its own.** Credentials are resolved by the official SDK/CLI from
   the operator's environment — see [Auth & the providers' terms](/workerdeck/docs/guides/auth/).
 

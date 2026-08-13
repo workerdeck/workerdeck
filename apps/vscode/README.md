@@ -7,8 +7,10 @@ mounted as a `workerdeck://` virtual workspace folder. The panel is the real
 session surface does (streaming transcript, approvals, composer with attachments and `/` `@`
 completion, model/permission switches, capability gating per engine) works here unchanged.
 
-Design + decisions: `_docs/plans/VSCODE-EXTENSION-PRD.md` (local only). Not published to the
-Marketplace yet — build the `.vsix` and side-load it.
+Design + decisions: [`docs/ROADMAP.md`](../../docs/ROADMAP.md) (what shipped, and what is still
+open) and the extension section of the root [`CLAUDE.md`](../../CLAUDE.md) (the navigation rule
+the sidebar was rebuilt around). Not published to the Marketplace yet — build the `.vsix` and
+side-load it.
 
 ## How it connects
 

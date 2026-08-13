@@ -327,7 +327,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `examples/dev-server.config.mjs` does exactly this and is the worked example. Grant the
   **drawer, never `~/.codex`**: the same directory holds `auth.json`, and no file route may be
   one path segment away from it. (Making this work without operator config needs the runner to
-  *deliver* the bytes rather than name them — a protocol addition; see `_docs/plans/`.)
+  *deliver* the bytes rather than name them — a protocol addition, not yet designed.)
   The item's `result` is an undocumented free-form string and is length-capped before it reaches
   the event log — assume a long one is an encoded image, and base64 never goes on the wire.
 - **The app-server has no slash-command surface at all** — no command-listing RPC exists, and
