@@ -71,6 +71,7 @@ export {
   type SessionPanelProps,
   type SessionSurfacePanel,
   type SessionVitals,
+  type TerminalMetrics,
 } from './components/agent/SessionPanel.tsx'
 // The workspace layout and its Monaco editor live at `@workerdeck/ui/workspace`
 // — deliberately unreachable from here, so importing this entry never drags

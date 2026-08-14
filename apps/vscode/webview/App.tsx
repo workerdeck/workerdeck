@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
-import { SessionPanel, Toaster, type SessionControls } from '@workerdeck/ui'
+import { SessionPanel, Toaster, type SessionControls, type TerminalMetrics } from '@workerdeck/ui'
 import { Bridge } from './bridge.ts'
 
 /** An absolute path, optionally `:line` — what the extension host can open.
@@ -29,13 +29,21 @@ export function App({
   bridge,
   density,
   variant,
+  terminalMetrics,
+  affordances,
 }: {
   bridge: Bridge
   /** From `workerdeck.transcriptDensity`, stamped on `#root` so the first paint
-   * is right — see `SessionPanelProvider.#rootAttrs`. */
+   * is right — see `SessionPanelProvider.#rootAttrs`. Inert under `terminal`. */
   density: 'comfortable' | 'compact'
   /** From `workerdeck.transcriptVariant`, stamped alongside it. */
-  variant: 'lines' | 'cards'
+  variant: 'terminal' | 'cards'
+  /** The terminal theme's character cell, resolved from `editor.fontSize` /
+   * `editor.lineHeight` unless overridden. Stamped for the same reason the
+   * density is: it decides every row's height. */
+  terminalMetrics: TerminalMetrics
+  /** From `workerdeck.terminal.affordances`. */
+  affordances: boolean
 }) {
   const [shown, setShown] = useState<Shown | undefined>(undefined)
   // The panel owns the session's one attach, so it owns the only setters there
@@ -167,14 +175,26 @@ export function App({
         client={client}
         sessionId={shown.sessionId}
         className='h-full'
-        // From `workerdeck.transcriptVariant`, defaulting to `lines`: a dock has
-        // no vertical space to spend on cards, so every event is one full-width
-        // line behind a gutter glyph — the terminal treatment. Someone who drags
-        // the panel out into the editor area can ask for the chat form instead.
+        // From `workerdeck.transcriptVariant`, defaulting to `terminal`: this
+        // panel sits beside the editor and the integrated terminal, and the CLI
+        // it mirrors is what it should look like. Someone who drags the panel
+        // out into the editor area can ask for the chat form instead.
         transcriptVariant={variant}
-        // From `workerdeck.transcriptDensity`. Independent of the variant: a
-        // dock draws its rows as lines, and may still leave a blank line between
-        // them the way the CLI does.
+        // The cell, from the editor's own font size unless overridden — the
+        // panel and the terminal below it then draw at the same size, which is
+        // the whole claim.
+        terminalMetrics={terminalMetrics}
+        affordances={affordances}
+        // The overview ruler, in the dock that most needs it: this panel is
+        // narrow and tall, so a long run scrolls further here than anywhere
+        // else, and VS Code's own ruler is the thing beside it that this is
+        // modelled on. Inert under `cards`.
+        scrubber
+        // The CLI keeps the prompt in view while the turn runs; a dock is the
+        // narrowest surface we have, so it needs that most.
+        stickyPrompt
+        // From `workerdeck.transcriptDensity`, and `cards` only: a terminal has
+        // one line height, so under `terminal` this reaches nothing.
         transcriptDensity={density}
         panelSurface='external'
         // Model and mode live in the window status bar (a click there opens a

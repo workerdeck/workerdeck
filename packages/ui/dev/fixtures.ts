@@ -215,6 +215,185 @@ const long: TranscriptItem[] = Array.from({ length: 40 }, (_, index) =>
       }),
 )
 
+/** 600 rows of varied height — the scale where estimate error becomes
+ * visible scrollbar drift and short-landing jumps. Rendered with a catch-up
+ * splice at item 300 (see App.tsx), so the recap jump exercises the re-aim
+ * loop across ~300 unmeasured rows. */
+const huge: TranscriptItem[] = Array.from({ length: 600 }, (_, index) => {
+  const step = index % 6
+  if (step === 0)
+    return item({ kind: 'user',
+      text: `Task ${index / 6 + 1}: tighten the next module, keep the diff small, and stop if anything looks structural rather than local.`,
+    })
+  if (step === 1)
+    return item({ kind: 'assistant_text',
+      streaming: false,
+      parentToolUseId: null,
+      text:
+        `Looking at module ${index}. ` +
+        'The pattern from the previous pass applies here too. '.repeat(1 + (index % 4)),
+    })
+  if (step === 2 || step === 3)
+    return item({ kind: 'tool_call',
+      name: 'Read',
+      input: { file_path: `/repo/src/module-${index}/index.ts` },
+      parentToolUseId: null,
+      status: 'settled',
+      result: {
+        text: Array.from({ length: 1 + (index % 5) }, (_, l) => `line ${l + 1} of the output`).join('\n'),
+        isError: false,
+      },
+    })
+  if (step === 4)
+    return item({ kind: 'tool_call',
+      name: 'Edit',
+      input: { file_path: `/repo/src/module-${index}/index.ts`, old_string: 'a', new_string: 'b' },
+      parentToolUseId: null,
+      status: 'settled',
+      result: { text: `module-${index}: updated`, isError: false },
+    })
+  return item({ kind: 'turn_result',
+    subtype: 'success',
+    isError: false,
+    durationMs: 30_000 + index * 10,
+    totalCostUsd: 0.05,
+  })
+})
+
+/** Content chosen to break a row-height calculator — long unbroken
+ * tokens, CJK, emoji, combining marks, tabs, a wide table, a deep diff. Used by
+ * the height audit (`height-audit.ts`); adversarial on purpose. */
+const adversarial: TranscriptItem[] = [
+  // A tool result far bigger than the expanded row's character budget — the case
+  // the fixtures file claimed to cover and did not: nothing here reached 2000
+  // characters, which is how the "show all N chars" button stayed a no-op
+  // without anyone noticing. Expanded, this must clip and offer the rest.
+  item({
+    kind: 'tool_call',
+    name: 'Bash',
+    input: { command: 'pnpm -w test --reporter verbose' },
+    parentToolUseId: null,
+    status: 'settled',
+    result: {
+      text: Array.from(
+        { length: 400 },
+        (_, index) => ` ✓ packages/core/test/runner.test.ts > case ${index + 1} of 400 (${index * 3}ms)`,
+      ).join('\n'),
+      isError: false,
+    },
+  }),
+  item({ kind: 'user',
+    text: 'Wrap model against the wall: a token that cannot break anywhere, wide glyphs, tables.\n\n第二段是中文的，全部都是宽字符，还混了一个 emoji 🎉 以及组合字符 é（e + U+0301）。',
+  }),
+  item({ kind: 'assistant_text',
+    streaming: false,
+    parentToolUseId: null,
+    text: `## What breaks a character-cell calculator
+
+The URL https://registry.npmjs.org/@workerdeck/protocol/-/protocol-0.16.0.tgz?integrity=sha512-abcdef0123456789 is one unbreakable token, while \`session-list.ts\` and **bold text** and [a link](https://example.com) all change width between source and render.
+
+1. An ordered item whose text is long enough to wrap onto a second visual line at any dock width worth testing
+2. Short one
+3. Third with \`inline code\`
+
+- An unordered list item
+- Nested below:
+  - a second-level item that also wraps when the panel is narrow enough to squeeze it
+
+> A quote paragraph that should wrap inside its two-cell rule indent.
+>
+> And a second paragraph inside the same quote.
+
+\`\`\`ts
+const veryLongLine = buildSomething(withArguments, thatMakeThisLine, muchLongerThan, eightyColumns, soItWraps)
+\tindented with a tab
+short
+\`\`\`
+
+| package | published | notes | a fourth column to make it wide |
+| --- | --- | --- | --- |
+| protocol | yes | bump on breaking | wire types, browser safe, no deps |
+| ui | yes | ships src | tailwind v4, base-ui, cva |
+
+---
+
+漢字テキストの段落。カタカナとひらがなが混ざっていて、折り返し位置は全角文字の幅に依存する。`,
+  }),
+  item({ kind: 'thinking',
+    text: 'Considering 👩‍💻 a ZWJ sequence and a naïve café — combining marks résumé…',
+    parentToolUseId: null,
+  }),
+  item({ kind: 'tool_call',
+    name: 'Read',
+    input: { file_path: '/Users/atomic/projects/silkweave/packages/deeply/nested/with-a-very-long-single-component-file-name-that-cannot-break-anywhere-at-all.generated.ts' },
+    parentToolUseId: null,
+    status: 'settled',
+    result: {
+      text: 'line one\tafter a tab\naverylongunbrokenidentifierthatkeepsgoingandgoingandgoingandgoingandgoingandgoingandgoingandgoingandgoing = 1\n中文输出行，包含宽字符\n\nlast line after an empty one',
+      isError: false,
+    },
+  }),
+  item({ kind: 'tool_call',
+    name: 'Edit',
+    input: { file_path: '/Users/atomic/projects/silkweave/packages/server/src/http.ts' },
+    parentToolUseId: null,
+    status: 'settled',
+    result: { text: 'The file has been updated.', isError: false },
+    patch: {
+      path: '/Users/atomic/projects/silkweave/packages/server/src/http.ts',
+      kind: 'update',
+      hunks: [
+        {
+          oldStart: 1042,
+          oldLines: 4,
+          newStart: 1042,
+          newLines: 5,
+          lines: [
+            '           if (session) {',
+            '             const principal = await authenticate(request)',
+            '-            if (!principal) return refuse(response, 401)',
+            '+            if (!principal) return refuse(response, 401, "authentication required for every scoped route")',
+            '+            if (!authorizeSession(principal, session.info())) return refuse(response, 404)',
+            '             return handler(request, response, session, principal)',
+          ],
+        },
+      ],
+    },
+  }),
+  item({ kind: 'tool_call',
+    name: 'Bash',
+    input: { command: 'pnpm typecheck' },
+    parentToolUseId: null,
+    status: 'settled',
+    result: { text: 'done in 4.2s', isError: false },
+  }),
+  item({ kind: 'tool_call',
+    name: 'Bash',
+    input: { command: 'pnpm lint' },
+    parentToolUseId: null,
+    status: 'settled',
+    result: { text: 'ok', isError: false },
+  }),
+  item({ kind: 'notice',
+    level: 'info',
+    text: 'Long notice with an unbreakable middle: /var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/workerdeck-attachments-4f6a2c1e9b7d filled the line.',
+  }),
+  item({ kind: 'file_delivered',
+    path: 'reports/quarterly-summary-with-a-longer-than-usual-name.pdf',
+    bytes: 2_400_000,
+    description: 'Generated from the fixture data',
+  }),
+  item({ kind: 'turn_result',
+    subtype: 'error_during_execution',
+    isError: true,
+    durationMs: 63_000,
+    totalCostUsd: 0.92,
+    errors: [
+      'A very long error message that will certainly wrap at every width under test because it keeps enumerating the things that went wrong, one after another, without a single break-friendly token boundary of unusual kind',
+    ],
+  }),
+]
+
 /** An approval for a file edit — the change shown as a diff, without line
  * numbers, because the edit has not happened yet. */
 export const EDIT_APPROVAL: PermissionRequest = {
@@ -284,5 +463,13 @@ export const FIXTURES: { key: string; label: string; state: TranscriptState }[] 
   { key: 'markdown', label: 'markdown', state: base(markdown, 'idle') },
   { key: 'failure', label: 'failure', state: base(failure, 'idle') },
   { key: 'long', label: 'long run', state: base(long, 'idle') },
+  { key: 'huge', label: 'huge (600 rows)', state: base(huge, 'idle') },
+  { key: 'adversarial', label: 'adversarial (spike)', state: base(adversarial, 'idle') },
+  // A run with the approval standing — the scrubber pins its mark at the foot.
+  {
+    key: 'approval',
+    label: 'pending approval',
+    state: { ...base(run, 'running'), pendingApprovals: [BASH_APPROVAL] },
+  },
   { key: 'empty', label: 'empty', state: base([], 'idle') },
 ]

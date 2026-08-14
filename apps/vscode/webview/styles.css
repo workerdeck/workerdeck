@@ -20,6 +20,17 @@
  */
 :root {
   --cw-font-sans: var(--vscode-font-family, system-ui, -apple-system, sans-serif);
+  /*
+   * The monospace slot is the EDITOR's font, everywhere and unconditionally.
+   * The terminal theme draws its whole surface in it (`--cw-font-mono` in
+   * `terminal.css`), so this is what makes "the agent panel is in my editor
+   * font" true — and it is not a preference there: a proportional face would
+   * not be a different look, it would be a broken character grid.
+   *
+   * `workerdeck.fontFamily` still exists and still governs the `cards` variant,
+   * where the sans slot is what the transcript reads in.
+   */
+  --cw-font-mono: var(--vscode-editor-font-family, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
 }
 
 /*
@@ -88,10 +99,10 @@ html[data-font='editor'] {
 [data-slot='status-bar'] {
   padding-block: 2px;
 }
-/* The composer's docked treatment — flush to the panel edges, one accent rule
- * along the top — is the `lines` variant's own now (`Composer.tsx`), shared with
- * every other host that draws the terminal form. Nothing to override here: a
- * panel switched to `cards` gets the card, gutter and all. */
+/* The composer's docked treatment — flush to the panel edges, `>` in the gutter,
+ * one accent rule along the top — is the terminal theme's own (`Composer.tsx`),
+ * shared with every other host that draws it. Nothing to override here: a panel
+ * switched to `cards` gets the card, gutter and all. */
 
 html,
 body,

@@ -1,11 +1,17 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { TerminalPermissionPrompt } from '../src/components/terminal/PermissionPrompt.tsx'
 import { TerminalQuestionPrompt } from '../src/components/terminal/QuestionPrompt.tsx'
 import { TerminalStatusLine } from '../src/components/terminal/StatusLine.tsx'
 import { TerminalSurface } from '../src/components/terminal/surface.tsx'
+import { Composer } from '../src/components/agent/Composer.tsx'
 import { Transcript } from '../src/components/agent/Transcript.tsx'
+import { TranscriptVariantProvider } from '../src/components/agent/transcript-variant.tsx'
 import { BASH_APPROVAL, EDIT_APPROVAL, FIXTURES, QUESTIONS } from './fixtures.ts'
+import { markdownHeight, measureCh, textLines } from '../src/components/terminal/height.ts'
+import { terminalBlocks } from '../src/components/terminal/items.tsx'
+import { rowIndexForItem, type TranscriptRow } from '../src/components/agent/Transcript.tsx'
 import { auditGrid, type GridReport } from './grid-audit.ts'
+import { auditHeights } from './height-audit.ts'
 import { cn } from '../src/lib/utils.ts'
 
 /** The prompts are not transcript items — they are the panel's, rendered under
@@ -35,10 +41,83 @@ export function App() {
   const [report, setReport] = useState<GridReport | undefined>()
   const [prompt, setPrompt] = useState<(typeof PROMPTS)[number]['key']>('none')
   const [affordances, setAffordances] = useState(true)
+  const [scrub, setScrub] = useState(true)
   const [answered, setAnswered] = useState<string>()
   const surface = useRef<HTMLDivElement>(null)
 
   const state = FIXTURES.find((f) => f.key === fixture)!.state
+  // The huge fixture carries a catch-up splice, so the recap jump (the re-aim
+  // loop) can be exercised across hundreds of unmeasured rows.
+  const catchUp = fixture === 'huge' ? { from: 300 } : undefined
+  const jumpRef = useRef<(() => void) | null>(null)
+
+  // Hooks for driving the audits headlessly (chrome devtools).
+  // `__wdAudit` audits whatever rows are mounted; the driver scrolls and merges.
+  useEffect(() => {
+    const w = window as unknown as Record<string, unknown>
+    // The boundary goes in explicitly: the recap row shifts every row index
+    // after it, and it is unmounted exactly when you are auditing the rows that
+    // shift (see `recapRowIndex`).
+    w.__wdAudit = () =>
+      surface.current ? auditHeights(state, surface.current, catchUp?.from) : undefined
+    w.__wdJumpRecap = () => jumpRef.current?.()
+    w.__wdSetFixture = (key: string) => setFixture(key)
+    w.__wdSetWidth = (px: number) => setWidth(px)
+    w.__wdSetMetrics = (fs: number, lh: number) => {
+      setFontSize(fs)
+      setLineHeight(lh)
+    }
+    // Debug probes for the spike.
+    w.__wdMd = (md: string, width: number, line = lineHeight) => {
+      const el = surface.current?.querySelector<HTMLElement>('[data-terminal]')
+      return el ? markdownHeight(md, { width, ch: measureCh(el), line }) : undefined
+    }
+    w.__wdLines = (text: string, cols: number) => textLines(text, cols)
+    // The item→row mapping's regression check: binary search vs a linear
+    // reference, plus a containment assertion (the found row must actually
+    // cover the item), across every fixture × every item index × several
+    // recap-splice positions. This is the off-by-a-fold trap's test.
+    w.__wdCheckMapping = () => {
+      const buildRows = (items: typeof state.items, boundary?: number): TranscriptRow[] =>
+        boundary === undefined
+          ? terminalBlocks(items, 0, true)
+          : [
+              ...terminalBlocks(items.slice(0, boundary), 0, true),
+              { key: 'recap' as const, line: 'check' },
+              ...terminalBlocks(items.slice(boundary), boundary, true),
+            ]
+      const linear = (rows: TranscriptRow[], itemIndex: number): number => {
+        let best = 0
+        rows.forEach((row, index) => {
+          if ('index' in row && row.index <= itemIndex) best = index
+        })
+        return best
+      }
+      let cases = 0
+      const mismatches: unknown[] = []
+      for (const f of FIXTURES) {
+        const items = f.state.items
+        if (items.length === 0) continue
+        const boundaries = [undefined, 1, Math.floor(items.length / 2), items.length - 1]
+        for (const boundary of boundaries) {
+          const rows = buildRows(items, boundary)
+          for (let i = 0; i < items.length; i++) {
+            cases += 1
+            const got = rowIndexForItem(rows, i)
+            const want = linear(rows, i)
+            const row = rows[got]!
+            const covers =
+              'shell' in row
+                ? i >= row.index && i < row.index + row.shell.length
+                : 'item' in row && row.index === i
+            if (got !== want || !covers)
+              mismatches.push({ fixture: f.key, boundary, i, got, want, covers })
+          }
+        }
+      }
+      return { cases, mismatchCount: mismatches.length, sample: mismatches.slice(0, 5) }
+    }
+  })
 
   return (
     <div
@@ -91,6 +170,10 @@ export function App() {
             onChange={(e) => setAffordances(e.target.checked)}
           />
           affordances
+        </label>
+        <label className='flex items-center gap-2 text-fg-3'>
+          <input type='checkbox' checked={scrub} onChange={(e) => setScrub(e.target.checked)} />
+          scrubber
         </label>
         <label className='flex items-center gap-2 text-fg-3'>
           <input
@@ -159,13 +242,31 @@ export function App() {
               terminal theme as its variant. Proving the integration here is the
               point: the playground must exercise what an embedder gets. */}
           <Transcript
+            stickyPrompt
             state={state}
             variant='terminal'
             fontSize={fontSize}
             lineHeight={lineHeight}
             affordances={affordances}
+            scrubber={scrub}
+            scrubberMarks={fixture === 'huge' ? [30, 210, 480] : undefined}
+            catchUp={catchUp}
+            jumpToRecapRef={jumpRef}
             className={cn('h-[70vh]', grid && 'term-grid-overlay')}
           />
+          {/* The composer is the panel's foot and its own terminal surface, so
+              it is mounted the way the panel mounts it — inside the variant
+              provider, at the same metrics. The grid audit reaches it too. */}
+          <TranscriptVariantProvider value='terminal'>
+            <Composer
+              onSend={(text) => setAnswered(`sent: ${text}`)}
+              onInterrupt={() => setAnswered('interrupted')}
+              busy={false}
+              fontSize={fontSize}
+              lineHeight={lineHeight}
+              affordances={affordances}
+            />
+          </TranscriptVariantProvider>
           <TerminalSurface
             fontSize={fontSize}
             lineHeight={lineHeight}

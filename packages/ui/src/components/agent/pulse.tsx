@@ -13,8 +13,9 @@ import { useEffect, useState } from 'react'
  * BRAND.md's caveat applies and is satisfied here: `U+25C6/7/8` are East-Asian
  * *ambiguous width*, so they can render double-width in a terminal under an
  * East-Asian locale and shift every line with them. They are safe wherever the
- * glyph is centred in a fixed-width box, which is what `LineGlyph` is. Anything
- * writing to a real terminal must use the ASCII set instead.
+ * glyph is centred in a fixed-width box, which is what the terminal theme's
+ * gutter cell (`.term-gutter`, one `--term-cell` wide) is. Anything writing to a
+ * real terminal must use the ASCII set instead.
  */
 export const PULSE_FRAMES = ['⋄', '◇', '◈', '◆'] as const
 export const PULSE_MS = 150

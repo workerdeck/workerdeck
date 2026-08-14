@@ -52,18 +52,21 @@ export function setTranscriptDensity(density: TranscriptDensity): void {
 /**
  * Transcript variant — whether a session reads as chat or as a terminal.
  *
- * `cards` is the chat convention and the dashboard's default; `lines` is
- * full-width transparent rows behind a fixed gutter glyph, no boxes, which is
- * what the VS Code panel wears. Independent of density on purpose: the variant
- * is the *shape* of a row, density is how much air it gets, and someone may well
- * want terminal rows with room to breathe.
+ * `cards` is the chat convention and the dashboard's default; `terminal` is the
+ * CLI's own form, every row on a character cell with no boxes anywhere.
+ * Independent of density on purpose: density is how much air a *card* gets, and
+ * the terminal theme measures its own spacing in blank lines.
  */
-export type TranscriptVariant = 'cards' | 'lines'
+export type TranscriptVariant = 'cards' | 'terminal'
 
 const VARIANT_KEY = 'workerdeck.transcript-variant'
 
 export function getTranscriptVariant(): TranscriptVariant {
-  return localStorage.getItem(VARIANT_KEY) === 'lines' ? 'lines' : 'cards'
+  const stored = localStorage.getItem(VARIANT_KEY)
+  // `lines` was the retired no-boxes variant. Someone who turned boxes off keeps
+  // them off — falling back to `cards` would silently undo the choice they made,
+  // which is the one outcome a migration must not produce.
+  return stored === 'terminal' || stored === 'lines' ? 'terminal' : 'cards'
 }
 
 export function setTranscriptVariant(variant: TranscriptVariant): void {

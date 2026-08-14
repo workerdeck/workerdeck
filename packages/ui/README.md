@@ -164,9 +164,38 @@ lose by forgetting a second mount isn't one.
 - **`statusSurface: 'external'` takes the `⋯` menu's only home with it.** Combining it with
   `panelSurface: 'internal'` needs a *function* `header` to receive the menu, or those panels
   become unreachable.
-- **The terminal theme (`variant: 'terminal'`) is a renderer, not a third set of branches.** It
-  draws every row itself from `components/terminal/`, so `useLines()` stays *false* under it — a
-  card component asking "am I in lines?" must not answer yes for a variant it never draws.
+- **The terminal theme (`variant: 'terminal'`) is a renderer, not a second set of branches.** It
+  draws every row itself from `components/terminal/` and the shell mounts it *instead* of the
+  components under `components/agent/`, so nothing in there asks which variant it is in — if it is
+  drawing at all, it is drawing cards.
+- **The panel mounts three terminal surfaces, and they must agree.** The transcript, the pending
+  prompts and the composer each establish their own cell, because each sits in a different part of
+  the flex column. `terminalMetrics` is one prop for exactly that reason: hand two of them
+  different numbers and the caret lands on a different column from the text above it.
+- **`transcriptDensity` and `transcriptFont` reach `cards` only.** A terminal has one line height
+  and is monospace by construction. Under `terminal` both are inert rather than broken — a host
+  offering them as settings should say so, or hide them (the dashboard hides them).
+- **`scrubber` and `stickyPrompt` reach `terminal` only**, and by construction rather than policy.
+  Both rest on the theme's premise — one line height and one cell make a row's height computable —
+  and under `cards` the flags are inert.
+- **`stickyPrompt` pins the real row, not a copy of it.** The prompt at the top of the scroller is
+  the same DOM node the transcript already rendered, with its transform clamped to the scroll
+  offset. A duplicate header cannot be made to line up with the rows beneath it, which is why this
+  is worth the machinery (`rangeExtractor` to keep it mounted, a manual push-off — `position:
+  sticky` does nothing on an absolutely positioned element).
+- **Terminal row heights are computed, and the cache invalidates by object identity.** The height
+  calculator keys a `WeakMap<TranscriptItem, …>` per (width, cell) epoch, which works only because
+  the react reducer replaces item objects on every mutation. Mutate a `TranscriptItem` in place and
+  you will serve a stale height for a row that has changed. The epoch is rebuilt from a
+  `ResizeObserver` on the **content** element, not the scroller — the panel can resize without the
+  wrap width moving, since the content column caps at 48rem.
+- **An item index is not a virtual row index.** `terminalBlocks` folds consecutive shell calls into
+  one row and the catch-up recap splices another, so `scrollToIndex(itemIndex)` lands off by the
+  fold on any transcript that has either. Go through `rowIndexForItem`.
+- **`affordances={false}` must leave a way to scroll.** The scrubber replaces the native scrollbar
+  while it is interactive; with affordances off, the marks stay painted but inert *and the native
+  scrollbar comes back*. A rail that kept the scrollbar hidden while refusing the pointer would
+  strand the reader.
 - **Its two metrics must be whole pixels.** `--term-font-size` and `--term-line` are the character
   cell; a line height of `1.5 x 13px` is 19.5px and puts every other row on a half-pixel, which
   softens the text and shows a seam through the diff bands. Horizontal measures are `ch` and

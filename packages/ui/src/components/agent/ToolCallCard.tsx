@@ -6,10 +6,7 @@ import { CodeBlock } from '../ui/CodeBlock.tsx'
 import { Spinner } from '../ui/Spinner.tsx'
 import { cn } from '../../lib/utils.ts'
 import { toolInputPreview } from '../../lib/format.ts'
-import { isMutatingTool, toolIcon } from '../../lib/tool-icon.ts'
-import { LINE_INDENT, LinePayload } from './line-prompt.tsx'
-import { usePulse } from './pulse.tsx'
-import { LineGlyph, useLines } from './transcript-variant.tsx'
+import { toolIcon } from '../../lib/tool-icon.ts'
 
 export type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
 
@@ -51,15 +48,6 @@ const STATE_BADGE = {
   failed: { label: 'Error', variant: 'danger', busy: false },
 } as const
 
-/** The gutter dot's colour in `lines`: the state, said without a badge. */
-const STATE_GLYPH = {
-  running: 'text-info',
-  pending: 'text-info',
-  deferred: 'text-accent',
-  settled: 'text-fg-4',
-  failed: 'text-danger',
-} as const
-
 /**
  * The language to highlight a payload as.
  *
@@ -91,47 +79,35 @@ function resultLanguage(item: ToolCallItem): string | undefined {
 type Status = keyof typeof STATE_BADGE
 
 export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) {
-  const lines = useLines()
   const [open, setOpen] = useState(false)
   const [fullResult, setFullResult] = useState(false)
   const imagePath = imagePathOf(item)
   const status: Status = item.status ?? (item.result === undefined ? 'running' : 'settled')
   const badge = STATE_BADGE[status]
   const isError = status === 'failed' || item.result?.isError === true
-  // Ticks only while this row is actually running, and only in the variant with a
-  // gutter to pulse in — an idle transcript of a hundred settled tools starts no
-  // timers at all.
-  const pulse = usePulse(lines && badge.busy)
   const Icon = toolIcon(item.name)
 
   const resultText = item.result?.text ?? ''
   const truncated = !fullResult && resultText.length > RESULT_PREVIEW_CHARS
   const shownResult = truncated ? resultText.slice(0, RESULT_PREVIEW_CHARS) : resultText
 
-  // In `lines` the payloads are dim label + highlighted band, not framed cards:
-  // a tool call is already one row, and boxing what it expands into puts back
-  // the chrome the variant exists to remove.
-  const blockVariant = lines ? 'plain' : 'panel'
-  const Payload = lines ? HighlightedPayload : PlainPayload
   const details = open ? (
-    <div className={cn('flex flex-col', lines ? 'gap-1 py-1' : 'gap-2 border-t border-border p-2.5')}>
-      <Payload
+    <div className='flex flex-col gap-2 border-t border-border p-2.5'>
+      <PlainPayload
         code={JSON.stringify(item.input, null, 2)}
         language='json'
         label='Parameters'
-        variant={blockVariant}
       />
       {item.logs?.length ? (
-        <Payload code={item.logs.join('\n')} label='Logs' variant={blockVariant} />
+        <PlainPayload code={item.logs.join('\n')} label='Logs'/>
       ) : null}
       {item.result !== undefined ? (
         <div>
-          <Payload
+          <PlainPayload
             code={shownResult || '(empty result)'}
             language={resultLanguage(item)}
             label={isError ? 'Error' : 'Result'}
-            variant={blockVariant}
-            className={cn(isError && (lines ? '[&_pre]:text-danger' : 'border-danger/40 [&_pre]:text-danger'))}
+                className={cn(isError && 'border-danger/40 [&_pre]:text-danger')}
           />
           {truncated ? (
             <button
@@ -148,63 +124,7 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
 
   // The picture is the point of the call — shown without expanding, the way the
   // tool's own output would be if the engine had sent bytes.
-  const image = imagePath && hostImage ? <HostImage path={imagePath} load={hostImage} lines={lines} /> : null
-
-  if (lines) {
-    return (
-      <div data-slot='tool-call' data-state={status} className={cn('w-full', className)}>
-        <button
-          type='button'
-          onClick={() => setOpen((v) => !v)}
-          className='flex w-full items-baseline gap-2 text-left outline-none'>
-          <LineGlyph
-            className={
-              // A settled write is green: skimming a run, "what did it change"
-              // is the question you come back to, and it is the one you might
-              // need to undo. Every other state keeps its own colour — a failed
-              // write is a failure first.
-              status === 'settled' && !isError && isMutatingTool(item.name)
-                ? 'text-success'
-                : STATE_GLYPH[status]
-            }>
-            {/* Running: the mark's own pulse, so a working tool row and the
-                transcript's working line beat together. Settled: a plain dot,
-                which reads as "done" precisely by not moving. */}
-            {badge.busy ? pulse : '●'}
-          </LineGlyph>
-          <span className='min-w-0 flex-1 truncate text-body-sm leading-5 text-fg-3'>
-            <span className='font-medium text-fg-1'>{item.name}</span>
-            <span className='text-fg-4'>({toolInputPreview(item.input)})</span>
-          </span>
-          {item.backend && item.backend !== 'server' ? (
-            <span className='shrink-0 text-label text-fg-4'>{item.backend}</span>
-          ) : null}
-          {/* No Spinner here: the gutter glyph animates now, and two spinners on
-              one row is one too many. `cards` keeps its own — it has no gutter. */}
-          {status === 'deferred' ? <Clock className='size-3 shrink-0 self-center text-fg-4' /> : null}
-          {isError && !badge.busy ? (
-            <span className='shrink-0 text-label text-danger'>error</span>
-          ) : null}
-        </button>
-        {/* Collapsed, the first line of the output is the whole story most of
-            the time — a summary line costs one row and saves an expand. */}
-        {!open && resultText ? (
-          <div className='flex items-baseline gap-2'>
-            <LineGlyph className='text-fg-4'>⎿</LineGlyph>
-            <span
-              className={cn(
-                'min-w-0 flex-1 truncate text-label leading-5',
-                isError ? 'text-danger' : 'text-fg-4',
-              )}>
-              {resultSummary(resultText)}
-            </span>
-          </div>
-        ) : null}
-        {image}
-        {details ? <div className={LINE_INDENT}>{details}</div> : null}
-      </div>
-    )
-  }
+  const image = imagePath && hostImage ? <HostImage path={imagePath} load={hostImage} /> : null
 
   return (
     <div
@@ -243,31 +163,19 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
   )
 }
 
-/** The first line worth showing of a tool result, for the collapsed summary. */
-function resultSummary(text: string): string {
-  const first = text.split('\n').find((line) => line.trim() !== '') ?? ''
-  const rest = text.trimEnd().split('\n').length - 1
-  const trimmed = first.trim()
-  return rest > 0 ? `${trimmed} (+${rest} lines)` : trimmed
-}
-
-type PayloadProps = {
+/** The framed card the `cards` transcript expands into. Unhighlighted by
+ * design: it is structured data in a panel, not a file. */
+function PlainPayload({
+  code,
+  label,
+  className,
+}: {
   code: string
   label: string
   language?: string
-  variant: 'panel' | 'plain'
   className?: string
-}
-
-/** The framed card, for the `cards` transcript. Unhighlighted by design: it is
- * structured data in a panel, not a file. */
-function PlainPayload({ code, label, variant, className }: PayloadProps) {
-  return <CodeBlock code={code} label={label} variant={variant} className={className} />
-}
-
-/** The terminal payload — shared with the line-shaped prompts. */
-function HighlightedPayload({ code, label, language, className }: PayloadProps) {
-  return <LinePayload code={code} label={label} language={language} className={className} />
+}) {
+  return <CodeBlock code={code} label={label} variant='panel' className={className} />
 }
 
 /**
@@ -282,11 +190,9 @@ function HighlightedPayload({ code, label, language, className }: PayloadProps) 
 function HostImage({
   path,
   load,
-  lines,
 }: {
   path: string
   load: (path: string) => Promise<string | undefined>
-  lines?: boolean
 }) {
   const [src, setSrc] = useState<string | undefined>()
   useEffect(() => {
@@ -305,7 +211,7 @@ function HostImage({
   }, [path, load])
   if (!src) return null
   return (
-    <div className={cn(lines ? cn('py-1', LINE_INDENT) : 'border-t border-border p-2.5')}>
+    <div className='border-t border-border p-2.5'>
       <img
         src={src}
         alt={path.split('/').pop() ?? 'Generated image'}

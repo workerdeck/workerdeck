@@ -1,16 +1,16 @@
-import * as vscode from 'vscode'
 import type { SessionVitals } from '@workerdeck/ui'
-import { HostStore, isLoopbackHost } from './hosts.ts'
-import { SessionsModel } from './sessions-model.ts'
-import { SessionPanelProvider } from './panel.ts'
-import { SidebarProvider } from './sidebar.ts'
-import { GatewaysViewProvider } from './gateways-view.ts'
-import { SectionViewProvider, type SectionKind } from './section-view.ts'
-import { WorkerdeckFileSystem } from './fsp.ts'
+import * as vscode from 'vscode'
 import { startDevReload } from './dev-reload.ts'
+import { WorkerdeckFileSystem } from './fsp.ts'
+import { GatewaysViewProvider } from './gateways-view.ts'
+import { HostStore, isLoopbackHost } from './hosts.ts'
+import { createSession, resumeSession, type NewSessionDeps } from './new-session.ts'
+import { SessionPanelProvider } from './panel.ts'
+import { SectionViewProvider, type SectionKind } from './section-view.ts'
+import { SessionsModel } from './sessions-model.ts'
+import { SidebarProvider } from './sidebar.ts'
 import { SessionStatusBar, currentModel, modelLabel } from './status-bar.ts'
 import { createWatermarks } from './watermarks.ts'
-import { createSession, resumeSession, type NewSessionDeps } from './new-session.ts'
 
 /** Section view ids — each its OWN view, so VS Code owns collapse/placement. */
 const SECTION_VIEWS: Record<SectionKind, string> = {
@@ -223,7 +223,13 @@ export function activate(context: vscode.ExtensionContext): void {
       if (
         e.affectsConfiguration('workerdeck.fontFamily') ||
         e.affectsConfiguration('workerdeck.transcriptDensity') ||
-        e.affectsConfiguration('workerdeck.transcriptVariant')
+        e.affectsConfiguration('workerdeck.transcriptVariant') ||
+        e.affectsConfiguration('workerdeck.terminal') ||
+        // The terminal cell FOLLOWS the editor's own size unless overridden, so
+        // an editor-font change is a panel change: without these two the panel
+        // would keep drawing at the size the editor used to be.
+        e.affectsConfiguration('editor.fontSize') ||
+        e.affectsConfiguration('editor.lineHeight')
       ) {
         panel.reloadWebview()
       }

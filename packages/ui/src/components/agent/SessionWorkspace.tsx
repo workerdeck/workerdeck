@@ -17,6 +17,7 @@ import { EditorTabs } from './EditorTabs.tsx'
 import { FileTree } from './FileTree.tsx'
 import { FileViewer } from './FileViewer.tsx'
 import { SessionPanel, type SessionPanelProps } from './SessionPanel.tsx'
+import { resolveAgainstCwd, usePathLinks } from './use-path-links.ts'
 
 export interface SessionWorkspaceProps {
   client: WorkerDeckClient
@@ -35,6 +36,11 @@ export interface SessionWorkspaceProps {
   transcriptVariant?: SessionPanelProps['transcriptVariant']
   transcriptDensity?: SessionPanelProps['transcriptDensity']
   transcriptFont?: SessionPanelProps['transcriptFont']
+  /** The overview ruler in place of the scrollbar — see `SessionPanel`. */
+  scrubber?: SessionPanelProps['scrubber']
+  scrubberMarks?: SessionPanelProps['scrubberMarks']
+  /** The last prompt pinned above the transcript — see `SessionPanel`. */
+  stickyPrompt?: SessionPanelProps['stickyPrompt']
   /** Which end of the panel the status bar sits at — see `SessionPanel`. */
   statusPlacement?: SessionPanelProps['statusPlacement']
   controlsSurface?: SessionPanelProps['controlsSurface']
@@ -94,6 +100,9 @@ export function SessionWorkspace({
   transcriptVariant,
   transcriptDensity,
   transcriptFont,
+  scrubber,
+  scrubberMarks,
+  stickyPrompt,
   statusPlacement,
   controlsSurface,
   unseen,
@@ -117,6 +126,7 @@ export function SessionWorkspace({
   // Writing is a separate server opt-in from reading and defaults off, so the
   // editor asks before it offers to save anything.
   const { canWrite } = useHostFileRoots(client)
+
 
   // Nothing here can save on the user's behalf when the tab is going away, so
   // the browser's own guard is the last line. Registered only while there is
@@ -172,6 +182,22 @@ export function SessionWorkspace({
 
   const column = useRef<HTMLDivElement>(null)
   const columnHeight = useElementHeight(column)
+  // Cmd/Ctrl+click a file the agent named and it opens in the editor above —
+  // the workspace is the only surface that *has* an editor, which is why this
+  // lives here and not in the panel. Gated on the tree being available: without
+  // a host filesystem there is nothing to open, and a link that cannot resolve
+  // is worse than plain text. Monaco is excluded because Cmd+click already
+  // means go-to-definition in there, and every identifier would match.
+  const openPath = useCallback(
+    ({ path }: { path: string }) => files.open(resolveAgainstCwd(path, cwd)),
+    [files.open, cwd],
+  )
+  usePathLinks({
+    container: column,
+    onOpen: openPath,
+    enabled: tree.available,
+    ignore: '.monaco-editor',
+  })
   const editorMax = Math.max(EDITOR_MIN, columnHeight - AGENT_MIN)
 
   // The embedder's header is app chrome and belongs above everything — but only
@@ -278,6 +304,9 @@ export function SessionWorkspace({
           transcriptVariant={transcriptVariant}
           transcriptDensity={transcriptDensity}
           transcriptFont={transcriptFont}
+          scrubber={scrubber}
+          scrubberMarks={scrubberMarks}
+          stickyPrompt={stickyPrompt}
           controlsSurface={controlsSurface}
           statusPlacement={statusPlacement}
           unseen={unseen}

@@ -74,6 +74,20 @@ export function toolIcon(toolName: string): LucideIcon {
 }
 
 /**
+ * Is this tool a shell command?
+ *
+ * Its own question because a run of them is *one* thing the reader skims past:
+ * the terminal theme collapses consecutive shell calls into a single "Ran N
+ * shell commands" line, the way the CLI does. Names from both first-party
+ * engines. `BashOutput`/`KillShell` are excluded on purpose — they manage a
+ * background shell rather than run something, and folding them into the count
+ * would inflate it.
+ */
+export function isShellTool(toolName: string): boolean {
+  return toolName === 'Bash' || toolName === 'CodexCommand'
+}
+
+/**
  * Does this tool *change* the workspace?
  *
  * Worth its own colour in a transcript: skimming a run, "what did it edit" is a

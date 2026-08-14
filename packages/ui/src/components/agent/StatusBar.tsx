@@ -9,6 +9,7 @@ import { Tip } from '../ui/Tooltip.tsx'
 import { cn } from '../../lib/utils.ts'
 import { formatCost, formatCountdown, formatTokens } from '../../lib/format.ts'
 import { STATUS_META } from './status.ts'
+import { useTranscriptVariant } from './transcript-variant.tsx'
 
 export interface StatusBarProps {
   state: TranscriptState
@@ -182,6 +183,7 @@ export function StatusBar({
   const session = state.rateLimits?.five_hour
   const weekly = state.rateLimits?.seven_day
   const link: ConnectionState = connection ?? (connected === false ? 'reconnecting' : 'live')
+  const terminal = useTranscriptVariant() === 'terminal'
   return (
     <div
       data-slot='status-bar'
@@ -198,8 +200,11 @@ export function StatusBar({
         // one piece of chrome, and a pixel of drift between them shows.
         'flex h-[38px] items-baseline gap-2 border-border bg-surface p-1.5',
         // The rule goes between the bar and the content, so which edge it sits
-        // on follows the placement.
-        placement === 'bottom' ? 'border-t' : 'border-b',
+        // on follows the placement — except under the terminal theme at the
+        // foot, where the composer directly above already closes itself with a
+        // rule of its own. Two adjacent 1px rules is a 2px rule with a seam in
+        // it, and it is off the line grid besides.
+        placement === 'bottom' ? (terminal ? undefined : 'border-t') : 'border-b',
         className,
       )}>
       {/* One slot, two meanings: connection trouble wins it, because a session

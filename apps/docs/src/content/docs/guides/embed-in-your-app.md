@@ -248,7 +248,7 @@ yours. Check `Sec-Fetch-Site` (falling back to `Origin`) before you resolve the 
   client={client}                       // ONE client per gateway
   key={sessionId}                       // remount by key; never by moving it in the tree
   sessionId={sessionId}
-  transcriptVariant="lines"             // full-width rows, no cards — right for a narrow rail
+  transcriptVariant="terminal"          // the CLI's own form — right for a narrow rail
   controlsSurface="status"              // model + mode into the panel's own status bar
   onVitals={(v) => setVitals(v)}        // live readings for your own chrome
 />

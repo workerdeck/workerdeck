@@ -213,60 +213,130 @@ protocol. Read these before changing scope or structure:
   says the session is busy, an absent one says this screen does not drive it — and **not an
   authorization boundary**: it removes the affordance, the gateway does the enforcing.
   `transcriptVariant: 'terminal'` is the **terminal theme** (`src/components/terminal/`, geometry
-  and palette in `src/styles/terminal.css`) and it is a *renderer*, not a third set of branches:
-  it draws every row itself, so `useLines()` stays false under it. Two rules hold the whole thing
+  and palette in `src/styles/terminal.css`) and it is a *renderer*, not a set of branches: it
+  draws every row itself and the shell mounts it **instead of** the components under
+  `components/agent/`, so nothing in there asks which variant it is in — if it is drawing, it is
+  drawing cards. Two rules hold the whole thing
   up — horizontal measures are `ch` (one cell) and vertical measures are whole multiples of
   `--term-line`, both of which must be whole pixels — and everything is built from three
   primitives: `Row` (gutter cell + body cell, which is what gives every wrap its hanging indent),
   `Blank` (one empty line, the theme's only spacing) and `Band` (a full-bleed wash). Markdown goes
-  through Streamdown with a **component map** rather than the sixty `!important` overrides `lines`
-  needed, `TerminalDiff` renders protocol's `FilePatch` with the engine's own line numbers (and
+  through Streamdown with a **component map** rather than the sixty `!important` overrides the
+  retired `lines` variant needed,
+  `TerminalDiff` renders protocol's `FilePatch` with the engine's own line numbers (and
   without a number column when the hunks start at 0 — an approval, where the edit has not
   happened), and the prompts are the CLI's: one question at a time behind a chip strip, ending in
-  a review step, answerable entirely from the keyboard. `affordances` is the seam for what a real
+  a review step, answerable entirely from the keyboard. A **run of consecutive shell calls folds
+  into one row** (`terminalBlocks` + `ShellRunRow`) reading `Ran N shell commands`, the CLI's own
+  compression: the calls are almost never what you came back to read, and six of them bury the
+  sentence that is. *Consecutive* is the entire rule — anything the model said between two commands
+  breaks the run, because that sentence is the reason the second one happened — and the recap
+  boundary breaks it too, so a count never spans "what you already read". `terminalBlocks` is the
+  one implementation of it: the virtualized shell folds each side of the boundary through the same
+  function the plain `TerminalTranscript` calls, and it is what the virtualizer counts, so a run is
+  one measured row rather than N. Expanding is the theme's one piece of state and it has three
+  parts, each of which is a bug when dropped: a press is a **`Pressable`, never a `<button>`**
+  (`press.tsx`) — a drag that selects text out of a row ends in a `click`, so the row you were
+  highlighting collapses and takes the selection with it; the press is refused when the pointer
+  travelled or a selection stands inside it. The opened block keeps a full-bleed wash (`.term-open`)
+  so eighty new rows read as one block. And `useRevealOnOpen` brings its **first line** back when
+  the expansion pushed it above the fold — one-directional, and only on the open transition, so a
+  block already in view never moves. A tool result opens **clipped to a character budget** with the
+  rest one press away, and that is a DOM guard rather than a preference: the whole of a
+  hundred-thousand-character result lands in *one* virtual row, and the virtualizer mounts rows, so
+  it cannot help with what is inside a single one.
+  **Row heights are computed, not estimated** (`terminal/height.ts`): one line height and one cell
+  make a row's height derivable from its item, so `estimateSize` is exact and the scrollbar stops
+  growing as rows mount. Measured 99–100% pixel-exact on real content; the calculator returns
+  `{px, exact}` and *flags* what it cannot know (CJK and other non-`1ch` advances, a table
+  compressed below `max-content`), which is the design — a flagged row self-corrects on mount.
+  Three invariants: it needs **no expanded branch** (expansion is component-local and resets on
+  unmount, so every unmounted row is collapsed by definition); the cache is a
+  `WeakMap<TranscriptItem, …>` per (width, cell) **epoch**, which self-invalidates because the
+  reducer replaces item objects on every mutation — streaming, results and patches all miss
+  naturally, with no version counter; and the epoch is rebuilt from a debounced `ResizeObserver`
+  on the **content** element, never the scroller (`ConversationContent` caps at 48rem, so the
+  panel resizes without the wrap width moving). `estimateSize` reaches terminal only — cards vary
+  too much for any constant to be right and the calculator has no claim there. `dev/height-audit.ts`
+  is the regression test and it measures against real browser layout, which is the only thing that
+  can check this: jsdom has no text layout, so a unit test would check the calculator against its
+  author's assumptions. The one genuinely unit-testable piece is `textLines`.
+  `scrubber` is the **overview ruler** (`terminal/scrubber.tsx`), VS Code's strip rather than its
+  minimap: a **16px** rail replacing the scrollbar, **two 8px lanes** (what you typed / the answer
+  and its turn end as **one** merged mark) with everything that is an *annotation on the run*
+  rather than a step through it — errors, a waiting approval pinned at the foot, `scrubberMarks`
+  bookmarks, the recap seam — spanning the full width instead. 8px minimum marks (a hit target
+  before a graphic) merging under a pixel with the loudest colour winning. The 16px is the one
+  deliberate exception to the theme's `ch` rule: the rail is chrome beside the grid, and its lanes
+  are hit targets rather than columns of text. Hover peeks, click jumps, drag scrubs. Peeks render from `state.items`
+  and **never the DOM** — the row they describe is usually unmounted. Positions come from the
+  virtualizer's own offsets, which are only trustworthy *because* the calculator feeds
+  `estimateSize`; that is also what answered whether the rail could be a real draggable scrollbar
+  (it can). Two traps it is built around: a mark's item index is **not** its virtual row index
+  (`terminalBlocks` folds shell runs and the recap splices a row, so `scrollToIndex(itemIndex)` is
+  wrong by construction — go through `rowIndexForItem`), and a jump is `jumpToRow`, the generalized
+  form of the recap re-aim loop, not a second copy of it. Under `affordances={false}` the marks stay
+  painted but inert **and the native scrollbar returns** — never leave a reader with no way to
+  scroll. `stickyPrompt` holds the prompt of the turn you are reading at the top of the scroller, the CLI's
+  own affordance — and it is the **real row, pinned**, not a header drawn above the transcript. A
+  duplicate has its own padding, band and gutter and never quite lines up with the rows beneath,
+  which is what got the first attempt rejected. `TranscriptRows` clamps that row's own transform to
+  the scroll offset (`position: sticky` does nothing on an absolutely positioned element, and
+  virtualized rows are), pushes it off with `nextStart - size`, and keeps it mounted when it is far
+  above the window — which is exactly when it is working — through the virtualizer's
+  `rangeExtractor`. `affordances` is the seam for what a real
   terminal *cannot* do (hover fill, hover-revealed copy) and every one of them costs no layout, so
-  `false` is the pure article rather than a degraded mode. `packages/ui/dev/` is its playground —
+  `false` is the pure article rather than a degraded mode. `terminalMetrics` is the cell, in whole
+  pixels, and it is **one** prop because the panel mounts **three** terminal surfaces — transcript,
+  pending prompts, composer — each in a different part of its flex column; hand two of them
+  different numbers and the caret lands on a different column from the text above it, which is the
+  failure the theme exists to prevent. The **composer** is the CLI's prompt under it: `❯`
+  (`PROMPT_GLYPH`, the same constant the user rows draw — two spellings would put the caret a glyph
+  off the column, and it is **blue**, because coral is the *working* mark and a prompt waiting for
+  you is not the session working) in the
+  same gutter cell every row's marker sits in, docked flush to the panel edges with `+`/`↵`
+  characters in place of the round pills. It is bracketed by **two rules**, top and bottom, both
+  turning accent on focus, with 8px of air inside them — the CLI's own frame for its prompt, and
+  the thing that makes the field its own strip of the panel rather than the transcript's last row,
+  without a side border that would take the `❯` off the column. The bottom rule is why
+  `StatusBar` draws no `border-t` under this variant: two adjacent 1px rules is a 2px rule with a
+  seam in it. It lives
+  in `Composer.tsx` keyed on the panel-wide variant context — it had been CSS overrides in the VS
+  Code webview, which meant only that one host had it. `packages/ui/dev/` is its playground —
   fixtures, a character-cell overlay and `grid-audit.ts`, which asserts every row starts on and
   spans a whole multiple of the line; it is dev-only and unpublished (`files` is `build` + `src`).
   `transcriptVariant` is otherwise the fifth, independent seam: `'cards'`
-  (the chat convention) or `'lines'` — full-width transparent rows behind a fixed gutter
-  glyph, no boxes, for a host where vertical space is scarce. It rides a **context**
-  (`transcript-variant.tsx`), not a prop chain, so a row component composed by hand gets the
-  right treatment too; every row component branches on `useLines()` rather than the embedder
-  restyling `data-slot`s from outside. `transcriptDensity` is the sixth seam and rides its own
+  (the chat convention) or `'terminal'`. It rides a **context**
+  (`transcript-variant.tsx`), not a prop chain, because the pieces that need it sit *outside* the
+  transcript — the composer and the pending prompts, which are line items of the same run — and
+  because a row component composed by hand gets the right treatment too.
+  `transcriptDensity` is the sixth seam and rides its own
   context beside it — `'comfortable'` (default: one blank line between rows, what the Claude
   Code CLI leaves) or `'compact'`. Separate from the variant on purpose: the variant follows
-  from the *surface* (boxed or not), density is the reader's *preference*, so a dock may be
-  roomy and a dashboard dense. `ROW_GAP` in `transcript-variant.tsx` is the whole feature — the
+  from the *surface*, density is the reader's *preference*. It reaches **`cards` only**: a
+  terminal has one line height, which is the premise, so its spacing is a blank *line* decided
+  per pair of blocks by `needsBlank`. `ROW_GAP` in `transcript-variant.tsx` is the whole feature — the
   gap goes on the virtualizer's **measured** wrapper, so no pixel constant is load-bearing and
   only `estimateSize` takes the `px` (scrollbar length before rows mount, replaced by a real
   measurement the moment one does). VS Code exposes it as `workerdeck.transcriptDensity`,
   stamped on `#root` like the font because it decides every row's height (`transcriptVariant`
-  is stamped beside it now — the dock defaults to `lines`, but it is a setting, not a
+  is stamped beside it, along with the cell and the affordances flag — the dock defaults to
+  `terminal`, but it is a setting, not a
   hardcode). `transcriptFont` is the seventh seam and the one with **no JS at all**:
   `'sans'`/`'mono'`, one `data-agent-font` attribute on the panel root, and a rule in
   `theme.css` repointing `--cw-font-sans` at the mono stack for that subtree. A subtree rule
   rather than `:root` is the whole claim — a monospace agent view inside an ordinary app, so
-  a host's sidebars and dialogs cannot pick it up. All three clients expose the same three
-  preferences, and only for a running session. The `lines` variant also owns the **docked
-  composer**: flush to the panel edges, no radius, no shadow, and one rule along the top that
-  turns accent on focus, with `+`/`↵` glyphs in place of the round pills. It lives in
-  `Composer.tsx` keyed on `useLines()` — it had been CSS overrides in the VS Code webview,
-  which meant only that one host had it and a panel switched to `cards` would have kept the
-  flattening. The working marker is
+  a host's sidebars and dialogs cannot pick it up. It too is **`cards` only**: the terminal
+  theme is monospace by construction and takes its face from `--cw-font-mono` (which the VS Code
+  webview repoints at the editor font, unconditionally, for exactly that reason). Clients that
+  offer density and font as settings must say they are Cards-only or hide them — the dashboard
+  hides them, the extension documents them. The working marker is
   the **brand mark's own pulse** (`pulse.tsx`: `⋄ ◇ ◈ ◆` at 150ms = the 0.6s clock in
-  `icon-loading.svg`), shared by the transcript's `Loader` and each running tool row's gutter
+  `icon-loading.svg`), shared by the transcript's working row and each running tool row's gutter
   glyph so they beat together; it rests on `◆` under `prefers-reduced-motion`, free because the
-  last frame *is* the mark. BRAND.md's ambiguous-width caveat is why this is webview-only:
-  `LineGlyph` centres the glyph in a fixed box, a real terminal must use the ASCII set. The
-  `lines` tool row lost its right-edge `Spinner` when the gutter started moving — two spinners
-  on one row is one too many. The provider wraps the **whole panel**, not just the
-  scroller, because the approval and question prompts render outside it and are line items in
-  the same run: in `lines` they are keyboard-first rows built from `line-prompt.tsx` (roving
-  `❯` marker, numbered rows, `↑↓`/digits/`esc`, `[x]` vs `(•)` for multi- vs one-of) rather
-  than dialogs — no boxes means the affordance has to be carried by the keyboard, which is
-  what a terminal does anyway. The same file owns the fenced-`Response` payload band the tool
-  rows already used. The transcript is **virtualized**
+  last frame *is* the mark. BRAND.md's ambiguous-width caveat is why this is webview-only: the
+  gutter cell centres the glyph in a fixed box, a real terminal must use the ASCII set. The
+  tool row has no right-edge `Spinner` — two spinners on one row is one too many. The transcript is **virtualized**
   (`@tanstack/react-virtual`), and the rule that keeps it honest is that two parties want to
   write `scrollTop`: `use-stick-to-bottom`'s follow spring and the virtualizer's size-change
   correction. They are split by regime — **pinned, corrections are suppressed** (being at the
@@ -329,7 +399,20 @@ protocol. Read these before changing scope or structure:
   (Sessions, Gateways, Jobs, Profiles) is a *list on the left, detail beside it* pair, so each
   names its own sidebar in `AppShell`'s `NAV` rather than mounting one from a route —
   navigating within a section must not replace the list you picked from, which is the whole
-  point of the shape. `components/shell/SidebarFrame.tsx` is the chrome they share (view
+  point of the shape. The frame around all four is **one surface**: `.app-frame` in
+  `styles/globals.css` repoints `--bg` and `--bg-surface` at `--sidebar`, so the sidebar, the
+  detail bar, the workspace's tab strip and file rail, the panel and the terminal transcript's
+  ground are the same grey. A detail pane on a different ground from the list it was opened from
+  reads as a second window inside the first. A token repoint rather than restyled components,
+  and it deliberately leaves alone everything that separates itself by *contrast* —
+  `--bg-elevated` (dialogs), `--bg-code`, the `row-hover` alpha, every border. It has to set
+  **`--surface` as well as `--bg-surface`**, and that is the trap: `bg-surface` maps to
+  `--color-surface: var(--surface)`, and `--surface: var(--bg-surface)` is declared on `:root`, so
+  it computes there once and the resolved colour inherits down — redefining only `--bg-surface`
+  lower changes nothing for anything spelled `bg-surface`, which was every piece of chrome in the
+  frame. Any override of a token with an alias in `theme.css`'s bridge block must set both halves
+  (`docs/GOTCHAS.md`).
+  `components/shell/SidebarFrame.tsx` is the chrome they share (view
   header, collapse toggle, per-section persisted width in `lib/sidebar.ts`) and deliberately
   owns nothing else: the rows, filtering and empty state have nothing in common beyond sitting
   in the box — except the row, which is `SidebarRow`: title top-left, status
@@ -363,7 +446,11 @@ protocol. Read these before changing scope or structure:
   **Settings is a dialog at the foot of the nav**, not a fifth section — it is a preference
   sheet, and a destination that spent the whole window on four rows of selects was the wrong
   trade; `/settings` survives as a redirect for bookmarks. What is left in it is only what this
-  *browser* holds: theme and the three agent-view preferences (style, density, font). The run
+  *browser* holds: theme and the agent-view preferences — style (Cards/Terminal), and, **only
+  when the style is Cards**, density and font. Both are inert under the terminal theme (one line
+  height, monospace by construction), and a control that changes nothing is worse than an absent
+  one: it invites you to keep pressing it. A stored `lines` migrates to `terminal` rather than
+  falling back to `cards`, because someone who turned boxes off should keep them off. The run
   **defaults moved to the profile** — `ProfileInfo.defaults` already existed and the gateway
   already applies it to any field a create request omits, so a per-browser copy was a second
   answer to a question that had one. The profile editor picks the model from *that profile's*
@@ -446,13 +533,22 @@ protocol. Read these before changing scope or structure:
   `WebSocketImpl` are postMessage shims, executed on the extension-host side with Node fetch /
   `ws` plus the gateway's `Authorization: Bearer` header — keys stay in `SecretStorage`, the
   webview CSP has no external `connect-src`, and the bridge refuses URLs not belonging to a
-  registered gateway. It runs the panel with `transcriptVariant: 'lines'`, `focusComposerOnClick` (dead-space
-  clicks land in the input; controls and drag-selections keep their meaning) and, by default,
-  in the **editor font**: `workerdeck.fontFamily` is stamped on `<html>` by `webviewHtml`
-  (it must be right on the first paint, which a postMessage cannot be) and repoints the ui's
-  *sans* token; a change re-renders the panel through the same `reloadWebview()` the dev
-  reloader uses. The **panel alone** opts in — the sidebar and section views are workbench
-  UI and follow `--vscode-font-family`, which is the webview baseline `styles.css` sets. The
+  registered gateway. It runs the panel with `transcriptVariant: 'terminal'`, `focusComposerOnClick` (dead-space
+  clicks land in the input; controls and drag-selections keep their meaning) and **at the
+  editor's own cell**: `terminalMetrics` is resolved host-side from `editor.fontSize` /
+  `editor.lineHeight` (the same three readings VS Code makes of the latter — 0 automatic, <8 a
+  multiplier, else pixels — rounded, because a fractional cell puts every other row on a
+  half-pixel), overridable per `workerdeck.terminal.fontSize`/`.lineHeight`, so the panel, the
+  editor and the integrated terminal draw at one size. Everything the first paint needs is
+  stamped on `#root` — variant, density, cell, affordances — and a change to any of them, or to
+  the two `editor.*` keys, re-renders the panel through the same `reloadWebview()` the dev
+  reloader uses. The webview repoints `--cw-font-mono` at `--vscode-editor-font-family`
+  unconditionally, which is what makes "the agent panel is in my editor font" true under a theme
+  that is monospace by construction; `workerdeck.fontFamily` survives for the `cards` variant,
+  where the *sans* token is what the transcript reads in, and is stamped on `<html>` by
+  `webviewHtml` because it must be right on the first paint. The **panel alone** opts in — the
+  sidebar and section views are workbench UI and follow `--vscode-font-family`, which is the
+  webview baseline `styles.css` sets. The
   window status bar is the panel's bar, and each of its three badges is its own boolean
   setting (`workerdeck.statusBar.*`), read per render so a change is just a re-render. Model
   and mode are bar items too, opening **QuickPicks** — a `StatusBarItem` has one command and
@@ -570,8 +666,9 @@ protocol. Read these before changing scope or structure:
   The three agent-view preferences are mirrored too (`AppSettings.swift`): variant and density as
   environment values the rows read, and the font as one `fontDesign` on the session view — with
   the composer's `UITextView` told separately, since UIKit sits outside SwiftUI's font
-  environment. In `lines` every row is one type size (`lineTextStyle`) and every marker is a
-  character rather than an SF Symbol, because a terminal has one size and draws nothing.
+  environment. In `lines` — which is **still the phone's own**, kept while the Swift terminal
+  renderer is unwritten rather than dropping the only compact view it has — every row is one type
+  size (`lineTextStyle`) and every marker is a character rather than an SF Symbol.
   `SessionList.swift` and `Watermarks.swift` are two more such mirrors — protocol's sessions-list
   view model and unread model — so the phone's list is **one list across every configured
   gateway**, gateway as a facet rather than the frame, with search/facets/group/sort, the subset
@@ -672,6 +769,19 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   documentation half — a "Rules you cannot infer from the types" section in every package README,
   and three new pages in `apps/docs` (the app-embedding guide, engines-and-executors,
   writing-tools) — and `apps/embedded` rebuilt on one silkweave action set behind two adapters.
+  Protocol stays **7**.
+  **0.16.0** — the terminal theme *adopted*, and the `lines` variant deleted. The theme itself
+  landed unreleased in 0.15.0's tail; this is every client on it: the VS Code dock (at the
+  editor's own cell, `--cw-font-mono` repointed at the editor font, three new
+  `workerdeck.terminal.*` settings), the dashboard (Settings → Agent view style → Terminal, with
+  a stored `lines` migrating to it), and `apps/embedded`'s rail. Plus what adoption needed —
+  `SessionPanel.terminalMetrics` feeding all three of its terminal surfaces, and the composer's
+  own terminal form (`>` in the gutter cell) — and what it let go: `'lines'`, `useLines`,
+  `LineGlyph`, `line-prompt.tsx` and every `lines` branch, including `Response`'s sixty
+  `!important` overrides (157 lines → 28). `apps/ios` keeps its own `lines`: a Swift terminal
+  renderer is a separate track, and deleting the phone's only compact view for symmetry with a
+  package it shares no code with would be a regression, not parity. The dashboard's frame also
+  became **one surface** (`.app-frame` repointing `--bg`/`--bg-surface` at `--sidebar`).
   Protocol stays **7**.
 
   **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,

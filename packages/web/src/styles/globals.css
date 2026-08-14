@@ -29,3 +29,68 @@
 :root {
   --wd-content-max-w: 100%;
 }
+
+/*
+ * The frame is ONE surface.
+ *
+ * The shell's shape — activity rail, section sidebar, detail pane — sits in a
+ * single inset frame, and it should read as one thing: a detail pane on a
+ * different ground from the list it was opened from reads as a second window
+ * inside the first, with a seam down the middle where there is only a border.
+ * So the canvas and the chrome surfaces inside the frame are both `--sidebar`,
+ * which is the ground the shell was already painting.
+ *
+ * A token repoint rather than restyled components, because that is what the
+ * tokens are for and because it reaches everything at once — the sidebars, the
+ * detail bar, the workspace's tab strip and file rail, the panel, the terminal
+ * transcript's ground. What stays put is everything that separates itself by
+ * *contrast* rather than by being a different surface: `--bg-elevated`
+ * (dialogs), `--bg-code`, the `row-hover` alpha, and every border. Those all
+ * still have somewhere to go.
+ */
+.app-frame {
+  --bg: var(--sidebar);
+  --bg-surface: var(--sidebar);
+  /*
+   * `--surface` as well, and this is the whole trap: `bg-surface` maps to
+   * `--color-surface: var(--surface)`, and `--surface: var(--bg-surface)` is
+   * declared on `:root`. A custom property's value is substituted where it is
+   * *declared*, so `--surface` computes to the root's `--bg-surface` once and
+   * that resolved colour inherits down — redefining `--bg-surface` here changes
+   * nothing for anything spelled `bg-surface`. Which was every piece of chrome
+   * in the frame: the detail bar, the file rail, the panel's status bar. Any
+   * future override of a token that has an alias in `theme.css`'s bridge block
+   * has to set both halves.
+   */
+  --surface: var(--sidebar);
+}
+
+/*
+ * The working mark, in this app's blue.
+ *
+ * `--term-mark` ships as the product's coral — it is the brand mark's colour,
+ * and the pulse in a working row's gutter is literally that mark animating. The
+ * dashboard reads as one blue-accented surface, and a coral spinner in the
+ * middle of it is the only warm thing on the screen: it draws the eye to
+ * "something is running" far harder than that fact deserves, every second it
+ * runs.
+ *
+ * `var(--term-blue)` rather than the hex, so this follows the palette instead of
+ * pinning a second copy of it — including into the light theme, where the blue
+ * is a different value and a hardcoded pale lavender would be invisible.
+ *
+ * Scoped to the terminal surface because that is the only place the token is
+ * read. An embedder who wants the brand colour back simply does not ship this.
+ *
+ * All three selectors, and that is not belt-and-braces: `terminal.css` sets the
+ * light palette through `[data-theme='light'] [data-terminal]`, which is a more
+ * specific selector than a bare `[data-terminal]` — so overriding only the
+ * latter leaves the light theme still coral. Equal specificity is enough to win
+ * here because `terminal.css` arrives via the `@workerdeck/ui/theme.css` import
+ * at the top of this file, so these rules come after it.
+ */
+[data-terminal],
+[data-theme='light'] [data-terminal],
+[data-terminal][data-theme='light'] {
+  --term-mark: var(--term-blue);
+}

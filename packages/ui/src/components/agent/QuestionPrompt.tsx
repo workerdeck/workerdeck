@@ -10,8 +10,6 @@ import { Badge } from '../ui/Badge.tsx'
 import { Button } from '../ui/Button.tsx'
 import { Input } from '../ui/Input.tsx'
 import { cn } from '../../lib/utils.ts'
-import { LINE_INDENT, LineHint, LineInput, LineOptionList, LinePayload } from './line-prompt.tsx'
-import { LineGlyph, useLines } from './transcript-variant.tsx'
 
 export type QuestionBehaviorMeta = {
   value: QuestionBehavior
@@ -49,9 +47,6 @@ export function parseUserQuestions(input: Record<string, unknown>): UserQuestion
 
 type Selection = { labels: string[]; other: string; otherActive: boolean }
 
-/** Whether the key hint should say "toggle" rather than "choose". */
-const multiSelectAnywhere = (questions: UserQuestion[]) => questions.some((q) => q.multiSelect === true)
-
 const EMPTY_SELECTION: Selection = { labels: [], other: '', otherActive: false }
 
 /** A question's answer string: chosen label(s) (multi-select comma-joined), with any
@@ -77,16 +72,10 @@ export interface QuestionPromptProps {
  * and the focused option's preview. Falls back to nothing renderable → the caller
  * should show a generic PermissionPrompt if `parseUserQuestions` finds no questions. */
 export function QuestionPrompt({ request, onAnswer, onDismiss, className }: QuestionPromptProps) {
-  const lines = useLines()
   const questions = parseUserQuestions(request.input)
   const [selections, setSelections] = useState<Selection[]>(() =>
     questions.map(() => EMPTY_SELECTION),
   )
-  // `lines` only: the roving cursor per question, and which question's list owns
-  // the DOM focus — two lists both chasing their own index would tear the caret
-  // between them on every render.
-  const [cursors, setCursors] = useState<number[]>(() => questions.map(() => 0))
-  const [activeQuestion, setActiveQuestion] = useState(0)
 
   const update = (index: number, patch: Partial<Selection>) => {
     setSelections((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)))
@@ -113,117 +102,6 @@ export function QuestionPrompt({ request, onAnswer, onDismiss, className }: Ques
       answers[q.question] = answerFor(selections[i] ?? EMPTY_SELECTION)
     })
     onAnswer(request.id, { ...request.input, answers })
-  }
-
-  if (lines) {
-    const dismiss = () => onDismiss(request.id, 'Question dismissed by user')
-    return (
-      <div
-        data-slot='question-prompt'
-        className={cn('flex w-full flex-col gap-2', className)}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            event.preventDefault()
-            dismiss()
-            return
-          }
-          // Enter belongs to the focused row (it is a button), so committing the
-          // whole form needs the modifier — the composer's own convention.
-          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && complete) {
-            event.preventDefault()
-            submit()
-          }
-        }}>
-        {questions.map((q, index) => {
-          const selection = selections[index] ?? EMPTY_SELECTION
-          const cursor = cursors[index] ?? 0
-          const multiSelect = q.multiSelect === true
-          const options = [
-            ...q.options.map((option, optionIndex) => {
-              const selected = selection.labels.includes(option.label)
-              return {
-                key: option.label,
-                label: option.label,
-                description: option.description,
-                // A preview shows on focus, not only on selection: in a list you
-                // walk with the arrow keys, "what does this one look like" is the
-                // question the cursor is asking.
-                detail:
-                  option.preview && (selected || cursor === optionIndex) ? (
-                    <LinePayload code={option.preview} label='Preview' />
-                  ) : undefined,
-                // Both kinds draw their state: without a marker a chosen
-                // one-of is invisible the moment the cursor moves off it.
-                checked: selected,
-                marker: multiSelect ? ('check' as const) : ('radio' as const),
-              }
-            }),
-            {
-              key: '__other',
-              label: 'Other…',
-              checked: selection.otherActive,
-              marker: multiSelect ? ('check' as const) : ('radio' as const),
-              detail: selection.otherActive ? (
-                <LineInput
-                  value={selection.other}
-                  onChange={(value) => update(index, { other: value })}
-                  onSubmit={() => {
-                    // The typed text is already in state, so `complete` is
-                    // current: Enter finishes the form when this was the last
-                    // question outstanding, and is a no-op when it wasn't.
-                    if (complete) submit()
-                  }}
-                  onCancel={() => update(index, { otherActive: false, other: '' })}
-                  placeholder='Type your own answer'
-                />
-              ) : undefined,
-            },
-          ]
-          return (
-            <div key={index} className='flex flex-col'>
-              <div className='flex items-baseline gap-2'>
-                <LineGlyph className='text-fg-3'>?</LineGlyph>
-                <span className='min-w-0 flex-1 text-body-sm leading-5 text-fg-1'>
-                  {q.header ? <span className='text-fg-4'>{q.header} · </span> : null}
-                  <span className='font-medium'>{q.question}</span>
-                </span>
-              </div>
-              <LineOptionList
-                label={q.question}
-                options={options}
-                focused={cursor}
-                active={activeQuestion === index && !selection.otherActive}
-                onFocus={(next) => {
-                  setActiveQuestion(index)
-                  setCursors((prev) => prev.map((c, i) => (i === index ? next : c)))
-                }}
-                onChoose={(next) => {
-                  if (next === q.options.length) {
-                    update(index, { otherActive: !selection.otherActive })
-                    return
-                  }
-                  const option = q.options[next]
-                  if (option) toggle(index, option.label, multiSelect)
-                }}
-              />
-            </div>
-          )
-        })}
-        <div className={cn(LINE_INDENT, 'flex flex-col')}>
-          <button
-            type='button'
-            disabled={!complete}
-            onClick={submit}
-            className='w-fit text-body-sm leading-5 text-accent underline-offset-2 outline-none hover:underline disabled:text-fg-4 disabled:no-underline'>
-            ⏎ Answer
-          </button>
-        </div>
-        <LineHint>
-          ↑↓ move · {multiSelectAnywhere(questions) ? 'space/1–9 toggle' : '1–9 choose'} · ⌘⏎ answer
-          · esc dismiss
-        </LineHint>
-      </div>
-    )
   }
 
   return (

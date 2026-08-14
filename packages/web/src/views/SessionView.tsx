@@ -102,6 +102,12 @@ function SessionViewInner({
       transcriptVariant={variant}
       transcriptDensity={density}
       transcriptFont={font}
+      // The overview ruler, when the transcript is the terminal one — a session
+      // that ran for an hour is a long scroll, and the rail is the only thing
+      // that says where in it the answers are. Inert under `cards`.
+      scrubber
+      // And the prompt you are waiting on, held above the answer.
+      stickyPrompt
       // Along the foot of the editor area, as an editor puts it.
       statusPlacement='bottom'
       // Model and mode ride that bar too, beside the readings they act on —

@@ -36,11 +36,15 @@ function PrefSelect<T extends string>({
   options,
   read,
   write,
+  onChange,
 }: {
   label: string
   options: { value: T; label: string }[]
   read: () => T
   write: (value: T) => void
+  /** For a preference other rows depend on — the variant, which decides whether
+   * density and font mean anything at all. */
+  onChange?: (value: T) => void
 }) {
   const [value, setValue] = useState<T>(read)
   return (
@@ -49,6 +53,7 @@ function PrefSelect<T extends string>({
       onValueChange={(next) => {
         setValue(next as T)
         write(next as T)
+        onChange?.(next as T)
       }}>
       <SelectTrigger aria-label={label} className='min-w-40'>
         <SelectValue>{options.find((o) => o.value === value)?.label}</SelectValue>
@@ -71,7 +76,7 @@ function PrefSelect<T extends string>({
  * control with its name beside it, and a box drawn around a list of those says
  * they are a *thing* when they are only a heading's worth of grouping. The
  * explanations went the same way: a select whose two options are "Cards" and
- * "Lines" is answered by trying it, not by a paragraph under it.
+ * "Terminal" is answered by trying it, not by a paragraph under it.
  */
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -99,6 +104,11 @@ export function SettingsDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  // Held here, not in the select, because two rows below it are only meaningful
+  // under `cards` — the terminal theme has one line height and one (monospace)
+  // face by construction. A control that changes nothing is worse than an absent
+  // one: it invites you to keep pressing it.
+  const [variant, setVariant] = useState<TranscriptVariant>(getTranscriptVariant)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* A column of one-line rows, so it is sized to the widest control rather
@@ -122,36 +132,41 @@ export function SettingsDialog({
                   label='Agent view style'
                   options={[
                     { value: 'cards', label: 'Cards' },
-                    { value: 'lines', label: 'Lines' },
+                    { value: 'terminal', label: 'Terminal' },
                   ]}
                   read={getTranscriptVariant}
                   write={setTranscriptVariant}
+                  onChange={setVariant}
                 />
               </div>
-              <div className='flex items-center justify-between'>
-                <span className='text-body-sm text-fg-2'>Agent view density</span>
-                <PrefSelect<TranscriptDensity>
-                  label='Agent view density'
-                  options={[
-                    { value: 'comfortable', label: 'Comfortable' },
-                    { value: 'compact', label: 'Compact' },
-                  ]}
-                  read={getTranscriptDensity}
-                  write={setTranscriptDensity}
-                />
-              </div>
-              <div className='flex items-center justify-between'>
-                <span className='text-body-sm text-fg-2'>Agent view font</span>
-                <PrefSelect<TranscriptFont>
-                  label='Agent view font'
-                  options={[
-                    { value: 'sans', label: 'Regular' },
-                    { value: 'mono', label: 'Monospace' },
-                  ]}
-                  read={getTranscriptFont}
-                  write={setTranscriptFont}
-                />
-              </div>
+              {variant === 'cards' ? (
+                <>
+                  <div className='flex items-center justify-between'>
+                    <span className='text-body-sm text-fg-2'>Agent view density</span>
+                    <PrefSelect<TranscriptDensity>
+                      label='Agent view density'
+                      options={[
+                        { value: 'comfortable', label: 'Comfortable' },
+                        { value: 'compact', label: 'Compact' },
+                      ]}
+                      read={getTranscriptDensity}
+                      write={setTranscriptDensity}
+                    />
+                  </div>
+                  <div className='flex items-center justify-between'>
+                    <span className='text-body-sm text-fg-2'>Agent view font</span>
+                    <PrefSelect<TranscriptFont>
+                      label='Agent view font'
+                      options={[
+                        { value: 'sans', label: 'Regular' },
+                        { value: 'mono', label: 'Monospace' },
+                      ]}
+                      read={getTranscriptFont}
+                      write={setTranscriptFont}
+                    />
+                  </div>
+                </>
+              ) : null}
             </Section>
           </div>
         </DialogBody>

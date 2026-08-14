@@ -103,6 +103,12 @@ export function JobView() {
       transcriptVariant={variant}
       transcriptDensity={density}
       transcriptFont={font}
+      // A finished job is *only* read — which is exactly the case the rail is
+      // for, and `readOnly` takes nothing away from it (it removes the composer,
+      // not the ability to find your way around).
+      scrubber
+      // And the prompt you are waiting on, held above the answer.
+      stickyPrompt
       statusPlacement='bottom'
       defaultRailWidth={rail.width}
       defaultRailCollapsed={rail.collapsed}

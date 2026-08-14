@@ -1,29 +1,25 @@
 import { createContext, useContext, type ReactNode } from 'react'
-import { cn } from '../../lib/utils.ts'
 
 /**
  * How the transcript draws a turn.
  *
  * - `cards` — the chat convention: bubbles, bordered tool cards, generous gaps.
  *   Right for a wide dashboard where the transcript is the page.
- * - `lines` — one full-width line item per event, transparent, hover-highlit,
- *   with a glyph in a fixed left gutter. Right where vertical space is the
- *   scarce resource (a VS Code dock) and the terminal is the reference UX:
- *   nothing is boxed, the content and its marker carry the comprehension.
+ * - `terminal` — the CLI's own form: every row on a character cell, no boxes
+ *   anywhere, diffs as full-width bands. Right where the transcript sits beside
+ *   a terminal (a VS Code dock) and where vertical space is scarce.
  *
- * A context rather than a prop chain because every row component needs it and
- * only the transcript root knows it — and because `Message`/`ToolCallCard` are
- * exported on their own, so an embedder composing them by hand gets the right
- * treatment for free.
+ * `terminal` is **not** a second set of branches in the components under
+ * `components/agent/`: it is its own renderer (`components/terminal/`) that the
+ * shell mounts *instead* of them. So a row component here never asks which
+ * variant it is in — if it is drawing at all, it is drawing cards.
+ *
+ * A context rather than a prop chain because the pieces that DO need it sit
+ * outside the transcript (the composer, the pending prompts) and because
+ * `Message`/`ToolCallCard` are exported on their own, so an embedder composing
+ * them by hand gets the right treatment for free.
  */
-/**
- * `terminal` is the third, and it is not a third set of branches in these
- * components: it is its own renderer (`components/terminal/`) that the shell
- * mounts instead of them. So {@link useLines} stays false under it — a card
- * component asking "am I in lines?" must not accidentally answer yes for a
- * variant it never draws.
- */
-export type TranscriptVariant = 'cards' | 'lines' | 'terminal'
+export type TranscriptVariant = 'cards' | 'terminal'
 
 const VariantContext = createContext<TranscriptVariant>('cards')
 
@@ -41,25 +37,21 @@ export function useTranscriptVariant(): TranscriptVariant {
   return useContext(VariantContext)
 }
 
-/** True in `lines`, for the many `cond ? a : b` reads in the row components. */
-export function useLines(): boolean {
-  return useTranscriptVariant() === 'lines'
-}
-
 /**
  * How much room the transcript gives each row.
  *
  * - `comfortable` — a blank line between messages, which is what the Claude Code
- *   CLI does and what the `lines` variant is trying to read like. The default:
- *   a transcript is prose before it is a table.
+ *   CLI does. The default: a transcript is prose before it is a table.
  * - `compact` — rows tight against each other, for a dock where every line of
  *   vertical space is contested.
  *
  * Separate from the variant, and deliberately: they answer different questions.
- * The variant decides *how a row is drawn* (boxed or not) and follows from the
- * surface; density decides *how much air is around it* and is a preference the
- * reader holds. Coupling them would mean a dock could not be roomy and a
- * dashboard could not be dense.
+ * The variant decides *how a row is drawn* and follows from the surface; density
+ * decides *how much air is around it* and is a preference the reader holds.
+ *
+ * Reaches `cards` only. The terminal theme's spacing is a blank *line*, decided
+ * per pair of blocks by `needsBlank` — a terminal has one line height, which is
+ * the whole premise — so there is nothing there for this to turn.
  */
 export type TranscriptDensity = 'comfortable' | 'compact'
 
@@ -102,9 +94,6 @@ export type TranscriptFont = 'sans' | 'mono'
  * `px` is fed to `estimateSize` alone, where being approximate is the contract:
  * it sets the scrollbar's length before rows mount and is replaced by a real
  * measurement the moment one does.
- *
- * `lines` + `compact` is the only combination with no gap at all: there the
- * row's own `py-0.5` is the entire separation, which is what makes it compact.
  */
 export const ROW_GAP: Record<
   TranscriptVariant,
@@ -123,31 +112,4 @@ export const ROW_GAP: Record<
     comfortable: { className: 'pt-4', px: 16 },
     compact: { className: 'pt-2', px: 8 },
   },
-  lines: {
-    // 16px on top of the row's own 4px of `py-0.5` is one 20px line — the blank
-    // line the CLI leaves, arrived at from the line height rather than picked.
-    comfortable: { className: 'pt-4', px: 16 },
-    compact: { px: 0 },
-  },
 }
-
-/**
- * The left gutter of a line item: one glyph, fixed width, so every row's text
- * starts on the same column no matter which kind of event it is. Decorative —
- * the row's own text says what it is.
- */
-export function LineGlyph({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        'w-3.5 shrink-0 select-none text-center font-mono text-label leading-5 text-fg-4',
-        className,
-      )}>
-      {children}
-    </span>
-  )
-}
-
-/** Body text metrics for a line item — tighter than the card variant's. */
-export const LINE_TEXT = 'text-body-sm leading-5'

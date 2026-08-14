@@ -1,7 +1,7 @@
 {
   "name": "workerdeck-vscode",
   "displayName": "WorkerDeck",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "Watch, steer, and approve WorkerDeck agent sessions from VS Code: sessions in the bottom panel, gateways in the sidebar, remote projects as a virtual workspace.",
   "publisher": "workerdeck",
   "private": true,
@@ -236,19 +236,19 @@
             "VS Code's UI font, like every other view."
           ],
           "default": "editor",
-          "description": "Typeface for the WorkerDeck agent panel. The sidebar and the session views always follow VS Code's UI font."
+          "description": "Typeface for the WorkerDeck agent panel's Cards style. The Terminal style always draws in the editor's monospace font — a proportional face there would break its character grid. The sidebar and the session views always follow VS Code's UI font."
         },
         "workerdeck.transcriptVariant": {
           "type": "string",
           "enum": [
-            "lines",
+            "terminal",
             "cards"
           ],
           "enumDescriptions": [
-            "Full-width rows behind a gutter glyph, no boxes — the terminal form, and what a dock has the space for.",
+            "The CLI's own form: every row on a character cell, no boxes, diffs as full-width bands.",
             "The chat form: your messages in bubbles, each tool call in a bordered card."
           ],
-          "default": "lines",
+          "default": "terminal",
           "description": "How the WorkerDeck agent panel draws each event."
         },
         "workerdeck.transcriptDensity": {
@@ -262,7 +262,24 @@
             "No blank line — every row tight against the next."
           ],
           "default": "comfortable",
-          "description": "Vertical spacing between messages in the WorkerDeck agent panel."
+          "description": "Vertical spacing between messages in the WorkerDeck agent panel's Cards style. The Terminal style has one line height by definition and ignores this."
+        },
+        "workerdeck.terminal.fontSize": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Font size for the agent panel's Terminal style, in pixels. 0 follows `editor.fontSize`, so the panel draws at the size the editor and the integrated terminal do. Rounded to whole pixels: a fractional cell puts every other row on a half-pixel."
+        },
+        "workerdeck.terminal.lineHeight": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Line height for the agent panel's Terminal style. 0 follows `editor.lineHeight`; as there, a value under 8 is a multiple of the font size and anything else is pixels. Rounded to whole pixels."
+        },
+        "workerdeck.terminal.affordances": {
+          "type": "boolean",
+          "default": true,
+          "description": "In the Terminal style, allow the things a real terminal cannot do: fill the row under the pointer, and reveal a copy button on hover. Neither costs any layout, so turning them off moves nothing."
         },
         "workerdeck.statusBar.status": {
           "type": "boolean",

@@ -5,7 +5,13 @@ import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl, isLoopbackHost } from './hosts.ts'
 import { clientFor } from './gateway.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
-import { transcriptDensity, transcriptVariant, webviewHtml } from './webview-html.ts'
+import {
+  terminalAffordances,
+  terminalMetrics,
+  transcriptDensity,
+  transcriptVariant,
+  webviewHtml,
+} from './webview-html.ts'
 import type { HostToPanel, PanelToHost } from './bridge-protocol.ts'
 
 export type ActiveSession = {
@@ -86,7 +92,16 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
    * in front of the reader.
    */
   #rootAttrs(): Record<string, string> {
-    return { 'data-density': transcriptDensity(), 'data-variant': transcriptVariant() }
+    const cell = terminalMetrics()
+    return {
+      'data-density': transcriptDensity(),
+      'data-variant': transcriptVariant(),
+      // The cell for the same reason as the density: it decides every row's
+      // height, and learning it one tick late reflows the whole transcript.
+      'data-font-size': String(cell.fontSize),
+      'data-line-height': String(cell.lineHeight),
+      'data-affordances': terminalAffordances() ? 'on' : 'off',
+    }
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {

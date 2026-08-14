@@ -879,9 +879,12 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   it computed would look authoritative and point at the wrong line. A patch whose hunks all start
   at `0` is the approval case (the edit has not happened yet); `TerminalDiff` reads that back and
   renders **without** a number column rather than printing a column of zeroes.
-- **`useLines()` stays false under `terminal`.** The terminal theme is a separate renderer, not a
-  third branch inside the card components, and a card component asking "am I in lines?" must not
-  get a yes for a variant it never draws.
+- **The card components have no terminal branch at all.** The terminal theme is a separate
+  renderer that the shell mounts *instead* of them, so nothing under `components/agent/` asks
+  which variant it is in — if it is drawing, it is drawing cards. The one exception is the
+  composer, which is not a transcript row: it lives outside the scroller, so it reads the variant
+  from the panel-wide context and draws its own terminal form (`>` in the gutter, glyph actions,
+  one rule along the top).
 - **The blank line between blocks is a row, not a margin — except inside the virtualizer.** The
   virtualizer measures one element per item, so space between two items has to be *part of* one of
   them or it goes unmeasured and the scrollbar drifts. Hence `term-row-gap` as padding on the
@@ -894,6 +897,16 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 
 ## Web dashboard
 
+- **Overriding a colour token lower in the tree needs its *alias* too.** `theme.css` has two
+  tiers: a raw palette, then an `@theme inline` block mapping it to Tailwind's `--color-*`. Some
+  of those go through a bridge alias — `bg-surface` is `--color-surface: var(--surface)`, and
+  `--surface: var(--bg-surface)` sits on `:root`. A custom property is substituted where it is
+  **declared**, so `--surface` computes to the root's `--bg-surface` once and that resolved
+  colour inherits down. Redefining `--bg-surface` on a subtree therefore changes nothing for
+  anything spelled `bg-surface`, silently and with no error. The dashboard's `.app-frame` sets
+  `--bg`, `--bg-surface` *and* `--surface`; the first attempt set only the first two and the
+  detail bar, the file rail and the panel's status bar stayed on the old colour while everything
+  else moved.
 - **`navigator.clipboard` does not exist on the origin this dashboard actually runs on.** It is
   gated on a *secure context* — HTTPS or localhost — and the normal WorkerDeck deployment is plain
   HTTP on a LAN address, reached from another machine or a phone. So the property is `undefined`
@@ -951,19 +964,26 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   than a DOM query, and why it has to re-aim: the offset it first scrolls to is the sum of a few
   hundred estimates, and only the rows it crosses make it true.
 - **The transcript variant is a *panel-wide* context, not a transcript one.**
-  `TranscriptVariantProvider` wraps `SessionPanel`'s whole tree, because the approval and
-  question prompts render **outside** the scroller and still have to answer `useLines()`. It was
+  `TranscriptVariantProvider` wraps `SessionPanel`'s whole tree, because the composer and the
+  approval/question prompts render **outside** the scroller and still have to know. It was
   originally around the transcript alone, and the symptom of that is quiet: the prompts silently
   rendered as cards inside an otherwise terminal panel, with nothing erroring. Anything new the
   panel draws beside the transcript inherits the fix; anything an embedder mounts outside the
   panel does not.
+- **Those outside pieces are separate `TerminalSurface`s, so they need the metrics passed too.**
+  A surface sets the cell; one handed no `fontSize`/`lineHeight` falls back to the CLI's 13/18. A
+  host running the transcript at its *editor's* size (the VS Code panel does) and leaving the
+  composer at the default gets a caret on a different column from the conversation — the exact
+  failure the theme exists to prevent. `SessionPanel`'s `terminalMetrics` is one prop feeding all
+  three for that reason.
 - **The markdown renderer marks its lists `list-inside`, and that is not a spacing preference.**
   With the marker inside the content flow, `padding-left` moves the *bullet* as well as the text
   (so a list sits a marker-width right of the paragraph above it) and a wrapped line runs back
-  under the bullet instead of hanging under its own text. The `lines` prose block therefore sets
-  `list-outside!` **before** its `pl-[2ch]`/`pl-[3ch]` indents; changing the padding without the
-  position flag looks like it works and quietly reintroduces both problems. `cards` keeps the
-  renderer's defaults on purpose.
+  under the bullet instead of hanging under its own text. The terminal theme's markdown therefore
+  goes through a Streamdown **component map** (`components/terminal/markdown.tsx`) rather than
+  overriding the renderer's classes — that was the lesson of the retired `lines` variant, whose
+  prose block had grown sixty `!important`s and still had to set `list-outside!` before its
+  indents to keep both problems away. `cards` keeps the renderer's defaults on purpose.
 - `SessionPanel`'s `header` prop takes a **function** when an embedder wants the session-actions
   (`⋯`) menu in its own chrome: it is called with the menu and the status bar then renders
   without it. The menu can only be built inside the panel (capability record, host-file verdict,

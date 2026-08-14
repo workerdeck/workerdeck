@@ -136,9 +136,11 @@ export function AgentSidebar({ onWikiMaybeChanged }: AgentSidebarProps) {
             client={client}
             sessionId={activeId}
             className='h-full'
-            // A 26rem rail has no room for cards or for a two-row composer.
-            transcriptVariant='lines'
-            transcriptDensity='compact'
+            // A 26rem rail has no room for cards or for a two-row composer, and
+            // the terminal theme is the densest thing there is: every row on a
+            // character cell, nothing boxed. (Density reaches `cards` only, so
+            // there is nothing to set beside it.)
+            transcriptVariant='terminal'
             // The model and permission pickers move into the panel's own status
             // bar; this app's chrome has nowhere to put them.
             controlsSurface='status'

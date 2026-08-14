@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
 import type { TerminalAffordances } from './affordances.tsx'
@@ -6,12 +6,14 @@ import {
   AssistantRow,
   FileRow,
   NoticeRow,
+  ShellRunRow,
   ThinkingRow,
   ToolRow,
   TurnResultRow,
   UserRow,
   WorkingRow,
-  needsBlank,
+  blockNeedsBlank,
+  terminalBlocks,
 } from './items.tsx'
 import { Blank } from './row.tsx'
 import { TerminalSurface } from './surface.tsx'
@@ -110,6 +112,7 @@ export function TerminalTranscript({
   className,
 }: TerminalTranscriptProps) {
   const runStartedAt = useRunStart(state.status)
+  const blocks = useMemo(() => terminalBlocks(state.items), [state.items])
   return (
     <TerminalSurface
       fontSize={fontSize}
@@ -119,10 +122,14 @@ export function TerminalTranscript({
       // band cancels so its wash reaches the scroller's edge.
       bleed='1ch'
       className={cn('term-transcript', className)}>
-      {state.items.map((item, index) => (
-        <Fragment key={`${item.kind}:${item.id}`}>
-          {index > 0 && needsBlank(state.items[index - 1]!, item) ? <Blank /> : null}
-          <TerminalItemView item={item} fileUrl={fileUrl} />
+      {blocks.map((block, index) => (
+        <Fragment key={block.key}>
+          {index > 0 && blockNeedsBlank(blocks[index - 1]!, block) ? <Blank /> : null}
+          {'shell' in block ? (
+            <ShellRunRow items={block.shell} />
+          ) : (
+            <TerminalItemView item={block.item} fileUrl={fileUrl} />
+          )}
         </Fragment>
       ))}
       {working(state) ? (

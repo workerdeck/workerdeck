@@ -149,7 +149,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
 
           Keyed on the section so switching sections mounts a fresh sidebar
           rather than reconciling one list component into another's shape. */}
-      <div className='frame-shine m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-xl'>
+      <div className='app-frame frame-shine m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-xl'>
         {Sidebar ? <Sidebar key={section?.id} /> : null}
         <main className='flex min-w-0 flex-1 flex-col overflow-hidden'>
           {children ?? <Outlet />}

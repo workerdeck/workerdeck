@@ -1,6 +1,6 @@
 {
   "name": "@workerdeck/server",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "type": "module",
   "description": "The WorkerDeck gateway: HTTP + WebSocket session server over @workerdeck/core. Session registry (create/list/attach/interrupt/kill), pluggable auth hook, replay-from-seq attach. Runs anywhere Node runs — needs a real filesystem (no serverless).",
   "license": "MIT",

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { TranscriptItem } from '@workerdeck/react'
 import { formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
-import { isMutatingTool } from '../../lib/tool-icon.ts'
+import { isMutatingTool, isShellTool } from '../../lib/tool-icon.ts'
 import { usePulse } from '../agent/pulse.tsx'
 import { CopyAction, WithActions } from './affordances.tsx'
 import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
+import { Pressable, useRevealOnOpen } from './press.tsx'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
 
 /**
@@ -21,23 +22,49 @@ import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
  *
  * | glyph | means                                    |
  * |-------|------------------------------------------|
- * | `>`   | what you typed                           |
+ * | `❯`   | what you typed                           |
  * | `●`   | what the model said, or a tool it called |
  * | `⎿`   | that tool's output, one level in         |
  * | `✻`   | thinking                                 |
  * | `!`   | a notice from the runner, not the model  |
  */
 
+/**
+ * The prompt marker, in the transcript and in the composer both.
+ *
+ * `❯` rather than `>`: it is the shell prompt of every terminal anyone has
+ * configured this decade, and it reads as a *prompt* where `>` reads as a
+ * quotation or a greater-than. Exported because the composer is the same
+ * marker in the same gutter cell — that is the whole claim of the terminal
+ * composer, and two spellings of it would put the caret one glyph off the
+ * column the rows above start on.
+ */
+export const PROMPT_GLYPH = '❯'
+
 /** How much of a tool result the collapsed row is willing to hold. */
 const RESULT_PREVIEW_LINES = 4
 /** And how much the expanded one shows before offering the rest. */
 const RESULT_PREVIEW_CHARS = 2000
 
+/** Whole lines up to a character budget — never zero, because a single line
+ * longer than the budget still has to be shown or the row would open onto
+ * nothing. */
+function clipToChars(lines: string[], maxChars: number): string[] {
+  const out: string[] = []
+  let chars = 0
+  for (const line of lines) {
+    if (out.length > 0 && chars + line.length > maxChars) break
+    out.push(line)
+    chars += line.length + 1
+  }
+  return out
+}
+
 export function UserRow({ item }: { item: Extract<TranscriptItem, { kind: 'user' }> }) {
   return (
     <div className='term-user'>
       {item.attachments?.length ? (
-        <Row glyph='>' glyphTone='dim' tone='dim'>
+        <Row glyph={PROMPT_GLYPH} glyphTone='dim' tone='dim'>
           {item.attachments.map((attachment) => attachment.name).join(', ')}
         </Row>
       ) : null}
@@ -45,7 +72,11 @@ export function UserRow({ item }: { item: Extract<TranscriptItem, { kind: 'user'
           the first keeps the marker, exactly as a shell continuation does. */}
       {item.text
         ? item.text.split('\n').map((line, index) => (
-            <Row key={index} glyph={index === 0 ? '>' : undefined} glyphTone='dim' tone='fg'>
+            <Row
+              key={index}
+              glyph={index === 0 ? PROMPT_GLYPH : undefined}
+              glyphTone='dim'
+              tone='fg'>
               {line || ' '}
             </Row>
           ))
@@ -90,9 +121,12 @@ const TOOL_TONE: Record<string, Tone> = {
   failed: 'red',
 }
 
-export function ToolRow({ item }: { item: Extract<TranscriptItem, { kind: 'tool_call' }> }) {
+export type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
+
+export function ToolRow({ item }: { item: ToolCallItem }) {
   const [open, setOpen] = useState(false)
   const [full, setFull] = useState(false)
+  const reveal = useRevealOnOpen(open)
   const status = item.status ?? (item.result === undefined ? 'running' : 'settled')
   const busy = status === 'running' || status === 'pending'
   const isError = status === 'failed' || item.result?.isError === true
@@ -102,9 +136,20 @@ export function ToolRow({ item }: { item: Extract<TranscriptItem, { kind: 'tool_
 
   const text = item.result?.text ?? ''
   const lines = text.trimEnd().split('\n')
-  const preview = open ? lines : lines.slice(0, RESULT_PREVIEW_LINES)
+  // Three states, not two. Collapsed shows a few lines; open shows the output up
+  // to a character budget; `full` lifts the budget. The middle one is the reason
+  // the budget exists at all: a tool result can be a hundred thousand characters
+  // (a test run, a `find /`), and the whole of it lands in **one** virtual row —
+  // the virtualizer mounts rows, so it cannot help with what is inside a single
+  // one. Without the clip, expanding one row commits thousands of DOM nodes and
+  // the transcript stops being smooth for the rest of the session.
+  const preview = open
+    ? full
+      ? lines
+      : clipToChars(lines, RESULT_PREVIEW_CHARS)
+    : lines.slice(0, RESULT_PREVIEW_LINES)
   const hidden = lines.length - preview.length
-  const clipped = open && !full && text.length > RESULT_PREVIEW_CHARS
+  const clipped = open && !full && hidden > 0
 
   const tone: Tone = isError
     ? 'red'
@@ -120,13 +165,13 @@ export function ToolRow({ item }: { item: Extract<TranscriptItem, { kind: 'tool_
   const copyable = typeof command === 'string' ? command : text
 
   return (
+    // Open, the whole block keeps a fill: an expansion that runs past the top of
+    // the screen otherwise leaves no mark of where it began, and the reader has
+    // to guess which rows they opened.
+    <div ref={reveal} className={open ? 'term-open' : undefined}>
     <WithActions
       actions={copyable ? <CopyAction text={copyable} label='Copy' /> : null}>
-      <button
-        type='button'
-        onClick={() => setOpen((v) => !v)}
-        className='term-press'
-        aria-expanded={open}>
+      <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
         <Row glyph={busy ? pulse : '●'} glyphTone={tone} tone='fg'>
           <Ink bold tone='bright'>
             {item.name}
@@ -136,7 +181,7 @@ export function ToolRow({ item }: { item: Extract<TranscriptItem, { kind: 'tool_
             <Ink tone='faint'> · {item.backend}</Ink>
           ) : null}
         </Row>
-      </button>
+      </Pressable>
       {/* A file edit shows its diff, not its result prose: "The file has been
           updated" is what the *model* needed to hear, and the change is what the
           reader did. The text stays reachable by expanding. */}
@@ -154,22 +199,129 @@ export function ToolRow({ item }: { item: Extract<TranscriptItem, { kind: 'tool_
               {line || ' '}
             </Row>
           ))}
+          {/* One row for "there is more", pressable exactly when pressing it
+              would do something. Collapsed, the count is a label — the header
+              above is already the toggle, and a second control for the same act
+              is one too many. Open and clipped, it is the way to the rest. */}
           {hidden > 0 ? (
             <Row indent={1} columns={3} tone='faint'>
-              … +{hidden} line{hidden === 1 ? '' : 's'}
-            </Row>
-          ) : null}
-          {clipped ? (
-            <Row indent={1} columns={3} tone='faint'>
-              <button type='button' className='term-press term-link' onClick={() => setFull(true)}>
-                show all {text.length.toLocaleString()} chars
-              </button>
+              {clipped ? (
+                <button
+                  type='button'
+                  className='term-press term-link'
+                  onClick={() => setFull(true)}>
+                  … +{hidden} line{hidden === 1 ? '' : 's'} — show all{' '}
+                  {text.length.toLocaleString()} chars
+                </button>
+              ) : (
+                <>
+                  … +{hidden} line{hidden === 1 ? '' : 's'}
+                </>
+              )}
             </Row>
           ) : null}
         </>
       ) : null}
     </WithActions>
+    </div>
   )
+}
+
+/** Is this a shell call — a row the transcript folds into a run? */
+export function isShellCall(item: TranscriptItem): item is ToolCallItem {
+  return item.kind === 'tool_call' && isShellTool(item.name)
+}
+
+/**
+ * A run of shell commands, as one line.
+ *
+ * The CLI's own compression, and the reason it works: a shell call is almost
+ * never what you came back to read. `Bash(pnpm -w typecheck)` and forty lines of
+ * its output say nothing the model's next sentence doesn't say better, and six
+ * of them in a row bury that sentence a screen and a half down. So a run
+ * collapses to its count and gets out of the way — and opens, in full, the
+ * moment it is the thing you actually want.
+ *
+ * *Consecutive* is the whole grouping rule. Anything the model said between two
+ * commands breaks the run, because that sentence is the reason the second one
+ * happened and a count spanning it would claim the two were one act.
+ */
+export function ShellRunRow({ items }: { items: ToolCallItem[] }) {
+  const [open, setOpen] = useState(false)
+  const reveal = useRevealOnOpen(open)
+  const busy = items.some((item) => {
+    const status = item.status ?? (item.result === undefined ? 'running' : 'settled')
+    return status === 'running' || status === 'pending'
+  })
+  const failed = items.some((item) => item.status === 'failed' || item.result?.isError === true)
+  const pulse = usePulse(busy)
+
+  return (
+    <div ref={reveal} className={open ? 'term-open' : undefined}>
+      <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
+        {/* No marker once settled: a run of commands is an aside, and a bullet
+            would give it the weight of something the model said. While one is
+            running the pulse earns the gutter — that much is news. */}
+        <Row
+          glyph={busy ? pulse : undefined}
+          glyphTone={busy ? 'mark' : undefined}
+          tone={failed ? 'red' : 'dim'}>
+          {busy ? 'Running ' : 'Ran '}
+          <Ink bold tone={failed ? 'red' : 'bright'}>
+            {items.length}
+          </Ink>
+          {` shell command${items.length === 1 ? '' : 's'}${busy ? '…' : ''}`}
+        </Row>
+      </Pressable>
+      {open ? (
+        <div>
+          {items.map((item) => (
+            <ToolRow key={item.id} item={item} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * Fold consecutive shell calls into runs, leaving everything else alone.
+ *
+ * Shared by both renderers — the virtualized shell in `agent/Transcript.tsx` and
+ * the plain {@link TerminalTranscript} — because which rows exist is part of what
+ * the theme *is*, and a client that grouped differently would be showing a
+ * different transcript of the same session.
+ */
+export type TerminalBlock =
+  | { key: string; item: TranscriptItem; index: number }
+  | { key: string; shell: ToolCallItem[]; index: number }
+
+/**
+ * @param offset  What `items[0]`'s index is in the whole transcript — the
+ *   virtualized shell folds each side of the recap boundary separately, and the
+ *   rows still have to say where they sit for the catch-up dimming.
+ * @param fold    Whether to group at all. `false` gives one block per item,
+ *   which is what the cards variant renders: this is the terminal theme's rule
+ *   and must not silently reshape another renderer's row list.
+ */
+export function terminalBlocks(
+  items: readonly TranscriptItem[],
+  offset = 0,
+  fold = true,
+): TerminalBlock[] {
+  const out: TerminalBlock[] = []
+  for (const [position, item] of items.entries()) {
+    const index = offset + position
+    const previous = out.at(-1)
+    if (fold && isShellCall(item)) {
+      if (previous && 'shell' in previous) previous.shell.push(item)
+      // Keyed by the run's *first* call, so the key is stable as the run grows.
+      else out.push({ key: `shell:${item.id}`, shell: [item], index })
+      continue
+    }
+    out.push({ key: `${item.kind}:${item.id}`, item, index })
+  }
+  return out
 }
 
 export function TurnResultRow({
@@ -273,6 +425,13 @@ export function WorkingRow({
 export function needsBlank(previous: TranscriptItem, next: TranscriptItem): boolean {
   if (previous.kind === 'tool_call' && next.kind === 'tool_call') return false
   return true
+}
+
+/** The same rule over blocks: a shell run counts as the tool calls it folded. */
+export function blockNeedsBlank(previous: TerminalBlock, next: TerminalBlock): boolean {
+  const before = 'shell' in previous ? 'tool_call' : previous.item.kind
+  const after = 'shell' in next ? 'tool_call' : next.item.kind
+  return !(before === 'tool_call' && after === 'tool_call')
 }
 
 export { Band, Blank }

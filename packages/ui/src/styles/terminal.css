@@ -77,7 +77,7 @@
   --term-faint: #6a6a6a;
 
   --term-mark: #d97757;
-  --term-blue: #4a9eff;
+  --term-blue: #afb9fe;
   --term-green: #4ec9a0;
   --term-red: #f14c4c;
   --term-yellow: #d7ba7d;
@@ -169,6 +169,15 @@
   height: var(--term-line);
 }
 
+/* A row jumped to lands one line below the top edge rather than flush against
+   it — the same blank line every block gets, so the target reads as the start of
+   something rather than as content cut off by the frame. `scroll-margin` is the
+   only way to say this: `scrollIntoView` takes no offset, and the two callers
+   (the scrubber's `align: 'start'`, the recap's `'center'`) both go through it. */
+[data-terminal] [data-slot='transcript-rows'] > [data-index] {
+  scroll-margin-block-start: var(--term-line);
+}
+
 /* The same blank line, as padding on a virtualized row's measured wrapper.
    Identical height, and it must be padding there rather than a `<Blank/>`: the
    virtualizer measures one element per item, so space between two items has to
@@ -237,6 +246,10 @@
   color: inherit;
   text-align: left;
   cursor: pointer;
+  /* A transcript is read far more often than it is opened, so a pressable row
+     still has to be text you can drag a selection out of. The other half of
+     this is in `press.tsx`: the click that ends such a drag is refused. */
+  user-select: text;
 }
 /* The hover fill lives with the other affordances below — it is one, and it is
    switchable for the same reason. */
@@ -257,6 +270,19 @@
    which is what a host projecting to a real terminal wants. */
 [data-terminal][data-affordances~='hover'] .term-press:hover > .term-row,
 [data-terminal][data-affordances~='hover'] .term-press:focus-visible > .term-row {
+  background: var(--term-row-hover);
+  margin-inline: calc(-1 * var(--term-bleed, 0px));
+  padding-inline: var(--term-bleed, 0px);
+}
+
+/* An opened block keeps the fill the pointer gave it, for the whole of what it
+   opened. Eighty lines of output pushes its own first line off the top of the
+   screen, and without a wash there is nothing to say where the thing you
+   expanded began — or that these rows are one block at all. Full-bleed, like
+   every other wash; the hover fill inside it reaches the same edge, so the two
+   stack without a step. (The other half is `useRevealOnOpen`, which brings that
+   first line back when it has gone above the fold.) */
+[data-terminal] .term-open {
   background: var(--term-row-hover);
   margin-inline: calc(-1 * var(--term-bleed, 0px));
   padding-inline: var(--term-bleed, 0px);
@@ -313,6 +339,19 @@
 [data-terminal] .term-link {
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* A file path, while the modifier that would open it is held.
+ *
+ * Only then, and that is the point: a path *is* clickable but only under
+ * Cmd/Ctrl, so it should only look clickable then — an always-underlined path
+ * promises a plain click that does nothing. Applied by `usePathLinks` using the
+ * same test the click itself makes, so nothing lights up that a click ignores.
+ * Outside `[data-terminal]` too, since a cards transcript names files as well. */
+.wd-path-link {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 
 /* A status-line reading that leads somewhere. Inline and unstyled until hovered
@@ -412,6 +451,15 @@
   border: 0;
   padding: 0;
   outline: none;
+  /* The terminal's own caret: a filled cell, not a hairline. It is the last
+     thing in the theme still drawn the way the web draws it, and it is the one
+     the eye is always on. `caret-animation: manual` hands the blink to the
+     author and we then decline to animate it, so the block sits steady — a
+     blinking block is a strobe at this size, where a blinking hairline was
+     merely a caret. Both are ignored where unsupported, which is exactly the
+     right failure: a thin blinking caret is a plain caret, not a broken one. */
+  caret-shape: block;
+  caret-animation: manual;
   background: linear-gradient(var(--term-faint), var(--term-faint)) bottom left / 100% 1px no-repeat;
 }
 [data-terminal] .term-input:focus {
@@ -419,6 +467,111 @@
 }
 [data-terminal] .term-input::placeholder {
   color: var(--term-faint);
+}
+
+/* ── Sticky prompt ───────────────────────────────────────────────────────────
+ *
+ * The pinned prompt is the **real row**, not a header drawn above the
+ * transcript: `TranscriptRows` clamps that one row's transform to the scroll
+ * offset so it holds still while the rest moves under it. All this needs to do
+ * is put it in front and give it something opaque to sit on — the user band is
+ * translucent by design, so without a ground the rows passing beneath would
+ * show straight through it.
+ *
+ * `--bg` is the panel's own ground, the same token the hover-revealed row
+ * actions cover themselves with.
+ */
+[data-terminal] [data-slot='transcript-rows'] > [data-sticky] {
+  z-index: 3;
+  background: var(--bg, transparent);
+}
+
+/* ── Composer ────────────────────────────────────────────────────────────────
+ *
+ * The foot of the panel, and a *row* like every other: `>` in the gutter cell,
+ * the caret on the body column. That is the whole design — a typed line and a
+ * rendered one start on the same character, which no chat composer does and
+ * every terminal does for free.
+ *
+ * Docked rather than floating: no radius, no shadow, and a rule along the top
+ * *and* the bottom, both turning accent while anything inside has focus. Those
+ * two rules are the CLI's own frame for its prompt, and they are the only
+ * affordance — which is what the transcript above (no boxes anywhere) asks for.
+ * They also do the work a box would: the field reads as its own strip of the
+ * panel rather than as the last row of the transcript, without a border on the
+ * sides that would take the `❯` off the column the rows start on.
+ *
+ * The bottom rule is why the status bar under it draws none of its own — see
+ * `StatusBar.tsx`. Two adjacent 1px rules is a 2px rule with a seam in it.
+ */
+[data-terminal].term-composer {
+  border-top: 1px solid var(--term-faint);
+  border-bottom: 1px solid var(--term-faint);
+  transition: border-color 120ms;
+}
+/* The bar spans the panel; its contents sit in the transcript's own column, so
+   the `>` lands on the column the rows above it start on. Two elements because
+   those are two different widths — a rule that stopped at the content column
+   would read as a card, which is the one thing this theme has none of. */
+[data-terminal] .term-composer-body {
+  margin-inline: auto;
+  width: 100%;
+  max-width: var(--wd-content-max-w, 48rem);
+  padding-inline: var(--term-bleed, 0px);
+  /* Air on each side of the prompt, and a plain pixel value rather than a
+     fraction of `--term-line`: this is chrome between two rules, not a
+     transcript row, and the whole-multiple rule governs rows — a computed
+     half-line would be exactly the fractional metric that rule exists to
+     forbid. */
+  padding-block: 8px;
+}
+[data-terminal].term-composer:focus-within,
+[data-terminal].term-composer[data-dragging] {
+  border-color: var(--term-blue);
+}
+
+/* The contentEditable field. `font: inherit` is what makes it the cell — the
+   surface above already carries the size and the line height, and anything that
+   restates them here can disagree with the rows. */
+[data-terminal] .term-composer-field {
+  font: inherit;
+  color: var(--term-fg);
+  outline: none;
+  /* The steady block caret, same as the prompt fields. See `.term-input`. */
+  caret-shape: block;
+  caret-animation: manual;
+}
+
+/* A composer action as a character: one cell wide, one line tall, so pressing
+   it costs no width and removing it would move nothing. Dim until you reach for
+   it — the same restraint the row actions show. */
+[data-terminal] .term-glyph {
+  flex: none;
+  width: var(--term-cell);
+  height: var(--term-line);
+  font: inherit;
+  line-height: var(--term-line);
+  text-align: center;
+  background: none;
+  border: 0;
+  padding: 0;
+  outline: none;
+  user-select: none;
+  cursor: pointer;
+}
+/* `:not([data-tone])` because the tone rules and this one have the same
+   specificity and this one is further down the file: without it, a toned glyph
+   (the lit `↵`) would silently lose its colour to the default. */
+[data-terminal] .term-glyph:not([data-tone]) {
+  color: var(--term-dim);
+}
+[data-terminal] .term-glyph:hover:not(:disabled),
+[data-terminal] .term-glyph:focus-visible:not(:disabled) {
+  color: var(--term-bright);
+}
+[data-terminal] .term-glyph:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* ── Diff ────────────────────────────────────────────────────────────────────
@@ -480,6 +633,19 @@
    spacing), which would render every one of those as a visible blank line — so
    markdown bodies opt back out, and only a fenced block opts back in. */
 .term-md {
+  white-space: normal;
+}
+
+/* And it has to reach `.term-body` explicitly, because a list item *is* a Row
+   and Rows carry `pre-wrap` (a plain line of tool output must keep its own
+   spacing). Inherited, that turns every newline react-markdown emits between an
+   item's block children into a visible empty line — a nested list drew k+2
+   phantom blanks, so a two-line nested item was 72px of 18px rows. Models nest
+   lists constantly, and the grid audit cannot see it: the phantoms are whole
+   lines, so every row still lands on the grid. Fenced code opts back in for
+   itself (`.term-pre`), which is the only markdown that wants its own
+   whitespace. */
+.term-md .term-body {
   white-space: normal;
 }
 
@@ -548,8 +714,15 @@
 }
 .term-md .term-table {
   border-collapse: collapse;
+  /* `max-content` and **no** `max-width`. A cap of `100%` looks like the
+     defensive choice and is the opposite: it clamps a wide table below its
+     natural width, so the cells wrap and a 14-row table becomes 19 lines tall —
+     which breaks the theme's premise (a row is a line) and with it the height
+     calculator, whose table model counts rows. It also silently disables the
+     wrapper's own `overflow-x`, since a table that shrinks never overflows.
+     Letting it reach `max-content` puts every row back on one line and hands the
+     scrolling to `.term-table-wrap`, which exists for exactly that. */
   width: max-content;
-  max-width: 100%;
 }
 .term-md .term-table :is(th, td) {
   /* Columns are cells, rows are lines. No vertical padding, ever. */
@@ -560,4 +733,130 @@
 .term-md .term-thead {
   /* The header rule, again as a shadow so it costs no layout. */
   box-shadow: inset 0 -1px var(--term-diff-num);
+}
+
+/* ── Scrubber ────────────────────────────────────────────────────────────────
+ *
+ * The overview ruler (`components/terminal/scrubber.tsx`): a 16px rail of marks
+ * over the scroller's right edge — VS Code's strip beside the minimap, with
+ * this transcript's semantics. It is *chrome*, not rows: absolutely positioned
+ * over the scroll container so the transcript's grid is untouched, and drawn
+ * entirely from --term-* tokens so it follows the theme wherever the panel is
+ * embedded. Its width is the one deliberate exception to the theme's `ch` rule
+ * — see the note on `.term-scrubber` below.
+ *
+ * Interactivity is an affordance. Without `data-interactive` the rail is
+ * passive paint with pointer events off — and the native scrollbar, which
+ * stays in that mode, keeps working straight through it.
+ */
+[data-terminal].term-scrubber {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  /* Exactly 16px, and this is the one place the theme's `ch` rule is set aside
+     on purpose: the rail is chrome beside the grid rather than part of it, and
+     its width is a *hit target* (two 8px lanes) rather than a column of text.
+     `2ch` is 15.6px at the default cell and drifts with the font, which would
+     make the lanes 7.8px and different again in the VS Code dock. */
+  width: 16px;
+  z-index: 10;
+  pointer-events: none;
+}
+[data-terminal].term-scrubber[data-interactive] {
+  pointer-events: auto;
+}
+.term-scrubber .term-scrubber-body {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+/* The viewport band — where you are, in the same fill every hover uses. */
+.term-scrubber .term-scrub-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--term-row-hover);
+  pointer-events: none;
+}
+
+.term-scrubber .term-scrub-mark {
+  position: absolute;
+  min-height: 8px;
+}
+.term-scrubber[data-interactive] .term-scrub-mark {
+  cursor: pointer;
+}
+.term-scrubber[data-interactive] .term-scrub-mark:hover {
+  outline: 1px solid color-mix(in srgb, var(--term-bright) 40%, transparent);
+}
+
+/* Two lanes of 8px — what you asked, and what came back — and 'f', the
+   full-width lane for annotations *about* the run (an error, an approval, a
+   bookmark, the catch-up seam) rather than steps through it. Pixels, not
+   percentages: the whole point of the 16px rail is that a lane is a reliable
+   8px target, and a percentage would reintroduce the drift the fixed width was
+   chosen to remove. */
+.term-scrubber .term-scrub-mark[data-lane='l'] { left: 0; width: 8px; }
+.term-scrubber .term-scrub-mark[data-lane='r'] { left: 8px; width: 8px; }
+.term-scrubber .term-scrub-mark[data-lane='f'] { left: 0; width: 16px; }
+
+.term-scrubber .term-scrub-mark[data-kind='user'] { background: var(--term-blue); }
+.term-scrubber .term-scrub-mark[data-kind='turn'] { background: var(--term-fg); }
+.term-scrubber .term-scrub-mark[data-kind='turnFailed'],
+.term-scrubber .term-scrub-mark[data-kind='error'] { background: var(--term-red); }
+.term-scrubber .term-scrub-mark[data-kind='bookmark'] { background: var(--term-magenta); }
+.term-scrubber .term-scrub-mark[data-kind='approval'] {
+  background: var(--term-yellow);
+  animation: term-scrub-pulse 1.2s infinite;
+}
+/* The catch-up boundary: a dashed hairline centered in its 3px hit box. */
+.term-scrubber .term-scrub-mark[data-kind='recap'] {
+  background: repeating-linear-gradient(to right, var(--term-faint) 0 3px, transparent 3px 6px)
+    left center / 100% 1px no-repeat;
+}
+@keyframes term-scrub-pulse {
+  50% { opacity: 0.3; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .term-scrubber .term-scrub-mark[data-kind='approval'] {
+    animation: none;
+  }
+}
+
+/* The peek. Rendered from transcript state — the row it describes is usually
+   unmounted — and framed the theme's way: strokes as backgrounds, no border.
+   pointer-events: none, so it can never trap the pointer that revealed it. */
+.term-scrubber .term-scrub-peek {
+  position: absolute;
+  right: calc(100% + 1ch);
+  width: 44ch;
+  max-width: 60vw;
+  padding: var(--term-line) 2ch;
+  background:
+    linear-gradient(var(--term-faint), var(--term-faint)) top left / 100% 1px no-repeat,
+    linear-gradient(var(--term-faint), var(--term-faint)) bottom left / 100% 1px no-repeat,
+    linear-gradient(var(--term-faint), var(--term-faint)) top left / 1px 100% no-repeat,
+    linear-gradient(var(--term-faint), var(--term-faint)) top right / 1px 100% no-repeat,
+    var(--bg-elevated, #1f1f1f);
+  pointer-events: none;
+  z-index: 11;
+}
+.term-scrubber .term-scrub-ex {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* While an interactive scrubber is mounted it IS the scrollbar; the transcript
+   stamps this attribute on the scroll element. A passive rail leaves the
+   native scrollbar alone — pointer-events: none above is what keeps that
+   scrollbar reachable through the paint. */
+[data-term-scrubber-host] {
+  scrollbar-width: none;
+}
+[data-term-scrubber-host]::-webkit-scrollbar {
+  display: none;
 }

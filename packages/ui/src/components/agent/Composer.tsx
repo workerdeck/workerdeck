@@ -24,7 +24,10 @@ import { Spinner } from '../ui/Spinner.tsx'
 import { PromptArea } from '../prompt-area/prompt-area.tsx'
 import { usePromptAreaState } from '../prompt-area/use-prompt-area-state.ts'
 import { commandTrigger, mentionTrigger } from '../prompt-area/trigger-presets.ts'
-import { useLines } from './transcript-variant.tsx'
+import { useTranscriptVariant } from './transcript-variant.tsx'
+import type { TerminalAffordances } from '../terminal/affordances.tsx'
+import { PROMPT_GLYPH } from '../terminal/items.tsx'
+import { TerminalSurface } from '../terminal/surface.tsx'
 import type { TriggerSuggestion } from '../prompt-area/types.ts'
 import { cn } from '../../lib/utils.ts'
 import { formatBytes } from '../../lib/format.ts'
@@ -77,6 +80,19 @@ export interface ComposerProps {
    * empty composer would otherwise spend two rows saying nothing.
    */
   layout?: 'stacked' | 'inline'
+  /**
+   * Terminal theme only: the cell the composer draws on. Passed straight
+   * through to its own {@link TerminalSurface}, and it has to be passed — the
+   * composer sits outside the transcript's scroller, so it establishes a second
+   * surface, and a surface handed no metrics falls back to the 13/18 default. A
+   * host running the transcript at its editor's size and the composer at the
+   * default would have the caret land on a different column from the text above
+   * it, which is the one thing this theme exists to prevent.
+   */
+  fontSize?: number
+  lineHeight?: number
+  /** Terminal theme only; see {@link TerminalAffordances}. */
+  affordances?: TerminalAffordances | boolean
   className?: string
   ref?: Ref<ComposerHandle>
 }
@@ -145,13 +161,16 @@ export function Composer({
   attachments,
   toolbar,
   layout = 'stacked',
+  fontSize,
+  lineHeight,
+  affordances,
   className,
   ref,
 }: ComposerProps) {
   const inline = layout === 'inline'
   // The transcript's variant reaches here through the panel-wide context, so
   // the composer matches the rows above it without a prop chain.
-  const lines = useLines()
+  const terminal = useTranscriptVariant() === 'terminal'
   const { bind, plainText, isEmpty, clear, focus } = usePromptAreaState()
   const fileInput = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -322,10 +341,13 @@ export function Composer({
   const attach = canAttach ? (
     <>
       {fileField}
-      {lines ? (
-        // The glyph sits in the same 14px gutter the transcript's markers use,
-        // so the typed line starts on the column the conversation does.
-        <GlyphButton label='Attach files' disabled={disabled} onClick={() => fileInput.current?.click()}>
+      {terminal ? (
+        // The glyph sits in the same gutter the transcript's markers use, so the
+        // typed line starts on the column the conversation does.
+        <GlyphButton
+          label='Attach files'
+          disabled={disabled}
+          onClick={() => fileInput.current?.click()}>
           +
         </GlyphButton>
       ) : (
@@ -342,7 +364,7 @@ export function Composer({
   ) : null
 
   const interrupting = busy && !canSend
-  const submitButton = lines ? (
+  const submitButton = terminal ? (
     // Terminal furniture rather than chat furniture: a glyph that lights up on
     // hover/focus instead of a filled pill. `↵` is what sends, `■` is what stops
     // — the same two symbols the keyboard and a shell already use.
@@ -350,7 +372,7 @@ export function Composer({
       label={interrupting ? 'Interrupt' : 'Send'}
       disabled={!interrupting && !canSend}
       onClick={interrupting ? onInterrupt : submit}
-      className={interrupting ? 'text-warning' : canSend ? 'text-accent' : undefined}>
+      tone={interrupting ? 'yellow' : canSend ? 'blue' : undefined}>
       {interrupting ? '■' : '↵'}
     </GlyphButton>
   ) : interrupting ? (
@@ -393,7 +415,6 @@ export function Composer({
     <div
       className={cn(
         'mx-auto mt-1 flex w-full max-w-[var(--wd-content-max-w,48rem)] items-center gap-2 text-label text-danger',
-        lines && 'px-2',
       )}>
       <TriangleAlert className='size-3 shrink-0' />
       <span className='min-w-0 flex-1'>{attachments.error}</span>
@@ -407,59 +428,66 @@ export function Composer({
     </div>
   ) : null
 
-  if (lines) {
-    // Docked, not floating: the composer is the foot of the panel rather than a
-    // card sitting on it. No gutter, no radius, no shadow, and **one** border —
-    // the rule along the top — which turns accent while anything inside has
-    // focus. That single blue line is the whole affordance, which is what VS
-    // Code's own agent view does and what the transcript above (no boxes) asks
-    // for. The bar spans the panel; its contents stay in the transcript's
-    // column, so the typed line starts where the conversation does.
+  if (terminal) {
+    // The CLI's own prompt, on the CLI's own grid: `>` sits in the gutter cell
+    // every transcript row's marker sits in, so what you type starts on the
+    // column what you are reading starts on. That alignment is the entire
+    // reason this is its own branch rather than the docked chrome restyled —
+    // the composer is outside the transcript's scroller, so it needs a surface
+    // of its own, at the same metrics.
+    const line = lineHeight ?? 18
     return (
       <div data-slot='composer' className={cn('shrink-0', className)}>
-        <div
+        <TerminalSurface
           {...dropHandlers}
-          className={cn(
-            // `min-h`, not `h`: one line matches the status bar below it exactly
-            // — two strips of one piece of chrome — and it still grows with the
-            // message, which a fixed height would not.
-            'flex min-h-[38px] flex-col justify-center',
-            'border-t border-border bg-bg transition-colors',
-            'focus-within:border-t-accent',
-            dragging && 'border-t-accent',
-            disabled && 'opacity-60',
-          )}>
-          <div className='mx-auto w-full max-w-[var(--wd-content-max-w,48rem)] px-2 py-1'>
+          fontSize={fontSize}
+          lineHeight={lineHeight}
+          affordances={affordances}
+          bleed='1ch'
+          data-dragging={dragging || undefined}
+          className={cn('term-composer', disabled && 'opacity-60')}>
+          <div className='term-composer-body'>
             {staged.length > 0 && attachments ? (
               <AttachmentStrip attachments={attachments} />
             ) : null}
-            {/* One row until the message needs more: the field grows into the
-                space rather than the frame reserving it, and the buttons stay
-                bottom-aligned as it does. */}
-            <div className='flex items-end gap-1'>
-              {attach}
-              <PromptArea
-                {...bind}
-                triggers={triggers}
-                onSubmit={submit}
-                disabled={disabled}
-                placeholder={disabled ? 'Session ended' : placeholder}
-                minHeight={20}
-                maxHeight={192}
-                aria-label='Message the agent'
-                className='min-w-0 flex-1 py-0.5 text-body-sm text-text'
-                onImagePaste={(file) => attachments?.add([file])}
-              />
-              {submitButton}
+            <div className='term-row'>
+              {/* Blue, not the brand's coral: the coral is the *working* mark
+                  (the pulse, the status line), and a prompt sitting waiting for
+                  you is not the session working. Blue is what the rest of the
+                  theme's live edges use — the focused rule right above this. */}
+              <span aria-hidden className='term-gutter' data-tone='blue'>
+                {PROMPT_GLYPH}
+              </span>
+              <div className='flex min-w-0 items-start'>
+                <PromptArea
+                  {...bind}
+                  triggers={triggers}
+                  onSubmit={submit}
+                  disabled={disabled}
+                  placeholder={disabled ? 'Session ended' : placeholder}
+                  // The field's own metrics are the cell's: one row is one line,
+                  // and it grows in whole lines from there.
+                  minHeight={line}
+                  maxHeight={line * 10}
+                  aria-label='Message the agent'
+                  className='term-composer-field min-w-0 flex-1'
+                  onImagePaste={(file) => attachments?.add([file])}
+                />
+                {attach}
+                {submitButton}
+              </div>
             </div>
-            {/* Model and mode under the field, where an editor's chat puts them.
-                Absent entirely under `controlsSurface: 'external'`, which is how
-                the VS Code panel keeps the composer one row tall. */}
+            {/* Model and mode below the prompt, on the body column so they read
+                as a continuation of the line rather than new chrome. Absent
+                under `controlsSurface: 'external'`. */}
             {toolbar ? (
-              <div className='flex min-w-0 items-center gap-1 pt-1'>{toolbar}</div>
+              <div className='term-row'>
+                <span aria-hidden className='term-gutter' />
+                <div className='flex min-w-0 items-center gap-[1ch]'>{toolbar}</div>
+              </div>
             ) : null}
           </div>
-        </div>
+        </TerminalSurface>
         {errorRow}
       </div>
     )
@@ -532,19 +560,22 @@ export function Composer({
 }
 
 /**
- * A composer action as a **character**, for the inline (terminal) layout: no
- * pill, no border, nothing drawn until you reach for it — the surface only
- * appears on hover/focus/press, which is how a terminal's own affordances
- * behave. Sized to the transcript's gutter glyph (14px) so the row's furniture
- * lines up with the conversation above it rather than towering over it.
+ * A composer action as a **character**, for the terminal composer: no pill, no
+ * border, nothing drawn until you reach for it — the surface only appears on
+ * hover/focus, which is how a terminal's own affordances behave.
+ *
+ * One cell wide and one line tall (`term-glyph` in `terminal.css`), so it sits
+ * on the same grid as the row it shares and removing it would move nothing.
  */
 function GlyphButton({
+  tone,
   label,
   disabled,
   onClick,
   className,
   children,
 }: {
+  tone?: 'blue' | 'yellow'
   label: string
   disabled?: boolean
   onClick: () => void
@@ -558,13 +589,8 @@ function GlyphButton({
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className={cn(
-        'flex size-6 shrink-0 items-center justify-center rounded-sm font-mono text-body-sm leading-none',
-        'text-fg-3 transition-colors outline-none select-none',
-        'hover:bg-surface-hover hover:text-fg-1 focus-visible:bg-surface-hover focus-visible:text-fg-1',
-        'active:bg-accent-bg disabled:pointer-events-none disabled:opacity-40',
-        className,
-      )}>
+      data-tone={tone}
+      className={cn('term-glyph', className)}>
       {children}
     </button>
   )

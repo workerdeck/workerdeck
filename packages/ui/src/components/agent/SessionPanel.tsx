@@ -74,10 +74,12 @@ import { UsageDialog } from './UsageDialog.tsx'
  */
 function PromptSurface({
   terminal,
+  metrics,
   affordances,
   children,
 }: {
   terminal: boolean
+  metrics?: TerminalMetrics
   affordances?: TerminalAffordances | boolean
   children: ReactNode
 }) {
@@ -89,11 +91,31 @@ function PromptSurface({
     )
   }
   return (
-    <TerminalSurface affordances={affordances} bleed='1ch' className='term-transcript'>
+    <TerminalSurface
+      fontSize={metrics?.fontSize}
+      lineHeight={metrics?.lineHeight}
+      affordances={affordances}
+      bleed='1ch'
+      className='term-transcript'>
       {children}
     </TerminalSurface>
   )
 }
+
+/**
+ * The character cell the terminal theme draws on, in **whole pixels**.
+ *
+ * One object rather than two props because the panel mounts three separate
+ * `TerminalSurface`s — the transcript, the pending prompts, the composer — and
+ * they must agree: a prompt drawn at a different line height from the rows above
+ * it is three surfaces on three grids, which is the failure this theme is built
+ * to make impossible. Passing one value through one prop is what keeps them from
+ * drifting.
+ *
+ * Absent means the CLI's own 13/18. A host that follows an editor font size
+ * (VS Code) hands that down instead.
+ */
+export type TerminalMetrics = { fontSize?: number; lineHeight?: number }
 
 export interface SessionPanelProps {
   client: WorkerDeckClient
@@ -155,10 +177,10 @@ export interface SessionPanelProps {
    * internal ref, so an inline closure is fine). */
   onVitals?: (vitals: SessionVitals) => void
   /**
-   * How the transcript draws a turn — `'cards'` (default) or `'lines'`, the
-   * space-efficient terminal treatment: no boxes, no bubbles, one full-width
-   * hover-highlit row per event behind a gutter glyph. An embedder in a dock
-   * (the VS Code panel) wants `'lines'`; a full-width dashboard usually doesn't.
+   * How the transcript draws a turn — `'cards'` (default, the chat convention)
+   * or `'terminal'`, the CLI's own form: every row on a character cell, no boxes
+   * anywhere, diffs as full-width bands. An embedder in a dock (the VS Code
+   * panel) wants `'terminal'`; a full-width dashboard may prefer cards.
    */
   transcriptVariant?: TranscriptVariant
   /**
@@ -168,6 +190,42 @@ export interface SessionPanelProps {
    * {@link TerminalAffordances}.
    */
   affordances?: TerminalAffordances | boolean
+  /**
+   * Terminal theme only: the character cell, in whole pixels. See
+   * {@link TerminalMetrics} — it reaches all three of the panel's terminal
+   * surfaces, which is why it is one prop and not two per surface.
+   */
+  terminalMetrics?: TerminalMetrics
+  /**
+   * Terminal theme only: replace the scrollbar with the **overview ruler** — a
+   * `2ch` rail of coloured marks in three lanes (what you typed, the answer and
+   * its turn end, errors and a waiting approval), which you can hover to peek,
+   * click to jump, and drag to scrub.
+   *
+   * Its premise is the terminal theme's own: one line height and one cell make
+   * every row's height derivable, so a mark's position is *computed* rather than
+   * guessed from rows that have not mounted. That is why it is not offered under
+   * `cards` — there the flag is inert.
+   *
+   * `false` keeps the native scrollbar. So does `affordances={false}`, which
+   * leaves the marks painted but inert rather than removing a reader's only way
+   * to scroll.
+   */
+  scrubber?: boolean
+  /**
+   * Bookmarked **item indices**, painted full-width on the rail. Paint only —
+   * the panel neither stores bookmarks nor offers a way to set one, because who
+   * owns that store is the embedder's question (a private pin belongs with the
+   * client's watermarks; a shared one is session metadata on the gateway).
+   */
+  scrubberMarks?: readonly number[]
+  /**
+   * Terminal theme only: hold the prompt of the turn you are reading at the top
+   * of the transcript, as the Claude Code CLI does. The **real row** is pinned
+   * rather than a copy drawn above it, so it lines up with the rows beneath by
+   * construction — see `TranscriptRows`.
+   */
+  stickyPrompt?: boolean
   /**
    * How much air the transcript gives each row — `'comfortable'` (default: a
    * blank line between messages, as the Claude Code CLI leaves) or `'compact'`
@@ -364,6 +422,10 @@ export function SessionPanel({
   transcriptDensity = 'comfortable',
   transcriptFont = 'sans',
   affordances,
+  terminalMetrics,
+  scrubber = false,
+  scrubberMarks,
+  stickyPrompt = false,
   controlsSurface = 'internal',
   onControls,
   focusComposerOnClick = false,
@@ -680,9 +742,9 @@ export function SessionPanel({
   }
 
   return (
-    // The variant is a panel-wide fact, not a transcript-only one: the approval
-    // and question prompts live outside the scroller but are line items in the
-    // same run, and they read `useLines()` like every other row.
+    // The variant is a panel-wide fact, not a transcript-only one: the composer
+    // and the pending prompts live outside the scroller but belong to the same
+    // run, and they read it from this context rather than a prop chain.
     <TranscriptVariantProvider value={transcriptVariant}>
       <TranscriptDensityProvider value={transcriptDensity}>
       <div
@@ -714,7 +776,12 @@ export function SessionPanel({
           hostImage={hostImage}
           variant={transcriptVariant}
           density={transcriptDensity}
+          fontSize={terminalMetrics?.fontSize}
+          lineHeight={terminalMetrics?.lineHeight}
           affordances={affordances}
+          stickyPrompt={stickyPrompt}
+          scrubber={scrubber}
+          scrubberMarks={scrubberMarks}
           catchUp={
             catchUp && newCount > 0
               ? { from: catchUp.itemCount, since: catchUp.since }
@@ -732,10 +799,7 @@ export function SessionPanel({
               className='mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] items-center gap-2 text-label text-fg-3'>
               <span
                 aria-hidden
-                className={cn(
-                  'select-none',
-                  transcriptVariant === 'lines' ? 'text-fg-3' : 'text-accent',
-                )}>
+                className={cn('select-none', terminal ? 'text-fg-3' : 'text-accent')}>
                 ※
               </span>
               <span className='min-w-0 flex-1 truncate'>
@@ -765,7 +829,7 @@ export function SessionPanel({
             session is actually driven. */}
         {!readOnly && capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
           <div className={cn(terminal ? 'pb-2' : 'px-3 pb-2')}>
-            <PromptSurface terminal={terminal} affordances={affordances}>
+            <PromptSurface terminal={terminal} metrics={terminalMetrics} affordances={affordances}>
               {state.pendingApprovals.map((request) => {
                 const isQuestion =
                   request.toolName === 'AskUserQuestion' &&
@@ -823,6 +887,9 @@ export function SessionPanel({
           }
           layout={controlsExternal ? 'inline' : 'stacked'}
           toolbar={controlsExternal ? undefined : sessionControls}
+          fontSize={terminalMetrics?.fontSize}
+          lineHeight={terminalMetrics?.lineHeight}
+          affordances={affordances}
         />
         )}
         {/* Below the composer, along the foot of the panel — the editor
