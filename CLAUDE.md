@@ -388,6 +388,11 @@ protocol. Read these before changing scope or structure:
   grouping, the subset line, unread badges, inline rename — for a host that wants the
   dashboard's look without reimplementing the rules; `SessionList` stays beside it for the
   plain fixed-set case.
+  The file rail reads in the **UI font, never mono** — it is workbench chrome you scan, and the
+  editors it sits beside set filenames in their UI face; mono is for content on a grid and nothing
+  in a file list is on one. It had carried a hardcoded `font-mono` since it shipped, which only
+  became conspicuous once a monospace transcript sat next to it. Independent of `transcriptFont`,
+  which scopes to the session panel alone.
   `SessionWorkspace` is the VS Code-shaped layout *around* it (file rail, tabs, read-only viewer,
   hand-rolled `Splitter` — Base UI ships none) and is **strictly additive**: an embedder picks the
   panel or the workspace, and `SessionPanel` is untouched by it. It ships from a **second entry

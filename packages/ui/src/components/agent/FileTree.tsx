@@ -108,9 +108,7 @@ export function FileTree({
             ) : null}
           </div>
         ) : (
-          <span className='min-w-0 flex-1 truncate px-1 font-mono text-label text-fg-4'>
-            {tree.root}
-          </span>
+          <span className='min-w-0 flex-1 truncate px-1 text-label text-fg-4'>{tree.root}</span>
         )}
         <Button
           variant='ghost'
@@ -259,11 +257,14 @@ function Row({
       <span className='flex size-3 shrink-0 items-center justify-center'>{chevron}</span>
       {icon}
       {/* `shrink-0` on the name and `min-w-0` on the detail: when the row runs
-          out of room the directory gives way and the filename stays whole. */}
-      <span className='shrink-0 truncate font-mono text-label'>{label}</span>
-      {detail ? (
-        <span className='min-w-0 flex-1 truncate font-mono text-label text-fg-4'>{detail}</span>
-      ) : null}
+          out of room the directory gives way and the filename stays whole.
+          The rail reads in the **UI font**, never mono: it is workbench chrome
+          — a list you scan — and the editors it sits beside (VS Code, Finder)
+          all set filenames in their UI face. Mono is for content on a grid, and
+          nothing here is on one. It is also independent of `transcriptFont`,
+          which scopes to the session panel alone. */}
+      <span className='shrink-0 truncate text-label'>{label}</span>
+      {detail ? <span className='min-w-0 flex-1 truncate text-label text-fg-4'>{detail}</span> : null}
     </button>
   )
 }
