@@ -205,6 +205,29 @@ function outputText(output: ToolExecutionOutput): string {
 /** CLI-side command output arrives as user text wrapped in local-command tags. */
 const LOCAL_COMMAND_OUTPUT = /^<local-command-(stdout|stderr)>([\s\S]*?)<\/local-command-\1>$/
 
+/**
+ * A slash command the person ran, as the CLI writes it into the transcript:
+ * `<command-message>…</command-message><command-name>/wrapup</command-name>
+ * <command-args>…</command-args>`, in whichever order.
+ *
+ * Rendered as the command line rather than hidden. It *is* a person's turn — it
+ * is the reason everything after it happened — but the raw wrapper is markup
+ * nobody typed, and it showed up verbatim in every resumed transcript. Not
+ * suppressed in the runner for that same reason: hiding it would erase the
+ * turn's cause and, since `transcriptActivity` counts a non-synthetic user
+ * message as one row, silently disagree with the unread count.
+ */
+const COMMAND_NAME = /<command-name>([\s\S]*?)<\/command-name>/
+const COMMAND_ARGS = /<command-args>([\s\S]*?)<\/command-args>/
+
+/** The typed command line, or undefined when this is ordinary prose. */
+function slashCommandText(text: string): string | undefined {
+  const name = COMMAND_NAME.exec(text)?.[1]?.trim()
+  if (!name) return undefined
+  const args = COMMAND_ARGS.exec(text)?.[1]?.trim()
+  return args ? `${name} ${args}` : name
+}
+
 function upsert(items: TranscriptItem[], item: TranscriptItem): TranscriptItem[] {
   const index = items.findIndex((existing) => existing.id === item.id && existing.kind === item.kind)
   if (index === -1) return [...items, item]
@@ -378,7 +401,9 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
             items = upsert(items, {
               kind: 'user',
               id: event.uuid ?? `user-${event.seq}`,
-              text,
+              // A slash command reads as the command line, not as the wrapper
+              // the CLI stored it in.
+              text: slashCommandText(text) ?? text,
               // References, not bytes — render them by fetching
               // `/sessions/:id/attachments/:attachmentId`.
               attachments: event.attachments,

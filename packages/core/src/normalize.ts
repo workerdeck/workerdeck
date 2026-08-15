@@ -5,6 +5,7 @@ import type {
   McpServerStatusInfo,
   ModelOption,
   SessionEventBody,
+  TextBlock,
 } from '@workerdeck/protocol'
 import { filePatchFromToolResult } from './patch.ts'
 
@@ -15,6 +16,49 @@ function singleToolResult(message: ApiMessage): boolean {
   const content = message.content
   if (!Array.isArray(content)) return false
   return content.filter((block) => block.type === 'tool_result').length === 1
+}
+
+/**
+ * The wrappers the CLI writes into the transcript when the *harness* is talking
+ * to the model rather than a person talking to the session.
+ *
+ * Deliberately a text test, and only these two. The live path has structure to
+ * go on (`isSynthetic`, `origin.kind`), but **the resumed path has none**: the
+ * SDK's `SessionMessage` carries exactly `message`, `uuid`, `session_id`,
+ * `parent_tool_use_id`, `parent_agent_id` and `timestamp` — every one of
+ * `isMeta`, `isSidechain`, `promptSource` and `origin` is dropped between the
+ * stored JSONL and what `getSessionMessages` hands back (verified against real
+ * transcripts). So on resume this is the only signal there is, and without it a
+ * `<task-notification>` blob comes back as a blue user row and a scrubber mark,
+ * as if someone had typed it.
+ *
+ * `<local-command-caveat>` is here for symmetry and cheap insurance: the SDK
+ * filters `isMeta` entries out of a resumed transcript itself today, which is
+ * not a contract anyone wrote down.
+ *
+ * What is *not* here matters as much:
+ * - `<local-command-stdout>` — the reducer turns it into a notice row on
+ *   purpose; marking it synthetic would delete a row both paths show.
+ * - `<command-name>` — that is a person running a slash command. The reducer
+ *   renders it as the command line they typed; hiding it would erase the turn's
+ *   cause.
+ */
+const SYNTHETIC_USER_PREFIXES = ['<task-notification>', '<local-command-caveat>']
+
+/** First text block's leading tag, for the test above. Tool results and images
+ * carry no text and are never synthetic by this rule (a tool result is already
+ * a tool result to every renderer). */
+export function isSyntheticUserText(message: ApiMessage): boolean {
+  const content = message.content
+  const text =
+    typeof content === 'string'
+      ? content
+      : Array.isArray(content)
+        ? content.find((block): block is TextBlock => block.type === 'text')?.text
+        : undefined
+  if (typeof text !== 'string') return false
+  const head = text.trimStart()
+  return SYNTHETIC_USER_PREFIXES.some((prefix) => head.startsWith(prefix))
 }
 
 export function toApiMessage(message: unknown): ApiMessage {
@@ -280,7 +324,16 @@ export function normalizeSdkMessage(msg: SDKMessage): SessionEventBody | null {
         message,
         parentToolUseId: msg.parent_tool_use_id,
         replay: 'isReplay' in msg && msg.isReplay === true ? true : undefined,
-        synthetic: msg.isSynthetic === true ? true : undefined,
+        // Three ways to be the harness rather than a person: the SDK says so,
+        // the message's origin says so (a background task reporting in is not
+        // someone typing), or the text is one of the CLI's own wrappers — which
+        // is the only one of the three a *resumed* transcript still carries.
+        synthetic:
+          msg.isSynthetic === true ||
+          msg.origin?.kind === 'task-notification' ||
+          isSyntheticUserText(message)
+            ? true
+            : undefined,
         // The engine's own line numbers, projected down to the hunks — see
         // `filePatchFromToolResult` for why the rest of `tool_use_result` stays
         // off the wire. Only with a single tool_result block, because nothing

@@ -668,6 +668,51 @@ describe('SessionRunner', () => {
     expect(events).toHaveLength(events.filter((e) => e.type !== 'sdk_event').length)
   })
 
+  it("stamps the harness's own wrapper messages synthetic on backfill", async () => {
+    // A stored message carries none of `isMeta`/`origin`/`promptSource` — the
+    // SDK's `SessionMessage` drops every one of them — so the wrapper text is
+    // the only thing left to tell a background task reporting in from a person
+    // typing. Unstamped, these came back as blue user rows *and* were counted as
+    // unread work by `transcriptActivity`.
+    const entry = (uuid: string, content: unknown) => ({
+      type: 'user' as const,
+      uuid,
+      session_id: 'sdk-session-1',
+      message: { role: 'user', content },
+      parent_tool_use_id: null,
+      parent_agent_id: null,
+    })
+    const history = [
+      entry('h-task', '<task-notification>\n<task-id>abc</task-id>\n</task-notification>'),
+      entry('h-caveat', '<local-command-caveat>Caveat: the messages below…</local-command-caveat>'),
+      // Not synthetic: the reducer renders this as the command line a person ran.
+      entry('h-command', '<command-name>/wrapup</command-name><command-args>ship it</command-args>'),
+      // Not synthetic either: the reducer turns it into a notice row, and
+      // hiding it would delete a row the live path shows.
+      entry('h-stdout', '<local-command-stdout>Set model to Fable 5</local-command-stdout>'),
+      entry('h-typed', [{ type: 'text', text: 'a real prompt' }]),
+    ]
+    const { harness, runner, events } = makeRunner({
+      resume: 'sdk-session-1',
+      historyFn: vi.fn(async () => history),
+    })
+    void runner.start()
+    await tick()
+    harness.emit(initMessage)
+    await tick()
+
+    const byUuid = new Map(
+      events
+        .filter((e): e is Extract<SessionEvent, { type: 'user_message' }> => e.type === 'user_message')
+        .map((e) => [e.uuid, e.synthetic]),
+    )
+    expect(byUuid.get('h-task')).toBe(true)
+    expect(byUuid.get('h-caveat')).toBe(true)
+    expect(byUuid.get('h-command')).toBeUndefined()
+    expect(byUuid.get('h-stdout')).toBeUndefined()
+    expect(byUuid.get('h-typed')).toBeUndefined()
+  })
+
   it('resume without history and historyFn failures are non-fatal', async () => {
     const historyFn = vi.fn(async () => {
       throw new Error('no transcript')

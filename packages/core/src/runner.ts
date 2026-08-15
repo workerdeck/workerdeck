@@ -32,6 +32,7 @@ import { InputQueue } from './input-queue.ts'
 import {
   type UsageRateLimits,
   defaultModelFromSdk,
+  isSyntheticUserText,
   mcpStatusInfo,
   modelOptionsFromSdk,
   normalizeSdkMessage,
@@ -400,11 +401,19 @@ export class SessionRunner implements Runner {
     for (const m of messages) {
       if (this.#closed) return
       if (m.type === 'user') {
+        const message = toApiMessage(m.message)
         this.#emit({
           type: 'user_message',
-          message: toApiMessage(m.message),
+          message,
           parentToolUseId: m.parent_tool_use_id,
           replay: true,
+          // The live path reads this off `isSynthetic` / `origin.kind`; a stored
+          // message carries neither (see `isSyntheticUserText`), so the wrapper
+          // text is the only thing left to read it from. Without it a resumed
+          // session's `<task-notification>` blobs come back as blue user rows —
+          // and, because `transcriptActivity` counts a non-synthetic user
+          // message as a row, as unread badges for work nobody typed.
+          synthetic: isSyntheticUserText(message) ? true : undefined,
           uuid: m.uuid,
         })
       } else if (m.type === 'assistant') {

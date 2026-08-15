@@ -397,6 +397,33 @@ describe('transcript reducer', () => {
     ])
   })
 
+  it('renders a slash command as the command line, not as the wrapper it is stored in', () => {
+    seq = 0
+    const state = run(initialTranscriptState, [
+      {
+        type: 'user_message',
+        message: {
+          role: 'user',
+          content:
+            '<command-message>wrapup</command-message>\n<command-name>/dev:wrapup</command-name>\n<command-args>(commit only)</command-args>',
+        },
+        parentToolUseId: null,
+        uuid: 'cmd-1',
+      },
+      // No `<command-name>`: ordinary prose is untouched, angle brackets and all.
+      {
+        type: 'user_message',
+        message: { role: 'user', content: 'compare <a> and <b>' },
+        parentToolUseId: null,
+        uuid: 'cmd-2',
+      },
+    ])
+    expect(state.items).toEqual([
+      { kind: 'user', id: 'cmd-1', text: '/dev:wrapup (commit only)', attachments: undefined },
+      { kind: 'user', id: 'cmd-2', text: 'compare <a> and <b>', attachments: undefined },
+    ])
+  })
+
   it('carries a message’s attachments as references on the user item', () => {
     seq = 0
     const attachments = [

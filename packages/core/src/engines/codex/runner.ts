@@ -342,18 +342,37 @@ function userQuestionsFromCodex(questions: readonly AppServerUserInputQuestion[]
   }))
 }
 
-/** The text of a history `userMessage` item: its content entries' text parts
- * joined. Image parts have no replayable representation (the bytes went to the
- * model, not into the rollout we can render from) and are skipped. */
+/**
+ * The text of a history `userMessage` item: its content entries' text parts
+ * joined.
+ *
+ * Image parts have no replayable representation — the bytes went to the model,
+ * not into the rollout we can render from — so they are named rather than
+ * dropped. A prompt that was *only* an image used to produce an empty string,
+ * which the caller read as "nothing to replay" and skipped: the turn lost its
+ * user row and, with it, the prompt mark the scrubber navigates by, so a resumed
+ * thread had answers with no visible question. A word in place of the picture is
+ * a smaller lie than a turn that never happened.
+ */
 function historyUserText(item: AppServerUserMessageItem): string {
   if (!Array.isArray(item.content)) return ''
-  return item.content
+  let images = 0
+  const text = item.content
     .map((part) => {
       const candidate = part as { type?: string; text?: unknown } | null
-      return candidate?.type === 'text' && typeof candidate.text === 'string' ? candidate.text : ''
+      if (candidate?.type === 'text' && typeof candidate.text === 'string') return candidate.text
+      // By name, because the part vocabulary is codex's and open ('image',
+      // 'localImage', …). Anything else unnamed stays unrepresented rather than
+      // counted as a picture it may not be.
+      if (typeof candidate?.type === 'string' && candidate.type.toLowerCase().includes('image')) {
+        images += 1
+      }
+      return ''
     })
     .filter(Boolean)
     .join('\n')
+  if (text) return text
+  return images > 0 ? `[${images === 1 ? 'image' : `${images} images`}]` : ''
 }
 
 /** The AskUserQuestion answer convention (question text → chosen label(s),

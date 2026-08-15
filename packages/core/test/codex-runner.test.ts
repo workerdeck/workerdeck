@@ -1690,6 +1690,42 @@ describe('CodexRunner resume backfill', () => {
     expect(runner.status).toBe('idle')
   })
 
+  it('replays an image-only prompt as a named picture, not as a missing turn', async () => {
+    // The bytes went to the model, not into the rollout, so there is nothing to
+    // render — but skipping the item cost the turn its user row *and* the
+    // prompt mark the scrubber navigates by, leaving an answer with no visible
+    // question.
+    const peer = scriptedPeer()
+    peer.respond('thread/resume', () => ({
+      ...THREAD_RESULT,
+      thread: {
+        id: 'thread-1',
+        turns: [
+          {
+            id: 'turn-h1',
+            items: [
+              {
+                id: 'item-1',
+                type: 'userMessage',
+                content: [{ type: 'image', imageUrl: 'data:…' }, { type: 'localImage', path: '/x' }],
+              },
+              { id: 'item-2', type: 'agentMessage', text: 'Two pictures.' },
+            ],
+          },
+        ],
+      },
+      turnsBackwardsCursor: null,
+    }))
+    const runner = new CodexRunner({ cwd: '/tmp', resume: 'prior', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+
+    const user = events.find(
+      (e): e is Extract<SessionEvent, { type: 'user_message' }> => e.type === 'user_message',
+    )
+    expect(user?.message.content).toBe('[2 images]')
+  })
+
   it('resume with a prompt: history lands before the new turn, once, with disjoint live ids', async () => {
     const peer = scriptedPeer()
     peer.respond('thread/resume', () => ({
