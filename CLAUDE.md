@@ -45,7 +45,19 @@ protocol. Read these before changing scope or structure:
   rules, not preferences: the extension's unread status-bar item counts the *same* rows its
   list shows, so a client that filtered differently would announce work it is hiding. Tests live
   in `packages/react/test/session-list.test.ts` + `watermarks.test.ts` (protocol has no
-  vitest of its own); Swift mirrors in `WorkerDeckKit`.
+  vitest of its own); Swift mirrors in `WorkerDeckKit`. `usage.ts` joined them with the plan
+  meters: `mergeUsage` is **which reading a client renders** — the gateway's per-profile state
+  (`ProfileInfo.usage`) wins every window it holds, the session's transcript fills the rest —
+  and the reason it is not a timestamp comparison is the rule worth keeping: the reducer stores
+  **one** clock for the whole map, so this session's morning `five_hour` is dated with the
+  afternoon's `seven_day` event and would beat a genuinely fresher profile entry, while the
+  tracker (fed from every session on the profile, by event `ts`) is never behind what one
+  transcript holds. The session half is coverage, not correctness — an in-memory map is empty
+  after a restart, and a session with no profile has no account state at all.
+  `orderUsageWindows` is the ordering-and-drop-the-unknown rule beside it, because the panel
+  renders windows off a merged transcript and the dashboard's profile page renders them off
+  `ProfileInfo.usage` with no session in sight. Tests in `packages/react/test/usage.test.ts`;
+  **no Swift mirror yet** — the phone still renders its session's own reading.
 - `packages/core` — the engines, shipped as **adapters** (`src/engines/`): one `EngineAdapter`
   per engine (capability record pinned by identity to protocol's `ENGINE_CAPABILITIES`, a model
   catalog versioned with the release, a credential-availability probe, a runner factory), looked
@@ -216,7 +228,10 @@ protocol. Read these before changing scope or structure:
   (reload / keep mine / dismiss), never a message, and nothing but `revert` and an explicit reload
   may discard a draft; `useHostFileRoots` for `canWrite`, which is a *separate* server opt-in from
   reading and defaults off; `useSessionInfo`, one REST record — never a second `useClaudeSession`,
-  see the bridge rule below), the
+  see the bridge rule below; `useProfileUsage`, the plan's windows as the *gateway* knows them,
+  a **poll** because nothing pushes them — a session's own `rate_limit` readings land only at a
+  turn's edges, so an idle session's meters age silently and a sibling session's spend never
+  reaches them at all), the
   other pure helpers that both clients must agree on (`rateLimitWindows`, `scanPromptTokens` —
   the mirror of the Swift `PromptTokens`), and the browser tool host (`tool-host.ts`) running
   server-bridged calls in the tab. Companions must ride the hook's own `handle` — the bridge asks

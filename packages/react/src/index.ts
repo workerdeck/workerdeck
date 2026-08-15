@@ -22,6 +22,8 @@ export type {
 } from './use-host-files.ts'
 export { ancestorsWithin, flattenHostTree } from './host-tree.ts'
 export type { HostDirState, HostTreeRow } from './host-tree.ts'
+export { useProfileUsage } from './use-profile-usage.ts'
+export type { UseProfileUsageOptions, UseProfileUsageResult } from './use-profile-usage.ts'
 export { useSessionInfo } from './use-session-info.ts'
 export type { UseSessionInfoResult } from './use-session-info.ts'
 export { useOpenFiles } from './use-open-files.ts'

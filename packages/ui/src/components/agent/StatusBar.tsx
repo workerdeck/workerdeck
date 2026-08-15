@@ -13,6 +13,15 @@ import { useTranscriptVariant } from './transcript-variant.tsx'
 
 export interface StatusBarProps {
   state: TranscriptState
+  /**
+   * Plan windows to draw, when they should not be the session's own. The panel
+   * hands over the gateway's per-profile state merged over this transcript's
+   * reading (`mergeUsage`): a session's own `rate_limit` readings arrive only at
+   * a turn's edges, so one idle since yesterday would otherwise render
+   * yesterday's number as current. Absent = `state.rateLimits`, which is what a
+   * bar composed by hand outside the panel gets.
+   */
+  rateLimits?: Record<string, RateLimitInfo>
   /** @deprecated Pass {@link StatusBarProps.connection}; kept so an embedder
    * still handing over a boolean keeps working. */
   connected?: boolean
@@ -168,6 +177,7 @@ function Slot({ onClick, hint, children }: { onClick?: () => void; hint: string;
 
 export function StatusBar({
   state,
+  rateLimits,
   connected,
   connection,
   onOpenStatus,
@@ -180,8 +190,9 @@ export function StatusBar({
 }: StatusBarProps) {
   const meta = STATUS_META[state.status]
   const now = useNow()
-  const session = state.rateLimits?.five_hour
-  const weekly = state.rateLimits?.seven_day
+  const windows = rateLimits ?? state.rateLimits
+  const session = windows?.five_hour
+  const weekly = windows?.seven_day
   const link: ConnectionState = connection ?? (connected === false ? 'reconnecting' : 'live')
   const terminal = useTranscriptVariant() === 'terminal'
   return (

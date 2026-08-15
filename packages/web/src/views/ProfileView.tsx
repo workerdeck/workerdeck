@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import type { GetProfileResponse } from '@workerdeck/protocol'
+import { orderUsageWindows, type GetProfileResponse } from '@workerdeck/protocol'
 import {
   Badge,
   Button,
@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
   Spinner,
+  UsageMeters,
   toast,
 } from '@workerdeck/ui'
 import { Code, Trash2 } from 'lucide-react'
@@ -53,21 +54,30 @@ export function ProfileView() {
 
   useEffect(() => {
     let alive = true
-    client()
-      ?.getProfile(profileName)
-      .then((d) => {
-        if (alive) setDetail(d)
-      })
-      .catch((e: unknown) => {
-        if (alive) setError(e instanceof Error ? e.message : 'Failed to load profile')
-      })
+    const load = () => {
+      client()
+        ?.getProfile(profileName)
+        .then((d) => {
+          if (alive) setDetail(d)
+        })
+        .catch((e: unknown) => {
+          if (alive) setError(e instanceof Error ? e.message : 'Failed to load profile')
+        })
+    }
+    load()
+    // The record is mostly static, but the plan usage on it is not: it is the
+    // newest reading from any session on this account, and sessions this page
+    // knows nothing about keep spending. A minute is finer than readings arrive.
+    const timer = setInterval(load, 60_000)
     return () => {
       alive = false
+      clearInterval(timer)
     }
   }, [profileName])
 
   const profile = detail?.profile
   const config = detail?.config
+  const usageWindows = useMemo(() => orderUsageWindows(profile?.usage), [profile?.usage])
 
   const remove = async () => {
     try {
@@ -164,6 +174,23 @@ export function ProfileView() {
                 ) : null}
               </CardContent>
             </Card>
+
+            {/* The plan behind the profile, not any one session's view of it:
+                the gateway keeps the newest reading each of this profile's
+                sessions reported, so this answers "how much is left on this
+                account" with nothing open. Absent means nothing has reported —
+                unknown, never 0% — so the card stays away rather than drawing
+                empty bars. */}
+            {usageWindows.length > 0 ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Plan usage</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <UsageMeters windows={usageWindows} />
+                </CardContent>
+              </Card>
+            ) : null}
 
             {profile.engine === 'provider' ? (
               <Card>

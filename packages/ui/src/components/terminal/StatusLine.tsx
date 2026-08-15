@@ -1,3 +1,4 @@
+import type { RateLimitInfo } from '@workerdeck/protocol'
 import type { ConnectionState, TranscriptState } from '@workerdeck/react'
 import { formatCost, formatTokens } from '../../lib/format.ts'
 import {
@@ -38,6 +39,10 @@ const SEVERITY_TONE: Record<StatusSeverity, Tone> = {
 
 export interface TerminalStatusLineProps {
   state: TranscriptState
+  /** Plan windows to read from, when they should not be the session's own — the
+   * gateway's per-profile state merged over this transcript's. See
+   * {@link StatusBarProps.rateLimits}. Absent = `state.rateLimits`. */
+  rateLimits?: Record<string, RateLimitInfo>
   /** How the client is doing at reaching the gateway. Wins the status slot when
    * the socket is down — see above. */
   connection?: ConnectionState
@@ -71,6 +76,7 @@ function Reading({
 
 export function TerminalStatusLine({
   state,
+  rateLimits,
   connection,
   onOpenStatus,
   onOpenContext,
@@ -78,7 +84,7 @@ export function TerminalStatusLine({
 }: TerminalStatusLineProps) {
   const presentation = statusPresentation({ status: state.status, connection })
   const usage = state.contextUsage
-  const window = tightestWindow(state.rateLimits)
+  const window = tightestWindow(rateLimits ?? state.rateLimits)
   const model = modelLabel({ model: state.model, models: state.models ?? [] })
 
   const parts: React.ReactNode[] = [

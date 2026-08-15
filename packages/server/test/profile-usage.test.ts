@@ -268,4 +268,26 @@ describe('per-profile plan usage on GET /profiles', () => {
       updatedAt: reportedAt,
     })
   })
+
+  it('answers the same on the detail route as in the list', async () => {
+    // The detail route had served the bare stored record, so a profile page
+    // could learn *less* about a profile than the list it was opened from — and
+    // the one client that renders plan usage without a session open is that
+    // page. Same decoration, one `forResponse`.
+    const gateway = await startGateway()
+    await create(gateway.base, 'plan-a')
+    gateway.built[0]!.emitRateLimit({
+      status: 'allowed',
+      rateLimitType: 'five_hour',
+      utilization: 61,
+      resetsAt: resetsAtIn(60 * 60_000),
+    })
+
+    const res = await fetch(`${gateway.base}/profiles/plan-a`)
+    expect(res.status).toBe(200)
+    const { profile } = (await res.json()) as { profile: ProfileInfo }
+    expect(profile.usage?.five_hour?.info.utilization).toBe(61)
+    // The rest of the decoration rides along, for the same reason.
+    expect(profile.capabilities).toBeDefined()
+  })
 })

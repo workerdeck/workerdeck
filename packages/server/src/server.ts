@@ -2588,7 +2588,12 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         // withheld from a non-operator while the profile record itself (name,
         // engine, model catalog) still answers, because a create form needs it.
         json(res, 200, {
-          profile: withManagedFlag(profile),
+          // The same decoration the list route serves (`forResponse`): the
+          // capability record, the model catalog, the availability verdict and
+          // the plan usage. It had been the bare record, which made the detail
+          // route answer *less* about a profile than the list it was opened
+          // from — a client could only get the usage state by listing.
+          profile: forResponse(profile),
           config: isOperator(auth) ? readProfileConfig(profile) : undefined,
         })
         return

@@ -1,4 +1,4 @@
-import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, mergeUsage, orderUsageWindows } from '@workerdeck/protocol'
 import type {
   ContentBlock,
   ContextUsage,
@@ -248,22 +248,17 @@ export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): 
  * The session's rate-limit windows in reading order: the session window, the
  * weekly window, then whichever per-model weekly windows it reports.
  *
- * Discovered rather than hardcoded — the SDK's set of windows is an open union
- * and has grown before — but ordered, so the first two always mean the same
- * thing. A window with no `utilization` is *unknown*, not zero, and is dropped
- * entirely rather than drawn as an empty bar that reads as "plenty left".
+ * The ordering and the drop-the-unknown rule are protocol's `orderUsageWindows`
+ * — the dashboard renders the same windows straight off `ProfileInfo.usage`,
+ * with no transcript anywhere near it, and two orderings would be one account
+ * described two ways. This stays as the transcript-shaped door to it.
  */
 export function rateLimitWindows(
   state: TranscriptState,
 ): Array<{ key: string; info: RateLimitInfo }> {
-  const all = Object.entries(state.rateLimits ?? {})
-    .filter(([, info]) => info.utilization !== undefined)
-    .map(([key, info]) => ({ key, info }))
-  const named = ['five_hour', 'seven_day'].flatMap((key) => all.filter((w) => w.key === key))
-  const perModel = all
-    .filter((w) => w.key.startsWith('seven_day_'))
-    .sort((a, b) => a.key.localeCompare(b.key))
-  return [...named, ...perModel]
+  return orderUsageWindows(
+    mergeUsage({ rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt }, undefined),
+  )
 }
 
 export function applyEvent(state: TranscriptState, event: SessionEvent): TranscriptState {

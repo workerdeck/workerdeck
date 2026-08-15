@@ -1928,4 +1928,5 @@ export type ListJobsResponse = { jobs: JobInfo[] }
 export type QueueStatsResponse = { stats: QueueStats }
 
 export * from './session-list.ts'
+export * from './usage.ts'
 export * from './watermarks.ts'

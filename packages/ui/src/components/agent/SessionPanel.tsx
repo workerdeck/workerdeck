@@ -8,12 +8,20 @@ import {
   type ReactNode,
 } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
-import { PROTOCOL_VERSION, type ModelOption, type PermissionMode } from '@workerdeck/protocol'
 import {
-  rateLimitWindows,
+  PROTOCOL_VERSION,
+  mergeUsage,
+  orderUsageWindows,
+  usageInfos,
+  type ModelOption,
+  type PermissionMode,
+  type RateLimitInfo,
+} from '@workerdeck/protocol'
+import {
   useAttachments,
   useClaudeSession,
   useHostFileSearch,
+  useProfileUsage,
   useToolCallHost,
   type ConnectionState,
   type ProducedFileRef,
@@ -517,6 +525,36 @@ export function SessionPanel({
   const terminal = transcriptVariant === 'terminal'
   const capabilities = state.capabilities
 
+  // Plan usage as the *gateway* knows it, merged over this session's own
+  // reading — one derivation, feeding the bar, the terminal status line, the
+  // Usage panel and the vitals an external chrome renders from, because four
+  // surfaces disagreeing about the same percentage is worse than any of them
+  // being stale. A session's own `rate_limit` readings land only at a turn's
+  // edges, so an idle session's numbers age silently and a sibling session's
+  // spend never shows up here at all; `mergeUsage` is where that rule is
+  // written down. Skipped entirely for an engine that reports no windows.
+  const { usage: profileUsage } = useProfileUsage(client, state.session?.profile, {
+    enabled: capabilities.rateLimits,
+  })
+  const usage = useMemo(
+    () =>
+      mergeUsage(
+        { rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt },
+        profileUsage,
+      ),
+    [state.rateLimits, state.rateLimitsUpdatedAt, profileUsage],
+  )
+  // Undefined rather than an empty map when nothing has been reported: absent is
+  // *unknown*, and a surface that can't tell the two apart draws 0%.
+  const rateLimits: Record<string, RateLimitInfo> | undefined = useMemo(
+    () => (Object.keys(usage).length > 0 ? usageInfos(usage) : undefined),
+    [usage],
+  )
+  const usageUpdatedAt = useMemo(() => {
+    const stamps = Object.values(usage).map((w) => w.updatedAt)
+    return stamps.length > 0 ? Math.max(...stamps) : undefined
+  }, [usage])
+
   // Vitals out to the embedder, keyed on the readings themselves so an inline
   // closure prop doesn't retrigger it every render.
   const onVitalsRef = useRef(onVitals)
@@ -540,7 +578,7 @@ export function SessionPanel({
       permissionModes,
       cwd: state.cwd,
       contextUsage: state.contextUsage,
-      rateLimits: state.rateLimits,
+      rateLimits,
       itemCount: state.items.length,
     })
   }, [
@@ -554,7 +592,7 @@ export function SessionPanel({
     permissionModes,
     state.cwd,
     state.contextUsage,
-    state.rateLimits,
+    rateLimits,
     state.items.length,
   ])
 
@@ -585,7 +623,9 @@ export function SessionPanel({
   // inert for the moment before it does, and stays inert on a gateway that
   // serves no host files.
   const hostFiles = useHostFileSearch(client, state.cwd)
-  const windows = useMemo(() => rateLimitWindows(state), [state])
+  // Protocol's ordering, over the merged readings — each row keeping its own
+  // date, since they no longer share one clock.
+  const windows = useMemo(() => orderUsageWindows(usage), [usage])
   // Reads a picture the engine left on the host (codex's `image_gen` reports a
   // path, never bytes). Stable and memoized per path: transcript rows re-render
   // on every delta, and a fresh function would re-fetch each time.
@@ -739,6 +779,7 @@ export function SessionPanel({
   const statusBar = statusExternal ? null : (
     <StatusBar
       state={state}
+      rateLimits={rateLimits}
       connection={connection}
       placement={statusPlacement}
       controls={controlsInStatus && !readOnly ? sessionControls : undefined}
@@ -940,7 +981,7 @@ export function SessionPanel({
             subscriptionType={state.subscriptionType}
             engine={state.engine ?? 'claude'}
             totalCostUsd={state.totalCostUsd}
-            updatedAt={state.rateLimitsUpdatedAt}
+            updatedAt={usageUpdatedAt}
             open={panel === 'usage'}
             onOpenChange={(next) => setPanel(next ? 'usage' : undefined)}
           />
