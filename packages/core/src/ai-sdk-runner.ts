@@ -696,6 +696,23 @@ export class AiSdkRunner implements Runner {
       cacheWrite: 0,
       cacheRead: 0,
     })
+    // Completed blocks of the step in progress, flushed as an assistant
+    // message at each tool call (its result may follow immediately and the
+    // transcript needs the call first) and at every step boundary. Declared
+    // outside the try: the catch flushes what an interrupted turn had produced.
+    let blocks: ContentBlock[] = []
+    const textBuf = new Map<string, string>()
+    const reasoningBuf = new Map<string, string>()
+    const flush = (): void => {
+      if (blocks.length === 0) return
+      this.#emit({
+        type: 'assistant_message',
+        message: { role: 'assistant', content: blocks, model: this.#modelId() },
+        parentToolUseId: null,
+        uuid: randomUUID(),
+      })
+      blocks = []
+    }
     try {
       // Streamed, not generate(): a multi-step turn must reach the transcript
       // as it happens — token deltas while text is produced, each step's
@@ -705,22 +722,6 @@ export class AiSdkRunner implements Runner {
         abortSignal: abort.signal,
       })
       const partials = this.#config.includePartialMessages !== false
-      // Completed blocks of the step in progress, flushed as an assistant
-      // message at each tool call (its result may follow immediately and the
-      // transcript needs the call first) and at every step boundary.
-      let blocks: ContentBlock[] = []
-      const textBuf = new Map<string, string>()
-      const reasoningBuf = new Map<string, string>()
-      const flush = (): void => {
-        if (blocks.length === 0) return
-        this.#emit({
-          type: 'assistant_message',
-          message: { role: 'assistant', content: blocks, model: this.#modelId() },
-          parentToolUseId: null,
-          uuid: randomUUID(),
-        })
-        blocks = []
-      }
       const emitToolResult = (toolCallId: string, content: string, isError?: boolean): void => {
         flush()
         this.#emit({
@@ -846,6 +847,21 @@ export class AiSdkRunner implements Runner {
       this.#finishTurn(text)
     } catch (error) {
       if (this.#closed) return
+      // What the turn produced before it died is part of the record: without a
+      // durable assistant_message the partial text exists only as stream
+      // deltas, which the client holds in a singleton streaming item — wiped
+      // by the *next* turn's message and glued onto by its deltas. An
+      // interrupted minute of output must not vanish on the next question or
+      // the next attach. Buffers still holding text mean the abort cut a block
+      // mid-stream (no `text-end` came); completed-but-unflushed blocks are in
+      // `blocks` already.
+      for (const [, thinking] of reasoningBuf) {
+        if (thinking) blocks.push({ type: 'thinking', thinking })
+      }
+      for (const [, text] of textBuf) {
+        if (text) blocks.push({ type: 'text', text })
+      }
+      flush()
       const message = error instanceof Error ? error.message : String(error)
       this.#numTurns += 1
       this.#emit({

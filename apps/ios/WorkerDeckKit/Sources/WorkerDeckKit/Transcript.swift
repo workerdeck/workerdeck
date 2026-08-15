@@ -479,6 +479,22 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
   case .turnResult(let payload):
     // totalCostUsd is session-cumulative on each SDK result message.
     next.totalCostUsd = payload.totalCostUsd
+    // The turn is over: whatever is still streaming is this turn's final text —
+    // an interrupted or failed turn never sends the assistant_message that
+    // normally supersedes it. Finalize it under a stable id, or the *next*
+    // turn's message wipes it and the next turn's deltas append to it.
+    // (Mirrors the react reducer's turn_result case.)
+    next.items = next.items.map { item in
+      switch item {
+      case .assistantText(let id, let text, _, let parent) where id == streamingId:
+        return .assistantText(
+          id: "text-\(event.seq)", text: text, streaming: false, parentToolUseId: parent)
+      case .thinking(let id, let text, let parent) where id == streamingThinkingId:
+        return .thinking(id: "thinking-\(event.seq)", text: text, parentToolUseId: parent)
+      default:
+        return item
+      }
+    }
     next.items.append(
       .turnResult(
         id: "turn-\(event.seq)", subtype: payload.subtype, isError: payload.isError,

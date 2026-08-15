@@ -113,6 +113,49 @@ describe('transcript reducer', () => {
     ])
   })
 
+  it('finalizes an interrupted turn’s streamed text on turn_result', () => {
+    seq = 0
+    const delta = (text: string, uuid: string): SessionEventBody => ({
+      type: 'stream_delta',
+      event: { type: 'content_block_delta', delta: { type: 'text_delta', text } },
+      parentToolUseId: null,
+      uuid,
+    })
+    // An interrupted turn: deltas, then the error result — never the
+    // assistant_message that normally supersedes the streamed preview.
+    const interrupted = run(initialTranscriptState, [
+      delta('a long ', 's1'),
+      delta('poem', 's2'),
+      {
+        type: 'turn_result',
+        subtype: 'error_during_execution',
+        isError: true,
+        durationMs: 31_000,
+        numTurns: 1,
+        totalCostUsd: 0,
+        errors: ['interrupted'],
+      },
+    ])
+    const partial = interrupted.items.find((i) => i.kind === 'assistant_text')
+    expect(partial).toMatchObject({ text: 'a long poem', streaming: false })
+    expect(partial?.id).not.toBe('streaming')
+
+    // The next turn must not disturb it: its message must not wipe the partial
+    // (the singleton-streaming-item bug), and its deltas must start a fresh
+    // streaming item rather than appending to the finalized one.
+    const next = run(interrupted, [
+      delta('short', 's3'),
+      {
+        type: 'assistant_message',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'short' }] },
+        parentToolUseId: null,
+        uuid: 'a2',
+      },
+    ])
+    const texts = next.items.filter((i) => i.kind === 'assistant_text')
+    expect(texts.map((t) => t.text)).toEqual(['a long poem', 'short'])
+  })
+
   it('tracks pending approvals and ignores duplicate seq', () => {
     seq = 0
     const request = {

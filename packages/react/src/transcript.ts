@@ -471,7 +471,20 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
         // total_cost_usd is session-cumulative on each SDK result message.
         totalCostUsd: event.totalCostUsd,
         items: [
-          ...base.items,
+          // The turn is over: whatever is still streaming is this turn's final
+          // text — an interrupted or failed turn never sends the
+          // assistant_message that normally supersedes it. Finalize it under a
+          // stable id, or it stays the singleton streaming item: the *next*
+          // turn's message would wipe it (a minute of interrupted output
+          // vanishing on the next question) and the next turn's deltas would
+          // append to it, gluing two turns' text into one row.
+          ...base.items.map((item) =>
+            item.kind === 'assistant_text' && item.id === STREAMING_ID
+              ? { ...item, id: `text-${event.seq}`, streaming: false }
+              : item.kind === 'thinking' && item.id === STREAMING_THINKING_ID
+                ? { ...item, id: `thinking-${event.seq}` }
+                : item,
+          ),
           {
             kind: 'turn_result',
             id: `turn-${event.seq}`,
