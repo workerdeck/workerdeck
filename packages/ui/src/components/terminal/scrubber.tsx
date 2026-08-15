@@ -121,6 +121,30 @@ const KIND_NAME: Record<MarkKind, string> = {
 // through `nearestMember`, so hit reliability does not ride on mark height.
 const MIN_MARK = 2
 
+/**
+ * Rail pixels per content pixel — the one scale both the marks and the viewport
+ * band are drawn at, so they cannot disagree about where a row sits.
+ *
+ * The denominator is `max(totalSize, viewportH)` and never `totalSize` alone.
+ * A transcript **shorter than its viewport** is the case that forces it: with
+ * 90px of content in a 906px window, `railH / totalSize` is ~10, and the band
+ * — `viewportH * scale` — comes out at 9120px inside a 906px rail. The rail is
+ * absolutely positioned *within the scroller*, so that overflow becomes real
+ * scrollable height: a short session grew ~8000px of empty space below it, and
+ * the reader could scroll away from the only three rows there were.
+ *
+ * Clamping the denominator says the thing that is actually true: when
+ * everything fits, the rail represents the **viewport**, not the content. The
+ * band then fills it exactly (`viewportH * railH / viewportH === railH`), which
+ * is what "you are looking at all of it" should look like. It also makes the
+ * overflow structurally impossible rather than merely unlikely — `bandH` can
+ * never exceed `railH` again, for any content, because `viewportH` can never
+ * exceed the denominator.
+ */
+function railScale(railH: number, totalSize: number, viewportH: number): number {
+  return totalSize > 0 ? railH / Math.max(totalSize, viewportH) : 0
+}
+
 /** The final response a turn end pairs with: the last top-level, settled
  * assistant message between the previous boundary and the turn row. */
 function pairedResponse(items: readonly TranscriptItem[], turnIndex: number): number | undefined {
@@ -193,6 +217,7 @@ function buildClusters(
     offsetOfRow,
     sizeOfRow,
     totalSize,
+    viewportH,
   } = props
   const marks: Mark[] = []
   items.forEach((item, index) => {
@@ -215,7 +240,7 @@ function buildClusters(
       marks.push({ kind: 'bookmark', itemIndex: index, rowIndex: rowIndexFor(index) })
   if (recapRow) marks.push({ kind: 'recap', itemIndex: -1, rowIndex: recapRow.rowIndex })
 
-  const scale = totalSize > 0 ? railH / totalSize : 0
+  const scale = railScale(railH, totalSize, viewportH)
   const lanes = new Map<Lane, { mark: Mark; y: number; h: number }[]>()
   for (const mark of marks) {
     // A mark's height is its row's, at rail scale, floored at the hit target —
@@ -416,11 +441,25 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
   const clusters = useMemo(
     () => (railH > 0 ? buildClusters(props, railH) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.items, props.bookmarks, props.recapRow, props.pendingApprovals, totalSize, railH],
+    // `viewportH` rides here because it is the scale's other term whenever the
+    // transcript is shorter than the window — without it a resize in that
+    // regime leaves every mark at the old scale.
+    [
+      props.items,
+      props.bookmarks,
+      props.recapRow,
+      props.pendingApprovals,
+      totalSize,
+      railH,
+      viewportH,
+    ],
   )
-  const scale = totalSize > 0 ? railH / totalSize : 0
-  const bandTop = Math.round(liveOffset * scale)
-  const bandH = Math.max(2, Math.round(viewportH * scale))
+  const scale = railScale(railH, totalSize, viewportH)
+  const bandH = Math.max(2, Math.min(railH, Math.round(viewportH * scale)))
+  // Clamped against the rail's foot as well as its head: an overscroll bounce
+  // drives `liveOffset` past `totalSize - viewportH` for a frame or two, and the
+  // band is the one child whose top is not already bounded by its own height.
+  const bandTop = Math.max(0, Math.min(railH - bandH, Math.round(liveOffset * scale)))
 
   const scrub = (clientY: number) => {
     const rail = bodyRef.current

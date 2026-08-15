@@ -269,7 +269,14 @@ protocol. Read these before changing scope or structure:
   scale (2px floor), drawn as a solid 2px head with a 25% tail; marks merge under a pixel with
   the loudest colour winning, and a 2px full-width cursor line rides the viewport's top edge. The
   12px is the one deliberate exception to the theme's `ch` rule: the rail is chrome beside the
-  grid, and its lanes are hit targets rather than columns of text. Hover peeks, click jumps, drag scrubs. Peeks render from `state.items`
+  grid, and its lanes are hit targets rather than columns of text. Rail scale is `railScale()`
+  and its denominator is **`max(totalSize, viewportH)`, never `totalSize`** — the rail is
+  absolutely positioned *inside the scroller*, so anything overflowing it becomes real scrollable
+  height. A transcript shorter than its window is what proves it: 90px of content in a 906px
+  viewport made `railH / totalSize` ≈ 10 and a 9120px band inside a 906px rail, hanging ~8000px
+  of empty scroll under a three-row session. Clamped, the rail represents the *viewport* when
+  everything fits (the band fills it exactly), and `bandH` can never exceed `railH` for any
+  content. Hover peeks, click jumps, drag scrubs. Peeks render from `state.items`
   and **never the DOM** — the row they describe is usually unmounted. Positions come from the
   virtualizer's own offsets, which are only trustworthy *because* the calculator feeds
   `estimateSize`; that is also what answered whether the rail could be a real draggable scrollbar
