@@ -24,6 +24,7 @@
     "dashboard": "turbo run build --filter=@workerdeck/web --only",
     "dev:web": "WORKER_URL=http://${WD_DEV_HOST:-127.0.0.1}:8787 pnpm --filter @workerdeck/web run dev",
     "dev:server": "pnpm cli --config examples/dev-server.config.mjs --host ${WD_DEV_HOST:-127.0.0.1} --insecure-host ${WD_DEV_HOST:-127.0.0.1} --no-web",
+    "start:prod": "pnpm build && node packages/cli/build/cli.mjs --config examples/prod-server.config.mjs --port ${WD_PROD_PORT:-8788} --host ${WD_DEV_HOST:-127.0.0.1} --insecure-host ${WD_DEV_HOST:-127.0.0.1}",
     "smoke:sandbox": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/sandbox.ts",
     "smoke:live": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/ai-sdk-live.ts",
     "smoke:sdk": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/sdk-client.ts",

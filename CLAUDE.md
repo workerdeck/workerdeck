@@ -733,7 +733,15 @@ covers `smoke/` + `examples/` too via `typecheck:extras` (they have tsconfigs bu
 so turbo never ran them); lint oxlint; `build/` via tsdown only on `prepack`/CI. Dev never builds
 — the `@workerdeck/source` export condition resolves packages to `src/index.ts` (Node runs with
 `--conditions=@workerdeck/source` + swc-node; Vite/vitest set `resolve.conditions`, vitest also
-aliases). In-package imports use explicit `.ts` extensions. Releases go through **pnpm only** —
+aliases). `pnpm start:prod` is the other side of that coin and the surface to judge a release
+candidate on: `pnpm build` then the built `packages/cli/build/cli.mjs` with **no** conditions
+flag, so imports resolve to each package's `build/` and the dashboard is `@workerdeck/web`'s
+prebuilt `dist/` — production React, not development. It runs on 8788 with state in `/tmp`
+(`examples/prod-server.config.mjs`), deliberately beside `dev:server` on 8787 rather than
+replacing it, so the two can be compared without stopping either. The difference is not
+academic: measured on one 976-row session at a pinned width, dev and prod share a p50 but dev's
+p95 is ~2× prod's (~21ms vs ~11ms) — all of it dev-mode React in the tail.
+In-package imports use explicit `.ts` extensions. Releases go through **pnpm only** —
 `npm publish` would ship `workspace:*` verbatim; see the packaging section of `docs/GOTCHAS.md`
 before touching versioning or the publish workflow.
 
