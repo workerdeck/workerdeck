@@ -1010,6 +1010,40 @@ export type ProfileSessionDefaults = {
   instructions?: string
 }
 
+/**
+ * One rate-limit window of a profile's plan, as the *gateway* last saw it — the
+ * newest {@link RateLimitInfo} any session on the profile reported, across every
+ * session, live or since closed. The profile is the account boundary (one config
+ * dir / codex home / provider key = one plan), so this is the single usage state
+ * per account, where a session's own transcript only knows what *it* was last
+ * told.
+ *
+ * Two rules a client must keep:
+ * - An absent window (or an absent {@link ProfileInfo.usage} entirely) is
+ *   **unknown, not 0%** — render nothing, exactly as for session-level readings.
+ *   The map is in-memory and starts empty on a cold server.
+ * - `inferredReset` marks a reading the server zeroed at serve time because the
+ *   reading's own `resetsAt` passed with nothing newer: the pre-reset number is
+ *   then provably wrong, and 0 is the truthful *floor* (the account may have
+ *   been used outside this gateway since). Distinguishable on the wire from an
+ *   engine-reported 0, which carries no flag.
+ */
+export type ProfileUsageWindow = {
+  /** The reading, exactly as the session event carried it — except after an
+   * elapsed reset, when `utilization` is 0 and `resetsAt` is dropped (the old
+   * one names the *previous* window; a countdown from it would be nonsense). */
+  info: RateLimitInfo
+  /** Epoch ms of the event that carried the reading — honest for "Updated …"
+   * lines even when the served utilization is inferred. */
+  updatedAt: number
+  /** Present (true) only on the served-as-0 inference described above. */
+  inferredReset?: boolean
+}
+
+/** Per-window plan usage, keyed by `rateLimitType` ('five_hour', 'seven_day',
+ * ...) — the same keying as a transcript's rate-limit state. */
+export type ProfileUsage = Record<string, ProfileUsageWindow>
+
 export type ProfileInfo = {
   /** Unique name, used as {@link CreateSessionRequest.profile}. */
   name: string
@@ -1050,6 +1084,11 @@ export type ProfileInfo = {
   /** Response-only: one operator-actionable line, present only when
    * `available === false`. */
   unavailableReason?: string
+  /** Response-only: the plan's rate-limit windows as last reported by any
+   * session on this profile (see {@link ProfileUsageWindow}). Absent = unknown
+   * — no session has reported yet (API-key sessions never do), or the server
+   * restarted. **Display-only**, like `available`: never a gate. */
+  usage?: ProfileUsage
   /** Response-only, computed by the server: this profile came from the profile
    * store and can be edited or deleted through the API. Profiles declared in
    * server options are absent/false — they are code. Ignored on the way in. */

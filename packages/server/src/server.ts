@@ -60,6 +60,7 @@ import {
 } from './host-files.ts'
 import { AttachmentStore } from './attachments.ts'
 import { ProducedFileStore } from './produced-files.ts'
+import { ProfileUsageTracker } from './profile-usage.ts'
 import { SessionRegistry } from './registry.ts'
 import { SessionNotifier, type SessionNotificationOptions } from './notifications.ts'
 import { BridgeHub, type BridgeHubOptions } from './bridge.ts'
@@ -834,9 +835,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
    * Response shape for a profile: the managed marker, the engine's capability
    * record, its static model catalog (correct from the first request — no
    * warm-up session, no process spawned), the availability verdict when one
-   * has been probed, and the learned default model (the one thing a static
+   * has been probed, the learned default model (the one thing a static
    * catalog cannot know: a claude profile's default is the operator's CLI
-   * config, so it stays absent until a session on the profile reports it).
+   * config, so it stays absent until a session on the profile reports it),
+   * and the plan usage learned from the profile's sessions' rate_limit events.
    * Read-only decoration — never persisted.
    */
   const forResponse = (p: ProfileInfo): ProfileInfo => {
@@ -855,6 +857,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       base.available = probed.available
       if (probed.available === false) base.unavailableReason = probed.reason
     }
+    // Plan usage, learned like the default model and display-only like the
+    // availability verdict. The 0%-after-elapsed-reset inference happens in
+    // `usage()` per request, so it is computed against *this* moment's clock.
+    const usage = profileUsage.usage(p.name)
+    if (usage) base.usage = usage
     return base
   }
 
@@ -1218,12 +1225,17 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
    */
   const profileDefaultModels = new Map<string, string>()
   const producedFiles = new ProducedFileStore()
+  /** The single plan-usage state per profile, fed from every session's
+   * `rate_limit` events and served by `forResponse` (see ProfileUsageTracker). */
+  const profileUsage = new ProfileUsageTracker()
   const registry = new SessionRegistry({
     onRegister: (runner) => {
       notifier.watch(runner)
       // Same hook, opposite replay choice: from 0, because a rebuilt session's
       // earlier pictures must stay fetchable (see ProducedFileStore.watch).
       producedFiles.watch(runner)
+      // Also from 0 — replay is guarded by the events' own timestamps there.
+      profileUsage.watch(runner)
       const profile = runner.info().profile
       if (!profile) return
       runner.subscribe((event) => {
