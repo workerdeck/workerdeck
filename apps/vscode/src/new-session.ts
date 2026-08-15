@@ -495,6 +495,11 @@ async function pickAndResume(
     // A stored session knows its own directory; trust it over the pick.
     cwd: picked.stored.cwd ?? cwd,
     resume: picked.stored.sessionId,
+    // Adopt the name the engine already knows this thread by — the same string
+    // the pick was labelled with. Without it a resumed session is titleless:
+    // `meta.title` is unset and the derived fallback reads the first prompt,
+    // which a resume deliberately does not send.
+    title: (picked.stored.customTitle ?? picked.stored.summary).trim() || undefined,
   })
   return undefined
 }
@@ -502,7 +507,7 @@ async function pickAndResume(
 async function create(
   deps: NewSessionDeps,
   adapter: AdapterChoice,
-  body: { cwd: string; prompt?: string; resume?: string },
+  body: { cwd: string; prompt?: string; resume?: string; title?: string },
 ): Promise<void> {
   const client = await clientFor(deps.store, adapter.host)
   if (!client) return
@@ -517,6 +522,9 @@ async function create(
           // of that would be a second turn nobody asked for.
           prompt: body.resume ? undefined : body.prompt,
           resume: body.resume,
+          // `meta.title` is what SessionInfo.title prefers; a rename later
+          // overwrites it through the same field.
+          meta: body.title ? { title: body.title } : undefined,
         }),
     )
     await deps.refresh()

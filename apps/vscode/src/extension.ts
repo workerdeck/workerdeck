@@ -47,6 +47,18 @@ const HAS_SESSION_KEY = 'workerdeck.hasSession'
  */
 const UNREAD_WATCHER = 'workerdeck.statusBar.unread'
 
+/**
+ * Which session the panel was showing, so a window reload lands back on it.
+ *
+ * Everything the panel needs is otherwise in-memory — `#active` here, `#selected`
+ * in the model — so "Developer: Reload Window" left the dock on its empty state
+ * with a session still running behind it, and nothing re-attached until the user
+ * re-clicked the card. Workspace state, not global: which session you are
+ * reading is a fact about this window's folder, and two windows on two projects
+ * must not fight over one slot.
+ */
+const ACTIVE_SESSION_KEY = 'workerdeck.activeSession'
+
 export function activate(context: vscode.ExtensionContext): void {
   const store = new HostStore(context)
   const model = new SessionsModel(store)
@@ -210,6 +222,9 @@ export function activate(context: vscode.ExtensionContext): void {
     // — Context and Usage would sit empty until the next event moved one.
     if (!panel.isShowing(hostId, sessionId)) vitals = undefined
     model.setSelected({ hostId, sessionId })
+    // `cwd` rides along because it is what resolves a Cmd-clicked relative path,
+    // and it is host-side state the model has no snapshot of at activation.
+    void context.workspaceState.update(ACTIVE_SESSION_KEY, { hostId, sessionId, cwd: info?.cwd })
     // Choosing a session is a request to talk to it: reveal the panel and put the
     // caret in the composer, even when that session was already on screen.
     await panel.show({ host, sessionId, cwd: info?.cwd }, { focus: true })
@@ -220,6 +235,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (panel.active?.sessionId === sessionId) {
         vitals = undefined
         model.setSelected(undefined)
+        void context.workspaceState.update(ACTIVE_SESSION_KEY, undefined)
         await panel.show(undefined)
       }
     },
@@ -251,6 +267,32 @@ export function activate(context: vscode.ExtensionContext): void {
     void vscode.commands.executeCommand('setContext', HAS_SESSION_KEY, has)
   panel.onDidChangeActive((active) => syncHasSession(active !== undefined))
   syncHasSession(panel.active !== undefined)
+
+  // Come back to the session this window was reading. Placed after the
+  // `onDidChangeActive` subscribers above so restoring feeds the status bar and
+  // the section views' `when` key the same way selecting would; the panel's own
+  // push waits for the webview to re-announce `wd-ready`. The refresh is
+  // unconditional and one-shot: the poll only starts when something is
+  // *watching*, which after a reload may be nothing at all if the unread item
+  // is switched off, and the restored panel needs a snapshot to name its
+  // session and root its file tree.
+  const remembered = context.workspaceState.get<{
+    hostId: string
+    sessionId: string
+    cwd?: string
+  }>(ACTIVE_SESSION_KEY)
+  if (remembered) {
+    const host = store.get(remembered.hostId)
+    // A gateway removed since the reload leaves nothing to restore — drop the
+    // record rather than retrying it every activation.
+    if (host) {
+      model.setSelected({ hostId: remembered.hostId, sessionId: remembered.sessionId })
+      panel.restoreActive({ host, sessionId: remembered.sessionId, cwd: remembered.cwd })
+    } else {
+      void context.workspaceState.update(ACTIVE_SESSION_KEY, undefined)
+    }
+  }
+  void model.refresh()
 
   context.subscriptions.push(
     startDevReload(context, [panel, sidebar, gateways, ...Object.values(sections)]),

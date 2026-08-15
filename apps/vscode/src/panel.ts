@@ -154,6 +154,25 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     this.#pushActive()
   }
 
+  /**
+   * Adopt a session on activation without revealing anything.
+   *
+   * Deliberately not `show()`: that materializes the view when none exists yet
+   * (`!existed`), which on activation is *always* true and would force the dock
+   * open on every window start, including for someone who had closed it. A
+   * reload is not a request to be shown anything — it is a request to still be
+   * where you were. So this only seeds `#active`, and the push happens if and
+   * when VS Code re-resolves the view itself. Without it the restored panel
+   * renders its empty state and never attaches, so a session that is mid-run
+   * looks like no session at all until you re-click it.
+   */
+  restoreActive(active: ActiveSession): void {
+    if (this.#active) return
+    this.#active = active
+    this.#onDidChangeActive.fire(active)
+    this.#pushActive()
+  }
+
   #pushActive(): void {
     if (!this.#view || !this.#ready) return
     const active = this.#active
