@@ -311,10 +311,20 @@
           "default": true,
           "description": "Show the context-window badge in the window status bar. Only appears for engines that report a context window."
         },
-        "workerdeck.statusBar.usage": {
+        "workerdeck.statusBar.sessionUsage": {
           "type": "boolean",
           "default": true,
-          "description": "Show the plan-usage badge (the fullest rate-limit window) in the window status bar."
+          "description": "Show the session plan-usage badge (the five-hour rate-limit window) in the window status bar. This is the one that resets while you work. Hidden when the account has no such window."
+        },
+        "workerdeck.statusBar.weeklyUsage": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the weekly plan-usage badge (the seven-day rate-limit window) in the window status bar. Hidden when the account has no such window."
+        },
+        "workerdeck.statusBar.modelUsage": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show the per-model weekly plan-usage badge — the fullest of the model-scoped windows, labelled with that model's name (Fable, Opus, …). Off by default: it is the reading you want only while deliberately spending one model's budget. Hidden when the account has no model-scoped window."
         },
         "workerdeck.statusBar.model": {
           "type": "boolean",

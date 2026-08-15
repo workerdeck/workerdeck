@@ -2,11 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
 import { SessionPanel, Toaster, type SessionControls, type TerminalMetrics } from '@workerdeck/ui'
 import { Bridge } from './bridge.ts'
-
-/** An absolute path, optionally `:line` — what the extension host can open.
- * One pattern for both the click and the hold-to-highlight, so nothing lights
- * up that a click would ignore. */
-const PATH_PATTERN = /(\/[^\s:'"`()[\]{}]+)(?::(\d+))?/
+import { matchPath } from './paths.ts'
 
 /** Marks the element under the pointer while Cmd/Ctrl is held (styles.css). */
 const LINKISH = 'wd-linkish'
@@ -94,20 +90,18 @@ export function App({
   )
 
   useEffect(() => {
-    // Cmd/Ctrl+click on something that looks like an absolute path → ask the
-    // extension host to open it (real file for loopback gateways, workerdeck://
-    // for remote ones). Capture phase, so it wins over text selection.
+    // Cmd/Ctrl+click on something that looks like a path → ask the extension
+    // host to open it (real file for loopback gateways, workerdeck:// for
+    // remote ones; a relative path is resolved against the session cwd there,
+    // which is the only side that knows it). Capture phase, so it wins over
+    // text selection.
     const onClick = (e: MouseEvent) => {
       if (!e.metaKey && !e.ctrlKey) return
-      const match = PATH_PATTERN.exec((e.target as HTMLElement | null)?.textContent ?? '')
+      const match = matchPath((e.target as HTMLElement | null)?.textContent)
       if (!match) return
       e.preventDefault()
       e.stopPropagation()
-      bridge.post({
-        kind: 'wd-open-path',
-        path: match[1],
-        line: match[2] ? Number(match[2]) : undefined,
-      })
+      bridge.post({ kind: 'wd-open-path', path: match.path, line: match.line })
     }
     document.addEventListener('click', onClick, true)
     return () => document.removeEventListener('click', onClick, true)
@@ -131,9 +125,9 @@ export function App({
       unmark()
       if (!element) return
       const text = element.textContent?.trim() ?? ''
-      const match = PATH_PATTERN.exec(text)
+      const match = matchPath(text)
       // Mostly-a-path, or an element whose whole job is to be one (inline code).
-      if (!match || (match[0].length < text.length * 0.6 && element.tagName !== 'CODE')) return
+      if (!match || (match.length < text.length * 0.6 && element.tagName !== 'CODE')) return
       hovered = element
       element.classList.add(LINKISH)
     }

@@ -41,7 +41,9 @@ paths. Three tiers:
 | `workerdeck.fontFamily` | `editor` | Typeface for the **agent panel**: the editor font (monospace) or VS Code's UI font. The sidebar and section views always use the UI font. |
 | `workerdeck.statusBar.status` | `true` | The session-status badge in the window status bar. |
 | `workerdeck.statusBar.context` | `true` | The context-window badge. Absent anyway for engines that report no context window. |
-| `workerdeck.statusBar.usage` | `true` | The plan-usage badge (the fullest rate-limit window). |
+| `workerdeck.statusBar.sessionUsage` | `true` | The session plan-usage badge — the five-hour window, the one that resets while you work. |
+| `workerdeck.statusBar.weeklyUsage` | `true` | The weekly plan-usage badge — the seven-day window. |
+| `workerdeck.statusBar.modelUsage` | `false` | The per-model weekly badge — the fullest model-scoped window, named for its model (Fable, Opus, …). |
 | `workerdeck.statusBar.model` | `true` | The model picker. Click → Quick Pick. |
 | `workerdeck.statusBar.mode` | `true` | The permission-mode picker. Click → Quick Pick. |
 | `workerdeck.dev.autoReload` | `true` | Extension Development Host only: re-render the webviews on rebuild. |

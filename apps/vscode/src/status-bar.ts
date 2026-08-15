@@ -28,9 +28,10 @@ import {
   modelLabel,
   statusPresentation,
   tightestWindow,
+  usageWindow,
   windowLabel,
 } from '@workerdeck/ui/format'
-import type { StatusSeverity } from '@workerdeck/ui/format'
+import type { StatusSeverity, UsageLane } from '@workerdeck/ui/format'
 
 // The status *presentation* rules — which icon and severity a status wears,
 // where the 80/95 meter thresholds sit, which rate-limit window is the binding
@@ -44,6 +45,27 @@ function severityBackground(severity: StatusSeverity): vscode.ThemeColor | undef
   if (severity === 'warning') return new vscode.ThemeColor('statusBarItem.warningBackground')
   if (severity === 'error') return new vscode.ThemeColor('statusBarItem.errorBackground')
   return undefined
+}
+
+/**
+ * A working session's badge, coloured.
+ *
+ * The ask was a **blue background** while the session is running, and VS Code
+ * does not offer one: `StatusBarItem.backgroundColor` accepts exactly
+ * `statusBarItem.errorBackground` and `statusBarItem.warningBackground` and
+ * silently ignores anything else — the API is documented that way, and the two
+ * it does take are both alarm colours, which is the wrong thing to say about a
+ * session doing its job.
+ *
+ * So the *foreground* carries it. `charts.blue` is a theme token, so it tracks
+ * the user's theme instead of a hardcoded hex, and the pulse icon beside it is
+ * already moving. Everything else keeps the bar's default colour, because a
+ * status bar where every item is coloured has no coloured items.
+ */
+function statusForeground(status: string | undefined): vscode.ThemeColor | undefined {
+  return status === 'running' || status === 'starting'
+    ? new vscode.ThemeColor('charts.blue')
+    : undefined
 }
 
 function contextTooltip(usage: ContextUsage): vscode.MarkdownString {
@@ -82,10 +104,34 @@ const TICK_MS = 30_000
  * UI, which an array-of-enum or an object map would not be. Read per render
  * rather than cached: `activate` re-renders the bar on a config change, and the
  * live read is what makes that one line. */
-export type StatusBadge = 'unread' | 'status' | 'context' | 'usage' | 'model' | 'mode'
+export type StatusBadge =
+  | 'unread'
+  | 'status'
+  | 'context'
+  | 'sessionUsage'
+  | 'weeklyUsage'
+  | 'modelUsage'
+  | 'model'
+  | 'mode'
+
+/** The three usage badges, in the order they sit in the bar, paired with the
+ * lane each reads. Iterated rather than unrolled so adding a fourth is one
+ * entry — and so the item, the setting and the lane can never drift apart. */
+const USAGE_BADGES: readonly { badge: StatusBadge; lane: UsageLane }[] = [
+  { badge: 'sessionUsage', lane: 'session' },
+  { badge: 'weeklyUsage', lane: 'weekly' },
+  { badge: 'modelUsage', lane: 'model' },
+]
+
+/** Not every badge defaults on. The model-scoped weekly bucket is the reading
+ * you want *sometimes* — when you are deliberately burning one model's budget —
+ * and three usage numbers in the bar by default is a status bar nobody reads. */
+const BADGE_DEFAULT: Partial<Record<StatusBadge, boolean>> = { modelUsage: false }
 
 export function badgeEnabled(badge: StatusBadge): boolean {
-  return vscode.workspace.getConfiguration('workerdeck.statusBar').get<boolean>(badge, true)
+  return vscode.workspace
+    .getConfiguration('workerdeck.statusBar')
+    .get<boolean>(badge, BADGE_DEFAULT[badge] ?? true)
 }
 
 /**
@@ -164,7 +210,8 @@ export type StatusBarSubject = {
 export class SessionStatusBar implements vscode.Disposable {
   readonly #status: vscode.StatusBarItem
   readonly #context: vscode.StatusBarItem
-  readonly #usage: vscode.StatusBarItem
+  /** One per {@link USAGE_BADGES} entry, same order. */
+  readonly #usage: readonly vscode.StatusBarItem[]
   readonly #model: vscode.StatusBarItem
   readonly #mode: vscode.StatusBarItem
   #subject: StatusBarSubject | undefined
@@ -173,23 +220,33 @@ export class SessionStatusBar implements vscode.Disposable {
 
   constructor() {
     // Descending priority within Left alignment lays them out status → context
-    // → usage, reading order. 50 is where the single item used to sit, so the
-    // group keeps its place relative to other extensions' items.
+    // → the usage lanes → the pickers, reading order. 50 is where the single
+    // item used to sit, so the group keeps its place relative to other
+    // extensions' items; the two extra usage lanes pushed the pickers from
+    // 47/46 to 45/44, which only matters against another extension sitting
+    // exactly there.
     this.#status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50)
     this.#context = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49)
-    this.#usage = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 48)
+    this.#usage = USAGE_BADGES.map((_, index) =>
+      vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 48 - index),
+    )
     // The two controls, after the gauges. A status bar item has one command and
     // no dropdown of its own — the native pattern (language mode, encoding) is
     // command → QuickPick, which is what these open.
-    this.#model = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 47)
-    this.#mode = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 46)
+    this.#model = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 45)
+    this.#mode = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 44)
     // Each gauge leads to the view that answers *its* question — the same
     // targets the panel's bar routed to before it moved out here.
     this.#status.command = 'workerdeck.sessionInfo.focus'
     this.#context.command = 'workerdeck.context.focus'
-    this.#usage.command = 'workerdeck.usage.focus'
+    for (const item of this.#usage) item.command = 'workerdeck.usage.focus'
     this.#model.command = 'workerdeck.selectModel'
     this.#mode.command = 'workerdeck.selectPermissionMode'
+  }
+
+  /** Every item, for the two places that touch all of them. */
+  get #items(): vscode.StatusBarItem[] {
+    return [this.#status, this.#context, ...this.#usage, this.#model, this.#mode]
   }
 
   /** `subject: undefined` = no session selected; everything hides. */
@@ -207,9 +264,7 @@ export class SessionStatusBar implements vscode.Disposable {
   #render(): void {
     const subject = this.#subject
     if (!subject) {
-      for (const item of [this.#status, this.#context, this.#usage, this.#model, this.#mode]) {
-        item.hide()
-      }
+      for (const item of this.#items) item.hide()
       this.#stopTicking()
       return
     }
@@ -221,6 +276,11 @@ export class SessionStatusBar implements vscode.Disposable {
       const presentation = statusPresentation(vitals)
       this.#status.text = `$(${presentation.icon}) ${presentation.label}`
       this.#status.backgroundColor = severityBackground(presentation.severity)
+      // Only when the badge is otherwise plain: a warning/error background sets
+      // its own foreground, and overriding it there would make the alarm
+      // unreadable.
+      this.#status.color =
+        presentation.severity === 'none' ? statusForeground(vitals?.status) : undefined
       const tip = new vscode.MarkdownString()
       tip.appendMarkdown(`**${name}** on ${subject.hostName}\n\n`)
       tip.appendMarkdown(`Status: ${presentation.label}\n\n`)
@@ -247,24 +307,34 @@ export class SessionStatusBar implements vscode.Disposable {
       this.#context.hide()
     }
 
+    // Three usage lanes, each its own item and its own setting. A lane the
+    // account has no window for hides rather than showing a dash: an empty
+    // reading is not a reading, and this plan simply may not have that limit.
     const rateLimits = vitals?.rateLimits
-    const tightest = tightestWindow(rateLimits)
-    if (badgeEnabled('usage') && rateLimits && tightest) {
-      const pct = tightest.info.utilization
+    let anyUsage = false
+    for (const [index, { badge, lane }] of USAGE_BADGES.entries()) {
+      const item = this.#usage[index]!
+      const window = badgeEnabled(badge) ? usageWindow(rateLimits, lane) : undefined
+      if (!window) {
+        item.hide()
+        continue
+      }
+      const pct = window.info.utilization
       // No made-up 0%: the CLI omits utilization on some updates, and an
       // invented number here would read as a real one.
       const reading = pct !== undefined ? `${pct.toFixed(0)}%` : '—'
-      this.#usage.text = `$(pulse) ${windowLabel(tightest.key)} ${reading}`
-      this.#usage.backgroundColor = severityBackground(
-        tightest.info.status === 'rejected' ? 'error' : meterSeverity(pct),
+      item.text = `$(pulse) ${windowLabel(window.key)} ${reading}`
+      item.backgroundColor = severityBackground(
+        window.info.status === 'rejected' ? 'error' : meterSeverity(pct),
       )
-      this.#usage.tooltip = usageTooltip(rateLimits, now)
-      this.#usage.show()
-      this.#startTicking()
-    } else {
-      this.#usage.hide()
-      this.#stopTicking()
+      // One tooltip for all three: the question "and the others?" is asked of
+      // whichever one you happen to be pointing at.
+      item.tooltip = usageTooltip(rateLimits ?? {}, now)
+      item.show()
+      anyUsage = true
     }
+    if (anyUsage) this.#startTicking()
+    else this.#stopTicking()
 
     // The two pickers. Each is shown only where switching is actually possible:
     // an item that opens an empty QuickPick is worse than no item.
@@ -305,9 +375,7 @@ export class SessionStatusBar implements vscode.Disposable {
 
   dispose(): void {
     this.#stopTicking()
-    for (const item of [this.#status, this.#context, this.#usage, this.#model, this.#mode]) {
-      item.dispose()
-    }
+    for (const item of this.#items) item.dispose()
   }
 }
 

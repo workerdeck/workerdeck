@@ -284,13 +284,19 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
  * machine (in a Remote SSH window, "this machine" is the remote box — which is
  * exactly where a loopback gateway's files are): open it directly. Remote
  * gateway → a `workerdeck://` URI served by the FileSystemProvider.
+ *
+ * A **relative** path is resolved here and only here: the webview matched the
+ * text, but the session's cwd is host-side state. With no cwd there is nothing
+ * to resolve against, so the click is a no-op rather than a guess at the root.
  */
 async function openTranscriptPath(
   active: ActiveSession | undefined,
-  path: string,
+  clicked: string,
   line: number | undefined,
 ): Promise<void> {
-  if (!active || !path.startsWith('/')) return
+  if (!active) return
+  const path = resolveAgainstCwd(clicked, active.cwd)
+  if (!path) return
   const uri = isLoopbackHost(active.host)
     ? vscode.Uri.file(path)
     : vscode.Uri.from({ scheme: 'workerdeck', authority: active.host.id.toLowerCase(), path })
@@ -301,4 +307,26 @@ async function openTranscriptPath(
   } catch {
     void vscode.window.showWarningMessage(`WorkerDeck: could not open ${path}`)
   }
+}
+
+/**
+ * Turn a clicked path into an absolute one. Deliberately POSIX arithmetic and
+ * not `node:path`: the cwd is the *gateway's*, so its separators are the
+ * gateway's too, and a Windows extension host joining a remote session's cwd
+ * with `\` would produce a path neither side has ever seen.
+ */
+function resolveAgainstCwd(clicked: string, cwd: string | undefined): string | undefined {
+  if (clicked.startsWith('/')) return normalizePosix(clicked)
+  if (!cwd) return undefined
+  return normalizePosix(`${cwd.replace(/\/+$/, '')}/${clicked}`)
+}
+
+function normalizePosix(path: string): string {
+  const out: string[] = []
+  for (const part of path.split('/')) {
+    if (part === '' || part === '.') continue
+    if (part === '..') out.pop()
+    else out.push(part)
+  }
+  return `/${out.join('/')}`
 }

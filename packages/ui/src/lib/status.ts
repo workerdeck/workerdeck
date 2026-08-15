@@ -63,8 +63,59 @@ export function meterSeverity(pct: number | undefined): StatusSeverity {
   return 'none'
 }
 
+/**
+ * The three *lanes* a plan-usage reading can occupy, and the whole reason this
+ * is a rule rather than a per-client `if`.
+ *
+ * The CLI reports one window per limit (`five_hour`, `seven_day`, and a
+ * `seven_day_<model>` bucket per model-scoped limit — `seven_day_opus`,
+ * `seven_day_sonnet`, and whatever `model_scoped` names next). A surface with
+ * one slot shows the fullest of them, which is why `tightestWindow` exists —
+ * but that answers "what is closest to blocking me", not "how much of *this
+ * session's* budget have I spent", and those are different questions a reader
+ * asks at different times. A weekly window at 71% will win the single slot over
+ * a five-hour window at 60% every time, so the reading you actually watch while
+ * working is the one you can never see.
+ *
+ * Hence three lanes, each independently showable:
+ *
+ * - `'session'` — the five-hour window. The one that resets while you work.
+ * - `'weekly'` — the plain seven-day window, the account-wide ceiling.
+ * - `'model'` — the fullest of the *model-scoped* weekly buckets. Deliberately
+ *   not a named model: which models have their own bucket is the plan's
+ *   business and changes without notice, so a client that hardcoded
+ *   `seven_day_opus` would show nothing the month it becomes something else.
+ *   The label comes from the key, so this lane names whatever it found.
+ */
+export type UsageLane = 'session' | 'weekly' | 'model'
+
+/** The window a lane points at, or `undefined` when this account has none. */
+export function usageWindow(
+  rateLimits: Record<string, RateLimitInfo> | undefined,
+  lane: UsageLane,
+): { key: string; info: RateLimitInfo } | undefined {
+  if (!rateLimits) return undefined
+  if (lane === 'session') {
+    const info = rateLimits.five_hour
+    return info ? { key: 'five_hour', info } : undefined
+  }
+  if (lane === 'weekly') {
+    const info = rateLimits.seven_day
+    return info ? { key: 'seven_day', info } : undefined
+  }
+  // Model-scoped: same "fullest wins" rule as the single slot, over the subset.
+  const scoped = Object.fromEntries(
+    Object.entries(rateLimits).filter(
+      ([key]) => key.startsWith('seven_day_') && key !== 'seven_day_oauth_apps',
+    ),
+  )
+  return tightestWindow(scoped)
+}
+
 /** The rate-limit window that gets the one visible slot: whichever is fullest,
- * since the binding constraint is the one worth glancing at. */
+ * since the binding constraint is the one worth glancing at. Still the right
+ * rule for a surface with exactly one slot; {@link usageWindow} is for one with
+ * three. */
 export function tightestWindow(
   rateLimits: Record<string, RateLimitInfo> | undefined,
 ): { key: string; info: RateLimitInfo } | undefined {
@@ -85,11 +136,16 @@ export function tightestWindow(
   return best
 }
 
-/** A rate-limit window's key, named for a human. */
+/** A rate-limit window's key, named for a human. A model-scoped bucket is named
+ * for its model alone (`seven_day_fable` → "Fable"): the lane it sits in
+ * already says weekly, and "Seven day fable" in a status bar is three words to
+ * say one. */
 export function windowLabel(key: string): string {
   if (key === 'five_hour') return 'Session'
   if (key === 'seven_day') return 'Weekly'
-  return key.replaceAll('_', ' ')
+  const scoped = key.startsWith('seven_day_') ? key.slice('seven_day_'.length) : key
+  const words = scoped.replaceAll('_', ' ')
+  return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
 export type ModelReadings = { model?: string; models: readonly ModelOption[] }
