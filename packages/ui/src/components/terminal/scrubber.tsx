@@ -145,16 +145,24 @@ function railScale(railH: number, totalSize: number, viewportH: number): number 
   return totalSize > 0 ? railH / Math.max(totalSize, viewportH) : 0
 }
 
-/** The final response a turn end pairs with: the last top-level, settled
- * assistant message between the previous boundary and the turn row. */
-function pairedResponse(items: readonly TranscriptItem[], turnIndex: number): number | undefined {
-  for (let j = turnIndex - 1; j >= 0; j--) {
-    const item = items[j]!
-    if (item.kind === 'user' || item.kind === 'turn_result') return undefined
-    if (item.kind === 'assistant_text' && !item.streaming && item.parentToolUseId == null) return j
-  }
-  return undefined
-}
+/**
+ * The right lane is anchored on **the answer, not the turn end**.
+ *
+ * It used to be built from `turn_result` items alone, which made it silently
+ * history-blind: `#backfillHistory` maps only `user` and `assistant` entries, so
+ * a session replayed after a gateway restart — or any resumed session — carried
+ * no turn rows at all and the whole white lane came back empty. The blue lane
+ * survived, which is what made it look like a rendering bug rather than a
+ * missing input.
+ *
+ * So a turn's mark is emitted for the last top-level assistant message of each
+ * segment, and a `turn_result` (when there is one) *decorates* it rather than
+ * conjuring it — contributing the failed colour and the `turnIndex` its peek
+ * shows the done-line from. Live behaviour is unchanged by construction: the
+ * item this lands on is exactly the one `pairedResponse` used to find, because
+ * a settled `assistant_text` always precedes the `turn_result` that ends it.
+ */
+type Segment = { response?: number; turn?: number; failed?: boolean }
 
 const doneLine = (turn: Extract<TranscriptItem, { kind: 'turn_result' }>): string =>
   `${turn.isError ? turn.subtype : 'done'} · ${formatDuration(turn.durationMs)} · ${formatCost(turn.totalCostUsd)}`
@@ -220,21 +228,44 @@ function buildClusters(
     viewportH,
   } = props
   const marks: Mark[] = []
-  items.forEach((item, index) => {
-    if (item.kind === 'user') {
-      marks.push({ kind: 'user', itemIndex: index, rowIndex: rowIndexFor(index) })
-    } else if (item.kind === 'turn_result') {
-      const anchor = pairedResponse(items, index) ?? index
+  // One right-lane mark per segment, emitted when the segment closes. A segment
+  // is closed by the next prompt, by its own turn end, or by running out of
+  // items — that last one is what a replayed history is made of.
+  let segment: Segment = {}
+  const closeSegment = () => {
+    const anchor = segment.response ?? segment.turn
+    if (anchor !== undefined) {
       marks.push({
-        kind: item.isError ? 'turnFailed' : 'turn',
+        kind: segment.failed ? 'turnFailed' : 'turn',
         itemIndex: anchor,
         rowIndex: rowIndexFor(anchor),
-        turnIndex: index,
+        turnIndex: segment.turn,
       })
+    }
+    segment = {}
+  }
+  items.forEach((item, index) => {
+    if (item.kind === 'user') {
+      closeSegment()
+      marks.push({ kind: 'user', itemIndex: index, rowIndex: rowIndexFor(index) })
+    } else if (item.kind === 'turn_result') {
+      segment.turn = index
+      segment.failed = item.isError
+      closeSegment()
     } else if (item.kind === 'notice' && item.level === 'error') {
       marks.push({ kind: 'error', itemIndex: index, rowIndex: rowIndexFor(index) })
+    } else if (item.kind === 'assistant_text' && item.parentToolUseId == null) {
+      // The live one included, deliberately: a turn in flight has no turn end
+      // yet, which left a two-minute answer unrepresented on the rail for the
+      // whole two minutes it was the only thing worth navigating to. The mark's
+      // height is its row's, so it grows as the answer does with no extra
+      // bookkeeping, and it cannot double up — the reducer settles this item in
+      // the same action that appends the `turn_result` that closes the segment.
+      segment.response = index
     }
   })
+  // A history that ends mid-segment still has an answer in it.
+  closeSegment()
   for (const index of bookmarks)
     if (index >= 0 && index < items.length)
       marks.push({ kind: 'bookmark', itemIndex: index, rowIndex: rowIndexFor(index) })
