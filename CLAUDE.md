@@ -504,8 +504,16 @@ protocol. Read these before changing scope or structure:
   filter/group/sort (minus `search`, which always starts empty, and `scoped`, which a dashboard
   has no folders to mean anything against). Unread rides `useUnseen` — one module-scope
   `Watermarks` over `localStorage`, because two hooks with two copies would each answer from
-  their own stale snapshot — and the session route both feeds it (`onVitals`, refusing while
-  `document.hidden`) and reads it once at mount for the panel's catch-up row. The registry poll
+  their own stale snapshot — and the session route both feeds it and reads it once at mount for
+  the panel's catch-up row. **The mark advances off the same record the badge counts from**, the
+  polled `useSessions` snapshots, and that is the whole rule: two other sources look right and
+  are not. `onVitals` fires per streamed delta and stops with the last token, but the row that
+  *ends* a turn reaches the registry after them, so the session you sat and watched kept a badge
+  for the rows it finished with; `useSessionInfo` is one GET at mount and is never polled, so an
+  effect on its `activityCount` fires once and never again. `onVitals` still carries `itemCount`
+  — the socket is its only source and the catch-up row reads it — and `document.hidden` is held
+  as **state** behind a `visibilitychange` listener, so returning to a tab left mid-turn clears
+  the badge instead of waiting for the next row. The registry poll
   is adaptive (5s idle / 1.2s while anything is working or awaiting approval), re-armed on the
   regime rather than per response. Rename is a gateway edit (`PATCH /sessions/:id`), reached
   from the row's pencil rather than the extension's double-click: here a single click

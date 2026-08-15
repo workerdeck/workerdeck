@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { useSessionInfo } from '@workerdeck/react'
 import {
@@ -20,7 +20,7 @@ import { clientFor, useHosts } from '@/lib/hosts.ts'
 import { getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
 import { useMarkSeen, unseenSince } from '@/lib/useUnseen.ts'
-import { nudgeSessions } from '@/lib/useSessions.ts'
+import { nudgeSessions, useSessions } from '@/lib/useSessions.ts'
 
 /**
  * Resolves the route's gateway before anything below it runs.
@@ -81,6 +81,49 @@ function SessionViewInner({
     void navigate({ to: '/sessions' })
   }, [error, navigate])
 
+  // Whether this tab is actually being looked at, as **state** rather than a
+  // read of `document.hidden`. It is a dependency of "is this on screen": while
+  // the tab is hidden every mark is refused, so without something re-running on
+  // the way back, a session you left mid-turn keeps its badge after you return
+  // and look straight at it.
+  const [visible, setVisible] = useState(() => !document.hidden)
+  useEffect(() => {
+    const sync = () => setVisible(!document.hidden)
+    document.addEventListener('visibilitychange', sync)
+    return () => document.removeEventListener('visibilitychange', sync)
+  }, [])
+
+  // Mark off the SAME record the badge counts from — the polled sessions list.
+  //
+  // The badge is `unseenFor(hostId, info)` over `useSessions`' snapshots, which
+  // poll every 1.2s while anything is working. Two near-misses are worth naming,
+  // because both look right and neither is:
+  //
+  //  - Marking inside `onVitals` alone. Those fire per streamed delta and stop
+  //    with the last token, but the row that *ends* a turn reaches the registry
+  //    after them — so the session you sat and watched kept a badge for the rows
+  //    it finished with.
+  //  - Marking off `useSessionInfo`. It is one GET at mount and is never polled,
+  //    so its `activityCount` is frozen; an effect on it fires once and then
+  //    never again, which looks like a fix for exactly one render.
+  //
+  // Reading the same poll the badge reads closes the loop by construction:
+  // anything the badge can count, this has already seen. `useMarkSeen` still
+  // refuses while the tab is hidden, and `Watermarks.mark` is monotonic per
+  // field, so a partial reading can never walk `itemCount` back.
+  const { snapshots } = useSessions()
+  const polled = useMemo(
+    () =>
+      snapshots
+        .find((s) => s.host.id === hostId)
+        ?.sessions.find((s) => s.id === sessionId),
+    [snapshots, hostId, sessionId],
+  )
+  useEffect(() => {
+    if (!polled || !visible) return
+    markSeen({ activity: polled.activityCount, turns: polled.numTurns })
+  }, [polled?.activityCount, polled?.numTurns, visible, markSeen])
+
   const close = async () => {
     try {
       await client.deleteSession(sessionId)
@@ -120,7 +163,11 @@ function SessionViewInner({
       // This route IS the session on screen, so its readings are what "read up
       // to here" means. `useMarkSeen` still refuses while the tab is hidden.
       onVitals={(vitals) => {
-        markSeen({ itemCount: vitals.itemCount, activity: info?.activityCount, turns: info?.numTurns })
+        // Only `itemCount` — the socket is the sole source of it, and it is what
+        // the catch-up row reads. `activity`/`turns` ride the effect above, off
+        // the record the badge itself counts from; passing the closure's `info`
+        // here wrote whatever the last render happened to hold.
+        markSeen({ itemCount: vitals.itemCount })
         // This socket knows a turn started before any poll could. Coalesced and
         // rate-limited inside, so calling it per streamed delta is fine.
         nudgeSessions()
