@@ -341,39 +341,69 @@ export function Composer({
   const attach = canAttach ? (
     <>
       {fileField}
-      {terminal ? (
-        // The glyph sits in the same gutter the transcript's markers use, so the
-        // typed line starts on the column the conversation does.
-        <GlyphButton
-          label='Attach files'
-          disabled={disabled}
-          onClick={() => fileInput.current?.click()}>
-          +
-        </GlyphButton>
-      ) : (
-        <Button
-          variant='ghost'
-          size='icon-sm'
-          aria-label='Attach files'
-          disabled={disabled}
-          onClick={() => fileInput.current?.click()}>
-          <Paperclip className='size-4' />
-        </Button>
-      )}
+      <Button
+        variant='ghost'
+        size='icon-sm'
+        aria-label='Attach files'
+        disabled={disabled}
+        onClick={() => fileInput.current?.click()}>
+        <Paperclip className='size-4' />
+      </Button>
     </>
   ) : null
+
+  /**
+   * The terminal composer's **gutter cell** — the one column every transcript
+   * row's marker sits in, so whatever stands here cannot move the text beside
+   * it. It holds one of three things, in this order:
+   *
+   * `✕` **while the session is working**, because the gutter is where the eye
+   * already is (it is the column the pulse and every marker share) and stop is
+   * the only action that matters mid-run. Note the condition is `busy` alone,
+   * not the old `busy && !canSend`: with send living on the other side of the
+   * field there is no longer a slot to compete for, so typing a follow-up while
+   * a turn runs no longer hides the way to stop it.
+   *
+   * A cross rather than the `■` this started as: the square reads as a *state*
+   * ("stopped") in a column where `●` and `◆` really are states, so it looked
+   * like a status marker rather than something to press. A cross reads as an
+   * action and collides with nothing else on the column. It is also one of the
+   * few candidates that measures exactly 1ch in JetBrains Mono — `⏹`, `⏸` and
+   * `⏻`, the obvious picks, are 1.05–1.31 cells and would break the grid.
+   *
+   * `+` **otherwise**, when there is anything to attach — the composer's own
+   * affordance, in the composer's own gutter.
+   *
+   * `❯` when neither applies, so the column is never empty and the typed line
+   * never shifts. Blue, not the brand's coral: coral is the *working* mark, and
+   * a prompt waiting for you is not the session working.
+   */
+  const gutter = busy ? (
+    <GlyphButton gutter label='Interrupt' tone='yellow' onClick={onInterrupt}>
+      ✕
+    </GlyphButton>
+  ) : canAttach ? (
+    <GlyphButton
+      gutter
+      label='Attach files'
+      disabled={disabled}
+      onClick={() => fileInput.current?.click()}>
+      +
+    </GlyphButton>
+  ) : (
+    <span aria-hidden className='term-gutter' data-tone='blue'>
+      {PROMPT_GLYPH}
+    </span>
+  )
 
   const interrupting = busy && !canSend
   const submitButton = terminal ? (
     // Terminal furniture rather than chat furniture: a glyph that lights up on
-    // hover/focus instead of a filled pill. `↵` is what sends, `■` is what stops
-    // — the same two symbols the keyboard and a shell already use.
-    <GlyphButton
-      label={interrupting ? 'Interrupt' : 'Send'}
-      disabled={!interrupting && !canSend}
-      onClick={interrupting ? onInterrupt : submit}
-      tone={interrupting ? 'yellow' : canSend ? 'blue' : undefined}>
-      {interrupting ? '■' : '↵'}
+    // hover/focus instead of a filled pill. `↵` is the only thing on this side
+    // now — stop moved to the gutter — so it means one thing at all times, and
+    // a reader never has to check which symbol is currently under their cursor.
+    <GlyphButton label='Send' disabled={!canSend} onClick={submit} tone={canSend ? 'blue' : undefined}>
+      ↵
     </GlyphButton>
   ) : interrupting ? (
     <Button
@@ -451,13 +481,9 @@ export function Composer({
               <AttachmentStrip attachments={attachments} />
             ) : null}
             <div className='term-row'>
-              {/* Blue, not the brand's coral: the coral is the *working* mark
-                  (the pulse, the status line), and a prompt sitting waiting for
-                  you is not the session working. Blue is what the rest of the
-                  theme's live edges use — the focused rule right above this. */}
-              <span aria-hidden className='term-gutter' data-tone='blue'>
-                {PROMPT_GLYPH}
-              </span>
+              {/* The hidden input only — its trigger lives in the gutter. */}
+              {canAttach ? fileField : null}
+              {gutter}
               <div className='flex min-w-0 items-start'>
                 <PromptArea
                   {...bind}
@@ -473,7 +499,6 @@ export function Composer({
                   className='term-composer-field min-w-0 flex-1'
                   onImagePaste={(file) => attachments?.add([file])}
                 />
-                {attach}
                 {submitButton}
               </div>
             </div>
@@ -572,6 +597,7 @@ function GlyphButton({
   label,
   disabled,
   onClick,
+  gutter,
   className,
   children,
 }: {
@@ -579,6 +605,10 @@ function GlyphButton({
   label: string
   disabled?: boolean
   onClick: () => void
+  /** Standing in the gutter cell rather than at the row's trailing edge, so the
+   * glyph aligns to the column's start like every transcript marker instead of
+   * centring in the 2ch cell — see `.term-glyph[data-gutter]`. */
+  gutter?: boolean
   className?: string
   children: ReactNode
 }) {
@@ -590,6 +620,7 @@ function GlyphButton({
       disabled={disabled}
       onClick={onClick}
       data-tone={tone}
+      data-gutter={gutter || undefined}
       className={cn('term-glyph', className)}>
       {children}
     </button>

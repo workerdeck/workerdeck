@@ -309,12 +309,21 @@ protocol. Read these before changing scope or structure:
   pixels, and it is **one** prop because the panel mounts **three** terminal surfaces — transcript,
   pending prompts, composer — each in a different part of its flex column; hand two of them
   different numbers and the caret lands on a different column from the text above it, which is the
-  failure the theme exists to prevent. The **composer** is the CLI's prompt under it: `❯`
-  (`PROMPT_GLYPH`, the same constant the user rows draw — two spellings would put the caret a glyph
-  off the column, and it is **blue**, because coral is the *working* mark and a prompt waiting for
-  you is not the session working) in the
-  same gutter cell every row's marker sits in, docked flush to the panel edges with `+`/`↵`
-  characters in place of the round pills. It is bracketed by **two rules**, top and bottom, both
+  failure the theme exists to prevent. The **composer** is the CLI's prompt under it, docked flush
+  to the panel edges with characters in place of the round pills. Its **gutter cell** — the one
+  every transcript marker sits in — holds `+` to attach, which becomes `✕` (yellow, Interrupt)
+  **whenever the session is working**; `↵` sits alone at the trailing edge and therefore means one
+  thing at all times. The busy test is `busy` alone, not `busy && !canSend`: while stop and send
+  shared the trailing slot, typing a follow-up mid-run replaced stop with send and left no way to
+  stop at all. `✕` rather than a `■`, because the square read as a *state* in a column where `●`
+  and `◆` really are states; it is also one of the few candidates measuring exactly 1ch in
+  JetBrains Mono, where `⏹`/`⏸`/`⏻` are 1.05–1.31 cells and would break the grid. With nothing to
+  attach the cell falls back to `❯` (`PROMPT_GLYPH`, the same constant the user rows draw — two
+  spellings would put the caret a glyph off the column, and it is **blue**, because coral is the
+  *working* mark and a prompt waiting for you is not the session working), so the column is never
+  empty and the typed line never shifts. A glyph *in* that cell carries `data-gutter`, which
+  aligns it `start` like a marker: `term-glyph`'s centring is right for the trailing `↵` and wrong
+  here, landing the glyph half a cell (≈3.9px) right of the column every `❯` and `●` sits on. It is bracketed by **two rules**, top and bottom, both
   turning accent on focus, with 8px of air inside them — the CLI's own frame for its prompt, and
   the thing that makes the field its own strip of the panel rather than the transcript's last row,
   without a side border that would take the `❯` off the column. The bottom rule is why

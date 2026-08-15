@@ -611,6 +611,16 @@
   user-select: none;
   cursor: pointer;
 }
+/* A glyph standing in the **gutter cell** is a marker, so it aligns like one.
+   The cell is 2ch and a character is 1ch, so `text-align: center` — right for a
+   standalone control at the row's trailing edge — lands the glyph half a cell
+   (≈3.9px at 13px/JetBrains Mono) to the right of the column every `❯` and `●`
+   in the transcript starts on. `start` is what `.term-gutter` uses, and on this
+   grid "nearly the same column" is just the wrong column. */
+[data-terminal] .term-glyph[data-gutter] {
+  text-align: start;
+}
+
 /* `:not([data-tone])` because the tone rules and this one have the same
    specificity and this one is further down the file: without it, a toned glyph
    (the lit `↵`) would silently lose its colour to the default. */
