@@ -167,6 +167,43 @@ const TAB_SIZE = 2
  * long URLs after it (verified against real break rects). */
 const BREAK_AFTER = new Set(['-', '–', '—', '?'])
 
+/** Printable ASCII, tab excluded: every character is one cell and one grapheme,
+ * so the segmenter has nothing to tell us. This is nearly every line a
+ * transcript holds, and the segmenter was the calculator's whole CPU bill —
+ * ~1s of a 30s scroll sweep on the 4k-item perf fixture, all of it spent
+ * segmenting text that `charCodeAt` classifies for free. */
+const PLAIN_ASCII = /^[\x20-\x7e]*$/
+
+/** The ASCII half of {@link tokenize}: same tokens, same break rules ('-' and
+ * '?' break unless a digit follows; '–'/'—' are not ASCII), no segmenter and
+ * no per-grapheme allocation. Must stay semantically identical to the general
+ * path — the height audit runs both, via content that takes each. */
+function tokenizeAscii(line: string): Token[] {
+  const tokens: Token[] = []
+  let wordW = 0
+  const flushWord = () => {
+    if (wordW > 0) tokens.push({ kind: 'word', w: wordW, exact: true })
+    wordW = 0
+  }
+  for (let i = 0; i < line.length; i++) {
+    const code = line.charCodeAt(i)
+    if (code === 0x20) {
+      flushWord()
+      const last = tokens[tokens.length - 1]
+      if (last?.kind === 'space') last.w += 1
+      else tokens.push({ kind: 'space', w: 1, exact: true })
+      continue
+    }
+    wordW += 1
+    if (code === 0x2d /* - */ || code === 0x3f /* ? */) {
+      const next = line.charCodeAt(i + 1)
+      if (!(next >= 0x30 && next <= 0x39)) flushWord()
+    }
+  }
+  flushWord()
+  return tokens
+}
+
 /**
  * Tokenize one hard line into wrap units. Tabs advance to the next 2-cell stop
  * measured from the hard line's start — position-dependent after a soft wrap in
@@ -174,6 +211,7 @@ const BREAK_AFTER = new Set(['-', '–', '—', '?'])
  * rare and the error is bounded by one tab stop.
  */
 function tokenize(line: string): Token[] {
+  if (PLAIN_ASCII.test(line)) return tokenizeAscii(line)
   const tokens: Token[] = []
   let word = { w: 0, exact: true }
   let col = 0
@@ -314,16 +352,46 @@ function stripInline(s: string): string {
     .replace(/\\([\\`*_{}[\]()#+.!-])/g, '$1')
 }
 
+/**
+ * Text blocks carry **rendered lines**, resolved by CommonMark's own break
+ * rule: a source line ending in two spaces (or a backslash) is a hard break
+ * and renders as `<br>`; any other newline is soft and collapses to a space
+ * under `white-space: normal`. Both halves are load-bearing and each was the
+ * whole model once. Join-always missed the hard breaks — models write poems
+ * with trailing double-spaces, and a 350-line one estimated ~115 lines short
+ * (a phantom scrollbar tail, scrubber marks resizing as rows mounted).
+ * Break-always missed the soft ones and overestimated the same stanza written
+ * without them by four lines. The `markdown` fixture carries one poem of each
+ * as the audit's guard.
+ */
 type MdBlock =
-  | { t: 'p'; text: string }
+  | { t: 'p'; lines: string[] }
   | { t: 'h'; text: string }
   | { t: 'fence'; code: string }
-  | { t: 'list'; items: { text: string; gutter: number; indent: number }[] }
-  | { t: 'quote'; paras: string[] }
+  | { t: 'list'; items: { lines: string[]; gutter: number; indent: number }[] }
+  | { t: 'quote'; paras: string[][] }
   /** One line per row, unconditionally — see the `table` case in
    * {@link markdownHeight}. */
   | { t: 'table'; rows: number }
   | { t: 'hr' }
+
+/** Source lines of one paragraph-ish run → the lines the renderer draws: hard
+ * breaks (trailing double space or backslash) split, soft newlines join with a
+ * space. The break marker itself never renders and is stripped. */
+function hardLines(source: string[]): string[] {
+  const out: string[] = []
+  let current: string[] = []
+  for (const raw of source) {
+    const hard = /(?:\s{2}|\\)$/.test(raw)
+    current.push(stripInline(raw.replace(/(?:\s+|\\)$/, '')))
+    if (hard) {
+      out.push(current.join(' '))
+      current = []
+    }
+  }
+  if (current.length) out.push(current.join(' '))
+  return out
+}
 
 /** A line-based CommonMark-ish block parser — just enough structure to mirror
  * what Streamdown + the terminal component map emit for transcript content. */
@@ -366,15 +434,15 @@ function parseBlocks(md: string): MdBlock[] {
         raw.push(lines[i]!.replace(/^>\s?/, ''))
         i += 1
       }
-      const paras: string[] = []
+      const paras: string[][] = []
       let current: string[] = []
       for (const l of raw) {
         if (l.trim() === '') {
-          if (current.length) paras.push(stripInline(current.join(' ')))
+          if (current.length) paras.push(hardLines(current))
           current = []
         } else current.push(l)
       }
-      if (current.length) paras.push(stripInline(current.join(' ')))
+      if (current.length) paras.push(hardLines(current))
       blocks.push({ t: 'quote', paras })
       continue
     }
@@ -386,7 +454,7 @@ function parseBlocks(md: string): MdBlock[] {
       return { depth, ordered, text: m[3]! }
     }
     if (listMarker(line)) {
-      const items: { text: string; gutter: number; indent: number }[] = []
+      const items: { lines: string[]; gutter: number; indent: number }[] = []
       // Marker cells per level, outermost first — a nested item's indent is the
       // sum of its ancestors' gutters (each nested list sits in its parent li's
       // body column).
@@ -409,13 +477,17 @@ function parseBlocks(md: string): MdBlock[] {
         }
         gutters[m.depth] = m.ordered ? 3 : 2
         const indent = gutters.slice(0, m.depth).reduce((a, b) => a + (b ?? 2), 0)
-        items.push({ text: stripInline(m.text), gutter: gutters[m.depth]!, indent })
+        const source = [m.text]
         i += 1
-        // Lazy continuation lines join the item.
+        // Lazy continuation lines belong to the item; whether each newline
+        // renders is `hardLines`' call, same as a paragraph's.
         while (i < lines.length && lines[i]!.trim() !== '' && !listMarker(lines[i]!)) {
-          items[items.length - 1]!.text += ' ' + stripInline(lines[i]!.trim())
+          // trimStart only: a trailing double space is the hard-break marker,
+          // and `hardLines` needs to see it.
+          source.push(lines[i]!.trimStart())
           i += 1
         }
+        items.push({ lines: hardLines(source), gutter: gutters[m.depth]!, indent })
       }
       blocks.push({ t: 'list', items })
       continue
@@ -455,8 +527,7 @@ function parseBlocks(md: string): MdBlock[] {
       para.push(lines[i]!)
       i += 1
     }
-    // Soft breaks render as collapsible whitespace under `white-space: normal`.
-    blocks.push({ t: 'p', text: stripInline(para.join(' ')) })
+    blocks.push({ t: 'p', lines: hardLines(para) })
   }
   return blocks
 }
@@ -471,7 +542,13 @@ export function markdownHeight(md: string, m: CellMetrics, extraPx = 0): Acc {
   for (const [index, block] of blocks.entries()) {
     if (index > 0) acc = add(acc, { px: m.line, exact: true })
     switch (block.t) {
-      case 'p':
+      case 'p': {
+        for (const line of block.lines) {
+          const r = textLines(line, cols)
+          acc = add(acc, { px: r.lines * m.line, exact: r.exact })
+        }
+        break
+      }
       case 'h': {
         const r = textLines(block.text, cols)
         acc = add(acc, { px: r.lines * m.line, exact: r.exact })
@@ -492,9 +569,11 @@ export function markdownHeight(md: string, m: CellMetrics, extraPx = 0): Acc {
         let px = 0
         let exact = true
         for (const item of block.items) {
-          const r = textLines(item.text, cols - item.indent - item.gutter)
-          px += r.lines * m.line
-          exact = exact && r.exact
+          for (const line of item.lines) {
+            const r = textLines(line, cols - item.indent - item.gutter)
+            px += r.lines * m.line
+            exact = exact && r.exact
+          }
         }
         acc = add(acc, { px, exact })
         break
@@ -504,9 +583,11 @@ export function markdownHeight(md: string, m: CellMetrics, extraPx = 0): Acc {
         let exact = true
         for (const [pi, para] of block.paras.entries()) {
           if (pi > 0) px += m.line
-          const r = textLines(para, cols - 2)
-          px += r.lines * m.line
-          exact = exact && r.exact
+          for (const line of para) {
+            const r = textLines(line, cols - 2)
+            px += r.lines * m.line
+            exact = exact && r.exact
+          }
         }
         acc = add(acc, { px, exact })
         break

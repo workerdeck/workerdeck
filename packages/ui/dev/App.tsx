@@ -12,6 +12,7 @@ import { terminalBlocks } from '../src/components/terminal/items.tsx'
 import { rowIndexForItem, type TranscriptRow } from '../src/components/agent/Transcript.tsx'
 import { auditGrid, type GridReport } from './grid-audit.ts'
 import { auditHeights } from './height-audit.ts'
+import { perfSweep } from './perf-audit.ts'
 import { cn } from '../src/lib/utils.ts'
 
 /** The prompts are not transcript items — they are the panel's, rendered under
@@ -61,6 +62,13 @@ export function App() {
     w.__wdAudit = () =>
       surface.current ? auditHeights(state, surface.current, catchUp?.from) : undefined
     w.__wdJumpRecap = () => jumpRef.current?.()
+    // The scroll-performance sweep (`perf-audit.ts`) — run it on `perf`.
+    w.__wdPerf = (step?: number) => {
+      const scroller = surface.current?.querySelector<HTMLElement>(
+        '[data-slot="conversation"] > div',
+      )
+      return scroller ? perfSweep(scroller, { step }) : undefined
+    }
     w.__wdSetFixture = (key: string) => setFixture(key)
     w.__wdSetWidth = (px: number) => setWidth(px)
     w.__wdSetMetrics = (fs: number, lh: number) => {

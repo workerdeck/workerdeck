@@ -166,6 +166,46 @@ git tag v0.16.0 && git push --tags
 
 See [the workflow](https://github.com/workerdeck/workerdeck) for the gate it re-runs.`,
   }),
+  // The break rule's guard, one poem per half. CommonMark: a line ending in
+  // two spaces is a **hard** break and renders as <br>; a bare newline is
+  // **soft** and collapses to a space under `white-space: normal`. Models
+  // really do write poems both ways (GPT-5.6 Luna emits the double-space
+  // form), and the calculator has been wrong in each direction once —
+  // join-always undershot the hard form by ~115 lines on a long poem,
+  // break-always overshot the soft form by four here.
+  item({ kind: 'user', text: 'now a short poem about releases' }),
+  item({ kind: 'assistant_text',
+    streaming: false,
+    parentToolUseId: null,
+    // Hard breaks: trailing double spaces, every line renders. Appended
+    // programmatically — a literal trailing space in source is one
+    // format-on-save away from silently deleting the case this guards.
+    text: [
+      '**The Tag That Was Never Pushed**',
+      '',
+      ...['It sat in the local dark,', 'a name without a wire,', 'while npm told the world'].map(
+        (l) => `${l}  `,
+      ),
+      'the old truth, entire.',
+      '',
+      ...['Check the registry,', 'check the remote refs too —', 'a release is what shipped,'].map(
+        (l) => `${l}  `,
+      ),
+      'not what version:set knew.',
+    ].join('\n'),
+  }),
+  item({ kind: 'user', text: 'again, without the trailing spaces' }),
+  item({ kind: 'assistant_text',
+    streaming: false,
+    parentToolUseId: null,
+    // Soft breaks: bare newlines, the stanza joins and wraps as prose.
+    text: `**The Tag, Rejoined**
+
+It sat in the local dark,
+a name without a wire,
+while npm told the world
+the old truth, entire.`,
+  }),
 ]
 
 /** The unhappy paths — a failure, a notice, and a turn that ended badly. */
@@ -258,6 +298,123 @@ const huge: TranscriptItem[] = Array.from({ length: 600 }, (_, index) => {
     durationMs: 30_000 + index * 10,
     totalCostUsd: 0.05,
   })
+})
+
+/**
+ * A massive, varied session for performance work — every content shape the
+ * renderer knows, cycled deterministically over thousands of items (~10× the
+ * `huge` fixture, with far heavier rows). This is what `__wdPerf()` sweeps;
+ * it is deliberately bigger than any session ought to get, so a cost that
+ * grows with session size is visible here first.
+ */
+const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
+  const turn = Math.floor(index / 10)
+  switch (index % 10) {
+    case 0:
+      return item({ kind: 'user',
+        text: `Task ${turn}: review the module, refactor what you find, and summarise. ${'Keep the diff reviewable. '.repeat(1 + (turn % 3))}`,
+      })
+    case 1:
+      return item({ kind: 'thinking',
+        text: `Thought for ${3 + (turn % 20)}s about module ${turn} and its ${1 + (turn % 7)} call sites`,
+        parentToolUseId: null,
+      })
+    case 2:
+      // Stanza text: hard line breaks, the calculator's hardest common case.
+      return item({ kind: 'assistant_text',
+        streaming: false,
+        parentToolUseId: null,
+        text: Array.from({ length: 3 + (turn % 4) }, (_, s) =>
+          Array.from({ length: 4 }, (_, l) =>
+            `stanza ${s + 1} line ${l + 1} of note ${turn}, ${'holding steady '.repeat(1 + ((s + l) % 3))}`.trim(),
+          ).join('\n'),
+        ).join('\n\n'),
+      })
+    case 3:
+    case 4:
+      // Consecutive shell calls — folds into a ShellRunRow.
+      return item({ kind: 'tool_call',
+        name: 'Bash',
+        input: { command: `pnpm --filter @workerdeck/mod-${index} test`, description: `Test module ${index}` },
+        parentToolUseId: null,
+        status: 'settled',
+        result: {
+          text: Array.from({ length: 2 + (index % 6) }, (_, l) => `✓ case ${l + 1} passed (${l * 7}ms)`).join('\n'),
+          isError: false,
+        },
+      })
+    case 5:
+      return item({ kind: 'tool_call',
+        name: 'Read',
+        input: { file_path: `/repo/src/module-${turn}/index.ts` },
+        parentToolUseId: null,
+        status: 'settled',
+        result: {
+          text: Array.from({ length: 20 + (turn % 30) }, (_, l) => `${l + 1}  export const symbol${l} = build(${l})`).join('\n'),
+          isError: false,
+        },
+      })
+    case 6:
+      return item({ kind: 'tool_call',
+        name: 'Edit',
+        input: { file_path: `/repo/src/module-${turn}/index.ts` },
+        parentToolUseId: null,
+        status: 'settled',
+        result: { text: `module-${turn}: updated`, isError: false },
+        patch: {
+          path: `/repo/src/module-${turn}/index.ts`,
+          kind: 'update',
+          hunks: [
+            {
+              oldStart: 10 + turn,
+              oldLines: 4,
+              newStart: 10 + turn,
+              newLines: 5,
+              lines: [
+                '   const before = context(1)',
+                `-  const value = legacy(${turn})`,
+                `+  // module ${turn}: computed at build time`,
+                `+  const value = modern(${turn})`,
+                '   return value',
+              ],
+            },
+          ],
+        },
+      })
+    case 7:
+      return item({ kind: 'assistant_text',
+        streaming: false,
+        parentToolUseId: null,
+        text: `## Module ${turn}
+
+The refactor holds. ${'The call sites stay compatible and the tests agree. '.repeat(1 + (turn % 4))}
+
+- kept the public surface
+- \`legacy(${turn})\` → \`modern(${turn})\`
+- ${1 + (turn % 5)} call sites updated
+
+| check | result |
+| --- | --- |
+| tests | pass |
+| types | clean |`,
+      })
+    case 8:
+      return turn % 7 === 3
+        ? item({ kind: 'notice', level: 'error', text: `module ${turn}: transient watcher error, retried once` })
+        : item({ kind: 'assistant_text',
+            streaming: false,
+            parentToolUseId: null,
+            text: `Module ${turn} done; moving on.`,
+          })
+    default:
+      return item({ kind: 'turn_result',
+        subtype: turn % 11 === 5 ? 'error_during_execution' : 'success',
+        isError: turn % 11 === 5,
+        durationMs: 20_000 + turn * 17,
+        totalCostUsd: 0.03,
+        ...(turn % 11 === 5 ? { errors: ['interrupted'] } : {}),
+      })
+  }
 })
 
 /** Content chosen to break a row-height calculator — long unbroken
@@ -464,6 +621,7 @@ export const FIXTURES: { key: string; label: string; state: TranscriptState }[] 
   { key: 'failure', label: 'failure', state: base(failure, 'idle') },
   { key: 'long', label: 'long run', state: base(long, 'idle') },
   { key: 'huge', label: 'huge (600 rows)', state: base(huge, 'idle') },
+  { key: 'perf', label: 'perf (4k items)', state: base(perf, 'idle') },
   { key: 'adversarial', label: 'adversarial (spike)', state: base(adversarial, 'idle') },
   // A run with the approval standing — the scrubber pins its mark at the foot.
   {

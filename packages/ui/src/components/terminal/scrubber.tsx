@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
 import type { PermissionRequest } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
@@ -9,19 +9,19 @@ import { TerminalSurface } from './surface.tsx'
  * The overview ruler — VS Code's strip beside the minimap, with this
  * transcript's own semantics.
  *
- * A 16px rail over the scroller's right edge, two lanes of 8px: **left** is
+ * A 12px rail over the scroller's right edge, two lanes of 6px: **left** is
  * what you typed (blue), **right** is each turn's final response and its
  * `turn_result` as *one* merged mark (white; red when the turn failed — the
  * turn boundary is the response's address, so two ticks would answer no
  * question the peek doesn't). Those two are the conversation, and they are what
  * you navigate by.
  *
- * Everything else spans the **full 16px** and is an annotation rather than a
+ * Everything else spans the **full 12px** and is an annotation rather than a
  * step: an error, the pending approval (pinned at the foot, pulsing), a
  * bookmark (magenta — paint only; the store is the client's, the way watermarks
- * are) and the catch-up seam (dashed). Marks are 8px minimum — a hit target
- * before a graphic — and merge when closer than a pixel, loudest colour
- * winning.
+ * are) and the catch-up seam (dashed). A mark is its row's extent at rail
+ * scale, floored at 2px, drawn as a solid 2px head with a 25% tail; marks
+ * merge when closer than a pixel, loudest colour winning.
  *
  * Positions are **pixel space**, not index space: mark y = the row's
  * virtualizer offset over `getTotalSize()`. That is only honest because the
@@ -113,11 +113,13 @@ const KIND_NAME: Record<MarkKind, string> = {
   bookmark: 'bookmark',
 }
 
-// 8px, and it is a hit target before it is a graphic: a 3px mark is findable
-// but not reliably clickable, and the rail's whole promise is that a key event
-// is one press away. Full-width annotations are this tall too, so the rail has
-// exactly one vertical unit.
-const MIN_MARK = 8
+// The floor, not the height: a mark spans its row's actual extent at rail
+// scale, so a one-line prompt is a tick and a hundred-line response is a bar —
+// the rail is a map, and on a map a long answer looks long. 2px keeps a tick
+// findable while the CSS draws only the first 2px solid (the rest is a 25%
+// tail); the pointer's real target is the 6px-wide lane, and a press resolves
+// through `nearestMember`, so hit reliability does not ride on mark height.
+const MIN_MARK = 2
 
 /** The final response a turn end pairs with: the last top-level, settled
  * assistant message between the previous boundary and the turn row. */
@@ -164,6 +166,9 @@ export interface TerminalScrubberProps {
   /** A virtual row's offset in content space — the virtualizer's measurements,
    * which the height calculator keeps honest for unmounted rows. */
   offsetOfRow: (rowIndex: number) => number
+  /** A virtual row's height in content space, same source — what a mark's own
+   * height is scaled from. */
+  sizeOfRow: (rowIndex: number) => number
   totalSize: number
   scrollOffset: number
   viewportH: number
@@ -179,8 +184,16 @@ function buildClusters(
   props: TerminalScrubberProps,
   railH: number,
 ): Cluster[] {
-  const { items, bookmarks, recapRow, pendingApprovals, rowIndexFor, offsetOfRow, totalSize } =
-    props
+  const {
+    items,
+    bookmarks,
+    recapRow,
+    pendingApprovals,
+    rowIndexFor,
+    offsetOfRow,
+    sizeOfRow,
+    totalSize,
+  } = props
   const marks: Mark[] = []
   items.forEach((item, index) => {
     if (item.kind === 'user') {
@@ -203,30 +216,31 @@ function buildClusters(
   if (recapRow) marks.push({ kind: 'recap', itemIndex: -1, rowIndex: recapRow.rowIndex })
 
   const scale = totalSize > 0 ? railH / totalSize : 0
-  const lanes = new Map<Lane, { mark: Mark; y: number }[]>()
+  const lanes = new Map<Lane, { mark: Mark; y: number; h: number }[]>()
   for (const mark of marks) {
-    const y = Math.min(
-      Math.max(0, railH - MIN_MARK),
-      Math.round(offsetOfRow(mark.rowIndex) * scale),
-    )
+    // A mark's height is its row's, at rail scale, floored at the hit target —
+    // the row the mark *anchors* (for a turn, the final response), which is
+    // where the reader lands and what they came to gauge the size of.
+    const h = Math.max(MIN_MARK, Math.round(sizeOfRow(mark.rowIndex) * scale))
+    const y = Math.min(Math.max(0, railH - h), Math.round(offsetOfRow(mark.rowIndex) * scale))
     const lane = LANE[mark.kind]
     const list = lanes.get(lane) ?? []
-    list.push({ mark, y })
+    list.push({ mark, y, h })
     lanes.set(lane, list)
   }
   const clusters: Cluster[] = []
   for (const [lane, list] of lanes) {
     list.sort((a, b) => a.y - b.y)
     let current: Cluster | null = null
-    for (const { mark, y } of list) {
+    for (const { mark, y, h } of list) {
       // Merge when the gap is under a pixel; the merged mark grows and takes
       // the loudest member's colour.
       if (current && y <= current.y + current.h + 1) {
-        current.h = Math.max(current.h, y + MIN_MARK - current.y)
+        current.h = Math.max(current.h, y + h - current.y)
         if (LOUDNESS[mark.kind] > LOUDNESS[current.kind]) current.kind = mark.kind
         current.marks.push({ mark, y })
       } else {
-        current = { lane, kind: mark.kind, y, h: MIN_MARK, marks: [{ mark, y }] }
+        current = { lane, kind: mark.kind, y, h, marks: [{ mark, y }] }
         clusters.push(current)
       }
     }
@@ -343,6 +357,22 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
     return () => observer.disconnect()
   }, [])
 
+  // The band tracks the scroller's own scroll events, not the `scrollOffset`
+  // prop: the virtualizer notifies React only when the virtual row *range*
+  // changes, and scrolling inside one tall row changes none — the prop then
+  // refreshes only when `isScrolling` flips at the end, which reads as the
+  // band lagging the drag and snapping into place. The prop still seeds the
+  // first paint, before this listener's first event.
+  const [liveOffset, setLiveOffset] = useState(scrollOffset)
+  useEffect(() => {
+    const scroller = stick.scrollRef.current
+    if (!scroller) return
+    const onScroll = () => setLiveOffset(scroller.scrollTop)
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    setLiveOffset(scroller.scrollTop)
+    return () => scroller.removeEventListener('scroll', onScroll)
+  }, [stick.scrollRef])
+
   // A peek is a snapshot of the cluster it was opened on; if the transcript
   // changes underneath (a fixture/session swap, a burst of new items), drop it
   // rather than describe rows that no longer exist.
@@ -376,9 +406,20 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
     element.style.top = `${Math.max(4, Math.min(railHeight - height - 4, peek.y - height / 2))}px`
   }, [peek])
 
-  const clusters = railH > 0 ? buildClusters(props, railH) : []
+  // Memoized against content and geometry, NOT recomputed per render: the live
+  // scroll offset re-renders this component on every scroll event, and
+  // rebuilding the clusters there walks every item — O(session) work per
+  // wheel tick for output that only changes when content or measurements do.
+  // `rowIndexFor`/`offsetOfRow` are closures rebuilt every parent render and
+  // deliberately not dependencies; `totalSize` stands in for the measurements
+  // behind them — row heights cannot move a mark without moving the total.
+  const clusters = useMemo(
+    () => (railH > 0 ? buildClusters(props, railH) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.items, props.bookmarks, props.recapRow, props.pendingApprovals, totalSize, railH],
+  )
   const scale = totalSize > 0 ? railH / totalSize : 0
-  const bandTop = Math.round(scrollOffset * scale)
+  const bandTop = Math.round(liveOffset * scale)
   const bandH = Math.max(2, Math.round(viewportH * scale))
 
   const scrub = (clientY: number) => {
@@ -430,7 +471,7 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
             'aria-label': 'Transcript overview',
             'aria-valuemin': 0,
             'aria-valuemax': 100,
-            'aria-valuenow': Math.min(100, Math.max(0, Math.round((scrollOffset / maxOffset) * 100))),
+            'aria-valuenow': Math.min(100, Math.max(0, Math.round((liveOffset / maxOffset) * 100))),
           }
         : { 'aria-hidden': true })}>
       <div
@@ -468,6 +509,10 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
             }
           : null)}>
         <div className='term-scrub-band' style={{ top: bandTop, height: bandH }} />
+        <div
+          className='term-scrub-cursor'
+          style={{ top: Math.min(bandTop, Math.max(0, railH - 2)) }}
+        />
         {clusters.map((cluster, index) => (
           <div
             key={index}

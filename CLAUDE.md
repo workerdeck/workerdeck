@@ -262,13 +262,14 @@ protocol. Read these before changing scope or structure:
   can check this: jsdom has no text layout, so a unit test would check the calculator against its
   author's assumptions. The one genuinely unit-testable piece is `textLines`.
   `scrubber` is the **overview ruler** (`terminal/scrubber.tsx`), VS Code's strip rather than its
-  minimap: a **16px** rail replacing the scrollbar, **two 8px lanes** (what you typed / the answer
+  minimap: a **12px** rail replacing the scrollbar, **two 6px lanes** (what you typed / the answer
   and its turn end as **one** merged mark) with everything that is an *annotation on the run*
   rather than a step through it — errors, a waiting approval pinned at the foot, `scrubberMarks`
-  bookmarks, the recap seam — spanning the full width instead. 8px minimum marks (a hit target
-  before a graphic) merging under a pixel with the loudest colour winning. The 16px is the one
-  deliberate exception to the theme's `ch` rule: the rail is chrome beside the grid, and its lanes
-  are hit targets rather than columns of text. Hover peeks, click jumps, drag scrubs. Peeks render from `state.items`
+  bookmarks, the recap seam — spanning the full width instead. A mark is its row's extent at rail
+  scale (2px floor), drawn as a solid 2px head with a 25% tail; marks merge under a pixel with
+  the loudest colour winning, and a 2px full-width cursor line rides the viewport's top edge. The
+  12px is the one deliberate exception to the theme's `ch` rule: the rail is chrome beside the
+  grid, and its lanes are hit targets rather than columns of text. Hover peeks, click jumps, drag scrubs. Peeks render from `state.items`
   and **never the DOM** — the row they describe is usually unmounted. Positions come from the
   virtualizer's own offsets, which are only trustworthy *because* the calculator feeds
   `estimateSize`; that is also what answered whether the rail could be a real draggable scrollbar
@@ -277,14 +278,25 @@ protocol. Read these before changing scope or structure:
   wrong by construction — go through `rowIndexForItem`), and a jump is `jumpToRow`, the generalized
   form of the recap re-aim loop, not a second copy of it. Under `affordances={false}` the marks stay
   painted but inert **and the native scrollbar returns** — never leave a reader with no way to
-  scroll. `stickyPrompt` holds the prompt of the turn you are reading at the top of the scroller, the CLI's
-  own affordance — and it is the **real row, pinned**, not a header drawn above the transcript. A
-  duplicate has its own padding, band and gutter and never quite lines up with the rows beneath,
-  which is what got the first attempt rejected. `TranscriptRows` clamps that row's own transform to
-  the scroll offset (`position: sticky` does nothing on an absolutely positioned element, and
-  virtualized rows are), pushes it off with `nextStart - size`, and keeps it mounted when it is far
-  above the window — which is exactly when it is working — through the virtualizer's
-  `rangeExtractor`. `affordances` is the seam for what a real
+  scroll. `stickyPrompt` holds the **first line** of the prompt of the turn you are reading at the
+  top of the scroller, the CLI's own affordance — one line and not the row, because a pasted
+  twenty-line prompt pinned whole covers the very answer being read. The pin is the browser's:
+  each prompt renders inside a **lane** (`StickyPromptLane`, an absolutely positioned strip
+  spanning its turn, positioned with `top` — `position: sticky` resolves at layout time and a
+  transform is paint-only) led by a one-line `sticky` **head**: the same row rendered again,
+  height-clipped, flow footprint cancelled, laid exactly over the real row's first line — a
+  duplicate, but the earlier rejection was of a *separate header* with its own padding and
+  gutter; this copy is the same component in the same column and aligns by construction. It is
+  `visibility: hidden` until a sentinel `IntersectionObserver` marks it stuck (an overlay visible
+  in flow swallows the first line's selection highlight), pointer-transparent and `aria-hidden`
+  throughout — the real row owns interaction — and the compositor does pin and push-off, so no
+  per-scroll JS (a JS-written pin trails the compositor and wobbles). The active prompt's lane is
+  kept mounted far above the window — exactly when it is working — through the virtualizer's
+  `rangeExtractor`, whose forced index is computed *inside* the callback from the live offset
+  (a render-fed ref is one scroll event stale). One measurement invariant nearby: the height
+  epoch's `virtualizer.measure()` wipe must re-feed mounted rows via `resizeItem` (after a
+  measurement read rebuilds the array) or a row whose height survived a width change keeps its
+  estimate forever and the transcript grows a phantom scrollable tail. `affordances` is the seam for what a real
   terminal *cannot* do (hover fill, hover-revealed copy) and every one of them costs no layout, so
   `false` is the pure article rather than a degraded mode. `terminalMetrics` is the cell, in whole
   pixels, and it is **one** prop because the panel mounts **three** terminal surfaces — transcript,

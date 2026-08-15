@@ -169,12 +169,13 @@
   height: var(--term-line);
 }
 
-/* A row jumped to lands one line below the top edge rather than flush against
-   it — the same blank line every block gets, so the target reads as the start of
-   something rather than as content cut off by the frame. `scroll-margin` is the
-   only way to say this: `scrollIntoView` takes no offset, and the two callers
-   (the scrubber's `align: 'start'`, the recap's `'center'`) both go through it. */
-[data-terminal] [data-slot='transcript-rows'] > [data-index] {
+/* A row `scrollIntoView`ed lands one line below the top edge rather than flush
+   against it, so the target reads as the start of something rather than as
+   content cut off by the frame. Only the recap's `'center'` jump still goes
+   through scrollIntoView — the scrubber's `'start'` jumps compute their own
+   offset (a sticky row's rect is wherever it is pinned) and land the line at
+   exactly the top edge. */
+[data-terminal] [data-slot='transcript-rows'] [data-index] {
   scroll-margin-block-start: var(--term-line);
 }
 
@@ -471,19 +472,70 @@
 
 /* ── Sticky prompt ───────────────────────────────────────────────────────────
  *
- * The pinned prompt is the **real row**, not a header drawn above the
- * transcript: `TranscriptRows` clamps that one row's transform to the scroll
- * offset so it holds still while the rest moves under it. All this needs to do
- * is put it in front and give it something opaque to sit on — the user band is
- * translucent by design, so without a ground the rows passing beneath would
- * show straight through it.
+ * The pinned prompt is the prompt's **first line**, and the pin is the
+ * browser's, not script's. `TranscriptRows` renders each prompt inside a lane
+ * spanning its turn; a one-line `sticky` **head** — the same row rendered
+ * again, clipped by height — leads the lane with its flow footprint cancelled
+ * (the negative bottom margin), so in flow it lies exactly over the real
+ * row's first line and is invisible. The compositor pins it (no per-scroll
+ * JS, no frame lag) and the lane's bottom edge pushes it off when the next
+ * prompt arrives. One line and not the row, because a pasted twenty-line
+ * prompt pinned whole covers the very answer being read.
+ *
+ * The head's visible line docks flush to the top edge of the scroller. Its
+ * inter-row gap is padding on the head (matching the row it overlays), so a
+ * gap-carrying head is one line taller and pins one line negative: the
+ * padding parks above the viewport edge and the line starts at zero — which
+ * is also what makes the pin engage exactly when the line itself reaches the
+ * top, not a line early.
+ *
+ * The lane spans the whole turn and the head is an overlay, so both are
+ * transparent to the pointer — the real row beneath owns interaction, and
+ * the head is `aria-hidden` in the markup. The z-index is on the lane —
+ * every row wrapper is its own stacking context (they are transformed), so
+ * the head's own z-index could never beat a later sibling.
  *
  * `--bg` is the panel's own ground, the same token the hover-revealed row
- * actions cover themselves with.
+ * actions cover themselves with — the user band is translucent by design, so
+ * without a ground the rows passing beneath would show straight through the
+ * pinned head. Opaque always, which is invisible in flow: the ground behind
+ * it is the same `--bg`, and the row it covers is its own content.
  */
-[data-terminal] [data-slot='transcript-rows'] > [data-sticky] {
+[data-terminal] [data-slot='transcript-rows'] > [data-sticky-lane] {
   z-index: 3;
+  pointer-events: none;
+}
+
+/* The head's own strip: the full lane, out of flow, so the head needs no
+   footprint-cancelling margin — sticky confinement clamps the margin box, and
+   a negative margin shrinks it to nothing, letting the head overshoot the
+   lane's end by its own height (two pinned prompts on screen at once). */
+[data-terminal] [data-sticky-lane] > [data-sticky-headlane] {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Hidden until actually stuck (`data-stuck`, set by the lane's sentinel
+   observer): an overlay visible in flow sits on the real row's first line and
+   swallows its selection highlight — the line reads as unselectable. */
+[data-terminal] [data-sticky-headlane] > [data-sticky-head] {
+  position: sticky;
+  top: 0;
+  height: var(--term-line);
+  overflow: hidden;
   background: var(--bg, transparent);
+  user-select: none;
+  visibility: hidden;
+}
+
+[data-terminal] [data-sticky-headlane] > [data-sticky-head][data-stuck] {
+  visibility: visible;
+}
+
+[data-terminal] [data-sticky-headlane] > [data-sticky-head].term-row-gap {
+  top: calc(-1 * var(--term-line));
+  height: calc(2 * var(--term-line));
 }
 
 /* ── Composer ────────────────────────────────────────────────────────────────
@@ -737,7 +789,7 @@
 
 /* ── Scrubber ────────────────────────────────────────────────────────────────
  *
- * The overview ruler (`components/terminal/scrubber.tsx`): a 16px rail of marks
+ * The overview ruler (`components/terminal/scrubber.tsx`): a 12px rail of marks
  * over the scroller's right edge — VS Code's strip beside the minimap, with
  * this transcript's semantics. It is *chrome*, not rows: absolutely positioned
  * over the scroll container so the transcript's grid is untouched, and drawn
@@ -754,12 +806,12 @@
   top: 0;
   right: 0;
   bottom: 0;
-  /* Exactly 16px, and this is the one place the theme's `ch` rule is set aside
+  /* Exactly 12px, and this is the one place the theme's `ch` rule is set aside
      on purpose: the rail is chrome beside the grid rather than part of it, and
-     its width is a *hit target* (two 8px lanes) rather than a column of text.
-     `2ch` is 15.6px at the default cell and drifts with the font, which would
-     make the lanes 7.8px and different again in the VS Code dock. */
-  width: 16px;
+     its width is a *hit target* (two 6px lanes) rather than a column of text.
+     A `ch` measure drifts with the font, which would make the lanes different
+     again in the VS Code dock. */
+  width: 12px;
   z-index: 10;
   pointer-events: none;
 }
@@ -772,18 +824,37 @@
   touch-action: none;
 }
 
-/* The viewport band — where you are, in the same fill every hover uses. */
+/* The viewport band — where you are: a faint wash with a hairline frame,
+   floated over the marks (z-index) so the framed region reads as a window
+   onto the rail rather than a stripe behind it. `--term-faint` at 25% rather
+   than a literal, so the light palette re-tints it. */
 .term-scrubber .term-scrub-band {
   position: absolute;
   left: 0;
   right: 0;
-  background: var(--term-row-hover);
+  background: color-mix(in srgb, var(--term-faint) 25%, transparent);
+  box-shadow: 0 0 0 1px var(--term-faint) inset;
   pointer-events: none;
+  z-index: 1;
+}
+
+/* The cursor — the viewport's top edge as a crisp full-width line, the one
+   place on the rail that answers "where am I" at a glance. It rides over the
+   marks (the band sits under them), which is the point: it is the reader's
+   position against the map, not another mark on it. */
+.term-scrubber .term-scrub-cursor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--term-blue);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .term-scrubber .term-scrub-mark {
   position: absolute;
-  min-height: 8px;
+  min-height: 2px;
 }
 .term-scrubber[data-interactive] .term-scrub-mark {
   cursor: pointer;
@@ -798,13 +869,38 @@
    percentages: the whole point of the 16px rail is that a lane is a reliable
    8px target, and a percentage would reintroduce the drift the fixed width was
    chosen to remove. */
-.term-scrubber .term-scrub-mark[data-lane='l'] { left: 0; width: 8px; }
-.term-scrubber .term-scrub-mark[data-lane='r'] { left: 8px; width: 8px; }
-.term-scrubber .term-scrub-mark[data-lane='f'] { left: 0; width: 16px; }
+.term-scrubber .term-scrub-mark[data-lane='l'] { left: 0; width: 6px; }
+.term-scrubber .term-scrub-mark[data-lane='r'] { left: 6px; width: 6px; }
+.term-scrubber .term-scrub-mark[data-lane='f'] { left: 0; width: 12px; }
 
-.term-scrubber .term-scrub-mark[data-kind='user'] { background: var(--term-blue); }
-.term-scrubber .term-scrub-mark[data-kind='turn'] { background: var(--term-fg); }
-.term-scrubber .term-scrub-mark[data-kind='turnFailed'],
+/* Lane marks are two-tone: the first 2px — the mark's own anchor — at full
+   strength, the rest of the row's extent a 25% tail, so a long answer reads
+   as long without a tall solid bar shouting over the rail. A minimum-height
+   mark shows only the solid segment, so short and long marks need no separate
+   rules; the *lane* stays the pointer's target, so a 2px mark is still
+   findable. Full-width annotations (error, approval) stay solid: they are
+   alarms, not extents. */
+.term-scrubber .term-scrub-mark[data-kind='user'] {
+  background: linear-gradient(
+    to bottom,
+    var(--term-blue) 0 2px,
+    color-mix(in srgb, var(--term-blue) 25%, transparent) 2px
+  );
+}
+.term-scrubber .term-scrub-mark[data-kind='turn'] {
+  background: linear-gradient(
+    to bottom,
+    var(--term-fg) 0 2px,
+    color-mix(in srgb, var(--term-fg) 25%, transparent) 2px
+  );
+}
+.term-scrubber .term-scrub-mark[data-kind='turnFailed'] {
+  background: linear-gradient(
+    to bottom,
+    var(--term-red) 0 2px,
+    color-mix(in srgb, var(--term-red) 25%, transparent) 2px
+  );
+}
 .term-scrubber .term-scrub-mark[data-kind='error'] { background: var(--term-red); }
 .term-scrubber .term-scrub-mark[data-kind='bookmark'] { background: var(--term-magenta); }
 .term-scrubber .term-scrub-mark[data-kind='approval'] {

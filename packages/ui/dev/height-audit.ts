@@ -73,7 +73,9 @@ export function auditHeights(
   const ch = measureCh(surface)
   const blocks = terminalBlocks(state.items, 0, true)
   const wrappers = surface.querySelectorAll<HTMLElement>(
-    '[data-slot="transcript-rows"] > [data-index]',
+    // Descendant, not child: a prompt row under `stickyPrompt` sits inside its
+    // sticky lane, one level down.
+    '[data-slot="transcript-rows"] [data-index]',
   )
   // The transcript splices a recap row into the virtual list, so a wrapper's
   // `data-index` is a *row* index while the blocks are indexed by *block*.

@@ -403,6 +403,84 @@ export function rowIndexForItem(rows: readonly TranscriptRow[], itemIndex: numbe
 }
 
 /**
+ * A prompt row's sticky lane — the strip spanning its turn, leading with the
+ * one-line pinned **head** (see the pinned-prompt comment in
+ * {@link TranscriptRows}).
+ *
+ * The head starts `visibility: hidden` and shows only while actually stuck —
+ * an overlay that is visible in flow would sit on the real row's first line
+ * and swallow its selection highlight, which reads as "the first line cannot
+ * be selected". CSS cannot ask "am I stuck?", so a 1px sentinel at the head's
+ * engage threshold (the line's own y) feeds an IntersectionObserver: sentinel
+ * above the scrollport top → stuck. Transition-only callbacks — this adds no
+ * per-scroll work, and the pin itself is still the compositor's.
+ */
+function StickyPromptLane({
+  top,
+  height,
+  gapClass,
+  scrollRoot,
+  index,
+  measureRef,
+  content,
+}: {
+  top: number
+  height: number
+  gapClass?: string | false
+  scrollRoot: HTMLElement | null
+  index: number
+  measureRef: (element: HTMLDivElement | null) => void
+  content: ReactNode
+}) {
+  const headRef = useRef<HTMLDivElement | null>(null)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const head = headRef.current
+    const sentinel = sentinelRef.current
+    if (!head || !sentinel || !scrollRoot) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry) return
+        // Above the scrollport, not merely out of it — a lane still below the
+        // viewport has its sentinel non-intersecting too.
+        const stuck =
+          !entry.isIntersecting &&
+          entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0)
+        head.toggleAttribute('data-stuck', stuck)
+      },
+      { root: scrollRoot },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [scrollRoot])
+  return (
+    <div data-sticky-lane='' className='absolute inset-x-0' style={{ top, height }}>
+      {/* The head rides in its own absolutely positioned sub-lane rather than
+          in flow with a cancelled footprint: sticky confinement clamps the
+          *margin* box, and a negative bottom margin shrinks that box to zero
+          height — the head then overshoots the lane's end by its own height,
+          which put two pinned prompts on screen at once during the handoff.
+          Out of flow, the border box is what gets clamped, and the push-off
+          lands exactly at the lane's bottom edge. */}
+      <div data-sticky-headlane='' aria-hidden>
+        <div ref={headRef} data-sticky-head='' className={gapClass || undefined}>
+          {content}
+        </div>
+      </div>
+      <div
+        ref={sentinelRef}
+        aria-hidden
+        className='absolute left-0 w-px'
+        style={{ top: gapClass ? 'var(--term-line)' : 0, height: 1 }}
+      />
+      <div ref={measureRef} data-index={index} className={gapClass || undefined}>
+        {content}
+      </div>
+    </div>
+  )
+}
+
+/**
  * The virtualized row window. Only rows near the viewport are mounted, so
  * opening a thousand-row session commits a screenful of DOM rather than the
  * whole session in one go.
@@ -498,10 +576,15 @@ function TranscriptRows({
     [rows],
   )
   // The pinned row must stay mounted even when it is far above the window, so
-  // it is forced into the virtual range. A ref, because `rangeExtractor` is
-  // called from inside the virtualizer's own measurement pass and must not
-  // close over a stale render's value.
-  const stickyRef = useRef(-1)
+  // it is forced into the virtual range — see `rangeExtractor` below, which
+  // reads these refs rather than closing over render values: it is called from
+  // inside the virtualizer's own range pass, where a closure would be a stale
+  // render's.
+  const pinRef = useRef<{ enabled: boolean; promptRows: readonly number[] }>({
+    enabled: false,
+    promptRows: [],
+  })
+  pinRef.current = { enabled: terminal && stickyPrompt, promptRows }
   useEffect(() => {
     setScrollElement(stick.scrollRef.current)
   }, [stick.scrollRef])
@@ -597,11 +680,27 @@ function TranscriptRows({
     overscan: 8,
     getItemKey: (index) => rows[index].key,
     // The sticky row, forced into the range. This is the virtualizer's own
-    // sticky-header seam: without it the pinned prompt unmounts the moment it
-    // leaves the window, which is exactly when it is doing its job.
+    // sticky-header seam: without it the pinned prompt's lane unmounts the
+    // moment it leaves the window, which is exactly when it is doing its job.
+    // The active prompt — the last one starting at or above the fold — is
+    // computed *here*, from the instance's own offset, rather than in the
+    // render body: the range pass runs before the render that would refresh a
+    // ref, so a value computed outside this callback is one scroll event
+    // stale, and a long programmatic jump would leave the pinned row unmounted
+    // until the next scroll. (`virtualizer` is safe to close over: the hook
+    // returns one stable instance for the component's lifetime.)
     rangeExtractor: useCallback((range: Range) => {
       const indexes = new Set(defaultRangeExtractor(range))
-      if (stickyRef.current >= 0) indexes.add(stickyRef.current)
+      const { enabled, promptRows: prompts } = pinRef.current
+      if (enabled) {
+        const offset = virtualizer.scrollOffset ?? 0
+        let pinned = -1
+        for (const index of prompts) {
+          if ((virtualizer.measurementsCache[index]?.start ?? Infinity) <= offset) pinned = index
+          else break
+        }
+        if (pinned >= 0) indexes.add(pinned)
+      }
       return [...indexes].sort((a, b) => a - b)
     }, []),
     // Explicit, and left at the default, because the obvious cleanup here is
@@ -636,11 +735,35 @@ function TranscriptRows({
   // A new epoch means every remembered size is against the wrong metrics —
   // the *measurements* included, which were taken at the old width. Dropping
   // both together is the whole point: better estimates layered under
-  // stale-width measurements would be worse than either alone. Mounted rows
-  // re-measure immediately through their `measureElement` refs.
+  // stale-width measurements would be worse than either alone.
+  //
+  // The second half is not optional: `measure()` clears the size cache and a
+  // row re-enters it only when its ResizeObserver fires — which needs a *size
+  // change*. A mounted row whose height happens to survive the width change
+  // (short lines that never rewrap) would keep its estimate forever, and
+  // wherever the estimate is off the transcript grows a phantom tail — 2,052px
+  // of scrollable nothing after one sidebar toggle, on a real session. So the
+  // mounted rows are fed straight back in.
   useEffect(() => {
     if (!terminal || !epoch) return
     virtualizer.measure()
+    const container = rowsRef.current
+    if (!container) return
+    // Two sharp edges in the re-feed, both learned the hard way. Order:
+    // `resizeItem` diffs a measure against `measurementsCache`, and straight
+    // after `measure()` that array is still the pre-wipe one — an unchanged
+    // row diffs to zero against its own old measurement and the write is
+    // skipped; recomputing first (any measurement read does it) rebuilds the
+    // array from estimates, so the diff is real again. And `resizeItem`
+    // directly, not `measureElement(element)`: the latter is gated on the
+    // scroll state and silently drops a measure that lands while a scroll is
+    // still hot — which a resize's own scroll anchoring makes routine.
+    virtualizer.getTotalSize()
+    for (const element of container.querySelectorAll<HTMLElement>('[data-index]')) {
+      const index = Number(element.getAttribute('data-index'))
+      if (Number.isInteger(index) && index >= 0)
+        virtualizer.resizeItem(index, element.getBoundingClientRect().height)
+    }
   }, [terminal, epoch, virtualizer])
 
   // The jump: aim at a virtual row, land exactly. Every jump on this surface
@@ -669,16 +792,65 @@ function TranscriptRows({
   useEffect(() => () => clearTimeout(aimTimer.current), [])
   // `align` is the caller's, because the two jumps want different things. A
   // scrubber mark is a place to *start reading* — the answer runs downward from
-  // it, so it belongs at the top with the screen below it to read into, and
-  // centring wastes half the viewport on what you have already read. The recap
-  // boundary is the opposite: it is a seam, and seeing a little of what came
-  // before is how you place it.
+  // it, so its line lands at exactly the top edge with the screen below it to
+  // read into, and centring wastes half the viewport on what you have already
+  // read. The recap boundary is the opposite: it is a seam, and seeing a little
+  // of what came before is how you place it.
+  //
+  // The two aligns aim differently, and the split is load-bearing. `'start'`
+  // computes the target offset itself — never `scrollIntoView` — because a
+  // prompt row is `position: sticky` and scrollIntoView aims at the element's
+  // *current* rect, which for a stuck row is wherever it is pinned: the jump
+  // would be a no-op on the very rows the scrubber's left lane points at. The
+  // target is the row's virtual start plus the rows container's own offset in
+  // the scroll content, plus the row's gap padding (the blank line is padding
+  // *on* the row, and the reader asked for the line, not its air) — which also
+  // lands exactly on the sticky engage threshold, so the row arrives pinned.
+  // Re-aims recompute it while rows crossed by the travel measure.
   const jumpToRow = (rowIndex: number, align: 'start' | 'center' = 'center') => {
-    if (rowIndex < 0 || rowIndex >= rows.length) return
+    if (rowIndex < 0 || rowIndex >= rows.length || !scrollElement) return
     stick.stopScroll()
     clearTimeout(aimTimer.current)
+    if (align === 'start') {
+      // The gap padding a row's *line* sits below — the target is the line,
+      // not its air.
+      const linePad = (index: number) =>
+        terminal && epoch && index > 0 && gapBefore(rows, index) ? epoch.line : 0
+      const target = () => {
+        const start = virtualizer.measurementsCache[rowIndex]?.start ?? 0
+        const spacer = rowsRef.current
+          ? rowsRef.current.getBoundingClientRect().top -
+            scrollElement.getBoundingClientRect().top +
+            scrollElement.scrollTop
+          : 0
+        let top = start + spacer + linePad(rowIndex)
+        // A non-prompt target lands *below* the pinned prompt, not under it:
+        // at this offset the turn's own prompt head is stuck at the top, and a
+        // jump that puts the line at zero puts it exactly behind that band —
+        // the scrubber's answer marks would all land their first line hidden.
+        // The head is one line tall. A jump *to* a prompt keeps zero: it
+        // becomes the pinned row itself.
+        if (terminal && stickyPrompt && epoch && !promptRows.includes(rowIndex)) {
+          const pinned = promptRows.some((index) => index < rowIndex)
+          if (pinned) top -= epoch.line
+        }
+        return Math.round(top)
+      }
+      const aim = (attempt: number) => {
+        const top = target()
+        scrollElement.scrollTo({ top, behavior: 'smooth' })
+        if (attempt >= 6) return
+        aimTimer.current = setTimeout(() => {
+          // Off target: still travelling, or a row that measured under the
+          // journey moved it. Either way the fix is the same re-aim.
+          if (Math.abs(scrollElement.scrollTop - target()) > 1) aim(attempt + 1)
+        }, 300)
+      }
+      aim(0)
+      return
+    }
     const aim = (attempt: number) => {
-      const row = scrollElement?.querySelector(`[data-index="${rowIndex}"]`)
+      const row = scrollElement.querySelector(`[data-index="${rowIndex}"]`)
       if (row) {
         row.scrollIntoView({ behavior: 'smooth', block: align })
         return
@@ -718,45 +890,44 @@ function TranscriptRows({
   }, [terminal, scrubber, scrubInteractive, scrollElement])
 
   /**
-   * The pinned prompt: the **real row**, held at the top of the scroller.
+   * The pinned prompt: the prompt's **first line**, held at the top of the
+   * scroller.
    *
-   * Not a copy of it. A duplicate header is a second element with its own
-   * padding, its own band and its own idea of where the gutter is, and it never
-   * quite lines up with the rows beneath — which is the whole complaint it was
-   * built to answer. Here the row that is already rendered simply stops
-   * translating: its transform is clamped to the scroll offset, so it holds
-   * still while everything else moves under it. Same DOM, same measured height,
-   * same styling, exactly aligned by construction.
+   * One line, not the row: a pasted twenty-line prompt pinned whole covers the
+   * viewport and buries the very answer being read under it. So what pins is a
+   * **head** — one line tall, `overflow: hidden` — whose content is the same
+   * row rendered again, laid exactly over the real row's first line. It is a
+   * duplicate, which an earlier design here rejected — but that rejection was
+   * of a *separate header* with its own padding and its own idea of the
+   * gutter. This copy is the same component in the same column at the same
+   * width, so it aligns with the row beneath by construction, and while the
+   * row is in flow the overlay is pixel-identical and invisible. It takes no
+   * pointer events and is `aria-hidden`: the real row owns interaction and
+   * the accessibility tree; the head is paint.
    *
-   * Which row: the last prompt at or above the fold — the question the answer
-   * on screen belongs to. That falls out of pinning a real row rather than being
-   * chosen, and it is the behaviour a reader wants when scrolled back through an
-   * old turn.
+   * The pin itself is the browser's, not ours. Each prompt row renders inside a
+   * **lane**: an absolutely positioned strip spanning from the prompt's start to
+   * the next prompt's (its turn), with the head `position: sticky` inside it
+   * (its flow footprint cancelled by a negative bottom margin, so the real row
+   * sits at the lane's top as if the head were not there). The compositor does
+   * the pinning and the lane's bottom edge does the push-off — `sticky` is
+   * inert on an absolutely positioned element, but works unchanged on a child
+   * *of* one, confined to the lane's box. An earlier version clamped the row's
+   * transform from render instead, and paid for it every frame: any JS-written
+   * pin — React render or a raw scroll handler — runs behind the compositor
+   * thread, so the row wobbled under momentum scroll. With the lane there is
+   * no per-scroll JS and no lag.
    *
-   * It is pushed off by the next one (`min(..., nextStart - size)`), which is
-   * what `position: sticky` does for free and has to be done by hand here —
-   * virtualized rows are absolutely positioned, and `sticky` does nothing on an
-   * absolutely positioned element.
+   * Which row — the last prompt at or above the fold, the question the answer
+   * on screen belongs to — falls out of the geometry: only the lane spanning
+   * the viewport top has its child stuck; every earlier lane has pushed its row
+   * off its bottom edge, every later one hasn't reached the top.
+   *
+   * The one job left to JS is keeping that row *mounted* once it scrolls far
+   * above the virtual window — which is exactly when it is working. That lives
+   * in the `rangeExtractor` above.
    */
-  const scrollOffset = virtualizer.scrollOffset ?? 0
   const measurements = virtualizer.measurementsCache
-  let stickyIndex = -1
-  if (terminal && stickyPrompt) {
-    for (const index of promptRows) {
-      if ((measurements[index]?.start ?? Infinity) <= scrollOffset) stickyIndex = index
-      else break
-    }
-  }
-  stickyRef.current = stickyIndex
-  const stickyTop = (() => {
-    if (stickyIndex < 0) return undefined
-    const own = measurements[stickyIndex]
-    if (!own) return undefined
-    const next = promptRows.find((index) => index > stickyIndex)
-    const limit = next === undefined ? undefined : (measurements[next]?.start ?? 0) - own.size
-    const pinned = Math.max(own.start, scrollOffset)
-    return limit === undefined ? pinned : Math.min(pinned, limit)
-  })()
 
   return (
     <div
@@ -766,52 +937,78 @@ function TranscriptRows({
       style={{ height: virtualizer.getTotalSize() }}>
       {virtualizer.getVirtualItems().map((virtualRow) => {
         const row = rows[virtualRow.index]
+        // The inter-row gap, folded into each row so the measured height
+        // carries it: flex `gap` cannot reach absolutely positioned rows,
+        // and a pixel constant for the virtualizer's `gap` option would
+        // drift from the rem the layout is set in. On the measured wrapper,
+        // not the row div, so a nested row's left border still breaks
+        // across the gap as it did under flex. Skipped for the first row —
+        // a gap above it would be padding, not spacing.
+        // Every variant but terminal spaces every row alike. Terminal
+        // asks whether the pair belongs together — a tool call and its
+        // output get no blank line, exactly as the CLI leaves none.
+        const gapClass =
+          virtualRow.index > 0 && (!terminal || gapBefore(rows, virtualRow.index))
+            ? gap.className
+            : undefined
+        const content =
+          'shell' in row ? (
+            <div className={cn(read(boundary, row.index) && 'opacity-45')}>
+              <ShellRunRow items={row.shell} />
+            </div>
+          ) : 'item' in row ? (
+            <div className={cn(read(boundary, row.index) && 'opacity-45', nestedClass(row.item))}>
+              <TranscriptItemView
+                item={row.item}
+                fileUrl={fileUrl}
+                attachmentUrl={attachmentUrl}
+                hostImage={hostImage}
+                terminal={terminal}
+              />
+            </div>
+          ) : (
+            <RecapRow line={row.line} since={since} terminal={terminal} />
+          )
+        // A prompt row's sticky lane — see the pinned-prompt comment above.
+        // The lane is sized to the turn; the sticky **head** (one clipped
+        // line, the same content again) comes first with its flow footprint
+        // cancelled, and the *measured* element is the real row after it, so
+        // the virtualizer's heights are untouched by either. Both carry the
+        // gap class: the row because the gap is part of its measured height,
+        // the head so its one visible line sits on the same y while in flow —
+        // the pin parks that padding above the viewport edge when stuck.
+        // Positioned with `top`, NOT the translate every other row gets:
+        // `position: sticky` is resolved at layout time and a transform is
+        // paint-only, so under a translate the head would stick against the
+        // lane's un-translated box at the top of the list — observed as the
+        // row clamped to its lane's bottom edge, never pinning at all.
+        if (terminal && stickyPrompt && 'item' in row && row.item.kind === 'user') {
+          const next = promptRows.find((index) => index > virtualRow.index)
+          const laneEnd =
+            next === undefined
+              ? virtualizer.getTotalSize()
+              : (measurements[next]?.start ?? virtualRow.start)
+          return (
+            <StickyPromptLane
+              key={row.key}
+              top={virtualRow.start}
+              height={Math.max(laneEnd - virtualRow.start, 0)}
+              gapClass={gapClass}
+              scrollRoot={scrollElement}
+              index={virtualRow.index}
+              measureRef={virtualizer.measureElement}
+              content={content}
+            />
+          )
+        }
         return (
           <div
             key={row.key}
             ref={virtualizer.measureElement}
             data-index={virtualRow.index}
-            className={cn(
-              'absolute inset-x-0 top-0',
-              // The inter-row gap, folded into each row so the measured height
-              // carries it: flex `gap` cannot reach absolutely positioned rows,
-              // and a pixel constant for the virtualizer's `gap` option would
-              // drift from the rem the layout is set in. On this outer wrapper,
-              // not the row div, so a nested row's left border still breaks
-              // across the gap as it did under flex. Skipped for the first row —
-              // a gap above it would be padding, not spacing.
-              // Every variant but terminal spaces every row alike. Terminal
-              // asks whether the pair belongs together — a tool call and its
-              // output get no blank line, exactly as the CLI leaves none.
-              virtualRow.index > 0 &&
-                (!terminal || gapBefore(rows, virtualRow.index)) &&
-                gap.className,
-            )}
-            data-sticky={virtualRow.index === stickyIndex && stickyTop !== undefined ? '' : undefined}
-            style={{
-              transform: `translateY(${
-                virtualRow.index === stickyIndex && stickyTop !== undefined
-                  ? stickyTop
-                  : virtualRow.start
-              }px)`,
-            }}>
-            {'shell' in row ? (
-              <div className={cn(read(boundary, row.index) && 'opacity-45')}>
-                <ShellRunRow items={row.shell} />
-              </div>
-            ) : 'item' in row ? (
-              <div className={cn(read(boundary, row.index) && 'opacity-45', nestedClass(row.item))}>
-                <TranscriptItemView
-                  item={row.item}
-                  fileUrl={fileUrl}
-                  attachmentUrl={attachmentUrl}
-                  hostImage={hostImage}
-                  terminal={terminal}
-                />
-              </div>
-            ) : (
-              <RecapRow line={row.line} since={since} terminal={terminal} />
-            )}
+            className={cn('absolute inset-x-0 top-0', gapClass)}
+            style={{ transform: `translateY(${virtualRow.start}px)` }}>
+            {content}
           </div>
         )
       })}
@@ -833,6 +1030,7 @@ function TranscriptRows({
               // above refreshed it, and with the calculator feeding
               // `estimateSize` these starts are honest for unmounted rows too.
               offsetOfRow={(rowIndex) => virtualizer.measurementsCache[rowIndex]?.start ?? 0}
+              sizeOfRow={(rowIndex) => virtualizer.measurementsCache[rowIndex]?.size ?? 0}
               totalSize={virtualizer.getTotalSize()}
               scrollOffset={virtualizer.scrollOffset ?? 0}
               viewportH={virtualizer.scrollRect?.height ?? 0}
