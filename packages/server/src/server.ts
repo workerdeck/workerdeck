@@ -1259,7 +1259,32 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     rebuild: (record) =>
       isDormant(record)
         ? buildRunner(
-            buildRunnerConfig({ ...record.config, resume: record.sdkSessionId }),
+            buildRunnerConfig({
+              ...record.config,
+              // A wake is "come back as you were", never a new turn. `prompt` is
+              // the *first* prompt and it was consumed by the original run, but
+              // it persists in the record and `start()` sends it unconditionally
+              // — so a session created with an opening prompt used to re-run it
+              // on top of the thread the resume had just replayed, costing a
+              // turn and doing unrequested work. The provider engine has always
+              // had this guard for its own rehydration (`if (config.restore)` in
+              // `AiSdkRunner.start`); claude and codex resume by `resume`, which
+              // — unlike `restore` — is a public request field where
+              // `createSession({ resume, prompt })` legitimately means "continue
+              // this thread, and here is the next thing". So the suppression
+              // belongs here, at the one call site that means rehydration, and
+              // not in the runners.
+              prompt: undefined,
+              // Dropping the prompt would otherwise cost the session its name:
+              // `#title()` falls back to deriving one from `prompt` whenever
+              // `meta.title` is unset. `record.info.title` has already resolved
+              // that precedence, so freezing it into `meta` keeps a derived name
+              // through the wake and is a no-op when the session was renamed.
+              meta: record.info.title
+                ? { ...record.config.meta, title: record.info.title }
+                : record.config.meta,
+              resume: record.sdkSessionId,
+            }),
             undefined,
             record.id,
           )
@@ -2801,6 +2826,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         }
         const title = typeof body.title === 'string' ? body.title.trim() : ''
         runner.setTitle(title || undefined)
+        // A rename emits no event, so nothing else would re-save the dormant
+        // record — and the wake rebuilds from it. Without this the new name
+        // survives only until the next restart.
+        parking.touch(runner)
       }
       json(res, 200, { session: runner.info() })
       return

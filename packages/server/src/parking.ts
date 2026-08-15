@@ -114,6 +114,21 @@ export class SessionParkManager {
   }
 
   /**
+   * Re-save a live session's dormant record because something outside the event
+   * stream changed it.
+   *
+   * `#rememberDormant` is otherwise driven by `status_changed` and `system_init`
+   * alone, and a rename (`PATCH /sessions/:id`) fires neither — so without this
+   * a renamed session that is never touched again keeps its old title on disk
+   * and comes back under it. Safe to call for anything: every gate in
+   * `#rememberDormant` still applies, so a session that cannot be resumed, has
+   * no engine session yet, or is no longer the registry's writes nothing.
+   */
+  touch(runner: Runner): void {
+    void this.#rememberDormant(runner)
+  }
+
+  /**
    * Adopt the store's contents (a durable store after a restart): re-index the
    * executions and re-arm their watchdogs, no deadline sooner than the grace
    * window — nothing could have been delivered while the process was down.
@@ -313,7 +328,14 @@ export class SessionParkManager {
       // saying `running` would show a spinner over a session with no process.
       info: { ...info, status: 'idle' },
       profile: info.profile,
-      config,
+      // `#configs` holds the config the session was BUILT from, and a rename
+      // never reaches it: `setTitle` replaces the runner's own `#config`. Since
+      // a wake rebuilds from `record.config` and discards `record.info`, taking
+      // the config's `meta` verbatim resurrected the pre-rename title — the
+      // rename survived the listing (which reads `info`) and died on the wake.
+      // `info.meta` IS the runner's live `#config.meta`, so this is the current
+      // one by construction, not a copy that can drift.
+      config: { ...config, meta: info.meta },
       sdkSessionId,
       savedAt: Date.now(),
     }

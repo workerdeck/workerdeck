@@ -29,15 +29,26 @@ class ResumableRunner implements Runner {
   #listeners = new Set<(event: SessionEvent) => void>()
   #seq = 0
   #sdkSessionId: string | undefined
+  /** Mirrors the real runner, where `info().meta` IS the live `#config.meta` —
+   * which is what a rename writes and what the dormant record must capture. */
+  #meta: Record<string, unknown> | undefined
 
   constructor(id: string, config: SessionRunnerConfig) {
     this.id = id
     this.config = config
+    this.#meta = config.meta
   }
 
-  /** What every engine does on its way up: name the session it is running. */
+  /** Every turn this runner was asked to take, in order — what proves a wake
+   * does not quietly re-run the session's opening prompt. */
+  readonly sent: string[] = []
+
+  /** What every engine does on its way up: name the session it is running, and
+   * send the opening prompt if it was given one (`SessionRunner.start` and
+   * `CodexRunner` both do this unconditionally — the behaviour under test). */
   async start(): Promise<void> {
     this.#sdkSessionId = this.config.resume ?? 'engine-session-1'
+    if (this.config.prompt) this.sendMessage(this.config.prompt)
     this.#emit({
       type: 'system_init',
       sdkSessionId: this.#sdkSessionId,
@@ -68,6 +79,11 @@ class ResumableRunner implements Runner {
       createdAt: this.createdAt,
       lastSeq: this.#seq,
       pendingPermissionCount: 0,
+      meta: this.#meta,
+      // The real `#title()`'s precedence, which the wake depends on: an explicit
+      // `meta.title`, else one derived from the opening prompt.
+      title:
+        typeof this.#meta?.title === 'string' ? this.#meta.title : (this.config.prompt || undefined),
     }
   }
 
@@ -76,8 +92,15 @@ class ResumableRunner implements Runner {
     this.#listeners.add(listener)
     return () => this.#listeners.delete(listener)
   }
-  sendMessage(): void {}
-  setTitle(): void {}
+  sendMessage(text: string): void {
+    this.sent.push(text)
+  }
+  setTitle(title: string | undefined): void {
+    const meta = { ...this.#meta }
+    if (title) meta.title = title
+    else delete meta.title
+    this.#meta = meta
+  }
   resolvePermission(): boolean {
     return false
   }
@@ -147,11 +170,24 @@ async function startGateway(store: SessionStore): Promise<Gateway> {
   return { server, base: `http://127.0.0.1:${port}/v1`, built }
 }
 
-const create = async (base: string, profileName = 'resumable'): Promise<SessionInfo> => {
+const create = async (
+  base: string,
+  profileName = 'resumable',
+  prompt?: string,
+): Promise<SessionInfo> => {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ cwd: '/tmp/project', profile: profileName }),
+    body: JSON.stringify({ cwd: '/tmp/project', profile: profileName, prompt }),
+  })
+  return ((await res.json()) as { session: SessionInfo }).session
+}
+
+const rename = async (base: string, id: string, title: string): Promise<SessionInfo> => {
+  const res = await fetch(`${base}/sessions/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title }),
   })
   return ((await res.json()) as { session: SessionInfo }).session
 }
@@ -215,6 +251,74 @@ describe('sessions that survive a restart', () => {
     expect(rebuilt.id).toBe(session.id)
     // The transcript comes back from the engine's own store, not from ours.
     expect(rebuilt.config.resume).toBe('engine-session-1')
+  })
+
+  it('wakes under the name it was renamed to, not the one it was built with', async () => {
+    const dir = await stateDir()
+    const first = await startGateway(createFileSessionStore({ dir }))
+    const session = await create(first.base)
+    await vi.waitFor(async () => {
+      expect(await createFileSessionStore({ dir }).get(session.id)).not.toBeNull()
+    })
+
+    const renamed = await rename(first.base, session.id, 'The one I named')
+    expect(renamed.title).toBe('The one I named')
+    // A rename emits no event, so the re-save is the route's own doing.
+    await vi.waitFor(async () => {
+      const record = await createFileSessionStore({ dir }).get(session.id)
+      expect((record as { config: SessionRunnerConfig }).config.meta?.title).toBe('The one I named')
+    })
+
+    await first.server.close()
+    servers.splice(servers.indexOf(first.server), 1)
+
+    const second = await startGateway(createFileSessionStore({ dir }))
+    // The listing reads `record.info`, so it was never the half that broke.
+    expect((await list(second.base))[0]!.title).toBe('The one I named')
+
+    // The wake is: it rebuilds from `record.config` and discards `record.info`,
+    // so a config still carrying the build-time meta resurrects the old title.
+    const ws = new WebSocket(`${second.base.replace('http', 'ws')}/sessions/${session.id}/ws`)
+    await new Promise((resolve, reject) => {
+      ws.once('open', resolve)
+      ws.once('error', reject)
+    })
+    ws.close()
+
+    expect(second.built[0]!.config.meta?.title).toBe('The one I named')
+    expect(second.built[0]!.info().title).toBe('The one I named')
+  })
+
+  it('does not re-run the opening prompt on a wake, and keeps the name it derived from it', async () => {
+    const dir = await stateDir()
+    const first = await startGateway(createFileSessionStore({ dir }))
+    const session = await create(first.base, 'resumable', 'Summarize the repo')
+    // The original run really does send it — that is what must not happen twice.
+    expect(first.built[0]!.sent).toEqual(['Summarize the repo'])
+    expect(session.title).toBe('Summarize the repo')
+    await vi.waitFor(async () => {
+      expect(await createFileSessionStore({ dir }).get(session.id)).not.toBeNull()
+    })
+
+    await first.server.close()
+    servers.splice(servers.indexOf(first.server), 1)
+
+    const second = await startGateway(createFileSessionStore({ dir }))
+    const ws = new WebSocket(`${second.base.replace('http', 'ws')}/sessions/${session.id}/ws`)
+    await new Promise((resolve, reject) => {
+      ws.once('open', resolve)
+      ws.once('error', reject)
+    })
+    ws.close()
+
+    const woken = second.built[0]!
+    // The thread comes back from the engine's own store; the prompt that opened
+    // it is history, not an instruction to carry out again.
+    expect(woken.config.resume).toBe('engine-session-1')
+    expect(woken.sent).toEqual([])
+    expect(woken.config.prompt).toBeUndefined()
+    // And dropping it must not cost the session the name it derived from it.
+    expect(woken.info().title).toBe('Summarize the repo')
   })
 
   it('writes nothing for an engine that cannot resume — it would come back empty', async () => {
