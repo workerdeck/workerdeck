@@ -621,6 +621,75 @@ describe('SessionRunner', () => {
     expect(named.info().title).toBe('My session')
   })
 
+  describe("the CLI's own session title", () => {
+    const sessionInfo = (info: Record<string, unknown>) =>
+      vi.fn(async () => ({ sessionId: 'sdk-session-1', lastModified: 0, ...info }) as never)
+
+    it('adopts the generated summary, and prefers a /rename over it', async () => {
+      // Not observable on the message stream — no member of the SDK's
+      // `SDKMessage` union carries a title — so it is read at init and turn end.
+      const sessionInfoFn = sessionInfo({
+        summary: 'Fixing the scrubber lane',
+        firstPrompt: 'the right lane mark never grows, have a look',
+      })
+      const { harness, runner } = makeRunner({
+        prompt: 'the right lane mark never grows, have a look',
+        sessionInfoFn,
+      })
+      void runner.start()
+      harness.emit(initMessage)
+      await tick()
+      expect(runner.info().title).toBe('Fixing the scrubber lane')
+      expect(sessionInfoFn).toHaveBeenCalledWith('sdk-session-1', { dir: '/tmp/project' })
+
+      // The CLI's /rename wins over its own generated summary.
+      const renamed = makeRunner({
+        prompt: 'p',
+        sessionInfoFn: sessionInfo({ summary: 'Generated', customTitle: 'What I called it' }),
+      })
+      void renamed.runner.start()
+      renamed.harness.emit(initMessage)
+      await tick()
+      expect(renamed.runner.info().title).toBe('What I called it')
+    })
+
+    it('leaves a summary that is just the first prompt to the prompt fallback', async () => {
+      // `SDKSessionInfo.summary` falls back to the first prompt before the
+      // session has a real title; taking it would only change how it truncates.
+      const { harness, runner } = makeRunner({
+        prompt: 'do the thing',
+        sessionInfoFn: sessionInfo({ summary: 'do the thing', firstPrompt: 'do the thing' }),
+      })
+      void runner.start()
+      harness.emit(initMessage)
+      await tick()
+      expect(runner.info().title).toBe('do the thing')
+    })
+
+    it('never reads it while the host has named the session', async () => {
+      // A person's rename is not something a model may overwrite — and it is
+      // not fetched *at all*, so nothing is waiting to resurface.
+      const sessionInfoFn = sessionInfo({ summary: 'Generated', firstPrompt: 'p' })
+      const { harness, runner } = makeRunner({
+        prompt: 'p',
+        meta: { title: 'My session' },
+        sessionInfoFn,
+      })
+      void runner.start()
+      harness.emit(initMessage)
+      harness.emit(resultMessage)
+      await tick()
+      expect(sessionInfoFn).not.toHaveBeenCalled()
+      expect(runner.info().title).toBe('My session')
+
+      // Cleared, the generated title is picked up on the next turn.
+      runner.setTitle(undefined)
+      harness.emit(resultMessage)
+      await tick()
+      expect(runner.info().title).toBe('Generated')
+    })
+  })
+
   it('backfills resumed-session history as replay events before live events', async () => {
     const history = [
       {

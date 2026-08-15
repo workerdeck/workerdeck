@@ -88,7 +88,28 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   **0%-after-reset inference happens at serve time**, because it is a function of the wall clock —
   a fabricated `rate_limit` event would be replayed from transcripts forever and captured into
   parking snapshots. `inferredReset` is what keeps that zero distinguishable from an
-  engine-reported one; an absent window is still **unknown, never 0%**.
+  engine-reported one; an absent window is still **unknown, never 0%**. On the client side
+  `mergeUsage` (protocol) decides which of the two a surface draws — the profile's per-window
+  reading wins wherever it exists, and *not* by comparing timestamps: the reducer keeps one clock
+  for the whole map, so a session's morning `five_hour` is dated with its afternoon `seven_day`
+  event and would beat a fresher profile entry.
+- **The CLI's own session title is a poll, not an event.** No member of the `SDKMessage` union
+  carries it; it lives on `SDKSessionInfo.summary` / `.customTitle`, which only `getSessionInfo`
+  and `listSessions` return. `SessionRunner` reads it at `system_init` and after each turn
+  (`#fetchEngineTitle`), and two rules keep it honest: it is **not read at all while `meta.title`
+  is set** — a rename is a person's decision, and not fetching means nothing is stored waiting to
+  resurface if the rename is later cleared — and `summary` is taken only when it **differs from
+  `firstPrompt`**, because the SDK falls back to the first prompt before a session has a real
+  title, and `#title()` already has its own prompt fallback.
+- **A resumed transcript carries no structure.** `getSessionMessages` returns exactly
+  `{ type, uuid, session_id, message, parent_tool_use_id, parent_agent_id, timestamp }`: `isMeta`,
+  `isSidechain`, `promptSource` and `origin` are all dropped, and `isMeta` entries are filtered
+  out by the SDK itself. So the backfill cannot mark a harness message synthetic from structure
+  the way the live path does — `isSyntheticUserText` (`core/src/normalize.ts`) matches the CLI's
+  own wrappers instead, and only `<task-notification>` / `<local-command-caveat>`. That stamping
+  belongs in the **runner, not the reducer**: `transcriptActivity` counts a non-synthetic user
+  message as a row, so a row the client hides but the count counts is an unread badge for work
+  nobody typed.
 
 ## Permissions
 

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import {
+  getSessionInfo,
   getSessionMessages,
   query as sdkQuery,
   type CanUseTool,
@@ -7,6 +8,7 @@ import {
   type PermissionResult,
   type Query,
   type SDKMessage,
+  type SDKSessionInfo,
   type SDKUserMessage,
   type SessionMessage,
 } from '@anthropic-ai/claude-agent-sdk'
@@ -52,6 +54,11 @@ export type HistoryFn = (
   options: { dir?: string },
 ) => Promise<SessionMessage[]>
 
+export type SessionInfoFn = (
+  sdkSessionId: string,
+  options: { dir?: string },
+) => Promise<SDKSessionInfo | undefined>
+
 export type SessionRunnerConfig = CreateSessionRequest & {
   /** Injectable query implementation (tests, instrumentation). Defaults to the SDK's query(). */
   queryFn?: QueryFn
@@ -67,6 +74,10 @@ export type SessionRunnerConfig = CreateSessionRequest & {
   backfillHistory?: boolean
   /** Injectable history reader (tests). Defaults to the SDK's getSessionMessages. */
   historyFn?: HistoryFn
+  /** Injectable session-metadata reader (tests). Defaults to the SDK's
+   * getSessionInfo — the only place the CLI's own session title is readable
+   * from, since no message on the stream carries it. */
+  sessionInfoFn?: SessionInfoFn
 }
 
 const DEFAULT_APPROVAL_TIMEOUT_MS = 300_000
@@ -118,6 +129,9 @@ export class SessionRunner implements Runner {
   /** Last plan reported by the usage poll, so `plan_info` is emitted on change
    * rather than once per turn. */
   #subscriptionType: string | undefined
+  /** The title the CLI gave this thread (see `#fetchEngineTitle`). Undefined
+   * until it has one — a session gets its summary a turn or two in. */
+  #engineTitle: string | undefined
   #started = false
   #closed = false
   #runPromise: Promise<void> | undefined
@@ -187,9 +201,20 @@ export class SessionRunner implements Runner {
     }
   }
 
+  /**
+   * Three sources, most-deliberate first: the host's own rename (`meta.title`),
+   * the title the CLI gave this thread (`#engineTitle`), then the first prompt
+   * truncated.
+   *
+   * The rename outranks everything by design — a person naming a session must
+   * not have it renamed under them by a model — which is also why the engine
+   * title is *only ever read* while `meta.title` is unset (see
+   * `#fetchEngineTitle`), rather than read and then discarded here.
+   */
   #title(): string | undefined {
     const metaTitle = this.#config.meta?.title
     if (typeof metaTitle === 'string' && metaTitle.length > 0) return metaTitle
+    if (this.#engineTitle) return this.#engineTitle
     const prompt = this.#config.prompt
     if (!prompt) return undefined
     return prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt
@@ -484,6 +509,9 @@ export class SessionRunner implements Runner {
       void this.#fetchCapabilities()
       void this.#fetchContextUsage()
       void this.#fetchRateLimits()
+      // A resumed thread usually already has one; a fresh one will not for a
+      // turn or two, which is what the turn-end poll is for.
+      void this.#fetchEngineTitle()
       return
     }
     if (msg.type === 'system' && msg.subtype === 'session_state_changed') {
@@ -516,6 +544,7 @@ export class SessionRunner implements Runner {
         // Context usage moves every turn; the poll is a cheap control request.
         void this.#fetchContextUsage()
         void this.#fetchRateLimits()
+        void this.#fetchEngineTitle()
       }
     }
   }
@@ -551,6 +580,48 @@ export class SessionRunner implements Runner {
       })
     } catch {
       // Capabilities are best-effort decoration; the session works without them.
+    }
+  }
+
+  /**
+   * Adopt the title the CLI gave this thread — the "friendly title" it writes a
+   * turn or two into a session, and the name a resumed thread already carries.
+   *
+   * A **poll, not an observation**, and unavoidably so: no member of the SDK's
+   * `SDKMessage` union carries it (the whole union was checked). It lives on
+   * `SDKSessionInfo`, which only `getSessionInfo` / `listSessions` return — the
+   * same record `GET /sdk-sessions` already serves as `SdkSessionSummary`. So it
+   * is read at init and after each turn, which is also roughly the rate at which
+   * it changes.
+   *
+   * Two rules:
+   * - **Never while `meta.title` is set.** A rename is a person's decision and a
+   *   generated summary must not overwrite it. Not read at all in that case, so
+   *   there is no stored value waiting to resurface if the rename is cleared —
+   *   the next turn simply fetches it again.
+   * - `summary` falls back to the first prompt when the session has no real
+   *   title yet, so it is taken only when it *differs* from `firstPrompt`.
+   *   Otherwise `#title()`'s own prompt fallback covers it, and the two would
+   *   disagree only in how they truncate.
+   *
+   * Best-effort throughout: an unreadable transcript, a session file that is not
+   * there yet, an SDK without the function — all leave the title as it was.
+   */
+  async #fetchEngineTitle(): Promise<void> {
+    const metaTitle = this.#config.meta?.title
+    if (typeof metaTitle === 'string' && metaTitle.length > 0) return
+    const sdkSessionId = this.#sdkSessionId
+    if (!sdkSessionId) return
+    const read = this.#config.sessionInfoFn ?? getSessionInfo
+    try {
+      const info = await read(sdkSessionId, { dir: this.#cwd })
+      if (this.#closed || !info) return
+      const summary =
+        info.summary && info.summary !== info.firstPrompt ? info.summary : undefined
+      const title = info.customTitle || summary
+      if (title) this.#engineTitle = title
+    } catch {
+      // The title is decoration; a session with none works exactly as well.
     }
   }
 
