@@ -102,7 +102,19 @@ protocol. Read these before changing scope or structure:
   availability verdict** from the first request (`forResponse`; probes are adapter-run, gated on
   `checkCredentials`, ~60s TTL, display-only — only the *default* model is still learned from
   sessions, because it is the operator's CLI config),
-  optional `/jobs` + `/queue` routes, profiles (+ `profileStore` CRUD), `GET /sessions/:id/files`,
+  **plan usage per profile** (`profile-usage.ts` → `ProfileInfo.usage`), because usage had only
+  ever lived in session transcripts: a session's own reading is refreshed by nothing but a turn,
+  so one idle since yesterday replays yesterday's number as current, and a session opened today
+  knows nothing of what a sibling on the same account spent an hour ago. The profile is the
+  account boundary, so the newest reading across its sessions is the one state worth showing.
+  Fed by `runner.subscribe` in `onRegister` like `profileDefaultModels`, but **last-write-wins by
+  the event's own `ts`, never arrival order** (it subscribes from seq 0, so a rebuilt runner's
+  replayed reading must not clobber a live one), and the **0%-after-reset inference happens at
+  serve time** — it is a function of the wall clock, and a fabricated `rate_limit` event would be
+  replayed from transcripts forever and captured into parking snapshots. `inferredReset` keeps
+  that zero distinguishable from an engine-reported one; absent stays **unknown, never 0%**.
+  Plus: optional `/jobs` + `/queue` routes, profiles (+ `profileStore` CRUD),
+  `GET /sessions/:id/files`,
   message attachments (`attachments.ts` — bytes held per session so the event log carries only
   `MessageAttachment` refs; **never** inline base64 into an event),
   `/sessions/:id/produced[/:fileId]` (`produced-files.ts` — host files the *engine* wrote, served

@@ -75,6 +75,20 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   need nothing new, and replay covers late attachers. That control request is marked experimental
   in the SDK, method name included, so it is probed for by name and every failure is silent: if
   it disappears, usage goes back to change-only, and nothing else breaks.
+- **A session's own rate-limit reading can be arbitrarily old, and the poll has no timer.** Its
+  three call sites are a promptless start, `system_init` and `turn_result` — so a session idle
+  since yesterday is never refreshed, an attach triggers no poll, and replay faithfully
+  re-installs yesterday's number as current (`replayCoalesceKey` keeps the last per window *on
+  purpose*). A dormant wake is **not** affected: a fresh log means there is nothing to replay and
+  `system_init` polls immediately. The gateway therefore keeps the account-level truth itself —
+  `ProfileUsageTracker` (`server/src/profile-usage.ts`), fed from every session's `rate_limit`
+  events and served as `ProfileInfo.usage` on `GET /profiles`. Two rules there: last-write-wins is
+  by the **event's own `ts`**, never arrival order (it subscribes from seq 0, so a rebuilt
+  runner's replayed reading must not clobber a sibling session's live one), and the
+  **0%-after-reset inference happens at serve time**, because it is a function of the wall clock —
+  a fabricated `rate_limit` event would be replayed from transcripts forever and captured into
+  parking snapshots. `inferredReset` is what keeps that zero distinguishable from an
+  engine-reported one; an absent window is still **unknown, never 0%**.
 
 ## Permissions
 
@@ -527,6 +541,22 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     rehydrated session on the wrong credential store.
   - A park's record is *consumed* on wake; a dormant one is refreshed in place, because the
     session will need it again the next time the process dies.
+  - **The wake must clear `prompt`, and carry the title as it does.** `prompt` is the session's
+    *opening* prompt, it persists in the record, and `SessionRunner.start()`/`CodexRunner` send it
+    unconditionally — so a session created with one used to re-run it as a fresh turn on top of the
+    thread the resume had just replayed. The provider engine has always guarded its own rehydration
+    (`if (this.#config.restore)` in `AiSdkRunner.start`); claude and codex rehydrate by `resume`,
+    which unlike `restore` is a **public request field** — `createSession({ resume, prompt })`
+    legitimately means "continue this thread, and here is the next thing". So the suppression lives
+    at the wake site in `rebuild:`, never in a runner. Dropping it alone is a *different* bug:
+    `#title()` derives from `prompt` when `meta.title` is unset, so the wake also freezes
+    `record.info.title` into `meta` or the session comes back nameless.
+  - **A rename must re-save the record, and the record must carry the runner's live `meta`.**
+    `setTitle()` writes the *runner's* `#config`, which `SessionParkManager.#configs` never sees,
+    and the wake rebuilds from `record.config` while discarding `record.info` — so a rename used to
+    survive the listing and die on the wake. `#rememberDormant` persists `{ ...config, meta:
+    info.meta }`, and `PATCH /sessions/:id` calls `parking.touch()` because a rename emits no event
+    and nothing else would trigger a save.
 - Parking is a persistence boundary, not an ending, and its invariants are load-bearing:
   `park()` emits `status_changed: 'parked'` and NEVER `session_closed`, snapshots *after* that
   emit and keeps the seq counter (a rehydrated runner continuing at a reused seq is silently
