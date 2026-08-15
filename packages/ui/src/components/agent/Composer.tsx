@@ -648,8 +648,16 @@ function GlyphButton({
  * the local blob, so nothing here waits on the network; the upload's state rides
  * on top of it and the ✕ takes it back off. */
 function AttachmentStrip({ attachments }: { attachments: UseAttachmentsResult }) {
+  const terminal = useTranscriptVariant() === 'terminal'
   return (
-    <div className='flex gap-2 overflow-x-auto border-b border-border px-2 py-2'>
+    <div
+      className={cn(
+        'flex gap-2 overflow-x-auto',
+        // The terminal form draws no rule of its own: the composer's frame is
+        // already directly below this strip, and two rules a few pixels apart
+        // is the box the theme has none of. Geometry in `terminal.css`.
+        terminal ? 'term-attachments' : 'border-b border-border px-2 py-2',
+      )}>
       {attachments.items.map((item) => (
         <AttachmentChip
           key={item.key}
@@ -672,15 +680,23 @@ function AttachmentChip({
   onRemove: () => void
 }) {
   const failed = item.status === 'failed'
+  const terminal = useTranscriptVariant() === 'terminal'
+  // Corners are the whole difference: rounded and floating in `cards`, square
+  // and inside the frame here. Kept as one flag rather than four so a thumbnail
+  // and the overlays stacked on it cannot disagree about their own shape.
+  const round = terminal ? '' : 'rounded-md'
   return (
     <div
       className='group relative shrink-0'
       title={failed ? `${item.name} — ${item.error}` : `${item.name} · ${formatBytes(item.bytes)}`}>
       <div
         className={cn(
-          'flex size-14 items-center justify-center overflow-hidden rounded-md border border-border bg-surface',
+          'flex size-14 items-center justify-center overflow-hidden bg-surface',
+          round,
+          terminal ? 'term-attachment' : 'border border-border',
           failed && 'border-danger/50',
-        )}>
+        )}
+        data-failed={terminal && failed ? '' : undefined}>
         {item.previewUrl ? (
           <img src={item.previewUrl} alt={item.name} className='size-full object-cover' />
         ) : (
@@ -693,7 +709,7 @@ function AttachmentChip({
         )}
       </div>
       {item.status === 'uploading' ? (
-        <div className='absolute inset-0 flex items-center justify-center rounded-md bg-black/35'>
+        <div className={cn('absolute inset-0 flex items-center justify-center bg-black/35', round)}>
           <Spinner className='size-4 text-white' />
         </div>
       ) : null}
@@ -702,7 +718,10 @@ function AttachmentChip({
           type='button'
           onClick={onRetry}
           aria-label={`Retry ${item.name}`}
-          className='absolute inset-0 flex items-center justify-center rounded-md bg-black/45 text-warning'>
+          className={cn(
+            'absolute inset-0 flex items-center justify-center bg-black/45 text-warning',
+            round,
+          )}>
           <RotateCw className='size-4' />
         </button>
       ) : null}
@@ -710,7 +729,14 @@ function AttachmentChip({
         type='button'
         onClick={onRemove}
         aria-label={`Remove ${item.name}`}
-        className='absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full border border-border bg-surface text-fg-3 shadow-(--shadow-xs) hover:text-fg-1'>
+        className={cn(
+          'absolute flex size-4 items-center justify-center bg-surface text-fg-3 hover:text-fg-1',
+          // Cards hang it off the corner as a round badge; the terminal tucks it
+          // inside, squared, with two rules for its corner (`terminal.css`).
+          terminal
+            ? 'term-attachment-remove'
+            : '-top-1 -right-1 rounded-full border border-border shadow-(--shadow-xs)',
+        )}>
         <X className='size-2.5' />
       </button>
     </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { TerminalPermissionPrompt } from '../src/components/terminal/PermissionPrompt.tsx'
 import { TerminalQuestionPrompt } from '../src/components/terminal/QuestionPrompt.tsx'
 import { TerminalStatusLine } from '../src/components/terminal/StatusLine.tsx'
@@ -32,6 +32,10 @@ const PROMPTS = [
  * changed cell size, a narrow viewport and a row that only *looks* aligned, and
  * each needs to be reachable in one click.
  */
+/** A stand-in thumbnail: a 1x1 PNG, stretched by `object-cover`. */
+const ATTACHMENT_PREVIEW =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+
 export function App() {
   const [fixture, setFixture] = useState(FIXTURES[0]!.key)
   const [grid, setGrid] = useState(false)
@@ -52,6 +56,37 @@ export function App() {
   const catchUp = fixture === 'huge' ? { from: 300 } : undefined
   const jumpRef = useRef<(() => void) | null>(null)
   const repinRef = useRef<(() => void) | null>(null)
+  // Staged attachments, faked. The real hook needs a gateway to upload to, but
+  // the strip's geometry is the composer's and belongs in the grid audit —
+  // one of each state, so the overlays get drawn too.
+  const [attachmentCount, setAttachmentCount] = useState(0)
+  const stagedAttachments = useMemo(() => {
+    const states = ['ready', 'uploading', 'failed', 'ready'] as const
+    const items = Array.from({ length: attachmentCount }, (_, i) => ({
+      key: `att-${i}`,
+      name: `Screenshot ${i + 1}.png`,
+      mediaType: i === 2 ? 'application/pdf' : 'image/png',
+      bytes: 188_293,
+      previewUrl: i === 2 ? undefined : ATTACHMENT_PREVIEW,
+      status: states[i % states.length],
+      id: `id-${i}`,
+      error: states[i % states.length] === 'failed' ? 'too large (413)' : undefined,
+    }))
+    return {
+      items,
+      readyIds: items.filter((i) => i.status === 'ready').map((i) => i.id),
+      uploading: items.some((i) => i.status === 'uploading'),
+      hasFailure: items.some((i) => i.status === 'failed'),
+      accept: 'image/*',
+      disabled: false,
+      add: () => setAttachmentCount((n) => n + 1),
+      retry: () => {},
+      remove: (key: string) =>
+        setAttachmentCount((n) => Math.max(0, n - (key ? 1 : 0))),
+      clear: () => setAttachmentCount(0),
+      dismissError: () => {},
+    }
+  }, [attachmentCount])
 
   // Hooks for driving the audits headlessly (chrome devtools).
   // `__wdAudit` audits whatever rows are mounted; the driver scrolls and merges.
@@ -64,6 +99,8 @@ export function App() {
       surface.current ? auditHeights(state, surface.current, catchUp?.from) : undefined
     w.__wdJumpRecap = () => jumpRef.current?.()
     w.__wdRepin = () => repinRef.current?.()
+    // Stage N fake attachments — the strip needs a gateway otherwise.
+    w.__wdAttach = (n?: number) => setAttachmentCount(n ?? 4)
     // The scroll-performance sweep (`perf-audit.ts`) — run it on `perf`.
     w.__wdPerf = (step?: number) => {
       const scroller = surface.current?.querySelector<HTMLElement>(
@@ -270,6 +307,7 @@ export function App() {
               provider, at the same metrics. The grid audit reaches it too. */}
           <TranscriptVariantProvider value='terminal'>
             <Composer
+              attachments={stagedAttachments}
               onSend={(text) => {
                 // The panel re-pins on send (`SessionPanel.handleSend`), so the
                 // playground does too — otherwise the one integration this

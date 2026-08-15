@@ -329,7 +329,10 @@ protocol. Read these before changing scope or structure:
   browser's list margins, the second of which took the typed row off `--term-line`. Its lists are
   therefore styled separately and to the same numbers (`- ` at 2ch, `1. ` at 3ch, hanging indent,
   markers as `::before` so nothing enters the message and `html-to-markdown.ts` still serializes
-  the real `<li>`s). It is bracketed by **two rules**, top and bottom, both
+  the real `<li>`s). Staged **attachments** ride above it as squared 1px cells with the `✕` tucked
+  *inside* each one's top-right corner (two rules, no badge hanging off an edge), and the strip
+  draws no rule of its own — the composer's own frame is directly beneath it, and two rules a few
+  pixels apart is the box this theme exists not to have. It is bracketed by **two rules**, top and bottom, both
   turning accent on focus, with 8px of air inside them — the CLI's own frame for its prompt, and
   the thing that makes the field its own strip of the panel rather than the transcript's last row,
   without a side border that would take the `❯` off the column. The bottom rule is why

@@ -594,6 +594,47 @@
   caret-animation: manual;
 }
 
+/* Staged attachments, above the prompt.
+ *
+ * The card form wraps each thumbnail in a rounded box and hangs a round `✕`
+ * badge outside its top-right corner, over a strip with its own bottom rule.
+ * None of that survives here: this theme has no rounded corners and no badges
+ * floating off an edge, and the strip sits *inside* the composer's frame, which
+ * already draws the only rule there is — a second one directly above the field
+ * reads as the box this theme exists not to have.
+ *
+ * So the thumbnail is a plain 1px cell, and the remove control is tucked into
+ * its top-right corner with two rules of its own, which is how a terminal draws
+ * a control inside a frame rather than on top of one. `1px` rather than `0`
+ * puts it just inside the thumbnail's border instead of straddling it.
+ *
+ * The strip's only spacing is the 8px the composer already uses above and below
+ * its prompt — a plain pixel value, and deliberately, for the reason given
+ * there: this is chrome between rules, not a transcript row, so the
+ * whole-multiple-of-`--term-line` rule does not govern it. No side padding: the
+ * strip is already inside the body column, so padding here would step it in
+ * from the column every row above it starts on. */
+[data-terminal] .term-attachments {
+  padding: 0 0 8px 0;
+}
+[data-terminal] .term-attachment {
+  border: 1px solid var(--term-faint);
+}
+/* A refused upload, in the terminal's own red. This needs to be said here
+   rather than left to the card form's `border-danger/50`: the rule above sets
+   the `border` shorthand, colour included, and outranks a utility class — so
+   without this the one state that must stand out is the one that looks
+   ordinary. */
+[data-terminal] .term-attachment[data-failed] {
+  border-color: var(--term-red);
+}
+[data-terminal] .term-attachment-remove {
+  top: 1px;
+  right: 1px;
+  border-left: 1px solid var(--term-faint);
+  border-bottom: 1px solid var(--term-faint);
+}
+
 /* A composer action as a character: one cell wide, one line tall, so pressing
    it costs no width and removing it would move nothing. Dim until you reach for
    it — the same restraint the row actions show. */
