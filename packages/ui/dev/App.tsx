@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { TranscriptState } from '@workerdeck/react'
 import { TerminalPermissionPrompt } from '../src/components/terminal/PermissionPrompt.tsx'
 import { TerminalQuestionPrompt } from '../src/components/terminal/QuestionPrompt.tsx'
 import { TerminalStatusLine } from '../src/components/terminal/StatusLine.tsx'
@@ -50,7 +51,31 @@ export function App() {
   const [answered, setAnswered] = useState<string>()
   const surface = useRef<HTMLDivElement>(null)
 
-  const state = FIXTURES.find((f) => f.key === fixture)!.state
+  // Attach replay, simulated. A real attach does not hand the transcript its
+  // items in one render: the gateway replays the whole event log over the WS
+  // and the reducer appends as it goes, so the content grows in bursts. That is
+  // the one candidate for "opening a long session visibly scrolls" that a
+  // fixture switch cannot reproduce, and the reason `__wdReplay` exists.
+  // `undefined` = not replaying, show the fixture whole.
+  const [replayTo, setReplayTo] = useState<number | undefined>(undefined)
+  // The replay hold, as the panel would drive it from `useClaudeSession`'s
+  // `replaying`: true from the first burst, false in the SAME commit as the
+  // last one — which is exactly when the hook's derived boolean flips, the
+  // render that applies the replay's final event.
+  const [replayHold, setReplayHold] = useState(false)
+  // The status matters and used to matter more: the retired `useSettled` latch
+  // only allowed smooth scrolling on a *live* status, so a replay under `idle`
+  // could never reproduce the travel. Overridable so it can.
+  const [statusOverride, setStatusOverride] = useState<TranscriptState['status'] | undefined>()
+  const whole = FIXTURES.find((f) => f.key === fixture)!.state
+  const state = useMemo(() => {
+    if (replayTo === undefined && !statusOverride) return whole
+    return {
+      ...whole,
+      ...(statusOverride ? { status: statusOverride } : {}),
+      ...(replayTo === undefined ? {} : { items: whole.items.slice(0, replayTo) }),
+    }
+  }, [whole, replayTo, statusOverride])
   // The huge fixture carries a catch-up splice, so the recap jump (the re-aim
   // loop) can be exercised across hundreds of unmeasured rows.
   const catchUp = fixture === 'huge' ? { from: 300 } : undefined
@@ -109,6 +134,81 @@ export function App() {
       return scroller ? perfSweep(scroller, { step }) : undefined
     }
     w.__wdSetFixture = (key: string) => setFixture(key)
+    // Replay the current fixture in bursts, sampling `scrollTop` every frame —
+    // the check for "does opening a long session travel". A pinned transcript
+    // should show exactly one scrollTop per burst and never an intermediate
+    // value, because `Conversation` is `instant` on both `initial` and
+    // `resize`. Resolves to the trace so a driver can assert on it.
+    // `hold` = drive the replay under the panel's replay hold (the
+    // `replaying` prop), released in the same commit as the final burst. The
+    // trace then also carries per-frame visibility, so a driver can assert the
+    // two things the hold promises: every burst lands hidden, and the first
+    // VISIBLE frame is already at the final scroll position.
+    w.__wdReplay = (
+      batch = 25,
+      everyMs = 30,
+      status: TranscriptState['status'] = 'running',
+      hold = false,
+    ) => {
+      const root = () => surface.current?.querySelector<HTMLElement>('[data-slot="conversation"]')
+      const scroller = () =>
+        surface.current?.querySelector<HTMLElement>('[data-slot="conversation"] > div') ??
+        surface.current?.querySelector<HTMLElement>('[data-slot="conversation"]')
+      const total = whole.items.length
+      setStatusOverride(status)
+      setReplayTo(0)
+      setReplayHold(hold)
+      return new Promise<{
+        tops: number[]
+        visibleTops: number[]
+        hiddenFrames: number
+        revealTop: number | undefined
+        final: number
+        bottomGap: number
+      }>((resolve) => {
+        const frames: Array<{ top: number; hidden: boolean }> = []
+        let shown = 0
+        let sampling = true
+        const raf = () => {
+          const el = scroller()
+          const r = root()
+          if (el && r)
+            frames.push({
+              top: Math.round(el.scrollTop),
+              hidden: getComputedStyle(r).visibility === 'hidden',
+            })
+          if (sampling) requestAnimationFrame(raf)
+        }
+        requestAnimationFrame(raf)
+        const timer = setInterval(() => {
+          shown = Math.min(total, shown + batch)
+          setReplayTo(shown)
+          if (shown >= total) {
+            clearInterval(timer)
+            // Same synchronous block as the final `setReplayTo`, so React
+            // commits the last rows and the reveal together — the hook's shape.
+            setReplayHold(false)
+            setTimeout(() => {
+              sampling = false
+              const el = scroller()
+              setReplayTo(undefined)
+              setStatusOverride(undefined)
+              const firstHidden = frames.findIndex((f) => f.hidden)
+              const afterHold = firstHidden === -1 ? [] : frames.slice(firstHidden)
+              const visible = afterHold.filter((f) => !f.hidden)
+              resolve({
+                tops: [...new Set(frames.map((f) => f.top))],
+                visibleTops: [...new Set(visible.map((f) => f.top))],
+                hiddenFrames: afterHold.length - visible.length,
+                revealTop: visible[0]?.top,
+                final: el ? Math.round(el.scrollTop) : -1,
+                bottomGap: el ? el.scrollHeight - el.clientHeight - Math.round(el.scrollTop) : -1,
+              })
+            }, 400)
+          }
+        }, everyMs)
+      })
+    }
     w.__wdSetWidth = (px: number) => setWidth(px)
     w.__wdSetMetrics = (fs: number, lh: number) => {
       setFontSize(fs)
@@ -297,6 +397,7 @@ export function App() {
             affordances={affordances}
             scrubber={scrub}
             scrubberMarks={fixture === 'huge' ? [30, 210, 480] : undefined}
+            replaying={replayHold}
             catchUp={catchUp}
             jumpToRecapRef={jumpRef}
             repinRef={repinRef}

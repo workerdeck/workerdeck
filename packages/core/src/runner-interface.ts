@@ -73,8 +73,21 @@ export interface Runner {
   /** Begin the session. Idempotent; returns the run promise (resolves when the run ends). */
   start(): Promise<void>
   info(): SessionInfo
-  /** Replay buffered events with seq > afterSeq, then deliver live events. Returns unsubscribe. */
-  subscribe(listener: SessionEventListener, afterSeq?: number): () => void
+  /** Replay buffered events with seq > afterSeq, then deliver live events. Returns unsubscribe.
+   *
+   * `coalesceReplay` drops state readings superseded later in the same replay —
+   * the fifty stale context/rate-limit polls a long session accumulates, which
+   * a client otherwise applies one by one and *renders*, counting its usage
+   * meters up through the session's history on every attach. Opt-in, and the
+   * default must stay off: it is only sound for a consumer whose handling of
+   * those events is last-write-wins, and `parking.ts` — which subscribes from
+   * seq 0 — branches on `status_changed` instead. Live events are never
+   * affected; this touches the buffered replay alone. */
+  subscribe(
+    listener: SessionEventListener,
+    afterSeq?: number,
+    options?: { coalesceReplay?: boolean },
+  ): () => void
   /** Queue a user message for the session (starts the next turn when idle).
    * `attachments` carry their bytes to the engine and their reference to the
    * event log (see {@link AttachmentInput}). */

@@ -889,19 +889,10 @@
   z-index: 1;
 }
 
-/* The cursor — the viewport's top edge as a crisp full-width line, the one
-   place on the rail that answers "where am I" at a glance. It rides over the
-   marks (the band sits under them), which is the point: it is the reader's
-   position against the map, not another mark on it. */
-.term-scrubber .term-scrub-cursor {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--term-blue);
-  pointer-events: none;
-  z-index: 1;
-}
+/* There is no separate cursor line. The band above answers "where am I" on its
+   own — it is outlined, so its top edge already reads as an edge — and a 2px
+   blue rule laid over it was a second indicator of the same fact, in the
+   loudest colour the rail has. */
 
 .term-scrubber .term-scrub-mark {
   position: absolute;

@@ -31,6 +31,7 @@ import type {
   SessionEventListener,
 } from './runner-interface.ts'
 import type { ToolExecutionCall, ToolExecutionResult, ToolExecutor } from './tool-executor.ts'
+import { staleReplaySeqs } from './replay.ts'
 
 /** Permission modes this engine can honor. The rest of the protocol vocabulary
  * (acceptEdits/plan/auto) is Claude Code CLI semantics with no meaning here —
@@ -536,9 +537,16 @@ export class AiSdkRunner implements Runner {
     }
   }
 
-  subscribe(listener: SessionEventListener, afterSeq = 0): () => void {
+  subscribe(
+    listener: SessionEventListener,
+    afterSeq = 0,
+    options?: { coalesceReplay?: boolean },
+  ): () => void {
+    const stale = options?.coalesceReplay ? staleReplaySeqs(this.#events, afterSeq) : undefined
     for (const event of this.#events) {
-      if (event.seq > afterSeq) listener(event)
+      if (event.seq <= afterSeq) continue
+      if (stale?.has(event.seq)) continue
+      listener(event)
     }
     this.#listeners.add(listener)
     return () => this.#listeners.delete(listener)

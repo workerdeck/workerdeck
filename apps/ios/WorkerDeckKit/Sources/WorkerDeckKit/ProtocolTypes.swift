@@ -757,6 +757,11 @@ public enum SessionEventBody: Sendable, Equatable {
   /// Which claude.ai plan the rate-limit windows belong to ('pro', 'max', ...).
   /// Never sent for an API-key session, which has no plan.
   case planInfo(subscriptionType: String)
+  /// The engine started a fresh conversation inside the same session (`/clear`,
+  /// plan-mode exit). The transcript empties; session-scoped state survives.
+  /// `sdkSessionId` is the fresh conversation's engine session id, when the
+  /// engine reported one — the follow-up `system_init` stays authoritative.
+  case conversationReset(sdkSessionId: String?)
   case assistantMessage(AssistantMessageEvent)
   case userMessage(UserMessageEvent)
   case streamDelta(StreamDeltaEvent)
@@ -804,6 +809,7 @@ extension SessionEvent: Decodable {
     case executionId, toolName, backend, deferred, expiresAt, output, logs, durationMs
     case reason, error, path, bytes, description, payload
     case skills, fileId, mediaType, toolUseId
+    case sdkSessionId
   }
 
   public init(from decoder: Decoder) throws {
@@ -845,6 +851,9 @@ extension SessionEvent: Decodable {
       case "plan_info":
         body = .planInfo(
           subscriptionType: try container.decode(String.self, forKey: .subscriptionType))
+      case "conversation_reset":
+        body = .conversationReset(
+          sdkSessionId: try container.decodeIfPresent(String.self, forKey: .sdkSessionId))
       case "assistant_message":
         body = .assistantMessage(try AssistantMessageEvent(from: decoder))
       case "user_message":

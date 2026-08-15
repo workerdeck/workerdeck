@@ -28,6 +28,7 @@ import {
 } from '../../attachments.ts'
 import { parseUnifiedDiff } from '../../patch.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
+import { staleReplaySeqs } from '../../replay.ts'
 import { JsonRpcError } from './jsonrpc.ts'
 import type {
   AppServerCommandApprovalParams,
@@ -1050,9 +1051,16 @@ export class CodexRunner implements Runner {
     this.#setStatus('closed')
   }
 
-  subscribe(listener: SessionEventListener, afterSeq = 0): () => void {
+  subscribe(
+    listener: SessionEventListener,
+    afterSeq = 0,
+    options?: { coalesceReplay?: boolean },
+  ): () => void {
+    const stale = options?.coalesceReplay ? staleReplaySeqs(this.#events, afterSeq) : undefined
     for (const event of this.#events) {
-      if (event.seq > afterSeq) listener(event)
+      if (event.seq <= afterSeq) continue
+      if (stale?.has(event.seq)) continue
+      listener(event)
     }
     this.#listeners.add(listener)
     return () => this.#listeners.delete(listener)

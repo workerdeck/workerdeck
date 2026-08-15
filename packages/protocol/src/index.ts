@@ -448,6 +448,28 @@ export type SessionEventBody =
    * plan). It names the windows; it does not size them — the tier suffix a
    * subscription page shows ("Max 20x") is not in the data. */
   | { type: 'plan_info'; subscriptionType: string }
+  /**
+   * The engine started a **fresh conversation inside the same session** — the
+   * CLI's `/clear`, a plan-mode exit, and whatever fresh-conversation flows the
+   * SDK grows. The session id, registry row, workspace and scope are all
+   * unchanged; only the conversation is new. Clients empty the transcript and
+   * keep every session-scoped fact (models, commands, skills, produced files,
+   * rate limits, cwd, permission mode).
+   *
+   * The server's replay honours it too: an attach after a reset does not
+   * resurrect the cleared rows, because the runner skips *transcript content*
+   * below the latest reset (see {@link transcriptContent}) while still
+   * replaying every state-bearing event. `SessionInfo.activityCount` stays
+   * monotonic across a reset on purpose — it is an unread cursor, not an item
+   * count, and winding it back would kill every stored watermark above it.
+   */
+  | {
+      type: 'conversation_reset'
+      /** The engine session id the fresh conversation runs under (the SDK's
+       * `new_conversation_id`), when the engine reported one. The follow-up
+       * `system_init` remains authoritative. */
+      sdkSessionId?: string
+    }
   | {
       type: 'assistant_message'
       message: ApiMessage
@@ -1256,6 +1278,13 @@ export type SessionInfo = {
    * `lastSeq` cannot either — it counts every event, and with token streaming on
    * that is hundreds per reply. Absent on an older server; a client should fall
    * back to `numTurns` rather than showing nothing.
+   *
+   * Monotonic for the session's whole life, **including across a
+   * `conversation_reset`**: after a `/clear` this deliberately exceeds the
+   * number of rows a fresh attach renders. It is an unread *cursor* diffed
+   * against stored monotonic watermarks (see `watermarks.ts`) — resetting it to
+   * the new row count would leave every stored mark above it, and that
+   * session's badge dead until the count caught back up.
    */
   activityCount?: number
   /** Epoch ms of the most recent emitted event. */
@@ -1302,6 +1331,116 @@ export function transcriptActivity(body: SessionEventBody): number {
       return 1
     default:
       return 0
+  }
+}
+
+/**
+ * Whether an event is **transcript content** — whether the reducer
+ * (`@workerdeck/react`'s `transcript.ts`, and its Swift mirror) mutates
+ * `items` when it applies it. The rule behind `conversation_reset`'s replay
+ * semantics: the runner keeps its whole event log, but `subscribe()` skips
+ * content below the latest reset so an attaching client does not resurrect a
+ * cleared conversation — while every *state-bearing* event (`system_init`,
+ * `capabilities`, `skills`, `status_changed`, usage and rate-limit readings,
+ * `file_produced`, permission bookkeeping) still replays, because a fresh
+ * attacher with no model list and no cwd is broken, not cleared.
+ *
+ * Deliberately **broader than `transcriptActivity() > 0`**: stream deltas,
+ * tool results (synthetic user messages) and execution lifecycle events count
+ * zero rows but still mutate items — replaying them across a reset would leave
+ * orphaned deltas and results with no parent message.
+ *
+ * `conversation_reset` itself is content under this rule, and that is load-
+ * bearing twice: a *superseded* reset (below a newer one) is skipped with the
+ * conversation it cleared, while the latest reset always replays (the skip is
+ * strictly-below), which is what clears a reconnecting client that still holds
+ * pre-reset rows.
+ *
+ * Lives here beside {@link transcriptActivity} for the same reason: the
+ * reducer owns the rule and the runners filter with it, and the two sides may
+ * not import each other. If the reducer's items-mutating set changes, change
+ * this with it. Unknown/future event types are NOT content — the safe failure
+ * is replaying a stale row, never withholding state.
+ */
+export function transcriptContent(body: SessionEventBody): boolean {
+  switch (body.type) {
+    case 'user_message':
+    case 'assistant_message':
+    case 'stream_delta':
+    case 'turn_result':
+    case 'execution_dispatched':
+    case 'execution_result':
+    case 'execution_failed':
+    case 'file_delivered':
+    case 'session_error':
+    case 'session_closed':
+    case 'conversation_reset':
+      return true
+    default:
+      return false
+  }
+}
+
+/**
+ * The dedupe key for an event that is **last-write-wins** on replay, or
+ * `undefined` for one that must always be delivered.
+ *
+ * The problem: the runner polls context usage and the plan's rate limits after
+ * every turn, so a fifty-turn session's log holds fifty context readings and
+ * fifty per rate-limit window. Replaying all of them is not merely wasteful —
+ * it is *visible*. A client applies each in turn, so opening a session shows
+ * the usage meters counting up from the session's first reading to its last
+ * over the length of the replay, announcing history as if it were news.
+ *
+ * The fix is a backwards scan over the buffered log keeping the first
+ * occurrence of each key, which is `staleReplaySeqs` in `@workerdeck/core`.
+ * The key is per *window* for rate limits, not per event type: the reducer
+ * stores them keyed by window ("so five_hour and seven_day updates don't
+ * clobber each other"), so a single key would keep only the most recently
+ * polled window and silently drop the others.
+ *
+ * **This is a claim about the reducer**, which is why it lives here rather
+ * than in core: only the server coalesces, but only `@workerdeck/react` can
+ * prove the rule correct, and neither package may import the other. The
+ * property that must hold is that coalescing is *unobservable* — folding the
+ * full log and the coalesced log through `applyEvent` yields identical state.
+ * `packages/react/test/replay-coalesce.test.ts` asserts exactly that, over
+ * every event kind. Extend the rule only with a case that test still passes.
+ *
+ * Three kinds are deliberately **excluded** despite looking eligible:
+ *
+ * - `capabilities` — `defaultModel: event.defaultModel ?? base.defaultModel`
+ *   is a fallback *merge*, so a later event without one would erase an earlier
+ *   event's. (It is also emitted once per session, so there is nothing to win.)
+ * - `model_changed` — `undefined` means "reset to the server default" and the
+ *   reducer *keeps* the last known model, so the last event alone is not the
+ *   same as the fold.
+ * - `system_init` — pure replace for the reducer, but the server's
+ *   `watchAuthSource` reads the **first** one to decide an auth policy, and
+ *   parking treats each as a resume point.
+ *
+ * Coalescing never drops the highest-seq event, and that is load-bearing
+ * rather than incidental: the globally-last event is by definition the last of
+ * its own key, so it always survives. `useClaudeSession`'s replay hold waits
+ * for `state.lastSeq` to reach the attach's `session.lastSeq`, and would hang
+ * on a blank panel forever if a coalescer could swallow the final event.
+ */
+export function replayCoalesceKey(body: SessionEventBody): string | undefined {
+  switch (body.type) {
+    case 'context_usage':
+      return 'context_usage'
+    case 'rate_limit':
+      // Per window. The reducer keys `rateLimits` by `rateLimitType`; an event
+      // without one is dropped by the reducer, so it has no key here either.
+      return body.info.rateLimitType ? `rate_limit:${body.info.rateLimitType}` : undefined
+    case 'status_changed':
+      // Pure replace in the reducer. Safe only because coalescing is opt-in at
+      // the WS attach: `parking.ts` subscribes from seq 0 and *branches* on
+      // this event (a `parked` status triggers a park), so a coalesced log
+      // handed to every subscriber would silently skip that side effect.
+      return 'status_changed'
+    default:
+      return undefined
   }
 }
 

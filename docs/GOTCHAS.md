@@ -49,6 +49,25 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   SDK's `Options.effort`. Effort is an *open string* end to end — the CLI's vocabulary outruns
   typed unions (its own list includes `max`), and the CLI silently downgrades an effort the
   selected model lacks, so over-offering is safe and under-typing is not.
+- **`/clear` is a `conversation_reset`, not a new session — and three of its rules look wrong
+  until you know why.** The CLI parses `/clear` itself (no client intercepts the string; plan-mode
+  exit arrives on the same SDK message), the runner maps it to the `conversation_reset` event, and
+  the reducers empty `items` while keeping session-scoped state. (1) The event log is **never
+  truncated**: it still carries `capabilities`, `system_init`, `status_changed` and the other
+  state events a fresh attacher depends on — `#fetchCapabilities` will not re-emit — so
+  `SessionRunner.subscribe` instead skips *transcript content* strictly below the latest reset,
+  with protocol's `transcriptContent` as the rule (broader than `transcriptActivity() > 0`:
+  deltas and tool results count zero rows and still mutate items). The reset event itself is
+  content, so a superseded reset is skipped with the conversation it cleared and the latest one
+  always replays — which is what clears a reconnecting client still holding pre-reset rows, and
+  what keeps a pre-reset *client* (protocol 7, no reducer case) correct on its next attach.
+  (2) `#activityCount` stays **monotonic** across the reset: it is the unread cursor watermarks
+  diff against, and winding it back to the fresh row count would leave every stored mark above it
+  and that badge silently dead. (3) The runner adopts `new_conversation_id` as `#sdkSessionId`
+  **immediately**, not at the follow-up `system_init` (which only comes with the next prompt) — a
+  dormant record written in between must resume the fresh conversation, not replay the cleared
+  one. Pending approvals deliberately survive: the runner still holds them, so
+  `permission_requested`/`permission_resolved` are state, not content.
 - The CLI **pushes** a `rate_limit_event` only when a window *changes*, so a session that is
   watched rather than driven would show no plan usage at all. The runner therefore polls the
   structured `/usage` control request after init and after every turn and re-emits the windows as
@@ -862,6 +881,53 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - **The three actions are session-scoped** *where they exist*. `reconnect`/`enable`/`disable` go to
   the running CLI; nothing is written to a `.mcp.json`. The iOS screen's footer says this, because
   "Disable" on a server list otherwise reads as an edit to config.
+
+## Attach replay (the hold, the cache, the three filters)
+
+- **Three independent filters now sit on a replay, and they compose.** `subscribe()` skips
+  transcript *content* strictly below the latest `conversation_reset`; it skips events at or
+  below `afterSeq`; and, **only when the caller opts in**, it skips state readings superseded
+  later in the same replay (`coalesceReplay` → `replayCoalesceKey` → `staleReplaySeqs`).
+  The opt-in is the load-bearing part: coalescing is sound only for a consumer whose handling of
+  those events is last-write-wins, and `parking.ts` subscribes from seq 0 and *branches* on
+  `status_changed` — a `parked` status triggers a park. Turning it on globally would silently
+  skip that side effect. The WS attach in `server.ts` is the one caller, because a *client's*
+  reducer really is last-write-wins there.
+- **Coalescing must never drop the highest-seq event**, and it cannot by construction — the
+  globally-last event is by definition the last of its own key. This is not trivia:
+  `useClaudeSession`'s replay hold waits for `state.lastSeq` to reach the attach frame's
+  `session.lastSeq`, so a coalescer that swallowed the final event would hang the panel blank
+  forever. Tested on both sides. If you extend `replayCoalesceKey`, the property to keep is that
+  folding the full log and the coalesced log through `applyEvent` yields identical state —
+  `packages/react/test/replay-coalesce.test.ts` asserts exactly that. Three kinds look eligible
+  and are not: `capabilities` (`defaultModel ?? base.defaultModel` is a fallback *merge*),
+  `model_changed` (`undefined` means "keep the last known model"), and `system_init` (the
+  server's `watchAuthSource` reads the **first** one).
+- **A cached `afterSeq` against a rebuilt log fails silently, and that is the worst failure in
+  this area.** Attaching at `afterSeq: 500` against a runner whose log holds 12 events delivers
+  *nothing* — every seq is below the mark — so the client sits on a stale transcript with no
+  error, no spinner and no reconnect. The log resets routinely: a dormant session is rebuilt with
+  a brand-new runner starting at seq 0. `staleAttach` in `use-session.ts` is the guard, on two
+  signals — `frame.session.lastSeq < held.lastSeq`, and a `createdAt` mismatch (all three runners
+  stamp `createdAt` at construction, and `AiSdkRunner` restores it *exactly when* it restores the
+  event array, so equality really does mean "same log" and a parked wake keeps its cache). Note
+  this was reachable **before** any cache existed: a `SessionHandle` reconnect after a gateway
+  restart re-attaches with its own advanced `#lastSeq` and freezes the same way.
+- **Recovering from a stale attach has three traps**, each of which is a bug if skipped: unhook
+  the event listener *before* resyncing (a rebuilt log that has advanced past the held seq
+  replays new-log events in the same tick as the frame, and they must not compose into old-log
+  state); seed the reducer back to `initialTranscriptState` (`applyEvent`'s `seq <= lastSeq`
+  dedupe would otherwise silently swallow the whole fresh replay); and do **not** let the effect
+  cleanup write the condemned state back to the cache, or the retry re-poisons what it just
+  discarded. The retry attaches with `afterSeq` 0, for which `staleAttach` is false by
+  definition, so it cannot loop.
+- **The hold's placeholder must not become the next flicker.** The hold hides the transcript by
+  `visibility` (never by unmounting — the rows must lay out so the virtualizer measures and the
+  reveal is one paint of a settled list), and it draws a `Loading…` line. Unconditionally, that
+  line appears and vanishes inside ~0.5s, which is the flicker the hold exists to remove, moved
+  to the top of the panel. `wd-hold-appear` holds it at `opacity: 0` and fades it in only after
+  600ms, so a healthy attach never paints it. The general rule: do not announce a wait too short
+  to notice.
 
 ## Terminal theme (`transcriptVariant: 'terminal'`)
 

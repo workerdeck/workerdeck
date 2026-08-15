@@ -91,10 +91,18 @@ ride through as `sdk_event` rather than breaking older clients.
 - **A breaking wire change bumps `PROTOCOL_VERSION`.** New client-visible frames also need matching
   surface in `@workerdeck/client`, or no client can reach them.
 - **This package owns rules, not just shapes.** `transcriptActivity` is the row-count both the
-  reducer renders by and the runners report as `activityCount`; `session-list.ts` is the sessions
-  list view model; `watermarks.ts` is the unread model. They live here because a client that
-  filtered or counted differently would announce work it is hiding. Change one, change every
-  consumer — including the Swift mirror in `apps/ios/WorkerDeckKit`.
+  reducer renders by and the runners report as `activityCount`; `transcriptContent` is the
+  does-it-mutate-items rule behind `conversation_reset`'s replay (the runner skips content below
+  the latest reset, and it must skip exactly what the reducer would have cleared — note it is
+  broader than `transcriptActivity() > 0`: deltas and tool results count zero rows and still
+  mutate items); `session-list.ts` is the sessions list view model; `watermarks.ts` is the unread
+  model. They live here because a client that filtered or counted differently would announce work
+  it is hiding. Change one, change every consumer — including the Swift mirror in
+  `apps/ios/WorkerDeckKit`.
+- **`activityCount` is monotonic across a `conversation_reset`.** It is an unread *cursor*
+  diffed against stored monotonic watermarks, not an item count — resetting it to the fresh row
+  count would leave every stored mark above it and that session's badge silently dead. After a
+  `/clear` it deliberately exceeds the rendered row count.
 - **`ENGINE_CAPABILITIES` is pinned by identity, and is a *fallback*.** A server that reports its
   own record wins; this table is what a client uses when talking to one that doesn't. Editing a
   value here is a cross-client change, not a local one.

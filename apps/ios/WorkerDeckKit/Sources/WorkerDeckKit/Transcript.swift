@@ -383,6 +383,18 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
   case .planInfo(let subscriptionType):
     next.subscriptionType = subscriptionType
 
+  case .conversationReset(let sdkSessionId):
+    // Same session, fresh conversation (/clear, plan-mode exit). Only
+    // conversation-scoped state resets: the items, the context reading (the
+    // runner re-polls a fresh one), and the engine session id when the event
+    // names the new one. Session-scoped state survives — models/commands/
+    // skills, produced files, rate limits and plan, cwd, model, permission
+    // mode, cumulative cost — and so do pending approvals: the runner still
+    // holds them. (Mirrors the react reducer's conversation_reset case.)
+    next.items = []
+    next.contextUsage = nil
+    if let sdkSessionId { next.sdkSessionId = sdkSessionId }
+
   case .userMessage(let payload):
     var items = next.items
     for block in payload.message.content.asBlocks {

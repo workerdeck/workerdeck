@@ -426,6 +426,41 @@
     transform 0.08s cubic-bezier(0.4, 0, 0.2, 1),
     box-shadow 0.05s ease;
 }
+/**
+ * The replay hold's placeholder, revealed only if the wait is long enough to be
+ * worth mentioning.
+ *
+ * The hold hides the transcript while the attach replay lands — typically ~0.5s
+ * — and an unconditional "Loading…" line inside it is *worse than nothing*: it
+ * appears and vanishes within half a second, so the flicker the hold exists to
+ * remove comes straight back as a blinking line at the top of the panel. The
+ * hold is the fix; announcing it is the regression.
+ *
+ * So the placeholder starts transparent and fades in only after a delay longer
+ * than a healthy attach takes. A normal open paints it **never** — the element
+ * unmounts while still at `opacity: 0` — and only a genuinely slow attach (a
+ * cold gateway, a huge log) ever shows a line, which is exactly when a reader
+ * needs to be told something is happening rather than assume the panel is dead.
+ *
+ * CSS rather than a JS timer on purpose: there is no state to hold, nothing to
+ * clean up on unmount, and no render caused by the placeholder appearing.
+ * `prefers-reduced-motion` collapses the fade's duration (the global block
+ * below) but not its delay, so the behaviour survives: still nothing early,
+ * then a line with no animation.
+ */
+@keyframes wd-hold-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.wd-hold-appear {
+  opacity: 0;
+  animation: wd-hold-appear 150ms ease-out 600ms forwards;
+}
+
 @keyframes prompt-area-chip-ripple {
   0% {
     transform: scale(0);

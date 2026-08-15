@@ -382,6 +382,27 @@ export class WorkerDeckClient {
     this.#WebSocketImpl = options.WebSocketImpl ?? WebSocket
   }
 
+  /**
+   * Stable identity of the (gateway, principal) pair this client speaks as:
+   * the base URL plus the auth headers it sends, order-insensitively.
+   *
+   * Exists for client-side caches that must survive the client *instance*
+   * being rebuilt (a `useMemo` recreating it when a view switches gateways)
+   * without ever sharing an entry across gateways — a session id is unique
+   * only within one — or across credentials. Auth that rides outside
+   * `headers` (a same-origin cookie, a fetch shim adding the key host-side)
+   * is chosen per origin in every such host, so the base URL still separates
+   * principals there; an embedder whose principal varies some other way on
+   * one base URL should not key anything on this.
+   */
+  get identityKey(): string {
+    const headers = Object.entries(this.#options.headers ?? {}).map(
+      ([name, value]) => [name.toLowerCase(), value] as const,
+    )
+    headers.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    return JSON.stringify([this.#options.baseUrl, headers])
+  }
+
   async createSession(request: CreateSessionRequest): Promise<SessionInfo> {
     const body = await this.#call('POST', '/sessions', request)
     return (body as { session: SessionInfo }).session

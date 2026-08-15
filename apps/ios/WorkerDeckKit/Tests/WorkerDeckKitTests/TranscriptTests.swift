@@ -395,6 +395,42 @@ struct TranscriptTests {
     ])
   }
 
+  @Test func conversationResetEmptiesItemsAndKeepsSessionScopedState() {
+    var seeded = reduce([
+      event(1, .capabilities(models: [], commands: [], defaultModel: "claude-opus-5")),
+      user(2, uuid: "u1", [.text("hi")]),
+      assistant(3, [.text("hello")]),
+      event(
+        4,
+        .contextUsage(
+          ContextUsage(categories: [], totalTokens: 90_000, maxTokens: 200_000, percentage: 45))),
+    ])
+    seeded.model = "claude-test-1"
+    seeded.cwd = "/tmp/p"
+    seeded.sdkSessionId = "sdk-1"
+
+    let state = reduce([event(5, .conversationReset(sdkSessionId: "sdk-2"))], from: seeded)
+    // The conversation is gone, its context reading with it…
+    #expect(state.items == [])
+    #expect(state.contextUsage == nil)
+    #expect(state.sdkSessionId == "sdk-2")
+    // …and session-scoped state survives.
+    #expect(state.model == "claude-test-1")
+    #expect(state.cwd == "/tmp/p")
+    #expect(state.defaultModel == "claude-opus-5")
+
+    // A reset without a new id keeps the known one; resets stack — only what
+    // came after the latest remains.
+    let again = reduce(
+      [
+        user(6, uuid: "u2", [.text("two")]),
+        event(7, .conversationReset(sdkSessionId: nil)),
+        user(8, uuid: "u3", [.text("three")]),
+      ], from: state)
+    #expect(again.sdkSessionId == "sdk-2")
+    #expect(again.items == [.user(id: "u3", text: "three")])
+  }
+
   @Test func statusAndCapabilitiesTrackTheirEvents() {
     let state = reduce([
       event(1, .statusChanged(status: .awaitingApproval, detail: "waiting")),

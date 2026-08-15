@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -184,39 +185,24 @@ function RecapRow({ line, since, terminal }: { line: string; since?: number; ter
 }
 
 /**
- * Has the transcript stopped *filling* and started *streaming*?
+ * **Nothing on this surface animates its scroll position.** VS Code does not —
+ * click its editor scrollbar and it jumps — and neither does a terminal, which
+ * is the article this transcript is drawing. Every travel a reader ever
+ * complained about here was an animation we asked for.
  *
- * Attaching replays the whole session as a burst of events, so the content grows
- * by hundreds of rows over a few hundred milliseconds. Animating that — which is
- * the right behaviour for a live turn — turns opening a session into a
- * several-second scroll from its first row to its last, which is precisely wrong
- * when you are skimming sessions to see where each agent got to.
+ * What used to be here was `useSettled`: a latch deciding smooth-vs-instant for
+ * the follow spring, with a quiet window, a "silence before the first row does
+ * not count" guard and a live-status gate — all of it apparatus for a
+ * smooth-scroll bug (the attach replays hundreds of rows, and animating that
+ * turned opening a session into a several-second journey). With no smooth mode
+ * left there is nothing for it to decide, so the whole thing is gone rather
+ * than pinned to `false`.
  *
- * So: instant until the arrivals stop for a beat, smooth from then on. Latched,
- * because a live turn is bursty too and nobody wants the follow behaviour to
- * flicker between modes mid-answer.
- *
- * Two guards, both load-bearing, both learned from this going wrong:
- *
- * - **Silence before the first row is not quiet, it is waiting.** The attach
- *   that fills this transcript is a round trip — and in a VS Code webview it is
- *   webview → extension host → gateway and back — so the first replayed row can
- *   land well after the quiet window. A timer started at mount then latches
- *   *before the transcript exists*, and the whole replay animates: exactly the
- *   symptom the latch was added to prevent.
- * - **Only a live turn earns smooth.** An idle session has nothing to animate.
- *   Skimming finished sessions is therefore instant no matter what the timing
- *   did, which is the case that has to be right.
+ * The two remaining writers of `scrollTop` — the follow spring and the
+ * virtualizer's size-change correction — are unchanged and still split by
+ * regime; `Conversation` itself is now hardwired to `instant` on both `initial`
+ * and `resize`.
  */
-function useSettled(count: number, status: TranscriptState['status'], quietMs = 400): boolean {
-  const [settled, setSettled] = useState(false)
-  useEffect(() => {
-    if (settled || count === 0) return
-    const timer = setTimeout(() => setSettled(true), quietMs)
-    return () => clearTimeout(timer)
-  }, [count, settled, quietMs])
-  return settled && (status === 'running' || status === 'starting')
-}
 
 /**
  * When the current run began — the clock the working line counts from.
@@ -314,6 +300,13 @@ function TerminalShell({
     </TerminalSurface>
   )
 }
+
+/** How many times a jump re-checks its landing, and how long it waits before
+ * doing so. Both are much smaller than the smooth era's 6 × 300ms: a pass is
+ * now a jump rather than a journey, so the only thing being waited on is a
+ * layout pass in which the crossed rows measure. */
+const AIM_PASSES = 4
+const AIM_SETTLE_MS = 50
 
 /**
  * Does a blank line go above this row, in the terminal theme?
@@ -519,6 +512,7 @@ function TranscriptRows({
   boundary,
   since,
   terminal,
+  replaying,
   stickyPrompt,
   gap,
   fontSize,
@@ -539,6 +533,9 @@ function TranscriptRows({
   since: number | undefined
   /** The terminal theme draws its own rows; see {@link TranscriptItemView}. */
   terminal: boolean
+  /** The replay hold (see {@link TranscriptProps.replaying}) — read here only
+   * for its falling edge, which needs a pre-paint pin. */
+  replaying: boolean
   /** Pin the prompt of the turn being read to the top of the scroller. */
   stickyPrompt: boolean
   /** The inter-row gap for this variant and density (`ROW_GAP`). */
@@ -590,6 +587,64 @@ function TranscriptRows({
   useEffect(() => {
     setScrollElement(stick.scrollRef.current)
   }, [stick.scrollRef])
+
+  // A composer that grows steals a line from the transcript.
+  //
+  // The composer and the transcript are siblings in the panel's flex column, so
+  // typing a newline shrinks this scroller by one line. "At the bottom" is a
+  // `scrollTop`, and that number stops meaning the bottom the moment the
+  // viewport changes height — so the last row, the one you were reading, slides
+  // under the fold as you type.
+  //
+  // `use-stick-to-bottom` cannot catch this: its ResizeObserver observes the
+  // **content** element (`.observe(content)` in its `useStickToBottom`), and
+  // here the content is unchanged and the *scroller* moved. Nor does the browser
+  // help — scrollTop is untouched, so no scroll event fires and nothing
+  // recomputes. Hence an observer of our own, on the scroller's own box.
+  //
+  // The guard is the whole feature: re-pin **only when already pinned**, or
+  // every newline yanks a reader who had deliberately scrolled up. That state
+  // lives in here, which is why this is in `Transcript` and not `SessionPanel`.
+  // Reading `stick.state.isAtBottom` (the library's live object, not the
+  // rendered boolean) is safe precisely because of the paragraph above: no
+  // scroll event fired, so the flag still holds the pre-resize answer.
+  //
+  // This is not a third writer of `scrollTop` — it presses the follow spring's
+  // own button, instantly, which is what the spring would have done had it
+  // noticed. The pinned-suppresses-corrections regime below is untouched.
+  useEffect(() => {
+    if (!scrollElement) return
+    let last = scrollElement.clientHeight
+    const observer = new ResizeObserver(() => {
+      const height = scrollElement.clientHeight
+      if (height === last) return
+      last = height
+      if (stick.state.isAtBottom) void stick.scrollToBottom('instant')
+    })
+    observer.observe(scrollElement)
+    return () => observer.disconnect()
+  }, [scrollElement, stick])
+
+  // The replay hold's reveal must paint already at the bottom, and the follow
+  // spring cannot make that true: even `scrollToBottom('instant')` defers its
+  // write behind a `requestAnimationFrame`, one frame after the reveal's paint
+  // — so the first visible frame showed the tail a burst shy of the bottom and
+  // then hopped (measured: revealTop 33037 against final 34459 on the 600-row
+  // fixture). A layout effect runs after the commit that removed the hold's
+  // visibility and before its paint, so this write lands in the very frame the
+  // transcript appears. It presses the library's own `state.scrollTop` setter
+  // — which records the write in `ignoreScrollToTop`, so the scroll handler
+  // knows it for its own — not a raw `scrollTop`, and only on the hold's
+  // falling edge, only while pinned; it is the pin's own move made a frame
+  // early, not a third writer.
+  const wasReplaying = useRef(replaying)
+  useLayoutEffect(() => {
+    const was = wasReplaying.current
+    wasReplaying.current = replaying
+    if (!was || replaying) return
+    if (!stick.state.isAtBottom) return
+    stick.state.scrollTop = stick.state.calculatedTargetScrollTop
+  }, [replaying, stick])
 
   // The height epoch: one cache generation of computed row heights (terminal
   // theme only — cards have no calculator and keep the flat estimate). Owned
@@ -770,20 +825,25 @@ function TranscriptRows({
 
   // The jump: aim at a virtual row, land exactly. Every jump on this surface
   // — the catch-up strip's, and each of the scrubber's marks — comes through
-  // here. Smooth on purpose: the jump IS a journey, and watching it travel is
-  // what tells you how far away the target was. `stopScroll()` first, because
-  // the pin spring is the other `scrollTop` writer and this is the library's
-  // own switch for "the user is leaving the bottom".
+  // here. **Instant**, like everything else that moves the scroll position:
+  // VS Code's editor jumps when you click its scrollbar and so does this.
+  // `stopScroll()` first, because the pin spring is the other `scrollTop`
+  // writer and this is the library's own switch for "the user is leaving the
+  // bottom".
   //
   // The aim loop survives from before the height calculator, with its job
-  // changed. It used to be the mechanism: offsets over unmeasured spans were
-  // sums of flat estimates (~3300px off over 600 rows), and the loop walked
-  // them in up to six passes, each pass better than the last because the rows
-  // it crossed had measured. With `estimateSize` computed, the first aim lands
-  // within a line or two and the loop is convergence insurance: it absorbs the
-  // recap row's estimated constant and flagged content (CJK, compressed
-  // tables), and its terminal `scrollIntoView` — possible only once the target
-  // is mounted — is what turns "within a line" into "exactly centered".
+  // changed twice. It used to be the mechanism: offsets over unmeasured spans
+  // were sums of flat estimates (~3300px off over 600 rows), and the loop
+  // walked them in up to six passes, each pass better than the last because
+  // the rows it crossed had measured. With `estimateSize` computed the first
+  // aim lands within a line or two; with the travel now instant there is also
+  // no in-flight animation suppressing the virtualizer's own adjustments — the
+  // condition that made a *single* smooth `scrollToIndex` unable to
+  // self-correct at all. What is left is convergence insurance for the two
+  // things the calculator cannot know: the recap row's estimated constant, and
+  // flagged content (CJK, compressed tables). It is cheap now — each pass is a
+  // jump, not a journey, so a pass that was already on target costs nothing and
+  // the check exits after one.
   //
   // The pending re-aim lives in a ref, and this is the whole reason: the
   // closure is rebuilt every render to keep `rows` fresh, so anything held in
@@ -792,12 +852,15 @@ function TranscriptRows({
   // closure would be cancelled by the very work it is waiting for.
   const aimTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => () => clearTimeout(aimTimer.current), [])
-  // `align` is the caller's, because the two jumps want different things. A
-  // scrubber mark is a place to *start reading* — the answer runs downward from
-  // it, so its line lands at exactly the top edge with the screen below it to
-  // read into, and centring wastes half the viewport on what you have already
-  // read. The recap boundary is the opposite: it is a seam, and seeing a little
-  // of what came before is how you place it.
+  // `align` is the caller's, and every caller on this surface now asks for
+  // `'start'`: a jump target is a place to *start reading* — what you came for
+  // runs downward from it — so its line lands at exactly the top edge with the
+  // screen below it to read into, and centring wastes half the viewport on what
+  // you have already read. The recap boundary was the one exception, argued as
+  // "a seam, and seeing a little of what came before is how you place it"; in
+  // practice the seam is a starting line too. `'center'` survives as the
+  // default because it is what `scrollIntoView` means and a future caller may
+  // want it, not because anything here uses it.
   //
   // The two aligns aim differently, and the split is load-bearing. `'start'`
   // computes the target offset itself — never `scrollIntoView` — because a
@@ -840,13 +903,13 @@ function TranscriptRows({
       }
       const aim = (attempt: number) => {
         const top = target()
-        scrollElement.scrollTo({ top, behavior: 'smooth' })
-        if (attempt >= 6) return
+        scrollElement.scrollTo({ top, behavior: 'instant' })
+        if (attempt >= AIM_PASSES) return
         aimTimer.current = setTimeout(() => {
-          // Off target: still travelling, or a row that measured under the
-          // journey moved it. Either way the fix is the same re-aim.
+          // Off target: a row that measured under the jump moved it. (It can no
+          // longer be "still travelling" — that was the smooth era.)
           if (Math.abs(scrollElement.scrollTop - target()) > 1) aim(attempt + 1)
-        }, 300)
+        }, AIM_SETTLE_MS)
       }
       aim(0)
       return
@@ -854,21 +917,29 @@ function TranscriptRows({
     const aim = (attempt: number) => {
       const row = scrollElement.querySelector(`[data-index="${rowIndex}"]`)
       if (row) {
-        row.scrollIntoView({ behavior: 'smooth', block: align })
+        row.scrollIntoView({ behavior: 'instant', block: align })
         return
       }
-      if (attempt >= 6) return
-      virtualizer.scrollToIndex(rowIndex, { align, behavior: 'smooth' })
-      // Longer than one frame: the aim is only better once the rows crossed
-      // have mounted *and* been measured, and that is a layout pass away.
-      aimTimer.current = setTimeout(() => aim(attempt + 1), 300)
+      if (attempt >= AIM_PASSES) return
+      virtualizer.scrollToIndex(rowIndex, { align, behavior: 'auto' })
+      // A frame or two, not a journey: the aim is only better once the rows
+      // crossed have mounted *and* been measured, and that is a layout pass
+      // away — but with the jump instant there is nothing else to wait for.
+      aimTimer.current = setTimeout(() => aim(attempt + 1), AIM_SETTLE_MS)
     }
     aim(0)
   }
   useEffect(() => {
     if (!jumpToRecapRef) return
     jumpToRecapRef.current = () => {
-      jumpToRow(rows.findIndex((row) => row.key === 'recap'))
+      // `'start'`, like the scrubber's marks. The seam is a place to *start
+      // reading* — everything you missed runs downward from it — so it belongs
+      // at the top edge with the screen below it to read into. Centring it
+      // spent half the viewport on rows you had already read.
+      jumpToRow(
+        rows.findIndex((row) => row.key === 'recap'),
+        'start',
+      )
     }
     return () => {
       jumpToRecapRef.current = null
@@ -1124,6 +1195,16 @@ export interface TranscriptProps {
    */
   scrubberMarks?: readonly number[]
   /**
+   * The attach replay is still landing (`useClaudeSession().replaying`): rows
+   * render, measure and pin exactly as normal but nothing paints, and a loading
+   * line shows in their place; when it flips false the settled tail appears in
+   * one frame. Hiding is by *visibility*, never by not mounting — see the
+   * comment at the render site. Optional: an embedder that never passes it
+   * gets today's behaviour, and a short or empty session holds for no visible
+   * time at all (the frame between attach and replay-complete).
+   */
+  replaying?: boolean
+  /**
    * Catch-up: `from` is how many items had been seen last time, `since` when
    * that was. A recap row is drawn at that boundary and everything above it is
    * dimmed. Omit (or pass a boundary at/after the end) and the transcript
@@ -1163,6 +1244,7 @@ export function Transcript({
   stickyPrompt = false,
   scrubber,
   scrubberMarks,
+  replaying = false,
   catchUp,
   jumpToRecapRef,
   repinRef,
@@ -1171,8 +1253,17 @@ export function Transcript({
   const terminal = variant === 'terminal'
   const gap = ROW_GAP[variant][density]
   const runStartedAt = useRunStart(state.status)
-  const following = useSettled(state.items.length, state.status)
   // A boundary at (or past) the end means nothing is new — no row, no dimming.
+  //
+  // That "past the end" arm now also covers a `/clear`. The mark a client
+  // stored is an item index, and `conversation_reset` empties `items` while
+  // `activityCount` stays monotonic (it is an unread cursor, not an item count
+  // — a count that went backwards would silence the badge for good against a
+  // monotonic watermark store). So a session returned to after a clear has a
+  // boundary well past its few fresh rows and gets **no recap row**, which is
+  // the honest answer: an index into a conversation that no longer exists
+  // cannot say what you missed. Clamping it would land on `items.length` and
+  // read as "nothing is new" — the same outcome, told less truthfully.
   const boundary =
     catchUp && catchUp.from > 0 && catchUp.from < state.items.length ? catchUp.from : undefined
   const recap = useMemo(
@@ -1194,7 +1285,18 @@ export function Transcript({
   }, [state.items, boundary, recap, terminal])
   return (
     <TranscriptVariantProvider value={variant}>
-      <Conversation className={className} resize={following ? 'smooth' : 'instant'}>
+      {/* The replay hold hides by VISIBILITY, never by not mounting. The rows
+          must exist and lay out while hidden: the virtualizer measures them,
+          the height epoch builds, and the follow pin settles on the real
+          bottom — so the reveal is the removal of one style, a single paint of
+          an already-settled tail, and the catch-up jump always fires against a
+          measured list. (Unmounting instead would replay the entire
+          mount-measure-correct churn, visibly, at reveal time.) `visibility`
+          is the one hiding property a descendant can turn back ON, which is
+          how the loading line below stays visible inside a hidden root — and
+          the root is the right scope because the scrubber and the scroll
+          button portal/position into it, not into the scroller. */}
+      <Conversation className={cn(replaying && 'invisible', className)}>
         <ConversationContent className={cn(terminal && 'gap-0 p-0')}>
           <TerminalShell
             active={terminal}
@@ -1214,6 +1316,7 @@ export function Transcript({
               boundary={boundary}
               since={catchUp?.since}
               terminal={terminal}
+              replaying={replaying}
               stickyPrompt={stickyPrompt}
               gap={gap}
               fontSize={fontSize}
@@ -1254,6 +1357,45 @@ export function Transcript({
           </TerminalShell>
         </ConversationContent>
         <ConversationScrollButton />
+        {/* What shows while the hold is on — and for a normal attach that is
+            *nothing*. `wd-hold-appear` (theme.css) keeps it at `opacity: 0`
+            and fades it in only after 600ms, so a healthy ~0.5s hold unmounts
+            it before it ever paints. An unconditional line here was worse than
+            no hold at all: it appeared and vanished inside half a second, which
+            is the flicker the hold exists to remove, relocated to the top of
+            the panel. Only a genuinely slow attach earns a placeholder, which
+            is the case where a reader would otherwise think the panel is dead.
+            An overlay rather than a flow row
+            because the hidden content is at full height and pinned to its
+            bottom; a row in flow would sit at the bottom edge. It mirrors
+            `ConversationContent`'s wrapper (not the component itself — a
+            second `StickToBottom.Content` would steal the library's content
+            ref) so the paddings line up with the real rows'. */}
+        {replaying ? (
+          <div
+            data-slot='transcript-hold'
+            aria-hidden
+            className='wd-hold-appear visible pointer-events-none absolute inset-0 overflow-hidden'>
+            <div
+              className={cn(
+                'mx-auto w-full max-w-[var(--wd-content-max-w,48rem)]',
+                !terminal && 'px-4 py-4',
+              )}>
+              {terminal ? (
+                <TerminalSurface
+                  fontSize={fontSize}
+                  lineHeight={lineHeight}
+                  affordances={false}
+                  bleed='1ch'
+                  className='term-transcript'>
+                  <WorkingRow label='Loading…' />
+                </TerminalSurface>
+              ) : (
+                <Loader label='Loading session…' />
+              )}
+            </div>
+          </div>
+        ) : null}
       </Conversation>
     </TranscriptVariantProvider>
   )

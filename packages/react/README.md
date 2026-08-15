@@ -152,6 +152,16 @@ input by construction: fine for the user's own data, never a source of server-au
 - **The recap is counted, never written.** `summarizeSince` returns numbers because generating
   prose would spend a turn on a summary nobody asked for, and would be worst exactly where it
   matters most: a session that failed while unattended.
+- **Detached transcripts stay warm by default.** `useClaudeSession` keeps a bounded, module-scope
+  cache of the last few transcripts it held, so switching back to a session paints in the mount
+  frame and re-attaches with `afterSeq`, replaying only what it missed. Entries are keyed by the
+  client's `identityKey` — gateway base URL plus auth headers — never the session id alone (a
+  session id is unique only within one gateway), and a cached `afterSeq` pointed at a log the
+  server no longer has (a dormant rebuild, a restart) is detected off the attach frame
+  (`staleAttach`) and discarded with a full resync, because that attach would otherwise deliver
+  nothing and the stale rows would stand forever. Opt out with `cacheTranscript: false` if your
+  principal varies on one base URL by means the client cannot see, and call
+  `clearTranscriptCache()` on an in-place logout.
 
 ## License
 

@@ -547,11 +547,11 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
               },
             }
           : null)}>
+        {/* The band is the whole "where am I" answer. It used to carry a 2px
+            blue line on its top edge as well; with the band already outlined,
+            that was a second indicator of one fact, and the loudest colour on
+            the rail spent on it. */}
         <div className='term-scrub-band' style={{ top: bandTop, height: bandH }} />
-        <div
-          className='term-scrub-cursor'
-          style={{ top: Math.min(bandTop, Math.max(0, railH - 2)) }}
-        />
         {clusters.map((cluster, index) => (
           <div
             key={index}

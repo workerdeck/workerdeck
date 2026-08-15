@@ -16,7 +16,20 @@ protocol. Read these before changing scope or structure:
   on nothing and everything depends on it. Breaking → bump `PROTOCOL_VERSION`. It also owns the
   few *rules* both sides must agree on rather than each guess: `transcriptActivity(event)` is
   the row-count rule the react reducer renders by and the runners count with
-  (`SessionInfo.activityCount`) — change one, change both. Two more joined it, both lifted
+  (`SessionInfo.activityCount`) — change one, change both. `transcriptContent(event)` sits
+  beside it and is a *different* rule — does the reducer mutate items, which is broader than
+  "counts a row" (deltas and tool results count zero and still mutate): it is what
+  `SessionRunner.subscribe` skips below a `conversation_reset` (`/clear`) so a re-attach doesn't
+  resurrect a cleared conversation while state events still replay; `activityCount` stays
+  monotonic across the reset, because it is an unread cursor, not an item count.
+  `replayCoalesceKey(event)` is the third of the same family and the same shape of claim: which
+  events are **last-write-wins on replay**, so the gateway can drop the fifty stale context and
+  rate-limit polls a long session accumulates instead of shipping them all and having the client
+  render each — the usage meters used to visibly count up through the session's history on every
+  attach. Keyed per *window* for rate limits, because the reducer stores them that way. It lives
+  in protocol for the usual reason (only core coalesces, only react can prove it right, neither
+  may import the other), and the property is testable rather than argued: folding the full log
+  and the coalesced log must yield identical state. Two more joined it, both lifted
   out of the VS Code extension once a second client needed them. `FilePatch`/`PatchHunk` joined
   them for the same reason: a diff's line numbers are the *engine's*, carried on
   `user_message.patch`, because no client has read the file and one that computed them would point
@@ -72,7 +85,11 @@ protocol. Read these before changing scope or structure:
   `RunnerSnapshot` + `restore` are the two halves of rehydration, and `seedVfs`/`id` are the two
   options that make the *other* rehydration rules unmissable — `seedVfs` is ignored on a restore
   (seeding over a parked turn's files destroys exactly what was preserved) and `id` is what a
-  session comes back as itself under.
+  session comes back as itself under. `subscribe(listener, afterSeq, { coalesceReplay })` is the
+  third filter on a replay and the only opt-in one, because it is only sound for a consumer whose
+  handling of those events is last-write-wins: the WS attach is the single caller, while
+  `parking.ts` — which subscribes from seq 0 — *branches* on `status_changed`, so coalescing for
+  everyone would silently skip a park. `src/replay.ts` is the backwards scan behind it.
 - `packages/sandbox` — untrusted-code boundary: QuickJS-NG WASM guest, in-memory map VFS (not a
   node-fs emulation — the tab-side host runs it unpolyfilled), by-value host bridge,
   interpreter-enforced limits. Leaf like `protocol`; engine variant injected, so server and
@@ -164,7 +181,18 @@ protocol. Read these before changing scope or structure:
   paths. Here because every host that lets someone type a gateway address must normalize it
   identically, or the same gateway saved twice is two gateways.
 - `packages/react` — headless: `useClaudeSession`, the pure transcript reducer
-  (`src/transcript.ts`, framework-free, unit-tested — keep rendering out), the recap counters
+  (`src/transcript.ts`, framework-free, unit-tested — keep rendering out), the two halves of
+  **opening a session without flicker** (the ask was "no travel, no flash, no visible DOM
+  append", and scroll position was never the problem — the attach replays hundreds of rows in
+  bursts and you watch them stream past a correctly-pinned viewport): `replaying`, a hold on the
+  exact signal that `AttachedFrame` arrives *before* the replayed events and names the seq they
+  end on — never a quiet-window heuristic, which is what the deleted `useSettled` was — bounded
+  by a backstop because a blank panel forever beats no fix at all; and `src/transcript-cache.ts`,
+  a bounded LRU of `TranscriptState` keyed by *(gateway identity, session id)* so a switch-back
+  attaches with `afterSeq` and replays only the gap. That cache's whole risk is `staleAttach`: a
+  seq from a *different* log (a dormant rebuild starts at 0) delivers **nothing**, leaving stale
+  rows standing with no error — which was already reachable on a plain reconnect after a restart,
+  so the check fixes more than it costs. The recap counters
   behind catch-up (`src/recap.ts`: `summarizeSince` + `recapLine` — **counted, never written**;
   a prose recap would spend a turn on a summary nobody asked for, and would be worst in the
   case that matters most, a session that failed unattended), the composer's two
@@ -391,6 +419,12 @@ protocol. Read these before changing scope or structure:
   non-React host spells `45.2k` and `2h 10m` the same way the panel does, without pulling React
   into an extension-host bundle; `lib/status.ts` rides that entry too — `statusPresentation`
   (connection outranks a stale status), the 80/95 `meterSeverity` thresholds, `tightestWindow`
+  (the fullest window, for a surface with *one* slot) and `usageWindow(limits, lane)` (the
+  `session`/`weekly`/`model` split, for one with three — because "what is closest to blocking
+  me" and "how much of this session have I spent" are different questions, and the single slot
+  answered only the first, so a weekly window at 71% permanently hid a five-hour one at 60%; the
+  `model` lane finds the fullest `seven_day_*` bucket rather than naming a model, since which
+  models get their own bucket is the plan's business),
   and the lenient `[1m]`-stripping `currentModel`/`modelLabel` — typed structurally against
   `SessionVitals` rather than importing it, so the React-free entry stays React-free.
   `SessionBrowser` is the styled sessions list built on protocol's view model — search, facets,
@@ -599,14 +633,25 @@ protocol. Read these before changing scope or structure:
   `webviewHtml` because it must be right on the first paint. The **panel alone** opts in — the
   sidebar and section views are workbench UI and follow `--vscode-font-family`, which is the
   webview baseline `styles.css` sets. The
-  window status bar is the panel's bar, and each of its three badges is its own boolean
-  setting (`workerdeck.statusBar.*`), read per render so a change is just a re-render. Model
+  window status bar is the panel's bar, and each of its badges is its own boolean
+  setting (`workerdeck.statusBar.*`), read per render so a change is just a re-render — usage is
+  three of them now (`sessionUsage`/`weeklyUsage` on, `modelUsage` off, over protocol's lanes),
+  and a lane with no window hides rather than showing a dash. A running session colours its
+  status badge via the **foreground** (`charts.blue`), not a background: VS Code accepts only
+  `statusBarItem.errorBackground`/`warningBackground` and silently ignores anything else, and
+  both are alarm colours for a session that is merely working. Model
   and mode are bar items too, opening **QuickPicks** — a `StatusBarItem` has one command and
   no dropdown, so command → QuickPick is the only shape VS Code offers (and the one its own
   language-mode item uses); the panel's `onControls` setters are what they drive.
   One live attach per session, owned by the panel: sidebar/status
   bar/notifications read REST rollups (`pendingPermissionCount`) or tap frames already flowing
-  through the bridge — never a second attach. Remote gateways mount as a `workerdeck://`
+  through the bridge — never a second attach. A Cmd/Ctrl-clicked path in the transcript goes
+  through `webview/paths.ts`, which is a named module because the rule earned one: a match must
+  start at a **token boundary** (unanchored, `@_docs/BACKLOG.md` matched the *suffix* `/BACKLOG.md`
+  and the host confidently opened at the filesystem root) and a *relative* path must end in a
+  filename-with-extension, or the modifier underlines `and/or`. Resolution against the session
+  cwd is host-side, in POSIX arithmetic — the cwd is the *gateway's*, so a Windows host joining
+  it with `\` builds a path neither side has seen. Remote gateways mount as a `workerdeck://`
   FileSystemProvider over `/fs/*` (hash-guarded conditional writes; no mkdir/delete/rename —
   no such routes); local-vs-remote is decided from the gateway URL (`isLoopbackHost`), never
   by probing paths, which is also what makes `extensionKind: ["workspace","ui"]` the whole

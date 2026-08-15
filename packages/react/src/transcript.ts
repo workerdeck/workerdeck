@@ -226,6 +226,11 @@ export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): 
   return {
     ...state,
     // Before any event has arrived, the snapshot status is fresher than 'starting'.
+    // With state already held (a reconnect, or a warm transcript-cache seed) the
+    // held status stands: any change since is a `status_changed` in the replay
+    // span — state-bearing, always replayed, last occurrence kept — arriving on
+    // the same socket flush as this frame, so the event stream stays the one
+    // authority instead of a snapshot racing it.
     status: state.lastSeq === 0 ? info.status : state.status,
     model: state.model ?? info.model,
     permissionMode: state.permissionMode ?? info.permissionMode,
@@ -329,6 +334,22 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
 
     case 'plan_info':
       return { ...base, subscriptionType: event.subscriptionType }
+
+    case 'conversation_reset':
+      // Same session, fresh conversation (/clear, plan-mode exit). Only
+      // conversation-scoped state resets: the items, the context reading (the
+      // window now holds an almost-empty conversation; the runner re-polls),
+      // and the engine session id when the event names the new one. Everything
+      // session-scoped survives — models/commands/skills, produced files (still
+      // fetchable), rate limits and plan (account-level), cwd, model,
+      // permission mode, cumulative cost — and so do pending approvals: the
+      // runner still holds them and they still need answering.
+      return {
+        ...base,
+        items: [],
+        contextUsage: undefined,
+        sdkSessionId: event.sdkSessionId ?? base.sdkSessionId,
+      }
 
     case 'user_message': {
       let items = base.items

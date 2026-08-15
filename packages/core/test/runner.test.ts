@@ -680,4 +680,120 @@ describe('SessionRunner', () => {
     expect(events.map((e) => e.type)).toContain('system_init')
     expect(runner.status).toBe('running')
   })
+
+  describe('conversation_reset (/clear, plan-mode exit)', () => {
+    const resetMessage = {
+      type: 'conversation_reset',
+      new_conversation_id: 'sdk-session-2',
+      uuid: 'uuid-reset',
+      session_id: 'sdk-session-1',
+    } as unknown as SDKMessage
+
+    it('emits the event, adopts the new conversation id, and keeps activityCount monotonic', async () => {
+      const { harness, runner, events } = makeRunner()
+      void runner.start()
+      harness.emit(initMessage)
+      harness.emit(assistantMessage)
+      harness.emit(resultMessage)
+      await tick()
+      const activityBefore = runner.info().activityCount
+
+      harness.emit(resetMessage)
+      await tick()
+
+      const reset = events.find(
+        (e): e is Extract<SessionEvent, { type: 'conversation_reset' }> =>
+          e.type === 'conversation_reset',
+      )
+      expect(reset?.sdkSessionId).toBe('sdk-session-2')
+      // A dormant record written between the clear and the next prompt must
+      // resume the fresh conversation, not replay the cleared one.
+      expect(runner.sdkSessionId).toBe('sdk-session-2')
+      // The count is an unread cursor, not an item count: winding it back would
+      // strand every stored watermark above it (see SessionInfo.activityCount).
+      expect(runner.info().activityCount).toBe(activityBefore)
+    })
+
+    it('replays no pre-reset content to a fresh attach, but every state-bearing event', async () => {
+      const { harness, runner } = makeRunner(
+        {},
+        { models: [{ value: 'opus', displayName: 'Opus', description: '' }], commands: [] },
+      )
+      void runner.start()
+      await tick() // promptless: capabilities fetched eagerly
+      harness.emit(initMessage)
+      harness.emit(assistantMessage)
+      harness.emit(resultMessage)
+      harness.emit(resetMessage)
+      harness.emit({ ...assistantMessage, uuid: 'uuid-a2' } as unknown as SDKMessage)
+      await tick()
+
+      const replayed: SessionEvent[] = []
+      runner.subscribe((e) => replayed.push(e))
+      const types = replayed.map((e) => e.type)
+      // The cleared conversation does not come back…
+      expect(types.filter((t) => t === 'assistant_message')).toHaveLength(1)
+      expect(types).not.toContain('turn_result')
+      // …but the events a fresh attacher depends on — and which will not be
+      // re-emitted — all do.
+      expect(types).toContain('system_init')
+      expect(types).toContain('capabilities')
+      expect(types).toContain('status_changed')
+      expect(types).toContain('conversation_reset')
+      // The surviving assistant message is the post-reset one.
+      const assistant = replayed.find(
+        (e): e is Extract<SessionEvent, { type: 'assistant_message' }> =>
+          e.type === 'assistant_message',
+      )
+      expect(assistant?.uuid).toBe('uuid-a2')
+    })
+
+    it('still replays the reset to a reconnecting client holding pre-reset rows', async () => {
+      const { harness, runner } = makeRunner()
+      void runner.start()
+      harness.emit(initMessage)
+      harness.emit(assistantMessage)
+      await tick()
+      const detachedAt = runner.lastSeq // client saw the assistant row, then dropped
+
+      harness.emit(resetMessage)
+      await tick()
+
+      const replayed: SessionEvent[] = []
+      runner.subscribe((e) => replayed.push(e), detachedAt)
+      // The reset is what clears the stale rows the client still holds.
+      expect(replayed.map((e) => e.type)).toContain('conversation_reset')
+    })
+
+    it('a second reset supersedes the first: only the latest replays, with only its aftermath', async () => {
+      const { harness, runner } = makeRunner()
+      void runner.start()
+      harness.emit(initMessage)
+      harness.emit(assistantMessage)
+      harness.emit(resetMessage)
+      harness.emit({ ...assistantMessage, uuid: 'uuid-between' } as unknown as SDKMessage)
+      harness.emit({
+        ...resetMessage,
+        new_conversation_id: 'sdk-session-3',
+        uuid: 'uuid-reset-2',
+      } as unknown as SDKMessage)
+      harness.emit({ ...assistantMessage, uuid: 'uuid-after' } as unknown as SDKMessage)
+      await tick()
+
+      const replayed: SessionEvent[] = []
+      runner.subscribe((e) => replayed.push(e))
+      const resets = replayed.filter(
+        (e): e is Extract<SessionEvent, { type: 'conversation_reset' }> =>
+          e.type === 'conversation_reset',
+      )
+      expect(resets).toHaveLength(1)
+      expect(resets[0]!.sdkSessionId).toBe('sdk-session-3')
+      const assistants = replayed.filter(
+        (e): e is Extract<SessionEvent, { type: 'assistant_message' }> =>
+          e.type === 'assistant_message',
+      )
+      expect(assistants.map((e) => e.uuid)).toEqual(['uuid-after'])
+      expect(runner.sdkSessionId).toBe('sdk-session-3')
+    })
+  })
 })

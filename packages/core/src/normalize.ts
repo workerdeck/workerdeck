@@ -308,6 +308,11 @@ export function normalizeSdkMessage(msg: SDKMessage): SessionEventBody | null {
         errors: msg.subtype === 'success' ? undefined : msg.errors,
         usage: msg.usage,
       }
+    case 'conversation_reset':
+      // /clear, plan-mode exit, fresh-conversation flows: same session, fresh
+      // conversation. The runner reacts to this body too (reset watermark,
+      // sdkSessionId adoption) — see SessionRunner.#handleMessage.
+      return { type: 'conversation_reset', sdkSessionId: msg.new_conversation_id }
     case 'rate_limit_event':
       return {
         type: 'rate_limit',

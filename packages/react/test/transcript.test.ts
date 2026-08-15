@@ -587,6 +587,107 @@ describe('transcript reducer', () => {
     expect(state.model).toBeUndefined()
   })
 
+  it('conversation_reset empties the transcript and keeps session-scoped state', () => {
+    seq = 0
+    const before = run(initialTranscriptState, [
+      {
+        type: 'system_init',
+        sdkSessionId: 'sdk-1',
+        model: 'claude-test-1',
+        cwd: '/tmp/p',
+        apiKeySource: 'user',
+        tools: [],
+        skills: [],
+        slashCommands: [],
+        permissionMode: 'acceptEdits',
+        claudeCodeVersion: '2.0.0',
+        mcpServers: [],
+      },
+      {
+        type: 'capabilities',
+        models: [{ value: 'opus', displayName: 'Opus 5' }],
+        commands: [{ name: 'clear' }],
+        defaultModel: 'claude-opus-5',
+      },
+      { type: 'user_message', message: { role: 'user', content: 'hi' }, parentToolUseId: null, uuid: 'u1' },
+      {
+        type: 'assistant_message',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+        parentToolUseId: null,
+        uuid: 'a1',
+      },
+      {
+        type: 'context_usage',
+        usage: { categories: [], totalTokens: 90_000, maxTokens: 200_000, percentage: 45 },
+      },
+      { type: 'rate_limit', info: { status: 'allowed', rateLimitType: 'five_hour', utilization: 12 } },
+      {
+        type: 'file_produced',
+        fileId: 'f1',
+        path: '/home/u/.codex/generated_images/x.png',
+      },
+      { type: 'turn_result', subtype: 'success', isError: false, durationMs: 1, numTurns: 1, totalCostUsd: 0.5 },
+    ])
+    expect(before.items.length).toBeGreaterThan(0)
+
+    const state = run(before, [{ type: 'conversation_reset', sdkSessionId: 'sdk-2' }])
+    // The conversation is gone…
+    expect(state.items).toEqual([])
+    expect(state.sdkSessionId).toBe('sdk-2')
+    // …and its context reading with it: 45% of a cleared conversation is a lie,
+    // and the runner re-polls a fresh one.
+    expect(state.contextUsage).toBeUndefined()
+    // Session-scoped state survives: model list, commands, cwd, mode, produced
+    // files, rate limits (account-level), cumulative cost.
+    expect(state.models).toHaveLength(1)
+    expect(state.commands).toHaveLength(1)
+    expect(state.cwd).toBe('/tmp/p')
+    expect(state.model).toBe('claude-test-1')
+    expect(state.permissionMode).toBe('acceptEdits')
+    expect(state.producedFiles).toBeDefined()
+    expect(state.rateLimits?.five_hour?.utilization).toBe(12)
+    expect(state.totalCostUsd).toBe(0.5)
+  })
+
+  it('conversation_reset without a new id keeps the known one, and resets stack', () => {
+    seq = 0
+    const state = run(initialTranscriptState, [
+      {
+        type: 'system_init',
+        sdkSessionId: 'sdk-1',
+        model: 'm',
+        cwd: '/tmp/p',
+        apiKeySource: 'user',
+        tools: [],
+        skills: [],
+        slashCommands: [],
+        permissionMode: 'default',
+        claudeCodeVersion: '2.0.0',
+        mcpServers: [],
+      },
+      { type: 'user_message', message: { role: 'user', content: 'one' }, parentToolUseId: null, uuid: 'u1' },
+      { type: 'conversation_reset' },
+      { type: 'user_message', message: { role: 'user', content: 'two' }, parentToolUseId: null, uuid: 'u2' },
+      { type: 'conversation_reset', sdkSessionId: 'sdk-3' },
+      { type: 'user_message', message: { role: 'user', content: 'three' }, parentToolUseId: null, uuid: 'u3' },
+    ])
+    // Only what came after the second reset remains.
+    expect(state.items).toEqual([{ kind: 'user', id: 'u3', text: 'three', attachments: undefined }])
+    expect(state.sdkSessionId).toBe('sdk-3')
+  })
+
+  it('conversation_reset leaves pending approvals pending — the runner still holds them', () => {
+    seq = 0
+    const state = run(initialTranscriptState, [
+      {
+        type: 'permission_requested',
+        request: { id: 'req-1', toolName: 'Bash', input: {}, toolUseId: 't1' },
+      },
+      { type: 'conversation_reset' },
+    ])
+    expect(state.pendingApprovals).toHaveLength(1)
+  })
+
   it('records the plan the rate-limit windows belong to', () => {
     const state = run(initialTranscriptState, [{ type: 'plan_info', subscriptionType: 'max' }])
     expect(state.subscriptionType).toBe('max')

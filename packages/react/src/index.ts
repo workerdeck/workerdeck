@@ -1,9 +1,10 @@
-export { useClaudeSession } from './use-session.ts'
+export { initialReplayTarget, REPLAY_HOLD_MAX_MS, staleAttach, useClaudeSession } from './use-session.ts'
 export type {
   ConnectionState,
   UseClaudeSessionOptions,
   UseClaudeSessionResult,
 } from './use-session.ts'
+export { clearTranscriptCache } from './transcript-cache.ts'
 export { attachmentKind, useAttachments } from './use-attachments.ts'
 export type {
   AttachmentKind,

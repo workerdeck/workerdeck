@@ -13,10 +13,24 @@ import {
   seedFromSessionInfo,
   type TranscriptState,
 } from './transcript.ts'
+import {
+  deleteTranscriptCache,
+  readTranscriptCache,
+  transcriptCacheKey,
+  writeTranscriptCache,
+} from './transcript-cache.ts'
+
+/** Replace the state wholesale — an in-place session switch, or the stale-log
+ * resync. Internal to the hook; the wire never carries it. */
+type SeedAction = { type: 'transcript_seed'; state: TranscriptState }
 
 /** Session events drive the reducer; the attach snapshot seeds fields (permission
  * mode, model) that a promptless session's event stream doesn't carry yet. */
-function reduce(state: TranscriptState, action: SessionEvent | AttachedFrame): TranscriptState {
+function reduce(
+  state: TranscriptState,
+  action: SessionEvent | AttachedFrame | SeedAction,
+): TranscriptState {
+  if (action.type === 'transcript_seed') return action.state
   return action.type === 'attached'
     ? seedFromSessionInfo(state, action.session)
     : applyEvent(state, action)
@@ -37,11 +51,97 @@ export type ConnectionState = 'live' | 'reconnecting' | 'offline'
  * Three is ~3.5s of backoff — past a blip. Matches the iOS client. */
 const OFFLINE_AFTER_ATTEMPTS = 3
 
+/**
+ * The seq the initial attach replay ends on, or undefined when there is nothing
+ * to hold for.
+ *
+ * This is an exact signal, not a heuristic: the `attached` frame is sent before
+ * any replayed `event` frame and carries the runner's seq at attach time
+ * (`session.lastSeq`), so the moment the frame arrives the client knows
+ * precisely which seq the replay ends on. Every runner keeps its full event log
+ * and always delivers the highest-seq event on a fresh replay (the
+ * `conversation_reset` skip is strictly-below-the-reset, and the reset's seq is
+ * itself ≤ lastSeq), so `TranscriptState.lastSeq >= target` means the replay
+ * has landed. No quiet window or other arrival heuristic belongs here.
+ *
+ * Only a FRESH attach yields a target (`replayingFrom === 0`): a reconnect
+ * replays into a transcript the reader is already looking at, and blanking it
+ * mid-turn would be a worse bug than the flicker the hold exists to fix. A
+ * brand-new session (`lastSeq === 0`) has nothing to replay and never holds.
+ */
+export function initialReplayTarget(frame: AttachedFrame): number | undefined {
+  return frame.replayingFrom === 0 && frame.session.lastSeq > 0 ? frame.session.lastSeq : undefined
+}
+
+/**
+ * Whether an attach frame describes a DIFFERENT event log than the transcript
+ * `held` was built from — in which case attaching with `afterSeq: held.lastSeq`
+ * has already gone wrong: every event in the new log has seq ≤ afterSeq, so
+ * nothing will ever arrive and the stale rows would stand forever, with no
+ * error. The only recovery is to forget the state and re-attach from seq 0.
+ *
+ * A log resets on routine paths, not corner cases: a dormant session
+ * (claude/codex surviving a gateway restart) is rebuilt with a brand-new
+ * runner whose log starts at 0 and refills from the engine's own store. Two
+ * checks, each of which the other misses:
+ *
+ * - `session.lastSeq < held.lastSeq` — the server's log is shorter than what
+ *   we hold. Within one log seq only grows, so this is proof of a reset. It
+ *   catches a rebuilt runner that has not yet re-run far — but not one whose
+ *   backfill already advanced past us.
+ * - `session.createdAt !== held.session.createdAt` — a different runner
+ *   incarnation. The claude and codex runners stamp `Date.now()` at
+ *   construction, so a dormant rebuild always changes it; the provider runner
+ *   restores `createdAt` from its snapshot precisely when it also restores
+ *   the event log and seq counter (ai-sdk-runner's `#restore`), so equality
+ *   truthfully means "same log" for every engine.
+ *
+ * A full replay (`replayingFrom === 0`) is never stale — it carries the whole
+ * log, so the caller heals by resetting state and applying it — and holding
+ * nothing (`held.lastSeq === 0`) has nothing to be stale about. That first
+ * clause is also what makes the recovery loop-proof: the re-attach from 0 can
+ * never re-trigger this predicate.
+ *
+ * Not cache-specific: a live handle reconnecting after a gateway restart
+ * re-attaches with its own advanced `afterSeq` against the rebuilt log and
+ * hits the identical silence, so the hook applies this to every attach frame.
+ */
+export function staleAttach(frame: AttachedFrame, held: TranscriptState): boolean {
+  if (frame.replayingFrom === 0 || held.lastSeq === 0) return false
+  if (frame.session.lastSeq < held.lastSeq) return true
+  return held.session !== undefined && frame.session.createdAt !== held.session.createdAt
+}
+
+/**
+ * Backstop for the replay hold: if the target seq has not landed after this
+ * long, reveal what has arrived. On a healthy attach the target is always
+ * reached (see {@link initialReplayTarget}); the backstop exists because a
+ * blank panel forever would be a much worse failure than a visible stream, so
+ * the hold is bounded no matter what a future filter or a lossy path does. It
+ * runs from the attach — a per-event re-arm would be a quiet-window heuristic
+ * in a new costume.
+ */
+export const REPLAY_HOLD_MAX_MS = 1500
+
 export type UseClaudeSessionOptions = {
   /** Called when the server rejects a command with a protocol_error frame — e.g. a
    * permission-mode switch the CLI refuses. Without a handler these are dropped
    * silently and the UI looks like "nothing happened". */
   onProtocolError?: (message: string) => void
+  /**
+   * Keep this session's transcript warm after unmount (default true): the next
+   * mount of the same (client identity, session) paints the cached rows in its
+   * first frame and attaches with `afterSeq`, replaying only what it missed.
+   * Bounded module-scope LRU, keyed by the client's `identityKey` (gateway +
+   * auth headers) so nothing crosses gateways or credentials; if the attach
+   * frame shows a different event log (see {@link staleAttach}), the entry is
+   * discarded and the hook re-attaches from seq 0.
+   *
+   * Set `false` for an embedder whose principal varies on one base URL by
+   * means the client cannot see (a custom `fetchImpl` switching users, say) —
+   * or call `clearTranscriptCache()` on logout. Read at attach time.
+   */
+  cacheTranscript?: boolean
 }
 
 export type UseClaudeSessionResult = {
@@ -50,6 +150,16 @@ export type UseClaudeSessionResult = {
    * carries the same fact with the "has it been failing a while" distinction. */
   connected: boolean
   connection: ConnectionState
+  /**
+   * True while the initial attach replay is still landing: the `attached` frame
+   * said events up to `session.lastSeq` follow, and they have not all been
+   * applied yet. A surface can hold its paint on this — keep the rows mounted
+   * and measuring, show nothing — and reveal a settled transcript in one frame,
+   * instead of streaming hundreds of replayed rows past the reader. Always
+   * false on a reconnect (only a fresh attach holds; see
+   * {@link initialReplayTarget}) and bounded by {@link REPLAY_HOLD_MAX_MS}.
+   */
+  replaying: boolean
   /** The server's `PROTOCOL_VERSION` when it disagrees with the one this build
    * mirrors — undefined when they match. Some events may not render. */
   protocolMismatch?: number
@@ -89,25 +199,95 @@ export function useClaudeSession(
   sessionId: string | undefined,
   options?: UseClaudeSessionOptions,
 ): UseClaudeSessionResult {
-  const [state, dispatch] = useReducer(reduce, initialTranscriptState)
+  // Seeded from the transcript cache when this (client identity, session) was
+  // viewed recently — the cached rows are the mount frame's paint, which is the
+  // whole "switching back is instant" feature. A cold key starts blank as before.
+  const [state, dispatch] = useReducer(
+    reduce,
+    undefined,
+    (): TranscriptState =>
+      (options?.cacheTranscript !== false && sessionId !== undefined
+        ? readTranscriptCache(transcriptCacheKey(client, sessionId))
+        : undefined) ?? initialTranscriptState,
+  )
   const [connection, setConnection] = useState<ConnectionState>('reconnecting')
   const [protocolMismatch, setProtocolMismatch] = useState<number | undefined>()
+  /** Where the current attach's replay ends, while one is being held for. */
+  const [replayTarget, setReplayTarget] = useState<number | undefined>()
+  /** Bumped to force a fresh attach from seq 0 after a stale-log detection. */
+  const [resyncSeq, setResyncSeq] = useState(0)
   // Ref for the stable callbacks below; state so consumers of `handle` re-render
   // when the socket opens or the session switches.
   const [handleState, setHandleState] = useState<SessionHandle | undefined>()
   const handleRef = useRef<SessionHandle | null>(null)
   // Ref'd so a new inline callback doesn't tear down and reopen the socket.
-  const onProtocolErrorRef = useRef(options?.onProtocolError)
-  onProtocolErrorRef.current = options?.onProtocolError
+  const optionsRef = useRef(options)
+  optionsRef.current = options
+  // The latest rendered state, for the attach effect and its cleanup — both run
+  // outside render and must see what the transcript actually holds.
+  const stateRef = useRef(state)
+  stateRef.current = state
+  // Which (resync, client identity, session) the reducer state belongs to. The
+  // initializer above seeded for the mount's token; the effect re-seeds when its
+  // token differs (an in-place session switch, or a resync).
+  const seededForRef = useRef(
+    `0:${sessionId === undefined ? '' : transcriptCacheKey(client, sessionId)}`,
+  )
+  // True from a stale-log detection until the next attach: the cleanup must not
+  // write the condemned state back into the cache (it would re-poison the very
+  // retry that just discarded it), and the retry must attach cold even if some
+  // other mount re-wrote the entry meanwhile.
+  const skipCacheRef = useRef(false)
 
   useEffect(() => {
     if (!sessionId) return
-    const handle = client.attach(sessionId)
+    const cache = optionsRef.current?.cacheTranscript !== false
+    const key = transcriptCacheKey(client, sessionId)
+    const seedToken = `${resyncSeq}:${key}`
+    const warm = cache && !skipCacheRef.current ? readTranscriptCache(key) : undefined
+    skipCacheRef.current = false
+    // What the reducer holds for THIS attach. On the mount that initialized it,
+    // the live state (same object the initializer read); otherwise seed before
+    // any frame arrives — applyEvent's `seq <= lastSeq` dedupe would silently
+    // swallow a new session's (or a fresh log's) entire replay into old state.
+    let held: TranscriptState
+    if (seededForRef.current === seedToken) {
+      held = stateRef.current
+    } else {
+      held = warm ?? initialTranscriptState
+      dispatch({ type: 'transcript_seed', state: held })
+      seededForRef.current = seedToken
+    }
+    // `afterSeq` comes from the state actually held, never from a separate
+    // cache read: they are the same object here, and deriving both from one
+    // source keeps a racing write from another mount from opening a gap.
+    const handle = client.attach(sessionId, held.lastSeq > 0 ? { afterSeq: held.lastSeq } : {})
     handleRef.current = handle
     setHandleState(handle)
     const offEvent = handle.on('event', (event: SessionEvent) => dispatch(event))
     const offAttached = handle.on('attached', (frame: AttachedFrame) => {
+      if (staleAttach(frame, stateRef.current)) {
+        // The server's log is not the one this transcript came from (dormant
+        // rebuild, restart): we attached past events we never saw, so this
+        // socket delivers either nothing or another log's events — see
+        // staleAttach. Stop listening NOW (a rebuilt log that advanced past us
+        // replays new-log events in this same tick, and they must not compose
+        // into old-log state), forget everything, and re-attach from seq 0;
+        // the hold below then blanks the stale rows until the real replay
+        // lands. Cannot loop: the retry ignores the cache and attaches with
+        // afterSeq 0, for which staleAttach is false by definition.
+        offEvent()
+        deleteTranscriptCache(key)
+        skipCacheRef.current = true
+        setResyncSeq((n) => n + 1)
+        return
+      }
       dispatch(frame)
+      // A reconnect's frame (`replayingFrom > 0`) computes to undefined, which
+      // also RELEASES a hold whose replay was cut short by a socket drop: the
+      // re-attach picks up from whatever landed, streaming the rest visibly
+      // rather than holding for a target the first socket never delivered.
+      setReplayTarget(initialReplayTarget(frame))
       setProtocolMismatch(
         frame.protocolVersion === PROTOCOL_VERSION ? undefined : frame.protocolVersion,
       )
@@ -119,7 +299,7 @@ export function useClaudeSession(
       setConnection(attempts >= OFFLINE_AFTER_ATTEMPTS ? 'offline' : 'reconnecting'),
     )
     const offProtocolError = handle.on('protocolError', (message: string) => {
-      onProtocolErrorRef.current?.(message)
+      optionsRef.current?.onProtocolError?.(message)
     })
     return () => {
       offEvent()
@@ -132,12 +312,39 @@ export function useClaudeSession(
       setHandleState(undefined)
       setConnection('reconnecting')
       setProtocolMismatch(undefined)
+      setReplayTarget(undefined)
+      // Keep the transcript warm for a switch-back. Skipped when there is
+      // nothing real to keep (`lastSeq === 0`, which also protects an existing
+      // entry from being clobbered by a mount that never finished attaching)
+      // and after a stale-log detection (see skipCacheRef).
+      const parting = stateRef.current
+      if (cache && !skipCacheRef.current && parting.lastSeq > 0 && parting.session) {
+        writeTranscriptCache(key, parting)
+      }
     }
-  }, [client, sessionId])
+  }, [client, sessionId, resyncSeq])
+
+  // The hold's backstop. Armed once per hold (the target is set exactly once,
+  // at the attach) and NOT re-armed per event — that would be a quiet-window
+  // latch, the thing this design exists to not be. When the target is reached
+  // the derived `replaying` below flips false in that same render; this state
+  // is then cleared so the next attach starts clean.
+  useEffect(() => {
+    if (replayTarget === undefined) return
+    const timer = setTimeout(() => setReplayTarget(undefined), REPLAY_HOLD_MAX_MS)
+    return () => clearTimeout(timer)
+  }, [replayTarget])
+  useEffect(() => {
+    if (replayTarget !== undefined && state.lastSeq >= replayTarget) setReplayTarget(undefined)
+  }, [replayTarget, state.lastSeq])
 
   const models = useProfileModelFallback(client, sessionId, state)
 
   const connected = connection === 'live'
+  // Derived at render, not in an effect, so the reveal happens in the SAME
+  // commit that applies the replay's final event — an effect would reveal one
+  // render late, and that render is a visible frame.
+  const replaying = replayTarget !== undefined && state.lastSeq < replayTarget
   const reconnectNow = useCallback(() => handleRef.current?.reconnectNow(), [])
 
   return useMemo(
@@ -145,6 +352,7 @@ export function useClaudeSession(
       state,
       connected,
       connection,
+      replaying,
       protocolMismatch,
       models,
       effectiveModel: state.model ?? state.defaultModel,
@@ -159,7 +367,7 @@ export function useClaudeSession(
       closeSession: () => handleRef.current?.closeSession(),
       reconnectNow,
     }),
-    [state, connected, connection, protocolMismatch, models, handleState, reconnectNow],
+    [state, connected, connection, replaying, protocolMismatch, models, handleState, reconnectNow],
   )
 }
 

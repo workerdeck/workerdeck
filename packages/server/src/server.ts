@@ -2920,7 +2920,16 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       session: runner.info(),
       replayingFrom: afterSeq,
     })
-    const unsubscribe = runner.subscribe((event) => send({ type: 'event', event }), afterSeq)
+    // `coalesceReplay` is opt-in and this is the one caller: a client's reducer
+    // is last-write-wins for the readings it drops, so all it ever sees is the
+    // final value — whereas the in-process subscribers (parking above all) read
+    // those same events as *transitions* and must keep every one. Without it a
+    // long session replays every per-turn usage poll, and the client renders
+    // each: the meters visibly count up through the session's whole history on
+    // every attach.
+    const unsubscribe = runner.subscribe((event) => send({ type: 'event', event }), afterSeq, {
+      coalesceReplay: true,
+    })
     // Register for bridged tool calls: this client can be asked to execute them
     // in its own sandbox (see BridgeHub).
     const detachBridge = bridge.attach(runner.id, send)

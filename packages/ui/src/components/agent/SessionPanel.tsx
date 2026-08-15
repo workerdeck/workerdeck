@@ -325,6 +325,14 @@ export interface SessionPanelProps {
    * a wildcard.
    */
   toolHost?: UseToolCallHostOptions | false
+  /**
+   * Keep this session's transcript warm across remounts (default true), so
+   * switching back to a recently viewed session paints instantly and replays
+   * only what it missed — `UseClaudeSessionOptions.cacheTranscript`. Set
+   * `false` for an embedder whose principal varies on one gateway URL by means
+   * the client cannot see.
+   */
+  cacheTranscript?: boolean
   className?: string
 }
 
@@ -432,6 +440,7 @@ export function SessionPanel({
   unseen,
   readOnly = false,
   toolHost,
+  cacheTranscript,
   className,
 }: SessionPanelProps) {
   const external = panelSurface === 'external'
@@ -450,6 +459,7 @@ export function SessionPanel({
   const {
     state,
     connection,
+    replaying,
     protocolMismatch,
     models,
     effectiveModel,
@@ -461,7 +471,7 @@ export function SessionPanel({
     setModel,
     setPermissionMode,
     reconnectNow,
-  } = useClaudeSession(client, sessionId, { onProtocolError: setProtocolError })
+  } = useClaudeSession(client, sessionId, { onProtocolError: setProtocolError, cacheTranscript })
   // Callers are told to remount on a session switch, but a changed prop must not leave
   // the previous session's failure on screen.
   useEffect(() => setProtocolError(undefined), [sessionId])
@@ -791,6 +801,7 @@ export function SessionPanel({
           stickyPrompt={stickyPrompt}
           scrubber={scrubber}
           scrubberMarks={scrubberMarks}
+          replaying={replaying}
           catchUp={
             catchUp && newCount > 0
               ? { from: catchUp.itemCount, since: catchUp.since }
@@ -801,8 +812,10 @@ export function SessionPanel({
         />
         {/* The way back into what you missed. Above the composer because that is
             where the eye already is on returning, and because the transcript
-            itself opens pinned to the newest row. */}
-        {catchUp && newCount > 0 ? (
+            itself opens pinned to the newest row. Held with the transcript
+            while the replay lands — its count is `state.items.length`, which
+            during the replay is a number visibly climbing toward its answer. */}
+        {catchUp && newCount > 0 && !replaying ? (
           <div className='px-3 pb-1'>
             <div
               data-slot='catch-up'

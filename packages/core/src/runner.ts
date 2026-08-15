@@ -21,6 +21,7 @@ import {
   type SessionInfo,
   type SessionStatus,
   transcriptActivity,
+  transcriptContent,
 } from '@workerdeck/protocol'
 import {
   type AttachmentInput,
@@ -38,6 +39,7 @@ import {
   toApiMessage,
 } from './normalize.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from './runner-interface.ts'
+import { staleReplaySeqs } from './replay.ts'
 
 export type QueryFn = (params: {
   prompt: AsyncIterable<SDKUserMessage>
@@ -90,6 +92,15 @@ export class SessionRunner implements Runner {
   #listeners = new Set<SessionEventListener>()
   #seq = 0
   #activityCount = 0
+  /**
+   * Seq of the latest `conversation_reset` event, 0 when none. The log itself is
+   * never truncated — it still carries the state-bearing events (`capabilities`,
+   * `system_init`, …) a fresh attacher depends on and which are not re-emitted —
+   * but `subscribe()` skips transcript *content* strictly below this mark, so a
+   * replay does not resurrect a cleared conversation. A later reset supersedes
+   * an earlier one by overwriting it.
+   */
+  #resetSeq = 0
   #status: SessionStatus = 'starting'
   #statusDetail: string | undefined
   #sdkSessionId: string | undefined
@@ -303,10 +314,27 @@ export class SessionRunner implements Runner {
   /**
    * Replay buffered events with seq > afterSeq, then deliver live events.
    * Returns an unsubscribe function.
+   *
+   * Replay honours the reset watermark: transcript content below the latest
+   * `conversation_reset` is skipped (the reducer would clear it again anyway,
+   * and a pre-reset client that never learned the reducer's case would render
+   * a conversation the engine has discarded), while state-bearing events —
+   * which are emitted once and never again — always replay. The reset event
+   * itself replays (the skip is strictly-below), which is what clears a
+   * reconnecting client still holding pre-reset rows; superseded resets are
+   * content below the newer one and are skipped with what they cleared.
    */
-  subscribe(listener: SessionEventListener, afterSeq = 0): () => void {
+  subscribe(
+    listener: SessionEventListener,
+    afterSeq = 0,
+    options?: { coalesceReplay?: boolean },
+  ): () => void {
+    const stale = options?.coalesceReplay ? staleReplaySeqs(this.#events, afterSeq) : undefined
     for (const event of this.#events) {
-      if (event.seq > afterSeq) listener(event)
+      if (event.seq <= afterSeq) continue
+      if (event.seq < this.#resetSeq && transcriptContent(event)) continue
+      if (stale?.has(event.seq)) continue
+      listener(event)
     }
     this.#listeners.add(listener)
     return () => this.#listeners.delete(listener)
@@ -459,6 +487,17 @@ export class SessionRunner implements Runner {
     const body = normalizeSdkMessage(msg)
     if (body) {
       this.#emit(body)
+      if (body.type === 'conversation_reset') {
+        // Same session, fresh conversation: adopt the new conversation id now
+        // rather than waiting for the follow-up system_init (which only arrives
+        // with the next prompt) — a dormant record written in between must
+        // resume the fresh conversation, not replay the cleared one. The next
+        // system_init stays authoritative and overwrites it.
+        if (body.sdkSessionId) this.#sdkSessionId = body.sdkSessionId
+        // The window now holds an almost-empty conversation; re-poll so clients
+        // aren't left staring at the cleared conversation's reading.
+        void this.#fetchContextUsage()
+      }
       if (body.type === 'turn_result') {
         // total_cost_usd / num_turns are session-cumulative on each result message.
         this.#totalCostUsd = body.totalCostUsd
@@ -696,8 +735,11 @@ export class SessionRunner implements Runner {
   #emit(body: SessionEventBody): void {
     const event: SessionEvent = { ...body, seq: ++this.#seq, ts: Date.now() }
     this.#lastActivityAt = event.ts
-    // Rows, not events: what a client diffs to know how much it missed.
+    // Rows, not events: what a client diffs to know how much it missed. The
+    // count is monotonic across a conversation_reset on purpose — it is an
+    // unread cursor, not an item count (see SessionInfo.activityCount).
     this.#activityCount += transcriptActivity(body)
+    if (body.type === 'conversation_reset') this.#resetSeq = event.seq
     this.#events.push(event)
     for (const listener of this.#listeners) {
       try {
