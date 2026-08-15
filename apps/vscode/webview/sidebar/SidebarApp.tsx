@@ -34,8 +34,8 @@ type Persisted = { config?: ViewConfig }
  * body never grows a second button for it.
  *
  * What it does own is the view config itself (search, facets, group, sort),
- * which it persists and mirrors to the host so the activity-bar badge counts the
- * same rows the list is showing.
+ * which it persists and mirrors to the host so the unread status-bar item counts
+ * the same rows the list is showing.
  */
 export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const [state, setState] = useState<SidebarState | undefined>(undefined)
@@ -53,7 +53,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
     bridge.setState<Persisted>({ config })
   }, [bridge, config])
 
-  // …and the host mirrors it, so the activity-bar badge counts the rows this
+  // …and the host mirrors it, so the unread status-bar item counts the rows this
   // list is showing rather than every session on every gateway. One-way: the
   // webview owns the config, the host only reads it.
   useEffect(() => {

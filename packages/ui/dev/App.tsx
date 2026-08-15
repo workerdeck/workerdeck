@@ -51,6 +51,7 @@ export function App() {
   // loop) can be exercised across hundreds of unmeasured rows.
   const catchUp = fixture === 'huge' ? { from: 300 } : undefined
   const jumpRef = useRef<(() => void) | null>(null)
+  const repinRef = useRef<(() => void) | null>(null)
 
   // Hooks for driving the audits headlessly (chrome devtools).
   // `__wdAudit` audits whatever rows are mounted; the driver scrolls and merges.
@@ -62,6 +63,7 @@ export function App() {
     w.__wdAudit = () =>
       surface.current ? auditHeights(state, surface.current, catchUp?.from) : undefined
     w.__wdJumpRecap = () => jumpRef.current?.()
+    w.__wdRepin = () => repinRef.current?.()
     // The scroll-performance sweep (`perf-audit.ts`) — run it on `perf`.
     w.__wdPerf = (step?: number) => {
       const scroller = surface.current?.querySelector<HTMLElement>(
@@ -260,6 +262,7 @@ export function App() {
             scrubberMarks={fixture === 'huge' ? [30, 210, 480] : undefined}
             catchUp={catchUp}
             jumpToRecapRef={jumpRef}
+            repinRef={repinRef}
             className={cn('h-[70vh]', grid && 'term-grid-overlay')}
           />
           {/* The composer is the panel's foot and its own terminal surface, so
@@ -267,7 +270,13 @@ export function App() {
               provider, at the same metrics. The grid audit reaches it too. */}
           <TranscriptVariantProvider value='terminal'>
             <Composer
-              onSend={(text) => setAnswered(`sent: ${text}`)}
+              onSend={(text) => {
+                // The panel re-pins on send (`SessionPanel.handleSend`), so the
+                // playground does too — otherwise the one integration this
+                // harness exists to prove is the one it skips.
+                repinRef.current?.()
+                setAnswered(`sent: ${text}`)
+              }}
               onInterrupt={() => setAnswered('interrupted')}
               busy={false}
               fontSize={fontSize}

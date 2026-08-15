@@ -183,7 +183,7 @@ export class SessionsModel implements vscode.Disposable {
     return snap?.probe === 'connected' ? snap.sessions : []
   }
 
-  /** Sessions awaiting a human — the sidebar view badge. */
+  /** Sessions awaiting a human — what colours the unread status-bar item. */
   attentionCount(): number {
     let waiting = 0
     for (const snap of this.#snapshots.values()) {

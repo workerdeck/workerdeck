@@ -584,6 +584,8 @@ export function SessionPanel({
   // The catch-up strip's way of scrolling the (virtualized, usually unmounted)
   // recap row into view — the transcript fills it in. See TranscriptProps.
   const jumpToRecap = useRef<(() => void) | null>(null)
+  // Filled by the transcript; pressed on send. See `handleSend`.
+  const repinTranscript = useRef<(() => void) | null>(null)
 
   // "/model" is handled panel-side (see handleSend) — surface it in the autocomplete
   // even though the CLI's command list doesn't include it.
@@ -617,6 +619,13 @@ export function SessionPanel({
     // Typing into a session is the clearest possible statement that you have
     // read it — nothing left to catch up on.
     setCaughtUp(true)
+    // ...and sending is the statement that you want to watch what happens next,
+    // so following resumes here too. Scrolling up escapes the bottom lock, and
+    // without this the reply streams in off screen: the transcript stays parked
+    // where you were reading and sending looks like it did nothing. Ordered
+    // before `send` only for readability — the re-pin is instant and the first
+    // row is a round trip away either way.
+    repinTranscript.current?.()
     send(text, attachmentIds)
   }
 
@@ -788,6 +797,7 @@ export function SessionPanel({
               : undefined
           }
           jumpToRecapRef={jumpToRecap}
+          repinRef={repinTranscript}
         />
         {/* The way back into what you missed. Above the composer because that is
             where the eye already is on returning, and because the transcript

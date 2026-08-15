@@ -68,7 +68,7 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
     <td align="center" valign="top" width="25%">
       <a href="apps/vscode"><img src="docs/assets/card-vscode.png" alt="VS Code Extension — the editor with the agent session in the bottom panel and sessions in the sidebar" /></a>
       <br /><b><a href="apps/vscode">VS Code Extension</a></b>
-      <br /><sub>The session rides the bottom panel, terminal-shaped; gateways and sessions in the sidebar, approvals as native notifications, remote projects as a virtual workspace.</sub>
+      <br /><sub>The session rides the bottom panel, terminal-shaped; sessions in the Explorer, the session's own readings in the secondary sidebar, approvals as native notifications, remote projects as a virtual workspace.</sub>
     </td>
     <td align="center" valign="top" width="25%">
       <a href="https://workerdeck.github.io/workerdeck/docs/guides/embed-in-your-app/"><img src="docs/assets/card-embedded.png" alt="Embedded App — someone else's product with the WorkerDeck session panel docked inside it" /></a>

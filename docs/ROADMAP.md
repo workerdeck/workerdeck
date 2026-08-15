@@ -247,8 +247,8 @@ ships inside 0.15.0. Do not publish a v0.14.0 after the fact.
   `protocol` — deliberately the react reducer's own row rule, because `numTurns` undercounts
   a turn that ran five tools and `lastSeq` counts every stream delta. The extension keeps a
   per-session watermark (globalState, written only while the panel is visible and showing that
-  session), which becomes an unread badge on each card, the same count summed on the
-  activity-bar icon (over the rows the filter is actually showing — the webview mirrors its
+  session), which becomes an unread badge on each card, the same count summed into a window
+  status-bar item (over the rows the filter is actually showing — the webview mirrors its
   view config to the host for exactly this), and, on returning, **catch-up**: a `※ recap:` row
   at the boundary counting what happened, everything above it dimmed, and a jump/dismiss bar.
   The recap is counted, never written — `summarizeSince`/`recapLine` in `react` — because a
@@ -264,7 +264,7 @@ ships inside 0.15.0. Do not publish a v0.14.0 after the fact.
 
 The extension's list model, generalized and taken to the other two clients. The rules moved
 into `protocol` (`session-list.ts`, `watermarks.ts`) rather than being copied, because they are
-rules and not preferences: the extension's activity-bar badge counts the *same* rows its list
+rules and not preferences: the extension's unread badge counts the *same* rows its list
 shows, so a client filtering differently would announce work it is hiding. `apiUrl`/
 `isLoopbackHost` moved to `client` (there were two copies and a third was coming) and the status
 presentation rules to `@workerdeck/ui/format`; the extension now consumes all of it, and its

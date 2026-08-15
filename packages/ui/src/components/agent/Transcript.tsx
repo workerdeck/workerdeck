@@ -532,6 +532,7 @@ function TranscriptRows({
   attachmentUrl,
   hostImage,
   jumpToRecapRef,
+  repinRef,
 }: {
   rows: TranscriptRow[]
   boundary: number | undefined
@@ -558,6 +559,7 @@ function TranscriptRows({
   attachmentUrl?: (attachmentId: string) => string
   hostImage?: (path: string) => Promise<string | undefined>
   jumpToRecapRef?: RefObject<(() => void) | null>
+  repinRef?: RefObject<(() => void) | null>
 }) {
   const stick = useStickToBottomContext()
   // The scroll element belongs to an ancestor — `StickToBottom.Content`
@@ -873,6 +875,26 @@ function TranscriptRows({
     }
   })
 
+  // Re-pin to the bottom. Published the same way as the jump above, and for the
+  // same reason: only the scroll context can do it, and it lives in here.
+  //
+  // `'instant'`, never the follow spring. The spring exists to keep up with a
+  // stream a few pixels at a time; from a reader who had scrolled a long way up
+  // it would animate the whole way down, which is the smooth-scroll-on-switch
+  // complaint this component already carries two guards against. The target is
+  // trustworthy because the bottom is `totalSize`, which the height calculator
+  // makes exact — unlike a mid-list row, which is why `jumpToRow` needs its
+  // aim/re-aim loop and this needs none.
+  useEffect(() => {
+    if (!repinRef) return
+    repinRef.current = () => {
+      void stick.scrollToBottom('instant')
+    }
+    return () => {
+      repinRef.current = null
+    }
+  })
+
   // The scrubber. Interactivity follows the hover affordance — with
   // `affordances={false}` the rail is passive paint (pointer-events off) and
   // the native scrollbar stays; interactive, the rail IS the scrollbar, so the
@@ -1116,6 +1138,14 @@ export interface TranscriptProps {
    * catch-up strip never touch it. `null` while no transcript is mounted.
    */
   jumpToRecapRef?: RefObject<(() => void) | null>
+  /**
+   * Filled with a closure that re-pins the transcript to the bottom, so a host
+   * can resume following after the reader has scrolled away. The panel presses
+   * it on send: choosing to say something is choosing to watch what happens
+   * next, and a transcript left parked where you were reading makes a sent
+   * message look like it did nothing at all.
+   */
+  repinRef?: RefObject<(() => void) | null>
   className?: string
 }
 
@@ -1135,6 +1165,7 @@ export function Transcript({
   scrubberMarks,
   catchUp,
   jumpToRecapRef,
+  repinRef,
   className,
 }: TranscriptProps) {
   const terminal = variant === 'terminal'
@@ -1196,6 +1227,7 @@ export function Transcript({
               attachmentUrl={attachmentUrl}
               hostImage={hostImage}
               jumpToRecapRef={jumpToRecapRef}
+              repinRef={repinRef}
             />
           )}
           {showLoader(state) ? (

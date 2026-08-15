@@ -101,6 +101,69 @@ export function createRangeAtOffset(editor: HTMLElement, targetOffset: number): 
   return range
 }
 
+/**
+ * Where the caret is on screen, in viewport coordinates.
+ *
+ * A collapsed range usually measures fine, but not when it sits *between* child
+ * nodes of an element — which is exactly where a freshly inserted newline puts
+ * it, because this editor's content is a flat run of text nodes and `<br>`s
+ * directly under the editor element. There `getBoundingClientRect()` is all
+ * zeros, and the obvious fallback (measure `startContainer`'s element) resolves
+ * to the editor itself, whose rect is the viewport box — so it reports the
+ * caret as trivially visible and scrolls nothing.
+ *
+ * So measure the neighbour instead: the child the caret sits before, or failing
+ * that the one it sits after. Selecting a node gives a real rect even for a
+ * `<br>`, which is what the line the caret just moved to consists of.
+ */
+function caretRect(range: Range): DOMRect | null {
+  const direct = range.getBoundingClientRect()
+  if (direct.height > 0) return direct
+
+  const node = range.startContainer
+  if (node.nodeType !== Node.ELEMENT_NODE) return null
+  const children = (node as Element).childNodes
+  const neighbours = [children[range.startOffset], children[range.startOffset - 1]]
+  for (const neighbour of neighbours) {
+    if (!neighbour) continue
+    const probe = document.createRange()
+    probe.selectNode(neighbour)
+    const rect = probe.getBoundingClientRect()
+    if (rect.height > 0) return rect
+  }
+  return null
+}
+
+/**
+ * Keep the caret inside the editor's visible box after a *programmatic* move.
+ *
+ * The editor is its own scroll container once it hits `maxHeight`
+ * (`prompt-area.tsx` sets `overflowY: auto` there). Typing scrolls the caret
+ * into view for free, because that is the browser's own behaviour for a native
+ * edit — but every path that calls `preventDefault()` and rebuilds the DOM
+ * itself (Shift+Enter, list continuation, undo/redo, the bold/italic wrap,
+ * paste) places the caret with a Range instead, and setting a selection does
+ * not scroll anything. The symptom is a prompt that has grown past its cap and
+ * stops following what you are writing: type and it scrolls, press Shift+Enter
+ * and the new line appears below the fold.
+ *
+ * A no-op when the caret is already visible, so it is safe on every call — it
+ * corrects an off-screen caret rather than scrolling to one.
+ */
+export function scrollCaretIntoView(editor: HTMLElement): void {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return
+  const range = sel.getRangeAt(0)
+  if (!editor.contains(range.startContainer)) return
+
+  const rect = caretRect(range)
+  if (!rect) return
+
+  const box = editor.getBoundingClientRect()
+  if (rect.bottom > box.bottom) editor.scrollTop += rect.bottom - box.bottom
+  else if (rect.top < box.top) editor.scrollTop -= box.top - rect.top
+}
+
 export function setCursorAtOffset(editor: HTMLElement, targetOffset: number): void {
   const sel = window.getSelection()
   if (!sel) return
@@ -112,6 +175,7 @@ export function setCursorAtOffset(editor: HTMLElement, targetOffset: number): vo
     range.collapse(true)
     sel.removeAllRanges()
     sel.addRange(range)
+    scrollCaretIntoView(editor)
     return
   }
 
@@ -121,6 +185,7 @@ export function setCursorAtOffset(editor: HTMLElement, targetOffset: number): vo
   range.collapse(false)
   sel.removeAllRanges()
   sel.addRange(range)
+  scrollCaretIntoView(editor)
 }
 
 export function getTextLengthInRange(range: Range): number {

@@ -488,6 +488,17 @@ export function Composer({
                 <PromptArea
                   {...bind}
                   triggers={triggers}
+                  // What the agent receives is markdown, so the marker the user
+                  // typed is the marker that has to survive. Left on (the
+                  // default), the editor rewrites `- ` to `• ` in the *model*,
+                  // not just on screen — so a bulleted message reached the agent
+                  // as `• item`, which is not a list in any markdown parser, and
+                  // drew a glyph the character grid has no cell for. Off, the
+                  // convenience stays and only the rewrite goes:
+                  // `insertListContinuation` keys on `[•\-*] ` and reuses the
+                  // line's own marker, so Enter after `- item` still inserts
+                  // `\n- `, and Enter on an empty item still leaves the list.
+                  normalizeBullets={false}
                   onSubmit={submit}
                   disabled={disabled}
                   placeholder={disabled ? 'Session ended' : placeholder}
@@ -544,6 +555,9 @@ export function Composer({
             <PromptArea
               {...bind}
               triggers={triggers}
+              // See the terminal composer above: `•` is not a markdown list
+              // marker, and this rewrite reaches the sent message.
+              normalizeBullets={false}
               onSubmit={submit}
               disabled={disabled}
               placeholder={disabled ? 'Session ended' : placeholder}
@@ -560,6 +574,9 @@ export function Composer({
             <PromptArea
               {...bind}
               triggers={triggers}
+              // See the terminal composer above: `•` is not a markdown list
+              // marker, and this rewrite reaches the sent message.
+              normalizeBullets={false}
               onSubmit={submit}
               disabled={disabled}
               placeholder={disabled ? 'Session ended' : placeholder}

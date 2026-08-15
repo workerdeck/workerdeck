@@ -115,15 +115,31 @@ pretends otherwise):
   the boundary counting what happened (turns, tool calls and their names, files, errors,
   approvals waiting — counted from the transcript, never written by the model), everything
   above it dimmed, and a bar offering `jump` or `dismiss`. Sending a message dismisses it too.
-- **WorkerDeck sidebar** — management and switching. Its activity-bar icon carries the
-  **total new rows across the sessions the list is showing** — the webview mirrors its
-  filter to the extension host (`wd-view-config`, one-way: the webview owns it, the host
-  only counts with it), so a badge never announces work in a session the filter or the
-  workspace scope is hiding. The rules themselves live in `@workerdeck/protocol`
+- **WorkerDeck views** — management and switching, split across both sidebars and with no
+  activity-bar container of its own. **Sessions** sits in **Explorer** beside the file tree;
+  the other five sit in a **`secondarySidebar` container titled "WorkerDeck"**, one tab
+  stacked vertically: Usage → Context → MCP Servers → Session Info → Gateways. The four detail
+  views are `when`-gated on `workerdeck.hasSession` — they are *about the session you have
+  open*, Outline and Timeline's shape — so they do not exist at all with no session on screen.
+  The secondary-sidebar contribution point is why `engines.vscode` is `^1.106.0` (finalized
+  there; the schema is `additionalProperties: false`, so an older build drops the key and the
+  views vanish). A contributed location is only a default: any view drags to either sidebar or
+  the panel, and `contextualTitle` names the container it lands in. Note VS Code cannot order
+  an extension view against a built-in one, so Sessions appears *under* the file tree until
+  you drag it up, and a stored `views.customizations` beats any new default — **View: Reset
+  View Locations** is how you get back to the shipped layout. **Unread lives in the window status bar** (`$(bell) N`,
+  `workerdeck.statusBar.unread`): the **total new rows across the sessions the list is
+  showing** — the webview mirrors its filter to the extension host (`wd-view-config`, one-way:
+  the webview owns it, the host only counts with it), so it never announces work in a session
+  the filter or the workspace scope is hiding. It is not a view badge, and that is the point:
+  VS Code aggregates a view badge onto its *container's* icon, which here would be Explorer's,
+  beside a user's files. Because it is the extension's only always-visible signal, the sessions
+  poll runs while it is enabled even with every WorkerDeck view closed; turning the setting off
+  releases that watcher. The rules themselves live in `@workerdeck/protocol`
   (`session-list.ts`) — the dashboard renders the same list and iOS mirrors it in Swift —
   and `src/view-config.ts` re-exports them beside the one thing that is ours, turning the
-  bridge state into rows. Sessions waiting on a human lead its tooltip, since they are the more urgent thing
-  without being the bigger number. The **Sessions** view lists **every
+  bridge state into rows. Sessions waiting on a human lead its tooltip and turn it amber, since
+  they are the more urgent thing without being the bigger number. The **Sessions** view lists **every
   gateway's sessions at once**: the gateway is a facet, not the frame the list lives in.
   Above the list, the Extensions view's shape: a **search box that is always there** and a
   **funnel** beside it holding the facets — scope/gateway/adapter/state dropdowns plus group

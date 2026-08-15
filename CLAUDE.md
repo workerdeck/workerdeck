@@ -29,8 +29,8 @@ protocol. Read these before changing scope or structure:
   the scope-containment rule where a gateway-tagged root scopes only that gateway and an
   untagged one only loopback), and `watermarks.ts` is the **unread model** (monotonic marks
   behind a `WatermarkStore` seam, and `unseenCount`'s rows-not-turns arithmetic). They are
-  rules, not preferences: the extension's activity-bar badge counts the *same* rows its list
-  shows, so a client that filtered differently would announce work it is hiding. Tests live
+  rules, not preferences: the extension's unread status-bar item counts the *same* rows its
+  list shows, so a client that filtered differently would announce work it is hiding. Tests live
   in `packages/react/test/session-list.test.ts` + `watermarks.test.ts` (protocol has no
   vitest of its own); Swift mirrors in `WorkerDeckKit`.
 - `packages/core` — the engines, shipped as **adapters** (`src/engines/`): one `EngineAdapter`
@@ -323,7 +323,13 @@ protocol. Read these before changing scope or structure:
   *working* mark and a prompt waiting for you is not the session working), so the column is never
   empty and the typed line never shifts. A glyph *in* that cell carries `data-gutter`, which
   aligns it `start` like a marker: `term-glyph`'s centring is right for the trailing `↵` and wrong
-  here, landing the glyph half a cell (≈3.9px) right of the column every `❯` and `●` sits on. It is bracketed by **two rules**, top and bottom, both
+  here, landing the glyph half a cell (≈3.9px) right of the column every `❯` and `●` sits on. The
+  field is a **contentEditable in markdown mode**, so typing `- ` builds a real `<ul><li>` — editor
+  DOM that none of `.term-md`'s rules reach, which left it drawing the browser's `•` and the
+  browser's list margins, the second of which took the typed row off `--term-line`. Its lists are
+  therefore styled separately and to the same numbers (`- ` at 2ch, `1. ` at 3ch, hanging indent,
+  markers as `::before` so nothing enters the message and `html-to-markdown.ts` still serializes
+  the real `<li>`s). It is bracketed by **two rules**, top and bottom, both
   turning accent on focus, with 8px of air inside them — the CLI's own frame for its prompt, and
   the thing that makes the field its own strip of the panel rather than the transcript's last row,
   without a side border that would take the `❯` off the column. The bottom rule is why
@@ -621,13 +627,42 @@ protocol. Read these before changing scope or structure:
   list become a list and nothing else. The poll behind all of it is **ref-counted**
   (`SessionsModel.setWatching`) rather than gated on the sidebar alone — two independently
   collapsible views render it now, and gating on one leaves the other showing probes frozen
-  at `pending`. The `+` in a view title is the *only* way to create: no body ever grows a
+  at `pending`; the unread status-bar item holds a watcher of its own, unconditionally while
+  it is enabled, because it is the one surface that must be live with nothing open. The `+`
+  in a view title is the *only* way to create: no body ever grows a
   second button for it, so an empty state points at the `+` in words and keeps its button
   for what the header can't do (clear a filter, widen a scope).
-  The activity-bar badge is the same count summed over the sessions the **filter is
+  **There is no activity-bar container.** The views are split across the two sidebars by
+  default: **Sessions** into **Explorer**, beside the file tree (it is a workspace-level list,
+  and it is where the `+` lives), and the other five into a **`secondarySidebar` container
+  titled "WorkerDeck"** — one tab, stacked vertically, Usage → Context → MCP Servers →
+  Session Info → Gateways. The four detail views are `when`-gated on `workerdeck.hasSession`:
+  they are *about the thing you have open*, which is Outline and Timeline's shape. That gating
+  reverses the earlier "views must not appear and disappear under the pointer" rule on
+  purpose; Sessions and Gateways stay ungated, which is what keeps both containers' shape
+  stable. `viewsContainers.secondarySidebar` is what sets `engines.vscode` to **`^1.106.0`**:
+  it was proposed-only in 1.104/1.105 and finalized in 1.106, and the schema is
+  `additionalProperties: false`, so on an older build the key is dropped and the five views do
+  not exist at all. That floor is the whole cost of the layout, and it is what would keep the
+  extension off a Cursor/VSCodium built on an older base. Two things a contributed location
+  cannot do: it cannot order a view against a *built-in* one (extension views append after
+  `workbench.explorer.fileView`, so Sessions lands under the tree until someone drags it up),
+  and it cannot beat a user's stored `views.customizations` — anyone who has already moved
+  these views needs **View: Reset View Locations** before a new default is visible. Everything
+  is only a default: any view drags to either sidebar or the panel, and `contextualTitle` is
+  what names the container it lands in (VS Code otherwise auto-assigns the *source*
+  container's title, which is how six views dragged out of Explorer all came up "Explorer").
+  Unread therefore had to leave the container: a `view.badge` aggregates onto its
+  **container's** icon, which is now Explorer's, next to a user's files. It is a **window
+  status-bar item** (`UnreadStatusItem`, `workerdeck.statusBar.unread`), the same count summed
+  over the sessions the **filter is
   showing** — the webview mirrors its view config to the host (`wd-view-config`, one-way;
   the shared rules moved to `src/view-config.ts` so both sides filter identically), because a
   badge counting rows in hidden sessions sends you looking for something that isn't there.
+  Two things the move bought: the count no longer needs the Sessions webview to have been
+  resolved (there is no `#view` guard on `refreshUnread`, and `#viewConfig` is restored from
+  globalState for exactly that case), and sessions awaiting a human can *colour* it amber
+  rather than only leading its tooltip.
   The cards carry it per session — an **unread badge** of transcript rows since that session was last on
   screen (`src/watermarks.ts`, globalState, written **only while the panel is visible and
   showing it**, and monotonic so a compaction can't resurrect read rows). Rows, from

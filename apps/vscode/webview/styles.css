@@ -100,9 +100,55 @@ html[data-font='editor'] {
   padding-block: 2px;
 }
 /* The composer's docked treatment — flush to the panel edges, `>` in the gutter,
- * one accent rule along the top — is the terminal theme's own (`Composer.tsx`),
- * shared with every other host that draws it. Nothing to override here: a panel
- * switched to `cards` gets the card, gutter and all. */
+ * an accent rule along the top — is the terminal theme's own (`Composer.tsx`),
+ * shared with every other host that draws it. A panel switched to `cards` gets
+ * the card, gutter and all.
+ *
+ * The one thing this host takes back is the composer's BOTTOM rule. The theme
+ * brackets the prompt with two rules because in a surface that continues below
+ * it — the dashboard's inset panel — the lower one is the frame's other half.
+ * Here nothing continues: `statusSurface: 'external'` puts the status bar in
+ * the window, so the composer is the last element in the webview and its bottom
+ * rule lands flat against the panel's edge, which VS Code rounds. A straight
+ * 1px line (blue, once the field has focus) run across a rounded corner reads
+ * as a rendering fault, because it is one.
+ *
+ * `transparent` rather than `none`, so the box keeps its 1px and nothing above
+ * it shifts; and the `:focus-within` selector is repeated because the theme
+ * sets all four borders at once there — same specificity, later in the cascade
+ * (this file imports `theme.css`, which imports `terminal.css`, above). */
+[data-terminal].term-composer,
+[data-terminal].term-composer:focus-within,
+[data-terminal].term-composer[data-dragging] {
+  border-bottom-color: transparent;
+}
+
+/*
+ * The working marker — the `Working…` line and the pulsing brand glyph beside
+ * it — is the theme's coral (`--term-mark`, the mark's own colour). In this
+ * webview it reads as the odd one out: everything else primary here is already
+ * the editor's blue, because `--accent` above is repointed at the theme's link
+ * colour so the panel matches the workbench it is docked in. A single coral
+ * element in an otherwise theme-following surface looks like a stray token
+ * rather than a brand cue.
+ *
+ * Repointed at the terminal palette's own blue rather than `--vscode-textLink-
+ * foreground`: the transcript's blues (`--term-blue`) are tuned against the
+ * terminal ground, and mixing an editor blue into a row beside them would be a
+ * second blue, not a consistent one. Both light selectors are restated because
+ * the theme's light block is more specific than its base one; same specificity
+ * here, later in the cascade.
+ *
+ * Note this makes `working` and the composer's `❯` the same colour, which the
+ * theme deliberately kept apart (coral = the session is working, blue = it is
+ * waiting for you). That distinction now rests on position and glyph alone in
+ * this host.
+ */
+[data-terminal],
+[data-theme='light'] [data-terminal],
+[data-terminal][data-theme='light'] {
+  --term-mark: var(--term-blue);
+}
 
 html,
 body,

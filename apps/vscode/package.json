@@ -6,10 +6,15 @@
   "publisher": "workerdeck",
   "private": true,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/workerdeck/workerdeck.git",
+    "directory": "apps/vscode"
+  },
   "type": "module",
   "main": "./dist/extension.cjs",
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.106.0"
   },
   "categories": [
     "AI",
@@ -27,11 +32,12 @@
     }
   },
   "activationEvents": [
-    "onFileSystem:workerdeck"
+    "onFileSystem:workerdeck",
+    "onStartupFinished"
   ],
   "contributes": {
     "viewsContainers": {
-      "activitybar": [
+      "secondarySidebar": [
         {
           "id": "workerdeck",
           "title": "WorkerDeck",
@@ -47,45 +53,54 @@
       ]
     },
     "views": {
-      "workerdeck": [
+      "explorer": [
         {
           "id": "workerdeck.sessions",
           "type": "webview",
           "name": "Sessions",
+          "contextualTitle": "Sessions",
           "icon": "media/sidebar.svg"
-        },
+        }
+      ],
+      "workerdeck": [
         {
-          "id": "workerdeck.gateways",
+          "id": "workerdeck.usage",
           "type": "webview",
-          "name": "Gateways",
+          "name": "Usage",
+          "contextualTitle": "WorkerDeck",
           "icon": "media/sidebar.svg",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "workerdeck.sessionInfo",
-          "type": "webview",
-          "name": "Session Info",
-          "icon": "media/sidebar.svg",
-          "visibility": "collapsed"
+          "when": "workerdeck.hasSession"
         },
         {
           "id": "workerdeck.context",
           "type": "webview",
           "name": "Context",
+          "contextualTitle": "WorkerDeck",
           "icon": "media/sidebar.svg",
-          "visibility": "collapsed"
-        },
-        {
-          "id": "workerdeck.usage",
-          "type": "webview",
-          "name": "Usage",
-          "icon": "media/sidebar.svg",
-          "visibility": "collapsed"
+          "when": "workerdeck.hasSession"
         },
         {
           "id": "workerdeck.mcp",
           "type": "webview",
           "name": "MCP Servers",
+          "contextualTitle": "WorkerDeck",
+          "icon": "media/sidebar.svg",
+          "when": "workerdeck.hasSession"
+        },
+        {
+          "id": "workerdeck.sessionInfo",
+          "type": "webview",
+          "name": "Session Info",
+          "contextualTitle": "WorkerDeck",
+          "icon": "media/sidebar.svg",
+          "when": "workerdeck.hasSession",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "workerdeck.gateways",
+          "type": "webview",
+          "name": "Gateways",
+          "contextualTitle": "WorkerDeck",
           "icon": "media/sidebar.svg",
           "visibility": "collapsed"
         }
@@ -280,6 +295,11 @@
           "type": "boolean",
           "default": true,
           "description": "In the Terminal style, allow the things a real terminal cannot do: fill the row under the pointer, and reveal a copy button on hover. Neither costs any layout, so turning them off moves nothing."
+        },
+        "workerdeck.statusBar.unread": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the unread badge — transcript rows produced since you last looked, summed over the sessions the Sessions view's filter is showing. This is the extension's only always-visible signal that a session wants you, so while it is on the sessions are polled even with every WorkerDeck view closed; turning it off also stops that background poll."
         },
         "workerdeck.statusBar.status": {
           "type": "boolean",

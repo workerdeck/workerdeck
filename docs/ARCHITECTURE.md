@@ -41,8 +41,8 @@ boundary: anything a client needs must be expressible as protocol events and com
   Code extension when the dashboard needed them: the sessions-list view model (state buckets,
   facets, filter/group/sort, the subset summary, workspace-scope containment) and the unread
   model (monotonic marks behind a storage seam, plus `unseenCount`'s rows-not-turns
-  arithmetic). Every client must agree on them — the extension's activity-bar badge counts the
-  same rows its list shows, so a client filtering differently would announce hidden work.
+  arithmetic). Every client must agree on them — the extension's unread status-bar item counts
+  the same rows its list shows, so a client filtering differently would announce hidden work.
   Their tests live in `packages/react/test/`, which is where the vitest setup is.
 - **`packages/core`** — the engines. `SessionRunner` (Claude) wraps the Agent SDK's `query()`
   with: a push-based async input queue (`sendMessage` feeds the SDK's streaming-input iterable),

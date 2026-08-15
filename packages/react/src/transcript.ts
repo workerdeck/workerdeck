@@ -454,10 +454,22 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
           (item): item is Extract<TranscriptItem, { kind: 'thinking' }> =>
             item.kind === 'thinking' && item.id === STREAMING_THINKING_ID,
         )
+        const text = (existing?.text ?? '') + (delta.delta.thinking ?? '')
+        // The same guard the finalized block gets, and for the same reason: a
+        // `thinking_delta` can carry no visible text at all (an empty or
+        // whitespace-only `thinking`, which is what encrypted reasoning looks
+        // like on this channel), and a thinking item with a blank body renders
+        // as a bare `✻` marker with nothing after it. Worse, it does not go
+        // away — `turn_result` finalizes whatever is still streaming under a
+        // stable id, so the empty row outlives the turn that produced it.
+        // Skipping it here costs nothing: the next delta that does carry text
+        // creates the item, since the accumulated text is rebuilt from
+        // `existing` each time.
+        if (text.trim() === '') return base
         const item: TranscriptItem = {
           kind: 'thinking',
           id: STREAMING_THINKING_ID,
-          text: (existing?.text ?? '') + (delta.delta.thinking ?? ''),
+          text,
           parentToolUseId: event.parentToolUseId,
         }
         return { ...base, items: upsert(base.items, item) }

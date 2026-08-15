@@ -30,6 +30,14 @@ export type SidebarDelegate = {
   activeSessionId: () => string | undefined
   /** Reveal the Gateways view — its own view now, so the list can only ask. */
   revealGateways: (options: { add?: boolean }) => Promise<void>
+  /**
+   * The unread count, recomputed. It leaves through the delegate because it no
+   * longer belongs to this view: it used to be `view.badge`, which VS Code
+   * aggregates onto the *container's* icon, and the container these views live
+   * in is now Explorer. It renders in the window status bar instead. What stays
+   * here is the counting, because what it counts is this webview's own filter.
+   */
+  unread: (rows: number, waiting: number) => void
 }
 
 /**
@@ -143,44 +151,41 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     if (this.#view && this.#ready) {
       this.#post({ kind: 'wd-sidebar-state', state: this.#model.sidebarState() })
     }
-    this.refreshBadge()
+    this.refreshUnread()
   }
 
   /**
-   * Recompute the activity-bar badge alone.
+   * Recompute the unread count alone, and hand it to whoever renders it.
    *
    * Separate from the state push, and public, because the two have different
    * triggers and different preconditions. The webview can only be told things
-   * once it has said `wd-ready`; the badge is a property of the *view* and is
-   * the one thing still worth maintaining while nobody is looking at the list —
-   * it is what tells you to look. And the event that most often makes it wrong
-   * is not a poll at all: reading a session in the panel moves its watermark,
-   * which no model change announces. Gating this on `#ready` is how the badge
-   * came to sit at a stale count until the sidebar was next opened.
+   * once it has said `wd-ready`; the count is worth maintaining precisely while
+   * nobody is looking at the list — it is what tells you to look. And the event
+   * that most often makes it wrong is not a poll at all: reading a session in
+   * the panel moves its watermark, which no model change announces. Gating this
+   * on `#ready` is how the badge came to sit at a stale count until the sidebar
+   * was next opened.
+   *
+   * There is deliberately **no `#view` guard** either. As `view.badge` there had
+   * to be one — a badge with no view to hang on is nothing — and it meant a
+   * window that had never resolved this webview had no count at all. In the
+   * status bar the number stands on its own, so it is computed whether or not
+   * anyone has opened the list. `#viewConfig` is restored from globalState for
+   * exactly this case.
    */
-  refreshBadge(): void {
-    if (!this.#view) return
+  refreshUnread(): void {
     const state = this.#model.sidebarState()
-    // The badge counts in **rows** — the same unit the cards and the panel's
-    // recap use, so the numbers add up across surfaces — and only over the rows
-    // the list is actually showing: a badge announcing work in a session the
+    // The count is in **rows** — the same unit the cards and the panel's recap
+    // use, so the numbers add up across surfaces — and only over the rows the
+    // list is actually showing: a number announcing work in a session the
     // filter (or the workspace scope, which is on by default) is hiding sends
-    // you looking for something that isn't there. Sessions waiting on a human
-    // are the more urgent thing but not a bigger number, so they lead the
-    // tooltip rather than replacing the count.
+    // you looking for something that isn't there.
     const visible = filterRows(buildRows(state), this.#viewConfig, state.scope)
     const rows = visible.reduce(
       (total, row) => total + (state.unseen?.[`${row.hostId}:${row.info.id}`] ?? 0),
       0,
     )
-    const waiting = this.#model.attentionCount()
-    const tooltip = [
-      waiting > 0 ? `${waiting} session${waiting === 1 ? '' : 's'} awaiting approval` : undefined,
-      rows > 0 ? `${rows} new row${rows === 1 ? '' : 's'} since you last looked` : undefined,
-    ]
-      .filter(Boolean)
-      .join(' · ')
-    this.#view.badge = rows > 0 ? { value: rows, tooltip } : undefined
+    this.#delegate.unread(rows, this.#model.attentionCount())
   }
 
   async #onMessage(msg: SidebarToHost): Promise<void> {

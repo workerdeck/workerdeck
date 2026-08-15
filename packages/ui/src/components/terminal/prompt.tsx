@@ -125,11 +125,25 @@ export interface ChoicesProps {
 /** Is the reader mid-keystroke somewhere that keeps its own caret? */
 function isTyping(element: Element | null): boolean {
   if (!(element instanceof HTMLElement)) return false
-  return (
-    element.tagName === 'INPUT' ||
-    element.tagName === 'TEXTAREA' ||
-    element.isContentEditable
-  )
+  const editable =
+    element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable
+  if (!editable) return false
+  // Focus in a field is not the same as a message in progress, and only the
+  // second is worth protecting. This used to return true for any focused
+  // editable, which read fine until a host that keeps the composer focused at
+  // all times ran it: VS Code puts the caret in the composer when a session is
+  // shown and again on any click in dead space, so the field was *always* the
+  // active element and the prompt therefore *never* took the keyboard. The
+  // approval that has to be answered was the one thing you could not answer
+  // without reaching for the mouse.
+  //
+  // An empty field has nothing to lose, so the takeover proceeds; a half-typed
+  // message still wins, which is the case the guard was written for.
+  const text =
+    element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
+      ? element.value
+      : (element.textContent ?? '')
+  return text.trim().length > 0
 }
 
 /**
@@ -150,17 +164,27 @@ export function Choices({
   label,
 }: ChoicesProps) {
   const refs = useRef<Array<HTMLButtonElement | null>>([])
-  const mounted = useRef(false)
 
   useEffect(() => {
     if (!active) return
-    // The first pass is the takeover and is refusable; every pass after it is
-    // the roving cursor moving, which must always follow — by then the keyboard
-    // is already in this list, and not moving it would strand the `❯`.
-    if (!mounted.current) {
-      mounted.current = true
-      if (!autoFocus || isTyping(document.activeElement)) return
-    }
+    // Two different jobs, told apart by where the keyboard already is rather
+    // than by how many times this has run.
+    //
+    // If focus is already on one of these rows, the roving cursor is moving and
+    // the DOM must follow `focused` unconditionally — otherwise the `❯` and the
+    // real caret drift apart. If it is not, this is the initial takeover, which
+    // is refusable so it cannot snatch a half-written message.
+    //
+    // This used to be a `mounted` ref: refuse on the first pass, follow on
+    // every pass after. That is not safe under StrictMode, which mounts,
+    // unmounts and remounts in development — the ref survives the simulated
+    // remount, so the second pass saw `mounted === true`, skipped the guard
+    // entirely and stole focus from whatever you were typing. It read as
+    // correct in production and wrong in dev, which is the worst way round.
+    const focusIsInList = refs.current.some(
+      (row) => row !== null && row === document.activeElement,
+    )
+    if (!focusIsInList && (!autoFocus || isTyping(document.activeElement))) return
     refs.current[focused]?.focus()
   }, [active, focused, autoFocus])
 

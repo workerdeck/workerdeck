@@ -469,10 +469,20 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
           parentToolUseId: payload.parentToolUseId))
     } else if delta.type == "thinking_delta" {
       let existing = streamedText(next.items, kind: .thinking, id: streamingThinkingId)
+      let text = existing + (delta.thinking ?? "")
+      // The same guard the finalized block gets, and for the same reason: a
+      // thinking_delta can carry no visible text at all (encrypted reasoning
+      // looks like an empty `thinking` on this channel), and a thinking item
+      // with a blank body renders as a bare marker with nothing after it —
+      // which then outlives its turn, because turnResult finalizes whatever is
+      // still streaming under a stable id. Skipping costs nothing: the text is
+      // rebuilt from `existing` on every delta, so the first one that carries
+      // real text creates the item. (Mirrors the react reducer.)
+      if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { break }
       next.items = upsert(
         next.items,
         .thinking(
-          id: streamingThinkingId, text: existing + (delta.thinking ?? ""),
+          id: streamingThinkingId, text: text,
           parentToolUseId: payload.parentToolUseId))
     }
 

@@ -4,9 +4,18 @@
 // many. The panel's React bar is suppressed (`statusSurface='external'`) and its
 // readings arrive here over `wd-vitals`.
 //
-// Three items, not one: the bar answers three different questions (is it alive,
-// how full is the window, how much plan is left) and each has its own section
-// view to focus. One item would mean one click target for three destinations.
+// Separate items, not one: the bar answers several different questions (is it
+// alive, how full is the window, how much plan is left) and each has its own
+// section view to focus. One item would mean one click target for many
+// destinations.
+//
+// `UnreadStatusItem` is the odd one out and lives here because this is where the
+// window bar is owned, not because it shares the others' lifecycle. Everything
+// else on this bar is about the session on screen and hides when there is none;
+// unread is about every session and is *most* worth showing when nothing is
+// open. It became a status-bar item when the activity-bar container was
+// retired — a container badge belongs to its container, and the views' new home
+// is Explorer, where the number would have sat on the user's files.
 import * as vscode from 'vscode'
 import type { ContextUsage, RateLimitInfo } from '@workerdeck/protocol'
 import type { SessionVitals } from '@workerdeck/ui'
@@ -69,14 +78,76 @@ function usageTooltip(rateLimits: Record<string, RateLimitInfo>, now: number): v
  * bar ticks at the same rate; a minute-resolution countdown needs no finer. */
 const TICK_MS = 30_000
 
-/** The three badges, each its own boolean setting — checkboxes in the Settings
+/** The badges, each its own boolean setting — checkboxes in the Settings
  * UI, which an array-of-enum or an object map would not be. Read per render
  * rather than cached: `activate` re-renders the bar on a config change, and the
  * live read is what makes that one line. */
-export type StatusBadge = 'status' | 'context' | 'usage' | 'model' | 'mode'
+export type StatusBadge = 'unread' | 'status' | 'context' | 'usage' | 'model' | 'mode'
 
 export function badgeEnabled(badge: StatusBadge): boolean {
   return vscode.workspace.getConfiguration('workerdeck.statusBar').get<boolean>(badge, true)
+}
+
+/**
+ * The unread count, as a window status-bar item: transcript rows produced since
+ * this window last had each session on screen, summed over the sessions the
+ * Sessions view's filter is actually showing.
+ *
+ * It was the activity-bar badge until that container was retired. The counting
+ * rule is unchanged and is deliberately so — rows, not turns (a turn that runs
+ * five tools is one turn and eight rows), and only over visible rows, because a
+ * number announcing work in a session the filter or the workspace scope is
+ * hiding sends you looking for something that isn't there. What the move buys is
+ * that the number no longer depends on a view existing to carry it: the old
+ * badge was a property of `workerdeck.sessions`, so a window that had never
+ * opened that view had nowhere to put it.
+ *
+ * Sessions waiting on a human lead the tooltip and colour the item, but do not
+ * replace the count: they are the more urgent thing without being the bigger
+ * number.
+ */
+export class UnreadStatusItem implements vscode.Disposable {
+  readonly #item: vscode.StatusBarItem
+  #rows = 0
+  #waiting = 0
+
+  constructor() {
+    // 51 — one above the session group (50…46), so within the Left cluster it
+    // sits leftmost: the signal that asks you to look comes before the readings
+    // of the thing you are already looking at.
+    this.#item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 51)
+    this.#item.command = 'workerdeck.sessions.focus'
+  }
+
+  update(rows: number, waiting: number): void {
+    this.#rows = rows
+    this.#waiting = waiting
+    this.render()
+  }
+
+  /** Re-render against unchanged readings — for a settings change. */
+  render(): void {
+    const rows = this.#rows
+    const waiting = this.#waiting
+    if (!badgeEnabled('unread') || rows <= 0) {
+      this.#item.hide()
+      return
+    }
+    this.#item.text = `$(${waiting > 0 ? 'bell-dot' : 'bell'}) ${rows}`
+    this.#item.backgroundColor = severityBackground(waiting > 0 ? 'warning' : 'none')
+    const tip = new vscode.MarkdownString()
+    if (waiting > 0) {
+      tip.appendMarkdown(`**${waiting} session${waiting === 1 ? '' : 's'} awaiting approval**\n\n`)
+    }
+    tip.appendMarkdown(`${rows} new row${rows === 1 ? '' : 's'} since you last looked\n\n`)
+    tip.appendMarkdown('Click to open the Sessions view.')
+    this.#item.tooltip = tip
+    this.#item.show()
+  }
+
+  dispose(): void {
+    this.#item.dispose()
+  }
 }
 
 export type StatusBarSubject = {

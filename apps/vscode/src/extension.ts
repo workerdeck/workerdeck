@@ -9,7 +9,7 @@ import { SessionPanelProvider } from './panel.ts'
 import { SectionViewProvider, type SectionKind } from './section-view.ts'
 import { SessionsModel } from './sessions-model.ts'
 import { SidebarProvider } from './sidebar.ts'
-import { SessionStatusBar, currentModel, modelLabel } from './status-bar.ts'
+import { SessionStatusBar, UnreadStatusItem, badgeEnabled, currentModel, modelLabel } from './status-bar.ts'
 import { createWatermarks } from './watermarks.ts'
 
 /** Section view ids — each its OWN view, so VS Code owns collapse/placement. */
@@ -19,6 +19,33 @@ const SECTION_VIEWS: Record<SectionKind, string> = {
   usage: 'workerdeck.usage',
   mcp: 'workerdeck.mcp',
 }
+
+/**
+ * Whether a session is on screen in the agent panel, as a `when`-clause key.
+ *
+ * The four section views are gated on it. That reverses an earlier decision —
+ * they used to be contributed unconditionally, because a sidebar whose views
+ * appear and disappear changes shape under the pointer — and it is the move to
+ * Explorer that reverses it: in a container of our own, four rows reading "no
+ * session" were the container's content; in Explorer they are four uninvited
+ * rows under someone's file tree. The rule the earlier decision protected still
+ * holds where it applies, since Sessions and Gateways are ungated and are what
+ * gives the extension a stable shape there.
+ */
+const HAS_SESSION_KEY = 'workerdeck.hasSession'
+
+/**
+ * The watcher key the unread status-bar item holds on the sessions poll.
+ *
+ * Every other watcher is a view reporting its own visibility, so with nothing
+ * open the poll stops. That was fine while the count was a container badge you
+ * had to open the container to see; as the window bar's only always-visible
+ * WorkerDeck signal it would freeze at whatever it last computed. So while the
+ * item is enabled it watches unconditionally — one request per gateway per 5s
+ * idle, which is the price of the signal being live. Turning the setting off
+ * releases the watcher and restores the old behaviour exactly.
+ */
+const UNREAD_WATCHER = 'workerdeck.statusBar.unread'
 
 export function activate(context: vscode.ExtensionContext): void {
   const store = new HostStore(context)
@@ -30,7 +57,12 @@ export function activate(context: vscode.ExtensionContext): void {
   // readings while its first snapshot is still in flight.
   let vitals: SessionVitals | undefined
   const statusBar = new SessionStatusBar()
+  const unread = new UnreadStatusItem()
   const watermarks = createWatermarks(context)
+  // Follows the setting, both now and on every change: the item and the poll
+  // behind it are one switch, since a frozen count is worse than no count.
+  const syncUnreadWatcher = () => model.setWatching(UNREAD_WATCHER, badgeEnabled('unread'))
+  syncUnreadWatcher()
 
   /**
    * Record what is on screen as read — but only while it really is on screen.
@@ -53,7 +85,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // still says (2) until something unrelated happens to refresh it. (Guarded
     // because a poll can land before `sidebar` is assigned; that path fires
     // `#pushState` for itself a moment later.)
-    if (moved) sidebar?.refreshBadge()
+    if (moved) sidebar?.refreshUnread()
   }
 
   const feed = {
@@ -193,6 +225,7 @@ export function activate(context: vscode.ExtensionContext): void {
     },
     activeSessionId: () => panel.active?.sessionId,
     revealGateways: (options) => gateways.reveal(options),
+    unread: (rows, waiting) => unread.update(rows, waiting),
   })
 
   // What the new-session / resume QuickPicks need: the gateways and their
@@ -210,6 +243,14 @@ export function activate(context: vscode.ExtensionContext): void {
   panel.onDidChangeActive(() => pushStatusBar())
   model.onDidChange(() => pushStatusBar())
   pushStatusBar()
+
+  // The four section views exist only while there is a session for them to be
+  // about. Seeded false, because a `when` clause reads an unset key as false
+  // anyway and being explicit is what makes the sequence obvious.
+  const syncHasSession = (has: boolean) =>
+    void vscode.commands.executeCommand('setContext', HAS_SESSION_KEY, has)
+  panel.onDidChangeActive((active) => syncHasSession(active !== undefined))
+  syncHasSession(panel.active !== undefined)
 
   context.subscriptions.push(
     startDevReload(context, [panel, sidebar, gateways, ...Object.values(sections)]),
@@ -235,7 +276,13 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       // Which badges the window bar carries is a per-render read, so showing
       // and hiding one is just a re-render against the readings we already hold.
-      if (e.affectsConfiguration('workerdeck.statusBar')) statusBar.refresh()
+      if (e.affectsConfiguration('workerdeck.statusBar')) {
+        statusBar.refresh()
+        unread.render()
+        // The unread item is the one badge that also owns a poll, so its
+        // setting has to move more than a render.
+        syncUnreadWatcher()
+      }
     }),
     model,
     panel,
@@ -243,6 +290,7 @@ export function activate(context: vscode.ExtensionContext): void {
     gateways,
     fs,
     statusBar,
+    unread,
     vscode.window.registerWebviewViewProvider(SidebarProvider.viewId, sidebar, {
       webviewOptions: { retainContextWhenHidden: true },
     }),

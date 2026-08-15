@@ -257,6 +257,66 @@ describe('transcript reducer', () => {
     ])
   })
 
+  it('drops streamed thinking that never carries visible text, even past turn_result', () => {
+    seq = 0
+    // A `thinking_delta` can arrive with nothing visible in it. Left alone that
+    // built a thinking item with a blank body — a bare `✻` marker and no text —
+    // and `turn_result` then finalized it under a stable id, so it outlived the
+    // turn instead of being superseded.
+    const state = run(initialTranscriptState, [
+      {
+        type: 'stream_delta',
+        event: { type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: '' } },
+        parentToolUseId: null,
+        uuid: 's1',
+      },
+      {
+        type: 'stream_delta',
+        event: { type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: '  \n' } },
+        parentToolUseId: null,
+        uuid: 's2',
+      },
+      {
+        type: 'turn_result',
+        subtype: 'success',
+        isError: false,
+        durationMs: 10,
+        numTurns: 1,
+        totalCostUsd: 0.1,
+      },
+    ])
+    expect(state.items.filter((item) => item.kind === 'thinking')).toEqual([])
+  })
+
+  it('still builds a thinking row once a delta carries real text', () => {
+    seq = 0
+    // The guard must not swallow a thought whose *first* delta happens to be
+    // blank: the accumulated text is rebuilt from the existing item each time.
+    // The skipped prefix really is dropped — leading whitespace on a thought is
+    // not content, and keeping it would mean carrying blank text forward just to
+    // re-check it on the next delta.
+    const state = run(initialTranscriptState, [
+      {
+        type: 'stream_delta',
+        event: { type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: '  ' } },
+        parentToolUseId: null,
+        uuid: 's1',
+      },
+      {
+        type: 'stream_delta',
+        event: {
+          type: 'content_block_delta',
+          delta: { type: 'thinking_delta', thinking: 'Weighing it.' },
+        },
+        parentToolUseId: null,
+        uuid: 's2',
+      },
+    ])
+    expect(state.items).toEqual([
+      { kind: 'thinking', id: 'streaming-thinking', text: 'Weighing it.', parentToolUseId: null },
+    ])
+  })
+
   it('treats turn_result cost as session-cumulative (last-seen, not summed)', () => {
     seq = 0
     const turn = (totalCostUsd: number): SessionEventBody => ({

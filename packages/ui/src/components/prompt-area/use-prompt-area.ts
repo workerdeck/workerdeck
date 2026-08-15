@@ -1307,21 +1307,27 @@ export function usePromptArea({
         return
       }
 
-      // 3. Enter without Shift (skipping IME): continue a list, else submit when
-      // `submitOnEnter` is set, else insert a newline.
+      // 3. Enter without Shift (skipping IME): submit when `submitOnEnter` is
+      // set, else insert a newline — continuing a list if we are in one.
+      //
+      // Under `submitOnEnter`, Enter submits *unconditionally*. It used to try
+      // a list continuation first, which meant that once you had typed a
+      // bullet, the send key silently stopped sending: every Enter added
+      // another empty bullet, and the only way out was to clear the list. Enter
+      // is the send key in a chat composer, and a key that does something else
+      // depending on what the line above happens to start with is not one.
+      // Continuation lives on Shift+Enter (branch 2.8), which is the newline
+      // key here and therefore where "newline, and keep the list going"
+      // belongs. Without `submitOnEnter`, Enter *is* the newline key, so it
+      // keeps the continuation.
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-        const editor = editorRef.current
-        if (editor && tryListContinuation(editor)) {
-          e.preventDefault()
-          return
-        }
+        e.preventDefault()
         if (submitOnEnter) {
-          e.preventDefault()
           onSubmit?.(readSegmentsFromDOM())
           return
         }
-        e.preventDefault()
-        if (editor) insertPlainNewline(editor)
+        const editor = editorRef.current
+        if (editor && !tryListContinuation(editor)) insertPlainNewline(editor)
         return
       }
 
