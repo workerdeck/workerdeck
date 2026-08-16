@@ -286,9 +286,10 @@ protocol. Read these before changing scope or structure:
   3 roam-code, 2 shell, 1 read` — or `Ran N shell commands` when the run is all shell, which is the
   commonest run and was already the sentence people read. The CLI's own
   compression: the calls are almost never what you came back to read, and six of them bury the
-  sentence that is. It was **shell-only** until the screenshot in `_docs/sink` showed the cost — a
-  run alternating `Bash` with an MCP tool folded into *four* rows, a count for every gap it could
-  not group. The grouping rule was right and the membership rule was too narrow.
+  sentence that is. It was **shell-only**, and the cost of that showed up against a real session —
+  a run alternating `Bash` with an MCP tool folded into *four* rows, a count for every gap it could
+  not group, which is worse than not folding. The grouping rule was right and the membership rule
+  was too narrow.
   *Consecutive* is the entire rule — anything the model said between two calls
   breaks the run, because that sentence is the reason the second one happened — and the recap
   boundary breaks it too, so a count never spans "what you already read"; `parentToolUseId` is the
@@ -984,7 +985,17 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   renderer is a separate track, and deleting the phone's only compact view for symmetry with a
   package it shares no code with would be a regression, not parity. The dashboard's frame also
   became **one surface** (`.app-frame` repointing `--bg`/`--bg-surface` at `--sidebar`).
-  Protocol stays **7**.
+  Protocol stays **7**. It also carries the **per-account plan meters** (`ProfileInfo.usage`,
+  `mergeUsage`, the pace marker), the extension's **session restore and resume-keeps-its-name**,
+  the refactor pass that gave `core`/`react`/`server`/`web`/`embedded` folders that say what a
+  file is, and a last round of client polish: the VS Code create flow rebuilt so every step
+  arrives pre-answered (adapter → folder → model, no first-prompt step,
+  `workerdeck.newSession.permissionMode`, and the window's folders finally leading the cwd
+  candidates), the dock's usage meters gaining the pace marker the other two clients already had,
+  the scrubber marking a **failed tool call**, and the two verbosity fixes the terminal theme
+  needed to be readable against a real session — a collapsed tool result clipped by **characters**
+  as well as lines (a minified MCP reply is one line, so the old four-line slice kept all thirty
+  thousand characters of it) and the shell fold widened to **any run of consecutive tool calls**.
 
   **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`
