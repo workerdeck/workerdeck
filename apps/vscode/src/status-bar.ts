@@ -106,6 +106,7 @@ const TICK_MS = 30_000
  * live read is what makes that one line. */
 export type StatusBadge =
   | 'unread'
+  | 'subagents'
   | 'status'
   | 'context'
   | 'sessionUsage'
@@ -187,6 +188,67 @@ export class UnreadStatusItem implements vscode.Disposable {
     }
     tip.appendMarkdown(`${rows} new row${rows === 1 ? '' : 's'} since you last looked\n\n`)
     tip.appendMarkdown('Click to open the Sessions view.')
+    this.#item.tooltip = tip
+    this.#item.show()
+  }
+
+  dispose(): void {
+    this.#item.dispose()
+  }
+}
+
+/**
+ * How many sub-agents are running right now, across the sessions the Sessions
+ * view's filter is showing.
+ *
+ * Its own item beside `UnreadStatusItem` for that reason, and not part of
+ * `SessionStatusBar`: like unread it is about *every* session and is most worth
+ * showing when no panel is open — a session can be spending real money on six
+ * parallel agents in a window where nothing is on screen. The rest of the bar is
+ * about the one session you are looking at and hides when there is none.
+ *
+ * Coloured on the **foreground** (`charts.blue`, the same working colour the
+ * status badge uses) rather than a background: VS Code accepts only
+ * `errorBackground`/`warningBackground` and silently ignores anything else, and
+ * both are alarm colours for something that is merely working.
+ */
+export class SubagentStatusItem implements vscode.Disposable {
+  readonly #item: vscode.StatusBarItem
+  #running = 0
+  #sessions = 0
+
+  constructor() {
+    // 52 — outside the session group and above unread. Both are window-wide
+    // signals; this one is rarer, so it reads as the exception it is.
+    this.#item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 52)
+    this.#item.command = 'workerdeck.sessions.focus'
+    this.#item.color = new vscode.ThemeColor('charts.blue')
+  }
+
+  /** @param running total sub-agents in flight. @param sessions how many
+   * sessions they are spread across — the number that makes the tooltip worth
+   * reading, since "6 agents" in one session and in four are different days. */
+  update(running: number, sessions: number): void {
+    this.#running = running
+    this.#sessions = sessions
+    this.render()
+  }
+
+  /** Re-render against unchanged readings — for a settings change. */
+  render(): void {
+    const running = this.#running
+    // Zero hides rather than showing `0`: this is an annotation on work in
+    // progress, and a permanent zero in the bar is a thing people learn to stop
+    // seeing.
+    if (!badgeEnabled('subagents') || running <= 0) {
+      this.#item.hide()
+      return
+    }
+    this.#item.text = `$(type-hierarchy-sub) ${running}`
+    const tip = new vscode.MarkdownString()
+    tip.appendMarkdown(`**${running} sub-agent${running === 1 ? '' : 's'} running**`)
+    if (this.#sessions > 1) tip.appendMarkdown(` across ${this.#sessions} sessions`)
+    tip.appendMarkdown('\n\nClick to open the Sessions view, where each session lists its own.')
     this.#item.tooltip = tip
     this.#item.show()
   }

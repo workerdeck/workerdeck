@@ -24,9 +24,11 @@ export {
   groupRows,
   hasFacetFilter,
   inScope,
+  runningSubagents,
   scopeActive,
   sessionLabel,
   sessionState,
+  subagentLabel,
   subsetSummary,
 } from '@workerdeck/protocol'
 export type {

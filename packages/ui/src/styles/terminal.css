@@ -289,6 +289,25 @@
   padding-inline: var(--term-bleed, 0px);
 }
 
+/* Another frame of reference: the rows a subagent produced, inside the `Task`
+   that spawned them.
+
+   Two cells of indent, whole — the theme's rule is that horizontal measures are
+   `ch`, and these rows carry markers in a gutter that has to keep landing on the
+   grid the rows above it use. The rule itself is drawn *inside* that padding
+   with an inset shadow rather than as a border, which is what makes the 2ch
+   exact: a 1px border is layout, and would put every nested glyph one pixel off
+   the column for the sake of chrome.
+
+   `--term-faint` rather than the cards `--border` token, and that is the whole
+   reason this class exists: the nested block sits on the *open* block's wash,
+   and a border colour tuned for the base ground resolved to rgb(31,31,31) on it
+   — a rule nobody could see. The same trap `row-hover` is alpha to avoid. */
+[data-terminal] .term-nested {
+  padding-left: 2ch;
+  box-shadow: inset 1px 0 0 var(--term-faint);
+}
+
 .term-hoverable {
   position: relative;
 }

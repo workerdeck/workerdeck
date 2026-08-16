@@ -43,6 +43,7 @@ import {
 } from '../../lib/normalize.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
 import { staleReplaySeqs } from '../../lib/replay.ts'
+import { SubagentTracker } from './subagents.ts'
 
 export type QueryFn = (params: {
   prompt: AsyncIterable<SDKUserMessage>
@@ -120,6 +121,9 @@ export class SessionRunner implements Runner {
   #apiKeySource: string | undefined
   #permissionMode: PermissionMode | undefined
   #pending = new Map<string, PendingApproval>()
+  /** The read-time sub-agent rollup (`SessionInfo.subagents`), fed from #emit —
+   * the one chokepoint — so the resume backfill reconstructs it for free. */
+  #subagents = new SubagentTracker()
   #totalCostUsd: number | undefined
   #numTurns: number | undefined
   #lastActivityAt: number | undefined
@@ -192,6 +196,7 @@ export class SessionRunner implements Runner {
       lastSeq: this.#seq,
       activityCount: this.#activityCount,
       pendingPermissionCount: this.#pending.size,
+      subagents: this.#subagents.list(),
       meta: this.#config.meta,
       scope: this.#config.scope,
       title: this.#title(),
@@ -471,6 +476,15 @@ export class SessionRunner implements Runner {
       // the CLI silently downgrades an effort the model doesn't support.
       effort: c.reasoningEffort as Options['effort'],
       includePartialMessages: c.includePartialMessages ?? true,
+      // Without this the SDK forwards only a subagent's tool_use/tool_result
+      // blocks — "enough for a heartbeat counter", in its own words — and its
+      // prompt, thinking and final report never reach the stream at all. That
+      // is not a rendering gap a client can close: a nested transcript with no
+      // text in it is a list of tool names. On, therefore, because this surface
+      // claims to be the session rather than a summary of it; a host that wants
+      // the quieter stream sets it back through `extraOptions`, which is spread
+      // last precisely so it can.
+      forwardSubagentText: true,
       canUseTool: this.#canUseTool,
       env: c.env,
       pathToClaudeCodeExecutable: c.pathToClaudeCodeExecutable,
@@ -820,6 +834,9 @@ export class SessionRunner implements Runner {
     // unread cursor, not an item count (see SessionInfo.activityCount).
     this.#activityCount += transcriptActivity(body)
     if (body.type === 'conversation_reset') this.#resetSeq = event.seq
+    // Before fan-out, like #pending: a listener that reads info() on this very
+    // event must see it already folded in.
+    this.#subagents.observe(body, event.ts)
     this.#events.push(event)
     for (const listener of this.#listeners) {
       try {

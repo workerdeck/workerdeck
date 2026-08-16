@@ -17,6 +17,7 @@
  * `result-preview.ts` exists. Two spellings would be two different heights.
  */
 import type { TranscriptItem } from '@workerdeck/react'
+import { toolInputPreview } from '../../lib/format.ts'
 import { isShellTool } from '../../lib/tool-icon.ts'
 
 type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
@@ -88,4 +89,91 @@ export function runSummary(items: readonly ToolCallItem[], busy: boolean): strin
   // The ellipsis trails the whole line, not the count — "Running 2 tools… · 1
   // read, 1 shell" reads as though the sentence ended and then carried on.
   return `${verb}${n} tool${n === 1 ? '' : 's'} · ${breakdown}${tail}`
+}
+
+/* ── The task block's one line ─────────────────────────────────────────────
+ *
+ * A `Task` call and everything its subagent produced collapse to one row (see
+ * `blocks.ts`), and these are that row's words. Same contract as `runSummary`:
+ * `height.ts` wraps these exact strings to predict the row's pixel height with
+ * no DOM, so the component must render them verbatim — two spellings would be
+ * two different heights.
+ */
+
+const clip = (text: string, max = 80): string =>
+  text.length > max ? text.slice(0, max - 1) + '…' : text
+
+const trimmed = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+
+/**
+ * The row's identity half: which task this is.
+ *
+ * The Claude SDK's `Task` input carries `subagent_type` (e.g. "Explore") and a
+ * 3–5 word `description`, and both are worth the line: parallel tasks are the
+ * whole reason the block exists, and two rows both reading `Task(…)` answer
+ * nothing. `Task(Explore · find the auth check)` — falling back to the
+ * ordinary input preview when an engine sends neither, so the header is never
+ * emptier than a plain tool row's.
+ */
+export function taskLabel(task: ToolCallItem): string {
+  const input = task.input as { description?: unknown; subagent_type?: unknown } | null
+  const description = trimmed(input?.description)
+  const agent = trimmed(input?.subagent_type)
+  const inner =
+    agent && description
+      ? `${agent} · ${clip(description)}`
+      : (agent ?? (description ? clip(description) : toolInputPreview(task.input)))
+  return `${task.name}(${inner})`
+}
+
+const callBusy = (call: ToolCallItem): boolean =>
+  call.status === 'running' || call.status === 'pending'
+
+const callFailed = (call: ToolCallItem): boolean =>
+  call.status === 'failed' || call.result?.isError === true
+
+/** Is anything inside still going? The call itself, normally — the Task
+ * settles only when its subagent finishes — but a bridged or deferred child
+ * can outlive it, and a pulse that stopped while a child still worked would
+ * read as a hang. */
+export function taskBusy(task: ToolCallItem, children: readonly TranscriptItem[]): boolean {
+  return callBusy(task) || children.some((child) => child.kind === 'tool_call' && callBusy(child))
+}
+
+/**
+ * Does the row colour red? The task's own failure, or any child call's — the
+ * run fold's call exactly (and the scrubber's, by the same two-spelling
+ * predicate): a failure does not fragment the block, it colours it, because
+ * hiding it inside a longer list is worse than a red line the reader can open.
+ */
+export function taskFailed(task: ToolCallItem, children: readonly TranscriptItem[]): boolean {
+  return callFailed(task) || children.some((child) => child.kind === 'tool_call' && callFailed(child))
+}
+
+/**
+ * The collapsed task row's one line: identity, then scale.
+ *
+ * `Task(Explore · find the auth check) · 7 tools…` while the subagent works —
+ * the count grows as it does, which is the row's progress reading, and the
+ * trailing ellipsis is the same in-flight signal `runSummary` uses (the pulse
+ * in the gutter carries the beat). Settled, the ellipsis drops:
+ * `… · 7 tools`. "Tools" and not "tool calls" because `runSummary` already
+ * chose that word for the same count one row over.
+ *
+ * The counts are counted from the absorbed children, never read from the
+ * engine's structured Task output — WorkerDeck does not plumb structured tool
+ * results to clients, so a transcript replayed tomorrow must spell the same
+ * line from the same items it holds today.
+ *
+ * With no tool calls yet — the subagent thinking, or only its brief arrived —
+ * the line says `working…`, because `0 tools…` reads as a stall; settled with
+ * none it says `done`.
+ */
+export function taskSummary(task: ToolCallItem, children: readonly TranscriptItem[]): string {
+  const busy = taskBusy(task, children)
+  const calls = children.reduce((n, child) => n + (child.kind === 'tool_call' ? 1 : 0), 0)
+  const label = taskLabel(task)
+  if (calls === 0) return busy ? `${label} · working…` : `${label} · done`
+  return `${label} · ${calls} tool${calls === 1 ? '' : 's'}${busy ? '…' : ''}`
 }

@@ -131,6 +131,42 @@ describe('buildClusters', () => {
     expect(kinds(items)).toEqual(['l:user'])
   })
 
+  it('paints no prompt mark for a subagent’s brief', () => {
+    // A brief is a `user` item too (optional `parentToolUseId`, set only on
+    // briefs). Marked, it would claim someone typed mid-turn — and closing the
+    // segment there mis-anchors the turn mark whenever a task runs between the
+    // prompt and the answer.
+    const brief: TranscriptItem = {
+      kind: 'user',
+      id: `u${++seq}`,
+      text: 'go find it',
+      parentToolUseId: 'task-1',
+    }
+    const items = [user('do it'), assistant('working on it'), brief, assistant('the answer')]
+    const clusters = buildClusters(props(items), RAIL)
+    expect(clusters.filter((c) => c.kind === 'user')).toHaveLength(1)
+    // The segment survived the brief: one turn mark, anchored on the LAST
+    // top-level answer, not on the one the brief would have closed at.
+    const turns = clusters.filter((c) => c.kind === 'turn')
+    expect(turns).toHaveLength(1)
+    expect(turns[0]!.marks[0]!.mark.itemIndex).toBe(3)
+  })
+
+  it('still marks a failed tool call inside a subagent', () => {
+    // The row it anchors is the collapsed task block's (rowIndexFor maps an
+    // absorbed index to that row), but the MARK is built from the item — the
+    // failure stays on the rail even though its row folded away.
+    const failed: TranscriptItem = {
+      kind: 'tool_call',
+      id: `t${++seq}`,
+      name: 'Bash',
+      input: {},
+      parentToolUseId: 'task-1',
+      status: 'failed',
+    }
+    expect(kinds([failed])).toEqual(['f:toolFailed'])
+  })
+
   it('marks an error notice but not an info one', () => {
     expect(kinds([notice('error', 'boom')])).toEqual(['f:error'])
     expect(kinds([notice('info', 'fyi')])).toEqual([])

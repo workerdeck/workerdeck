@@ -13,9 +13,14 @@ import {
   UserRow,
   WorkingRow,
   blockNeedsBlank,
+  taskChildItems,
   terminalBlocks,
+  type TaskBlock,
 } from './items.tsx'
-import { Blank } from './row.tsx'
+import { usePulse } from '../agent/pulse.tsx'
+import { Pressable, useRevealOnOpen } from './press.tsx'
+import { taskBusy, taskFailed, taskSummary } from './tool-run.ts'
+import { Blank, Row } from './row.tsx'
 import { TerminalSurface } from './surface.tsx'
 
 /**
@@ -79,6 +84,77 @@ export function TerminalItemView({
   }
 }
 
+/**
+ * A `Task` and everything the subagent it spawned produced, as one row.
+ *
+ * The same claim the tool-run fold makes, and a stronger one: a subagent is
+ * *sixty* rows of somebody else's working — a brief, a dozen greps, its own
+ * thinking — and none of it is what you came back to read. What you came back
+ * to read is the report, and the report is the model's next sentence. So the
+ * whole frame collapses to one line saying what was asked and how big the
+ * answer was, and opens in full the moment it is the thing you want.
+ *
+ * **Always collapsed when unmounted**, and that is load-bearing rather than
+ * tidy: `height.ts` predicts this row as exactly one wrapped `taskSummary`, and
+ * expansion is component-local state that dies with the row. A row auto-opening
+ * because its subagent happens to be running would make its own height
+ * unpredictable — which is why the live signal is *in* the collapsed line (the
+ * pulse, and a count that climbs) rather than in an open block.
+ *
+ * The children are the theme's ordinary rows, stepped in behind a rule, and
+ * they fold among themselves: a subagent's consecutive tool calls are as much
+ * an aside inside its frame as they are in the main thread.
+ */
+export function TaskRow({
+  block,
+  fileUrl,
+}: {
+  block: TaskBlock
+  fileUrl?: (path: string) => string
+}) {
+  const [open, setOpen] = useState(false)
+  const reveal = useRevealOnOpen(open)
+  const children = useMemo(() => taskChildItems(block), [block])
+  const busy = taskBusy(block.task, children)
+  const failed = taskFailed(block.task, children)
+  const pulse = usePulse(busy)
+
+  return (
+    <div ref={reveal} className={open ? 'term-open' : undefined}>
+      <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
+        {/* A marker, where a folded run of calls gets none: a run is an aside,
+            but delegating a piece of the work is something the model *did*, and
+            the row stands for the whole of it. The body is `taskSummary`
+            verbatim — it is the string `height.ts` wraps to size this row, and
+            a second spelling here would be a second height. */}
+        <Row
+          glyph={busy ? pulse : '●'}
+          glyphTone={failed ? 'red' : busy ? 'mark' : 'dim'}
+          tone={failed ? 'red' : 'fg'}>
+          {taskSummary(block.task, children)}
+        </Row>
+      </Pressable>
+      {open ? (
+        // `term-nested` and not the shell's cards-era `border-l-2 pl-3`: this
+        // sits on the open block's wash, where that border token is invisible,
+        // and its 14px would take every nested marker off the cell grid.
+        <div className='term-nested'>
+          {block.children.map((leaf, index) => (
+            <Fragment key={leaf.key}>
+              {index > 0 && blockNeedsBlank(block.children[index - 1]!, leaf) ? <Blank /> : null}
+              {'run' in leaf ? (
+                <ToolRunRow items={leaf.run} />
+              ) : (
+                <TerminalItemView item={leaf.item} fileUrl={fileUrl} />
+              )}
+            </Fragment>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 /** When the current run began — the clock the working line counts from. Held
  * here, not in the row, because the row comes and goes within a single turn (it
  * hides the moment text streams) and a clock restarting at every tool call
@@ -127,8 +203,10 @@ export function TerminalTranscript({
           {index > 0 && blockNeedsBlank(blocks[index - 1]!, block) ? <Blank /> : null}
           {'run' in block ? (
             <ToolRunRow items={block.run} />
-          ) : (
+          ) : 'item' in block ? (
             <TerminalItemView item={block.item} fileUrl={fileUrl} />
+          ) : (
+            <TaskRow block={block} fileUrl={fileUrl} />
           )}
         </Fragment>
       ))}

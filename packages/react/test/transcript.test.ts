@@ -934,4 +934,89 @@ describe('transcript reducer', () => {
       expect(state.items).toHaveLength(0)
     })
   })
+
+  // A subagent streams *concurrently* with the thread that spawned it, and three
+  // parallel Tasks stream three ways at once. Everything here is about keeping
+  // those streams apart; under the old single `streaming` id every one of these
+  // cases welded two agents' output into one row.
+  describe('subagents', () => {
+    const textDelta = (text: string, parentToolUseId: string | null): SessionEventBody => ({
+      type: 'stream_delta',
+      event: { type: 'content_block_delta', delta: { type: 'text_delta', text } },
+      parentToolUseId,
+      uuid: `d${seq}`,
+    })
+    const texts = (state: TranscriptState) =>
+      state.items
+        .filter((item) => item.kind === 'assistant_text')
+        .map((item) => (item as { text: string }).text)
+
+    it('keeps two agents’ streamed text in separate rows', () => {
+      seq = 0
+      const state = run(initialTranscriptState, [
+        textDelta('Main ', null),
+        textDelta('Sub ', 'toolu_a'),
+        textDelta('thread.', null),
+        textDelta('agent.', 'toolu_a'),
+      ])
+      expect(texts(state)).toEqual(['Main thread.', 'Sub agent.'])
+    })
+
+    it('does not let a subagent’s finished message wipe its parent’s in-flight text', () => {
+      seq = 0
+      const state = run(initialTranscriptState, [
+        textDelta('Half a sentence', null),
+        {
+          type: 'assistant_message',
+          message: { role: 'assistant', content: [{ type: 'text', text: 'Subagent done.' }] },
+          parentToolUseId: 'toolu_a',
+          uuid: 'a-sub',
+        },
+      ])
+      expect(texts(state)).toEqual(['Half a sentence', 'Subagent done.'])
+    })
+
+    it('finalizes every agent’s stream at the turn’s end, under distinct ids', () => {
+      seq = 0
+      const state = run(initialTranscriptState, [
+        textDelta('Main.', null),
+        textDelta('Sub.', 'toolu_a'),
+        {
+          type: 'turn_result',
+          subtype: 'error_during_execution',
+          isError: true,
+          durationMs: 1,
+          totalCostUsd: 0,
+          numTurns: 1,
+        },
+      ])
+      const finalized = state.items.filter((item) => item.kind === 'assistant_text')
+      expect(finalized.map((item) => (item as { streaming: boolean }).streaming)).toEqual([
+        false,
+        false,
+      ])
+      expect(new Set(finalized.map((item) => item.id)).size).toBe(2)
+      expect(texts(state)).toEqual(['Main.', 'Sub.'])
+    })
+
+    // The brief is a real, non-synthetic user message. Unstamped it renders as a
+    // `❯` row in the main thread — the one row that must never be wrong about
+    // who said it.
+    it('stamps a subagent’s brief with its parent, and leaves a human prompt unstamped', () => {
+      seq = 0
+      const state = run(initialTranscriptState, [
+        { type: 'user_message', message: { role: 'user', content: 'find it' }, parentToolUseId: null, uuid: 'u1' },
+        {
+          type: 'user_message',
+          message: { role: 'user', content: 'Search the repo for X.' },
+          parentToolUseId: 'toolu_a',
+          uuid: 'u2',
+        },
+      ])
+      const prompts = state.items.filter((item) => item.kind === 'user')
+      expect(prompts).toHaveLength(2)
+      expect(prompts[0]).not.toHaveProperty('parentToolUseId')
+      expect((prompts[1] as { parentToolUseId?: string }).parentToolUseId).toBe('toolu_a')
+    })
+  })
 })

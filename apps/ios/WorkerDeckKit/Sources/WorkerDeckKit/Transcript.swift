@@ -88,7 +88,16 @@ public enum NoticeLevel: String, Sendable, Equatable {
 }
 
 public enum TranscriptItem: Sendable, Equatable, Identifiable {
-  case user(id: String, text: String, attachments: [MessageAttachment]? = nil)
+  /// `parentToolUseId` is set only when this prompt is a *subagent's brief*
+  /// rather than something a person typed — it arrives as a real, non-synthetic
+  /// user message with a parent. Unstamped it renders in the main thread as a
+  /// prompt row, which is the one row in a transcript that must never be wrong
+  /// about who said it. Defaulted rather than required (unlike the other kinds)
+  /// because the overwhelming case genuinely has no parent; mirrors the react
+  /// reducer's optional field.
+  case user(
+    id: String, text: String, attachments: [MessageAttachment]? = nil,
+    parentToolUseId: String? = nil)
   case assistantText(id: String, text: String, streaming: Bool, parentToolUseId: String?)
   case thinking(id: String, text: String, parentToolUseId: String?)
   case toolCall(ToolCallItem)
@@ -103,7 +112,7 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
 
   public var id: String {
     switch self {
-    case .user(let id, _, _): return id
+    case .user(let id, _, _, _): return id
     case .assistantText(let id, _, _, _): return id
     case .thinking(let id, _, _): return id
     case .toolCall(let call): return call.id
@@ -211,6 +220,27 @@ public struct TranscriptState: Sendable, Equatable {
 private let streamingId = "streaming"
 /// Id of the in-flight thinking item assembled from `thinking_delta`s.
 private let streamingThinkingId = "streaming-thinking"
+
+/// The in-flight stream is a singleton **per agent**, not per session.
+///
+/// One id was right while one thread streamed at a time, and it is not: a
+/// subagent streams concurrently with the thread that spawned it, and three
+/// parallel `Task`s stream three ways at once. Under one id every delta lands in
+/// the same item — a row welding several agents' half-sentences together — and
+/// the first finished message wipes all of them, including the ones still being
+/// written. The main thread keeps the bare id so nothing that keys off it moves.
+/// (Mirrors the react reducer's `streamingTextId`/`streamingThinkingId`.)
+private func streamId(_ base: String, _ parentToolUseId: String?) -> String {
+  guard let parentToolUseId else { return base }
+  return "\(base):\(parentToolUseId)"
+}
+
+/// Is this an in-flight stream — anyone's? The turn's end finalizes every one of
+/// them: a subagent interrupted mid-sentence has the same unrecoverable text as
+/// the main thread.
+private func isStreaming(_ id: String, _ base: String) -> Bool {
+  id == base || id.hasPrefix("\(base):")
+}
 
 /// CLI-side command output arrives as user text wrapped in local-command tags.
 /// (Mirrors `LOCAL_COMMAND_OUTPUT`; NSRegularExpression is thread-safe.)
@@ -417,7 +447,11 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
               text: trimmed(local.body)))
         } else {
           // References, not bytes — the view fetches each one to render it.
-          items = upsert(items, .user(id: id, text: text, attachments: payload.attachments))
+          items = upsert(
+            items,
+            .user(
+              id: id, text: text, attachments: payload.attachments,
+              parentToolUseId: payload.parentToolUseId))
         }
       default:
         break
@@ -430,12 +464,16 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
     // `thinking` is '' and the human-readable summary, when the model surfaces one at
     // all, exists only in the thinking_delta stream. Carry the streamed text over
     // rather than let the full message overwrite it with nothing.
+    let streamingText = streamId(streamingId, payload.parentToolUseId)
+    let streamingThought = streamId(streamingThinkingId, payload.parentToolUseId)
     var streamedThinking = streamedText(
-      next.items, kind: .thinking, id: streamingThinkingId)
-    // The full message supersedes any in-flight streamed text/thinking.
+      next.items, kind: .thinking, id: streamingThought)
+    // The full message supersedes any in-flight streamed text/thinking — this
+    // agent's, and only this agent's. A subagent's finished message must not
+    // wipe the sentence its parent is still writing.
     var items = next.items.filter { item in
-      !(item.kind == .assistantText && item.id == streamingId)
-        && !(item.kind == .thinking && item.id == streamingThinkingId)
+      !(item.kind == .assistantText && item.id == streamingText)
+        && !(item.kind == .thinking && item.id == streamingThought)
     }
     for (index, block) in payload.message.content.asBlocks.enumerated() {
       let id = "\(payload.uuid)-\(index)"
@@ -473,14 +511,16 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
       break
     }
     if delta.type == "text_delta" {
-      let existing = streamedText(next.items, kind: .assistantText, id: streamingId)
+      let id = streamId(streamingId, payload.parentToolUseId)
+      let existing = streamedText(next.items, kind: .assistantText, id: id)
       next.items = upsert(
         next.items,
         .assistantText(
-          id: streamingId, text: existing + (delta.text ?? ""), streaming: true,
+          id: id, text: existing + (delta.text ?? ""), streaming: true,
           parentToolUseId: payload.parentToolUseId))
     } else if delta.type == "thinking_delta" {
-      let existing = streamedText(next.items, kind: .thinking, id: streamingThinkingId)
+      let id = streamId(streamingThinkingId, payload.parentToolUseId)
+      let existing = streamedText(next.items, kind: .thinking, id: id)
       let text = existing + (delta.thinking ?? "")
       // The same guard the finalized block gets, and for the same reason: a
       // thinking_delta can carry no visible text at all (encrypted reasoning
@@ -494,7 +534,7 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
       next.items = upsert(
         next.items,
         .thinking(
-          id: streamingThinkingId, text: text,
+          id: id, text: text,
           parentToolUseId: payload.parentToolUseId))
     }
 
@@ -508,11 +548,18 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
     // (Mirrors the react reducer's turn_result case.)
     next.items = next.items.map { item in
       switch item {
-      case .assistantText(let id, let text, _, let parent) where id == streamingId:
+      // Every agent's, not just the main thread's — and the stable id carries
+      // the agent for the same reason the streaming one does: two agents
+      // finalizing on one `turn_result` would otherwise collide on a single id,
+      // and `upsert` keys by id.
+      case .assistantText(let id, let text, _, let parent) where isStreaming(id, streamingId):
         return .assistantText(
-          id: "text-\(event.seq)", text: text, streaming: false, parentToolUseId: parent)
-      case .thinking(let id, let text, let parent) where id == streamingThinkingId:
-        return .thinking(id: "thinking-\(event.seq)", text: text, parentToolUseId: parent)
+          id: "text-\(event.seq)\(parent.map { "-\($0)" } ?? "")", text: text, streaming: false,
+          parentToolUseId: parent)
+      case .thinking(let id, let text, let parent) where isStreaming(id, streamingThinkingId):
+        return .thinking(
+          id: "thinking-\(event.seq)\(parent.map { "-\($0)" } ?? "")", text: text,
+          parentToolUseId: parent)
       default:
         return item
       }

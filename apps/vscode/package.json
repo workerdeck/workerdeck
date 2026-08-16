@@ -325,6 +325,11 @@
           "default": true,
           "description": "Show the unread badge — transcript rows produced since you last looked, summed over the sessions the Sessions view's filter is showing. This is the extension's only always-visible signal that a session wants you, so while it is on the sessions are polled even with every WorkerDeck view closed; turning it off also stops that background poll."
         },
+        "workerdeck.statusBar.subagents": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show how many sub-agents are running, summed over the sessions the Sessions view's filter is showing. Hidden entirely when none are. Like the unread badge it keeps the sessions poll alive while it is on, since both are counted in the same pass."
+        },
         "workerdeck.statusBar.status": {
           "type": "boolean",
           "default": true,

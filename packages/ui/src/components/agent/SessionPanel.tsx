@@ -228,6 +228,14 @@ export interface SessionPanelProps {
    */
   scrubberMarks?: readonly number[]
   /**
+   * Scroll a tool call into view; bump `nonce` to ask again for the same one.
+   * See {@link TranscriptProps.reveal} — this is the panel's pass-through, and
+   * exists so a surface *outside* the panel (a sessions list showing a session's
+   * running sub-agents) can say "take me to that one" without opening a second
+   * attach to find out where it is.
+   */
+  reveal?: { toolUseId: string; nonce: number }
+  /**
    * Terminal theme only: hold the prompt of the turn you are reading at the top
    * of the transcript, as the Claude Code CLI does. The **real row** is pinned
    * rather than a copy drawn above it, so it lines up with the rows beneath by
@@ -441,6 +449,7 @@ export function SessionPanel({
   terminalMetrics,
   scrubber = false,
   scrubberMarks,
+  reveal,
   stickyPrompt = false,
   controlsSurface = 'internal',
   onControls,
@@ -848,6 +857,7 @@ export function SessionPanel({
               ? { from: catchUp.itemCount, since: catchUp.since }
               : undefined
           }
+          reveal={reveal}
           jumpToRecapRef={jumpToRecap}
           repinRef={repinTranscript}
         />

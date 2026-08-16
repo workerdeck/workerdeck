@@ -147,12 +147,38 @@ export type HostToPanel =
        */
       kind: 'wd-focus-composer'
     }
+  | {
+      /**
+       * Scroll the transcript to a tool call — the sub-agent picked in the
+       * sessions list. Carries its own `nonce` because picking the same one
+       * twice is two requests, and the panel drives `SessionPanel.reveal` with
+       * it; without the nonce the second press would be a props-equal no-op.
+       *
+       * Sent *after* `wd-show-session` when the pick also changed session: an id
+       * only means something once the panel is on the right transcript.
+       */
+      kind: 'wd-reveal-tool-use'
+      toolUseId: string
+      nonce: number
+    }
 
 /** Sidebar webview → host. */
 export type SidebarToHost =
   | TransportToHost
   | { kind: 'wd-ready' }
-  | { kind: 'wd-select-session'; hostId: string; sessionId: string }
+  | {
+      kind: 'wd-select-session'
+      hostId: string
+      sessionId: string
+      /**
+       * Set when the click landed on a *sub-agent* under the session rather than
+       * the session itself: select as normal, then take the panel to that
+       * `Task`'s row. A sub-agent is not a session and cannot be opened as one —
+       * its work lives nested inside one row of this session's transcript, so
+       * "open it" can only honestly mean "show me that row".
+       */
+      revealToolUse?: string
+    }
   | {
       /** Interrupt. Executed host-side over a transient attach. */
       kind: 'wd-stop-session'

@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { TranscriptItem } from '@workerdeck/react'
-import { foldsTogether, runSummary, toolFamily } from '../src/components/terminal/tool-run.ts'
+import {
+  foldsTogether,
+  runSummary,
+  taskBusy,
+  taskFailed,
+  taskLabel,
+  taskSummary,
+  toolFamily,
+} from '../src/components/terminal/tool-run.ts'
 
 type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
 
@@ -92,5 +100,115 @@ describe('foldsTogether', () => {
 
   it('folds two calls from the same subagent', () => {
     expect(foldsTogether(call('Bash', 'agent-1'), call('Read', 'agent-1'))).toBe(true)
+  })
+})
+
+/* ── The task block's one line ────────────────────────────────────────────── */
+
+const taskCall = (over: Partial<ToolCallItem> = {}): ToolCallItem => ({
+  kind: 'tool_call',
+  id: 'task-1',
+  name: 'Task',
+  input: { subagent_type: 'Explore', description: 'find the auth check' },
+  parentToolUseId: null,
+  status: 'settled',
+  ...over,
+})
+const brief: TranscriptItem = {
+  kind: 'user',
+  id: 'u1',
+  text: 'go find it',
+  parentToolUseId: 'task-1',
+}
+const said: TranscriptItem = {
+  kind: 'assistant_text',
+  id: 'a1',
+  text: 'found it',
+  streaming: false,
+  parentToolUseId: 'task-1',
+}
+
+describe('taskLabel', () => {
+  it('names the agent and the description, both from the call’s own input', () => {
+    expect(taskLabel(taskCall())).toBe('Task(Explore · find the auth check)')
+  })
+
+  it('takes whichever half an engine sent, without a dangling separator', () => {
+    expect(taskLabel(taskCall({ input: { subagent_type: 'Explore' } }))).toBe('Task(Explore)')
+    expect(taskLabel(taskCall({ input: { description: 'find it' } }))).toBe('Task(find it)')
+  })
+
+  it('falls back to the ordinary input preview when neither is there', () => {
+    expect(taskLabel(taskCall({ input: { prompt: 'x' } }))).toBe('Task({"prompt":"x"})')
+  })
+
+  it('treats a blank-padded description as absent, not as a name', () => {
+    // A model told to omit an optional field sends "" or " " — the same lesson
+    // `apps/embedded` paid for. `Task( )` would be that bug, drawn; the fallback
+    // preview happens to be empty for this input too, which is exactly what the
+    // plain tool row's header shows for it.
+    expect(taskLabel(taskCall({ input: { subagent_type: ' ', description: '' } }))).toBe('Task()')
+  })
+
+  it('clips a long description the way tool previews clip', () => {
+    const description = 'x'.repeat(200)
+    const label = taskLabel(taskCall({ input: { description } }))
+    expect(label).toBe(`Task(${'x'.repeat(79)}…)`)
+  })
+})
+
+describe('taskSummary', () => {
+  it('counts the subagent’s tool calls, settled', () => {
+    const children = [brief, said, call('Read', 'task-1'), call('Grep', 'task-1')]
+    expect(taskSummary(taskCall(), children)).toBe(
+      'Task(Explore · find the auth check) · 2 tools',
+    )
+  })
+
+  it('trails the ellipsis while the subagent works, and keeps counting', () => {
+    const children = [brief, call('Read', 'task-1')]
+    expect(taskSummary(taskCall({ status: 'running' }), children)).toBe(
+      'Task(Explore · find the auth check) · 1 tool…',
+    )
+  })
+
+  it('says working, not “0 tools”, before the first call lands', () => {
+    expect(taskSummary(taskCall({ status: 'running' }), [brief])).toBe(
+      'Task(Explore · find the auth check) · working…',
+    )
+  })
+
+  it('says done for a task that settled without calling anything', () => {
+    expect(taskSummary(taskCall(), [brief, said])).toBe(
+      'Task(Explore · find the auth check) · done',
+    )
+  })
+})
+
+describe('taskBusy', () => {
+  it('follows the call’s own status', () => {
+    expect(taskBusy(taskCall({ status: 'running' }), [])).toBe(true)
+    expect(taskBusy(taskCall({ status: 'pending' }), [])).toBe(true)
+    expect(taskBusy(taskCall(), [])).toBe(false)
+  })
+
+  it('stays busy while a child call still runs, even after the task settled', () => {
+    // A bridged or deferred child can outlive the call; a pulse that stopped
+    // while one still worked would read as a hang.
+    const children = [{ ...call('Read', 'task-1'), status: 'running' as const }]
+    expect(taskBusy(taskCall(), children)).toBe(true)
+  })
+})
+
+describe('taskFailed', () => {
+  it('colours on the task’s own failure, by either spelling', () => {
+    expect(taskFailed(taskCall({ status: 'failed' }), [])).toBe(true)
+    expect(taskFailed(taskCall({ result: { text: 'no', isError: true } }), [])).toBe(true)
+    expect(taskFailed(taskCall(), [])).toBe(false)
+  })
+
+  it('colours on a child’s failure rather than hiding it in the fold', () => {
+    const children = [{ ...call('Read', 'task-1'), status: 'failed' as const }]
+    expect(taskFailed(taskCall(), children)).toBe(true)
   })
 })

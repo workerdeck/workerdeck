@@ -42,6 +42,9 @@ export function App({
   affordances: boolean
 }) {
   const [shown, setShown] = useState<Shown | undefined>(undefined)
+  /** The sub-agent the sessions list last asked to be shown — see
+   * `wd-reveal-tool-use`. */
+  const [reveal, setReveal] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
   // The panel owns the session's one attach, so it owns the only setters there
   // are. The status bar's pickers reach them through here.
   const controls = useRef<SessionControls | undefined>(undefined)
@@ -72,6 +75,13 @@ export function App({
         } else if (msg.kind === 'wd-focus-composer') {
           focusWanted.current = true
           tryFocus()
+        } else if (msg.kind === 'wd-reveal-tool-use') {
+          // Straight to state, unlike the focus above: `reveal` is a *prop*, so
+          // a request that arrives before the transcript has mounted is still
+          // honoured — the panel reads it on its first render and jumps then.
+          // The host's nonce rides through unchanged, since it is what makes a
+          // repeat of the same id a second request rather than a no-op.
+          setReveal({ toolUseId: msg.toolUseId, nonce: msg.nonce })
         }
       }),
     [bridge],
@@ -184,6 +194,10 @@ export function App({
         // else, and VS Code's own ruler is the thing beside it that this is
         // modelled on. Inert under `cards`.
         scrubber
+        // Where the sessions list's sub-agent rows land. A sub-agent has no
+        // screen of its own — its work is nested inside one `Task` row of this
+        // transcript — so opening one means arriving at that row.
+        reveal={reveal}
         // The CLI keeps the prompt in view while the turn runs; a dock is the
         // narrowest surface we have, so it needs that most.
         stickyPrompt

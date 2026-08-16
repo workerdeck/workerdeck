@@ -59,6 +59,9 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
   #htmlVersion = 0
   /** A focus asked for before the webview could take it (see `show`). */
   #focusPending = false
+  /** A reveal asked for before the webview could take it — see `revealToolUse`. */
+  #revealPending: string | undefined
+  #revealNonce = 0
   #active: ActiveSession | undefined
   #transports: WebviewTransportHost | undefined
 
@@ -196,6 +199,31 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
       },
     })
     if (focus) this.#post({ kind: 'wd-focus-composer' })
+    // After the session, for the same reason the focus is: an id only means
+    // something once the panel is on the transcript that contains it.
+    this.#flushReveal()
+  }
+
+  /**
+   * Take the transcript to a tool call — the sub-agent picked in the sessions
+   * list. Queued like the composer focus, and for the same reason: a panel
+   * opening for the first time has not said `wd-ready` yet, so a reveal posted
+   * now would land in the void. The queue holds one request because only the
+   * newest matters — two clicks before the panel exists is one destination.
+   */
+  revealToolUse(toolUseId: string): void {
+    this.#revealPending = toolUseId
+    this.#flushReveal()
+  }
+
+  #flushReveal(): void {
+    if (!this.#view || !this.#ready) return
+    const toolUseId = this.#revealPending
+    if (!toolUseId) return
+    this.#revealPending = undefined
+    // The nonce is what makes asking twice mean twice — `SessionPanel.reveal` is
+    // a prop, so an identical one is a no-op.
+    this.#post({ kind: 'wd-reveal-tool-use', toolUseId, nonce: ++this.#revealNonce })
   }
 
   #post(msg: HostToPanel): void {

@@ -3,6 +3,7 @@ import { useStickToBottomContext } from 'use-stick-to-bottom'
 import type { PermissionRequest } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
 import { formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
+import { parentOf } from './blocks.ts'
 import { TerminalSurface } from './surface.tsx'
 
 /**
@@ -275,7 +276,11 @@ export function buildClusters(
     segment = {}
   }
   items.forEach((item, index) => {
-    if (item.kind === 'user') {
+    // Top-level prompts only, like the answer check below: a subagent's brief
+    // is a `user` item too, and it would both paint a "you" mark for something
+    // nobody typed and close the segment mid-turn — which mis-anchors the turn
+    // mark whenever a task runs between the prompt and the answer.
+    if (item.kind === 'user' && parentOf(item) === undefined) {
       closeSegment()
       marks.push({ kind: 'user', itemIndex: index, rowIndex: rowIndexFor(index) })
     } else if (item.kind === 'turn_result') {

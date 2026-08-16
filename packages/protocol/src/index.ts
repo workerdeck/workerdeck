@@ -1265,6 +1265,71 @@ export type CreateSessionRequest = {
   scope?: Record<string, string>
 }
 
+/**
+ * One sub-agent (a `Task` call and the sidechain it spawned), as a *list* surface
+ * sees it — without attaching.
+ *
+ * Sub-agent work is otherwise attach-only: it exists on the wire as
+ * `parentToolUseId` on three event bodies, and is reconstructed into rows by the
+ * react reducer and grouped per-Task by `terminalBlocks`. A sessions list never
+ * attaches (one live attach per session, owned by the panel), so it reads
+ * `SessionInfo` over REST and would otherwise have no way to know a session has
+ * six agents running inside one turn.
+ *
+ * This is a **runner-owned rollup computed at read time**, exactly like
+ * {@link SessionInfo.pendingPermissionCount}: it is not an event, it is not
+ * persisted separately, and it therefore rides the REST list, the WS attach
+ * snapshot and parking snapshots for free. Only the claude engine produces it —
+ * codex and provider emit `parentToolUseId: null` on every event, so an empty
+ * list there is the truth rather than a gap.
+ *
+ * It is deliberately **not** the input to `taskSummary`. That string is spelled
+ * from the absorbed transcript items and must stay that way, so a transcript
+ * replayed tomorrow spells the same line from the same items it holds today.
+ */
+export type SubagentInfo = {
+  /** The `tool_use` id of the `Task` call that spawned it — the same id its
+   * nested events carry as `parentToolUseId`, and therefore the handle a client
+   * uses to jump to that Task's row. */
+  toolUseId: string
+  /** The Task input's `subagent_type` (e.g. "Explore"), when it named one. */
+  agentType?: string
+  /** The Task input's short `description`, clipped by the runner. Together with
+   * `agentType` this is what makes two parallel sub-agents tell apart in a list;
+   * a row reading only `Task` answers nothing. */
+  description?: string
+  /**
+   * `running` until the Task's own `tool_result` arrives, then `done`/`failed`
+   * from that result's `is_error`. A turn that ends without that result — an
+   * interrupt, a session error, a turn or budget cap — settles what is still
+   * running as `failed`: the report never came, which is the one thing `done`
+   * could have claimed, and a `running` badge on an idle session would be a
+   * lie a list re-renders at every poll.
+   *
+   * Deliberately **narrower than `taskFailed`** in `@workerdeck/ui`'s
+   * `tool-run.ts`, which reddens a Task row when *any child call* failed. That is
+   * right for a transcript row the reader can expand — the failure is one press
+   * away and hiding it would be worse. It is wrong for a list: a grep that
+   * matched nothing inside an otherwise successful Explore agent would put
+   * `failed` beside the session's name with nothing to open. So this reports the
+   * sub-agent's own outcome. If you are here to "fix" the inconsistency, this is
+   * the reason it exists.
+   */
+  status: 'running' | 'done' | 'failed'
+  /** Epoch ms the `Task` call was emitted. */
+  startedAt: number
+  /** Tool calls the sub-agent has made so far — its progress reading while
+   * running, counted from nested `tool_use` blocks. */
+  toolCount: number
+}
+
+/**
+ * How many *settled* sub-agents {@link SessionInfo.subagents} keeps behind the
+ * running ones. Small on purpose: the point of the tail is that a list row does
+ * not go blank the instant a run finishes, not that it is a history.
+ */
+export const SUBAGENT_HISTORY = 8
+
 export type SessionInfo = {
   /** Server-assigned id (stable across SDK session forks/resumes). */
   id: string
@@ -1300,6 +1365,22 @@ export type SessionInfo = {
   /** Highest event seq emitted so far; attach with `afterSeq` to catch up. */
   lastSeq: number
   pendingPermissionCount: number
+  /**
+   * Sub-agents this session has running, plus a short tail of settled ones — see
+   * {@link SubagentInfo}. Absent on an engine that has no sidechains and on an
+   * older server; **absent and empty mean the same thing to a client**, so render
+   * nothing rather than "0 sub-agents".
+   *
+   * Bounded on purpose. This rides every row of `GET /sessions`, which a busy
+   * client polls at 1.2s, and it is captured into parking snapshots — the same
+   * attachment-bytes rule that keeps whole files off {@link FilePatch}. Every
+   * *running* sub-agent is always present (they are the live reading and there
+   * are never many at once); settled ones are kept newest-first to
+   * {@link SUBAGENT_HISTORY} and then dropped, so a day-long session with two
+   * hundred Tasks does not grow an unbounded field. A client must therefore not
+   * treat this as the session's full Task history — the transcript is that.
+   */
+  subagents?: SubagentInfo[]
   meta?: Record<string, unknown>
   /** Display title: `meta.title` if the host set one, else derived (e.g. first prompt). */
   title?: string
@@ -1350,6 +1431,14 @@ export type SessionInfo = {
  * reducer's row rule changes, change this with it.
  */
 export function transcriptActivity(body: SessionEventBody): number {
+  // A subagent's own messages are not rows of *this* conversation: they render
+  // inside the `Task` call that spawned them, which is itself a row and already
+  // counted. Scoring them would make an unread badge announce dozens of rows a
+  // reader cannot see without expanding a block — and the badge is a promise
+  // about what is on screen. The claim is the same one `transcriptContent`
+  // declines to make: nested items still *mutate* items, so they must still
+  // replay; they merely do not add to the count.
+  if ('parentToolUseId' in body && body.parentToolUseId != null) return 0
   switch (body.type) {
     case 'assistant_message': {
       const content = body.message.content

@@ -27,7 +27,24 @@ import type {
  */
 
 export type TranscriptItem =
-  | { kind: 'user'; id: string; text: string; attachments?: MessageAttachment[] }
+  | {
+      kind: 'user'
+      id: string
+      text: string
+      attachments?: MessageAttachment[]
+      /**
+       * The `Task` call this prompt was addressed to, when it is a subagent's
+       * brief rather than something a person typed.
+       *
+       * Optional where the other kinds carry it as `string | null`, and the
+       * asymmetry is the point: on those it is a fact about every instance, so
+       * forgetting to stamp it should not typecheck. Here the overwhelming case
+       * is a human prompt, which has no parent at all — `undefined` says that,
+       * where `null` on 24 construction sites would only say "somebody
+       * remembered".
+       */
+      parentToolUseId?: string
+    }
   | {
       kind: 'assistant_text'
       id: string
@@ -177,8 +194,34 @@ export const initialTranscriptState: TranscriptState = {
   lastSeq: 0,
 }
 
+/**
+ * The in-flight streamed text and thought — a singleton **per agent**, not per
+ * session.
+ *
+ * It was one id for the whole stream, which was right while one thread streamed
+ * at a time. It is not: with subagent text forwarded, a `Task` and the thread
+ * that spawned it stream *concurrently*, and three parallel Tasks stream three
+ * ways at once. Under one id every one of those deltas accumulates into the same
+ * item — a row welding several agents' half-sentences together — and the first
+ * `assistant_message` to land wipes all of them, including the ones still being
+ * written.
+ *
+ * So the id carries the agent: `streaming` for the main thread (unchanged, so
+ * nothing that keys off it moves) and `streaming:<parentToolUseId>` inside a
+ * subagent.
+ */
 const STREAMING_ID = 'streaming'
 const STREAMING_THINKING_ID = 'streaming-thinking'
+const streamingTextId = (parentToolUseId: string | null): string =>
+  parentToolUseId == null ? STREAMING_ID : `${STREAMING_ID}:${parentToolUseId}`
+const streamingThinkingId = (parentToolUseId: string | null): string =>
+  parentToolUseId == null ? STREAMING_THINKING_ID : `${STREAMING_THINKING_ID}:${parentToolUseId}`
+/** Is this item an in-flight stream — anyone's? The turn's end finalizes every
+ * one of them, since a subagent's last text is as unrecoverable as the main
+ * thread's when a turn is interrupted. */
+const isStreamingItem = (item: TranscriptItem): boolean =>
+  (item.kind === 'assistant_text' && item.id.startsWith(STREAMING_ID)) ||
+  (item.kind === 'thinking' && item.id.startsWith(STREAMING_THINKING_ID))
 
 function blockText(content: ToolResultBlock['content']): string {
   if (content === undefined) return ''
@@ -406,6 +449,14 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
               // References, not bytes — render them by fetching
               // `/sessions/:id/attachments/:attachmentId`.
               attachments: event.attachments,
+              // A subagent's brief arrives here too — a real, non-synthetic
+              // user message with a parent. Unstamped it renders as a `❯`
+              // prompt row in the main thread, which reads as something the
+              // person typed and is the one row in a transcript that must
+              // never be wrong about who said it.
+              ...(event.parentToolUseId != null && {
+                parentToolUseId: event.parentToolUseId,
+              }),
             })
           }
         }
@@ -418,16 +469,20 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
       // is '' and the human-readable summary, when the model surfaces one at all, exists only
       // in the thinking_delta stream. Carry the streamed text over rather than let the full
       // message overwrite it with nothing.
+      const streamingText = streamingTextId(event.parentToolUseId)
+      const streamingThought = streamingThinkingId(event.parentToolUseId)
       let streamedThinking =
         base.items.find(
           (item): item is Extract<TranscriptItem, { kind: 'thinking' }> =>
-            item.kind === 'thinking' && item.id === STREAMING_THINKING_ID,
+            item.kind === 'thinking' && item.id === streamingThought,
         )?.text ?? ''
-      // The full message supersedes any in-flight streamed text/thinking.
+      // The full message supersedes any in-flight streamed text/thinking — this
+      // agent's, and only this agent's. A subagent's finished message must not
+      // wipe the sentence its parent is still writing.
       let items = base.items.filter(
         (item) =>
-          !(item.kind === 'assistant_text' && item.id === STREAMING_ID) &&
-          !(item.kind === 'thinking' && item.id === STREAMING_THINKING_ID),
+          !(item.kind === 'assistant_text' && item.id === streamingText) &&
+          !(item.kind === 'thinking' && item.id === streamingThought),
       )
       const blocks = contentToBlocks(event.message.content)
       blocks.forEach((block, index) => {
@@ -476,13 +531,14 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
       }
       if (delta.type !== 'content_block_delta') return base
       if (delta.delta?.type === 'text_delta') {
+        const id = streamingTextId(event.parentToolUseId)
         const existing = base.items.find(
           (item): item is Extract<TranscriptItem, { kind: 'assistant_text' }> =>
-            item.kind === 'assistant_text' && item.id === STREAMING_ID,
+            item.kind === 'assistant_text' && item.id === id,
         )
         const item: TranscriptItem = {
           kind: 'assistant_text',
-          id: STREAMING_ID,
+          id,
           text: (existing?.text ?? '') + (delta.delta.text ?? ''),
           streaming: true,
           parentToolUseId: event.parentToolUseId,
@@ -490,9 +546,10 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
         return { ...base, items: upsert(base.items, item) }
       }
       if (delta.delta?.type === 'thinking_delta') {
+        const id = streamingThinkingId(event.parentToolUseId)
         const existing = base.items.find(
           (item): item is Extract<TranscriptItem, { kind: 'thinking' }> =>
-            item.kind === 'thinking' && item.id === STREAMING_THINKING_ID,
+            item.kind === 'thinking' && item.id === id,
         )
         const text = (existing?.text ?? '') + (delta.delta.thinking ?? '')
         // The same guard the finalized block gets, and for the same reason: a
@@ -508,7 +565,7 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
         if (text.trim() === '') return base
         const item: TranscriptItem = {
           kind: 'thinking',
-          id: STREAMING_THINKING_ID,
+          id,
           text,
           parentToolUseId: event.parentToolUseId,
         }
@@ -530,13 +587,19 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
           // turn's message would wipe it (a minute of interrupted output
           // vanishing on the next question) and the next turn's deltas would
           // append to it, gluing two turns' text into one row.
-          ...base.items.map((item) =>
-            item.kind === 'assistant_text' && item.id === STREAMING_ID
-              ? { ...item, id: `text-${event.seq}`, streaming: false }
-              : item.kind === 'thinking' && item.id === STREAMING_THINKING_ID
-                ? { ...item, id: `thinking-${event.seq}` }
-                : item,
-          ),
+          // Every agent's, not just the main thread's: a subagent interrupted
+          // mid-sentence has the same unrecoverable text, and one left under a
+          // `streaming:<id>` key would be adopted by the next Task that reused
+          // the id. The stable id carries the agent for the same reason the
+          // streaming one does — two agents finalizing on one `turn_result`
+          // would otherwise land on a single id, and `upsert` keys by id.
+          ...base.items.map((item) => {
+            if (!isStreamingItem(item)) return item
+            const agent = 'parentToolUseId' in item && item.parentToolUseId ? `-${item.parentToolUseId}` : ''
+            return item.kind === 'assistant_text'
+              ? { ...item, id: `text-${event.seq}${agent}`, streaming: false }
+              : { ...item, id: `thinking-${event.seq}${agent}` }
+          }),
           {
             kind: 'turn_result',
             id: `turn-${event.seq}`,

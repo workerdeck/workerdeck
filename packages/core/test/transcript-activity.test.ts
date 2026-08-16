@@ -94,6 +94,51 @@ describe('transcriptActivity', () => {
     // the unread cursor for something nobody needs to read.
     expect(transcriptActivity({ type: 'conversation_reset' })).toBe(0)
   })
+
+  // A subagent's rows render *inside* the `Task` call that spawned them, which
+  // is itself a counted row. Scoring them too would have an unread badge
+  // announce dozens of rows the reader cannot see without expanding a block —
+  // and one Task can outnumber everything a person actually typed that day.
+  it('scores a subagent’s own messages zero, however many rows they would be', () => {
+    expect(
+      transcriptActivity({
+        type: 'assistant_message',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'Searching.' },
+            { type: 'tool_use', id: 't1', name: 'Grep', input: {} },
+            { type: 'tool_use', id: 't2', name: 'Read', input: {} },
+          ],
+        },
+        parentToolUseId: 'toolu_a',
+        uuid: 'u9',
+      } as SessionEventBody),
+    ).toBe(0)
+    // The brief is a real, non-synthetic user message; it is still not a row of
+    // *this* conversation.
+    expect(
+      transcriptActivity({
+        type: 'user_message',
+        message: { role: 'user', content: 'Search the repo for X.' },
+        parentToolUseId: 'toolu_a',
+        uuid: 'u10',
+      } as SessionEventBody),
+    ).toBe(0)
+    // The `Task` call itself is the main thread's row and still counts — the
+    // badge must not go silent while a subagent works.
+    expect(
+      transcriptActivity({
+        type: 'assistant_message',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'toolu_a', name: 'Task', input: {} }],
+        },
+        parentToolUseId: null,
+        uuid: 'u11',
+      } as SessionEventBody),
+    ).toBe(1)
+  })
 })
 
 /**

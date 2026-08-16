@@ -33,13 +33,46 @@ struct TranscriptTests {
           synthetic: synthetic, uuid: uuid)))
   }
 
-  private func textDelta(_ seq: Int, _ text: String) -> SessionEvent {
+  private func textDelta(_ seq: Int, _ text: String, parentToolUseId: String? = nil)
+    -> SessionEvent
+  {
     event(
       seq,
       .streamDelta(
         StreamDeltaEvent(
           event: .init(type: "content_block_delta", delta: .init(type: "text_delta", text: text)),
+          parentToolUseId: parentToolUseId,
           uuid: "s\(seq)")))
+  }
+
+  /// A subagent streams concurrently with the thread that spawned it, so the
+  /// in-flight item is a singleton **per agent**. Under one id these deltas weld
+  /// two agents' half-sentences into a single row, and the first finished
+  /// message wipes the one still being written. (Mirrors the react reducer.)
+  @Test func concurrentAgentsStreamIntoSeparateRows() {
+    var state = reduce([
+      textDelta(1, "Main "),
+      textDelta(2, "Sub ", parentToolUseId: "toolu_a"),
+      textDelta(3, "thread.", parentToolUseId: nil),
+      textDelta(4, "agent.", parentToolUseId: "toolu_a"),
+    ])
+    #expect(
+      state.items == [
+        .assistantText(id: "streaming", text: "Main thread.", streaming: true, parentToolUseId: nil),
+        .assistantText(
+          id: "streaming:toolu_a", text: "Sub agent.", streaming: true,
+          parentToolUseId: "toolu_a"),
+      ])
+
+    state = reduce(
+      [
+        textDelta(1, "Half a sentence"),
+        assistant(2, uuid: "a-sub", parentToolUseId: "toolu_a", [.text("Subagent done.")]),
+      ])
+    #expect(
+      state.items.first == .assistantText(
+        id: "streaming", text: "Half a sentence", streaming: true, parentToolUseId: nil))
+    #expect(state.items.count == 2)
   }
 
   private func thinkingDelta(_ seq: Int, _ thinking: String) -> SessionEvent {

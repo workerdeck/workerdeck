@@ -1,4 +1,4 @@
-import type { SessionInfo } from './index.ts'
+import type { SessionInfo, SubagentInfo } from './index.ts'
 
 /**
  * How a sessions list is filtered, grouped and sorted — the whole of the view
@@ -34,6 +34,36 @@ export function sessionState(info: SessionInfo): SessionState {
   if (info.status === 'running' || info.status === 'starting') return 'working'
   if (info.status === 'failed' || info.status === 'closed') return 'ended'
   return 'idle'
+}
+
+/**
+ * The sub-agents a list row draws as live.
+ *
+ * `sessionState` deliberately does **not** grow a `subagents` bucket. A session
+ * with three agents running is already `working`, and a fifth state would split
+ * that bucket in two for every client that filters by it — including the ones
+ * that have not shipped this yet. Sub-agents are an *annotation* on a working
+ * row, the same call the scrubber makes about errors: they say more about a row
+ * you can already see, rather than moving it somewhere else.
+ */
+export function runningSubagents(info: SessionInfo): SubagentInfo[] {
+  return (info.subagents ?? []).filter((sub) => sub.status === 'running')
+}
+
+/**
+ * A sub-agent's identity on one line: `Explore · find the auth check`.
+ *
+ * The same two fields `taskLabel` builds its transcript row from, minus the
+ * `Task(…)` wrapper — a list row is already inside a session, so naming the tool
+ * spends the width that the description needs. Falls back to the bare agent type,
+ * then to a generic word: a row with no label at all reads as a rendering bug,
+ * and an engine is free to send neither field.
+ */
+export function subagentLabel(sub: SubagentInfo): string {
+  const agent = sub.agentType?.trim()
+  const description = sub.description?.trim()
+  if (agent && description) return `${agent} · ${description}`
+  return agent || description || 'Sub-agent'
 }
 
 /** The facets a session can be grouped or sorted by. */

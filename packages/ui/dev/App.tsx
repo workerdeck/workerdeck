@@ -234,11 +234,15 @@ export function App() {
               ...terminalBlocks(items.slice(boundary), boundary, true),
             ]
       const linear = (rows: TranscriptRow[], itemIndex: number): number => {
+        // An absorbed child maps to its task's row wherever it fell in the
+        // stream; everything else to the last row whose start is ≤ the target.
+        let absorbed: number | undefined
         let best = 0
         rows.forEach((row, index) => {
+          if ('task' in row && row.childIndices.includes(itemIndex)) absorbed = index
           if ('index' in row && row.index <= itemIndex) best = index
         })
-        return best
+        return absorbed ?? best
       }
       let cases = 0
       const mismatches: unknown[] = []
@@ -253,10 +257,15 @@ export function App() {
             const got = rowIndexForItem(rows, i)
             const want = linear(rows, i)
             const row = rows[got]!
+            // Identity membership, not index arithmetic: a run can fold across
+            // an absorbed gap, so `[index, index + len)` no longer describes
+            // its coverage — the row must literally CONTAIN the item.
             const covers =
               'run' in row
-                ? i >= row.index && i < row.index + row.run.length
-                : 'item' in row && row.index === i
+                ? row.run.includes(items[i]! as (typeof row.run)[number])
+                : 'task' in row
+                  ? row.task === items[i] || row.childIndices.includes(i)
+                  : 'item' in row && row.item === items[i]
             if (got !== want || !covers)
               mismatches.push({ fixture: f.key, boundary, i, got, want, covers })
           }

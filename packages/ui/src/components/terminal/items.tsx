@@ -8,8 +8,27 @@ import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { Pressable, useRevealOnOpen } from './press.tsx'
 import { collapsedResult } from './result-preview.ts'
-import { foldsTogether, runSummary } from './tool-run.ts'
+import { runSummary } from './tool-run.ts'
+import { type ToolCallItem } from './blocks.ts'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
+
+// The pure block model — which rows exist — lives in `blocks.ts` now that a
+// task block made it non-trivial; re-exported here because this file is where
+// consumers have always found it.
+export {
+  blockNeedsBlank,
+  isRunCall,
+  needsBlank,
+  parentOf,
+  taskChildItems,
+  terminalBlocks,
+  type ItemBlock,
+  type LeafBlock,
+  type RunBlock,
+  type TaskBlock,
+  type TerminalBlock,
+  type ToolCallItem,
+} from './blocks.ts'
 
 /**
  * One transcript item, drawn as terminal rows.
@@ -121,8 +140,6 @@ const TOOL_TONE: Record<string, Tone> = {
   settled: 'dim',
   failed: 'red',
 }
-
-export type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
 
 export function ToolRow({ item }: { item: ToolCallItem }) {
   const [open, setOpen] = useState(false)
@@ -238,12 +255,6 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
   )
 }
 
-/** Is this a row the transcript folds into a run? Any tool call is — see
- * `tool-run.ts` for why this is no longer shell-only. */
-export function isRunCall(item: TranscriptItem): item is ToolCallItem {
-  return item.kind === 'tool_call'
-}
-
 /**
  * A run of tool calls, as one line.
  *
@@ -291,49 +302,6 @@ export function ToolRunRow({ items }: { items: ToolCallItem[] }) {
       ) : null}
     </div>
   )
-}
-
-/**
- * Fold consecutive tool calls into runs, leaving everything else alone.
- *
- * Shared by both renderers — the virtualized shell in `agent/Transcript.tsx` and
- * the plain {@link TerminalTranscript} — because which rows exist is part of what
- * the theme *is*, and a client that grouped differently would be showing a
- * different transcript of the same session.
- */
-export type TerminalBlock =
-  | { key: string; item: TranscriptItem; index: number }
-  | { key: string; run: ToolCallItem[]; index: number }
-
-/**
- * @param offset  What `items[0]`'s index is in the whole transcript — the
- *   virtualized shell folds each side of the recap boundary separately, and the
- *   rows still have to say where they sit for the catch-up dimming.
- * @param fold    Whether to group at all. `false` gives one block per item,
- *   which is what the cards variant renders: this is the terminal theme's rule
- *   and must not silently reshape another renderer's row list.
- */
-export function terminalBlocks(
-  items: readonly TranscriptItem[],
-  offset = 0,
-  fold = true,
-): TerminalBlock[] {
-  const out: TerminalBlock[] = []
-  for (const [position, item] of items.entries()) {
-    const index = offset + position
-    const previous = out.at(-1)
-    if (fold && isRunCall(item)) {
-      if (previous && 'run' in previous && foldsTogether(previous.run[0]!, item)) {
-        previous.run.push(item)
-      } else {
-        // Keyed by the run's *first* call, so the key is stable as the run grows.
-        out.push({ key: `run:${item.id}`, run: [item], index })
-      }
-      continue
-    }
-    out.push({ key: `${item.kind}:${item.id}`, item, index })
-  }
-  return out
 }
 
 export function TurnResultRow({
@@ -429,21 +397,6 @@ export function WorkingRow({
       {readings.length ? <Ink tone='faint'> ({readings.join(' · ')})</Ink> : null}
     </Row>
   )
-}
-
-/** Spacing between two items: a blank line, unless the pair belongs together.
- * Tool output already sits under its call, and a run of tool calls reads as one
- * block — the CLI leaves no blank line inside either. */
-export function needsBlank(previous: TranscriptItem, next: TranscriptItem): boolean {
-  if (previous.kind === 'tool_call' && next.kind === 'tool_call') return false
-  return true
-}
-
-/** The same rule over blocks: a shell run counts as the tool calls it folded. */
-export function blockNeedsBlank(previous: TerminalBlock, next: TerminalBlock): boolean {
-  const before = 'run' in previous ? 'tool_call' : previous.item.kind
-  const after = 'run' in next ? 'tool_call' : next.item.kind
-  return !(before === 'tool_call' && after === 'tool_call')
 }
 
 export { Band, Blank }

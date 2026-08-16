@@ -25,7 +25,7 @@ import { Response } from './Response.tsx'
 import { SessionEmptyState } from './SessionEmptyState.tsx'
 import { ToolCallCard } from './ToolCallCard.tsx'
 import { resolveAffordances, type TerminalAffordances } from '../terminal/affordances.tsx'
-import { ToolRunRow, WorkingRow, terminalBlocks } from '../terminal/items.tsx'
+import { ToolRunRow, WorkingRow, parentOf, terminalBlocks } from '../terminal/items.tsx'
 import { estimateBlockPx } from '../terminal/height.ts'
 import { TerminalScrubber } from '../terminal/scrubber.tsx'
 import { gapBefore, rowIndexForItem, type TranscriptRow } from './transcript-rows.ts'
@@ -33,7 +33,7 @@ import { useHeightEpoch } from './use-height-epoch.ts'
 import { useTranscriptJumps } from './use-transcript-jumps.ts'
 import { Row } from '../terminal/row.tsx'
 import { TerminalSurface } from '../terminal/surface.tsx'
-import { TerminalItemView } from '../terminal/TerminalTranscript.tsx'
+import { TaskRow, TerminalItemView } from '../terminal/TerminalTranscript.tsx'
 import {
   ROW_GAP,
   TranscriptVariantProvider,
@@ -443,6 +443,7 @@ function TranscriptRows({
   hostImage,
   jumpToRecapRef,
   repinRef,
+  reveal,
 }: {
   rows: TranscriptRow[]
   boundary: number | undefined
@@ -473,6 +474,7 @@ function TranscriptRows({
   hostImage?: (path: string) => Promise<string | undefined>
   jumpToRecapRef?: RefObject<(() => void) | null>
   repinRef?: RefObject<(() => void) | null>
+  reveal?: { toolUseId: string; nonce: number }
 }) {
   const stick = useStickToBottomContext()
   // The scroll element belongs to an ancestor — `StickToBottom.Content`
@@ -487,7 +489,15 @@ function TranscriptRows({
   // changes, so the per-scroll work below is a walk over prompts rather than
   // over the transcript.
   const promptRows = useMemo(
-    () => rows.flatMap((row, index) => ('item' in row && row.item.kind === 'user' ? [index] : [])),
+    // Top-level prompts only: a subagent's brief is a `user` item too, and one
+    // that escaped absorption (an orphan) must not become the pinned prompt —
+    // it is not what the answer on screen belongs to.
+    () =>
+      rows.flatMap((row, index) =>
+        'item' in row && row.item.kind === 'user' && parentOf(row.item) === undefined
+          ? [index]
+          : [],
+      ),
     [rows],
   )
   // The pinned row must stay mounted even when it is far above the window, so
@@ -603,7 +613,7 @@ function TranscriptRows({
       if (terminal && epoch) {
         const row = rows[index]
         const gapPx = index > 0 && gapBefore(rows, index) ? epoch.line : 0
-        if (row && ('item' in row || 'run' in row))
+        if (row && !('line' in row))
           return estimateBlockPx(row, epoch) + gapPx
         return epoch.line + gapPx // recap: one Row, one line
       }
@@ -715,6 +725,34 @@ function TranscriptRows({
     repinRef,
   })
 
+  // Reveal a tool call from outside the transcript — a sub-agent picked in a
+  // sessions list, whose `Task` row is the thing the reader asked for.
+  //
+  // Keyed on the **nonce**, never on the id: asking for the same sub-agent twice
+  // is a second request, and a props-equal effect would answer only the first.
+  // The lookup goes through `rowIndexForItem` for the reason that function
+  // exists — a row covers a *membership*, not a contiguous span, so a Task's id
+  // resolves to the folded row that absorbed it rather than to a position. That
+  // also makes a nested child's id work, which is what a client holding only a
+  // `parentToolUseId` can offer.
+  //
+  // `'start'`, like the recap seam and the scrubber's marks: the sub-agent's
+  // work runs *downward* from its row, so the reader wants the screen below it.
+  const revealNonce = reveal?.nonce
+  const revealId = reveal?.toolUseId
+  useEffect(() => {
+    if (revealId === undefined) return
+    const itemIndex = items.findIndex(
+      (item) => item.kind === 'tool_call' && item.id === revealId,
+    )
+    // Not here: a compaction, a `/clear`, or simply a client whose list knows
+    // about a Task this transcript has not replayed yet. Staying put beats
+    // jumping somewhere arbitrary.
+    if (itemIndex < 0) return
+    jumpToRow(rowIndexForItem(rows, itemIndex), 'start')
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the nonce IS the trigger
+  }, [revealNonce])
+
   // The scrubber. Interactivity follows the hover affordance — with
   // `affordances={false}` the rail is passive paint (pointer-events off) and
   // the native scrollbar stays; interactive, the rail IS the scrollbar, so the
@@ -808,8 +846,16 @@ function TranscriptRows({
                 terminal={terminal}
               />
             </div>
-          ) : (
+          ) : 'line' in row ? (
             <RecapRow line={row.line} since={since} terminal={terminal} />
+          ) : (
+            // A task block. No `nestedClass` here: the rule belongs *inside*
+            // the row, around the children it opens onto — the collapsed line
+            // is the main thread's, and stepping it in would say a `Task` call
+            // happened somewhere else.
+            <div className={cn(read(boundary, row.index) && 'opacity-45')}>
+              <TaskRow block={row} fileUrl={fileUrl} />
+            </div>
           )
         // A prompt row's sticky lane — see the pinned-prompt comment above.
         // The lane is sized to the turn; the sticky **head** (one clipped
@@ -824,7 +870,15 @@ function TranscriptRows({
         // paint-only, so under a translate the head would stick against the
         // lane's un-translated box at the top of the list — observed as the
         // row clamped to its lane's bottom edge, never pinning at all.
-        if (terminal && stickyPrompt && 'item' in row && row.item.kind === 'user') {
+        // Same predicate as `promptRows` above — the lane and the forced range
+        // must agree on which rows are prompts.
+        if (
+          terminal &&
+          stickyPrompt &&
+          'item' in row &&
+          row.item.kind === 'user' &&
+          parentOf(row.item) === undefined
+        ) {
           const next = promptRows.find((index) => index > virtualRow.index)
           const laneEnd =
             next === undefined
@@ -976,6 +1030,19 @@ export interface TranscriptProps {
    * message look like it did nothing at all.
    */
   repinRef?: RefObject<(() => void) | null>
+  /**
+   * Scroll a tool call into view — bump `nonce` to ask again for the same one.
+   *
+   * The seam a *list* needs: sub-agent work is nested inside the `Task` call
+   * that spawned it, so "open that sub-agent" can only ever mean "take me to its
+   * row". A `parentToolUseId` works here as well as the Task's own id, since the
+   * lookup resolves an absorbed child to the row that folded it.
+   *
+   * A prop rather than a ref (the shape `jumpToRecapRef` uses) because the asker
+   * is outside this webview entirely and the request travels as data; a ref
+   * would need a live closure at the other end of a postMessage bridge.
+   */
+  reveal?: { toolUseId: string; nonce: number }
   className?: string
 }
 
@@ -997,6 +1064,7 @@ export function Transcript({
   catchUp,
   jumpToRecapRef,
   repinRef,
+  reveal,
   className,
 }: TranscriptProps) {
   const terminal = variant === 'terminal'
@@ -1080,6 +1148,7 @@ export function Transcript({
               hostImage={hostImage}
               jumpToRecapRef={jumpToRecapRef}
               repinRef={repinRef}
+              reveal={reveal}
             />
           )}
           {showLoader(state) ? (

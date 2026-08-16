@@ -4,7 +4,13 @@ import { clientFor } from './gateway.ts'
 import { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import type { HostToSidebar, SidebarToHost } from './bridge-protocol.ts'
-import { DEFAULT_VIEW_CONFIG, buildRows, filterRows, type ViewConfig } from './view-config.ts'
+import {
+  DEFAULT_VIEW_CONFIG,
+  buildRows,
+  filterRows,
+  runningSubagents,
+  type ViewConfig,
+} from './view-config.ts'
 import { webviewHtml } from './webview-html.ts'
 
 /** The webview's own filter, mirrored here for the badge (see `wd-view-config`). */
@@ -24,7 +30,9 @@ const FILTER_OPEN_KEY = 'workerdeck.filterOpen.v1'
 
 export type SidebarDelegate = {
   /** A session was chosen — show it in the agent panel. */
-  selectSession: (hostId: string, sessionId: string) => Promise<void>
+  /** `revealToolUse` set = the click landed on a sub-agent under the session:
+   * select it, then take the panel to that `Task`'s row. */
+  selectSession: (hostId: string, sessionId: string, revealToolUse?: string) => Promise<void>
   /** The active session was deleted out from under the panel. */
   clearPanelIfActive: (sessionId: string) => Promise<void>
   activeSessionId: () => string | undefined
@@ -38,6 +46,9 @@ export type SidebarDelegate = {
    * here is the counting, because what it counts is this webview's own filter.
    */
   unread: (rows: number, waiting: number) => void
+  /** Sub-agents in flight across the rows the list is showing, and how many
+   * sessions they are spread over. */
+  subagents: (running: number, sessions: number) => void
 }
 
 /**
@@ -186,6 +197,18 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
       0,
     )
     this.#delegate.unread(rows, this.#model.attentionCount())
+    // Counted over the same `visible` rows and in the same pass, for the same
+    // reason: a bar announcing six agents in a session the filter is hiding
+    // sends you looking for something that isn't there.
+    let running = 0
+    let sessions = 0
+    for (const row of visible) {
+      const live = runningSubagents(row.info).length
+      if (live === 0) continue
+      running += live
+      sessions += 1
+    }
+    this.#delegate.subagents(running, sessions)
   }
 
   async #onMessage(msg: SidebarToHost): Promise<void> {
@@ -209,7 +232,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
         this.#pushState()
         return
       case 'wd-select-session':
-        await this.#delegate.selectSession(msg.hostId, msg.sessionId)
+        await this.#delegate.selectSession(msg.hostId, msg.sessionId, msg.revealToolUse)
         return
       case 'wd-stop-session':
         return this.#stopSession(msg.hostId, msg.sessionId)

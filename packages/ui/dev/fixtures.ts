@@ -614,7 +614,118 @@ export const QUESTIONS: PermissionRequest = {
   },
 }
 
+/**
+ * Two subagents running at once, their rows interleaved — the case fixtures
+ * exist for, because it is the one a real session produces and no amount of
+ * reading the grouping code proves.
+ *
+ * It carries every edge the block model has to answer at once: two `Task` calls
+ * whose children alternate with each other *and* with the main thread's own
+ * work, a failed child (which must colour its task's collapsed line without
+ * fragmenting it), a task still running beside one that settled, and an **orphan
+ * child** whose `Task` call is not in the slice — what a recap boundary or a
+ * compaction leaves behind, and which must stay a visible row rather than
+ * disappear into a block above it.
+ */
+const withId = (id: string, draft: ItemDraft): TranscriptItem =>
+  ({ ...draft, id }) as TranscriptItem
+
+const subagents: TranscriptItem[] = [
+  item({ kind: 'user', text: 'Find every place we parse a permission mode, and check the docs match.' }),
+  item({
+    kind: 'assistant_text',
+    text: 'Two searches in parallel — one over the engines, one over the docs.',
+    streaming: false,
+    parentToolUseId: null,
+  }),
+  withId('toolu_A', {
+    kind: 'tool_call',
+    name: 'Task',
+    input: { subagent_type: 'Explore', description: 'permission mode parsing' },
+    parentToolUseId: null,
+    status: 'settled',
+    result: { text: 'Four sites; two of them normalise, two do not.', isError: false },
+  }),
+  withId('toolu_B', {
+    kind: 'tool_call',
+    name: 'Task',
+    input: { subagent_type: 'general-purpose', description: 'docs parity for permission modes' },
+    parentToolUseId: null,
+    status: 'running',
+  }),
+  // The two briefs, then their work, interleaved the way two children of one
+  // turn really arrive.
+  item({ kind: 'user', text: 'Search the engines for permission mode parsing.', parentToolUseId: 'toolu_A' }),
+  item({ kind: 'user', text: 'Check docs/ for permission mode claims.', parentToolUseId: 'toolu_B' }),
+  item({
+    kind: 'tool_call',
+    name: 'Grep',
+    input: { pattern: 'permissionMode' },
+    parentToolUseId: 'toolu_A',
+    status: 'settled',
+    result: { text: 'packages/core/src/engines/claude/runner.ts:461\npackages/server/src/routes.ts:88', isError: false },
+  }),
+  item({
+    kind: 'tool_call',
+    name: 'Glob',
+    input: { pattern: 'docs/**/*.md' },
+    parentToolUseId: 'toolu_B',
+    status: 'settled',
+    result: { text: 'docs/GOTCHAS.md\ndocs/ARCHITECTURE.md', isError: false },
+  }),
+  // The main thread carries on between them — a top-level call that must not be
+  // folded into either subagent's run.
+  item({
+    kind: 'tool_call',
+    name: 'Bash',
+    input: { command: 'git status --short' },
+    parentToolUseId: null,
+    status: 'settled',
+    result: { text: ' M packages/core/src/engines/claude/runner.ts', isError: false },
+  }),
+  item({
+    kind: 'tool_call',
+    name: 'Read',
+    input: { file_path: 'packages/server/src/routes.ts' },
+    parentToolUseId: 'toolu_A',
+    status: 'settled',
+    result: { text: 'export function routes() { /* … */ }', isError: false },
+  }),
+  // A failure inside a subagent: it colours the collapsed task line and keeps
+  // its scrubber mark, and it does not break the run around it.
+  item({
+    kind: 'tool_call',
+    name: 'Grep',
+    input: { pattern: 'bypassPermissions' },
+    parentToolUseId: 'toolu_B',
+    status: 'failed',
+    result: { text: 'No matches found', isError: true },
+  }),
+  item({
+    kind: 'assistant_text',
+    text: 'Four call sites. Two normalise the mode, two take it verbatim.',
+    streaming: false,
+    parentToolUseId: 'toolu_A',
+  }),
+  // Orphan: `toolu_GONE` is nowhere in this slice.
+  item({
+    kind: 'tool_call',
+    name: 'Read',
+    input: { file_path: 'docs/GOTCHAS.md' },
+    parentToolUseId: 'toolu_GONE',
+    status: 'settled',
+    result: { text: '§Permission modes …', isError: false },
+  }),
+  item({
+    kind: 'assistant_text',
+    text: 'The engines agree; `docs/GOTCHAS.md` still describes the pre-normalisation behaviour.',
+    streaming: false,
+    parentToolUseId: null,
+  }),
+]
+
 export const FIXTURES: { key: string; label: string; state: TranscriptState }[] = [
+  { key: 'subagents', label: 'subagents (interleaved)', state: base(subagents, 'running') },
   { key: 'run', label: 'live run', state: base(run, 'running') },
   { key: 'diff', label: 'file edit', state: base(diff, 'idle') },
   { key: 'markdown', label: 'markdown', state: base(markdown, 'idle') },

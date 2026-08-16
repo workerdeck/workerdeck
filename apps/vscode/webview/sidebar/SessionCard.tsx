@@ -1,7 +1,10 @@
-import type { SessionInfo } from '@workerdeck/protocol'
+import type { SessionInfo, SubagentInfo } from '@workerdeck/protocol'
 import { Spinner, formatRelativeTime, friendlyModel, cn } from '@workerdeck/ui'
 import {
   BellRing,
+  Check,
+  ChevronDown,
+  ChevronRight,
   CircleAlert,
   CircleSlash,
   Moon,
@@ -11,7 +14,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { EngineIcon } from '@workerdeck/ui'
-import { sessionLabel } from '../../src/view-config.ts'
+import { sessionLabel, subagentLabel } from '../../src/view-config.ts'
 
 /**
  * One session in the sidebar list. Dense on purpose — VS Code sidebars are
@@ -36,6 +39,7 @@ export function SessionCard({
   unseen = 0,
   selected,
   onSelect,
+  onSelectSubagent,
   onRename,
   onStop,
   onDelete,
@@ -47,11 +51,21 @@ export function SessionCard({
   unseen?: number
   selected: boolean
   onSelect: () => void
+  /** Open the session *at* one of its sub-agents — see `wd-select-session`'s
+   * `revealToolUse`. */
+  onSelectSubagent: (toolUseId: string) => void
   onRename: (title: string) => void
   onStop: () => void
   onDelete: () => void
 }) {
   const [editing, setEditing] = useState(false)
+  // Expansion is the row's own state and deliberately not persisted: a list that
+  // reopened yesterday's sub-agents on every window reload would be showing a
+  // settled tail nobody asked for. It also cannot be a native twisty — every
+  // view in this extension is a webview, so there is no tree to hang one on.
+  const [expanded, setExpanded] = useState(false)
+  const subagents = info.subagents ?? []
+  const runningAgents = subagents.filter((sub) => sub.status === 'running').length
   const needsHuman = info.pendingPermissionCount > 0 || info.status === 'awaiting_approval'
   const running = info.status === 'running' || info.status === 'starting'
   const age = info.lastActivityAt ?? info.createdAt
@@ -82,6 +96,12 @@ export function SessionCard({
         onSelect()
       }}
       onKeyDown={(e) => {
+        // Only when the card ITSELF has focus. A press on something inside it —
+        // the disclosure, a sub-agent, a hover action — already fires that
+        // control's own click, and `stopPropagation` there cannot help: the
+        // keydown is a separate event travelling the same path, so an unguarded
+        // handler ran the control's action AND selected the session.
+        if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') onSelect()
       }}
       className={cn(
@@ -127,6 +147,18 @@ export function SessionCard({
       </div>
       <div className='flex items-center gap-1 text-label text-fg-4'>
         <EngineIcon engine={engine} model={info.model} />
+        {/* The disclosure lives here, not in front of the title: the first
+            line's left edge belongs to the name, which is what you scan the
+            list by. It doubles as the count, so the row says how many there are
+            without being opened. */}
+        {subagents.length > 0 ? (
+          <SubagentToggle
+            expanded={expanded}
+            running={runningAgents}
+            total={subagents.length}
+            onToggle={() => setExpanded((open) => !open)}
+          />
+        ) : null}
         <span className='min-w-0 flex-1 truncate'>{details.join(' · ')}</span>
         {running ? (
           <RowAction label='Stop session' onClick={onStop}>
@@ -139,8 +171,108 @@ export function SessionCard({
           <Trash2 className='size-3' />
         </RowAction>
       </div>
+      {expanded
+        ? subagents.map((sub) => (
+            <SubagentRow
+              key={sub.toolUseId}
+              sub={sub}
+              onSelect={() => onSelectSubagent(sub.toolUseId)}
+            />
+          ))
+        : null}
     </div>
   )
+}
+
+/**
+ * The disclosure, which is also the reading: `3 agents` — or `2 of 3 agents`
+ * while some have settled, because "how many are still going" is the live
+ * question and a bare total answers it wrong the moment one finishes.
+ *
+ * Sub-agents are an annotation on a working row rather than a state of their
+ * own (see `runningSubagents` in protocol's `session-list.ts`), so this never
+ * competes with the row's status icon: that still says what the *session* is
+ * doing.
+ */
+function SubagentToggle({
+  expanded,
+  running,
+  total,
+  onToggle,
+}: {
+  expanded: boolean
+  running: number
+  total: number
+  onToggle: () => void
+}) {
+  const label =
+    running > 0 && running < total ? `${running} of ${total} agents` : `${total} agent${total === 1 ? '' : 's'}`
+  const Chevron = expanded ? ChevronDown : ChevronRight
+  return (
+    <button
+      type='button'
+      aria-expanded={expanded}
+      aria-label={`${expanded ? 'Hide' : 'Show'} sub-agents`}
+      title={`${expanded ? 'Hide' : 'Show'} sub-agents`}
+      onClick={(e) => {
+        // The whole card is a button and this one does not mean "select" — the
+        // same guard `RowAction` needs, and the reason a drag-select inside the
+        // row does not toggle it.
+        e.stopPropagation()
+        onToggle()
+      }}
+      className={cn(
+        'flex shrink-0 items-center gap-0.5 rounded px-0.5 outline-none',
+        'hover:bg-surface-hover hover:text-fg-2',
+        running > 0 ? 'text-info' : 'text-fg-4',
+      )}>
+      <Chevron className='size-3' />
+      {label}
+    </button>
+  )
+}
+
+/**
+ * One sub-agent under its session. Pressing it opens the session *at* that
+ * `Task`'s row — a sub-agent is not a session and has no screen of its own, so
+ * that is the only honest meaning of opening one.
+ *
+ * The label is protocol's `subagentLabel`, not a spelling of its own: the
+ * dashboard and the phone render the same rows from the same records, and two
+ * spellings would be two different answers to "which agent is this".
+ */
+function SubagentRow({ sub, onSelect }: { sub: SubagentInfo; onSelect: () => void }) {
+  return (
+    <button
+      type='button'
+      title={`${subagentLabel(sub)} · ${sub.toolCount} tool${sub.toolCount === 1 ? '' : 's'}`}
+      onClick={(e) => {
+        e.stopPropagation()
+        onSelect()
+      }}
+      /* Stepped in to sit under the details line, with the same rule the
+         terminal theme's nested rows use: the indent is the whole signal that
+         this happened *inside* the row above it. */
+      className='flex w-full items-center gap-1.5 rounded py-0.5 pl-4 text-left text-label text-fg-4 outline-none hover:bg-surface-hover hover:text-fg-2'>
+      <SubagentIcon status={sub.status} />
+      <span className='min-w-0 flex-1 truncate'>{subagentLabel(sub)}</span>
+      {/* The progress reading while it works, and what it cost when it is done.
+          Zero draws nothing: `0 tools` beside a thinking agent reads as a stall,
+          which is the same call `taskSummary` makes one surface over. */}
+      {sub.toolCount > 0 ? <span className='shrink-0 tabular-nums'>{sub.toolCount}</span> : null}
+    </button>
+  )
+}
+
+function SubagentIcon({ status }: { status: SubagentInfo['status'] }) {
+  switch (status) {
+    case 'running':
+      return <Spinner className='size-3 shrink-0 text-info' />
+    case 'failed':
+      return <CircleAlert className='size-3 shrink-0 text-danger' />
+    default:
+      return <Check className='size-3 shrink-0 text-fg-4' />
+  }
 }
 
 /**

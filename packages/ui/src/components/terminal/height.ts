@@ -6,9 +6,9 @@ import {
   formatDuration,
   toolInputPreview,
 } from '../../lib/format.ts'
-import type { TerminalBlock, ToolCallItem } from './items.tsx'
+import { taskChildItems, type TerminalBlock, type ToolCallItem } from './blocks.ts'
 import { collapsedResult } from './result-preview.ts'
-import { runSummary } from './tool-run.ts'
+import { runSummary, taskSummary } from './tool-run.ts'
 
 /**
  * The terminal theme's row-height calculator.
@@ -97,7 +97,13 @@ export function createHeightEpoch(width: number, ch: number, line: number): Heig
  * The inter-row gap is the *pair's* business (`gapBefore`), not the row's, so
  * it is added by the caller. */
 export function estimateBlockPx(block: TerminalBlock, epoch: HeightEpoch): number {
-  if ('run' in block) return blockHeight(block, epoch).px
+  // Only item blocks cache. A run's array is rebuilt every render, so its
+  // identity is worthless as a key — and a task block must not key on its
+  // `task` item either: children arrive without the call object changing (the
+  // reducer replaces the *child*), so a height cached against the task would
+  // survive exactly the mutation that changes the summary line. Both are one
+  // `wrapOne` over a short string (~2µs), so neither needs the cache.
+  if (!('item' in block)) return blockHeight(block, epoch).px
   const hit = epoch.cache.get(block.item)
   if (hit) return hit.px
   const computed = itemHeight(block.item, epoch)
@@ -716,9 +722,16 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
   }
 }
 
-/** A virtual row's height: an item, or a folded tool run (collapsed = its one
- * summary line, built by the same function the row draws). */
+/** A virtual row's height: an item, a folded tool run, or a task block —
+ * either fold collapsed is its one summary line, built by the same function
+ * the row draws (`runSummary` / `taskSummary`), rendered as one standard
+ * 2-cell-gutter `Row`. No expanded branch for the task block either: it is
+ * always collapsed by default, which is the invariant that keeps every
+ * unmounted row's estimate exact. */
 export function blockHeight(block: TerminalBlock, m: CellMetrics): ComputedHeight {
+  if ('task' in block) {
+    return rowH(taskSummary(block.task, taskChildItems(block)), m)
+  }
   if ('run' in block) {
     const busy = block.run.some((item) => item.status === 'running' || item.status === 'pending')
     return rowH(runSummary(block.run, busy), m)

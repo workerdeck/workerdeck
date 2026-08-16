@@ -9,7 +9,14 @@ import { SessionPanelProvider } from './panel.ts'
 import { SectionViewProvider, type SectionKind } from './section-view.ts'
 import { SessionsModel } from './sessions-model.ts'
 import { SidebarProvider } from './sidebar.ts'
-import { SessionStatusBar, UnreadStatusItem, badgeEnabled, currentModel, modelLabel } from './status-bar.ts'
+import {
+  SessionStatusBar,
+  SubagentStatusItem,
+  UnreadStatusItem,
+  badgeEnabled,
+  currentModel,
+  modelLabel,
+} from './status-bar.ts'
 import { createWatermarks } from './watermarks.ts'
 
 /** Section view ids — each its OWN view, so VS Code owns collapse/placement. */
@@ -70,10 +77,16 @@ export function activate(context: vscode.ExtensionContext): void {
   let vitals: SessionVitals | undefined
   const statusBar = new SessionStatusBar()
   const unread = new UnreadStatusItem()
+  const subagents = new SubagentStatusItem()
   const watermarks = createWatermarks(context)
   // Follows the setting, both now and on every change: the item and the poll
   // behind it are one switch, since a frozen count is worse than no count.
-  const syncUnreadWatcher = () => model.setWatching(UNREAD_WATCHER, badgeEnabled('unread'))
+  //
+  // Either badge keeps it alive. They are computed in the same pass off the same
+  // poll, so gating it on `unread` alone would leave someone who turned unread
+  // off — and sub-agents on — watching a count that never moves.
+  const syncUnreadWatcher = () =>
+    model.setWatching(UNREAD_WATCHER, badgeEnabled('unread') || badgeEnabled('subagents'))
   syncUnreadWatcher()
 
   /**
@@ -213,7 +226,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Show a session in the agent panel. Named, because both the list and the
   // new-session QuickPick end here — a session you just created should be the
   // one on screen.
-  const selectSession = async (hostId: string, sessionId: string) => {
+  const selectSession = async (hostId: string, sessionId: string, revealToolUse?: string) => {
     const host = store.get(hostId)
     if (!host) return
     const info = model.sessionsOf(hostId).find((s) => s.id === sessionId)
@@ -227,7 +240,13 @@ export function activate(context: vscode.ExtensionContext): void {
     void context.workspaceState.update(ACTIVE_SESSION_KEY, { hostId, sessionId, cwd: info?.cwd })
     // Choosing a session is a request to talk to it: reveal the panel and put the
     // caret in the composer, even when that session was already on screen.
-    await panel.show({ host, sessionId, cwd: info?.cwd }, { focus: true })
+    //
+    // Choosing a *sub-agent* under it is not — that is a request to read
+    // something, and the composer is at the other end of the panel from the row
+    // about to be revealed. So the caret stays where it was and the jump is the
+    // whole answer.
+    await panel.show({ host, sessionId, cwd: info?.cwd }, { focus: !revealToolUse })
+    if (revealToolUse) panel.revealToolUse(revealToolUse)
   }
   sidebar = new SidebarProvider(context, context.extensionUri, store, model, {
     selectSession,
@@ -242,6 +261,7 @@ export function activate(context: vscode.ExtensionContext): void {
     activeSessionId: () => panel.active?.sessionId,
     revealGateways: (options) => gateways.reveal(options),
     unread: (rows, waiting) => unread.update(rows, waiting),
+    subagents: (running, sessions) => subagents.update(running, sessions),
   })
 
   // What the new-session / resume QuickPicks need: the gateways and their
@@ -321,6 +341,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (e.affectsConfiguration('workerdeck.statusBar')) {
         statusBar.refresh()
         unread.render()
+        subagents.render()
         // The unread item is the one badge that also owns a poll, so its
         // setting has to move more than a render.
         syncUnreadWatcher()
@@ -333,6 +354,7 @@ export function activate(context: vscode.ExtensionContext): void {
     fs,
     statusBar,
     unread,
+    subagents,
     vscode.window.registerWebviewViewProvider(SidebarProvider.viewId, sidebar, {
       webviewOptions: { retainContextWhenHidden: true },
     }),

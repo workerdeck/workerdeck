@@ -104,11 +104,14 @@ export function auditHeights(
     const { px, exact } = blockHeight(block, metrics)
     const measured = el.getBoundingClientRect().height
     const computed = px + gap
-    const kind = 'run' in block ? 'shell_run' : block.item.kind
-    const text = ('run' in block ? `${block.run.length} cmds` : previewOf(block.item)).slice(
-      0,
-      40,
-    )
+    const kind = 'run' in block ? 'shell_run' : 'task' in block ? 'task' : block.item.kind
+    const text = (
+      'run' in block
+        ? `${block.run.length} cmds`
+        : 'task' in block
+          ? `task ${block.childIndices.length} children`
+          : previewOf(block.item)
+    ).slice(0, 40)
     rows.push({
       index,
       kind,

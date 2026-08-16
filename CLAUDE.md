@@ -16,7 +16,12 @@ protocol. Read these before changing scope or structure:
   on nothing and everything depends on it. Breaking → bump `PROTOCOL_VERSION`. It also owns the
   few *rules* both sides must agree on rather than each guess: `transcriptActivity(event)` is
   the row-count rule the react reducer renders by and the runners count with
-  (`SessionInfo.activityCount`) — change one, change both. `transcriptContent(event)` sits
+  (`SessionInfo.activityCount`) — change one, change both. A **subagent's own messages score
+  zero** (any event carrying a `parentToolUseId`): they render *inside* the `Task` call that
+  spawned them, which is itself a counted row, and one Task can outnumber everything a person
+  typed that day — a badge is a promise about what is on screen. It is deliberately not the
+  claim `transcriptContent` makes, which still counts them: a nested item mutates `items` and
+  must replay. `transcriptContent(event)` sits
   beside it and is a *different* rule — does the reducer mutate items, which is broader than
   "counts a row" (deltas and tool results count zero and still mutate): it is what
   `SessionRunner.subscribe` skips below a `conversation_reset` (`/clear`) so a re-attach doesn't
@@ -49,7 +54,25 @@ protocol. Read these before changing scope or structure:
   confidently at the wrong line. What rides there is only the hunks — the Claude SDK's
   `FileEditOutput` also carries `originalFile`, the entire pre-edit file, and this log is replayed
   on every attach and captured into parking snapshots, so that is the attachment-bytes rule again.
-  `session-list.ts` is the
+  `SubagentInfo` + `SessionInfo.subagents` are the same family and the same trade: sub-agent work
+  is otherwise **attach-only** (it exists on the wire only as `parentToolUseId`, reconstructed by
+  the reducer), and a sessions list never attaches, so a list could not know a session was running
+  six agents inside one turn. A **runner-owned rollup computed at read time**, exactly
+  `pendingPermissionCount`'s shape — which is what puts it on the REST list, the attach snapshot
+  and parking snapshots for free — folded in the claude runner's `#emit`, the one chokepoint, so a
+  dormant rebuild reconstructs it from the resume backfill with no second path. Three rules that
+  are bugs if dropped: `status` is the sub-agent's **own** `tool_result.is_error` and deliberately
+  **not** `taskFailed` (which reddens a Task row when any *child* call failed — right for a row you
+  can expand, wrong beside a session name where a nothing-matched grep would read as a failed run);
+  an interrupted turn **sweeps to `failed`** on `turn_result`/`session_closed`/the status coming to
+  rest, because a resume backfill replays no `turn_result` and a woken mid-Task session would
+  otherwise read `running` forever; and it is **bounded** — every running record plus the newest
+  `SUBAGENT_HISTORY` settled, evicted by settle order and not insertion order, because this rides
+  every row of a 1.2s poll and lands in park snapshots (the attachment-bytes rule again). Absent
+  and empty mean the same thing. `sessionState` grows **no** fifth bucket for it: a session with
+  agents running is already `working`, and a new state would split that bucket for every client
+  that has not shipped this — sub-agents are an *annotation* on a working row, the call the
+  scrubber makes about errors. `session-list.ts` is the
   **sessions-list view model** (the `attention/working/idle/ended` buckets, the
   gateway/adapter/state facets, `filterRows`/`groupRows`/`subsetSummary`/`clearFilters`, and
   the scope-containment rule where a gateway-tagged root scopes only that gateway and an
@@ -94,7 +117,16 @@ protocol. Read these before changing scope or structure:
   `src/lib/patch.ts` is where both engines' edit output becomes protocol's one `FilePatch`
   (`filePatchFromToolResult` off the Claude SDK's `tool_use_result`, `parseUnifiedDiff` off codex's
   `fileChange.diff`), so a client renders one shape with no per-engine branch and no diff parser of
-  its own. No transport. Tool execution rides the
+  its own. `forwardSubagentText: true` is set on the claude engine's options and is the whole
+  reason a subagent is visible at all: unset — the SDK's default — the stream carries only a
+  subagent's `tool_use`/`tool_result` blocks ("enough for a heartbeat counter"), and its brief,
+  thinking and final report never arrive, so the nested transcript is a list of tool names. Not a
+  new config field: `extraOptions` is spread last, so a host that wants the quieter stream turns
+  it back off. Three things were latent behind it and are fixed with it — the reducer's streaming
+  singleton was **per session** where concurrent agents need **per agent**
+  (`streaming:<parentToolUseId>`), a subagent's brief is a real non-synthetic `user_message` that
+  rendered as the human's own `❯` prompt row, and `transcriptActivity` counted every nested row
+  into the unread badge. No transport. Tool execution rides the
   `ToolExecutor` seam (`QuickJsExecutor` in-process, `BrowserBridgeExecutor` to a tab,
   `DeferredExecutor` for work outliving the runner); `createToolContext` builds the
   capability-scoped tool set with the `sandboxed`/`authoritative` trust split, and
@@ -304,6 +336,12 @@ protocol. Read these before changing scope or structure:
   would be a second operator arriving mid-run). Absent, not disabled — a greyed-out composer
   says the session is busy, an absent one says this screen does not drive it — and **not an
   authorization boundary**: it removes the affordance, the gateway does the enforcing.
+  `reveal={{ toolUseId, nonce }}` is the seam a *list* needs: sub-agent work is nested inside the
+  `Task` row that spawned it, so "open that sub-agent" can only mean "take me to its row". A prop
+  rather than a ref (the shape `jumpToRecapRef` uses) because the asker is outside the webview and
+  the request travels as data; **nonce-keyed**, because asking twice for the same agent is two
+  requests and an identical prop is a no-op; and resolved through `rowIndexForItem`, which is what
+  makes a nested child's id land on the folded row that absorbed it rather than on a position.
   `transcriptVariant: 'terminal'` is the **terminal theme** (`src/components/terminal/`, geometry
   and palette in `src/styles/terminal.css`) and it is a *renderer*, not a set of branches: it
   draws every row itself and the shell mounts it **instead of** the components under
@@ -333,7 +371,22 @@ protocol. Read these before changing scope or structure:
   one addition the wider rule needs, since a subagent's calls are drawn stepped in behind a rule and
   must not be counted with a top-level one. A **failure does not break a run, it colours it** — the
   same call the scrubber makes, since fragmenting the run around a failure hides it in a longer list
-  rather than surfacing it. `terminalBlocks` is the
+  rather than surfacing it. The same fold, one level up: **a `Task` and everything the subagent
+  produced is one row** (`blocks.ts`'s `TaskBlock`, `TaskRow`, wording in `tool-run.ts`), reading
+  `Task(Explore · permission mode parsing) · 7 tools`. A subagent is sixty rows of somebody else's
+  working and none of it is what you came back to read — the report is the model's next sentence.
+  It is **grouped by `parentToolUseId`, never by adjacency**, because parallel Tasks interleave in
+  the stream; that is what broke the old row-model contract, where a row covered a contiguous
+  `[index, index + len)` and now covers a *membership* — read `rowIndexForItem`'s contract before
+  touching anything positional, since an absorbed index resolves to its task's row and every jump
+  (scrubber mark, recap, bookmark) goes through it. **Always collapsed when unmounted** is
+  load-bearing rather than tidy: `height.ts` sizes the row as one wrapped `taskSummary`, so the
+  live signal is *in* the collapsed line (the pulse, a climbing count), never an auto-expansion.
+  A childless Task stays a plain call, and an **orphan child** — parent outside the slice, which is
+  what a recap boundary and a compaction leave — keeps its own stepped-in row rather than vanishing
+  into a block above the seam. **None of it renders without
+  `forwardSubagentText`** (see `packages/core`): a nested transcript built on the SDK's default
+  stream is a list of tool names. `terminalBlocks` is the
   one implementation of it: the virtualized shell folds each side of the boundary through the same
   function the plain `TerminalTranscript` calls, and it is what the virtualizer counts, so a run is
   one measured row rather than N. The summary string lives in `tool-run.ts` and the collapsed result
@@ -818,7 +871,21 @@ protocol. Read these before changing scope or structure:
   Two things the move bought: the count no longer needs the Sessions webview to have been
   resolved (there is no `#view` guard on `refreshUnread`, and `#viewConfig` is restored from
   globalState for exactly that case), and sessions awaiting a human can *colour* it amber
-  rather than only leading its tooltip.
+  rather than only leading its tooltip. `SubagentStatusItem`
+  (`workerdeck.statusBar.subagents`) sits beside it on the same argument — it is about *every*
+  session and is most worth showing when nothing is open, since a window with no panel up can be
+  spending real money on six parallel agents — counted in the same pass over the same filtered
+  rows, hidden entirely at zero, and coloured on the **foreground** (`charts.blue`) because VS Code
+  ignores every background but the two alarm ones. Either badge keeps the poll watcher alive:
+  gating it on `unread` alone left someone who turned unread off watching a frozen count.
+  A session row **expands** to its sub-agents (`SessionInfo.subagents`) — disclosure on the
+  *second* line, since the first line's left edge belongs to the name you scan by, doubling as the
+  count (`2 of 3 agents`, because "how many are still going" is the live question); expansion is
+  row-local React state and unpersisted, and could not be a native twisty regardless, every view
+  here being a webview. Pressing a child selects the session and reveals that `Task`'s row
+  (`wd-select-session`'s `revealToolUse` → `wd-reveal-tool-use` → `SessionPanel.reveal`) **without
+  focusing the composer**: a sub-agent has no screen of its own, so opening one is a reading action
+  and the composer is at the other end of the panel.
   The cards carry it per session — an **unread badge** of transcript rows since that session was last on
   screen (`src/watermarks.ts`, globalState, written **only while the panel is visible and
   showing it**, and monotonic so a compaction can't resurrect read rows). Rows, from
