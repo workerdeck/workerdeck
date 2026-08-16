@@ -944,6 +944,17 @@
   );
 }
 .term-scrubber .term-scrub-mark[data-kind='error'] { background: var(--term-red); }
+/* A failed tool call is an alarm, so it is full-width and solid like the rest of
+   them — but at 55%, which is the one thing keeping the rail readable. A session
+   error is rare and a turn failure rarer; a tool that failed and was recovered
+   from is routine (a grep that matched nothing, a build fixed on the second go),
+   and at full strength a normal working session paints the rail solid red and
+   the two errors that actually ended something stop standing out. Dimmer reads
+   as the same class of thing, one rank quieter — which is exactly its rank in
+   LOUDNESS. */
+.term-scrubber .term-scrub-mark[data-kind='toolFailed'] {
+  background: color-mix(in srgb, var(--term-red) 55%, transparent);
+}
 .term-scrubber .term-scrub-mark[data-kind='bookmark'] { background: var(--term-magenta); }
 .term-scrubber .term-scrub-mark[data-kind='approval'] {
   background: var(--term-yellow);

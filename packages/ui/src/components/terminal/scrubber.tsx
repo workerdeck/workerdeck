@@ -44,7 +44,15 @@ import { TerminalSurface } from './surface.tsx'
  */
 
 type Lane = 'l' | 'r' | 'f'
-type MarkKind = 'user' | 'turn' | 'turnFailed' | 'error' | 'approval' | 'recap' | 'bookmark'
+type MarkKind =
+  | 'user'
+  | 'turn'
+  | 'turnFailed'
+  | 'toolFailed'
+  | 'error'
+  | 'approval'
+  | 'recap'
+  | 'bookmark'
 
 type Mark = {
   kind: MarkKind
@@ -86,6 +94,11 @@ const LANE: Record<MarkKind, Lane> = {
   user: 'l',
   turn: 'r',
   turnFailed: 'r',
+  // Full-width, like every other alarm: a failed tool call is something that
+  // went wrong *during* a step, not a step you scroll between. A lane mark would
+  // also put it in the response lane, where it would compete with the turn marks
+  // that are the rail's actual navigation.
+  toolFailed: 'f',
   error: 'f',
   approval: 'f',
   recap: 'f',
@@ -94,9 +107,17 @@ const LANE: Record<MarkKind, Lane> = {
 
 /** Who wins the colour when marks merge. */
 const LOUDNESS: Record<MarkKind, number> = {
-  approval: 6,
-  error: 5,
-  turnFailed: 4,
+  approval: 7,
+  error: 6,
+  turnFailed: 5,
+  // Under `error`, which is the rank that actually does work: both are lane `f`,
+  // so a session error and a tool failure a pixel apart merge and the error must
+  // keep the cluster. (It cannot merge with `turnFailed` — that is lane `r`, and
+  // merging is per lane.) A failed tool call the model recovered from is routine
+  // in a way a session error is not, hence quieter here and at 55% in the CSS.
+  // The one thing it does outrank is `bookmark`, which loses its magenta to a
+  // failure it sits beside.
+  toolFailed: 4,
   user: 3,
   turn: 2,
   bookmark: 1,
@@ -107,6 +128,7 @@ const KIND_NAME: Record<MarkKind, string> = {
   user: 'you',
   turn: 'response · turn end',
   turnFailed: 'turn failed',
+  toolFailed: 'tool failed',
   error: 'error',
   approval: 'pending approval',
   recap: 'catch-up boundary',
@@ -254,6 +276,16 @@ function buildClusters(
       closeSegment()
     } else if (item.kind === 'notice' && item.level === 'error') {
       marks.push({ kind: 'error', itemIndex: index, rowIndex: rowIndexFor(index) })
+    } else if (
+      // The same predicate the row itself reddens with (`items.tsx`), and the
+      // same one the recap counts errors by — the two spellings are not
+      // redundant: an out-of-loop execution failure sets `status` with no
+      // `is_error` block to read, and an engine can flag `is_error` on a call
+      // this reducer has not settled yet.
+      item.kind === 'tool_call' &&
+      (item.status === 'failed' || item.result?.isError === true)
+    ) {
+      marks.push({ kind: 'toolFailed', itemIndex: index, rowIndex: rowIndexFor(index) })
     } else if (item.kind === 'assistant_text' && item.parentToolUseId == null) {
       // The live one included, deliberately: a turn in flight has no turn end
       // yet, which left a two-minute answer unrepresented on the rail for the
@@ -366,11 +398,27 @@ function peekContent(
         </>
       )
     } else if (item) {
+      const failure =
+        first.kind === 'toolFailed' && item.kind === 'tool_call'
+          ? item.result?.text.split('\n').find((line) => line.trim() !== '')
+          : undefined
       body = (
-        <div className='term-scrub-ex' data-tone={first.kind === 'error' ? 'red' : 'fg'}>
-          {first.kind === 'user' ? <span data-tone='dim'>{'❯ '}</span> : null}
-          {excerpt(item)}
-        </div>
+        <>
+          <div
+            className='term-scrub-ex'
+            data-tone={first.kind === 'error' || first.kind === 'toolFailed' ? 'red' : 'fg'}>
+            {first.kind === 'user' ? <span data-tone='dim'>{'❯ '}</span> : null}
+            {excerpt(item)}
+          </div>
+          {/* Which tool failed is rarely the question — `Bash(pnpm test)` is
+              what you already expected to see. The first non-blank line of what
+              it said back is the thing worth peeking at. */}
+          {failure ? (
+            <div className='term-scrub-ex' data-tone='red'>
+              {failure}
+            </div>
+          ) : null}
+        </>
       )
     }
   }
