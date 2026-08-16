@@ -1117,10 +1117,15 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   **Unreleased on master, deliberately.** 0.16.0 is the published latest and `package.json` still
   reads it. Master carries **live-session persistence** (`parking.persistLive`, `Runner.snapshot()`,
   protocol's `snapshotRetains`, `kind: 'live'` records, `apps/embedded` turned on) plus vitest in
-  `packages/ui`. It is held back from a bump on purpose: the feature is proven against a mock model
-  and a fake runner and has never run against the real app with a key — see
-  `_docs/VERIFICATION-DEBT.md`. Clear that first, then bump; the change is a **minor** (additive,
-  and `persistLive` defaults off). Protocol stays **7**.
+  `packages/ui`, and **sub-agents made visible** (`forwardSubagentText`, the reducer's per-agent
+  streaming singleton, the terminal theme's `Task` fold, `SessionInfo.subagents` +
+  `SubagentTracker`, the extension's expandable rows and subagent status item). Both are held back
+  from a bump on purpose, and for the same reason: each is proven against a harness that authored
+  every event it feeds — a mock model and a fake runner for parking, the fake `queryFn` for
+  sub-agents — so the tests confirm the *fold* and say nothing about the real CLI's stream shape or
+  whether the app boots with a key. See `_docs/VERIFICATION-DEBT.md`; clear it first, then bump.
+  The change is a **minor** (additive, `persistLive` defaults off, and absent `subagents` means
+  empty). Protocol stays **7**.
 
   **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`
