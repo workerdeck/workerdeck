@@ -1506,164 +1506,169 @@ export class CodexRunner implements Runner {
 
   #handleNotification(method: string, params: unknown): void {
     if (this.#closed) return
-    const active = this.#activeTurn
-    switch (method) {
-      case 'thread/started': {
-        const thread = (params as { thread?: { id?: string } })?.thread
-        if (typeof thread?.id === 'string') this.#sdkSessionId = thread.id
-        return
+    // The app-server surface is wide (mcpServer/*, account/*, thread
+    // housekeeping…) — everything unmapped is deliberately dropped.
+    this.#notifications[method]?.(params)
+  }
+
+  /** Reasoning deltas arrive on two methods that differ only in which section
+   * counter they advance; the section key carries the method so the two streams
+   * never share a boundary. Section boundaries (a new summary/content entry)
+   * render as paragraph breaks — the completed item joins sections with '\n\n'. */
+  #reasoningDelta(method: string): (params: unknown) => void {
+    return (params) => {
+      const active = this.#activeTurn
+      if (!active) return
+      const payload = params as {
+        delta?: string
+        itemId?: string
+        contentIndex?: number
+        summaryIndex?: number
       }
-      case 'turn/started': {
-        const turn = (params as { turn?: AppServerTurn })?.turn
-        if (active && turn && !active.turnId) active.turnId = turn.id
-        return
-      }
-      case 'turn/completed': {
-        const turn = (params as { turn?: AppServerTurn })?.turn
-        if (active && turn) active.resolve(turn)
-        return
-      }
-      case 'item/started':
-      case 'item/updated': {
-        if (!active) return
-        const item = (params as { item?: AppServerItem })?.item
-        if (item) this.#handleItemProgress(item, active)
-        return
-      }
-      case 'item/completed': {
-        if (!active) return
-        const item = (params as { item?: AppServerItem })?.item
-        if (item) this.#handleItemCompleted(item, active)
-        return
-      }
-      case 'item/agentMessage/delta': {
-        if (!active) return
-        const delta = (params as { delta?: string })?.delta
-        if (typeof delta === 'string' && delta) {
-          this.#emitDelta({ type: 'text_delta', text: delta })
-        }
-        return
-      }
-      case 'item/reasoning/textDelta':
-      case 'item/reasoning/summaryTextDelta': {
-        if (!active) return
-        const payload = params as {
-          delta?: string
-          itemId?: string
-          contentIndex?: number
-          summaryIndex?: number
-        }
-        if (typeof payload?.delta !== 'string' || !payload.delta) return
-        // Section boundaries (a new summary/content entry) render as paragraph
-        // breaks — the completed item joins sections with '\n\n' too.
-        const index = payload.contentIndex ?? payload.summaryIndex ?? 0
-        const key = `${payload.itemId ?? ''}:${method}`
-        const previous = active.sectionIndex.get(key)
-        active.sectionIndex.set(key, index)
-        const separator = previous !== undefined && index > previous ? '\n\n' : ''
-        this.#emitDelta({ type: 'thinking_delta', thinking: separator + payload.delta })
-        return
-      }
-      case 'thread/tokenUsage/updated': {
-        if (!active) return
-        const last = (params as AppServerTokenUsageUpdate)?.tokenUsage?.last
-        if (!last) return
-        // `last` is one model request; a tool-looping turn makes several. The
-        // per-turn number the Anthropic convention wants is their sum.
-        active.sawUsage = true
-        active.usage.inputTokens += last.inputTokens ?? 0
-        active.usage.cachedInputTokens += last.cachedInputTokens ?? 0
-        active.usage.cacheWriteInputTokens =
-          (active.usage.cacheWriteInputTokens ?? 0) + (last.cacheWriteInputTokens ?? 0)
-        active.usage.outputTokens += last.outputTokens ?? 0
-        active.usage.reasoningOutputTokens += last.reasoningOutputTokens ?? 0
-        // Context occupancy is the OPPOSITE choice from the accounting above:
-        // `last` (overwritten, not summed) against the window, because a request's
-        // input already contains the whole conversation. `total` is cumulative
-        // billing — it grows every turn while the context stays where it is, so a
-        // meter built on it would climb to 100% on an almost-empty thread
-        // (measured: total 13931 → 27878 across two trivial turns, last 13931 →
-        // 13947, window 258400).
-        const update = params as AppServerTokenUsageUpdate
-        active.contextTokens = last.totalTokens ?? undefined
-        active.contextWindow = update.tokenUsage?.modelContextWindow ?? undefined
-        return
-      }
-      case 'mcpServer/startupStatus/updated': {
-        // The ONLY place a server's liveness comes from — `mcpServerStatus/list`
-        // reports what is configured and what it exposes, never whether it is
-        // up. Not gated on `active`: servers start with the child, well before
-        // any turn.
-        const update = params as AppServerMcpStatusUpdate
-        if (typeof update?.name !== 'string') return
-        this.#mcpStatus.set(update.name, {
-          status: typeof update.status === 'string' ? update.status : 'starting',
-          ...(update.error ? { error: update.error } : {}),
-          ...(update.failureReason ? { failureReason: update.failureReason } : {}),
-        })
-        return
-      }
-      case 'skills/changed': {
-        // An invalidation signal with no payload — codex's watcher saying
-        // "re-run skills/list", which is exactly what this does. Not gated on
-        // `active`: the operator can edit a skill between turns, and that is
-        // in fact when they usually do.
-        const connection = this.#connection
-        if (connection) void this.#refreshSkills(connection)
-        return
-      }
-      case 'account/rateLimits/updated': {
-        // Pushed during a turn, so — unlike the Claude engine, whose CLI only
-        // pushes on change and therefore needs an explicit poll — listening is
-        // enough. Not gated on `active`: a window update is about the account,
-        // not the turn.
-        this.#emitRateLimits((params as { rateLimits?: AppServerRateLimits })?.rateLimits)
-        return
-      }
-      case 'turn/plan/updated': {
-        // v2's todo list, published as the codex.todo_list sdk_event payload
-        // both clients already render.
-        if (!active) return
-        const plan = (params as AppServerPlanUpdate)?.plan
-        if (!Array.isArray(plan)) return
-        this.#emit({
-          type: 'sdk_event',
-          payload: {
-            type: 'codex.todo_list',
-            id: `${active.nonce}:plan`,
-            items: plan.map((step) => ({ text: step.step, completed: step.status === 'completed' })),
-          },
-        })
-        return
-      }
-      case 'serverRequest/resolved': {
-        // Codex settled one of its own asks (auto-resolution, e.g.
-        // requestUserInput's autoResolutionMs) — retire the matching card. The
-        // late JSON-RPC response we still send is ignored by the peer. The
-        // resolved event reports 'deny' because we cannot know what codex
-        // chose; the message says who really decided.
-        const requestId = (params as { requestId?: string | number })?.requestId
-        if (requestId === undefined) return
-        for (const [id, pending] of this.#approvals) {
-          if (pending.wireId === requestId) {
-            this.#settleApproval(id, pending, { behavior: 'deny', message: 'resolved by codex' }, 'policy')
-            return
-          }
-        }
-        return
-      }
-      case 'error': {
-        // Mostly retry noise (`willRetry: true`); keep the last message so a
-        // turn that fails without its own error still explains itself.
-        const error = (params as { error?: { message?: string } })?.error
-        if (active && typeof error?.message === 'string') active.lastError = error.message
-        return
-      }
-      default:
-        // The app-server surface is wide (mcpServer/*, account/*, thread
-        // housekeeping…) — everything unmapped is deliberately dropped.
-        return
+      if (typeof payload?.delta !== 'string' || !payload.delta) return
+      const index = payload.contentIndex ?? payload.summaryIndex ?? 0
+      const key = `${payload.itemId ?? ''}:${method}`
+      const previous = active.sectionIndex.get(key)
+      active.sectionIndex.set(key, index)
+      const separator = previous !== undefined && index > previous ? '\n\n' : ''
+      this.#emitDelta({ type: 'thinking_delta', thinking: separator + payload.delta })
     }
+  }
+
+  /** One item-progress handler serves `item/started` and `item/updated`. */
+  #itemProgress = (params: unknown): void => {
+    const active = this.#activeTurn
+    if (!active) return
+    const item = (params as { item?: AppServerItem })?.item
+    if (item) this.#handleItemProgress(item, active)
+  }
+
+  /** The notification dispatch table — every method the child emits that this
+   * runner maps, in one place. Handlers read `this.#activeTurn` themselves:
+   * dispatch is synchronous, so the read is the same one the old switch made. */
+  readonly #notifications: Record<string, (params: unknown) => void> = {
+    'thread/started': (params) => {
+      const thread = (params as { thread?: { id?: string } })?.thread
+      if (typeof thread?.id === 'string') this.#sdkSessionId = thread.id
+    },
+    'turn/started': (params) => {
+      const active = this.#activeTurn
+      const turn = (params as { turn?: AppServerTurn })?.turn
+      if (active && turn && !active.turnId) active.turnId = turn.id
+    },
+    'turn/completed': (params) => {
+      const active = this.#activeTurn
+      const turn = (params as { turn?: AppServerTurn })?.turn
+      if (active && turn) active.resolve(turn)
+    },
+    'item/started': this.#itemProgress,
+    'item/updated': this.#itemProgress,
+    'item/completed': (params) => {
+      const active = this.#activeTurn
+      if (!active) return
+      const item = (params as { item?: AppServerItem })?.item
+      if (item) this.#handleItemCompleted(item, active)
+    },
+    'item/agentMessage/delta': (params) => {
+      if (!this.#activeTurn) return
+      const delta = (params as { delta?: string })?.delta
+      if (typeof delta === 'string' && delta) {
+        this.#emitDelta({ type: 'text_delta', text: delta })
+      }
+    },
+    'item/reasoning/textDelta': this.#reasoningDelta('item/reasoning/textDelta'),
+    'item/reasoning/summaryTextDelta': this.#reasoningDelta('item/reasoning/summaryTextDelta'),
+    'thread/tokenUsage/updated': (params) => {
+      const active = this.#activeTurn
+      if (!active) return
+      const last = (params as AppServerTokenUsageUpdate)?.tokenUsage?.last
+      if (!last) return
+      // `last` is one model request; a tool-looping turn makes several. The
+      // per-turn number the Anthropic convention wants is their sum.
+      active.sawUsage = true
+      active.usage.inputTokens += last.inputTokens ?? 0
+      active.usage.cachedInputTokens += last.cachedInputTokens ?? 0
+      active.usage.cacheWriteInputTokens =
+        (active.usage.cacheWriteInputTokens ?? 0) + (last.cacheWriteInputTokens ?? 0)
+      active.usage.outputTokens += last.outputTokens ?? 0
+      active.usage.reasoningOutputTokens += last.reasoningOutputTokens ?? 0
+      // Context occupancy is the OPPOSITE choice from the accounting above:
+      // `last` (overwritten, not summed) against the window, because a request's
+      // input already contains the whole conversation. `total` is cumulative
+      // billing — it grows every turn while the context stays where it is, so a
+      // meter built on it would climb to 100% on an almost-empty thread
+      // (measured: total 13931 → 27878 across two trivial turns, last 13931 →
+      // 13947, window 258400).
+      const update = params as AppServerTokenUsageUpdate
+      active.contextTokens = last.totalTokens ?? undefined
+      active.contextWindow = update.tokenUsage?.modelContextWindow ?? undefined
+    },
+    'mcpServer/startupStatus/updated': (params) => {
+      // The ONLY place a server's liveness comes from — `mcpServerStatus/list`
+      // reports what is configured and what it exposes, never whether it is
+      // up. Not gated on `active`: servers start with the child, well before
+      // any turn.
+      const update = params as AppServerMcpStatusUpdate
+      if (typeof update?.name !== 'string') return
+      this.#mcpStatus.set(update.name, {
+        status: typeof update.status === 'string' ? update.status : 'starting',
+        ...(update.error ? { error: update.error } : {}),
+        ...(update.failureReason ? { failureReason: update.failureReason } : {}),
+      })
+    },
+    'skills/changed': () => {
+      // An invalidation signal with no payload — codex's watcher saying
+      // "re-run skills/list", which is exactly what this does. Not gated on
+      // `active`: the operator can edit a skill between turns, and that is
+      // in fact when they usually do.
+      const connection = this.#connection
+      if (connection) void this.#refreshSkills(connection)
+    },
+    'account/rateLimits/updated': (params) => {
+      // Pushed during a turn, so — unlike the Claude engine, whose CLI only
+      // pushes on change and therefore needs an explicit poll — listening is
+      // enough. Not gated on `active`: a window update is about the account,
+      // not the turn.
+      this.#emitRateLimits((params as { rateLimits?: AppServerRateLimits })?.rateLimits)
+    },
+    'turn/plan/updated': (params) => {
+      // v2's todo list, published as the codex.todo_list sdk_event payload
+      // both clients already render.
+      const active = this.#activeTurn
+      if (!active) return
+      const plan = (params as AppServerPlanUpdate)?.plan
+      if (!Array.isArray(plan)) return
+      this.#emit({
+        type: 'sdk_event',
+        payload: {
+          type: 'codex.todo_list',
+          id: `${active.nonce}:plan`,
+          items: plan.map((step) => ({ text: step.step, completed: step.status === 'completed' })),
+        },
+      })
+    },
+    'serverRequest/resolved': (params) => {
+      // Codex settled one of its own asks (auto-resolution, e.g.
+      // requestUserInput's autoResolutionMs) — retire the matching card. The
+      // late JSON-RPC response we still send is ignored by the peer. The
+      // resolved event reports 'deny' because we cannot know what codex
+      // chose; the message says who really decided.
+      const requestId = (params as { requestId?: string | number })?.requestId
+      if (requestId === undefined) return
+      for (const [id, pending] of this.#approvals) {
+        if (pending.wireId === requestId) {
+          this.#settleApproval(id, pending, { behavior: 'deny', message: 'resolved by codex' }, 'policy')
+          return
+        }
+      }
+    },
+    'error': (params) => {
+      // Mostly retry noise (`willRetry: true`); keep the last message so a
+      // turn that fails without its own error still explains itself.
+      const active = this.#activeTurn
+      const error = (params as { error?: { message?: string } })?.error
+      if (active && typeof error?.message === 'string') active.lastError = error.message
+    },
   }
 
   /** Answer a server→client request: the ask channels become pending
@@ -1851,111 +1856,126 @@ export class CodexRunner implements Runner {
 
   #handleItemCompleted(item: AppServerItem, active: ActiveTurn): void {
     const id = `${active.nonce}:${item.id}`
-    switch (item.type) {
-      case 'userMessage':
-        // The echo of our own turn/start input — already in the log.
-        return
-      case 'agentMessage': {
-        const text = typeof item.text === 'string' ? item.text : ''
-        this.#emitAssistant(id, [{ type: 'text', text }])
-        active.finalText = text
-        return
-      }
-      case 'reasoning': {
-        // `summary` is what streamed (the default config); raw `content` only
-        // exists when the operator's config enables it. Joined the way the
-        // deltas rendered: sections as paragraphs.
-        const summary = Array.isArray(item.summary) ? item.summary.filter(Boolean) : []
-        const content = Array.isArray(item.content) ? item.content.filter(Boolean) : []
-        const thinking = (summary.length > 0 ? summary : content).join('\n\n')
-        if (thinking) this.#emitAssistant(id, [{ type: 'thinking', thinking }])
-        return
-      }
-      case 'commandExecution': {
-        if (!active.toolUseEmitted.has(id)) {
-          active.toolUseEmitted.add(id)
-          this.#emitToolUse(id, 'CodexCommand', { command: item.command })
-        }
-        const exitCode = item.exitCode ?? undefined
-        const failed =
-          item.status === 'failed' ||
-          item.status === 'declined' ||
-          (exitCode !== undefined && exitCode !== 0)
-        const output =
-          (item.aggregatedOutput ?? '') +
-          (exitCode !== undefined && exitCode !== 0 ? `\n(exit code ${exitCode})` : '')
-        this.#emitToolResult(id, output, failed)
-        return
-      }
-      case 'fileChange': {
-        // The completed item: by the time it lands the patch applied, failed,
-        // or was declined (a pending proposal rides the approval channel, not
-        // this item). v2's `kind` is an object (`{type: 'update', …}`), mapped
-        // defensively.
-        this.#emitToolUse(id, 'CodexFileChange', { changes: item.changes })
-        const lines = item.changes.map((change) => {
-          const kind = typeof change.kind === 'string' ? change.kind : change.kind?.type
-          return `${kind ?? 'change'}: ${change.path}`
-        })
-        // Codex reports a unified diff per change, so the wire can carry the
-        // same `FilePatch` the Claude engine sends and every client renders one
-        // shape. Only for a single-file change: the patch names one file, and a
-        // multi-file edit has no honest way to say which.
-        const only = item.changes.length === 1 ? item.changes[0] : undefined
-        this.#emitToolResult(
-          id,
-          lines.join('\n') || item.status,
-          item.status === 'failed' || item.status === 'declined',
-          only?.diff ? parseUnifiedDiff(only.diff, only.path) : undefined,
-        )
-        return
-      }
-      case 'mcpToolCall': {
-        if (!active.toolUseEmitted.has(id)) {
-          active.toolUseEmitted.add(id)
-          this.#emitToolUse(id, `mcp__${item.server}__${item.tool}`, item.arguments)
-        }
-        const isError = (item.error !== undefined && item.error !== null) || item.status === 'failed'
-        this.#emitToolResult(
-          id,
-          item.error?.message ??
-            (item.result === undefined || item.result === null ? '' : JSON.stringify(item.result)),
-          isError,
-        )
-        return
-      }
-      case 'webSearch':
-        this.#emitToolUse(id, 'CodexWebSearch', { query: item.query })
-        this.#emitToolResult(id, '', false)
-        return
-      case 'imageGeneration': {
-        // Re-emitted, not guarded by `toolUseEmitted`: `savedPath` only exists
-        // now, and the reducer upserts a tool_use by id — so this replaces the
-        // in-progress card's input with the finished one. The result event
-        // follows immediately, which is what settles the status again.
-        active.toolUseEmitted.add(id)
-        this.#emitToolUse(id, CODEX_IMAGE_TOOL, imageGenerationInput(item))
-        // The path IS the deliverable — the bytes live on the host and no event
-        // may carry them. `file_produced` is what makes those bytes reachable
-        // anyway: the gateway serves a path its own runner reported, with no
-        // host-file root to declare first.
-        if (item.savedPath) this.#emitFileProduced(item.savedPath, id)
-        const lines = [
-          item.savedPath ? `Saved to ${item.savedPath}` : 'No saved path reported',
-          ...(shortResult(item.result) ? [item.result] : []),
-        ]
-        this.#emitToolResult(id, lines.join('\n'), item.status === 'failed')
-        return
-      }
-      case 'imageView':
-        this.#emitToolUse(id, 'CodexImageView', { path: item.path })
-        this.#emitToolResult(id, item.path, false)
-        return
-      default: {
-        const unknown = item as AppServerUnknownItem
-        this.#emit({ type: 'sdk_event', payload: { type: `codex.${unknown.type}`, item: unknown } })
-      }
+    const handler = this.#itemCompleted[item.type] as
+      | ((item: AppServerItem, active: ActiveTurn, id: string) => void)
+      | undefined
+    if (handler) {
+      handler(item, active, id)
+      return
     }
+    // An item type the union does not model yet: passed through as an sdk_event
+    // rather than dropped — an unmapped item must not be invisible.
+    const unknown = item as AppServerUnknownItem
+    this.#emit({ type: 'sdk_event', payload: { type: `codex.${unknown.type}`, item: unknown } })
+  }
+
+  /**
+   * The completed-item mapping, one handler per member of the {@link AppServerItem}
+   * union. The mapped type is the invariant made checkable: model a new item
+   * type in `types.ts` and this table fails to compile until it says what the
+   * item becomes on the wire — the old switch silently fell through to the
+   * unknown-item passthrough instead. (The runtime still receives types the
+   * union has never heard of; those take the passthrough above.)
+   */
+  readonly #itemCompleted: {
+    [K in AppServerItem['type']]: (
+      item: Extract<AppServerItem, { type: K }>,
+      active: ActiveTurn,
+      id: string,
+    ) => void
+  } = {
+    // The echo of our own turn/start input — already in the log.
+    userMessage: () => {},
+    agentMessage: (item, active, id) => {
+      const text = typeof item.text === 'string' ? item.text : ''
+      this.#emitAssistant(id, [{ type: 'text', text }])
+      active.finalText = text
+    },
+    reasoning: (item, _active, id) => {
+      // `summary` is what streamed (the default config); raw `content` only
+      // exists when the operator's config enables it. Joined the way the
+      // deltas rendered: sections as paragraphs.
+      const summary = Array.isArray(item.summary) ? item.summary.filter(Boolean) : []
+      const content = Array.isArray(item.content) ? item.content.filter(Boolean) : []
+      const thinking = (summary.length > 0 ? summary : content).join('\n\n')
+      if (thinking) this.#emitAssistant(id, [{ type: 'thinking', thinking }])
+    },
+    commandExecution: (item, active, id) => {
+      if (!active.toolUseEmitted.has(id)) {
+        active.toolUseEmitted.add(id)
+        this.#emitToolUse(id, 'CodexCommand', { command: item.command })
+      }
+      const exitCode = item.exitCode ?? undefined
+      const failed =
+        item.status === 'failed' ||
+        item.status === 'declined' ||
+        (exitCode !== undefined && exitCode !== 0)
+      const output =
+        (item.aggregatedOutput ?? '') +
+        (exitCode !== undefined && exitCode !== 0 ? `\n(exit code ${exitCode})` : '')
+      this.#emitToolResult(id, output, failed)
+    },
+    fileChange: (item, _active, id) => {
+      // The completed item: by the time it lands the patch applied, failed,
+      // or was declined (a pending proposal rides the approval channel, not
+      // this item). v2's `kind` is an object (`{type: 'update', …}`), mapped
+      // defensively.
+      this.#emitToolUse(id, 'CodexFileChange', { changes: item.changes })
+      const lines = item.changes.map((change) => {
+        const kind = typeof change.kind === 'string' ? change.kind : change.kind?.type
+        return `${kind ?? 'change'}: ${change.path}`
+      })
+      // Codex reports a unified diff per change, so the wire can carry the
+      // same `FilePatch` the Claude engine sends and every client renders one
+      // shape. Only for a single-file change: the patch names one file, and a
+      // multi-file edit has no honest way to say which.
+      const only = item.changes.length === 1 ? item.changes[0] : undefined
+      this.#emitToolResult(
+        id,
+        lines.join('\n') || item.status,
+        item.status === 'failed' || item.status === 'declined',
+        only?.diff ? parseUnifiedDiff(only.diff, only.path) : undefined,
+      )
+    },
+    mcpToolCall: (item, active, id) => {
+      if (!active.toolUseEmitted.has(id)) {
+        active.toolUseEmitted.add(id)
+        this.#emitToolUse(id, `mcp__${item.server}__${item.tool}`, item.arguments)
+      }
+      const isError = (item.error !== undefined && item.error !== null) || item.status === 'failed'
+      this.#emitToolResult(
+        id,
+        item.error?.message ??
+          (item.result === undefined || item.result === null ? '' : JSON.stringify(item.result)),
+        isError,
+      )
+    },
+    webSearch: (item, _active, id) => {
+      this.#emitToolUse(id, 'CodexWebSearch', { query: item.query })
+      this.#emitToolResult(id, '', false)
+    },
+    imageGeneration: (item, active, id) => {
+      // Re-emitted, not guarded by `toolUseEmitted`: `savedPath` only exists
+      // now, and the reducer upserts a tool_use by id — so this replaces the
+      // in-progress card's input with the finished one. The result event
+      // follows immediately, which is what settles the status again.
+      active.toolUseEmitted.add(id)
+      this.#emitToolUse(id, CODEX_IMAGE_TOOL, imageGenerationInput(item))
+      // The path IS the deliverable — the bytes live on the host and no event
+      // may carry them. `file_produced` is what makes those bytes reachable
+      // anyway: the gateway serves a path its own runner reported, with no
+      // host-file root to declare first.
+      if (item.savedPath) this.#emitFileProduced(item.savedPath, id)
+      const lines = [
+        item.savedPath ? `Saved to ${item.savedPath}` : 'No saved path reported',
+        ...(shortResult(item.result) ? [item.result] : []),
+      ]
+      this.#emitToolResult(id, lines.join('\n'), item.status === 'failed')
+    },
+    imageView: (item, _active, id) => {
+      this.#emitToolUse(id, 'CodexImageView', { path: item.path })
+      this.#emitToolResult(id, item.path, false)
+    },
   }
 
   // -------------------------------------------------------------------------
