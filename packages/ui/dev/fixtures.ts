@@ -332,7 +332,7 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
       })
     case 3:
     case 4:
-      // Consecutive shell calls — folds into a ShellRunRow.
+      // Consecutive shell calls — folds into a ToolRunRow.
       return item({ kind: 'tool_call',
         name: 'Bash',
         input: { command: `pnpm --filter @workerdeck/mod-${index} test`, description: `Test module ${index}` },

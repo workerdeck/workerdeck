@@ -281,15 +281,26 @@ protocol. Read these before changing scope or structure:
   `TerminalDiff` renders protocol's `FilePatch` with the engine's own line numbers (and
   without a number column when the hunks start at 0 — an approval, where the edit has not
   happened), and the prompts are the CLI's: one question at a time behind a chip strip, ending in
-  a review step, answerable entirely from the keyboard. A **run of consecutive shell calls folds
-  into one row** (`terminalBlocks` + `ShellRunRow`) reading `Ran N shell commands`, the CLI's own
+  a review step, answerable entirely from the keyboard. A **run of consecutive tool calls folds
+  into one row** (`terminalBlocks` + `ToolRunRow`, wording in `tool-run.ts`) reading `Ran 6 tools ·
+  3 roam-code, 2 shell, 1 read` — or `Ran N shell commands` when the run is all shell, which is the
+  commonest run and was already the sentence people read. The CLI's own
   compression: the calls are almost never what you came back to read, and six of them bury the
-  sentence that is. *Consecutive* is the entire rule — anything the model said between two commands
+  sentence that is. It was **shell-only** until the screenshot in `_docs/sink` showed the cost — a
+  run alternating `Bash` with an MCP tool folded into *four* rows, a count for every gap it could
+  not group. The grouping rule was right and the membership rule was too narrow.
+  *Consecutive* is the entire rule — anything the model said between two calls
   breaks the run, because that sentence is the reason the second one happened — and the recap
-  boundary breaks it too, so a count never spans "what you already read". `terminalBlocks` is the
+  boundary breaks it too, so a count never spans "what you already read"; `parentToolUseId` is the
+  one addition the wider rule needs, since a subagent's calls are drawn stepped in behind a rule and
+  must not be counted with a top-level one. A **failure does not break a run, it colours it** — the
+  same call the scrubber makes, since fragmenting the run around a failure hides it in a longer list
+  rather than surfacing it. `terminalBlocks` is the
   one implementation of it: the virtualized shell folds each side of the boundary through the same
   function the plain `TerminalTranscript` calls, and it is what the virtualizer counts, so a run is
-  one measured row rather than N. Expanding is the theme's one piece of state and it has three
+  one measured row rather than N. The summary string lives in `tool-run.ts` and the collapsed result
+  preview in `result-preview.ts` for the same reason: `height.ts` wraps **those exact strings** to
+  predict the row's height with no DOM, so two spellings would be two different heights. Expanding is the theme's one piece of state and it has three
   parts, each of which is a bug when dropped: a press is a **`Pressable`, never a `<button>`**
   (`press.tsx`) — a drag that selects text out of a row ends in a `click`, so the row you were
   highlighting collapses and takes the selection with it; the press is refused when the pointer
@@ -298,6 +309,15 @@ protocol. Read these before changing scope or structure:
   the expansion pushed it above the fold — one-directional, and only on the open transition, so a
   block already in view never moves. A tool result opens **clipped to a character budget** with the
   rest one press away, and that is a DOM guard rather than a preference: the whole of a
+  hundred-thousand-character result lands in *one* virtual row, and the virtualizer mounts rows, so
+  it cannot help with what is inside a single one. The **collapsed** row is clipped by
+  `result-preview.ts` and has **two budgets, four lines and ~400 characters**, because lines alone
+  had an exact blind spot: a minified JSON reply — which is every MCP tool's reply — is *one* line,
+  so a four-line slice kept all thirty thousand characters of it, `lines.length - shown.length` came
+  out zero, and the row did not even offer the `+N` affordance. It reports characters when it cut
+  inside a line and lines otherwise, since "+0 lines" under a visibly truncated row is worse than
+  silence. That was the single biggest source of transcript verbosity, ahead of row count.
+  The open-state guard remains what it was: the whole of a
   hundred-thousand-character result lands in *one* virtual row, and the virtualizer mounts rows, so
   it cannot help with what is inside a single one.
   **Row heights are computed, not estimated** (`terminal/height.ts`): one line height and one cell

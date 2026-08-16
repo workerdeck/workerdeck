@@ -25,7 +25,7 @@ import { Response } from './Response.tsx'
 import { SessionEmptyState } from './SessionEmptyState.tsx'
 import { ToolCallCard } from './ToolCallCard.tsx'
 import { resolveAffordances, type TerminalAffordances } from '../terminal/affordances.tsx'
-import { ShellRunRow, WorkingRow, terminalBlocks } from '../terminal/items.tsx'
+import { ToolRunRow, WorkingRow, terminalBlocks } from '../terminal/items.tsx'
 import { estimateBlockPx } from '../terminal/height.ts'
 import { TerminalScrubber } from '../terminal/scrubber.tsx'
 import { gapBefore, rowIndexForItem, type TranscriptRow } from './transcript-rows.ts'
@@ -603,7 +603,7 @@ function TranscriptRows({
       if (terminal && epoch) {
         const row = rows[index]
         const gapPx = index > 0 && gapBefore(rows, index) ? epoch.line : 0
-        if (row && ('item' in row || 'shell' in row))
+        if (row && ('item' in row || 'run' in row))
           return estimateBlockPx(row, epoch) + gapPx
         return epoch.line + gapPx // recap: one Row, one line
       }
@@ -794,9 +794,9 @@ function TranscriptRows({
             ? gap.className
             : undefined
         const content =
-          'shell' in row ? (
+          'run' in row ? (
             <div className={cn(read(boundary, row.index) && 'opacity-45')}>
-              <ShellRunRow items={row.shell} />
+              <ToolRunRow items={row.run} />
             </div>
           ) : 'item' in row ? (
             <div className={cn(read(boundary, row.index) && 'opacity-45', nestedClass(row.item))}>

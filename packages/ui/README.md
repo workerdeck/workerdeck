@@ -189,9 +189,15 @@ lose by forgetting a second mount isn't one.
   you will serve a stale height for a row that has changed. The epoch is rebuilt from a
   `ResizeObserver` on the **content** element, not the scroller — the panel can resize without the
   wrap width moving, since the content column caps at 48rem.
-- **An item index is not a virtual row index.** `terminalBlocks` folds consecutive shell calls into
+- **An item index is not a virtual row index.** `terminalBlocks` folds consecutive tool calls into
   one row and the catch-up recap splices another, so `scrollToIndex(itemIndex)` lands off by the
   fold on any transcript that has either. Go through `rowIndexForItem`.
+- **A row's rendered strings are also its height.** `height.ts` predicts each row's pixel height
+  with no DOM, so anything the terminal renderer *writes* must come from the module both sides
+  import — `tool-run.ts` for a folded run's summary line, `result-preview.ts` for a collapsed tool
+  result and its `… +N` label. Re-spelling either one in the renderer alone desynchronises
+  `estimateSize` and the transcript grows a phantom scrollable tail. `dev/height-audit.ts` is the
+  gate; it measures against real browser layout, which no jsdom test can do.
 - **`affordances={false}` must leave a way to scroll.** The scrubber replaces the native scrollbar
   while it is interactive; with affordances off, the marks stay painted but inert *and the native
   scrollbar comes back*. A rail that kept the scrollbar hidden while refusing the pointer would

@@ -8,19 +8,19 @@ import type { TranscriptItem } from '@workerdeck/react'
 import { needsBlank, type TerminalBlock } from '../terminal/items.tsx'
 
 /** One row of the virtual list: a {@link TerminalBlock} (a transcript item, or
- * — under the terminal theme — a folded run of shell calls), or the recap
+ * — under the terminal theme — a folded run of tool calls), or the recap
  * boundary line spliced in at `catchUp.from`. One flat array so the virtualizer
  * sees stable indices, and each row carries the key the item was already
  * React-keyed by — measurements are cached per key, so a row keeps its measured
  * height when the recap splice shifts every index after it. */
 export type TranscriptRow = TerminalBlock | { key: 'recap'; line: string }
 
-/** The item a row is spaced *as*. A shell run stands for the calls it folded,
- * so a run and a lone tool call below it still read as one block. */
+/** The item a row is spaced *as*. A run stands for the calls it folded, so a
+ * run and a lone tool call below it still read as one block. */
 export function rowItem(row: TranscriptRow | undefined): TranscriptItem | undefined {
   if (!row) return undefined
   if ('item' in row) return row.item
-  if ('shell' in row) return row.shell[0]
+  if ('run' in row) return row.run[0]
   return undefined
 }
 
@@ -41,8 +41,8 @@ export function gapBefore(rows: TranscriptRow[], index: number): boolean {
 /**
  * Transcript-item index → virtual-row index — **the off-by-a-fold trap.**
  *
- * The virtualizer's rows are {@link TerminalBlock}s, not items: a folded shell
- * run occupies ONE row for `shell.length` consecutive items, and the recap
+ * The virtualizer's rows are {@link TerminalBlock}s, not items: a folded tool
+ * run occupies ONE row for `run.length` consecutive items, and the recap
  * boundary is a row with *no* item index at all, shifting every row after it
  * by one. `virtualizer.scrollToIndex(itemIndex)` is therefore wrong by
  * construction on any folded or spliced transcript — every jump that starts
@@ -50,8 +50,8 @@ export function gapBefore(rows: TranscriptRow[], index: number): boolean {
  * here first.
  *
  * The rule: the **last non-recap row whose first item index is ≤ the target**.
- * Rows are ordered by `index` (a shell run's row covers
- * `[index, index + shell.length)`), so this is a binary search; the recap row
+ * Rows are ordered by `index` (a run's row covers
+ * `[index, index + run.length)`), so this is a binary search; the recap row
  * is skipped by giving it its successor's start for navigation (both qualify
  * at the boundary, and "last wins" lands on the real row) while never letting
  * it be the answer. Exhaustively checked against a linear reference — every

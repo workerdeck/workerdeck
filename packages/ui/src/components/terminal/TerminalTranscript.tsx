@@ -6,7 +6,7 @@ import {
   AssistantRow,
   FileRow,
   NoticeRow,
-  ShellRunRow,
+  ToolRunRow,
   ThinkingRow,
   ToolRow,
   TurnResultRow,
@@ -125,8 +125,8 @@ export function TerminalTranscript({
       {blocks.map((block, index) => (
         <Fragment key={block.key}>
           {index > 0 && blockNeedsBlank(blocks[index - 1]!, block) ? <Blank /> : null}
-          {'shell' in block ? (
-            <ShellRunRow items={block.shell} />
+          {'run' in block ? (
+            <ToolRunRow items={block.run} />
           ) : (
             <TerminalItemView item={block.item} fileUrl={fileUrl} />
           )}

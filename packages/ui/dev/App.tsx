@@ -254,8 +254,8 @@ export function App() {
             const want = linear(rows, i)
             const row = rows[got]!
             const covers =
-              'shell' in row
-                ? i >= row.index && i < row.index + row.shell.length
+              'run' in row
+                ? i >= row.index && i < row.index + row.run.length
                 : 'item' in row && row.index === i
             if (got !== want || !covers)
               mismatches.push({ fixture: f.key, boundary, i, got, want, covers })
