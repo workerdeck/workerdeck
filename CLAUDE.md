@@ -926,7 +926,14 @@ before touching versioning or the publish workflow.
 `pnpm test` — core: fake `queryFn` harness (no CLI spawn) + a scripted JSON-RPC peer
 (`connectFn`) for `CodexRunner`; server: real HTTP+WS integration incl. job routes + webhook
 receiver (codex via the test-only `engines` adapter override); queue: fake runner; react:
-reducer + bridge e2e.
+reducer + bridge e2e; **ui: the pure modules only, and deliberately so** — the terminal theme's
+*geometry* needs real text layout, which jsdom does not have, so it is gated by
+`dev/height-audit.ts` in a browser instead, while everything that is a string-or-array contract
+(`terminalBlocks`, `runSummary`/`toolFamily`/`foldsTogether`, `collapsedResult`, `buildClusters`,
+`textLines`) is unit-tested with no DOM at all. That split is the rule for anything added here: a
+test in `packages/ui/test` that wanted a DOM belongs in the playground audit. `buildClusters` and
+`railScale` are exported *for the test alone* (not from `index.ts`) — both have shipped pure-logic
+bugs, which is the whole argument.
 Real-SDK smokes cost tokens and never run in `pnpm test`, but permission-path or
 CLI-control-request changes need one — the fake harness can't validate those payloads — and **an
 engine's process contract can't either**: any change to `CodexRunner`'s spawn options,

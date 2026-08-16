@@ -198,6 +198,13 @@ lose by forgetting a second mount isn't one.
   result and its `… +N` label. Re-spelling either one in the renderer alone desynchronises
   `estimateSize` and the transcript grows a phantom scrollable tail. `dev/height-audit.ts` is the
   gate; it measures against real browser layout, which no jsdom test can do.
+- **`pnpm test` here covers the pure modules and nothing else.** That is the split, not an
+  omission: which rows exist, what a folded run's line says, how much of a result a collapsed row
+  keeps and which marks the rail paints are all string-and-array contracts with no DOM in them,
+  and they are where this package's bugs have actually shipped. Geometry — does the rendered row
+  come out the height the calculator predicted — is the browser audit above. A test in `test/`
+  that wants a DOM belongs in `dev/` instead. `buildClusters` and `railScale` are exported from
+  `scrubber.tsx` for the test alone and are deliberately absent from `index.ts`.
 - **`affordances={false}` must leave a way to scroll.** The scrubber replaces the native scrollbar
   while it is interactive; with affordances off, the marks stay painted but inert *and the native
   scrollbar comes back*. A rail that kept the scrollbar hidden while refusing the pointer would

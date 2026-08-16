@@ -163,7 +163,7 @@ const MIN_MARK = 2
  * never exceed `railH` again, for any content, because `viewportH` can never
  * exceed the denominator.
  */
-function railScale(railH: number, totalSize: number, viewportH: number): number {
+export function railScale(railH: number, totalSize: number, viewportH: number): number {
   return totalSize > 0 ? railH / Math.max(totalSize, viewportH) : 0
 }
 
@@ -234,7 +234,15 @@ export interface TerminalScrubberProps {
   lineHeight?: number
 }
 
-function buildClusters(
+/**
+ * Exported for `test/scrubber.test.ts` and nothing else — it is not part of the
+ * package's surface (`index.ts` does not re-export it). Both of the bugs this
+ * function has shipped were pure-logic ones a unit test catches: a live answer
+ * with no `turn_result` yet went unmarked for the whole two minutes it was the
+ * only thing worth navigating to, and a replayed history — which carries no turn
+ * rows at all — came back with an empty right lane.
+ */
+export function buildClusters(
   props: TerminalScrubberProps,
   railH: number,
 ): Cluster[] {

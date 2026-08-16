@@ -1,0 +1,7 @@
+{
+  // Tests import the .tsx modules they cover (`items.tsx` owns `terminalBlocks`),
+  // so this has to carry the same jsx setting the main config does — it extends
+  // it for exactly that reason rather than restating anything.
+  "extends": "./tsconfig.json",
+  "include": ["test/**/*.ts"]
+}
