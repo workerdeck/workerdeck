@@ -8,7 +8,7 @@ import {
   type ToolExecutor,
   type ToolSet,
 } from '@workerdeck/core'
-import type { EngineRunnerContext } from './server.ts'
+import type { EngineRunnerContext } from '../options.ts'
 
 export type ProviderRunnerOptions = {
   /**

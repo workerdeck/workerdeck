@@ -20,7 +20,7 @@ import {
   resolveForWrite,
   writeContained,
   type HostFileRoots,
-} from '../src/host-files.ts'
+} from '../src/services/host-files.ts'
 
 const posix = process.platform !== 'win32'
 

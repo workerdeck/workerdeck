@@ -6,31 +6,35 @@ export type {
   SdkSessionLister,
   WorkerServer,
   WorkerServerOptions,
-} from './server.ts'
-export { sandboxedProviderProfile } from './sandboxed-profile.ts'
-export { createProviderRunner } from './provider-runner.ts'
-export type { ProviderRunnerOptions } from './provider-runner.ts'
-export { SessionRegistry } from './registry.ts'
-export type { SessionRegistryOptions } from './registry.ts'
-export { AttachmentStore } from './attachments.ts'
-export type { AttachmentStoreOptions } from './attachments.ts'
-export { ProducedFileStore } from './produced-files.ts'
-export type { ProducedFile } from './produced-files.ts'
-export { SessionNotifier } from './notifications.ts'
-export type { SessionNotificationOptions } from './notifications.ts'
-export { ProfileUsageTracker } from './profile-usage.ts'
-export { BridgeHub } from './bridge.ts'
-export type { BridgeHubOptions } from './bridge.ts'
-export { SessionParkManager } from './parking.ts'
-export type { SessionParkOptions } from './parking.ts'
-export { createFileSessionStore, MemorySessionStore, toDurableRecord } from './session-store.ts'
+} from './options.ts'
+export { sandboxedProviderProfile } from './lib/sandboxed-profile.ts'
+export { createProviderRunner } from './lib/provider-runner.ts'
+export type { ProviderRunnerOptions } from './lib/provider-runner.ts'
+export { SessionRegistry } from './services/registry.ts'
+export type { SessionRegistryOptions } from './services/registry.ts'
+export { AttachmentStore } from './services/attachments.ts'
+export type { AttachmentStoreOptions } from './services/attachments.ts'
+export { ProducedFileStore } from './services/produced-files.ts'
+export type { ProducedFile } from './services/produced-files.ts'
+export { SessionNotifier } from './services/notifications.ts'
+export type { SessionNotificationOptions } from './services/notifications.ts'
+export { ProfileUsageTracker } from './services/profile-usage.ts'
+export { BridgeHub } from './services/bridge.ts'
+export type { BridgeHubOptions } from './services/bridge.ts'
+export { SessionParkManager } from './services/parking.ts'
+export type { SessionParkOptions } from './services/parking.ts'
+export {
+  createFileSessionStore,
+  MemorySessionStore,
+  toDurableRecord,
+} from './services/session-store.ts'
 export type {
   FileSessionStoreOptions,
   ParkedSessionRecord,
   SessionStore,
-} from './session-store.ts'
+} from './services/session-store.ts'
 export {
   createFileProfileStore,
   createMemoryProfileStore,
   type ProfileStore,
-} from './profile-store.ts'
+} from './services/profile-store.ts'
