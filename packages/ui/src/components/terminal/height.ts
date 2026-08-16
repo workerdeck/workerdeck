@@ -7,6 +7,8 @@ import {
   toolInputPreview,
 } from '../../lib/format.ts'
 import type { TerminalBlock, ToolCallItem } from './items.tsx'
+import { collapsedResult } from './result-preview.ts'
+import { runSummary } from './tool-run.ts'
 
 /**
  * The terminal theme's row-height calculator.
@@ -79,7 +81,7 @@ export type ComputedHeight = {
  * factory and a new WeakMap is free. Within an epoch the cache keys on item
  * object identity, which the reducer's replace-on-mutation discipline turns
  * into automatic invalidation: a streamed delta is a new object and simply
- * misses. Shell-run blocks are not cached — the folded array is rebuilt every
+ * misses. Run blocks are not cached — the folded array is rebuilt every
  * render, so its identity is worthless as a key, and a collapsed run is one
  * `wrapOne` over a short string (~2µs).
  */
@@ -95,7 +97,7 @@ export function createHeightEpoch(width: number, ch: number, line: number): Heig
  * The inter-row gap is the *pair's* business (`gapBefore`), not the row's, so
  * it is added by the caller. */
 export function estimateBlockPx(block: TerminalBlock, epoch: HeightEpoch): number {
-  if ('shell' in block) return blockHeight(block, epoch).px
+  if ('run' in block) return blockHeight(block, epoch).px
   const hit = epoch.cache.get(block.item)
   if (hit) return hit.px
   const computed = itemHeight(block.item, epoch)
@@ -643,14 +645,9 @@ function diffHeight(patch: FilePatch, m: CellMetrics, extraPx = 0): Acc {
   return acc
 }
 
-/** How much of a tool result the collapsed row shows — `items.tsx`'s
- * `RESULT_PREVIEW_LINES`, restated because that module keeps it private. The
- * dev audit is what keeps the two from drifting. */
-const RESULT_PREVIEW_LINES = 4
-
 /** A collapsed tool row: the header, then the diff (when the call carries a
- * patch) or up to four result lines plus the `… +N lines` row. No expanded
- * branch — see the module comment's first invariant. */
+ * patch) or the shared collapsed preview plus its trailing "there is more" row.
+ * No expanded branch — see the module comment's first invariant. */
 function toolRowHeight(item: ToolCallItem, m: CellMetrics, extraPx: number): Acc {
   const preview = toolInputPreview(item.input)
   const backend = item.backend && item.backend !== 'server' ? ` · ${item.backend}` : ''
@@ -659,23 +656,17 @@ function toolRowHeight(item: ToolCallItem, m: CellMetrics, extraPx: number): Acc
   if (item.patch) return add(acc, diffHeight(item.patch, m, extraPx))
   const text = item.result?.text ?? ''
   if (!text) return acc
-  const lines = text.trimEnd().split('\n')
-  const shown = lines.slice(0, RESULT_PREVIEW_LINES)
+  // The renderer's own budget, not a copy of it: `collapsedResult` returns both
+  // the lines and the exact trailing label, so this cannot drift from what
+  // `items.tsx` draws — which it previously could, and which its own comment
+  // said only the dev audit was catching.
+  const { shown, more } = collapsedResult(text.trimEnd().split('\n'))
   for (const line of shown) {
     // indent=1 with columns=3 resolves the indent against the row's own
     // --term-cell: 3ch of padding + 3ch of gutter.
     acc = add(acc, rowH(line || ' ', m, { indentCells: 3, gutterCells: 3, extraPx }))
   }
-  const hidden = lines.length - shown.length
-  if (hidden > 0)
-    acc = add(
-      acc,
-      rowH(`… +${hidden} line${hidden === 1 ? '' : 's'}`, m, {
-        indentCells: 3,
-        gutterCells: 3,
-        extraPx,
-      }),
-    )
+  if (more) acc = add(acc, rowH(more, m, { indentCells: 3, gutterCells: 3, extraPx }))
   return acc
 }
 
@@ -725,18 +716,12 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
   }
 }
 
-/** A virtual row's height: an item, or a folded shell run (collapsed = its one
- * summary line). */
+/** A virtual row's height: an item, or a folded tool run (collapsed = its one
+ * summary line, built by the same function the row draws). */
 export function blockHeight(block: TerminalBlock, m: CellMetrics): ComputedHeight {
-  if ('shell' in block) {
-    const n = block.shell.length
-    const busy = block.shell.some(
-      (item) => item.status === 'running' || item.status === 'pending',
-    )
-    return rowH(
-      `${busy ? 'Running ' : 'Ran '}${n} shell command${n === 1 ? '' : 's'}${busy ? '…' : ''}`,
-      m,
-    )
+  if ('run' in block) {
+    const busy = block.run.some((item) => item.status === 'running' || item.status === 'pending')
+    return rowH(runSummary(block.run, busy), m)
   }
   return itemHeight(block.item, m)
 }

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import type { TranscriptItem } from '@workerdeck/react'
 import { formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
-import { isMutatingTool, isShellTool } from '../../lib/tool-icon.ts'
+import { isMutatingTool } from '../../lib/tool-icon.ts'
 import { usePulse } from '../agent/pulse.tsx'
 import { CopyAction, WithActions } from './affordances.tsx'
 import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { Pressable, useRevealOnOpen } from './press.tsx'
+import { collapsedResult } from './result-preview.ts'
+import { foldsTogether, runSummary } from './tool-run.ts'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
 
 /**
@@ -41,9 +43,8 @@ import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
  */
 export const PROMPT_GLYPH = '❯'
 
-/** How much of a tool result the collapsed row is willing to hold. */
-const RESULT_PREVIEW_LINES = 4
-/** And how much the expanded one shows before offering the rest. */
+/** How much the expanded row shows before offering the rest. The collapsed
+ * budget is `collapsedResult`'s, shared with the height calculator. */
 const RESULT_PREVIEW_CHARS = 2000
 
 /** Whole lines up to a character budget — never zero, because a single line
@@ -143,11 +144,12 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
   // the virtualizer mounts rows, so it cannot help with what is inside a single
   // one. Without the clip, expanding one row commits thousands of DOM nodes and
   // the transcript stops being smooth for the rest of the session.
+  const collapsed = collapsedResult(lines)
   const preview = open
     ? full
       ? lines
       : clipToChars(lines, RESULT_PREVIEW_CHARS)
-    : lines.slice(0, RESULT_PREVIEW_LINES)
+    : collapsed.shown
   const hidden = lines.length - preview.length
   const clipped = open && !full && hidden > 0
 
@@ -202,8 +204,17 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
           {/* One row for "there is more", pressable exactly when pressing it
               would do something. Collapsed, the count is a label — the header
               above is already the toggle, and a second control for the same act
-              is one too many. Open and clipped, it is the way to the rest. */}
-          {hidden > 0 ? (
+              is one too many. Open and clipped, it is the way to the rest.
+              Collapsed spells its own label (it may be counting characters
+              rather than lines, having cut inside one), and it is the string
+              `height.ts` sizes the row from. */}
+          {!open ? (
+            collapsed.more ? (
+              <Row indent={1} columns={3} tone='faint'>
+                {collapsed.more}
+              </Row>
+            ) : null
+          ) : hidden > 0 ? (
             <Row indent={1} columns={3} tone='faint'>
               {clipped ? (
                 <button
@@ -227,26 +238,28 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
   )
 }
 
-/** Is this a shell call — a row the transcript folds into a run? */
-export function isShellCall(item: TranscriptItem): item is ToolCallItem {
-  return item.kind === 'tool_call' && isShellTool(item.name)
+/** Is this a row the transcript folds into a run? Any tool call is — see
+ * `tool-run.ts` for why this is no longer shell-only. */
+export function isRunCall(item: TranscriptItem): item is ToolCallItem {
+  return item.kind === 'tool_call'
 }
 
 /**
- * A run of shell commands, as one line.
+ * A run of tool calls, as one line.
  *
- * The CLI's own compression, and the reason it works: a shell call is almost
+ * The CLI's own compression, and the reason it works: a tool call is almost
  * never what you came back to read. `Bash(pnpm -w typecheck)` and forty lines of
  * its output say nothing the model's next sentence doesn't say better, and six
  * of them in a row bury that sentence a screen and a half down. So a run
  * collapses to its count and gets out of the way — and opens, in full, the
  * moment it is the thing you actually want.
  *
- * *Consecutive* is the whole grouping rule. Anything the model said between two
- * commands breaks the run, because that sentence is the reason the second one
- * happened and a count spanning it would claim the two were one act.
+ * The membership and wording rules live in `tool-run.ts`, shared with the height
+ * calculator. A failed member does not break the run — it *colours* it, which is
+ * the same call the scrubber makes: a failure is worth seeing, and fragmenting
+ * the run around it would hide it in a longer list rather than surface it.
  */
-export function ShellRunRow({ items }: { items: ToolCallItem[] }) {
+export function ToolRunRow({ items }: { items: ToolCallItem[] }) {
   const [open, setOpen] = useState(false)
   const reveal = useRevealOnOpen(open)
   const busy = items.some((item) => {
@@ -259,18 +272,14 @@ export function ShellRunRow({ items }: { items: ToolCallItem[] }) {
   return (
     <div ref={reveal} className={open ? 'term-open' : undefined}>
       <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
-        {/* No marker once settled: a run of commands is an aside, and a bullet
+        {/* No marker once settled: a run of calls is an aside, and a bullet
             would give it the weight of something the model said. While one is
             running the pulse earns the gutter — that much is news. */}
         <Row
           glyph={busy ? pulse : undefined}
           glyphTone={busy ? 'mark' : undefined}
           tone={failed ? 'red' : 'dim'}>
-          {busy ? 'Running ' : 'Ran '}
-          <Ink bold tone={failed ? 'red' : 'bright'}>
-            {items.length}
-          </Ink>
-          {` shell command${items.length === 1 ? '' : 's'}${busy ? '…' : ''}`}
+          {runSummary(items, busy)}
         </Row>
       </Pressable>
       {open ? (
@@ -285,7 +294,7 @@ export function ShellRunRow({ items }: { items: ToolCallItem[] }) {
 }
 
 /**
- * Fold consecutive shell calls into runs, leaving everything else alone.
+ * Fold consecutive tool calls into runs, leaving everything else alone.
  *
  * Shared by both renderers — the virtualized shell in `agent/Transcript.tsx` and
  * the plain {@link TerminalTranscript} — because which rows exist is part of what
@@ -294,7 +303,7 @@ export function ShellRunRow({ items }: { items: ToolCallItem[] }) {
  */
 export type TerminalBlock =
   | { key: string; item: TranscriptItem; index: number }
-  | { key: string; shell: ToolCallItem[]; index: number }
+  | { key: string; run: ToolCallItem[]; index: number }
 
 /**
  * @param offset  What `items[0]`'s index is in the whole transcript — the
@@ -313,10 +322,13 @@ export function terminalBlocks(
   for (const [position, item] of items.entries()) {
     const index = offset + position
     const previous = out.at(-1)
-    if (fold && isShellCall(item)) {
-      if (previous && 'shell' in previous) previous.shell.push(item)
-      // Keyed by the run's *first* call, so the key is stable as the run grows.
-      else out.push({ key: `shell:${item.id}`, shell: [item], index })
+    if (fold && isRunCall(item)) {
+      if (previous && 'run' in previous && foldsTogether(previous.run[0]!, item)) {
+        previous.run.push(item)
+      } else {
+        // Keyed by the run's *first* call, so the key is stable as the run grows.
+        out.push({ key: `run:${item.id}`, run: [item], index })
+      }
       continue
     }
     out.push({ key: `${item.kind}:${item.id}`, item, index })
@@ -429,8 +441,8 @@ export function needsBlank(previous: TranscriptItem, next: TranscriptItem): bool
 
 /** The same rule over blocks: a shell run counts as the tool calls it folded. */
 export function blockNeedsBlank(previous: TerminalBlock, next: TerminalBlock): boolean {
-  const before = 'shell' in previous ? 'tool_call' : previous.item.kind
-  const after = 'shell' in next ? 'tool_call' : next.item.kind
+  const before = 'run' in previous ? 'tool_call' : previous.item.kind
+  const after = 'run' in next ? 'tool_call' : next.item.kind
   return !(before === 'tool_call' && after === 'tool_call')
 }
 
