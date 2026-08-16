@@ -7,7 +7,7 @@ import type {
   SessionCapability,
 } from '@workerdeck/protocol'
 import { createVfs } from '@workerdeck/sandbox'
-import { AiSdkRunner, type AiSdkRunnerConfig } from './ai-sdk-runner.ts'
+import { AiSdkRunner, type AiSdkRunnerConfig } from './runner.ts'
 import {
   createToolContext,
   withHostTools,
@@ -15,7 +15,7 @@ import {
   type HostToolDefinition,
   type ToolContextOptions,
 } from './tools.ts'
-import type { ToolExecutor } from './tool-executor.ts'
+import type { ToolExecutor } from '../../executors/tool-executor.ts'
 import { createWebFetch, type WebFetchFn, type WebFetchOptions } from './web-fetch.ts'
 
 export type EngineSessionOptions = {

@@ -1,7 +1,7 @@
 import { createServer, request as httpRequest, type IncomingMessage, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createCliAuth, type CliAuth, type CliPrincipal, type CliSessionStore, type StoredSession } from '../src/auth.ts'
+import { createCliAuth, type CliAuth, type CliPrincipal, type CliSessionStore, type StoredSession } from '../src/auth/auth.ts'
 
 const SECRET = 'correct-horse-battery-staple'
 

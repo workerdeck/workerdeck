@@ -1,14 +1,14 @@
-export { SessionRunner } from './runner.ts'
-export { AiSdkRunner } from './ai-sdk-runner.ts'
+export { SessionRunner } from './engines/claude/runner.ts'
+export { AiSdkRunner } from './engines/provider/runner.ts'
 export type {
   AiSdkRunnerConfig,
   AiSdkSessionState,
   PendingToolCall,
   ToolCallOutput,
-} from './ai-sdk-runner.ts'
-export type { HistoryFn, QueryFn, SessionRunnerConfig } from './runner.ts'
-export { checkClaudeAuth, resolveBundledClaudeExecutable } from './claude-auth.ts'
-export type { ClaudeAuthProbe, ClaudeAuthStatus } from './claude-auth.ts'
+} from './engines/provider/runner.ts'
+export type { HistoryFn, QueryFn, SessionRunnerConfig } from './engines/claude/runner.ts'
+export { checkClaudeAuth, resolveBundledClaudeExecutable } from './engines/claude/auth.ts'
+export type { ClaudeAuthProbe, ClaudeAuthStatus } from './engines/claude/auth.ts'
 export type {
   ParkedExecution,
   PermissionDecision,
@@ -21,47 +21,47 @@ export type {
   ToolExecutionDispatch,
   ToolExecutionResult,
   ToolExecutor,
-} from './tool-executor.ts'
-export { QuickJsExecutor, isHostAllowed } from './quickjs-executor.ts'
-export type { HostFetch, QuickJsExecutorOptions } from './quickjs-executor.ts'
-export { BrowserBridgeExecutor, toExecutionResult } from './browser-bridge-executor.ts'
-export type { BridgeAnswer, BrowserBridgeExecutorOptions } from './browser-bridge-executor.ts'
-export { DeferredExecutor } from './deferred-executor.ts'
-export type { DeferredDispatch, DeferredExecutorOptions } from './deferred-executor.ts'
-export { connectMcpTools, createEngineSession } from './engine.ts'
-export type { EngineSessionOptions, McpConnection } from './engine.ts'
+} from './executors/tool-executor.ts'
+export { QuickJsExecutor, isHostAllowed } from './executors/quickjs-executor.ts'
+export type { HostFetch, QuickJsExecutorOptions } from './executors/quickjs-executor.ts'
+export { BrowserBridgeExecutor, toExecutionResult } from './executors/browser-bridge-executor.ts'
+export type { BridgeAnswer, BrowserBridgeExecutorOptions } from './executors/browser-bridge-executor.ts'
+export { DeferredExecutor } from './executors/deferred-executor.ts'
+export type { DeferredDispatch, DeferredExecutorOptions } from './executors/deferred-executor.ts'
+export { connectMcpTools, createEngineSession } from './engines/provider/session.ts'
+export type { EngineSessionOptions, McpConnection } from './engines/provider/session.ts'
 /** Re-exported so a host wiring the provider engine can type its model factory
  * and tool sets without reaching past this package for the AI SDK itself —
  * `core` is the only package in the graph that depends on it. */
 export type { LanguageModel, Tool, ToolSet } from 'ai'
-export { createToolContext, withHostTools, withMcpTools } from './tools.ts'
+export { createToolContext, withHostTools, withMcpTools } from './engines/provider/tools.ts'
 export type {
   HostToolDefinition,
   ToolContext,
   ToolContextOptions,
   ToolDefinition,
   ToolTrust,
-} from './tools.ts'
-export { createWebFetch, htmlToMarkdown, isPrivateAddress } from './web-fetch.ts'
-export type { WebFetchDigest, WebFetchFn, WebFetchOptions, WebFetchResult } from './web-fetch.ts'
-export { PendingRequestRegistry } from './pending-registry.ts'
+} from './engines/provider/tools.ts'
+export { createWebFetch, htmlToMarkdown, isPrivateAddress } from './engines/provider/web-fetch.ts'
+export type { WebFetchDigest, WebFetchFn, WebFetchOptions, WebFetchResult } from './engines/provider/web-fetch.ts'
+export { PendingRequestRegistry } from './lib/pending-registry.ts'
 export type {
   PendingEntry,
   PendingKind,
   PendingOutcome,
   RegisterOptions,
   SettledBy,
-} from './pending-registry.ts'
-export { InputQueue } from './input-queue.ts'
+} from './lib/pending-registry.ts'
+export { InputQueue } from './lib/input-queue.ts'
 export {
   SUPPORTED_ATTACHMENT_TYPES,
   attachmentContentBlocks,
   attachmentKind,
   attachmentRef,
   normalizeMediaType,
-} from './attachments.ts'
-export type { AttachmentInput, AttachmentKind } from './attachments.ts'
-export { mcpStatusInfo, modelOptionsFromSdk, normalizeSdkMessage, toApiMessage } from './normalize.ts'
+} from './lib/attachments.ts'
+export type { AttachmentInput, AttachmentKind } from './lib/attachments.ts'
+export { mcpStatusInfo, modelOptionsFromSdk, normalizeSdkMessage, toApiMessage } from './lib/normalize.ts'
 export { getEngineAdapter } from './engines/adapter.ts'
 export type {
   EngineAdapter,

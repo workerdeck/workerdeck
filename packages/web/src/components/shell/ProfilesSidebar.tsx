@@ -5,7 +5,7 @@ import { IdCard, Plus } from 'lucide-react'
 import { CreateProfileDialog } from '@/components/CreateProfileDialog.tsx'
 import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
 import { SidebarRow } from './SidebarRow.tsx'
-import { useProfileList } from '@/lib/useProfiles.ts'
+import { useProfileList } from '@/hooks/useProfiles.ts'
 
 /**
  * The profiles the primary gateway declares, as a sidebar.

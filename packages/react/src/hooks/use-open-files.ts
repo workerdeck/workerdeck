@@ -7,7 +7,7 @@ import {
   openFilesReducer,
   type OpenFile,
   type OpenFilesState,
-} from './open-files.ts'
+} from '../lib/open-files.ts'
 
 export type UseOpenFilesResult = OpenFilesState & {
   /** The focused file, resolved — what the editor renders. */

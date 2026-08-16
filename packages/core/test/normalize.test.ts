@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { modelOptionsFromSdk, rateLimitEventsFromUsage } from '../src/normalize.ts'
+import { modelOptionsFromSdk, rateLimitEventsFromUsage } from '../src/lib/normalize.ts'
 
 describe('modelOptionsFromSdk', () => {
   // What a real CLI reports, copied off the wire — note the names: the family

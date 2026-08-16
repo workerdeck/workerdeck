@@ -1,7 +1,7 @@
 import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
-import { materializeAuthKey } from '../src/auth-key.ts'
+import { materializeAuthKey } from '../src/auth/auth-key.ts'
 
 const created: string[] = []
 const tempStateDir = async (): Promise<string> => {

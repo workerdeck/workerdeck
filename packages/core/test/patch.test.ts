@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filePatchFromToolResult, parseUnifiedDiff } from '../src/patch.ts'
+import { filePatchFromToolResult, parseUnifiedDiff } from '../src/lib/patch.ts'
 
 /**
  * These two functions are the only reason a client can print a line number, so

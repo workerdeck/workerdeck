@@ -25,10 +25,10 @@ import {
   attachmentRef,
   normalizeMediaType,
   type AttachmentInput,
-} from '../../attachments.ts'
-import { parseUnifiedDiff } from '../../patch.ts'
+} from '../../lib/attachments.ts'
+import { parseUnifiedDiff } from '../../lib/patch.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
-import { staleReplaySeqs } from '../../replay.ts'
+import { staleReplaySeqs } from '../../lib/replay.ts'
 import { JsonRpcError } from './jsonrpc.ts'
 import type {
   AppServerCommandApprovalParams,

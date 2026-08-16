@@ -5,7 +5,7 @@ import { Trash2 } from 'lucide-react'
 import { ConfirmRemoveGateway, GatewayFields } from '@/components/GatewayForm.tsx'
 import { DetailBar, DetailBody } from '@/components/shell/DetailBar.tsx'
 import { isLocal, useHosts } from '@/lib/hosts.ts'
-import { useSessions } from '@/lib/useSessions.ts'
+import { useSessions } from '@/hooks/useSessions.ts'
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (

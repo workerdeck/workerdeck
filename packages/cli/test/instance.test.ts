@@ -7,7 +7,7 @@ import WebSocket from 'ws'
 import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { ServerFrame } from '@workerdeck/protocol'
 import { parseArgs, resolveInstanceConfig, type ResolvedConfig } from '../src/config.ts'
-import { startInstance, type Instance } from '../src/instance.ts'
+import { startInstance, type Instance } from '../src/lib/instance.ts'
 
 /**
  * The end-to-end check the whole single-port design exists for: a browser with

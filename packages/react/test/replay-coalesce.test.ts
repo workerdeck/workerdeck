@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { replayCoalesceKey } from '@workerdeck/protocol'
 import type { RateLimitInfo, SessionEvent, SessionEventBody } from '@workerdeck/protocol'
-import { applyEvent, initialTranscriptState, type TranscriptState } from '../src/transcript.ts'
+import { applyEvent, initialTranscriptState, type TranscriptState } from '../src/lib/transcript.ts'
 
 /**
  * `replayCoalesceKey` lives in `protocol` but is a **claim about this reducer**:

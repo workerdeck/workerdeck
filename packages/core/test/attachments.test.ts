@@ -4,7 +4,7 @@ import {
   attachmentKind,
   normalizeMediaType,
   type AttachmentInput,
-} from '../src/attachments.ts'
+} from '../src/lib/attachments.ts'
 
 function input(mediaType: string, data: string, name = 'thing'): AttachmentInput {
   return {

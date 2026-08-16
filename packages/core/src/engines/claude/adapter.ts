@@ -1,7 +1,7 @@
 import { listSessions as sdkListSessions } from '@anthropic-ai/claude-agent-sdk'
 import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
-import { checkClaudeAuth } from '../../claude-auth.ts'
-import { SessionRunner } from '../../runner.ts'
+import { checkClaudeAuth } from './auth.ts'
+import { SessionRunner } from './runner.ts'
 import type { EngineAdapter } from '../adapter.ts'
 import { CLAUDE_CATALOG } from './catalog.ts'
 

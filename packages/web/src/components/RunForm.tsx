@@ -16,7 +16,7 @@ import { ProfileSelect } from '@/components/ProfileSelect.tsx'
 import { client } from '@/lib/client.ts'
 import { engineFormOptions } from '@/lib/engine.ts'
 import { type DefaultsKind } from '@/lib/settings.ts'
-import { useProfileChoice } from '@/lib/useProfiles.ts'
+import { useProfileChoice } from '@/hooks/useProfiles.ts'
 
 /**
  * The half of a run that a session and a queue job describe identically: where

@@ -6,7 +6,7 @@ import {
   openFilesReducer,
   type OpenFilesAction,
   type OpenFilesState,
-} from '../src/open-files.ts'
+} from '../src/lib/open-files.ts'
 
 const run = (actions: OpenFilesAction[], from: OpenFilesState = initialOpenFilesState) =>
   actions.reduce(openFilesReducer, from)

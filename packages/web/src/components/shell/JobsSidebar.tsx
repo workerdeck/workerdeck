@@ -19,7 +19,7 @@ import { ScheduleJobDialog } from '@/views/JobsView.tsx'
 import { client } from '@/lib/client.ts'
 import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
 import { RowAction, SidebarRow } from './SidebarRow.tsx'
-import { useJobs } from '@/lib/useJobs.ts'
+import { useJobs } from '@/hooks/useJobs.ts'
 
 export const JOB_STATUS_META: Record<
   JobStatus,

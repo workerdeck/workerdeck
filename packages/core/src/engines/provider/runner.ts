@@ -22,16 +22,16 @@ import {
   transcriptActivity,
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
-import { type AttachmentInput, attachmentRef, normalizeMediaType } from './attachments.ts'
+import { type AttachmentInput, attachmentRef, normalizeMediaType } from '../../lib/attachments.ts'
 import type {
   ParkedExecution,
   PermissionDecision,
   Runner,
   RunnerSnapshot,
   SessionEventListener,
-} from './runner-interface.ts'
-import type { ToolExecutionCall, ToolExecutionResult, ToolExecutor } from './tool-executor.ts'
-import { staleReplaySeqs } from './replay.ts'
+} from '../../runner-interface.ts'
+import type { ToolExecutionCall, ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
+import { staleReplaySeqs } from '../../lib/replay.ts'
 
 /** Permission modes this engine can honor. The rest of the protocol vocabulary
  * (acceptEdits/plan/auto) is Claude Code CLI semantics with no meaning here —

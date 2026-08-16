@@ -19,8 +19,8 @@ import type { WorkerDeckClient } from '@workerdeck/client'
 import { clientFor, useHosts } from '@/lib/hosts.ts'
 import { getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
-import { useMarkSeen, unseenSince } from '@/lib/useUnseen.ts'
-import { nudgeSessions, useSessions } from '@/lib/useSessions.ts'
+import { useMarkSeen, unseenSince } from '@/hooks/useUnseen.ts'
+import { nudgeSessions, useSessions } from '@/hooks/useSessions.ts'
 
 /**
  * Resolves the route's gateway before anything below it runs.

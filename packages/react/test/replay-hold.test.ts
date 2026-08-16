@@ -3,7 +3,7 @@ import WebSocket from 'ws'
 import { createWorkerServer, type WorkerServer } from '@workerdeck/server'
 import { WorkerDeckClient, type SessionHandle } from '@workerdeck/client'
 import type { AttachedFrame, SessionEvent, SessionInfo } from '@workerdeck/protocol'
-import { initialReplayTarget } from '../src/use-session.ts'
+import { initialReplayTarget } from '../src/hooks/use-session.ts'
 
 /**
  * The replay hold: `useClaudeSession` holds the transcript's paint until the

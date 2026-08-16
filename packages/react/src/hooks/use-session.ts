@@ -12,13 +12,13 @@ import {
   initialTranscriptState,
   seedFromSessionInfo,
   type TranscriptState,
-} from './transcript.ts'
+} from '../lib/transcript.ts'
 import {
   deleteTranscriptCache,
   readTranscriptCache,
   transcriptCacheKey,
   writeTranscriptCache,
-} from './transcript-cache.ts'
+} from '../lib/transcript-cache.ts'
 
 /** Replace the state wholesale — an in-place session switch, or the stale-log
  * resync. Internal to the hook; the wire never carries it. */

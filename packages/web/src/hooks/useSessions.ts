@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { isJobRun, sessionState, type SessionInfo, type SessionRow } from '@workerdeck/protocol'
-import { clientFor, currentHosts, isLocal, onHostsChange, type GatewayHost } from './hosts.ts'
+import { clientFor, currentHosts, isLocal, onHostsChange, type GatewayHost } from '../lib/hosts.ts'
 import { useUnseen } from './useUnseen.ts'
 
 /**

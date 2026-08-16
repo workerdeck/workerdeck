@@ -1,5 +1,5 @@
 import type { ToolCallRequestFrame, ToolExecutionOutput } from '@workerdeck/protocol'
-import { PendingRequestRegistry, type PendingOutcome } from './pending-registry.ts'
+import { PendingRequestRegistry, type PendingOutcome } from '../lib/pending-registry.ts'
 import type {
   ToolExecutionCall,
   ToolExecutionDispatch,

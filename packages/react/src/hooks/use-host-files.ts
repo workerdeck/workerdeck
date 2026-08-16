@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { WorkerDeckError, type WorkerDeckClient } from '@workerdeck/client'
 import type { HostFileMatch } from '@workerdeck/protocol'
-import { ancestorsWithin, flattenHostTree, type HostDirState, type HostTreeRow } from './host-tree.ts'
+import { ancestorsWithin, flattenHostTree, type HostDirState, type HostTreeRow } from '../lib/host-tree.ts'
 
 export type UseHostFileSearchResult = {
   /**

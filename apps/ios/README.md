@@ -21,7 +21,7 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     `Authorization: Bearer <key>` on both REST and the WS handshake — native apps don't need the
     cookie machinery the web dashboard uses.
   - `Transcript.swift` — pure transcript reducer, a 1:1 port of
-    `packages/react/src/transcript.ts`. Keep the two in sync when transcript semantics change.
+    `packages/react/src/lib/transcript.ts`. Keep the two in sync when transcript semantics change.
   - `MarkdownBlocks.swift` — splits assistant text into blocks: headings, lists, quotes, rules
     and fenced code, with anything it doesn't model (tables included) falling through as prose
     rather than being lost. Pure, so it lives here (this package is the only part of the app

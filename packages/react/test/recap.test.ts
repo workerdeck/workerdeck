@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { recapLine, summarizeSince } from '../src/recap.ts'
-import type { TranscriptItem } from '../src/transcript.ts'
+import { recapLine, summarizeSince } from '../src/lib/recap.ts'
+import type { TranscriptItem } from '../src/lib/transcript.ts'
 
 const user = (id: string): TranscriptItem => ({ kind: 'user', id, text: 'hi' })
 const reply = (id: string): TranscriptItem => ({

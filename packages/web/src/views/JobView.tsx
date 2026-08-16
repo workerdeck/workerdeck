@@ -19,8 +19,8 @@ import { client } from '@/lib/client.ts'
 import { primaryHost } from '@/lib/hosts.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
 import { getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
-import { useJobs } from '@/lib/useJobs.ts'
-import { useSessions } from '@/lib/useSessions.ts'
+import { useJobs } from '@/hooks/useJobs.ts'
+import { useSessions } from '@/hooks/useSessions.ts'
 
 /**
  * One job: what the queue knows about it, and — while its session is still in

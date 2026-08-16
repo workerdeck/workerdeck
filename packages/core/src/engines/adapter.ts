@@ -6,7 +6,7 @@ import type {
   SdkSessionSummary,
 } from '@workerdeck/protocol'
 import type { Runner, RunnerSnapshot } from '../runner-interface.ts'
-import type { SessionRunnerConfig } from '../runner.ts'
+import type { SessionRunnerConfig } from './claude/runner.ts'
 
 /**
  * A probe's verdict on one profile's credentials. 'unknown' means the probe

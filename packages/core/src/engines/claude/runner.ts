@@ -29,8 +29,8 @@ import {
   type AttachmentInput,
   attachmentContentBlocks,
   attachmentRef,
-} from './attachments.ts'
-import { InputQueue } from './input-queue.ts'
+} from '../../lib/attachments.ts'
+import { InputQueue } from '../../lib/input-queue.ts'
 import {
   type UsageRateLimits,
   defaultModelFromSdk,
@@ -40,9 +40,9 @@ import {
   normalizeSdkMessage,
   rateLimitEventsFromUsage,
   toApiMessage,
-} from './normalize.ts'
-import type { PermissionDecision, Runner, SessionEventListener } from './runner-interface.ts'
-import { staleReplaySeqs } from './replay.ts'
+} from '../../lib/normalize.ts'
+import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
+import { staleReplaySeqs } from '../../lib/replay.ts'
 
 export type QueryFn = (params: {
   prompt: AsyncIterable<SDKUserMessage>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionEvent, SessionEventBody } from '@workerdeck/protocol'
-import { staleReplaySeqs } from '../src/replay.ts'
+import { staleReplaySeqs } from '../src/lib/replay.ts'
 
 /**
  * The scan itself. That coalescing produces the *right client state* is proved

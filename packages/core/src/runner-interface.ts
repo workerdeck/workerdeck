@@ -7,8 +7,8 @@ import type {
   SessionInfo,
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
-import type { AttachmentInput } from './attachments.ts'
-import type { ToolExecutionResult } from './tool-executor.ts'
+import type { AttachmentInput } from './lib/attachments.ts'
+import type { ToolExecutionResult } from './executors/tool-executor.ts'
 
 export type SessionEventListener = (event: SessionEvent) => void
 

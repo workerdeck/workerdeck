@@ -6,7 +6,7 @@ import {
   initialTranscriptState,
   seedFromSessionInfo,
   type TranscriptState,
-} from '../src/transcript.ts'
+} from '../src/lib/transcript.ts'
 
 let seq = 0
 const ev = (body: SessionEventBody): SessionEvent => ({ ...body, seq: ++seq, ts: 0 })

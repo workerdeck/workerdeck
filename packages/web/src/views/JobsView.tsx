@@ -26,8 +26,8 @@ import { CalendarClock, ListChecks, Plus } from 'lucide-react'
 import { RunFormFields, useRunForm } from '@/components/RunForm.tsx'
 import { client } from '@/lib/client.ts'
 import { primaryHost } from '@/lib/hosts.ts'
-import { useJobs } from '@/lib/useJobs.ts'
-import { useSessions } from '@/lib/useSessions.ts'
+import { useJobs } from '@/hooks/useJobs.ts'
+import { useSessions } from '@/hooks/useSessions.ts'
 
 export function QueueStatsStrip({ stats }: { stats: QueueStats }) {
   const dailyPct =

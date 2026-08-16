@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ListProfilesResponse, ProfileInfo } from '@workerdeck/protocol'
-import { client } from './client.ts'
+import { client } from '../lib/client.ts'
 
 // Profiles change rarely (server config, plus whatever the Profiles view creates)
 // — fetch once per page load and share the result across every consumer, with an

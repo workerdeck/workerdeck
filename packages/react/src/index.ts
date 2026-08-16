@@ -1,44 +1,44 @@
-export { initialReplayTarget, REPLAY_HOLD_MAX_MS, staleAttach, useClaudeSession } from './use-session.ts'
+export { initialReplayTarget, REPLAY_HOLD_MAX_MS, staleAttach, useClaudeSession } from './hooks/use-session.ts'
 export type {
   ConnectionState,
   UseClaudeSessionOptions,
   UseClaudeSessionResult,
-} from './use-session.ts'
-export { clearTranscriptCache } from './transcript-cache.ts'
-export { attachmentKind, useAttachments } from './use-attachments.ts'
+} from './hooks/use-session.ts'
+export { clearTranscriptCache } from './lib/transcript-cache.ts'
+export { attachmentKind, useAttachments } from './hooks/use-attachments.ts'
 export type {
   AttachmentKind,
   StagedAttachment,
   UseAttachmentsOptions,
   UseAttachmentsResult,
-} from './use-attachments.ts'
-export { scanPromptTokens } from './prompt-tokens.ts'
-export type { PromptToken } from './prompt-tokens.ts'
-export { useHostFileRoots, useHostFileSearch, useHostFileTree } from './use-host-files.ts'
+} from './hooks/use-attachments.ts'
+export { scanPromptTokens } from './lib/prompt-tokens.ts'
+export type { PromptToken } from './lib/prompt-tokens.ts'
+export { useHostFileRoots, useHostFileSearch, useHostFileTree } from './hooks/use-host-files.ts'
 export type {
   UseHostFileRootsResult,
   UseHostFileSearchResult,
   UseHostFileTreeResult,
-} from './use-host-files.ts'
-export { ancestorsWithin, flattenHostTree } from './host-tree.ts'
-export type { HostDirState, HostTreeRow } from './host-tree.ts'
-export { useProfileUsage } from './use-profile-usage.ts'
-export type { UseProfileUsageOptions, UseProfileUsageResult } from './use-profile-usage.ts'
-export { useSessionInfo } from './use-session-info.ts'
-export type { UseSessionInfoResult } from './use-session-info.ts'
-export { useOpenFiles } from './use-open-files.ts'
-export type { UseOpenFilesResult } from './use-open-files.ts'
-export { currentText, initialOpenFilesState, isDirty, openFilesReducer } from './open-files.ts'
-export type { OpenFile, OpenFilesAction, OpenFilesState } from './open-files.ts'
-export { useToolCallHost } from './use-tool-host.ts'
-export type { UseToolCallHostOptions } from './use-tool-host.ts'
-export { createToolCallHost } from './tool-host.ts'
-export type { ToolCallHostOptions, ToolHostExecution, ToolHostRunner } from './tool-host.ts'
+} from './hooks/use-host-files.ts'
+export { ancestorsWithin, flattenHostTree } from './lib/host-tree.ts'
+export type { HostDirState, HostTreeRow } from './lib/host-tree.ts'
+export { useProfileUsage } from './hooks/use-profile-usage.ts'
+export type { UseProfileUsageOptions, UseProfileUsageResult } from './hooks/use-profile-usage.ts'
+export { useSessionInfo } from './hooks/use-session-info.ts'
+export type { UseSessionInfoResult } from './hooks/use-session-info.ts'
+export { useOpenFiles } from './hooks/use-open-files.ts'
+export type { UseOpenFilesResult } from './hooks/use-open-files.ts'
+export { currentText, initialOpenFilesState, isDirty, openFilesReducer } from './lib/open-files.ts'
+export type { OpenFile, OpenFilesAction, OpenFilesState } from './lib/open-files.ts'
+export { useToolCallHost } from './hooks/use-tool-host.ts'
+export type { UseToolCallHostOptions } from './hooks/use-tool-host.ts'
+export { createToolCallHost } from './lib/tool-host.ts'
+export type { ToolCallHostOptions, ToolHostExecution, ToolHostRunner } from './lib/tool-host.ts'
 export {
   applyEvent,
   initialTranscriptState,
   rateLimitWindows,
   seedFromSessionInfo,
-} from './transcript.ts'
-export type { ProducedFileRef, TranscriptItem, TranscriptState } from './transcript.ts'
-export { recapLine, summarizeSince, type RecapInput, type RecapSummary } from './recap.ts'
+} from './lib/transcript.ts'
+export type { ProducedFileRef, TranscriptItem, TranscriptState } from './lib/transcript.ts'
+export { recapLine, summarizeSince, type RecapInput, type RecapSummary } from './lib/recap.ts'

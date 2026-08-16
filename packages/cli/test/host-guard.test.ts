@@ -1,7 +1,7 @@
 import type { IncomingMessage } from 'node:http'
 import { describe, expect, it } from 'vitest'
 import { hostnameOf, isLoopbackHostname, parseArgs, resolveInstanceConfig } from '../src/config.ts'
-import { createHostGuard } from '../src/instance.ts'
+import { createHostGuard } from '../src/lib/instance.ts'
 
 const req = (host?: string): IncomingMessage =>
   ({ headers: host === undefined ? {} : { host } }) as unknown as IncomingMessage

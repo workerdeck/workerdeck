@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url'
 import type { ProfileInfo } from '@workerdeck/protocol'
 import type { WorkerServerOptions } from '@workerdeck/server'
 import type { ApnsConfig } from './apns/client.ts'
-import type { CliAuthOptions } from './auth.ts'
+import type { CliAuthOptions } from './auth/auth.ts'
 
 /**
  * The config surface has to be JavaScript, not JSON: the two options a real

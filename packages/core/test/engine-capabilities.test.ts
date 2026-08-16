@@ -12,7 +12,7 @@ import { providerAdapter } from '../src/engines/provider/adapter.ts'
 import { getEngineAdapter } from '../src/engines/adapter.ts'
 import { CLAUDE_CATALOG } from '../src/engines/claude/catalog.ts'
 import { CODEX_CATALOG } from '../src/engines/codex/catalog.ts'
-import { modelOptionsFromSdk, type SdkModelInfo } from '../src/normalize.ts'
+import { modelOptionsFromSdk, type SdkModelInfo } from '../src/lib/normalize.ts'
 
 const ENGINES = Object.keys(ENGINE_CAPABILITIES) as ProfileEngine[]
 const ALL_MODES: PermissionMode[] = [

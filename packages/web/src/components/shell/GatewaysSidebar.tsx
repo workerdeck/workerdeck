@@ -6,7 +6,7 @@ import { ConfirmRemoveGateway, CreateGatewayDialog } from '@/components/GatewayF
 import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
 import { RowAction, SidebarRow } from './SidebarRow.tsx'
 import { useHosts, type GatewayHost } from '@/lib/hosts.ts'
-import { useSessions } from '@/lib/useSessions.ts'
+import { useSessions } from '@/hooks/useSessions.ts'
 
 /**
  * The configured gateways, as their own section sidebar.

@@ -4,7 +4,7 @@ import {
   createToolCallHost,
   type ToolCallHostOptions,
   type ToolHostExecution,
-} from './tool-host.ts'
+} from '../lib/tool-host.ts'
 
 export type UseToolCallHostOptions = ToolCallHostOptions & {
   /** Turn the host off without unmounting. Default true. */

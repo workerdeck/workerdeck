@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SessionHandle } from '@workerdeck/client'
 import type { ToolCallRequestFrame } from '@workerdeck/protocol'
 import type { RunScriptResult } from '@workerdeck/sandbox'
-import { createToolCallHost, type ToolCallHostOptions } from '../src/tool-host.ts'
+import { createToolCallHost, type ToolCallHostOptions } from '../src/lib/tool-host.ts'
 
 /** Drives the framework-free host through a fake handle — no renderer needed. */
 function fakeHandle() {

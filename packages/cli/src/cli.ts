@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ConfigError, loadConfigFile, parseArgs, resolveInstanceConfig } from './config.ts'
-import { startInstance } from './instance.ts'
+import { startInstance } from './lib/instance.ts'
 
 const HELP = `workerdeck — run a workerdeck instance: session gateway + dashboard, one port.
 
@@ -107,7 +107,7 @@ function openInBrowser(url: string): void {
 
 async function main(argv: string[]): Promise<number> {
   if (argv[0] === 'guard') {
-    const { runGuard } = await import('./guard.ts')
+    const { runGuard } = await import('./lib/guard.ts')
     return await runGuard(argv.slice(1))
   }
 

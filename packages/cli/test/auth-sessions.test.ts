@@ -2,8 +2,8 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createAuthSessionStore } from '../src/auth-sessions.ts'
-import { createCliAuth } from '../src/auth.ts'
+import { createAuthSessionStore } from '../src/auth/auth-sessions.ts'
+import { createCliAuth } from '../src/auth/auth.ts'
 
 const SECRET = 'correct-horse-battery-staple'
 const dirs: string[] = []

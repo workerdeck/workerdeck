@@ -16,8 +16,8 @@ import { CreateSessionDialog } from '@/views/SessionsView.tsx'
 import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
 import { clientFor, primaryHost } from '@/lib/hosts.ts'
 import { getFiltersShown, setFiltersShown } from '@/lib/sidebar.ts'
-import { useSessionRows, useSessions } from '@/lib/useSessions.ts'
-import { useViewConfig } from '@/lib/useViewConfig.ts'
+import { useSessionRows, useSessions } from '@/hooks/useSessions.ts'
+import { useViewConfig } from '@/hooks/useViewConfig.ts'
 
 /**
  * The sessions list as a persistent left sidebar — VS Code's explorer, not a

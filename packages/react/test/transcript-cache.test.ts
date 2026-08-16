@@ -3,20 +3,20 @@ import WebSocket from 'ws'
 import { createWorkerServer, type WorkerServer } from '@workerdeck/server'
 import { WorkerDeckClient, type SessionHandle } from '@workerdeck/client'
 import type { AttachedFrame, SessionEvent, SessionInfo } from '@workerdeck/protocol'
-import { initialReplayTarget, staleAttach } from '../src/use-session.ts'
+import { initialReplayTarget, staleAttach } from '../src/hooks/use-session.ts'
 import {
   applyEvent,
   initialTranscriptState,
   seedFromSessionInfo,
   type TranscriptState,
-} from '../src/transcript.ts'
+} from '../src/lib/transcript.ts'
 import {
   clearTranscriptCache,
   deleteTranscriptCache,
   readTranscriptCache,
   transcriptCacheKey,
   writeTranscriptCache,
-} from '../src/transcript-cache.ts'
+} from '../src/lib/transcript-cache.ts'
 
 /**
  * The transcript cache: a detached session's state is kept warm so a

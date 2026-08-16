@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import type { JobInfo, QueueStats } from '@workerdeck/protocol'
-import { client } from './client.ts'
+import { client } from '../lib/client.ts'
 
 /**
  * Live view of the primary gateway's job queue: jobs stream in over `/queue/ws`

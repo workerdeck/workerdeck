@@ -16,7 +16,7 @@ import { Code, Trash2 } from 'lucide-react'
 import { EditProfileCard } from '@/components/EditProfileCard.tsx'
 import { DetailBar, DetailBody } from '@/components/shell/DetailBar.tsx'
 import { client } from '@/lib/client.ts'
-import { useProfileList } from '@/lib/useProfiles.ts'
+import { useProfileList } from '@/hooks/useProfiles.ts'
 import { openInVsCode } from './ProfilesView.tsx'
 
 function Row({ label, children }: { label: string; children: ReactNode }) {

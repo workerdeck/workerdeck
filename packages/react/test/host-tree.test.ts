@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { HostDirEntry } from '@workerdeck/protocol'
-import { ancestorsWithin, flattenHostTree, type HostDirState } from '../src/host-tree.ts'
+import { ancestorsWithin, flattenHostTree, type HostDirState } from '../src/lib/host-tree.ts'
 
 const dir = (path: string): HostDirEntry => ({
   name: path.slice(path.lastIndexOf('/') + 1),

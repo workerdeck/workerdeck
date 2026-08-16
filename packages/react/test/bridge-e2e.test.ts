@@ -5,7 +5,7 @@ import { createWorkerServer, type WorkerServer } from '@workerdeck/server'
 import { createVfs, loadEngine, type SandboxEngine } from '@workerdeck/sandbox'
 import type { ToolExecutionResult } from '@workerdeck/core'
 import { WorkerDeckClient, type SessionHandle } from '@workerdeck/client'
-import { createToolCallHost } from '../src/tool-host.ts'
+import { createToolCallHost } from '../src/lib/tool-host.ts'
 
 /**
  * The whole M3 path with nothing faked but the model: a server dispatches a

@@ -22,7 +22,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - CLI telemetry quirks (smoke-verified, SDK 0.3.221): `getContextUsage().categories[].color`
   holds CLI theme token names, not CSS; rate_limit events can omit `utilization` — render
   unknown, never 0%.
-- **The model list needs shaping, and it happens once, in `core/src/normalize.ts`**
+- **The model list needs shaping, and it happens once, in `core/src/lib/normalize.ts`**
   (`modelOptionsFromSdk`) so no client invents its own. Three traps, all live:
   `supportedModels()` leads with a `value: 'default'` sentinel that is a *choice*, not a model —
   a session running on it reports something else, so a picker row for it can never be checked and
@@ -71,7 +71,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - The CLI **pushes** a `rate_limit_event` only when a window *changes*, so a session that is
   watched rather than driven would show no plan usage at all. The runner therefore polls the
   structured `/usage` control request after init and after every turn and re-emits the windows as
-  ordinary `rate_limit` events (`rateLimitEventsFromUsage` in `core/src/normalize.ts`) — clients
+  ordinary `rate_limit` events (`rateLimitEventsFromUsage` in `core/src/lib/normalize.ts`) — clients
   need nothing new, and replay covers late attachers. That control request is marked experimental
   in the SDK, method name included, so it is probed for by name and every failure is silent: if
   it disappears, usage goes back to change-only, and nothing else breaks.
@@ -81,7 +81,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   re-installs yesterday's number as current (`replayCoalesceKey` keeps the last per window *on
   purpose*). A dormant wake is **not** affected: a fresh log means there is nothing to replay and
   `system_init` polls immediately. The gateway therefore keeps the account-level truth itself —
-  `ProfileUsageTracker` (`server/src/profile-usage.ts`), fed from every session's `rate_limit`
+  `ProfileUsageTracker` (`server/src/services/profile-usage.ts`), fed from every session's `rate_limit`
   events and served as `ProfileInfo.usage` on `GET /profiles`. Two rules there: last-write-wins is
   by the **event's own `ts`**, never arrival order (it subscribes from seq 0, so a rebuilt
   runner's replayed reading must not clobber a sibling session's live one), and the
@@ -105,7 +105,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `{ type, uuid, session_id, message, parent_tool_use_id, parent_agent_id, timestamp }`: `isMeta`,
   `isSidechain`, `promptSource` and `origin` are all dropped, and `isMeta` entries are filtered
   out by the SDK itself. So the backfill cannot mark a harness message synthetic from structure
-  the way the live path does — `isSyntheticUserText` (`core/src/normalize.ts`) matches the CLI's
+  the way the live path does — `isSyntheticUserText` (`core/src/lib/normalize.ts`) matches the CLI's
   own wrappers instead, and only `<task-notification>` / `<local-command-caveat>`. That stamping
   belongs in the **runner, not the reducer**: `transcriptActivity` counts a non-synthetic user
   message as a row, so a row the client hides but the count counts is an unread badge for work
