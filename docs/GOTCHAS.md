@@ -1011,6 +1011,14 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   absolutely positioned overlays one line tall, so `affordances={false}` changes no glyph's
   position. That is what makes "off" the pure article rather than a degraded mode — and the reason
   a new affordance may not be added as anything that occupies space.
+- **Verify against the real renderer, not the model.** The playground (`cd packages/ui && pnpm
+  dev`, port 5193) is the terminal theme's regression surface — jsdom has no text layout, so
+  only a browser can check the geometry. Console hooks: `__wdAudit` (height audit),
+  `__wdCheckMapping` (item→row mapping), `__wdPerf` (frame-time sweep), `__wdJumpRecap`,
+  `__wdSetFixture`, `__wdSetWidth`, `__wdSetMetrics`, `__wdMd`, `__wdLines`, plus the "audit
+  grid" button. Re-run the audits after any change to row structure — both instrument bugs found
+  building the scrubber inflated *coverage* rather than accuracy and would have read as
+  calculator bugs.
 
 ## Web dashboard
 

@@ -6,7 +6,7 @@ creation/resume, context + rate-limit HUD, and a browser/editor for the host's p
 over your own network (typically Tailscale). No relay, no cloud: the app is a plain HTTP/WS
 client to the gateway you already run.
 
-Plan and research: `_docs/plans/MOBILE-CLIENT.md` (gitignored, local).
+Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
 
 ## Layout
 
