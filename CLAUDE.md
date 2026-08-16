@@ -319,8 +319,16 @@ protocol. Read these before changing scope or structure:
   `scrubber` is the **overview ruler** (`terminal/scrubber.tsx`), VS Code's strip rather than its
   minimap: a **12px** rail replacing the scrollbar, **two 6px lanes** (what you typed / the answer
   and its turn end as **one** merged mark) with everything that is an *annotation on the run*
-  rather than a step through it — errors, a waiting approval pinned at the foot, `scrubberMarks`
-  bookmarks, the recap seam — spanning the full width instead. A mark is its row's extent at rail
+  rather than a step through it — errors, **a failed tool call**, a waiting approval pinned at
+  the foot, `scrubberMarks`
+  bookmarks, the recap seam — spanning the full width instead. The tool failure is the one that
+  is *routine* (a grep that matched nothing, a build fixed on the second go), which is why it
+  alone is drawn at 55% rather than solid and sits under `turnFailed` in `LOUDNESS`: at full
+  strength a normal working session paints the rail red and the two errors that actually ended
+  something stop standing out. Its predicate is `status === 'failed' || result?.isError` — the
+  same disjunction the row reddens with and the recap counts by, and both spellings are needed
+  (an out-of-loop execution failure sets only the status; an engine can flag `is_error` on a
+  call the reducer has not settled). A mark is its row's extent at rail
   scale (2px floor), drawn as a solid 2px head with a 25% tail; marks merge under a pixel with
   the loudest colour winning, and a 2px full-width cursor line rides the viewport's top edge. The
   12px is the one deliberate exception to the theme's `ch` rule: the rail is chrome beside the
@@ -697,9 +705,24 @@ protocol. Read these before changing scope or structure:
   gateway is a mode every session belongs to, so managing them sits beside the list
   permanently, with the connected count in the view header's description. There is **no
   implicit localhost gateway**. Creating a session is a native multi-step QuickPick
-  (`src/new-session.ts`: adapter → folder → optional first prompt, each step skipped when it
+  (`src/new-session.ts`: adapter → folder → model, each step skipped when it
   has nothing to ask and backed out of with `QuickInputButtons.Back`), which is what let the
-  list become a list and nothing else. The poll behind all of it is **ref-counted**
+  list become a list and nothing else. Every step arrives **pre-answered**, so the flow is
+  three `enter`s: the folder from this window's open folders, which lead the candidates
+  *unconditionally* now (the `local` test survives as the hint, not as a filter — a gateway on
+  a LAN or tailnet address may well be this machine, and offering `~/projects` to someone
+  sitting in `~/projects/ai/workerdeck` was the bug; a `workerdeck://` mount stays filtered to
+  its own gateway, being positively another machine's directory rather than merely unverified);
+  the model and the permission mode from **the session that adapter ran last**, read back off
+  the gateway's session list rather than remembered at create time, because an operator who
+  switched either one *mid-session* did it through the in-session pickers and a stored copy of
+  what they asked for at creation would not know. Mode is a default and never a step — two
+  questions is one too many for a flow whose point is that `enter` gets you a session — with
+  `workerdeck.newSession.permissionMode` to pin it ("always start on Auto") and a clamp against
+  the profile's own capability record, since a mode carried over from another engine would be
+  refused by the gateway. The **first-prompt step is gone**: interactively you are about to be
+  looking at a composer, and it was load-bearing for a real bug (a woken session re-ran
+  `config.prompt`). The poll behind all of it is **ref-counted**
   (`SessionsModel.setWatching`) rather than gated on the sidebar alone — two independently
   collapsible views render it now, and gating on one leaves the other showing probes frozen
   at `pending`; the unread status-bar item holds a watcher of its own, unconditionally while

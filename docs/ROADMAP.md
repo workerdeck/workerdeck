@@ -191,7 +191,9 @@ ships inside 0.15.0. Do not publish a v0.14.0 after the fact.
   renameable in place (double-click). **Gateways is its own collapsible view** — a gateway is a
   mode every session belongs to, so managing them sits beside the list permanently rather than
   replacing it — and creating or resuming a session is a native multi-step **QuickPick**
-  (adapter → folder → optional first prompt), which is what let the list become a list. The
+  (adapter → folder → model), which is what let the list become a list. Each step arrives
+  pre-answered — the folder from this window's open folders, the model and permission mode from
+  the session that adapter ran last — so the common path is three `enter`s. The
   folder step asks the *gateway* for its roots (`GET /fs/roots`) and can browse a remote
   filesystem over `/fs/list`, since a remote gateway's paths cannot be inferred from this
   window. The `+` in a view title is the only way to create: no body grows a second button, so
