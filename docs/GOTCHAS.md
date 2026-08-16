@@ -1136,6 +1136,20 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 
 ## Build, test & packaging
 
+- **Verifying "it is really production React" — check the right marker.** On a `pnpm start:prod`
+  bundle, `grep jsxDEV` *does* hit the main chunk and it is a false positive: the one occurrence
+  is a markdown library's own options check. The real markers are `react-stack-bottom-frame` and
+  the dev warning strings — zero of either means production. (Measured difference on one 976-row
+  session at a pinned width: dev and prod share a p50, dev's p95 is ~2× prod's — all tail.)
+- **`localStorage['workerdeck.transcript-variant']` is stored raw, not JSON.**
+  `setItem(key, 'terminal')`; writing `JSON.stringify('terminal')` stores it with quotes,
+  `getTranscriptVariant()`'s `stored === 'terminal'` fails, and the panel silently stays on
+  Cards — which looks exactly like the setting not working. A fresh profile also *defaults* to
+  Cards, so screenshot the panel before trusting any transcript measurement.
+- **A heavy transcript for free: resume, don't generate.** `GET /v1/sdk-sessions?cwd=…&profile=…`
+  lists what the engine store holds, and a create with `resume: <id>` and *no* first prompt
+  replays the whole thread — the engine backfills, no turn is sent, no tokens are spent. A real
+  ~1000-row transcript lands in seconds, which is the thing worth scrolling in a perf sweep.
 - A package that imports a workspace sibling needs the vitest workspace-source alias (see
   `packages/core/vitest.config.ts`) — the `@workerdeck/source` condition alone isn't enough,
   vite-node externalizes siblings to their unbuilt `build/` entries.

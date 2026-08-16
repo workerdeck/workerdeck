@@ -26,8 +26,7 @@ import type { TerminalBlock, ToolCallItem } from './items.tsx'
  * whose advances are not whole cells.
  * Measured against the real renderer in the dev playground
  * (`dev/height-audit.ts`): every unflagged row was pixel-exact across fixtures,
- * widths and cell sizes — the audit is this file's regression gate, and
- * `_docs/references/scrubber/height-calculator-spike.md` is the paper trail.
+ * widths and cell sizes — the audit is this file's regression gate.
  *
  * Two invariants keep the model small, and both are load-bearing:
  *

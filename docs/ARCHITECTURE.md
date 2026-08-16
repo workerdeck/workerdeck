@@ -43,6 +43,12 @@ boundary: anything a client needs must be expressible as protocol events and com
   model (monotonic marks behind a storage seam, plus `unseenCount`'s rows-not-turns
   arithmetic). Every client must agree on them — the extension's unread status-bar item counts
   the same rows its list shows, so a client filtering differently would announce hidden work.
+  `src/usage.ts` is a third of the same species: `mergeUsage` decides which plan-usage reading a
+  client renders (the gateway's per-profile state wins every window it holds, the session's
+  transcript fills the rest — deliberately not a timestamp comparison, see gotchas) and
+  `orderUsageWindows` is the ordering-and-drop-the-unknown rule beside it, because the panel
+  renders windows off a merged transcript while the dashboard's profile page renders them off
+  `ProfileInfo.usage` with no session in sight.
   Their tests live in `packages/react/test/`, which is where the vitest setup is.
 - **`packages/core`** — the engines. `SessionRunner` (Claude) wraps the Agent SDK's `query()`
   with: a push-based async input queue (`sendMessage` feeds the SDK's streaming-input iterable),
@@ -135,7 +141,15 @@ boundary: anything a client needs must be expressible as protocol events and com
   `GET /profiles`. With the `profileStore` option (a small seam, memory and JSON-file
   implementations bundled) the dashboard can also create, edit, and delete profiles — gated by
   `canManageProfiles` on the principal, and never touching the ones declared in server options,
-  which are code. A profile also picks the **engine**: `engine: 'provider'` routes creation to
+  which are code. The gateway also keeps **one plan-usage state per profile**
+  (`profile-usage.ts` → `ProfileUsageTracker`, served as `ProfileInfo.usage` on `GET /profiles`):
+  a session's own reading is refreshed by nothing but a turn, so one idle since yesterday replays
+  yesterday's number as current, and a sibling on the same account never sees what another spent
+  — the profile is the account boundary, so the newest reading across its sessions is the state
+  worth serving. Fed from `runner.subscribe` in `onRegister`, last-write-wins by the event's own
+  `ts` (never arrival order — a rebuilt runner replays from seq 0), with the 0%-after-reset
+  inference computed at serve time and marked `inferredReset` (see gotchas).
+  A profile also picks the **engine**: `engine: 'provider'` routes creation to
   the `createEngineRunner` hook (which may be async, for assembly that has to await) instead of
   the SDK runner, so this package imports no model SDK and never resolves provider credentials.
   Because the two engines answer to different vocabularies, the gateway rejects a permission mode
@@ -207,6 +221,13 @@ boundary: anything a client needs must be expressible as protocol events and com
   QuestionPrompt, Composer, SessionList, SessionBrowser, StatusBar, ModelSelect;
   `SessionBrowser` is the sessions list with search, facets, grouping, the subset line, unread
   badges and inline rename, rendering protocol's view model rather than a second copy of it).
+  `src/components/terminal/` is the **terminal theme** (`transcriptVariant: 'terminal'`) — a
+  renderer, not a set of branches: it draws every row itself on a character grid (`ch` columns,
+  whole multiples of `--term-line`), with computed-not-estimated row heights (`height.ts`
+  feeding the virtualizer's `estimateSize`), the scrubber overview ruler, the sticky prompt and
+  the terminal composer. `'cards'` is the chat-convention variant; density and font are
+  cards-only seams. Geometry and palette live in `src/styles/terminal.css`, and the theme's
+  invariants are in CLAUDE.md's `packages/ui` section and gotchas §Terminal theme.
   `@workerdeck/ui/format` is a React-free entry carrying both the formatters and
   `lib/status.ts`'s presentation rules (status severity, meter thresholds, the binding
   rate-limit window, the lenient model match), so a non-React host spells them identically. Tailwind v4 + Base UI + cva;
@@ -221,8 +242,11 @@ boundary: anything a client needs must be expressible as protocol events and com
   remounting it would drop the WebSocket attach and the whole rendered transcript. The embedder's
   `header` render-prop is portalled from inside the panel up to the top of the workspace — only
   the panel can build the `⋯` menu it is handed, but app chrome belongs above everything.
-- **`packages/web`** — the full session-control dashboard (TanStack Router, hash history): session
-  list, create/resume flow, live panel, jobs view, profiles view, settings. Published as prebuilt
+- **`packages/web`** — the full session-control dashboard (TanStack Router, hash history), shaped
+  as **four sections and a dialog**: Sessions, Gateways, Jobs and Profiles are each a
+  list-on-the-left/detail-beside-it pair (multi-gateway — routes carry the gateway, since a
+  session id is unique only within one), every `+` opens a modal, and Settings is a dialog at the
+  foot of the nav rather than a fifth section. Published as prebuilt
   static files with zero runtime deps (`dashboardDir` is a path, not a component tree) — it is an
   application, so everything it builds with is a devDependency. The create forms and the session
   panel render from the profile's **capability record** (`ProfileInfo.capabilities`, falling back
@@ -261,7 +285,12 @@ boundary: anything a client needs must be expressible as protocol events and com
 5. Resume: the SDK re-streams only user messages, so the runner backfills full history from the
    SDK's on-disk store as `replay: true` events; the transcript reducer dedupes doubled user
    messages by uuid. `SessionInfo.id` (server id) ≠ `sdkSessionId` (Agent SDK id used for
-   `resume`).
+   `resume`). Backfill strips structure (`getSessionMessages` carries no `isMeta`/`origin`), so
+   the runner stamps harness-injected rows synthetic by text (`isSyntheticUserText` in
+   `core/normalize.ts`, applied on the live path too — in the runner, not the reducer, so
+   `transcriptActivity` never counts an unread row for work nobody typed). Session titles rank
+   three-deep in `SessionRunner#title()`: host rename > the CLI's own generated title (polled
+   off `getSessionInfo`, never while a rename stands) > the first prompt truncated.
 
 ## Embedding: sandboxed sessions and session scope
 

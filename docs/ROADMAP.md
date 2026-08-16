@@ -1,9 +1,10 @@
 # Roadmap & open questions
 
-What's shipped, what's next, and what's still undecided. Status as of 2026-08-13: **0.15.0** on
-master, tagged and published — the embedding seams (session `scope`, `sandboxedProviderProfile()`,
-a loud MCP failure, host tools at a stated trust) and `apps/embedded` as the reference embedding.
-Protocol stays **7** and has since 0.9.0.
+What's shipped, what's next, and what's still undecided. Status as of 2026-08-16: **0.16.0** on
+master, bumped but **not yet tagged or published** — npm's latest is 0.15.0 (the embedding seams
+and `apps/embedded`), and everything since rides inside the pending 0.16.0: the terminal theme
+adopted everywhere, terminal navigation (scrubber, sticky prompt, computed row heights), and
+per-account plan usage. Protocol stays **7** and has since 0.9.0.
 
 The registry goes 0.13.0 → 0.15.0 with no 0.14.0, and that gap is deliberate: 0.14.0 was bumped
 and committed but never tagged, so nothing under that number ever reached npm and its content
@@ -229,7 +230,8 @@ ships inside 0.15.0. Do not publish a v0.14.0 after the fact.
   usually unreachable. Renaming a session is a gateway edit, not a local one —
   `PATCH /sessions/:id` (`UpdateSessionRequest`, `Runner.setTitle`) writes `meta.title` and
   `null` restores the derived title, so the dashboard and the phone see the same name.
-  The panel then went **terminal**: `transcriptVariant: 'lines'` in `ui` (full-width
+  The panel then went **terminal**: `transcriptVariant: 'lines'` in `ui` (since replaced by the
+  real `'terminal'` renderer in 0.16.0, which deleted `lines` — this is the 0.11.0 story) (full-width
   transparent rows behind a fixed gutter glyph, markdown snapped to one line height, fenced
   code and tables flattened out of their cards, payloads highlighted through the renderer's own
   shiki), the editor font by default (`workerdeck.fontFamily`), a transcript density
@@ -274,7 +276,8 @@ presentation rules to `@workerdeck/ui/format`; the extension now consumes all of
   state facets, grouping, sorting, the subset line, per-row unread badges, inline rename. Plus
   catch-up (`unseen` into the panel, marks written only while the route is mounted and the tab
   visible), an adaptive registry poll (5s idle / 1.2s busy) replacing the flat 5s, transcript
-  **style and density as settings** (`cards`/`lines`, `comfortable`/`compact`), a persisted file
+  **style and density as settings** (`cards`/`lines` then, `cards`/`terminal` since 0.16.0 —
+  a stored `lines` migrates to `terminal`; `comfortable`/`compact`), a persisted file
   rail, jobs search + an active-only filter, and one shared run form behind the session and job
   screens instead of two that had drifted.
 - **iOS**: one list across every configured gateway — gateway as a facet, not the frame, so the
@@ -365,6 +368,44 @@ session with no tools.
 - The documentation half: a "Rules you cannot infer from the types" section in every package
   README, and three new site pages — the app-embedding guide, engines and executors, writing tools.
 
+### The terminal theme adopted, terminal navigation, per-account usage (0.16.0 — pending release)
+
+Bumped on master, not yet tagged or published. Three tracks:
+
+- **The terminal theme everywhere, `lines` deleted.** `transcriptVariant: 'terminal'` is a
+  renderer, not a set of branches (`packages/ui/src/components/terminal/`): the VS Code dock at
+  the editor's own cell (`terminalMetrics` resolved from `editor.fontSize`/`lineHeight`,
+  `--cw-font-mono` repointed at the editor font, `workerdeck.terminal.*` settings), the dashboard
+  (Settings → Terminal, a stored `lines` migrating to it rather than falling back to cards), and
+  `apps/embedded`'s rail. The composer grew its own terminal form (gutter `❯`/`+`/`✕`, two
+  focus-tracking rules). Deleted with `lines`: `useLines`, `LineGlyph`, `line-prompt.tsx`, and
+  `Response`'s sixty `!important` overrides. `apps/ios` keeps its own `lines` on purpose — a
+  Swift terminal renderer is a separate track. The dashboard's frame also became one surface
+  (`.app-frame` repointing `--bg`/`--bg-surface` at `--sidebar`).
+- **Terminal navigation.** Row heights are *computed*, not estimated (`terminal/height.ts` —
+  `{px, exact}`, WeakMap cache per width×cell epoch, browser-measured regression gate in
+  `dev/height-audit.ts`), which is what let the scrubber be a real draggable scrollbar: a 12px
+  overview ruler with two lanes (prompts / answers), full-width annotations for errors, the
+  pending approval and the recap seam, hover peeks from `state.items` (never the DOM), click
+  jumps through `rowIndexForItem`. The sticky prompt holds the first line of the turn you are
+  reading via a compositor-pinned lane + head, kept mounted through the virtualizer's
+  `rangeExtractor`. A session opens settled (the `replaying` hold on the attach frame's own
+  signal), switching is cached (`transcript-cache.ts`, guarded by `staleAttach`), replay is
+  coalesced (`replayCoalesceKey` in protocol), and `/clear` clears (`transcriptContent`).
+- **The meters read the account, not the session.** Per-profile plan usage: `ProfileUsageTracker`
+  in the server (last-write-wins by event `ts`, the 0%-after-reset inference at serve time),
+  `ProfileInfo.usage` on `GET /profiles`, `mergeUsage`/`orderUsageWindows` in protocol,
+  `useProfileUsage` in react, `UsageMeters` in ui, and three usage lanes in the VS Code status
+  bar (`session`/`weekly`/`model` via `usageWindow`). No protocol bump — optional response-only
+  fields, the `available`/`models` precedent.
+
+Plus, in the VS Code extension: the activity-bar container deleted (Sessions into Explorer, five
+views into a `secondarySidebar` container — the `engines.vscode ^1.106.0` floor is the cost),
+unread as a window status-bar item, window-reload session restore; and in core, a session comes
+back under the CLI's own title (polled off `getSessionInfo`, never overwriting a rename) and a
+resumed transcript no longer shows rows nobody typed (`isSyntheticUserText` on both paths). One
+command runs the production build beside dev (`pnpm start:prod`, 8788).
+
 ## Next
 
 0. **APNs push for the iOS app — released in 0.7.0, not yet proven on a device.** The forwarder half is in
@@ -382,10 +423,12 @@ session with no tools.
    are open, in order: (a) a live end-to-end run against a real gateway in an Extension
    Development Host. Partly done as of 0.11.x: a side-loaded build has been driven against a real
    remote gateway, which is how the new-session QuickPick's folder step was found to be empty
-   there (no candidate source survives a non-loopback gateway with no sessions) and fixed. Still
-   unobserved: the virtualized transcript on a long session, the unread badge clearing with the
-   list closed, and the keyboard-first approval prompts — `apps/vscode` has no test suite, so
-   these can only be checked by hand; (b) **agent→IDE tools**, the thing that makes it more than a
+   there (no candidate source survives a non-loopback gateway with no sessions) and fixed. The
+   machinery has since changed shape under this list — 0.16.0 gave the virtualized transcript
+   computed row heights, and unread became a window status-bar item that no longer needs the
+   Sessions view resolved — but the by-hand pass itself is still owed: a long session in a real
+   window, the unread count clearing, and the keyboard-first approval prompts. `apps/vscode` has
+   no test suite, so these can only be checked by hand; (b) **agent→IDE tools**, the thing that makes it more than a
    webview — selection/diagnostics/open-file as context, and edits arriving as VS Code edits
    rather than filesystem writes; (c) Marketplace publishing, which is a packaging and
    naming decision, not code. CI already uploads the `.vsix` as an artifact.
