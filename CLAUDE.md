@@ -1047,6 +1047,14 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   as well as lines (a minified MCP reply is one line, so the old four-line slice kept all thirty
   thousand characters of it) and the shell fold widened to **any run of consecutive tool calls**.
 
+  **Unreleased on master, deliberately.** 0.16.0 is the published latest and `package.json` still
+  reads it. Master carries **live-session persistence** (`parking.persistLive`, `Runner.snapshot()`,
+  protocol's `snapshotRetains`, `kind: 'live'` records, `apps/embedded` turned on) plus vitest in
+  `packages/ui`. It is held back from a bump on purpose: the feature is proven against a mock model
+  and a fake runner and has never run against the real app with a key — see
+  `_docs/VERIFICATION-DEBT.md`. Clear that first, then bump; the change is a **minor** (additive,
+  and `persistLive` defaults off). Protocol stays **7**.
+
   **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`
   land *above* `v0.5.0` and a `| tail` reads the newest tags as the oldest. 0.12.0 had a local
