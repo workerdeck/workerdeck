@@ -1,5 +1,12 @@
 import * as vscode from 'vscode'
-import type { HostFileRoot, ProfileInfo, SdkSessionSummary } from '@workerdeck/protocol'
+import type {
+  HostFileRoot,
+  ModelOption,
+  PermissionMode,
+  ProfileInfo,
+  SdkSessionSummary,
+  SessionInfo,
+} from '@workerdeck/protocol'
 import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import { clientFor } from './gateway.ts'
 import type { HostStore } from './hosts.ts'
@@ -16,9 +23,14 @@ import { workspaceScope } from './workspace-scope.ts'
  * it is modal, `esc` always means cancel, and it is where VS Code puts every
  * other "pick some things and go" flow it ships.
  *
- * Three steps: adapter, working folder, optional first prompt. Each is skipped
- * when it has nothing to ask (one adapter, no candidate folder), and each can be
- * backed out of, so the sequence never traps you two picks deep.
+ * Three steps: adapter, working folder, model. Each is skipped when it has
+ * nothing to ask (one adapter, no candidate folder, no model catalog), and each
+ * can be backed out of, so the sequence never traps you two picks deep.
+ *
+ * Every step arrives already answered wherever it can be — the folder from this
+ * window, the model and the permission mode from the session this adapter ran
+ * last — so the flow is `enter, enter, enter` unless you want something else.
+ * That is also why the permission mode is not a fourth step: see `resolveMode`.
  */
 
 /** One adapter the operator could run, on one gateway. */
@@ -105,7 +117,7 @@ async function run(deps: NewSessionDeps, options: { resume: boolean }): Promise<
     } else {
       const done = options.resume
         ? await pickAndResume(deps, adapter!, cwd!)
-        : await askPromptAndCreate(deps, adapter!, cwd!)
+        : await pickModelAndCreate(deps, adapter!, cwd!)
       if (done === BACK) {
         step = 1
         continue
@@ -196,11 +208,11 @@ async function pickAdapter(
  *
  * Candidates come from four places, best first: whatever was chosen before a
  * back-step, the window's own folders (a session started from an editor almost
- * always means one of them), recent session cwds, and — the only *authoritative*
- * source — the roots the gateway itself will accept. The first three are all
- * inferred from this window and all gated on the gateway being loopback, so a
- * remote gateway with no sessions yet had none of them: no rows, no browse, and
- * an empty box. Asking the gateway is what makes the step work at all there.
+ * always means one of them, so these lead unconditionally), recent session cwds,
+ * and — the only *authoritative* source — the roots the gateway itself will
+ * accept. The first three are all inferred from this window, so a remote gateway
+ * with no sessions yet would otherwise have only a guess: asking the gateway is
+ * what makes the step trustworthy there, and what gives it a browse.
  *
  * A typed path stays available throughout, since a listing can be refused or
  * truncated and the operator may know a path the routes will accept anyway.
@@ -211,45 +223,59 @@ async function pickFolder(
   current: string | undefined,
 ): Promise<Answer<string>> {
   const host = adapter.host
-  const candidates: { path: string; hint: string }[] = []
-  const add = (path: string, hint: string) => {
-    if (path && !candidates.some((c) => c.path === path)) candidates.push({ path, hint })
+  // `verified` = this gateway is known to be able to chdir here, as opposed to a
+  // path inferred from this window that it may or may not share. It decides the
+  // *preset* only; every candidate is offered either way.
+  const candidates: { path: string; hint: string; verified: boolean }[] = []
+  const add = (path: string, hint: string, verified: boolean) => {
+    if (path && !candidates.some((c) => c.path === path)) candidates.push({ path, hint, verified })
   }
 
-  if (current) add(current, 'chosen')
-  // The window's folders, but only those this gateway could actually chdir into
-  // — a remote gateway's identical-looking path is another machine's directory.
-  // Same rule the sessions list scopes by.
-  for (const root of workspaceScope()?.roots ?? []) {
-    const usable = root.hostId ? root.hostId.toLowerCase() === host.id.toLowerCase() : host.local
-    if (usable) add(root.path, 'this window')
-  }
-  add(host.cwdSuggestion ?? '', 'suggested')
-  for (const info of deps.state().sessions[host.id] ?? []) add(info.cwd, 'recent session')
-  // Ask the GATEWAY where it will let a session live. Everything above is
-  // inferred from this window, and every bit of it is gated on the gateway being
-  // loopback — so for a remote gateway with no sessions yet this step used to
-  // offer nothing at all: no rows, no browse, and an empty box under "type an
-  // absolute path". These roots are authoritative instead of inferred, and they
-  // exist on both kinds of gateway. Absent route (host files not configured) is
-  // a 404, which is a fine answer and not an error.
+  // Asked FIRST, because it is the only authoritative answer and everything
+  // below wants to know it: where the gateway will let a session live. An absent
+  // route (host files not configured) is a 404 — a fine answer, not an error.
   const roots = await hostRoots(deps, host)
-  for (const root of roots) add(root.path, 'on the gateway')
+  const underRoot = (path: string) =>
+    roots.some((r) => path === r.path || path.startsWith(r.path.endsWith('/') ? r.path : `${r.path}/`))
 
-  // Last resort: a remote gateway that exposes no filesystem and has run nothing
-  // yet leaves every source above empty, and an empty box under "type an absolute
-  // path" is the worst version of this step — it asks the operator to recall a
-  // path exactly, with no way to check it. So the window's folders are offered
-  // anyway, as a starting point to edit rather than a claim: a gateway reached by
-  // hostname may well be this same machine, and where it isn't, the path is still
-  // the right shape and usually the right project name. The hint says plainly
-  // that it is a guess, and a cwd that does not exist fails the create call
-  // cleanly — this cannot do damage, only save typing.
-  if (candidates.length === 0) {
-    for (const root of workspaceScope()?.roots ?? []) {
-      add(root.path, `unverified on ${host.name}`)
+  if (current) add(current, 'chosen', true)
+  // The window's folders LEAD, always. Starting a session from an editor almost
+  // always means "here", and that has to hold even when the gateway is reached
+  // by a LAN name or a tailnet address rather than loopback — which is the
+  // common dev setup, and where this step used to fall through to the newest
+  // session's cwd and offer `~/projects` to someone sitting in
+  // `~/projects/ai/workerdeck`.
+  //
+  // Leading the list is not the same as being the *preset*, and the difference
+  // is what keeps a genuinely remote gateway working: prefilling the input with
+  // a local path that does not exist there is worse than it sounds, because the
+  // create failure surfaces as a toast *after* the flow has already returned —
+  // folder, model and all — so the whole sequence has to be walked again.
+  //
+  // So `local` no longer filters, it decides `verified` — and it is not the only
+  // thing that can: a folder **inside one of the gateway's own roots** is
+  // verified whoever it belongs to, which is exactly the LAN-address gateway
+  // that really is this machine. A remote gateway's roots will not contain a
+  // local path, so there it stays a guess and the preset moves on.
+  //
+  // A `workerdeck://` mount is the one case that stays filtered out: it names
+  // its gateway, so another gateway's mount is positively known to be a
+  // different machine's directory rather than merely unverified.
+  for (const root of workspaceScope()?.roots ?? []) {
+    if (root.hostId) {
+      if (root.hostId.toLowerCase() === host.id.toLowerCase()) add(root.path, 'this window', true)
+    } else if (host.local || underRoot(root.path)) {
+      add(root.path, 'this window', true)
+    } else {
+      add(root.path, `this window · unverified on ${host.name}`, false)
     }
   }
+  // Computed under the same local-vs-remote rule, so it is only ever set when it
+  // is a path this gateway shares.
+  add(host.cwdSuggestion ?? '', 'suggested', true)
+  // A session actually ran here, which is the strongest evidence there is.
+  for (const info of deps.state().sessions[host.id] ?? []) add(info.cwd, 'recent session', true)
+  for (const root of roots) add(root.path, 'on the gateway', true)
 
   type FolderItem = vscode.QuickPickItem & { path?: string; browse?: boolean }
   const items: FolderItem[] = candidates.map((c) => ({
@@ -276,12 +302,17 @@ async function pickFolder(
     })
   }
 
-  // The default is the window's own folder, and it arrives **in the input**, not
-  // merely highlighted in the list: this step is a path, people expect to see the
-  // path, and an empty box next to "type an absolute path" reads as unanswered.
-  // Prefilled it is also immediately editable — adjusting a subdirectory is a few
-  // keystrokes rather than retyping the whole thing.
-  const preset = current ?? candidates[0]?.path
+  // The default is normally the window's own folder, and it arrives **in the
+  // input**, not merely highlighted in the list: this step is a path, people
+  // expect to see the path, and an empty box next to "type an absolute path"
+  // reads as unanswered. Prefilled it is also immediately editable — adjusting a
+  // subdirectory is a few keystrokes rather than retyping the whole thing.
+  //
+  // The first *verified* candidate, though, not simply the first: an unverified
+  // row is a guess worth offering and not one worth pre-answering with. In the
+  // ordinary case (loopback gateway, or a folder inside the gateway's roots) the
+  // window's folder is verified and still wins, because it is first.
+  const preset = current ?? (candidates.find((c) => c.verified) ?? candidates[0])?.path
   const picked = await showPick(items, {
     title: 'New session: working folder',
     placeHolder: host.local
@@ -419,22 +450,157 @@ async function browseGateway(
   }
 }
 
-/** Step 3 of a create: the optional first prompt, then the create itself. */
-async function askPromptAndCreate(
+/**
+ * The session this adapter ran last, newest first — where the model and
+ * permission mode a new session starts on come from.
+ *
+ * Read back off the gateway's own session list rather than remembered in
+ * `globalState` at create time, and that is the whole point: an operator who
+ * switched model or mode *during* a session did so through the in-session
+ * pickers, and a stored copy of what they asked for at creation would not know
+ * it. The list is also per gateway and survives a window reload for free.
+ *
+ * Matched on the profile as well as the host, because a model id means nothing
+ * to another engine — resuming codex's last model into a claude session would
+ * name a model the engine has never heard of.
+ */
+function lastSessionOf(deps: NewSessionDeps, adapter: AdapterChoice): SessionInfo | undefined {
+  const engine = adapter.profile.engine ?? 'claude'
+  return (
+    (deps.state().sessions[adapter.host.id] ?? [])
+      .filter((s) =>
+        // `SessionInfo.profile` is the RESOLVED name and is present even when
+        // the create call left it implicit, so it is the precise test whenever
+        // the session reports one — comparing it against the engine would miss
+        // a single-profile gateway whose profile is not named after its engine.
+        // Engine is the fallback for an older server that reports neither.
+        s.profile !== undefined ? s.profile === adapter.profile.name : (s.engine ?? 'claude') === engine,
+      )
+      // The gateway's list order is its own business; recency is the question
+      // being asked here.
+      .sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt))[0]
+  )
+}
+
+/**
+ * Step 3 of a create: which model, then the create itself.
+ *
+ * It replaced the "first prompt" step, which was the wrong question to end on:
+ * interactively you are about to be looking at a composer, and a prompt typed
+ * into a QuickPick is a prompt typed without the transcript in front of you.
+ * (It was also load-bearing for a real bug — a woken session re-ran
+ * `config.prompt` — so the surface is smaller for its absence.)
+ *
+ * Model is the question worth asking here because it is the one thing that is
+ * awkward to change after the fact and cheap to answer before: it arrives
+ * preselected on whatever the last session used, so `enter` is the whole
+ * interaction unless you want something else. The permission *mode* deliberately
+ * stays out of the flow — see `resolveMode`.
+ */
+async function pickModelAndCreate(
   deps: NewSessionDeps,
   adapter: AdapterChoice,
   cwd: string,
 ): Promise<Answer<void>> {
-  const prompt = await showInput({
-    title: 'New session: first prompt',
-    placeHolder: 'Sent as soon as the session starts — leave empty to start idle',
+  const previous = lastSessionOf(deps, adapter)
+  const mode = resolveMode(adapter, previous)
+  const models = adapter.profile.models ?? []
+  // Nothing to ask: a profile whose engine ships no catalog answers for itself
+  // rather than showing a one-row pick or an empty one.
+  if (models.length === 0) {
+    await create(deps, adapter, { cwd, permissionMode: mode })
+    return undefined
+  }
+
+  // Only the last session's OWN model preselects a catalog row. A profile
+  // default is deliberately NOT resolved to whichever row happens to equal it:
+  // it has a row of its own below, and "unset" is a different request from
+  // "this id" — the gateway fills an unset model from the profile, and for
+  // claude that is the operator's CLI config, which no catalog row can name.
+  const preferred = previous?.model
+  const isPreferred = (m: ModelOption) =>
+    preferred !== undefined && (m.value === preferred || m.resolvedModel === preferred)
+  // `value: undefined` is the sentinel row protocol assigns to clients —
+  // catalogs never carry one (see ModelOption's docs), and every other client
+  // adds it. Without it this flow could not create a session on the profile's
+  // own default at all: it would send whichever row the cursor happened to land
+  // on, which for claude is the newest and most expensive model in the catalog.
+  type ModelItem = vscode.QuickPickItem & { value?: string }
+  const fallbackRow: ModelItem = {
+    label: 'Profile default',
+    description: previous?.model === undefined ? 'default' : undefined,
+    detail: adapter.profile.defaultModel ?? "whatever the profile's engine is configured for",
+    value: undefined,
+  }
+  const items: ModelItem[] = [
+    ...models.map((m) => ({
+      label: m.displayName,
+      // Only worth saying when it is the session's own history — "last used"
+      // about a model nobody here has run is a claim, not a hint.
+      description: isPreferred(m) ? 'last used' : undefined,
+      detail: m.description ?? m.resolvedModel,
+      value: m.value,
+    })),
+    fallbackRow,
+  ]
+  const picked = await showPick(items, {
+    title: 'New session: model',
+    placeHolder: `Model for this session — permission mode: ${modeLabel(mode)}`,
+    // The profile's default whenever the last session's model is unknown or has
+    // since left the catalog (a model can be retired between one session and the
+    // next). Never the catalog's first row by accident.
+    activeItem: items[models.findIndex(isPreferred)] ?? fallbackRow,
     step: 3,
     totalSteps: 3,
   })
-  if (prompt === CANCEL) return CANCEL
-  if (prompt === BACK) return BACK
-  await create(deps, adapter, { cwd, prompt: prompt.trim() || undefined })
+  if (picked === CANCEL) return CANCEL
+  if (picked === BACK) return BACK
+  await create(deps, adapter, { cwd, model: picked.value, permissionMode: mode })
   return undefined
+}
+
+/**
+ * The permission mode a new session starts in — a default, never a step.
+ *
+ * Two questions in a row is one too many for a flow whose whole point is that
+ * `enter` gets you a session, and mode is the one people set once and keep: so
+ * it follows the last session by default, and `workerdeck.newSession.permissionMode`
+ * is the way to pin it — which is what "always start on Auto" needs, without
+ * costing everyone a pick.
+ *
+ * Clamped to what the engine admits either way. A mode carried over from a
+ * claude session (or typed into the setting years ago) that this engine does
+ * not have is dropped rather than sent: the gateway would refuse the create,
+ * and the profile's own default is a better answer than an error.
+ */
+function resolveMode(
+  adapter: AdapterChoice,
+  previous: SessionInfo | undefined,
+): PermissionMode | undefined {
+  const pinned = vscode.workspace
+    .getConfiguration('workerdeck')
+    .get<string>('newSession.permissionMode', 'remember')
+  const wanted =
+    pinned && pinned !== 'remember'
+      ? (pinned as PermissionMode)
+      : (previous?.permissionMode ?? adapter.profile.defaults?.permissionMode)
+  if (!wanted) return undefined
+  // The profile's OWN record, not the static table keyed by engine: the gateway
+  // serves it from the first request and it is what the create call is actually
+  // checked against.
+  const caps = adapter.profile.capabilities ?? ENGINE_CAPABILITIES[adapter.profile.engine ?? 'claude']
+  return caps.permissionModes.includes(wanted) ? wanted : undefined
+}
+
+function modeLabel(mode: PermissionMode | undefined): string {
+  // 'default' is spelled "Manual" everywhere a person reads it (see
+  // PERMISSION_MODES in ui) — the wire name would read as "the default", which
+  // is the opposite of what it means.
+  if (mode === undefined || mode === 'default') return 'Manual'
+  if (mode === 'acceptEdits') return 'Accept edits'
+  if (mode === 'bypassPermissions') return 'Bypass'
+  if (mode === 'dontAsk') return "Don't ask"
+  return mode.charAt(0).toUpperCase() + mode.slice(1)
 }
 
 /** Step 3 of a resume: which stored session to continue. */
@@ -500,6 +666,12 @@ async function pickAndResume(
     // `meta.title` is unset and the derived fallback reads the first prompt,
     // which a resume deliberately does not send.
     title: (picked.stored.customTitle ?? picked.stored.summary).trim() || undefined,
+    // A resume is a session created from VS Code too, which is what the setting
+    // says it governs — and the thread being resumed carries no mode of its own,
+    // so leaving it unset would silently ignore a pinned "always Auto" for
+    // exactly the sessions most likely to want it. Model stays unset: the thread
+    // already has one, and this flow never asked.
+    permissionMode: resolveMode(adapter, lastSessionOf(deps, adapter)),
   })
   return undefined
 }
@@ -507,21 +679,43 @@ async function pickAndResume(
 async function create(
   deps: NewSessionDeps,
   adapter: AdapterChoice,
-  body: { cwd: string; prompt?: string; resume?: string; title?: string },
+  body: {
+    cwd: string
+    resume?: string
+    title?: string
+    model?: string
+    permissionMode?: PermissionMode
+  },
 ): Promise<void> {
   const client = await clientFor(deps.store, adapter.host)
   if (!client) return
+  // Say the mode out loud whenever it is not the asking one. The model step's
+  // placeholder already does, but a profile with no catalog skips that step
+  // entirely and creates straight off the folder — so a `bypassPermissions`
+  // inherited from the last session would otherwise reach a running session
+  // without ever having been shown.
+  const modeNote =
+    body.permissionMode && body.permissionMode !== 'default'
+      ? ` · ${modeLabel(body.permissionMode)}`
+      : ''
   try {
     const info = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: 'WorkerDeck: creating session…' },
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: `WorkerDeck: creating session…${modeNote}`,
+      },
       () =>
         client.createSession({
           cwd: body.cwd,
           profile: adapter.explicit ? adapter.profile.name : undefined,
-          // The engine replays the thread it is resuming — a first prompt on top
-          // of that would be a second turn nobody asked for.
-          prompt: body.resume ? undefined : body.prompt,
           resume: body.resume,
+          model: body.model,
+          permissionMode: body.permissionMode,
+          // The CLI only allows bypass when the process was spawned for it, so
+          // it is decided here or never — asking for the mode without this flag
+          // is asking for a switch the engine will refuse.
+          allowDangerouslySkipPermissions:
+            body.permissionMode === 'bypassPermissions' ? true : undefined,
           // `meta.title` is what SessionInfo.title prefers; a rename later
           // overwrites it through the same field.
           meta: body.title ? { title: body.title } : undefined,
@@ -608,37 +802,3 @@ function showPick<T extends vscode.QuickPickItem>(
   })
 }
 
-/** `showInputBox` with a back button. Empty input is a valid answer here — the
- * first prompt is optional — so this cannot lean on validation to mean "unset". */
-function showInput(options: {
-  title: string
-  placeHolder: string
-  step?: number
-  totalSteps?: number
-}): Promise<Answer<string>> {
-  return new Promise((resolve) => {
-    const input = vscode.window.createInputBox()
-    input.title = options.title
-    input.placeholder = options.placeHolder
-    input.step = options.step
-    input.totalSteps = options.totalSteps
-    input.ignoreFocusOut = true
-    if ((options.step ?? 1) > 1) input.buttons = [vscode.QuickInputButtons.Back]
-
-    let answered = false
-    const finish = (answer: Answer<string>) => {
-      answered = true
-      resolve(answer)
-      input.hide()
-    }
-    input.onDidTriggerButton((button) => {
-      if (button === vscode.QuickInputButtons.Back) finish(BACK)
-    })
-    input.onDidAccept(() => finish(input.value))
-    input.onDidHide(() => {
-      if (!answered) resolve(CANCEL)
-      input.dispose()
-    })
-    input.show()
-  })
-}

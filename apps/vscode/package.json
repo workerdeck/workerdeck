@@ -253,6 +253,30 @@
           "default": "editor",
           "description": "Typeface for the WorkerDeck agent panel's Cards style. The Terminal style always draws in the editor's monospace font — a proportional face there would break its character grid. The sidebar and the session views always follow VS Code's UI font."
         },
+        "workerdeck.newSession.permissionMode": {
+          "type": "string",
+          "enum": [
+            "remember",
+            "default",
+            "auto",
+            "acceptEdits",
+            "plan",
+            "dontAsk",
+            "bypassPermissions"
+          ],
+          "enumDescriptions": [
+            "Start on whatever the last session on that adapter was using.",
+            "Manual — ask before every tool that needs permission.",
+            "Auto — the engine decides each permission itself.",
+            "Accept edits — file edits go through, everything else asks.",
+            "Plan — research and propose, change nothing.",
+            "Don't ask — never prompt; refuse instead of asking.",
+            "Bypass — no permission checks at all. Decided at creation and unchangeable after."
+          ],
+          "default": "remember",
+          "description": "Permission mode for sessions created from VS Code. A mode the chosen engine does not support falls back to that profile's own default.",
+          "scope": "machine-overridable"
+        },
         "workerdeck.transcriptVariant": {
           "type": "string",
           "enum": [

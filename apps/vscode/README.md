@@ -46,6 +46,7 @@ paths. Three tiers:
 | `workerdeck.statusBar.modelUsage` | `false` | The per-model weekly badge — the fullest model-scoped window, named for its model (Fable, Opus, …). |
 | `workerdeck.statusBar.model` | `true` | The model picker. Click → Quick Pick. |
 | `workerdeck.statusBar.mode` | `true` | The permission-mode picker. Click → Quick Pick. |
+| `workerdeck.newSession.permissionMode` | `remember` | Permission mode for sessions created from VS Code. `remember` follows the last session on that adapter; pin a mode (e.g. `auto`) to always start there. A mode the chosen engine does not support falls back to that profile's own default. |
 | `workerdeck.dev.autoReload` | `true` | Extension Development Host only: re-render the webviews on rebuild. |
 
 ## Develop
