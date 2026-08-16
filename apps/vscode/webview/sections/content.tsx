@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import type { ContextUsage, McpServerStatusInfo, RateLimitInfo, SessionInfo } from '@workerdeck/protocol'
 import { rateLimitWindows, type TranscriptState } from '@workerdeck/react'
-import { Badge, Button, Spinner, cn } from '@workerdeck/ui'
+import { Badge, Button, Spinner, UsageMeters, cn } from '@workerdeck/ui'
 import { RefreshCw } from 'lucide-react'
 
 /**
@@ -68,6 +68,13 @@ export function ContextSection({ usage }: { usage: ContextUsage | undefined }) {
   )
 }
 
+/**
+ * `UsageMeters` rather than a bar of our own: the pace marker is the whole
+ * value of these meters — "17% used" only means something once you know how far
+ * into the window you are — and it was invented twice already (iOS's `UsageBar`,
+ * the panel's Usage dialog). A third hand-rolled copy here is how the dock came
+ * to be the one surface without it.
+ */
 export function UsageSection({ rateLimits }: { rateLimits: Record<string, RateLimitInfo> | undefined }) {
   // rateLimitWindows reads only `rateLimits` — the cast hands it the one field
   // it consumes without dragging a full transcript state into the sidebar.
@@ -75,24 +82,10 @@ export function UsageSection({ rateLimits }: { rateLimits: Record<string, RateLi
   if (windows.length === 0) {
     return <div className='py-1 text-body-sm text-fg-4'>No plan-usage reading yet.</div>
   }
-  return (
-    <div className='flex flex-col gap-2'>
-      {windows.map(({ key, info }) => (
-        <div key={key} className='flex flex-col gap-1'>
-          <div className='flex items-baseline justify-between text-body-sm'>
-            <span className='text-fg-3'>{windowLabel(key)}</span>
-            <span className='flex items-baseline gap-2'>
-              <span className='font-mono text-fg-2'>{Math.round(info.utilization ?? 0)}%</span>
-              {info.resetsAt ? (
-                <span className='text-label text-fg-4'>resets {resetsIn(info.resetsAt)}</span>
-              ) : null}
-            </span>
-          </div>
-          <Meter percent={info.utilization ?? 0} warn={80} />
-        </div>
-      ))}
-    </div>
-  )
+  // No `now` prop: this view is mounted for as long as its section is expanded,
+  // so it ticks its own minute clock. Passing one would mean this file owning a
+  // timer the section has no other use for.
+  return <UsageMeters windows={windows} className='gap-4' />
 }
 
 export function McpSection({
@@ -187,18 +180,3 @@ function formatTokens(tokens: number): string {
   return String(tokens)
 }
 
-function windowLabel(key: string): string {
-  if (key === 'five_hour') return 'Session (5h)'
-  if (key === 'seven_day') return 'Weekly'
-  if (key.startsWith('seven_day_')) return `Weekly · ${key.slice('seven_day_'.length)}`
-  return key
-}
-
-function resetsIn(resetsAtSeconds: number): string {
-  const ms = resetsAtSeconds * 1000 - Date.now()
-  if (ms <= 0) return 'soon'
-  const hours = Math.floor(ms / 3_600_000)
-  if (hours >= 24) return `in ${Math.round(hours / 24)}d`
-  if (hours >= 1) return `in ${hours}h`
-  return `in ${Math.max(1, Math.round(ms / 60_000))}m`
-}

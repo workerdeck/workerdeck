@@ -18,6 +18,7 @@ import type {
   ToolExecutionBackend,
   ToolExecutionOutput,
   ToolResultBlock,
+  UsageWindowRow,
 } from '@workerdeck/protocol'
 
 /**
@@ -276,9 +277,7 @@ export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): 
  * with no transcript anywhere near it, and two orderings would be one account
  * described two ways. This stays as the transcript-shaped door to it.
  */
-export function rateLimitWindows(
-  state: TranscriptState,
-): Array<{ key: string; info: RateLimitInfo }> {
+export function rateLimitWindows(state: TranscriptState): UsageWindowRow[] {
   return orderUsageWindows(
     mergeUsage({ rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt }, undefined),
   )
