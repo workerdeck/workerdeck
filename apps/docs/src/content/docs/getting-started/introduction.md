@@ -106,8 +106,9 @@ The browser side never imports the server side; the protocol is the only bridge.
 - **Hosting: no serverless.** A CLI engine is a long-running subprocess with filesystem state. Edge/serverless functions cannot host this. Realistic targets: a VM, a
   container with min-instances, any Node ≥22 host with a real filesystem.
 - **Sessions are single-host.** Transcripts live on the server's local disk (the engine's own
-  default); resume works across process restarts on the same host. Parked
-  sessions survive a restart with the bundled file store, but one directory serves one process.
+  default); resume works across process restarts on the same host. Parked sessions survive a
+  restart with the bundled file store, and live *provider* sessions do too with
+  `parking.persistLive` — but one directory serves one process.
 - **The server trusts its host app.** For CLI engines `CreateSessionRequest` accepts `mcpServers`
   and tool policy; gate session creation behind your own auth and use `allowedCwdRoots` +
   `buildRunnerConfig` to clamp what clients may request. Provider sessions are tighter by

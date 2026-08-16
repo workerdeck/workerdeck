@@ -279,9 +279,24 @@ should *not* solve for you.
 
 ## 10. What breaks in production
 
-- **Restarts.** Provider sessions can `park()` — state persisted, runner torn down, rebuilt as
-  itself. Configure `parking: { store: createFileSessionStore(…) }` or a restart loses every live
-  session's transcript. The default in-memory store survives a disconnect, not a restart.
+- **Restarts.** Two options, and you need both:
+
+  ```ts
+  parking: { store: createFileSessionStore({ dir: '…' }), persistLive: true }
+  ```
+
+  A durable store alone is not enough, and this is the trap: `park()` only fires for a session
+  *resting on deferred executions*, so an ordinary conversation never parks and a store on its own
+  saves nothing. `persistLive` is what covers the ordinary case — the runner's snapshot is written
+  through after every turn, and a restart rebuilds from it lazily, on first attach. It is off by
+  default because it writes the session's whole transcript to that store, in plaintext.
+
+  This is the *provider* engine's mechanism specifically. Claude and codex have engine-side session
+  stores and go dormant instead, remembering only an id to resume from.
+- **Restarts also sign people out, if you let them.** A per-process session secret is the obvious
+  default and it makes working persistence look completely broken: sessions are scoped, a scoped
+  session answers 404 to anyone else, so a new secret on boot preserves every conversation and
+  leaves every one unreachable. Persist whatever signs your cookies.
 - **More than one pod.** Sessions are in-process. A second instance behind a load balancer does not
   see the first one's sessions, and the WebSocket must land on the pod that owns the runner. Pin by
   session id, or run one instance, until you have a story here.
