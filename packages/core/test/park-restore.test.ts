@@ -41,6 +41,23 @@ const streamCalls = (calls: Array<{ id: string; tool: string; input: unknown }>)
   ]),
 })
 
+/**
+ * A turn genuinely in flight: some text, then nothing until the abort signal
+ * fires. It has to *watch* the signal — a stream that merely never closes hangs
+ * the turn forever, because aborting the runner's controller cannot cancel a
+ * stream that was never wired to it.
+ */
+const streamStalls = (text: string) => async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
+  stream: new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'stream-start' as const, warnings: [] })
+      controller.enqueue({ type: 'text-start' as const, id: 't1' })
+      controller.enqueue({ type: 'text-delta' as const, id: 't1', delta: text })
+      abortSignal?.addEventListener('abort', () => controller.error(new Error('interrupted')))
+    },
+  }),
+})
+
 const TOOLS = { remote_task: tool({ inputSchema: z.object({ task: z.string() }) }) }
 
 function harness(config: Partial<AiSdkRunnerConfig> & Pick<AiSdkRunnerConfig, 'languageModel'>) {
@@ -275,6 +292,127 @@ describe('deferred execution: park and rehydrate', () => {
     await new Promise((r) => setTimeout(r, 20))
     expect(h.runner.info().status).toBe('running')
     expect(h.runner.park()).toBeUndefined()
+  })
+
+  it('snapshots an idle session without ending it — the case park() refuses', async () => {
+    const model = new MockLanguageModelV3({
+      modelId: 'mock-1',
+      doStream: [streamText('hi there'), streamText('and again')],
+    })
+    const vfs = createVfs({ '/notes.txt': 'keep me' })
+    const h = harness({ languageModel: model, vfs })
+    h.runner.sendMessage('hello')
+    await h.waitFor(() => h.eventsOf('turn_result').length === 1)
+
+    // park() has nothing to wait for and says so; snapshot() is exactly this case.
+    expect(h.runner.park()).toBeUndefined()
+    const snapshot = h.runner.snapshot()!
+    expect(snapshot).toBeDefined()
+    expect(snapshot.parked).toEqual([])
+    expect(snapshot.vfs).toEqual({ '/notes.txt': 'keep me' })
+
+    // …and it changed nothing: still live, still attached, still usable.
+    expect(h.runner.info().status).toBe('idle')
+    expect(h.eventsOf('session_closed')).toHaveLength(0)
+    expect(
+      h.eventsOf('status_changed').some((e) => 'status' in e && e.status === 'parked'),
+    ).toBe(false)
+    const before = h.events.length
+    h.runner.sendMessage('again')
+    await h.waitFor(() => h.eventsOf('turn_result').length === 2)
+    expect(h.events.length).toBeGreaterThan(before)
+  })
+
+  it('drops stream deltas from the snapshot and nothing else', async () => {
+    const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: [streamText('hi there')] })
+    const h = harness({ languageModel: model })
+    h.runner.sendMessage('hello')
+    await h.waitFor(() => h.eventsOf('turn_result').length === 1)
+
+    const snapshot = h.runner.snapshot()!
+    expect(h.eventsOf('stream_delta').length).toBeGreaterThan(0)
+    expect(snapshot.events.some((e) => e.type === 'stream_delta')).toBe(false)
+    // Everything else survives, in order, with its seq intact…
+    expect(snapshot.events.map((e) => e.type)).toEqual(
+      h.events.filter((e) => e.type !== 'stream_delta').map((e) => e.type),
+    )
+    // …and the last event still carries the snapshot's own seq, which the
+    // client's replay hold waits to reach.
+    expect(snapshot.events.at(-1)?.seq).toBe(snapshot.seq)
+    // The text is not lost with the deltas: the flushed message carries it.
+    const message = snapshot.events.find((e) => e.type === 'assistant_message')
+    expect(JSON.stringify(message)).toContain('hi there')
+  })
+
+  it('refuses to snapshot a turn in flight', async () => {
+    const model = new MockLanguageModelV3({
+      modelId: 'mock-1',
+      doStream: [
+        streamCalls([{ id: 'call-fast', tool: 'remote_task', input: { task: 'fast' } }]),
+      ],
+    })
+    // An in-process execution: its result comes back to THIS runner and dies with
+    // the process, so a restore would wait on it forever.
+    const h = harness({
+      languageModel: model,
+      executor: {
+        describe: () => ({}),
+        dispatch: (call) => Promise.resolve({ executionId: call.executionId, status: 'pending' as const }),
+      },
+    })
+    h.runner.sendMessage('go')
+    await h.waitFor(() => h.eventsOf('execution_dispatched').length === 1)
+    expect(h.runner.snapshot()).toBeUndefined()
+  })
+
+  it('does not re-run an interrupted turn when restored', async () => {
+    // The trap under this feature. An interrupt flushes a partial
+    // assistant_message for the transcript but never pushes the model's response
+    // messages, so the history ends on the USER's turn — and `#runTurn`'s
+    // "already answered" guard reads exactly that. A restore that scheduled a
+    // turn would silently re-run the very turn the user killed, on first attach,
+    // burning tokens and doing unrequested work.
+    const stall = streamStalls('a long half-writ')
+    let leg = 0
+    const model = new MockLanguageModelV3({
+      modelId: 'mock-1',
+      // The first turn stalls until interrupted; a second one — which must not
+      // happen — would answer immediately and be unmissable.
+      doStream: (options) => (leg++ === 0 ? stall(options) : Promise.resolve(streamText('SHOULD NOT HAPPEN'))),
+    })
+    const h = harness({ languageModel: model })
+    h.runner.sendMessage('write me an essay')
+    // Interrupted *mid-flight*, which is the whole point: a turn that already
+    // finished leaves the history ending on the assistant, and the guard in
+    // `#runTurn` would cover for a restore that wrongly scheduled one.
+    await h.waitFor(() => h.eventsOf('stream_delta').length > 0)
+    await h.runner.interrupt()
+    await h.waitFor(() => h.eventsOf('turn_result').length === 1)
+    expect(h.eventsOf('turn_result')[0]).toMatchObject({ isError: true })
+    // The history really does end on the user — this is what makes the bug
+    // reachable, and if it ever stops being true this test stops proving anything.
+    expect(h.runner.messages.at(-1)?.role).toBe('user')
+
+    const snapshot = h.runner.snapshot()!
+
+    const resumed = new AiSdkRunner({
+      languageModel: model,
+      tools: TOOLS,
+      executableTools: ['remote_task'],
+      prompt: 'write me an essay',
+      restore: snapshot,
+    })
+    const after: SessionEvent[] = []
+    resumed.subscribe((e) => after.push(e), snapshot.seq)
+    void resumed.start()
+    // Long enough for a scheduled turn to have started and emitted something.
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(after.filter((e) => e.type === 'turn_result')).toHaveLength(0)
+    expect(
+      after.some((e) => e.type === 'status_changed' && 'status' in e && e.status === 'running'),
+    ).toBe(false)
+    expect(resumed.info().status).not.toBe('running')
   })
 
   it('rejects a snapshot from another engine', () => {

@@ -22,6 +22,19 @@ protocol. Read these before changing scope or structure:
   `SessionRunner.subscribe` skips below a `conversation_reset` (`/clear`) so a re-attach doesn't
   resurrect a cleared conversation while state events still replay; `activityCount` stays
   monotonic across the reset, because it is an unread cursor, not an item count.
+  `snapshotRetains(event)` is the fourth of the same family and the same shape of claim as the
+  coalescer: which events a *store* may drop without any client being able to tell. A
+  `RunnerSnapshot` embeds the whole event log and a log is mostly stream deltas — a four-character
+  token rides a ~180-byte envelope, sitting on disk beside the `assistant_message` that respells
+  it — which was affordable written once at a park and is not written after every turn. So
+  everything is retained except `stream_delta`, safe because a delta is superseded by construction
+  (both stream exits flush, the error path included) and because `transcriptActivity` scores it 0,
+  so the `activityCount` a restore recomputes is bit-identical and no unread cursor moves. That
+  last property is why this is *not* a cap on the log, which would have moved it. **Provider engine
+  only**: a Claude log's thinking blocks arrive empty and are backfilled from the delta stream, so
+  the same rule there would erase every thought — unreachable today (only that engine snapshots)
+  but an obligation any engine inherits with `park()`. Proof in
+  `packages/react/test/snapshot-retain.test.ts`, the same fold-equality property as the coalescer.
   `replayCoalesceKey(event)` is the third of the same family and the same shape of claim: which
   events are **last-write-wins on replay**, so the gateway can drop the fifty stale context and
   rate-limit polls a long session accumulates instead of shipping them all and having the client
@@ -94,7 +107,16 @@ protocol. Read these before changing scope or structure:
   that did not connect refuses to build, and `AiSdkRunner.mcpServers()` answers `/sessions/:id/mcp`
   with what the host actually assembled — an empty list, never a 501, which is why
   `ENGINE_CAPABILITIES.provider.mcpStatus` is now `true`. `park()` →
-  `RunnerSnapshot` + `restore` are the two halves of rehydration, and `seedVfs`/`id` are the two
+  `RunnerSnapshot` + `restore` are the two halves of rehydration; `snapshot()` is `park()`'s value
+  without its teardown (one shared private builder — the gate refuses a turn in flight and pending
+  *in-process* calls, and allows the idle case `park()` exists to refuse), which is what lets a
+  provider session survive a restart at all, having no engine-side store to resume from.
+  `start()`'s restore branch schedules **nothing**, and that is load-bearing rather than tidy: an
+  interrupted turn leaves the history ending on the *user* — the catch path flushes a partial
+  `assistant_message` for the transcript but never pushes the model's response messages — so a
+  scheduled turn would pass `#runTurn`'s "already answered" guard and re-run the very turn the
+  user killed, unprompted, on first attach. Unreachable while `park()` was the only snapshot
+  source; reachable the moment `snapshot()` existed. And `seedVfs`/`id` are the two
   options that make the *other* rehydration rules unmissable — `seedVfs` is ignored on a restore
   (seeding over a parked turn's files destroys exactly what was preserved) and `id` is what a
   session comes back as itself under. `subscribe(listener, afterSeq, { coalesceReplay })` is the
@@ -173,13 +195,28 @@ protocol. Read these before changing scope or structure:
   transcript at all, just the id, the `sdkSessionId` to resume from and the config to rebuild
   with, written continuously (off `system_init` + status changes, never a shutdown hook — a
   `kill -9` doesn't run one) and woken **lazily on first attach**, because respawning every
-  session at boot is a fork bomb. Between them every engine survives a restart. Three things
+  session at boot is a fork bomb. **Write-through** (`parking.persistLive`, off by default — a
+  library must not start writing transcripts to disk because someone upgraded) is the third, and
+  the restart story for the engine dormancy cannot cover: a provider session has no engine store
+  to resume from, so its record carries the state itself, taken with `snapshot()` on
+  `turn_result`/`model_changed`/`permission_mode_changed` and rebuilt lazily on first attach like
+  a dormant one. Between them every engine survives a restart. Four things
   hold it together and each is a bug if dropped: `listInfo` hides a record whose id the registry
   has (or every live session lists twice), the `session_closed` discard is skipped while
   `#closed` (the registry closes runners with the same 'server' reason a DELETE gives, so a
-  graceful shutdown would forget exactly what it was preserving), and waking one feeds its config
+  graceful shutdown would forget exactly what it was preserving), waking one feeds its config
   back through `buildRunnerConfig` rather than using it as-is — `env` is never persisted, so the
-  profile's `CLAUDE_CONFIG_DIR` pin has to be re-derived. Imports no model
+  profile's `CLAUDE_CONFIG_DIR` pin has to be re-derived — and a **`live` record is refreshed in
+  place on wake, never consumed** the way a park's is. That last one is a `kind` on the shared
+  `ParkedSessionRecord` rather than a new type (every other branch — rebuild, serve `vfs`, arm
+  `executions`, subscribe past `snapshot.seq` — is already right for both, and an older server
+  parses it down the parked arm, so a downgrade degrades instead of losing the file), and it is a
+  correctness difference: consuming it opens a window from the attach to the next turn in which
+  the session exists nowhere durable, so someone who opens a session, reads it and types nothing
+  loses it to a redeploy with no error and no trace. The write is also deliberately **not**
+  synchronous in the listener — `turn_result` is emitted before the turn's `finally` clears the
+  abort controller, so a direct `snapshot()` would see a turn in flight and refuse every time,
+  silently; `#queue`'s microtask hop is what puts it after. Imports no model
   SDK — a provider profile is built by the host's `createEngineRunner` hook; claude and codex
   profiles go through core's adapters. A Claude profile pins
   `CLAUDE_CONFIG_DIR` *except* when that would be a no-op — setting it at all moves the CLI off the
@@ -847,7 +884,13 @@ protocol. Read these before changing scope or structure:
   Express's default 404, or the whole connect fails; and a model told to omit an optional `id`
   sends `""` or `" "`, so no tool may infer its operation from an absent field. The MCP connect is
   `required: true` and the runner is built by `createProviderRunner` — this app is where both
-  seams came from, and it was the thing dropping `ctx.id`. Storage is `node:sqlite`, one file,
+  seams came from, and it was the thing dropping `ctx.id`. **Sessions survive a restart** — the
+  fourth decision in `gateway.ts` worth reading: `parking: { store: createFileSessionStore(...),
+  persistLive: true }`, which is the provider engine's only restart mechanism, plus the half that
+  is easy to miss — the cookie secret is **persisted** (`auth/secret.ts`, `EMBEDDED_SECRET` else a
+  0600 file beside the database) rather than per-process, because a scoped session 404s for
+  anyone else, so signing everyone out on boot would preserve every conversation and make each one
+  unreachable. Storage is `node:sqlite`, one file,
   zero deps. `EMBEDDED_MODEL` (default `gpt-5.6-luna`) is env, not a constant; there is **one**
   provider and one key, deliberately — the openai-compatible branch was removed because every
   branch in a reference app is a branch a reader must hold that teaches nothing about embedding.

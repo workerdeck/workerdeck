@@ -4,6 +4,7 @@ import { createAppState } from './app/state.ts'
 import { openWikiDb } from './wiki/db.ts'
 import { createEmbeddedGateway, PROFILE_NAME } from './gateway.ts'
 import { createCookieAuth } from './auth/cookie.ts'
+import { resolveSecret } from './auth/secret.ts'
 import { USERS } from './auth/users.ts'
 import { createWikiApi } from './wiki/trpc.ts'
 import { createWikiMcp } from './wiki/mcp.ts'
@@ -31,8 +32,12 @@ const host = process.env.HOST ?? '127.0.0.1'
 const dbFile = process.env.EMBEDDED_DB ?? fileURLToPath(new URL('../.embedded/wiki.db', import.meta.url))
 const webRoot = fileURLToPath(new URL('../dist', import.meta.url))
 
+const stateDir = fileURLToPath(new URL('../.embedded', import.meta.url))
+
 const db = openWikiDb(dbFile)
-const auth = createCookieAuth(process.env.EMBEDDED_SECRET)
+// Persisted, not per-process: a fresh secret on every boot signs everyone out,
+// and a signed-out user cannot see the sessions the restart just preserved.
+const auth = createCookieAuth(resolveSecret(`${stateDir}/cookie-secret`))
 const state = createAppState()
 const wikiMcp = createWikiMcp(db, state, USERS)
 // The same actions, for the browser: cookie-authenticated, typed end to end.
@@ -56,6 +61,7 @@ const app = createAppRoutes({
 const gateway = await createEmbeddedGateway({
   auth,
   wikiMcp,
+  sessionDir: `${stateDir}/sessions`,
   get mcpUrl() {
     return mcpUrl
   },

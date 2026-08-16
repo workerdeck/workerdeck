@@ -4,25 +4,49 @@ import type { ParkedExecution, RunnerSnapshot, SessionRunnerConfig } from '@work
 import type { SessionInfo } from '@workerdeck/protocol'
 
 /**
- * A session with its live runner torn down, waiting on deferred executions.
+ * A session captured whole: its wire-visible info, the config to rebuild the
+ * runner, the engine's snapshot, and what it is waiting for.
  *
- * Everything needed to bring it back: the wire-visible info (so it still lists and
- * reads over REST while parked), the config to rebuild the runner, the engine's
- * snapshot, and what it is waiting for.
+ * Two things are stored in this one shape, and the discriminator is `kind`:
+ *
+ * - **`parked`** — the live runner is torn down and the session is waiting on
+ *   deferred executions. The record *is* the session, so waking consumes it.
+ * - **`live`** — the runner is up and this is a copy taken after a turn, so the
+ *   session survives a restart (`persistLive`). It is a way back that the
+ *   session still needs the *next* time the process dies, so waking **refreshes
+ *   it in place** and only `session_closed` removes it.
+ *
+ * That difference is the whole reason these are two kinds rather than one, and
+ * it is a correctness difference, not bookkeeping: consuming a live record on
+ * wake opens a window from the attach to the next turn in which the session
+ * exists nowhere durable. A user who opens a session, reads it and types nothing
+ * would lose it to a redeploy — silently, which is the failure class worth
+ * spending a discriminator on.
+ *
+ * They share the shape so a store, and an older server, need no new code: every
+ * other branch (rebuild from `config` + `snapshot`, serve `snapshot.vfs`, arm
+ * `executions`, subscribe past `snapshot.seq`) is already right for both.
  */
 export type ParkedSessionRecord = {
   /** Absent on records written before dormant sessions existed — those are all parked. */
-  kind?: 'parked'
+  kind?: 'parked' | 'live'
   id: string
-  /** Session info as of the park, with `status: 'parked'`. */
+  /** Session info as of the write: `parked` for a park, `idle` for a live copy —
+   * never `running`, which would come back as a spinner over no process. */
   info: SessionInfo
   profile?: string
   /** The config the session was created with (profile defaults already applied). */
   config: SessionRunnerConfig
   snapshot: RunnerSnapshot
+  /** Empty for a live record: an idle session is waiting on nothing, so there is
+   * nothing for `hydrate` to arm a watchdog for. */
   executions: ParkedExecution[]
+  /** When it was written. Named for the park that came first. */
   parkedAt: number
 }
+
+/** A live record is refreshed in place on wake; a park is consumed by it. */
+export const isLiveRecord = (record: StoredSessionRecord): boolean => record.kind === 'live'
 
 /**
  * A live session, remembered so it can be brought back after a gateway restart.
@@ -286,6 +310,13 @@ function parseRecord(value: unknown): StoredSessionRecord | null {
   // The discriminator is optional on the wire: every record written before
   // dormant sessions existed is a park, and those files must keep working
   // across the upgrade that introduced this.
+  //
+  // A `live` record deliberately falls through to the parked arm and passes it —
+  // same fields, same requirements. That is what makes a *downgrade* graceful:
+  // an older server reads the file, lists the session idle, and restores it once
+  // (then consumes it, having no concept of refreshing in place). Losing
+  // write-through on a downgrade is the right cost; refusing to parse the file
+  // would lose the session.
   if (record.kind === 'dormant') {
     const dormant = record as Partial<DormantSessionRecord>
     if (typeof dormant.sdkSessionId !== 'string' || typeof dormant.savedAt !== 'number') return null

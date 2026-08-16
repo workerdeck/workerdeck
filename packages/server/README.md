@@ -208,6 +208,16 @@ OAuth, never reads or forwards tokens — see the repo README's
   VFS only when *not* restoring, and dispose per-session resources via `onClose`. Every one is a
   runtime-only failure. `createProviderRunner()` does all four; reach for the raw hook only when it
   genuinely doesn't fit.
+- **`parking.persistLive` is how a *provider* session survives a restart, and it needs a durable
+  store to mean anything.** Claude and codex go dormant — remembered by engine session id and
+  resumed from the engine's own store — which a provider session cannot do, so its record carries
+  the state itself, written through after every turn. With the default in-memory store the option
+  does nothing and says nothing. It is off by default: a library must not start writing sessions'
+  transcripts to disk because someone upgraded, and the record holds the whole transcript in
+  plaintext.
+- **A restored session is refreshed in place, not consumed.** A park's record *is* the session and
+  is deleted on wake; a live or dormant one is a way back the session still needs next time. If you
+  implement a `SessionStore`, do not "tidy up" a record on read.
 - **One origin is not a convenience.** A browser cannot put an `Authorization` header on a
   WebSocket upgrade, so a cookie is the only credential a tab can present on an attach, and a
   cookie is per-origin. That is what `fallback` is for — an app served from the gateway's own port.

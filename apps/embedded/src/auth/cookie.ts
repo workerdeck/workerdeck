@@ -10,9 +10,14 @@ export const SESSION_COOKIE = 'embedded_user'
  *
  * Signed rather than random-and-stored because the cookie *is* the whole session
  * table otherwise, and a restart would log everyone out — which would make the
- * gateway's own restart story impossible to demo. The secret is per-process
- * unless `EMBEDDED_SECRET` is set, so a restart without one does log everyone
- * out; that is the honest trade and it is one line to change.
+ * gateway's own restart story impossible to demo.
+ *
+ * The secret it signs with therefore has to outlive the process too, and that is
+ * `resolveSecret`'s job rather than this one's: agent sessions now survive a
+ * restart, so a login that did not would leave a user staring at an empty
+ * sidebar while their restored conversations sat behind a 404. The default
+ * argument stays random for a caller that wants a throwaway (a test), and is not
+ * what the app passes.
  */
 export function createCookieAuth(secret: string = randomBytes(32).toString('hex')) {
   const sign = (value: string): string =>

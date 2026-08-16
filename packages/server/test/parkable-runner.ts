@@ -31,11 +31,15 @@ export class ParkableRunner implements Runner {
   #pending = new Map<string, ParkedExecution>()
   #files: Record<string, string>
   #parked = false
+  /** Stands in for the provider engine's `ModelMessage[]`: the thing a park
+   * preserves and a write-through has to carry across a restart. */
+  #messages: string[] = []
 
   constructor(id: string, config: SessionRunnerConfig, restore?: RunnerSnapshot) {
     this.id = id
     this.#config = config
     this.#files = restore?.vfs ?? { '/out/report.md': '# draft' }
+    this.#messages = [...((restore?.state as { messages?: string[] })?.messages ?? [])]
     this.vfs = {
       list: () => Object.keys(this.#files).sort(),
       read: (path) => this.#files[path],
@@ -45,8 +49,12 @@ export class ParkableRunner implements Runner {
     if (restore) {
       this.#seq = restore.seq
       this.#events = [...restore.events]
-      this.#status = 'parked'
       for (const execution of restore.parked) this.#pending.set(execution.executionId, execution)
+      // Derived, exactly as the real runner derives it: a snapshot with nothing
+      // pending is an *idle* session that was written through, not a parked one.
+      // Hardcoding 'parked' here would have every restored live session come
+      // back claiming to wait on work it does not have.
+      this.#status = this.#pending.size > 0 ? 'parked' : 'idle'
     }
   }
 
@@ -62,6 +70,18 @@ export class ParkableRunner implements Runner {
     if (this.#parked || this.#pending.size === 0) return undefined
     this.#parked = true
     this.#listeners.clear()
+    return this.#buildSnapshot()
+  }
+
+  /** The non-destructive half, mirroring the real runner: same value, nothing
+   * torn down, and allowed at rest with nothing pending — which is exactly the
+   * case `park()` above refuses. */
+  snapshot(): RunnerSnapshot | undefined {
+    if (this.#parked) return undefined
+    return this.#buildSnapshot()
+  }
+
+  #buildSnapshot(): RunnerSnapshot {
     return {
       engine: 'provider',
       id: this.id,
@@ -70,8 +90,18 @@ export class ParkableRunner implements Runner {
       events: [...this.#events],
       vfs: { ...this.#files },
       parked: [...this.#pending.values()],
-      state: { messages: [] },
+      state: { messages: [...this.#messages] },
     }
+  }
+
+  /** What the session has said and been told — the history a restart must keep. */
+  get messages(): string[] {
+    return [...this.#messages]
+  }
+
+  /** Write to the scratch filesystem, so a round-trip has something to prove. */
+  writeFile(path: string, content: string): void {
+    this.#files[path] = content
   }
 
   settleExecution(executionId: string, result: ToolExecutionResult): boolean {
@@ -88,6 +118,30 @@ export class ParkableRunner implements Runner {
       this.#emit({ type: 'status_changed', status: 'running' })
     }
     return true
+  }
+
+  /** Take a turn, the way a live conversation does: the prompt and the answer
+   * both land in the history, and the turn ends. */
+  turn(prompt: string, answer: string): void {
+    this.#status = 'running'
+    this.#emit({ type: 'status_changed', status: 'running' })
+    this.#messages.push(`user:${prompt}`)
+    this.#emit({ type: 'user_message', message: { role: 'user', content: prompt }, parentToolUseId: null })
+    this.#messages.push(`assistant:${answer}`)
+    this.#emit({
+      type: 'assistant_message',
+      message: { role: 'assistant', content: [{ type: 'text', text: answer }], model: 'test-model' },
+      parentToolUseId: null,
+      uuid: `a${this.#seq}`,
+    })
+    this.finish()
+    this.#emit({ type: 'status_changed', status: 'idle' })
+  }
+
+  /** Switch the model — one of the write-through triggers, and the one that can
+   * fire while the session is anything but idle. */
+  changeModel(model: string): void {
+    this.#emit({ type: 'model_changed', model })
   }
 
   /** Finish the run, the way a completed turn would. */
@@ -119,6 +173,12 @@ export class ParkableRunner implements Runner {
       // Echoed like every real runner — `buildRunner` asserts on it, and every
       // scope check downstream reads it.
       scope: this.#config.scope,
+      // `info().meta` IS the live `#config.meta`, which is what `setTitle`
+      // writes — the property both record kinds depend on to carry a rename
+      // across a restart. Absent here, a rename looked correct in the listing
+      // and died on the wake, which is exactly the bug it must not have.
+      meta: this.#config.meta,
+      title: typeof this.#config.meta?.title === 'string' ? this.#config.meta.title : undefined,
     }
   }
   subscribe(listener: (event: SessionEvent) => void, afterSeq = 0): () => void {

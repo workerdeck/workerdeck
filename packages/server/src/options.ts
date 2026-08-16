@@ -331,6 +331,22 @@ export type WorkerServerOptions = {
     /** Grace given on boot to an execution whose deadline passed while the server
      * was down (durable stores only — nothing else survives a restart). Default 60000. */
     expiredGraceMs?: number
+    /**
+     * Keep live `provider` sessions written through to the store after each
+     * turn, so they survive a gateway restart. **Off by default** — this writes
+     * a session's whole transcript to `store` and a library must not start doing
+     * that because someone upgraded.
+     *
+     * It is the restart story for the one engine dormancy cannot cover: claude
+     * and codex are remembered by *engine session id* and resumed from their own
+     * on-disk store, which a provider session does not have. Pair it with a
+     * durable `store` — with the default in-memory one it does nothing a park
+     * did not already do.
+     *
+     * The record is rebuilt lazily, on first attach, exactly like a dormant one;
+     * a boot with fifty remembered sessions spawns nothing.
+     */
+    persistLive?: boolean
     /** Park/remember/resume failures — storage or engine-assembly problems, not
      * session errors. 'remember' is the write that lets a live session survive a
      * restart; losing one costs that session its way back and nothing else. */

@@ -8,6 +8,7 @@ import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
 import type { SessionRegistry } from './registry.ts'
 import {
   isDormant,
+  isLiveRecord,
   type DormantSessionRecord,
   type ParkedSessionRecord,
   type SessionStore,
@@ -31,6 +32,24 @@ export type SessionParkOptions = {
   /** Wait this long after the last client detaches before parking, so a reconnect
    * (a wifi blip, a page reload) doesn't cost a teardown. Default 2000. */
   parkDelayMs?: number
+  /**
+   * Keep a live session's snapshot written through to the store, so it survives
+   * a gateway restart. **Off by default**: a library must not start writing a
+   * session's whole transcript to disk because someone upgraded.
+   *
+   * This is the restart story for the engine that cannot go dormant. Dormancy
+   * works by remembering an *engine* session id to resume from, which the
+   * provider engine does not have — there is no store behind it, the history
+   * lives in the runner. What it has instead is `snapshot()`, so the record
+   * carries the state itself and rehydration is the ordinary `restore` path.
+   * Between the two, every engine survives a restart.
+   *
+   * Written at the end of a turn, never on a shutdown hook — a `kill -9`, an OOM
+   * or a pulled power cable run no hook, and that is precisely the case this
+   * exists for. Turn-end is also a natural rate limit: one write per turn, not
+   * one per token.
+   */
+  persistLive?: boolean
   /** Grace given at {@link SessionParkManager.hydrate} to an execution whose
    * deadline passed while the server was down. Its result could not have been
    * delivered during the outage, so failing it the instant the process is back
@@ -126,6 +145,13 @@ export class SessionParkManager {
    */
   touch(runner: Runner): void {
     void this.#rememberDormant(runner)
+    // Both, because a session has exactly one of the two record kinds and this
+    // has no business knowing which: `#rememberDormant` no-ops for a provider
+    // session (no `resume` capability) and `#persistLive` no-ops for a claude or
+    // codex one (no `snapshot()`). Without this half, a renamed provider session
+    // survives the listing and comes back under its old title — the same bug
+    // this method was added for, one engine over.
+    void this.#persistLive(runner)
   }
 
   /**
@@ -172,6 +198,19 @@ export class SessionParkManager {
         case 'status_changed':
           if (event.status === 'parked') void this.#park(runner)
           else void this.#rememberDormant(runner)
+          return
+        case 'turn_result':
+          // The write-through moment: a turn has ended, so the history is whole
+          // and the snapshot is cheap to justify.
+          void this.#persistLive(runner)
+          return
+        case 'permission_mode_changed':
+        case 'model_changed':
+          // Both are part of what "the session is still there" means, and both
+          // can be flipped between turns — so neither is covered by turn_result
+          // alone. Flipped *mid*-turn, `snapshot()` refuses (a turn is in
+          // flight) and the turn's own write covers it a moment later.
+          void this.#persistLive(runner)
           return
         case 'system_init':
           // The first moment a resume is even possible: before the engine names
@@ -348,6 +387,72 @@ export class SessionParkManager {
     }
   }
 
+  /**
+   * Write a live session's snapshot through to the store, so a restart can
+   * rebuild it. The counterpart to {@link #rememberDormant} for the engine that
+   * has no engine-side session to resume from — same discipline, different
+   * mechanism: that one remembers *where the transcript is*, this one carries it.
+   *
+   * The gates are the same four, plus the option and the engine's ability. The
+   * `registry.get(runner.id) !== runner` check is doing the same work it does
+   * there: a runner that has been evicted (parked, or replaced by a rebuild)
+   * finds itself a stranger here and writes nothing, so a late event cannot
+   * overwrite a park with a stale live record.
+   *
+   * **This must not run synchronously inside the event listener**, and that is
+   * easy to lose. `turn_result` is emitted from inside the turn, *before* the
+   * `finally` that clears the runner's abort controller — so a `snapshot()`
+   * called straight from the listener would see a turn in flight and refuse,
+   * every single time, silently. `#queue`'s microtask hop is what puts the call
+   * after it. A refactor that "simplifies" this into a direct call produces a
+   * write-through that never writes and nothing that says so.
+   */
+  async #persistLive(runner: Runner): Promise<void> {
+    if (this.#closed || !this.#options.persistLive || !runner.snapshot) return
+    const config = this.#configs.get(runner.id)
+    if (!config) return
+    if (this.#options.registry.get(runner.id) !== runner) return
+    try {
+      await this.#queue(runner.id, async () => {
+        // Re-checked inside the queue: this runs a tick or more after the event,
+        // and the session may have parked or been evicted in between — a park's
+        // record must not be overwritten by the live copy queued behind it.
+        if (this.#closed || this.#options.registry.get(runner.id) !== runner) return
+        const snapshot = runner.snapshot?.()
+        if (!snapshot) return
+        const info = runner.info()
+        const record: ParkedSessionRecord = {
+          kind: 'live',
+          id: runner.id,
+          // Idle, never the live status: a record that came back saying
+          // `running` would show a spinner over a session with no process, and
+          // one saying `parked` would claim it waits on work it does not have.
+          info: { ...info, status: 'idle' },
+          profile: info.profile,
+          // `info.meta` IS the runner's live `#config.meta`, and `#configs`
+          // never sees a rename — the same reason `#rememberDormant` spells it
+          // this way. Without it a renamed session comes back under its old
+          // title, having listed correctly right up until the restart.
+          config: { ...config, meta: info.meta },
+          snapshot,
+          // Whatever it is waiting on, which is empty for the ordinary idle
+          // write and is *not* for the case that matters: a session parked on
+          // deferred work stays live while a client is attached (`#park` defers
+          // to the socket), so this record is its only durable one and `hydrate`
+          // re-arms the watchdogs from exactly this list.
+          executions: snapshot.parked,
+          parkedAt: Date.now(),
+        }
+        await this.#options.store.save(record)
+      })
+    } catch (error) {
+      // Losing this costs the session its way back after a restart, and nothing
+      // else — the live session is untouched. Same phase as the dormant write:
+      // they are the same operation for different engines.
+      this.#options.onError?.(error, { sessionId: runner.id, phase: 'remember' })
+    }
+  }
+
   async #park(runner: Runner): Promise<void> {
     if (this.#closed || !runner.park) return
     const id = runner.id
@@ -434,11 +539,20 @@ export class SessionParkManager {
     // to skip and nothing deferred in it to re-index.
     this.watch(runner, isDormant(record) ? 0 : record.snapshot.seq)
     this.#options.onResumed?.(id, runner)
-    // A park's record *is* the session — consumed on wake. A dormant one is a
-    // way back that the session still needs the next time the process dies, so
-    // it stays and is refreshed in place; `listInfo` already hides it while the
-    // registry has the session, and `discard` removes it when the session ends.
-    if (!isDormant(record)) await this.#queue(id, () => this.#options.store.delete(id))
+    // A park's record *is* the session — consumed on wake. A dormant one, and a
+    // live one, are a way back that the session still needs the next time the
+    // process dies, so they stay and are refreshed in place; `listInfo` already
+    // hides them while the registry has the session, and `discard` removes them
+    // when the session ends.
+    //
+    // Consuming a live record here would be the feature's worst bug rather than
+    // a tidier lifecycle: it opens a window from this attach to the next turn in
+    // which the session exists nowhere durable, so someone who opens a session,
+    // reads it and types nothing loses it to a redeploy — with no error and no
+    // trace.
+    if (!isDormant(record) && !isLiveRecord(record)) {
+      await this.#queue(id, () => this.#options.store.delete(id))
+    }
     void runner.start()
     return runner
   }

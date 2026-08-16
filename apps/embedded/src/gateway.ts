@@ -4,6 +4,7 @@ import type { LanguageModel } from 'ai'
 import { connectMcpTools, QuickJsExecutor } from '@workerdeck/core'
 import { loadEngine } from '@workerdeck/sandbox'
 import {
+  createFileSessionStore,
   createProviderRunner,
   createWorkerServer,
   sandboxedProviderProfile,
@@ -54,6 +55,8 @@ export type GatewayDeps = {
   mcpUrl: string
   /** Serves everything outside the gateway's basePath — the SPA, /api, /mcp. */
   fallback: WorkerServerOptions['fallback']
+  /** Where the session records live, beside the wiki database. */
+  sessionDir: string
 }
 
 /**
@@ -98,8 +101,9 @@ export type EmbeddedGateway = {
 /**
  * The embedded gateway.
  *
- * Three things here are the actual reference material, and each is a decision
- * the plain `createWorkerServer` docs cannot make for you:
+ * Four things here are the actual reference material, and each is a decision
+ * the plain `createWorkerServer` docs cannot make for you (the fourth,
+ * `parking`, is documented at the call itself):
  *
  * 1. **`authenticate` resolves the app's own cookie into a scoped principal.**
  *    `scope: { user }` is what makes every session route, the WS attach and the
@@ -147,6 +151,38 @@ export async function createEmbeddedGateway(deps: GatewayDeps): Promise<Embedded
   const server = createWorkerServer({
     profiles: [profile],
     fallback: deps.fallback,
+
+    /**
+     * Sessions survive a restart — the fourth decision worth reading here.
+     *
+     * The provider engine has no on-disk session of its own to resume from
+     * (that is claude and codex, and it is what dormancy uses), so the record
+     * has to carry the state itself: `persistLive` writes the runner's snapshot
+     * through after every turn, and a restart rebuilds from it lazily, on the
+     * first attach. Transcript, message history, scratch VFS, model and
+     * permission mode all come back; the session keeps its id, so the tab's
+     * route and its scope still resolve.
+     *
+     * Two things this pairs with, neither of them optional:
+     * - a **durable** store. With the default in-memory one this option does
+     *   nothing, and the failure is silent.
+     * - a **persisted cookie secret** (`resolveSecret`), because a scoped
+     *   session answers 404 to anyone else — signing everyone out on boot would
+     *   preserve every conversation and make each one unreachable.
+     *
+     * Know what is on that disk: the record holds the session's whole
+     * transcript in plaintext. `.embedded/` is beside the wiki database and
+     * wants the same protection.
+     */
+    parking: {
+      store: createFileSessionStore({
+        dir: deps.sessionDir,
+        onError: (error, context) => {
+          console.error(`[sessions] ${context.op} ${context.path}:`, error)
+        },
+      }),
+      persistLive: true,
+    },
 
     /**
      * The cookie is the only credential a WebSocket attach can carry, so this

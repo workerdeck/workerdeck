@@ -165,6 +165,13 @@ selectExecutor: () => new DeferredExecutor({
 for you — a `SessionStore` plus `POST /executions/:id/result` — but the mechanism is here, and works
 with no server at all.
 
+`snapshot()` is the same value **without** the teardown: the runner stays live, attached and warm.
+That separation is what makes a provider session survive a process restart, since it has no
+engine-side store to resume from the way claude and codex do — the host writes the snapshot through
+after each turn and rebuilds from the last one. The gate differs from `park()`'s in one direction
+only: it refuses a turn in flight and pending *in-process* executions (whose results die with the
+process), and allows the idle case `park()` exists to refuse.
+
 ## Rules you cannot infer from the types
 
 Things the compiler will not tell you, each of which has cost someone real time:

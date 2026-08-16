@@ -19,6 +19,7 @@ import {
   type SessionInfo,
   type SessionStatus,
   type ToolExecutionBackend,
+  snapshotRetains,
   transcriptActivity,
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
@@ -289,10 +290,22 @@ export class AiSdkRunner implements Runner {
     if (this.#started) return this.#turnChain
     this.#started = true
     if (this.#config.restore) {
-      // Rehydrated mid-task: the prompt was consumed by the original run, and the
-      // history is already a turn in progress. Waiting on its parked executions is
-      // the whole point — the loop re-enters when one is settled.
-      if (this.#pendingToolCalls.size === 0) this.#scheduleTurn()
+      // Rehydrated: the prompt was consumed by the original run, and the history
+      // is whatever the snapshot captured. **Schedule nothing.** Waiting is the
+      // whole point — a parked session re-enters the loop when an execution is
+      // settled, and an idle one when the user says something.
+      //
+      // There used to be a `if (#pendingToolCalls.size === 0) #scheduleTurn()`
+      // here, and it was unreachable: `park()` only ever produced a snapshot
+      // while resting on deferred calls, so the size was never 0. `snapshot()`
+      // makes it reachable, and it would be a live bug — an *interrupted* turn
+      // leaves the history ending on the user's message (the catch path flushes
+      // a partial `assistant_message` for the transcript but never pushes the
+      // model's response messages, since the throw skipped that), so
+      // `#runTurn`'s "already answered" guard would pass and the restored
+      // session would re-run the very turn the user killed, unprompted, on first
+      // attach. Restoring behaves exactly as the live session did: the
+      // interrupted turn stays interrupted, and the next message answers both.
       return this.#turnChain
     }
     this.#setStatus('idle')
@@ -315,6 +328,65 @@ export class AiSdkRunner implements Runner {
     // Emitted before the snapshot so the persisted log carries the transition and
     // still-attached listeners see it.
     this.#setStatus('parked')
+    const snapshot = this.#buildSnapshot()
+    this.#parked = true
+    this.#listeners.clear()
+    try {
+      void Promise.resolve(this.#config.onClose?.()).catch(() => {})
+    } catch {
+      // Disposer errors must not break the park — the snapshot is already taken.
+    }
+    return snapshot
+  }
+
+  /**
+   * The same snapshot, taken without ending anything.
+   *
+   * `park()` and this are two operations that happen to produce the same value,
+   * and the difference is the whole point: `park()` *ends* the live runner
+   * (inert, listeners dropped, `onClose` called), which is right for deferred
+   * execution — the session has nothing to do for possibly days — and wrong for
+   * restart-survival, where the session is active and someone is mid-
+   * conversation. This one changes nothing at all: no status emit, no listener
+   * clear, no disposer. The host writes the value through to durable storage
+   * after each turn and keeps the runner live and warm, so a restart rebuilds
+   * from the last write through the existing `restore` path and the next message
+   * costs no wake.
+   *
+   * The gate is `park()`'s minus the requirement that there be something parked:
+   *
+   * - `#abort` set is refused for the reason it always was — a `generate()` in
+   *   flight has produced messages that are not in the history yet, so the
+   *   snapshot would be of a turn that half-happened.
+   * - Pending calls that are **not** all deferred are refused, which is
+   *   `park()`'s rule wearing a different hat. An in-process execution's result
+   *   is coming back to *this* runner and dies with the process; a restore would
+   *   wait on it forever, and `state.dispatched` is what would stop the rebuilt
+   *   runner from simply calling it again.
+   * - Idle with nothing pending — the case `park()` exists to refuse — is
+   *   exactly the case this exists to allow.
+   */
+  snapshot(): RunnerSnapshot | undefined {
+    if (this.#closed || this.#parked || this.#abort) return undefined
+    if (this.#pendingToolCalls.size > 0 && !this.#restingOnDeferred()) return undefined
+    return this.#buildSnapshot()
+  }
+
+  /**
+   * The snapshot value itself, shared so a park and a write-through cannot
+   * disagree about what a session *is*.
+   *
+   * The event log is filtered through {@link snapshotRetains} — the persisted
+   * log drops stream deltas, which are superseded by the `assistant_message`
+   * that flushes them and would otherwise be tens of times the size of the text
+   * they spell. Parks get it too, and should: a park sits on disk for days.
+   *
+   * The `parked` list and `state.parkedAt` are honest under both callers. An
+   * idle write-through has no pending calls, so `parked` is empty and the host
+   * arms no watchdogs; `parkedAt` is "when this was taken", which is what
+   * `#restore` needs to discount a turn's clock either way.
+   */
+  #buildSnapshot(): RunnerSnapshot {
     const parked: ParkedExecution[] = [...this.#pendingToolCalls.values()].map((call) => ({
       executionId: call.toolCallId,
       toolName: call.toolName,
@@ -332,24 +404,16 @@ export class AiSdkRunner implements Runner {
       lastActivityAt: this.#lastActivityAt,
       parkedAt: Date.now(),
     }
-    const snapshot: RunnerSnapshot = {
+    return {
       engine: 'provider',
       id: this.id,
       createdAt: this.createdAt,
       seq: this.#seq,
-      events: [...this.#events],
+      events: this.#events.filter((event) => snapshotRetains(event)),
       vfs: this.#config.vfs?.snapshot(),
       parked,
       state,
     }
-    this.#parked = true
-    this.#listeners.clear()
-    try {
-      void Promise.resolve(this.#config.onClose?.()).catch(() => {})
-    } catch {
-      // Disposer errors must not break the park — the snapshot is already taken.
-    }
-    return snapshot
   }
 
   sendMessage(text: string, attachments?: readonly AttachmentInput[]): void {

@@ -1484,6 +1484,52 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
 }
 
 /**
+ * Does a `RunnerSnapshot` keep this event in its persisted log?
+ *
+ * The fourth of the same family, and the same shape of claim as
+ * {@link replayCoalesceKey}: which events a *store* may drop without any client
+ * being able to tell. It exists because a snapshot embeds the whole event log,
+ * and a log is mostly stream deltas — a four-character token rides a ~180-byte
+ * JSON envelope, so the delta run is tens of times the size of the text it
+ * spells, sitting on disk *beside* the `assistant_message` that respells it in
+ * full. That was affordable while a snapshot was written once, at a park. It is
+ * not affordable written after every turn, which is what restart-survival needs.
+ *
+ * So: everything is retained except `stream_delta`. The reason that is safe is
+ * not that deltas are unimportant but that they are **superseded by
+ * construction**. The reducer upserts them under one constant id and the
+ * following `assistant_message` filters exactly that id out and rebuilds from
+ * the full content blocks — and a snapshot may only be taken at a rest point,
+ * where the stream loop has exited and flushed. Both exits flush, including the
+ * error path: an interrupted turn pushes its half-finished buffers into a
+ * durable `assistant_message` before it emits the failed `turn_result`. There is
+ * no rest state in which a delta is the only record of anything.
+ *
+ * **Provider engine only**, and this is the carve-out that must not be lost:
+ * against a *Claude* log the rule would be wrong. The Claude SDK delivers
+ * thinking blocks whose text is `''`, with the human-readable summary existing
+ * only in the delta stream, and the reducer carries the streamed text over to
+ * fill them (`transcript.ts`, the `streamedThinking` backfill). Dropping deltas
+ * there would silently erase every thought from a restored transcript. Today
+ * that is unreachable rather than merely avoided — only the provider engine
+ * implements `park()`/`snapshot()` at all, and `#restore` refuses a snapshot
+ * from another engine — but an engine that gains one inherits this obligation.
+ *
+ * Two properties hold it up, both of which are tests rather than arguments:
+ * folding the full log and the retained log through `applyEvent` yields
+ * identical state (`packages/react/test/snapshot-retain.test.ts`, the same
+ * property `replay-coalesce.test.ts` asserts), and the retained log's last event
+ * still carries the snapshot's own `seq`. The second matters more than it looks:
+ * `transcriptActivity(stream_delta)` is 0, so the count `#restore` recomputes
+ * from the log is bit-identical — a client's unread cursor cannot move — and the
+ * replay hold waits for `state.lastSeq` to reach the attach's `lastSeq`, which a
+ * rule that could drop the final event would hang forever.
+ */
+export function snapshotRetains(body: SessionEventBody): boolean {
+  return body.type !== 'stream_delta'
+}
+
+/**
  * A session in an engine's on-disk store (independent of this server's registry):
  * the Agent SDK's session files, or a codex profile's CODEX_HOME threads. Listed
  * so hosts can offer "resume" across server restarts: feed `sessionId` to

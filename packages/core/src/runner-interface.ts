@@ -126,6 +126,25 @@ export interface Runner {
    * doesn't: the CLI owns its own process state).
    */
   park?(): RunnerSnapshot | undefined
+  /**
+   * The same snapshot, taken **without ending anything** — the runner stays live,
+   * attached and warm.
+   *
+   * Park and snapshot are two operations that happen to produce the same value,
+   * and separating them is what makes restart-survival possible for an engine
+   * that has no on-disk session of its own. A park is for a session with nothing
+   * to do for possibly days; this is for one whose user is mid-conversation and
+   * whose process might be redeployed out from under it. The host writes it
+   * through after each turn — never on a shutdown hook, because a `kill -9` runs
+   * no hook and that is precisely the case worth surviving — and rebuilds from
+   * the last write through the ordinary `restore` path.
+   *
+   * Returns undefined when a snapshot would capture a half-happened turn: one in
+   * flight, or pending in-process executions whose results die with the process.
+   * Optional for the same reason `park()` is — claude and codex run behind a
+   * binary that owns its process state, and have engine-side resume instead.
+   */
+  snapshot?(): RunnerSnapshot | undefined
   /** Emit a session_error and terminate. For host-enforced policy (e.g. requireApiKey). */
   fail(message: string): void
   /** Terminate the session and any underlying engine process. */

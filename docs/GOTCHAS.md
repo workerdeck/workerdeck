@@ -560,8 +560,39 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     reaches disk, so a claude profile's `CLAUDE_CONFIG_DIR` pin must be re-derived from the
     profile rather than read back. Handing the stored config to the engine as-is would strand a
     rehydrated session on the wrong credential store.
-  - A park's record is *consumed* on wake; a dormant one is refreshed in place, because the
-    session will need it again the next time the process dies.
+  - A park's record is *consumed* on wake; a dormant one — **and a live one** — is refreshed in
+    place, because the session will need it again the next time the process dies. Getting that
+    wrong for a live record is the sharpest bug in this area: consuming it opens a window from the
+    attach to the next turn in which the session exists nowhere durable, so a user who opens a
+    session, reads it and types nothing loses it to a redeploy, with no error and no trace.
+- **The provider engine's restart story is `snapshot()`, not dormancy, and it is off by default.**
+  Dormancy remembers an *engine* session id to resume from; a provider session has no engine store
+  behind it, so its record carries the state itself. `Runner.snapshot()` is `park()`'s value
+  without `park()`'s teardown — same builder, different gate: it refuses a turn in flight and
+  pending *in-process* executions (whose results die with the process), and allows the idle case
+  `park()` exists to refuse. `parking.persistLive` writes it through on `turn_result`,
+  `model_changed` and `permission_mode_changed`; the record is `kind: 'live'`, rebuilt lazily on
+  first attach like a dormant one. Two things it is easy to get wrong:
+  - **The write must not be synchronous in the event listener.** `turn_result` is emitted from
+    *inside* the turn, before the `finally` that clears the abort controller — so a `snapshot()`
+    called straight from the listener sees a turn in flight and refuses, every time, silently.
+    `#queue`'s microtask hop is what puts it after. A refactor that "simplifies" the hop away
+    produces a write-through that never writes and nothing that says so.
+  - **The persisted log drops stream deltas** (`snapshotRetains` in protocol). Safe because a
+    delta is superseded by the `assistant_message` that flushes it — including on the error path,
+    where an interrupted turn flushes its partial buffers before the failed `turn_result` — and
+    because `transcriptActivity(stream_delta)` is 0, so the `activityCount` a restore recomputes
+    from the log is bit-identical and no client's unread cursor moves. A *cap* on the log would
+    have broken exactly that. The rule is **provider-only**: a Claude log's thinking blocks arrive
+    empty and are backfilled from the delta stream, so the same rule there would silently erase
+    every thought.
+- **A restored session must not schedule a turn.** `AiSdkRunner.start()`'s restore branch
+  deliberately schedules nothing. An *interrupted* turn leaves the message history ending on the
+  user (the catch path flushes a partial `assistant_message` for the transcript but never pushes
+  the model's response messages), so `#runTurn`'s "already answered" guard would pass and the
+  woken session would re-run the very turn the user killed — unprompted, on first attach, burning
+  tokens. It was unreachable while `park()` was the only source of snapshots (it required pending
+  deferred calls); `snapshot()` makes it reachable. `park-restore.test.ts` pins it.
   - **The wake must clear `prompt`, and carry the title as it does.** `prompt` is the session's
     *opening* prompt, it persists in the record, and `SessionRunner.start()`/`CodexRunner` send it
     unconditionally — so a session created with one used to re-run it as a fresh turn on top of the

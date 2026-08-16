@@ -168,6 +168,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     store: options.parking?.store ?? new MemorySessionStore(),
     parkDelayMs: options.parking?.parkDelayMs,
     expiredGraceMs: options.parking?.expiredGraceMs,
+    persistLive: options.parking?.persistLive,
     onError: options.parking?.onError,
     // A park restores from its snapshot; a dormant record has none, so it is
     // rebuilt like an ordinary create — the config back through

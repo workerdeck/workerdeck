@@ -160,12 +160,40 @@ web/
 `auth/` splits on purpose: `users.ts` is the demo and is meant to be deleted, `cookie.ts` is the
 part worth keeping whatever ends up resolving the identity.
 
+## Sessions survive a restart
+
+Kill the server mid-conversation, start it again, reload the tab: the sidebar still lists the
+session, and opening it brings back the transcript, the message history, the scratch filesystem,
+the model and the permission mode. It is two options and one non-obvious companion:
+
+```ts
+parking: { store: createFileSessionStore({ dir: '.embedded/sessions' }), persistLive: true }
+```
+
+`persistLive` writes the runner's snapshot through after every turn — never on a shutdown hook,
+because a `kill -9` runs no hook and that is the case worth surviving — and a restart rebuilds
+lazily, on the first attach. This is the *provider* engine's restart mechanism specifically: claude
+and codex have engine-side stores and go dormant instead, remembering only a session id to resume
+from. A provider session has no such store, so its record carries the state itself.
+
+The companion is `auth/secret.ts`: the cookie secret is **persisted** (`EMBEDDED_SECRET`, else a
+0600 file beside the database) rather than randomised per process. A scoped session answers 404 to
+anyone else, so signing everyone out on boot would preserve every conversation and leave every one
+of them unreachable — the feature would look completely broken while working perfectly.
+
+Two things to know before copying this into a real deployment: the record holds the session's whole
+transcript in plaintext, so `.embedded/` wants the protection you would give `~/.claude/projects`;
+and the file store is single-host by design — more than one replica needs a `SessionStore` over
+shared storage plus a lease, or two pods will rebuild the same session id.
+
 ## Known edges
 
-- **Sessions do not survive a server restart.** The provider engine reports `resume: false`, so
-  dormancy skips it, and `park()` only applies to a loop resting on deferred calls. Restart the
-  server and the sidebar starts empty. On Kubernetes that means conversation lifetime = pod
-  lifetime; see `docs/GOTCHAS.md` §Session scope.
+- **Nothing reaps the session records.** A session nobody closes keeps its file forever. The queue
+  has a retention sweeper; this needs one before it runs anywhere real.
+- **Attachment bytes do not survive a restart.** They are held in memory and the persisted events
+  carry only refs, so a restored transcript would render a chip whose fetch 404s. Moot here — this
+  profile's capability record does not admit attachments — but it bites any embedder that raises
+  that grant.
 - **Visibility is full control.** A principal who can see a session can drive it — send messages,
   interrupt, close. There is no read-only sharing level yet.
 - **The MCP endpoint is stateless and answers `405` to `GET`.** Silkweave's transport serves one
