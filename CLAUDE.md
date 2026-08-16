@@ -74,11 +74,11 @@ protocol. Read these before changing scope or structure:
   (provider, over AI SDK v7, built by the host's `createEngineRunner` hook — its adapter is a
   pseudo-adapter). The
   **model list clients see is shaped here**, not by each UI: catalogs apply
-  `modelOptionsFromSdk`'s rules (`src/normalize.ts`) at authoring time — no `default` sentinel
+  `modelOptionsFromSdk`'s rules (`src/lib/normalize.ts`) at authoring time — no `default` sentinel
   row, names derived from resolved ids (`claude-haiku-4-5-20251001` → "Haiku 4.5"), newest of
   each family `primary` — and the live `capabilities` event still exists for the in-session
   model switcher and slash commands (both truths are load-bearing, see `docs/GOTCHAS.md`).
-  `src/patch.ts` is where both engines' edit output becomes protocol's one `FilePatch`
+  `src/lib/patch.ts` is where both engines' edit output becomes protocol's one `FilePatch`
   (`filePatchFromToolResult` off the Claude SDK's `tool_use_result`, `parseUnifiedDiff` off codex's
   `fileChange.diff`), so a client renders one shape with no per-engine branch and no diff parser of
   its own. No transport. Tool execution rides the
@@ -101,7 +101,7 @@ protocol. Read these before changing scope or structure:
   third filter on a replay and the only opt-in one, because it is only sound for a consumer whose
   handling of those events is last-write-wins: the WS attach is the single caller, while
   `parking.ts` — which subscribes from seq 0 — *branches* on `status_changed`, so coalescing for
-  everyone would silently skip a park. `src/replay.ts` is the backwards scan behind it.
+  everyone would silently skip a park. `src/lib/replay.ts` is the backwards scan behind it.
 - `packages/sandbox` — untrusted-code boundary: QuickJS-NG WASM guest, in-memory map VFS (not a
   node-fs emulation — the tab-side host runs it unpolyfilled), by-value host bridge,
   interpreter-enforced limits. Leaf like `protocol`; engine variant injected, so server and
@@ -205,19 +205,19 @@ protocol. Read these before changing scope or structure:
   paths. Here because every host that lets someone type a gateway address must normalize it
   identically, or the same gateway saved twice is two gateways.
 - `packages/react` — headless: `useClaudeSession`, the pure transcript reducer
-  (`src/transcript.ts`, framework-free, unit-tested — keep rendering out), the two halves of
+  (`src/lib/transcript.ts`, framework-free, unit-tested — keep rendering out), the two halves of
   **opening a session without flicker** (the ask was "no travel, no flash, no visible DOM
   append", and scroll position was never the problem — the attach replays hundreds of rows in
   bursts and you watch them stream past a correctly-pinned viewport): `replaying`, a hold on the
   exact signal that `AttachedFrame` arrives *before* the replayed events and names the seq they
   end on — never a quiet-window heuristic, which is what the deleted `useSettled` was — bounded
-  by a backstop because a blank panel forever beats no fix at all; and `src/transcript-cache.ts`,
+  by a backstop because a blank panel forever beats no fix at all; and `src/lib/transcript-cache.ts`,
   a bounded LRU of `TranscriptState` keyed by *(gateway identity, session id)* so a switch-back
   attaches with `afterSeq` and replays only the gap. That cache's whole risk is `staleAttach`: a
   seq from a *different* log (a dormant rebuild starts at 0) delivers **nothing**, leaving stale
   rows standing with no error — which was already reachable on a plain reconnect after a restart,
   so the check fixes more than it costs. The recap counters
-  behind catch-up (`src/recap.ts`: `summarizeSince` + `recapLine` — **counted, never written**;
+  behind catch-up (`src/lib/recap.ts`: `summarizeSince` + `recapLine` — **counted, never written**;
   a prose recap would spend a turn on a summary nobody asked for, and would be worst in the
   case that matters most, a session that failed unattended), the composer's two
   companions (`useAttachments` — staging + upload, filtered by the capability record;

@@ -121,7 +121,13 @@ boundary: anything a client needs must be expressible as protocol events and com
   resumes against the rebuilt runner (`onSessionParking` / `onSessionResumed`, called by whoever
   owns the parking). Parked runs are bounded by `maxParkedDurationMs` rather than
   `maxJobDurationMs`: waiting is not being stuck.
-- **`packages/server`** — the gateway: `node:http` + `ws`, a session registry
+- **`packages/server`** — the gateway: `node:http` + `ws`. `server.ts` is assembly and dispatch
+  only; the shape is `routes/` (one module per route family, each a function over the one
+  `ServerContext` record in `context.ts`), `services/` (the stateful pieces: registry, parking,
+  bridge, the stores, plus `profiles.ts`/`availability.ts`/`session-factory.ts`/`auth.ts` —
+  the create pipeline and the one `canSee` predicate), `lib/` (the pure rules: http helpers,
+  scope, the profile/env policy, the route parser), and `options.ts` for the public option
+  types. Functionally: a session registry
   (create/list/attach/interrupt/kill), resume from the SDK's on-disk sessions, a pluggable
   `authenticate` hook (refuses to start without one unless `allowUnauthenticated: true`), and —
   when the `queue` option is set — `/jobs` + `/queue` routes plus a `/queue/ws` stream of job
@@ -205,10 +211,10 @@ boundary: anything a client needs must be expressible as protocol events and com
   what an operator types into a `baseUrl` (`apiUrl`) and decides local-vs-remote from that URL
   alone (`isLoopbackHost`) — never by probing paths, which two checkouts of one repo would
   answer wrongly.
-- **`packages/react`** — the headless React layer: `useClaudeSession` plus `src/transcript.ts`,
+- **`packages/react`** — the headless React layer: `useClaudeSession` plus `src/lib/transcript.ts`,
   a pure framework-free reducer folding protocol events into transcript state (messages, tool
   calls, approvals, session meta). Rendering logic stays out of it; it is the unit-test surface.
-  `src/recap.ts` is the same shape for "what happened while you were away" —
+  `src/lib/recap.ts` is the same shape for "what happened while you were away" —
   `summarizeSince`/`recapLine`, counted from the transcript and never written by the model.
   Also the browser tool host (`createToolCallHost`, wrapped by `useToolCallHost`): it answers
   server-bridged tool calls by running them in the tab's own QuickJS guest, seeded from the
