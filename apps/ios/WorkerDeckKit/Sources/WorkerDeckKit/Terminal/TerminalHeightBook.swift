@@ -26,7 +26,10 @@ public struct TerminalHeightBook: Sendable {
   /// so the last entry is the total.
   private let offsets: [CGFloat]
 
-  public init(rows: TerminalRows, metrics: TerminalMetrics, cache: TerminalPlanCache? = nil) {
+  public init(
+    rows: TerminalRows, metrics: TerminalMetrics, cache: TerminalPlanCache? = nil,
+    expansion: TerminalExpansion = TerminalExpansion()
+  ) {
     self.rows = rows
     self.metrics = metrics
 
@@ -34,8 +37,8 @@ public struct TerminalHeightBook: Sendable {
     var offsets = [CGFloat](repeating: 0, count: rows.count + 1)
     for index in 0..<rows.count {
       let lines =
-        cache?.lineCount(rows[index], metrics: metrics)
-        ?? TerminalPlanner.plan(rows[index], metrics: metrics).count
+        cache?.lineCount(rows[index], metrics: metrics, expansion: expansion)
+        ?? TerminalPlanner.plan(rows[index], metrics: metrics, expansion: expansion).count
       let gap = rows.gapBefore(index) ? 1 : 0
       heights[index] = CGFloat(lines + gap) * metrics.line
       offsets[index + 1] = offsets[index] + heights[index]
@@ -86,6 +89,11 @@ public struct TerminalHeightBook: Sendable {
 public final class TerminalPlanCache: @unchecked Sendable {
   private struct Entry {
     var row: TranscriptRow
+    /// Only the part of the expansion *this row* can read. Keying the whole
+    /// epoch on the expansion instead would re-plan the entire transcript on
+    /// every tap — at `terminalStress`'s sixteen thousand rows, a rotation's
+    /// worth of work for one finger.
+    var expansion: TerminalExpansion
     var lines: Int
   }
 
@@ -95,7 +103,10 @@ public final class TerminalPlanCache: @unchecked Sendable {
 
   public init() {}
 
-  public func lineCount(_ row: TranscriptRow, metrics: TerminalMetrics) -> Int {
+  public func lineCount(
+    _ row: TranscriptRow, metrics: TerminalMetrics,
+    expansion: TerminalExpansion = TerminalExpansion()
+  ) -> Int {
     lock.lock()
     defer { lock.unlock() }
     if epoch != metrics {
@@ -103,9 +114,12 @@ public final class TerminalPlanCache: @unchecked Sendable {
       epoch = metrics
     }
     let key = row.key
-    if let entry = entries[key], entry.row == row { return entry.lines }
-    let lines = TerminalPlanner.plan(row, metrics: metrics).count
-    entries[key] = Entry(row: row, lines: lines)
+    // Free in the overwhelmingly common case: nothing is open, so no row has to
+    // be walked for its keys.
+    let subset = expansion.isEmpty ? TerminalExpansion() : expansion.subset(for: row)
+    if let entry = entries[key], entry.row == row, entry.expansion == subset { return entry.lines }
+    let lines = TerminalPlanner.plan(row, metrics: metrics, expansion: subset).count
+    entries[key] = Entry(row: row, expansion: subset, lines: lines)
     return lines
   }
 

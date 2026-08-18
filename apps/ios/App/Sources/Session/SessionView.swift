@@ -103,7 +103,8 @@ struct SessionView: View {
           Color.clear
         } else if settings.transcriptVariant.isTerminal {
           TerminalTranscriptView(
-            items: vm.state.items, revision: vm.revision, scroll: transcriptScroll)
+            items: vm.state.items, pendingApprovals: vm.state.pendingApprovals,
+            revision: vm.revision, scroll: transcriptScroll)
         } else {
           TranscriptListView(items: vm.state.items, revision: vm.revision)
         }

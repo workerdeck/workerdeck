@@ -15,9 +15,14 @@ import Foundation
 ///
 /// Two invariants carried over from the web client, both still load-bearing:
 ///
-/// 1. **Only the collapsed state is ever planned.** An expanded row is by
-///    definition on screen and can be measured for real. This is what lets a
-///    `Task` row be sized as one wrapped summary line.
+/// 1. **Every state a row can be in is planned, collapsed and expanded alike.**
+///    This is where the port stops mirroring the web client, and the reason is
+///    the sentence above: there, an expanded row is mounted and self-measures,
+///    so it never has to be predicted. Here nothing self-measures, so an
+///    expanded row that the book had not planned would be a frame the layout
+///    got wrong. `TerminalExpansion` is therefore an input to the planner, and
+///    the expanded budgets in `ResultPreview` are load-bearing rather than
+///    decorative — see `TerminalExpansion.swift`.
 /// 2. **The strings are the heights.** Every summary, preview and affordance
 ///    string comes from `ToolRun.swift` / `ResultPreview.swift`, never from a
 ///    view — a second spelling would be a second height.
@@ -108,12 +113,26 @@ public struct TermLine: Equatable, Sendable {
   /// every frame is one cell — so it rides the plan rather than forcing the
   /// view to re-derive which rows are working.
   public var pulsing: Bool
+  /// What a tap on this line does, if anything. On the plan rather than derived
+  /// in a view, for the same reason the strings are: the planner is what knows
+  /// which block a line came out of, and a view that worked it out again would
+  /// be a second answer to the same question.
+  ///
+  /// **Divergence from the web client, deliberately.** There, only the header
+  /// `Row` is wrapped in a `Pressable` and the result lines below it are inert.
+  /// A pointer can hit a 19px strip; a thumb cannot, so here every line a block
+  /// drew carries the block's press and the whole of it is one target.
+  public var press: TermPress?
+  /// Is this line inside a block that is open? Drawn as a full-bleed wash — the
+  /// web client's `.term-open` — so eighty lines that appeared at once read as
+  /// one block rather than as the transcript having grown.
+  public var inOpen: Bool
 
   public init(
     gutter: String = "", gutterTone: TermTone = .dim, text: String,
     attributed: AttributedString? = nil, tone: TermTone = .fg, columns: Int = 2, indent: Int = 0,
     band: TermBand = .none, bold: Bool = false, italic: Bool = false, nested: Bool = false,
-    pulsing: Bool = false
+    pulsing: Bool = false, press: TermPress? = nil, inOpen: Bool = false
   ) {
     self.gutter = gutter
     self.gutterTone = gutterTone
@@ -127,6 +146,8 @@ public struct TermLine: Equatable, Sendable {
     self.italic = italic
     self.nested = nested
     self.pulsing = pulsing
+    self.press = press
+    self.inOpen = inOpen
   }
 }
 

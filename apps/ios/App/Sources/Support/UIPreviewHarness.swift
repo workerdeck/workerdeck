@@ -29,6 +29,7 @@ enum UIPreview: String {
   case mcp
   case markdown
   case terminal
+  case terminalOpen
   case terminalStress
 
   static var active: UIPreview? {
@@ -43,6 +44,11 @@ enum UIPreview: String {
 /// that exists for looking at things shows it.
 private struct TerminalAuditPreview: View {
   let items: [TranscriptItem]
+  /// Open every block on mount. The audit checks the expanded plan
+  /// arithmetically either way; this is what puts it through a real layout
+  /// pass, which is the only thing that can show a planned line and a drawn
+  /// line parting company.
+  var expandAll = false
   @State private var verdict = "auditing…"
 
   var body: some View {
@@ -56,7 +62,7 @@ private struct TerminalAuditPreview: View {
         .background(Color.black)
       TerminalTranscriptView(
         items: items, revision: 0, scroll: TranscriptScrollModel(),
-        onAudit: { verdict = $0.summary })
+        onAudit: { verdict = $0.summary }, expandAll: expandAll)
     }
   }
 }
@@ -346,6 +352,14 @@ struct UIPreviewHarness: View {
       // children arriving out of order, a diff carrying the engine's own line
       // numbers, and a tool result long enough to hit both preview budgets.
       TerminalAuditPreview(items: Self.terminalItems)
+
+    case .terminalOpen:
+      // The same fixture with every block open. Expansion is the one thing this
+      // renderer has to *predict* that the web client never does — there, an
+      // expanded row is mounted and the browser measures it — so it needs the
+      // same treatment the collapsed plan gets: real text, real layout, and the
+      // audit reading out on top.
+      TerminalAuditPreview(items: Self.terminalItems, expandAll: true)
 
     case .markdown:
       // Every block type on one screen, plus the two streaming frontiers that

@@ -12,6 +12,9 @@ import WorkerDeckKit
 /// what every height is computed against.
 struct TerminalTranscriptView: View {
   let items: [TranscriptItem]
+  /// What the rail pins at its foot. Not an item — the prompt renders below the
+  /// transcript — so it cannot be derived from `items`.
+  var pendingApprovals: [PermissionRequest] = []
   /// Bumped on every applied event, streamed deltas included — `items.count`
   /// does not change while text streams into the last row, so it cannot be the
   /// only change signal.
@@ -21,6 +24,9 @@ struct TerminalTranscriptView: View {
     /// Receives the overflow audit's verdict after each refold. Wired only by
     /// the preview harness — a gate nobody reads is a gate that has never run.
     var onAudit: ((TerminalAudit.Report) -> Void)?
+    /// Open every block on mount, for the preview that checks the expanded plan
+    /// against real layout rather than against its author's arithmetic.
+    var expandAll = false
   #endif
 
   /// The phone's cell. Larger than the desktop's 13pt because a transcript read
@@ -40,15 +46,37 @@ struct TerminalTranscriptView: View {
       // character, which is exactly the kind of silent clipping the audit exists
       // to catch.
       let bleed = typography.cell
-      let metrics = typography.metrics(width: proxy.size.width - 2 * bleed)
+      // The rail is spent before the planner sees the width, exactly like the
+      // bleed. It is an *overlay*, so a row wrapped to the full screen would
+      // have its last column drawn underneath it — which is the same silent
+      // clipping the audit exists to catch, except the audit would not see it:
+      // the line fits its planned column, the column is simply covered.
+      let metrics = typography.metrics(
+        width: proxy.size.width - 2 * bleed - TerminalScrubberView.railWidth)
       Group {
         if let model, proxy.size.width > 0 {
           VirtualizedTranscriptView(
-            rows: model.rows, book: model.book, metrics: metrics, scroll: scroll
+            rows: model.rows, book: model.book, metrics: metrics, expansion: model.expansion,
+            scroll: scroll, reveal: model.reveal, showsScrollIndicator: false
           ) { index in
             TerminalRowView(
               lines: model.plan(at: index), typography: typography, metrics: metrics,
-              gapAbove: model.gapAbove(index), bleed: bleed)
+              gapAbove: model.gapAbove(index), bleed: bleed,
+              onPress: { model.press($0, row: index) })
+          }
+          // The rail replaces the scrollbar rather than sitting beside it. An
+          // overlay, so it is proposed the transcript's size — and it must be,
+          // because rail space and content space are the same fraction.
+          .overlay(alignment: .trailing) {
+            TerminalScrubberView(
+              input: ScrubberInput(
+                items: items, rows: model.rows, book: model.book,
+                pendingApprovals: pendingApprovals, viewportHeight: scroll.viewportHeight),
+              scroll: scroll, typography: typography,
+              // Through the row model, never by arithmetic — a mark's item index
+              // is not its row index, and `buildScrubberClusters` has already
+              // done that conversion.
+              onJumpToRow: { scroll.scrollToRow($0, anchor: .top, animated: true) })
           }
         } else {
           Color.clear
@@ -61,6 +89,9 @@ struct TerminalTranscriptView: View {
         guard proxy.size.width > 0 else { return }
         let model = model ?? TerminalTranscriptModel(metrics: metrics)
         model.update(items: items, metrics: metrics)
+        #if DEBUG
+          if expandAll, model.expansion.isEmpty { model.expandEverything() }
+        #endif
         if self.model == nil { self.model = model }
         #if DEBUG
           // The gate, run wherever a transcript is actually on screen. A line
@@ -68,7 +99,15 @@ struct TerminalTranscriptView: View {
           // silently, which is worse than a wrong height — nothing about it
           // looks wrong.
           if let onAudit {
-            onAudit(TerminalAudit.run(rows: model.rows, typography: typography, metrics: metrics))
+            // Both states, because the gate can only check lines it was given
+            // and a correctly-wrapped summary says nothing about the fifty
+            // result lines folded behind it. Planning is pure, so the second
+            // run costs a calculation and draws nothing.
+            onAudit(
+              TerminalAudit.run(
+                rows: model.rows, typography: typography, metrics: metrics,
+                expansion: model.expansion,
+                alsoFullyExpanded: true))
           }
         #endif
       }

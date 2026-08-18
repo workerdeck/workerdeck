@@ -52,6 +52,12 @@ enum TerminalPalette {
     }
   }
 
+  /// The wash behind an **open** block, so eighty lines that appeared at once
+  /// read as one block rather than as the transcript having grown. The web
+  /// client's `--term-row-hover`, which is where a pointer-driven surface also
+  /// spends it — there is no hover here, so it is free.
+  static var openWash: Color { dynamicAlpha(dark: 0.05, light: 0.04) }
+
   /// The rule drawn *inside* a nested row's padding, so the indent stays exactly
   /// two cells — a border would be layout, and would take every subagent row
   /// half a character off the column its parent sits on.

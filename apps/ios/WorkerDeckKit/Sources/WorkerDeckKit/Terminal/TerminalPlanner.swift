@@ -9,26 +9,48 @@ public enum TerminalPlanner {
 
   // MARK: - Entry points
 
-  /// The lines a row draws in its **collapsed** state — which is the only state
-  /// that has to be predicted, since an expanded row is on screen by definition.
-  public static func plan(_ row: TranscriptRow, metrics: TerminalMetrics) -> [TermLine] {
+  /// The lines a row draws, in whatever state `expansion` says it is in.
+  ///
+  /// The expanded state is planned here rather than measured on screen — see
+  /// `TerminalExpansion.swift` for why that inversion is forced on this
+  /// renderer and not on the web one.
+  public static func plan(
+    _ row: TranscriptRow, metrics: TerminalMetrics,
+    expansion: TerminalExpansion = TerminalExpansion()
+  ) -> [TermLine] {
     switch row {
     case .recap(let label):
       return wrapBody(
         "\(TermGlyph.recap) \(label)", metrics: metrics, gutter: "", tone: .faint, columns: 0)
     case .block(let block):
-      return plan(block, metrics: metrics)
+      return plan(block, metrics: metrics, expansion: expansion)
     }
   }
 
-  public static func plan(_ block: TerminalBlock, metrics: TerminalMetrics) -> [TermLine] {
+  public static func plan(
+    _ block: TerminalBlock, metrics: TerminalMetrics,
+    expansion: TerminalExpansion = TerminalExpansion(), inOpen: Bool = false
+  ) -> [TermLine] {
     switch block {
     case .item(let leaf):
-      return plan(item: leaf.item, metrics: metrics)
+      return plan(item: leaf.item, metrics: metrics, expansion: expansion, inOpen: inOpen)
     case .run(let leaf):
-      return planRun(leaf.run, metrics: metrics)
+      return planRun(leaf, metrics: metrics, expansion: expansion, inOpen: inOpen)
     case .task(let leaf):
-      return planTask(leaf, metrics: metrics)
+      return planTask(leaf, metrics: metrics, expansion: expansion, inOpen: inOpen)
+    }
+  }
+
+  /// A block that can sit inside a `Task`. Absorption is one level deep, so a
+  /// leaf is all a task's child can be.
+  static func plan(
+    leaf: TerminalLeafBlock, metrics: TerminalMetrics, expansion: TerminalExpansion, inOpen: Bool
+  ) -> [TermLine] {
+    switch leaf {
+    case .item(let block):
+      return plan(item: block.item, metrics: metrics, expansion: expansion, inOpen: inOpen)
+    case .run(let block):
+      return planRun(block, metrics: metrics, expansion: expansion, inOpen: inOpen)
     }
   }
 
@@ -48,15 +70,32 @@ public enum TerminalPlanner {
   /// folding"); widening made it rarer without removing it. The block model is
   /// untouched — this is a rendering rule, so keys, indices and
   /// `rowIndex(forItem:)` all stay exactly as they were.
-  static func planRun(_ run: [ToolCallItem], metrics: TerminalMetrics) -> [TermLine] {
-    if run.count == 1, let only = run.first { return planToolCall(only, metrics: metrics) }
+  static func planRun(
+    _ block: TerminalRunBlock, metrics: TerminalMetrics, expansion: TerminalExpansion,
+    inOpen: Bool
+  ) -> [TermLine] {
+    let run = block.run
+    if run.count == 1, let only = run.first {
+      return planToolCall(only, metrics: metrics, expansion: expansion, inOpen: inOpen)
+    }
     let busy = run.contains(where: callBusy)
     let failed = run.contains(where: callFailed)
     let nested = run.first?.parentToolUseId != nil
-    return wrapBody(
+    let open = expansion.isOpen(block.key)
+    let wash = inOpen || open
+
+    var lines = wrapBody(
       runSummary(run, busy: busy), metrics: metrics,
       gutter: busy ? TermGlyph.pulseRest : "", gutterTone: .mark,
-      tone: failed ? .red : .dim, nested: nested, pulsing: busy)
+      tone: failed ? .red : .dim, nested: nested, pulsing: busy,
+      press: .toggle(block.key), inOpen: wash)
+    guard open else { return lines }
+    // No blank between them: `needsBlank` says two tool calls sit flush, and
+    // that is exactly what the run is made of.
+    for call in run {
+      lines += planToolCall(call, metrics: metrics, expansion: expansion, inOpen: true)
+    }
+    return lines
   }
 
   /// One row for a `Task` and everything its subagent produced.
@@ -65,20 +104,40 @@ public enum TerminalPlanner {
   /// tidy: the live signal is *in* the collapsed line — the pulse, and a
   /// climbing tool count — never an auto-expansion that would resize the row
   /// under the reader.
-  static func planTask(_ block: TerminalTaskBlock, metrics: TerminalMetrics) -> [TermLine] {
+  static func planTask(
+    _ block: TerminalTaskBlock, metrics: TerminalMetrics, expansion: TerminalExpansion,
+    inOpen: Bool
+  ) -> [TermLine] {
     let children = taskChildItems(block)
     let busy = taskBusy(block.task, children)
     let failed = taskFailed(block.task, children)
-    return wrapBody(
+    let open = expansion.isOpen(block.key)
+    let wash = inOpen || open
+
+    var lines = wrapBody(
       taskSummary(block.task, children), metrics: metrics,
       gutter: busy ? TermGlyph.pulseRest : TermGlyph.bullet,
       gutterTone: failed ? .red : (busy ? .mark : .dim),
-      tone: failed ? .red : .fg, pulsing: busy)
+      tone: failed ? .red : .fg, pulsing: busy, press: .toggle(block.key), inOpen: wash)
+    guard open else { return lines }
+
+    // The children step themselves in: every one of them carries a
+    // `parentToolUseId`, which is what `nested` is read from, so nothing here
+    // has to know it is drawing inside a frame.
+    for (position, child) in block.children.enumerated() {
+      if position > 0, leafNeedsBlank(block.children[position - 1], child) {
+        lines.append(TermLine(text: "", tone: .fg, nested: true, inOpen: true))
+      }
+      lines += plan(leaf: child, metrics: metrics, expansion: expansion, inOpen: true)
+    }
+    return lines
   }
 
   // MARK: - Items
 
-  static func plan(item: TranscriptItem, metrics: TerminalMetrics) -> [TermLine] {
+  static func plan(
+    item: TranscriptItem, metrics: TerminalMetrics, expansion: TerminalExpansion, inOpen: Bool
+  ) -> [TermLine] {
     let nested = parentToolUseId(of: item) != nil
 
     switch item {
@@ -87,7 +146,8 @@ public enum TerminalPlanner {
       if let attachments, !attachments.isEmpty {
         lines += wrapBody(
           attachments.map(\.name).joined(separator: ", "), metrics: metrics,
-          gutter: TermGlyph.prompt, gutterTone: .dim, tone: .dim, band: .user, nested: nested)
+          gutter: TermGlyph.prompt, gutterTone: .dim, tone: .dim, band: .user, nested: nested,
+          inOpen: inOpen)
       }
       // One row per hard line, with the marker on the first only — a pasted
       // twenty-line prompt is one prompt, not twenty.
@@ -95,84 +155,139 @@ public enum TerminalPlanner {
       lines += wrapBody(
         text.isEmpty ? " " : text, metrics: metrics,
         gutter: markerOnFirst ? TermGlyph.prompt : "", gutterTone: .dim, tone: .fg,
-        band: .user, nested: nested)
+        band: .user, nested: nested, inOpen: inOpen)
       return lines
 
     case .assistantText(_, let text, _, _):
       return planMarkdown(
-        text, metrics: metrics, gutter: TermGlyph.bullet, gutterTone: .fg, nested: nested)
+        text, metrics: metrics, gutter: TermGlyph.bullet, gutterTone: .fg, nested: nested,
+        inOpen: inOpen)
 
     case .thinking(_, let text, _):
       return wrapBody(
         text, metrics: metrics, gutter: TermGlyph.thinking, gutterTone: .dim, tone: .dim,
-        italic: true, nested: nested)
+        italic: true, nested: nested, inOpen: inOpen)
 
     case .toolCall(let call):
-      return planToolCall(call, metrics: metrics)
+      return planToolCall(call, metrics: metrics, expansion: expansion, inOpen: inOpen)
 
     case .turnResult(_, let subtype, let isError, let durationMs, let totalCostUsd, let errors):
       // No glyph: a turn ending is not something anyone said.
       let head =
         "\(isError ? subtype : "done") · \(TermFmt.duration(ms: durationMs)) · \(TermFmt.cost(totalCostUsd))"
-      var lines = wrapBody(head, metrics: metrics, gutter: "", tone: isError ? .red : .faint)
+      var lines = wrapBody(
+        head, metrics: metrics, gutter: "", tone: isError ? .red : .faint, inOpen: inOpen)
       for message in errors ?? [] {
-        lines += wrapBody(message, metrics: metrics, gutter: "", tone: .red)
+        lines += wrapBody(message, metrics: metrics, gutter: "", tone: .red, inOpen: inOpen)
       }
       return lines
 
     case .notice(_, let level, let text):
       return wrapBody(
         text, metrics: metrics, gutter: TermGlyph.notice,
-        gutterTone: level == .error ? .red : .yellow, tone: level == .error ? .red : .dim)
+        gutterTone: level == .error ? .red : .yellow, tone: level == .error ? .red : .dim,
+        inOpen: inOpen)
 
     case .fileDelivered(_, let path, let bytes, let description):
       var body = "\(path) · \(TermFmt.bytes(bytes))"
       if let description, !description.isEmpty { body += " · \(description)" }
       return wrapBody(
-        body, metrics: metrics, gutter: TermGlyph.file, gutterTone: .blue, tone: .dim)
+        body, metrics: metrics, gutter: TermGlyph.file, gutterTone: .blue, tone: .dim,
+        inOpen: inOpen)
     }
   }
 
-  /// A tool call: its header, then either the diff it produced or a clipped
-  /// preview of its result.
-  static func planToolCall(_ call: ToolCallItem, metrics: TerminalMetrics) -> [TermLine] {
+  /// A tool call: its header, then either the diff it produced or a preview of
+  /// its result.
+  ///
+  /// **Three states, not two**, ported from the web client's `ToolRow` — and the
+  /// middle one is the reason the budget exists at all. Collapsed shows a few
+  /// lines; open shows the output up to ``ResultPreview/expandedChars``; `full`
+  /// lifts that budget. A tool result can be a hundred thousand characters (a
+  /// test run, a `find /`) and the whole of it lands in **one** virtual row —
+  /// the collection view recycles rows, so it cannot help with what is inside a
+  /// single one. Here the guard bites harder than it does on the web, because
+  /// every one of those lines is planned and wrapped before anything is drawn.
+  static func planToolCall(
+    _ call: ToolCallItem, metrics: TerminalMetrics, expansion: TerminalExpansion, inOpen: Bool
+  ) -> [TermLine] {
     let nested = call.parentToolUseId != nil
     let busy = callBusy(call)
     let tone = toolTone(call)
+    let openKey = TerminalExpansion.openKey(callId: call.id)
+    let fullKey = TerminalExpansion.fullKey(callId: call.id)
+    // Only a result has anything folded behind it. A call that produced none —
+    // and a file edit that produced only a patch, which is already drawn — must
+    // not advertise a press: a target that visibly does nothing when pressed is
+    // worse than no target, because the reader concludes the whole theme is
+    // broken rather than that this row is empty.
+    let expandable = call.result.map { !$0.text.isEmpty } ?? false
+    let open = expandable && expansion.isOpen(openKey)
+    let full = expansion.isFull(fullKey)
+    let wash = inOpen || open
+    let press: TermPress? = expandable ? .toggle(openKey) : nil
 
     var header = "\(call.name)(\(TermFmt.toolInputPreview(call.input)))"
     if let backend = call.backend, backend != "server" { header += " · \(backend)" }
 
     var lines = wrapBody(
       header, metrics: metrics, gutter: busy ? TermGlyph.pulseRest : TermGlyph.bullet,
-      gutterTone: tone, tone: .fg, bold: true, nested: nested, pulsing: busy)
+      gutterTone: tone, tone: .fg, bold: true, nested: nested, pulsing: busy, press: press,
+      inOpen: wash)
 
-    if let patch = call.patch {
-      lines += planDiff(patch, metrics: metrics, nested: nested)
+    // A file edit shows its diff, not its result prose: "The file has been
+    // updated" is what the *model* needed to hear, and the change is what the
+    // reader did. Opening the row is how you reach the text underneath.
+    if let patch = call.patch, !open {
+      lines += planDiff(patch, metrics: metrics, nested: nested, press: press, inOpen: wash)
       return lines
     }
 
     guard let text = call.result?.text, !text.isEmpty else { return lines }
     let failed = callFailed(call)
     // The preview rows sit one level in behind the `⎿` marker: three gutter
-    // cells and one indent level, six cells in all.
-    // The preview rows lose six cells to the marker and the indent, so the
-    // budget is measured against the width they actually get.
+    // cells and one indent level, six cells in all, so the character budget is
+    // measured against the width they actually get.
     let previewCols = metrics.columns(
       gutter: 3, indent: 1, extra: nested ? nestedIndentCells * metrics.cell : 0)
-    let collapsed = ResultPreview.collapsed(
+    let all =
       text.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
-        .components(separatedBy: "\n"), cols: previewCols)
-    for (offset, line) in collapsed.shown.enumerated() {
+      .components(separatedBy: "\n")
+
+    var shown: [String]
+    var more: String?
+    var morePress: TermPress?
+    if open {
+      shown = full ? all : ResultPreview.clipToChars(all)
+      let hidden = all.count - shown.count
+      if hidden > 0 {
+        // The affordance says what pressing it costs, because at this size the
+        // honest answer is sometimes "don't".
+        more =
+          "… +\(hidden) line\(hidden == 1 ? "" : "s") — show all \(TermFmt.grouped(text.count)) chars"
+        morePress = .expandFull(fullKey)
+      }
+    } else {
+      let collapsed = ResultPreview.collapsed(all, cols: previewCols)
+      shown = collapsed.shown
+      // Collapsed, the count is a label and not a second control: the header
+      // above is already the toggle, and this line carries the same press so
+      // the block stays one target.
+      more = collapsed.more
+      morePress = press
+    }
+
+    for (offset, line) in shown.enumerated() {
       lines += wrapBody(
         line.isEmpty ? " " : line, metrics: metrics,
         gutter: offset == 0 ? TermGlyph.output : "", gutterTone: failed ? .red : .dim,
-        tone: failed ? .red : .dim, columns: 3, indent: 1, band: .output, nested: nested)
+        tone: failed ? .red : .dim, columns: 3, indent: 1, band: .output, nested: nested,
+        press: press, inOpen: wash)
     }
-    if let more = collapsed.more {
+    if let more {
       lines += wrapBody(
         more, metrics: metrics, gutter: "", tone: .faint, columns: 3, indent: 1, band: .output,
-        nested: nested)
+        nested: nested, press: morePress, inOpen: wash)
     }
     return lines
   }
@@ -197,7 +312,10 @@ public enum TerminalPlanner {
   /// all start at 0 is a preview of an edit that has not happened — this client
   /// has never read the file, so the number column is dropped rather than
   /// invented.
-  static func planDiff(_ patch: FilePatch, metrics: TerminalMetrics, nested: Bool) -> [TermLine] {
+  static func planDiff(
+    _ patch: FilePatch, metrics: TerminalMetrics, nested: Bool, press: TermPress? = nil,
+    inOpen: Bool = false
+  ) -> [TermLine] {
     let numbered = patch.hunks.contains { $0.newStart > 0 }
     var widest = 1
     if numbered {
@@ -215,7 +333,7 @@ public enum TerminalPlanner {
           TermLine(
             gutter: String(repeating: " ", count: numberWidth) + " " + TermGlyph.hunkGap,
             gutterTone: .faint, text: "", tone: .faint, columns: columns, indent: 2,
-            nested: nested))
+            nested: nested, press: press, inOpen: inOpen))
       }
       var oldNumber = hunk.oldStart
       var newNumber = hunk.newStart
@@ -249,13 +367,14 @@ public enum TerminalPlanner {
           : String(marker)
         lines += wrapBody(
           body.isEmpty ? " " : body, metrics: metrics, gutter: gutter, gutterTone: .diffNumber,
-          tone: tone, columns: columns, indent: 2, band: band, nested: nested)
+          tone: tone, columns: columns, indent: 2, band: band, nested: nested, press: press,
+          inOpen: inOpen)
       }
     }
     if patch.truncated == true {
       lines += wrapBody(
-        "… hunks omitted", metrics: metrics, gutter: "", tone: .faint, columns: columns, indent: 2,
-        nested: nested)
+        "… hunks omitted", metrics: metrics, gutter: "", tone: .faint, columns: columns,
+        indent: 2, nested: nested, press: press, inOpen: inOpen)
     }
     return lines
   }
@@ -265,14 +384,15 @@ public enum TerminalPlanner {
   /// Assistant prose, block by block, with one blank line between blocks — the
   /// theme's only spacing.
   static func planMarkdown(
-    _ source: String, metrics: TerminalMetrics, gutter: String, gutterTone: TermTone, nested: Bool
+    _ source: String, metrics: TerminalMetrics, gutter: String, gutterTone: TermTone,
+    nested: Bool, inOpen: Bool = false
   ) -> [TermLine] {
     var lines: [TermLine] = []
     var first = true
 
     func emit(_ produced: [TermLine]) {
       guard !produced.isEmpty else { return }
-      if !first { lines.append(TermLine(text: "", tone: .fg, nested: nested)) }
+      if !first { lines.append(TermLine(text: "", tone: .fg, nested: nested, inOpen: inOpen)) }
       first = false
       lines += produced
     }
@@ -280,31 +400,42 @@ public enum TerminalPlanner {
     for block in MarkdownBlocks.parse(source) {
       switch block {
       case .prose(let text):
-        emit(inlineBody(text, metrics: metrics, tone: .fg, nested: nested))
+        emit(inlineBody(text, metrics: metrics, tone: .fg, nested: nested, inOpen: inOpen))
       case .heading(_, let text):
         // A terminal marks a heading by weight, never by size: there is one line
         // height, and a bigger glyph would break the grid it is drawn on.
-        emit(inlineBody(text, metrics: metrics, tone: .bright, bold: true, nested: nested))
+        emit(
+          inlineBody(
+            text, metrics: metrics, tone: .bright, bold: true, nested: nested, inOpen: inOpen))
       case .blockquote(let text):
-        emit(inlineBody(text, metrics: metrics, tone: .dim, indent: 1, nested: nested))
+        emit(
+          inlineBody(
+            text, metrics: metrics, tone: .dim, indent: 1, nested: nested, inOpen: inOpen))
       case .thematicBreak:
-        emit([TermLine(text: "", tone: .faint, nested: nested)])
+        emit([TermLine(text: "", tone: .faint, nested: nested, inOpen: inOpen)])
       case .code(let language, let text, _):
         _ = language
         var produced: [TermLine] = []
         for line in text.components(separatedBy: "\n") {
           produced += wrapBody(
             line.isEmpty ? " " : line, metrics: metrics, gutter: "", tone: .dim, indent: 1,
-            band: .output, nested: nested)
+            band: .output, nested: nested, inOpen: inOpen)
         }
-        emit(produced.isEmpty ? [TermLine(text: " ", tone: .dim, band: .output, nested: nested)] : produced)
+        emit(
+          produced.isEmpty
+            ? [TermLine(text: " ", tone: .dim, band: .output, nested: nested, inOpen: inOpen)]
+            : produced)
       case .list(let items):
-        emit(planList(items, metrics: metrics, nested: nested))
+        emit(planList(items, metrics: metrics, nested: nested, inOpen: inOpen))
       }
     }
 
     guard !lines.isEmpty else {
-      return [TermLine(gutter: gutter, gutterTone: gutterTone, text: "", tone: .fg, nested: nested)]
+      return [
+        TermLine(
+          gutter: gutter, gutterTone: gutterTone, text: "", tone: .fg, nested: nested,
+          inOpen: inOpen)
+      ]
     }
     lines[0].gutter = gutter
     lines[0].gutterTone = gutterTone
@@ -320,7 +451,7 @@ public enum TerminalPlanner {
   /// nested under a bullet. Tracked while walking, since a `MarkdownListItem`
   /// knows its depth but not what its ancestors were.
   static func planList(
-    _ items: [MarkdownListItem], metrics: TerminalMetrics, nested: Bool
+    _ items: [MarkdownListItem], metrics: TerminalMetrics, nested: Bool, inOpen: Bool = false
   ) -> [TermLine] {
     var lines: [TermLine] = []
     var gutterAtDepth: [Int] = []
@@ -335,7 +466,7 @@ public enum TerminalPlanner {
       let marker = item.ordinal.map { "\($0)." } ?? "-"
       lines += inlineBody(
         item.text, metrics: metrics, tone: .fg, columns: gutterCells, indent: indent,
-        gutter: marker, gutterTone: .faint, nested: nested)
+        gutter: marker, gutterTone: .faint, nested: nested, inOpen: inOpen)
     }
     return lines
   }
@@ -346,7 +477,8 @@ public enum TerminalPlanner {
   static func wrapBody(
     _ text: String, metrics: TerminalMetrics, gutter: String, gutterTone: TermTone = .dim,
     tone: TermTone = .fg, columns: Int = 2, indent: Int = 0, band: TermBand = .none,
-    bold: Bool = false, italic: Bool = false, nested: Bool = false, pulsing: Bool = false
+    bold: Bool = false, italic: Bool = false, nested: Bool = false, pulsing: Bool = false,
+    press: TermPress? = nil, inOpen: Bool = false
   ) -> [TermLine] {
     let extra = nested ? nestedIndentCells * metrics.cell : 0
     let cols = metrics.columns(gutter: columns, indent: indent, extra: extra)
@@ -355,7 +487,7 @@ public enum TerminalPlanner {
       TermLine(
         gutter: offset == 0 ? gutter : "", gutterTone: gutterTone, text: line, tone: tone,
         columns: columns, indent: indent, band: band, bold: bold, italic: italic, nested: nested,
-        pulsing: offset == 0 && pulsing)
+        pulsing: offset == 0 && pulsing, press: press, inOpen: inOpen)
     }
   }
 
@@ -365,7 +497,8 @@ public enum TerminalPlanner {
   /// sliced at the *same* offsets, so the two can never describe different text.
   static func inlineBody(
     _ source: String, metrics: TerminalMetrics, tone: TermTone, columns: Int = 2, indent: Int = 0,
-    gutter: String = "", gutterTone: TermTone = .dim, bold: Bool = false, nested: Bool = false
+    gutter: String = "", gutterTone: TermTone = .dim, bold: Bool = false, nested: Bool = false,
+    press: TermPress? = nil, inOpen: Bool = false
   ) -> [TermLine] {
     let styled = MarkdownInline.attributed(source)
     let plain = String(styled.characters)
@@ -381,7 +514,7 @@ public enum TerminalPlanner {
         TermLine(
           gutter: offset == 0 ? gutter : "", gutterTone: gutterTone, text: line,
           attributed: AttributedString(styled[start..<end]), tone: tone, columns: columns,
-          indent: indent, bold: bold, nested: nested))
+          indent: indent, bold: bold, nested: nested, press: press, inOpen: inOpen))
       // The wrap consumes the line plus whatever separated it from the next —
       // a newline, or the space a soft wrap fell on.
       consumed += line.count

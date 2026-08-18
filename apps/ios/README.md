@@ -50,10 +50,39 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
       computed to measure the row anyway. `TerminalPlanCache` is what keeps a refold cheap on
       every streamed token, standing in for the web client's `WeakMap` on item identity (a Swift
       array is a value; there is no identity to hang one on).
+    - `TerminalExpansion.swift` — which blocks are open, as an **input to the planner**. This is
+      the one place the port deliberately inverts the web client rather than mirroring it: there,
+      expansion is component-local `useState` and an expanded row is mounted and self-measures.
+      Here nothing self-measures — a `UICollectionViewLayout` takes every frame from the height
+      book — so a height the book does not know about is a frame the layout gets wrong. So the
+      planner plans **both** states, `ResultPreview`'s expanded budgets stop being decorative
+      (the whole of a hundred-thousand-character result lands in *one* virtual row), and the plan
+      cache is keyed on the slice of the expansion **that row** can read — an epoch-wide
+      invalidation would re-plan sixteen thousand rows for one finger. Two rules that are bugs if
+      dropped: a call with nothing folded behind it (no result text, or a file edit whose only
+      content is the diff already drawn) advertises **no press**, because a target that visibly
+      does nothing reads as the theme being broken rather than the row being empty; and closing a
+      result forgets that its character budget was lifted, so re-opening never lands back on the
+      unclipped form for a reader who has long since scrolled away.
     - `MarkdownInline.swift` — inline markdown rendered once and shared by the measurer and the
       renderer, so `**bold**` cannot be measured as eight characters and drawn as four. The web
       client strips inline syntax with a regex chain; a second answer to "what does this render
       as" is a second answer that drifts.
+    - `TerminalScrubber.swift` — the overview ruler's arithmetic, and **the thing the height book
+      was built for**: a mark's position is its row's *pixel offset*, and almost every row a rail
+      draws is unmounted, so only a computed height can answer for it. It lives in the kit for the
+      reason the web client exports `buildClusters`/`railScale` for its tests alone — both have
+      shipped pure-logic bugs, and neither is visible in a screenshot: a live answer with no
+      `turn_result` yet went unmarked for the whole two minutes it was the only thing worth
+      navigating to, and a replayed history (which carries no turn rows at all) came back with an
+      empty response lane. So a response mark anchors on **the answer**, with a `turn_result` only
+      *decorating* it. Two rules that are bugs if dropped: `railScale`'s denominator is
+      `max(totalSize, viewportHeight)` and never `totalSize` alone (a transcript shorter than its
+      window otherwise hangs thousands of points of empty scroll under three rows), and **a mark's
+      item index is not its row index** — every one goes through `rowIndex(forItem:)`. Merging is
+      what keeps a press cheap as well as legible: a dense session chain-merges each lane into one
+      bar, so the cluster count is bounded by the rail rather than by the session, and the bar
+      answers by its **nearest member** rather than by whichever mark founded it.
     - `ToolRun.swift` / `ResultPreview.swift` / `TerminalFormat.swift` — the exact strings. In
       this theme **the string is the height**, so every summary, preview and affordance is
       spelled once, here, and never in a view.
@@ -111,7 +140,12 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
       palette, ported value-for-value from `styles/terminal.css` so a session reads the same here
       as in the dashboard. Every planned line is exactly one rendered line, so each is drawn in a
       fixed-height box with wrapping off — no `lineSpacing` arithmetic, and no row that measures
-      18pt and lays out at 18.4.
+      18pt and lays out at 18.4. Presses ride the plan too (`TermLine.press`), grouped into one
+      target per run of consecutive lines that answer to the same block — **the whole block, not
+      just its header, which is where the web client puts its `Pressable`**: a pointer can hit a
+      19px strip and a thumb cannot. An open block keeps a full-bleed wash (`TermLine.inOpen`,
+      the web's `.term-open`) so eighty lines that arrived at once read as one block rather than
+      as the transcript having grown.
     - `TranscriptLayout.swift` / `VirtualizedTranscriptView.swift` — a `UICollectionView` with a
       custom layout whose frames come **entirely** from the height book; no self-sizing anywhere.
       That is what makes the rest possible: an overview scrubber needs the pixel offset of rows
@@ -119,14 +153,43 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
       exist. Stick-to-bottom and size-change correction are split into two regimes, as on the
       web — pinned, corrections are suppressed entirely (being at the bottom *is* the scroll
       position); escaped, the row under the viewport's top edge is re-anchored **by key**, since
-      "the same row" is a membership question once folds are in play.
+      "the same row" is a membership question once folds are in play. Expansion is part of that
+      epoch and has to be: it moves no row and changes no key, so the coordinator's guard would
+      otherwise swallow it and the layout would keep drawing collapsed frames. `reveal` is the
+      other half — the iOS spelling of `useRevealOnOpen`, one-directional and only on the open
+      transition. The escaped case barely needs it (the anchor already holds the pressed row
+      still); it exists for the **pinned** case, where expanding near the tail re-pins to the
+      bottom and pushes the header you pressed clean off the top of the screen.
+    - `TerminalScrubberView.swift` — the rail, drawn, and where the phone parts company with the
+      web design twice. **There is no hover**: a pointer resting on a mark opens the peek there and
+      a drag *dismisses* it, which would leave a finger no way to see a mark before committing to
+      it — so here a drag scrubs **and** peeks what it is passing, and a clean press with no travel
+      is a jump on a mark, a scroll-to-here on the ground. And **12 points is not a touch target**:
+      the paint is the theme's 12 (the one place the `ch` rule is set aside — the rail is chrome
+      beside the grid, not a column of text) and the hit strip is wider, though deliberately not
+      the HIG's 44, because this sits where a right thumb scrolls. Three structural notes: it is a
+      `Canvas` with arithmetic hit-testing rather than a view per mark, since a dense rail is
+      hundreds of clusters repainted per scroll tick; the band is **its own view**, because
+      observation is per body and reading the scroll offset beside the clusters would rebuild every
+      one of them per frame of a fling; and the whole thing is a **full-width overlay with only the
+      strip taking touches**, because a peek is wider than the rail and laying it out inside a
+      28-point container puts it off the screen. A scrub goes to a content offset, never to a row —
+      a rail drag is continuous, and snapping to row boundaries makes a hundred-line answer a dead
+      zone. The transcript's wrap width is reduced by the rail for the same reason it is reduced by
+      the bleed: the rail is an overlay, and a row wrapped to the full screen has its last column
+      drawn underneath it — silent clipping the audit cannot see, because the line fits the column
+      it was planned for and the column is simply covered.
     - `TerminalAudit.swift` — the gate. The planner counts cells; if a line's real rendered width
       ever exceeds the column it was planned for, it is clipped *silently*, which is worse than a
       wrong height because nothing about it looks wrong. Debug-only and deliberately not a unit
       test: a unit test would check the calculator against its author's assumptions. It is
       reported on screen by the `terminal` preview — a gate nobody reads is a gate that has never
       run. It ignores trailing spaces on purpose, those being the wrap model's own hanging
-      spaces rather than an overflow.
+      spaces rather than an overflow. It audits **both states**: a summary that wraps correctly
+      says nothing about the fifty result lines folded behind it, and planning is pure, so the
+      second pass costs a calculation and draws nothing. `UIPREVIEW=terminalOpen` is the visual
+      counterpart — the same fixture with every block open, through a real layout pass, which is
+      the only thing that can show a planned line and a drawn line parting company.
   - `App/Sources/Session/SessionStatusBar.swift` — the mini status bar, one glass line floating
     just above the composer where a thumb reaches it: status, model, permission mode, usage. The
     status slot is **shared with connectivity, and connectivity wins it** — while the socket is

@@ -50,6 +50,14 @@ public enum TerminalLeafBlock: Equatable, Sendable {
     case .run(let block): return block.key
     }
   }
+
+  /// The item this leaf is *spaced as* — what the blank-line rule reads.
+  public var spacingItem: TranscriptItem? {
+    switch self {
+    case .item(let block): return block.item
+    case .run(let block): return block.run.first.map(TranscriptItem.toolCall)
+    }
+  }
 }
 
 public struct TerminalTaskBlock: Equatable, Sendable {
@@ -224,6 +232,12 @@ public func needsBlank(_ previous: TranscriptItem, _ next: TranscriptItem) -> Bo
 }
 
 public func blockNeedsBlank(_ previous: TerminalBlock, _ next: TerminalBlock) -> Bool {
+  guard let before = previous.spacingItem, let after = next.spacingItem else { return true }
+  return needsBlank(before, after)
+}
+
+/// The same rule one frame in, between two of a `Task`'s absorbed children.
+public func leafNeedsBlank(_ previous: TerminalLeafBlock, _ next: TerminalLeafBlock) -> Bool {
   guard let before = previous.spacingItem, let after = next.spacingItem else { return true }
   return needsBlank(before, after)
 }

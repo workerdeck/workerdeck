@@ -32,11 +32,16 @@
       var rowsChecked: Int
       var linesChecked: Int
       var findings: [Finding]
+      /// How many blocks are open. On the readout because this screen is also
+      /// where a press is checked: a tap that lands but toggles nothing and a
+      /// tap that never landed look identical from outside.
+      var openCount = 0
 
       var summary: String {
-        findings.isEmpty
-          ? "✔ \(linesChecked) lines over \(rowsChecked) rows, none overflowing"
-          : "✘ \(findings.count) of \(linesChecked) lines overflow (worst \(String(format: "%.2f", findings.map(\.overflow).max() ?? 0))pt)"
+        let state = openCount > 0 ? " · \(openCount) open" : ""
+        return findings.isEmpty
+          ? "✔ \(linesChecked) lines over \(rowsChecked) rows, none overflowing\(state)"
+          : "✘ \(findings.count) of \(linesChecked) lines overflow (worst \(String(format: "%.2f", findings.map(\.overflow).max() ?? 0))pt)\(state)"
       }
     }
 
@@ -45,15 +50,37 @@
     /// A tolerance of a quarter point rather than zero: text layout rounds, and a
     /// sub-pixel excess is invisible and unclippable. Anything above that is a
     /// real cell-model disagreement and worth failing over.
+    /// - Parameter alsoFullyExpanded: fold in a second pass over the transcript
+    ///   with **everything open**. Without it the gate only ever sees collapsed
+    ///   lines, and a summary that wraps correctly says nothing about the fifty
+    ///   result lines behind it. Planning is pure, so this draws nothing.
     static func run(
       rows: TerminalRows, typography: TerminalTypography, metrics: TerminalMetrics,
+      expansion: TerminalExpansion = TerminalExpansion(), alsoFullyExpanded: Bool = false,
       tolerance: CGFloat = 0.25
+    ) -> Report {
+      var report = pass(
+        rows: rows, typography: typography, metrics: metrics, expansion: expansion,
+        tolerance: tolerance)
+      guard alsoFullyExpanded else { return report }
+      let expanded = pass(
+        rows: rows, typography: typography, metrics: metrics,
+        expansion: .everything(in: rows), tolerance: tolerance)
+      report.linesChecked += expanded.linesChecked
+      report.findings += expanded.findings
+      report.openCount = expansion.open.count
+      return report
+    }
+
+    private static func pass(
+      rows: TerminalRows, typography: TerminalTypography, metrics: TerminalMetrics,
+      expansion: TerminalExpansion, tolerance: CGFloat
     ) -> Report {
       var findings: [Finding] = []
       var linesChecked = 0
 
       for index in 0..<rows.count {
-        for line in TerminalPlanner.plan(rows[index], metrics: metrics) {
+        for line in TerminalPlanner.plan(rows[index], metrics: metrics, expansion: expansion) {
           linesChecked += 1
           // Trailing spaces are measured out, not measured in: the wrap model
           // deliberately lets preserved spaces *hang* past the last column

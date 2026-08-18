@@ -48,15 +48,57 @@ struct TerminalRowView: View {
   /// a prompt or an output wash that stopped short of the edge would read as a
   /// box, which is the thing this theme exists not to have.
   let bleed: CGFloat
+  /// What a tap on a line asks for. The planner decided which lines carry which
+  /// press; this only routes it.
+  var onPress: (TermPress) -> Void = { _ in }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       if gapAbove { Color.clear.frame(height: metrics.line) }
-      ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-        TermLineView(line: line, typography: typography, metrics: metrics, bleed: bleed)
+      ForEach(pressGroups) { group in
+        let block = VStack(alignment: .leading, spacing: 0) {
+          ForEach(group.range, id: \.self) { offset in
+            TermLineView(
+              line: lines[offset], typography: typography, metrics: metrics, bleed: bleed)
+          }
+        }
+        if let press = group.press {
+          // `contentShape` because a line's body is text in a box and the gaps
+          // between glyphs are not hit-testable without it — half a tap target
+          // is worse than none.
+          block
+            .contentShape(Rectangle())
+            .onTapGesture { onPress(press) }
+        } else {
+          block
+        }
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  /// Consecutive lines that answer to the same press, as one target.
+  ///
+  /// Grouped rather than one recognizer per line for two reasons: an expanded
+  /// tool result is fifty lines and fifty gesture recognizers is fifty too
+  /// many, and a group is the unit any future press feedback would highlight.
+  private var pressGroups: [PressGroup] {
+    var groups: [PressGroup] = []
+    for (offset, line) in lines.enumerated() {
+      if var last = groups.last, last.press == line.press {
+        last.range = last.range.lowerBound..<(offset + 1)
+        groups[groups.count - 1] = last
+        continue
+      }
+      groups.append(PressGroup(range: offset..<(offset + 1), press: line.press))
+    }
+    return groups
+  }
+
+  private struct PressGroup: Identifiable {
+    var range: Range<Int>
+    var press: TermPress?
+    var id: Int { range.lowerBound }
   }
 }
 
@@ -89,6 +131,10 @@ struct TermLineView: View {
     .padding(.horizontal, bleed)
     .frame(height: metrics.line, alignment: .topLeading)
     .background(TerminalPalette.band(line.band))
+    // Under the band, and full-bleed: an expansion that runs past the top of
+    // the screen otherwise leaves no mark of where it began, and the reader is
+    // left guessing which row they opened. The web client's `.term-open`.
+    .background(line.inOpen ? TerminalPalette.openWash : .clear)
   }
 
   @ViewBuilder private var gutter: some View {

@@ -1144,7 +1144,13 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   **native Swift terminal renderer** (phase 1 — virtualized, deterministic heights, the folds,
   diffs; `lines` deleted there as on the web) and the iOS **replay hold**. Those two are the
   opposite case — built, then run on a real device against a real session, which is how the
-  open-a-session flicker was found and fixed. They also touch **no published package**: the phone
+  open-a-session flicker was found and fixed. Phase 2 rides there too: **tap to expand/collapse**
+  (`TerminalExpansion`, an *input to the planner* rather than cell state, because a
+  `UICollectionViewLayout` takes every frame from the height book) and the **scrubber** (the port
+  of `buildClusters`/`railScale` into the kit, where their two shipped pure-logic bugs are
+  testable). Both are on the phone; both have one gesture the simulator could not be driven to
+  exercise. Next up is the renderer refactor to selectable text and the load flicker Tobias
+  reports — brief in `_docs/features/ios-terminal-selection.md`. They also touch **no published package**: the phone
   app is side-loaded from this repo and has no `package.json`, so `version:set` does not reach it
   and a bump neither helps nor hinders it.
 

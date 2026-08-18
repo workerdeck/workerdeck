@@ -12,6 +12,18 @@ enum TranscriptRowAnchor: Sendable {
   case bottom
 }
 
+/// "Bring this row's first line back into view, if the expansion pushed it above
+/// the fold." The iOS spelling of the web client's `useRevealOnOpen`.
+///
+/// **One-directional, and only on the open transition.** A row already in view
+/// never moves, and closing one never scrolls — the reader asked to see more,
+/// not to be taken somewhere. Nonce-keyed so asking twice for the same row is
+/// two requests while an unchanged value is a no-op.
+struct TranscriptRevealRequest: Equatable, Sendable {
+  var row: Int
+  var nonce: Int
+}
+
 /// One frame's worth of scroll geometry, all in **content space** (the top
 /// inset already folded in, so `contentOffset` is "how far into the content the
 /// first visible point is"). This is the coordinate system the scrubber's
@@ -31,6 +43,7 @@ struct TranscriptScrollReadings: Equatable, Sendable {
 protocol TranscriptScrollDriver: AnyObject {
   func scrollToBottom(animated: Bool)
   func scrollToRow(_ index: Int, anchor: TranscriptRowAnchor, animated: Bool)
+  func scrollTo(contentOffset: CGFloat)
 }
 
 /// The handle the parent holds: commands in, live readings out.
@@ -62,6 +75,15 @@ final class TranscriptScrollModel {
   /// never by arithmetic; a `Task` row covers a membership).
   func scrollToRow(_ index: Int, anchor: TranscriptRowAnchor = .top, animated: Bool = false) {
     driver?.scrollToRow(index, anchor: anchor, animated: animated)
+  }
+
+  /// Scrub to an exact place in content space.
+  ///
+  /// Distinct from ``scrollToRow(_:anchor:animated:)`` on purpose: a rail drag
+  /// is continuous and a row is not, so snapping to row boundaries would make a
+  /// long row a dead zone the transcript jumps across.
+  func scrollTo(contentOffset: CGFloat) {
+    driver?.scrollTo(contentOffset: contentOffset)
   }
 
   func publish(_ readings: TranscriptScrollReadings) {
@@ -123,7 +145,17 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
   var rows: TerminalRows
   var book: TerminalHeightBook
   var metrics: TerminalMetrics
+  /// Which blocks are open. Part of the epoch, not a rendering detail: it
+  /// changes what the book says every row is worth, and `rows` do not move when
+  /// it changes, so nothing else here would notice.
+  var expansion: TerminalExpansion
   var scroll: TranscriptScrollModel
+  var reveal: TranscriptRevealRequest?
+  /// Hidden while the overview rail is mounted: the rail *is* the scrollbar
+  /// there, and two of them beside each other is one too many. The web client
+  /// makes the same trade, and restores the native bar under
+  /// `affordances={false}` — never leave a reader with no way to scroll.
+  var showsScrollIndicator = true
   /// Breathing room above the first and below the last row, applied as
   /// `contentInset` so it scrolls with the content and never enters the book.
   var verticalPadding: CGFloat = 0
@@ -145,6 +177,7 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
     cv.keyboardDismissMode = .interactive
     cv.alwaysBounceVertical = true
     cv.showsHorizontalScrollIndicator = false
+    cv.showsVerticalScrollIndicator = showsScrollIndicator
     cv.isPrefetchingEnabled = true
     // The load-bearing negation: iOS 16+ would otherwise let the hosting
     // configuration invalidate its own size, and every frame must come from
@@ -170,11 +203,16 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
     let coordinator = context.coordinator
     coordinator.rowContent = rowContent
     coordinator.attach(model: scroll)
+    if uiView.showsVerticalScrollIndicator != showsScrollIndicator {
+      uiView.showsVerticalScrollIndicator = showsScrollIndicator
+    }
     if uiView.contentInset.top != verticalPadding || uiView.contentInset.bottom != verticalPadding {
       uiView.contentInset = UIEdgeInsets(
         top: verticalPadding, left: 0, bottom: verticalPadding, right: 0)
     }
-    coordinator.apply(rows: rows, book: book, metrics: metrics)
+    coordinator.apply(rows: rows, book: book, metrics: metrics, expansion: expansion)
+    // After the epoch has landed, so the offsets it reads are the new ones.
+    coordinator.reveal(reveal)
   }
 
   // MARK: - Coordinator
@@ -216,6 +254,8 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
     private(set) var rows = TerminalRows(rows: [])
     private var book: TerminalHeightBook?
     private var metrics: TerminalMetrics?
+    private var expansion = TerminalExpansion()
+    private var revealedNonce: Int?
     /// Cached keys of `rows` — the diff runs per applied epoch and rebuilding
     /// the old side each time would double its cost.
     private var keys: [String] = []
@@ -245,20 +285,25 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
     // MARK: Epochs
 
     func apply(rows newRows: TerminalRows, book newBook: TerminalHeightBook,
-      metrics newMetrics: TerminalMetrics)
+      metrics newMetrics: TerminalMetrics, expansion newExpansion: TerminalExpansion)
     {
       let rowsChanged = newRows != rows
       let metricsChanged = newMetrics != metrics
+      // Expansion changes no row and no key — only what each is worth — so
+      // without this the guard below would swallow it and the layout would keep
+      // drawing the collapsed frames.
+      let expansionChanged = newExpansion != expansion
       // Equal (rows, metrics) derive an identical book — the calculator is
       // deterministic, which is the premise of this whole surface — so there
       // is nothing to do. This guard is what makes it safe for SwiftUI to call
       // `updateUIView` as often as it likes.
-      guard rowsChanged || metricsChanged else { return }
+      guard rowsChanged || metricsChanged || expansionChanged else { return }
 
       guard let cv = collectionView, let layout else {
         self.rows = newRows
         self.book = newBook
         self.metrics = newMetrics
+        self.expansion = newExpansion
         self.keys = newRows.rows.map(\.key)
         return
       }
@@ -274,6 +319,7 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
       rows = newRows
       book = newBook
       metrics = newMetrics
+      expansion = newExpansion
       let newKeys = newRows.rows.map(\.key)
       keys = newKeys
       layout.setBook(newBook, rowCount: newRows.count)
@@ -287,14 +333,14 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
           // The streaming shape: same rows, one of them grew (a delta landed,
           // a call settled into its run). Reconfigure keeps the same cell and
           // hosting view, so SwiftUI diffs in place.
-          reconfigureVisible(cv, old: old, force: metricsChanged)
+          reconfigureVisible(cv, old: old, force: metricsChanged || expansionChanged)
         } else if newKeys.count > oldKeys.count, newKeys.starts(with: oldKeys) {
           // The append shape. The old tail commonly changed in the same event
           // (a run's key is its *first* call, so a growing run appends
           // nothing), hence the reconfigure ride-along.
           let inserted = (oldKeys.count..<newKeys.count).map { IndexPath(item: $0, section: 0) }
           cv.performBatchUpdates { cv.insertItems(at: inserted) }
-          reconfigureVisible(cv, old: old, force: metricsChanged)
+          reconfigureVisible(cv, old: old, force: metricsChanged || expansionChanged)
         } else {
           // Anything structural — a refold, the recap splice, a truncation.
           // Deliberately not a keyed batch-diff: UICollectionView move/delete
@@ -386,6 +432,28 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
       return nil
     }
 
+    // MARK: Reveal
+
+    /// Bring an opened row's first line back, and only that.
+    ///
+    /// Two cases need it, and the escaped one needs it least: the anchor
+    /// already holds the row under the fold still, so a press on a row you can
+    /// see moves nothing. It is the **pinned** case this exists for — expanding
+    /// near the tail re-pins to the bottom, and eighty new lines push the header
+    /// you pressed clean off the top of the screen.
+    func reveal(_ request: TranscriptRevealRequest?) {
+      guard let request, request.nonce != revealedNonce else { return }
+      revealedNonce = request.nonce
+      guard let cv = collectionView, let book, request.row >= 0, request.row < rows.count else {
+        return
+      }
+      let foldY = cv.contentOffset.y + cv.adjustedContentInset.top
+      // One-directional: a first line already at or below the fold stays where
+      // it is. Anything else would be scrolling the reader for asking to read.
+      guard book.offset(at: request.row) < foldY else { return }
+      scrollToRow(request.row, anchor: .top, animated: true)
+    }
+
     // MARK: Geometry
 
     func geometryChanged(_ cv: TranscriptCollectionView) {
@@ -438,6 +506,15 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
     }
 
     private func pinToBottom(_ scrollView: UIScrollView) {
+      // Not before the view has a size. `bottomOffsetY` subtracts the bounds
+      // height, so at zero bounds "the bottom" computes to the whole content
+      // height — a position one viewport past the end. The first `apply` runs
+      // from `updateUIView`, which SwiftUI calls *before* it has laid the view
+      // out, so this is the ordinary path and not an edge case: it would mount
+      // cells at a bogus offset and then move them the moment the real bounds
+      // arrive. `geometryChanged` pins for real on the first layout, which is
+      // where the viewport stops being zero.
+      guard scrollView.bounds.height > 0 else { return }
       scrollView.contentOffset = CGPoint(
         x: scrollView.contentOffset.x, y: bottomOffsetY(scrollView))
     }
@@ -478,6 +555,16 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
       cv.setContentOffset(
         CGPoint(x: cv.contentOffset.x, y: bottomOffsetY(cv)), animated: animated)
       if !animated { publishReadings(cv) }
+    }
+
+    func scrollTo(contentOffset: CGFloat) {
+      guard let cv = collectionView else { return }
+      let target = clampedOffsetY(contentOffset - cv.adjustedContentInset.top, in: cv)
+      // A scrub decides the pin from where it lands, like a jump: dragging the
+      // rail to its foot *is* going to the bottom.
+      setPinned(target >= bottomOffsetY(cv) - repinThreshold)
+      cv.setContentOffset(CGPoint(x: cv.contentOffset.x, y: target), animated: false)
+      publishReadings(cv)
     }
 
     func scrollToRow(_ index: Int, anchor: TranscriptRowAnchor, animated: Bool) {
