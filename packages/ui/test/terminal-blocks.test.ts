@@ -118,6 +118,30 @@ describe('terminalBlocks', () => {
   })
 })
 
+describe('terminalBlocks · run indices', () => {
+  it('records every member’s global index, respecting the slice offset', () => {
+    const items = [text('go'), tool('Bash'), tool('Read'), text('done')]
+    const run = terminalBlocks(items)[1]!
+    if (!('run' in run)) throw new Error('expected a run block')
+    expect(run.indices).toEqual([1, 2])
+    // The virtualized shell folds each side of the recap boundary separately,
+    // so a slice's blocks must still say where they sit in the whole.
+    const offset = terminalBlocks(items.slice(1), 1)[0]!
+    if (!('run' in offset)) throw new Error('expected a run block')
+    expect(offset.indices).toEqual([1, 2])
+  })
+
+  it('skips the absorbed item a run folded across', () => {
+    // The gapped run: two top-level calls separated only by a subagent's step
+    // are adjacent on screen, so `[index, index + len)` cannot describe them.
+    const items = [task('A'), tool('Bash'), tool('Read', 'A'), tool('Bash'), text('done')]
+    const run = terminalBlocks(items)[1]!
+    if (!('run' in run)) throw new Error('expected a run block')
+    expect(run.indices).toEqual([1, 3])
+    expect(run.index).toBe(1)
+  })
+})
+
 describe('terminalBlocks · task absorption', () => {
   it('absorbs a Task call and everything its subagent produced into one row', () => {
     const items = [

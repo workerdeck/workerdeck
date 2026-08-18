@@ -9,6 +9,18 @@ import Foundation
 /// a scrubber mark, the catch-up jump, a bookmark, "reveal this sub-agent" —
 /// must resolve through ``rowIndex(forItem:)`` and never by arithmetic.
 
+/// Where an item sits inside a row shared with other items: its 0-based ordinal
+/// in stream order, out of `count` siblings. `0 <= ordinal < count`.
+public struct RowPosition: Equatable, Sendable {
+  public var ordinal: Int
+  public var count: Int
+
+  public init(ordinal: Int, count: Int) {
+    self.ordinal = ordinal
+    self.count = count
+  }
+}
+
 /// One drawn row: a folded block, or the catch-up seam spliced between them.
 public enum TranscriptRow: Equatable, Sendable {
   case block(TerminalBlock)
@@ -42,6 +54,10 @@ public struct TerminalRows: Equatable, Sendable {
   /// Transcript index → the row that absorbed it. No ordering argument can find
   /// these: parallel subagents interleave.
   private var absorbed: [Int: Int]
+  /// Transcript index → where the item sits inside a row it SHARES with other
+  /// items. Built in the same pass as `absorbed`, for the same reason: nothing
+  /// positional can be recovered by arithmetic here.
+  private var positions: [Int: RowPosition]
   /// Per row, the transcript index it sorts at. A recap row borrows its
   /// successor's start so the search stays monotonic, but can never be an
   /// answer.
@@ -52,11 +68,29 @@ public struct TerminalRows: Equatable, Sendable {
     self.rows = rows
 
     var absorbed: [Int: Int] = [:]
+    var positions: [Int: RowPosition] = [:]
     for (rowIndex, row) in rows.enumerated() {
-      guard case .block(.task(let task)) = row else { continue }
-      for childIndex in task.childIndices { absorbed[childIndex] = rowIndex }
+      guard case .block(let block) = row else { continue }
+      switch block {
+      case .task(let task):
+        for (ordinal, childIndex) in task.childIndices.enumerated() {
+          absorbed[childIndex] = rowIndex
+          positions[childIndex] = RowPosition(ordinal: ordinal, count: task.childIndices.count)
+        }
+      // A run of ONE gets no position, and that carve-out is load-bearing: the
+      // fold makes every top-level tool call a run block, usually of length 1,
+      // so without it every ordinary failed call's mark would shrink from its
+      // row's extent to a tick and the rail would stop reading as a map.
+      case .run(let run) where run.run.count > 1:
+        for (ordinal, memberIndex) in run.indices.enumerated() {
+          positions[memberIndex] = RowPosition(ordinal: ordinal, count: run.run.count)
+        }
+      case .item, .run:
+        break
+      }
     }
     self.absorbed = absorbed
+    self.positions = positions
 
     var starts = [Int](repeating: 0, count: rows.count)
     var answerable = [Bool](repeating: false, count: rows.count)
@@ -115,6 +149,17 @@ public struct TerminalRows: Equatable, Sendable {
     }
     return best
   }
+
+  /// Where an item sits inside a row that holds MORE than itself — a task
+  /// block's absorbed child, or a member of a folded run of two or more. `nil`
+  /// for everything else, including a row's own head item and a singleton run:
+  /// there the row's extent IS the item's, and a mark spanning it is honest.
+  ///
+  /// The scrubber is the consumer: a mark for a shared-row item anchors at
+  /// `ordinal / count` of the row's height instead of inheriting an extent that
+  /// is mostly other items' work — expanded, one failed child of a hundred-call
+  /// task painted a solid band down the whole rail.
+  public func position(forItem itemIndex: Int) -> RowPosition? { positions[itemIndex] }
 
   /// Does a blank line go above this row? True at either edge of the recap seam,
   /// since a seam always breaks the run.

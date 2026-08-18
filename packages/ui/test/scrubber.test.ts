@@ -239,3 +239,95 @@ describe('buildClusters', () => {
     expect(buildClusters(props([]), RAIL)).toEqual([])
   })
 })
+
+describe('marks inside a shared row', () => {
+  // A hundred-call task collapsed is one line and expanded is the whole
+  // subagent area — `sizeOfRow` reports the measurement either way, so one
+  // failed child used to paint a band down the entire rail.
+  const failedChild = () => [user('go'), toolCall('failed')]
+
+  it('anchors a shared-row mark fractionally, at the hit-target height', () => {
+    // rowH 400 with viewportH 200 and RAIL 100 → scale 0.25; ordinal 2 of 4
+    // sits halfway down a row whose top is at 0 → y = round(200 × 0.25) = 50.
+    const clusters = buildClusters(
+      props(failedChild(), {
+        rowIndexFor: () => 0,
+        offsetOfRow: () => 0,
+        sizeOfRow: () => 400,
+        totalSize: 400,
+        positionInRow: (i) => (i === 1 ? { ordinal: 2, count: 4 } : undefined),
+      }),
+      RAIL,
+    )
+    const failed = clusters.find((c) => c.kind === 'toolFailed')!
+    expect(failed.h).toBe(2)
+    expect(failed.y).toBe(50)
+  })
+
+  it('reproduces today’s full-extent band when the prop is absent', () => {
+    const clusters = buildClusters(
+      props(failedChild(), {
+        rowIndexFor: () => 0,
+        offsetOfRow: () => 0,
+        sizeOfRow: () => 400,
+        totalSize: 400,
+      }),
+      RAIL,
+    )
+    expect(clusters.find((c) => c.kind === 'toolFailed')!.h).toBe(100)
+  })
+
+  it('merges siblings when the row is collapsed to one line', () => {
+    // Collapsed, the shared row is one 20px line inside a long transcript:
+    // every fraction of it rounds into the same rail pixel, so two failed
+    // children read as one mark — exactly as they did before the fraction.
+    const items = [user('go'), toolCall('failed'), toolCall('failed')]
+    const collapsed = {
+      rowIndexFor: () => 0,
+      offsetOfRow: () => 0,
+      sizeOfRow: () => 20,
+      totalSize: 20_000,
+    }
+    const withFraction = buildClusters(
+      props(items, { ...collapsed, positionInRow: (i) => ({ ordinal: i - 1, count: 2 }) }),
+      RAIL,
+    ).filter((c) => c.kind === 'toolFailed')
+    expect(withFraction).toHaveLength(1)
+    const before = buildClusters(props(items, collapsed), RAIL).filter(
+      (c) => c.kind === 'toolFailed',
+    )
+    expect(withFraction.map((c) => [c.y, c.h])).toEqual(before.map((c) => [c.y, c.h]))
+  })
+
+  it('clamps the last sibling of a tall row inside the rail', () => {
+    const clusters = buildClusters(
+      props(failedChild(), {
+        rowIndexFor: () => 0,
+        offsetOfRow: () => 0,
+        sizeOfRow: () => 10_000,
+        totalSize: 10_000,
+        positionInRow: () => ({ ordinal: 99, count: 100 }),
+      }),
+      RAIL,
+    )
+    expect(clusters.find((c) => c.kind === 'toolFailed')!.y).toBe(RAIL - 2)
+  })
+
+  it('applies to a bookmark on an absorbed child too — the same bug', () => {
+    const items = [user('go'), toolCall('settled')]
+    const clusters = buildClusters(
+      props(items, {
+        bookmarks: [1],
+        rowIndexFor: () => 0,
+        offsetOfRow: () => 0,
+        sizeOfRow: () => 400,
+        totalSize: 400,
+        positionInRow: (i) => (i === 1 ? { ordinal: 1, count: 4 } : undefined),
+      }),
+      RAIL,
+    )
+    const bookmark = clusters.find((c) => c.kind === 'bookmark')!
+    expect(bookmark.h).toBe(2)
+    expect(bookmark.y).toBe(25)
+  })
+})

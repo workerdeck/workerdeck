@@ -468,7 +468,17 @@ protocol. Read these before changing scope or structure:
   same disjunction the row reddens with and the recap counts by, and both spellings are needed
   (an out-of-loop execution failure sets only the status; an engine can flag `is_error` on a
   call the reducer has not settled). A mark is its row's extent at rail
-  scale (2px floor), drawn as a solid 2px head with a 25% tail; marks merge under a pixel with
+  scale (2px floor), drawn as a solid 2px head with a 25% tail — **except an item that shares its
+  row**, which is a 2px tick at `ordinal / count` of the row's measured height
+  (`positionInRow`/`RowPosition`, mirrored in `TerminalRows.position(forItem:)`). A row covers a
+  membership, so a task block's absorbed child and a folded run's member inherit an extent that is
+  mostly other items' work: expanded, one failed child of a hundred-call task painted a solid band
+  down the whole rail. `sizeOfRow` is the *measurement*, so expansion is reflected without the
+  scrubber learning expansion state — collapsed the fraction rounds onto the row's one line and
+  siblings merge as before. A **singleton run keeps its extent**, which is the load-bearing
+  carve-out: the fold makes every top-level tool call a run of one, and shrinking those would stop
+  the rail reading as a map. The fraction is deliberately approximate on iOS too, where the height
+  book could give a child's true offset — one rule, two implementations. Marks merge under a pixel with
   the loudest colour winning, and a 2px full-width cursor line rides the viewport's top edge. The
   12px is the one deliberate exception to the theme's `ch` rule: the rail is chrome beside the
   grid, and its lanes are hit targets rather than columns of text. Rail scale is `railScale()`

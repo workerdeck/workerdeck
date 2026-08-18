@@ -29,6 +29,12 @@ public struct TerminalItemBlock: Equatable, Sendable {
 public struct TerminalRunBlock: Equatable, Sendable {
   public var key: String
   public var run: [ToolCallItem]
+  /// Every member's global transcript index, in stream order — `childIndices`'
+  /// sibling, and needed for the same reason: a run folded across an absorbed
+  /// gap has no `[index, index + count)` coverage, so a member's ordinal within
+  /// the run (what the scrubber anchors a failure by) is unrecoverable from
+  /// index arithmetic.
+  public var indices: [Int]
   public var index: Int
 }
 
@@ -188,10 +194,13 @@ private func pushLeaf(_ out: inout [TerminalBlock], _ item: TranscriptItem, _ in
       foldsTogether(first, call)
     {
       previous.run.append(call)
+      previous.indices.append(index)
       out[out.count - 1] = .run(previous)
       return
     }
-    out.append(.run(TerminalRunBlock(key: "run:\(call.id)", run: [call], index: index)))
+    out.append(
+      TerminalBlock.run(
+        TerminalRunBlock(key: "run:\(call.id)", run: [call], indices: [index], index: index)))
     return
   }
   out.append(

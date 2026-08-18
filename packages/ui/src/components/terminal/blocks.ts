@@ -79,7 +79,17 @@ export type ItemBlock = { key: string; item: TranscriptItem; index: number }
  * At the top level its coverage is contiguous (`[index, index + run.length)`);
  * inside a task block the members' global indices may be scattered (the run is
  * consecutive in the *subagent's* stream, not the transcript's). */
-export type RunBlock = { key: string; run: ToolCallItem[]; index: number }
+export type RunBlock = {
+  key: string
+  run: ToolCallItem[]
+  /** Every member's global transcript index, in stream order — `childIndices`'
+   * sibling, and needed for the same reason: a run folded across an absorbed
+   * gap has no `[index, index + len)` coverage, so a member's ordinal within
+   * the run (what the scrubber anchors a failure by) is unrecoverable from
+   * `index` arithmetic. */
+  indices: number[]
+  index: number
+}
 /** What a task block's children fold into. Never a task block itself — the
  * engines do not nest sidechains, and a hypothetical grandchild renders
  * top-level rather than vanishing (see the module comment). */
@@ -128,9 +138,10 @@ function pushLeaf(out: LeafBlock[], item: TranscriptItem, index: number): void {
   if (isRunCall(item)) {
     if (previous && 'run' in previous && foldsTogether(previous.run[0]!, item)) {
       previous.run.push(item)
+      previous.indices.push(index)
     } else {
       // Keyed by the run's *first* call, so the key is stable as the run grows.
-      out.push({ key: `run:${item.id}`, run: [item], index })
+      out.push({ key: `run:${item.id}`, run: [item], indices: [index], index })
     }
     return
   }

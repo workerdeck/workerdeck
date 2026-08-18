@@ -28,7 +28,7 @@ import { resolveAffordances, type TerminalAffordances } from '../terminal/afford
 import { ToolRunRow, WorkingRow, parentOf, terminalBlocks } from '../terminal/items.tsx'
 import { estimateBlockPx } from '../terminal/height.ts'
 import { TerminalScrubber } from '../terminal/scrubber.tsx'
-import { gapBefore, rowIndexForItem, type TranscriptRow } from './transcript-rows.ts'
+import { gapBefore, positionInRow, rowIndexForItem, type TranscriptRow } from './transcript-rows.ts'
 import { useHeightEpoch } from './use-height-epoch.ts'
 import { useTranscriptJumps } from './use-transcript-jumps.ts'
 import { Row } from '../terminal/row.tsx'
@@ -922,6 +922,7 @@ function TranscriptRows({
               recapRow={recapRow}
               bookmarks={scrubberMarks ?? []}
               rowIndexFor={(itemIndex) => rowIndexForItem(rows, itemIndex)}
+              positionInRow={(itemIndex) => positionInRow(rows, itemIndex)}
               // The public memoized measurements array — `getTotalSize()` just
               // above refreshed it, and with the calculator feeding
               // `estimateSize` these starts are honest for unmounted rows too.

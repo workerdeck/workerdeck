@@ -41,12 +41,14 @@ struct TerminalScrubberTests {
 
   private func input(
     _ items: [TranscriptItem], approvals: [PermissionRequest] = [], bookmarks: [Int] = [],
-    recap: ScrubberRecap? = nil, viewport: CGFloat = 400
+    recap: ScrubberRecap? = nil, viewport: CGFloat = 400,
+    expansion: TerminalExpansion = TerminalExpansion()
   ) -> ScrubberInput {
     let rows = TerminalRows.build(items: items)
     return ScrubberInput(
       items: items, rows: rows,
-      book: TerminalHeightBook(rows: rows, metrics: metrics), pendingApprovals: approvals,
+      book: TerminalHeightBook(rows: rows, metrics: metrics, expansion: expansion),
+      pendingApprovals: approvals,
       bookmarks: bookmarks, recap: recap, viewportHeight: viewport)
   }
 
@@ -293,5 +295,92 @@ extension TerminalScrubberTests {
     #expect(clusters.count <= 2 * 760)
     #expect(clusters.flatMap(\.marks).count == 8000)
     for cluster in clusters { #expect(cluster.y + cluster.h <= 760 + scrubberMinMark) }
+  }
+
+  // MARK: - Marks inside a shared row
+
+  /// A task of many children is one line collapsed and the whole subagent area
+  /// expanded. The height book reports the measurement either way, so one failed
+  /// child used to paint a band down the entire rail once it was opened.
+  private var taskWithOneFailedChild: [TranscriptItem] {
+    [
+      user("u1"),
+      .toolCall(
+        ToolCallItem(
+          id: "T", name: "Task", input: .object(["description": .string("explore")]),
+          parentToolUseId: nil, status: .settled,
+          result: ToolCallResult(text: "report", isError: false))),
+      call("c0", parent: "T", result: "ok"),
+      call("c1", "Grep", parent: "T", result: "no matches", error: true),
+      call("c2", parent: "T", result: "ok"),
+      call("c3", parent: "T", result: "ok"),
+      say("a1"),
+    ]
+  }
+
+  @Test("an expanded task's failed child is a tick inside the row, not a band over it")
+  func absorbedChildAnchorsFractionally() {
+    let items = taskWithOneFailedChild
+    let open = TerminalExpansion(open: ["task:T"])
+    let expanded = input(items, expansion: open)
+    let clusters = buildScrubberClusters(expanded, railH: 100)
+    guard let failed = clusters.first(where: { $0.kind == .toolFailed }) else {
+      Issue.record("expected a toolFailed cluster")
+      return
+    }
+    let rowIndex = expanded.rows.rowIndex(forItem: 3)
+    let rowH = expanded.book.height(at: rowIndex)
+    let scale = railScale(
+      railH: 100, totalSize: expanded.totalSize, viewportH: expanded.viewportHeight)
+    // The task absorbed four children and this is the second of them.
+    #expect(expanded.rows.position(forItem: 3) == RowPosition(ordinal: 1, count: 4))
+    #expect(failed.h == scrubberMinMark)
+    #expect(
+      failed.y
+        == min(
+          max(0, 100 - scrubberMinMark),
+          ((expanded.book.offset(at: rowIndex) + rowH / 4) * scale).rounded()))
+    // The bug: without the fraction the mark would be the whole expanded block.
+    #expect(failed.h < (rowH * scale).rounded())
+  }
+
+  @Test("collapsed, the same mark sits where it always did")
+  func absorbedChildCollapsedIsUnchanged() {
+    // Padded to a session's worth of rows, which is the regime that matters:
+    // the collapsed task row is one line out of thousands, so every fraction of
+    // it rounds onto the row's own offset and siblings merge as they always did.
+    let items = taskWithOneFailedChild + (0..<300).map { say("pad\($0)", "line \($0)") }
+    let collapsed = input(items)
+    let clusters = buildScrubberClusters(collapsed, railH: 100)
+    guard let failed = clusters.first(where: { $0.kind == .toolFailed }) else {
+      Issue.record("expected a toolFailed cluster")
+      return
+    }
+    // One line, so the fraction rounds onto the row's own offset — the mark is
+    // the hit target at the top of the task row, exactly as before.
+    let rowIndex = collapsed.rows.rowIndex(forItem: 3)
+    #expect(failed.h == scrubberMinMark)
+    #expect(
+      failed.y
+        == (collapsed.book.offset(at: rowIndex)
+          * railScale(
+            railH: 100, totalSize: collapsed.totalSize, viewportH: collapsed.viewportHeight))
+          .rounded())
+  }
+
+  @Test("a plain failed call still spans its own row — the rail stays a map")
+  func singletonRunKeepsItsExtent() {
+    let items = [user("u1"), call("c1", result: "boom", error: true), say("a1")]
+    let plain = input(items)
+    let clusters = buildScrubberClusters(plain, railH: 100)
+    guard let failed = clusters.first(where: { $0.kind == .toolFailed }) else {
+      Issue.record("expected a toolFailed cluster")
+      return
+    }
+    #expect(plain.rows.position(forItem: 1) == nil)
+    let rowIndex = plain.rows.rowIndex(forItem: 1)
+    let scale = railScale(
+      railH: 100, totalSize: plain.totalSize, viewportH: plain.viewportHeight)
+    #expect(failed.h == max(scrubberMinMark, (plain.book.height(at: rowIndex) * scale).rounded()))
   }
 }

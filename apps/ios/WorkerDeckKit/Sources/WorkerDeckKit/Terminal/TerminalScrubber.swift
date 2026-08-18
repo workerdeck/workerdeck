@@ -284,9 +284,28 @@ public func buildScrubberClusters(_ input: ScrubberInput, railH: CGFloat) -> [Sc
     // A mark's height is its row's, at rail scale, floored at the hit target —
     // the row the mark *anchors* (for a turn, the final response), which is
     // where the reader lands and what they came to gauge the size of.
-    let h = max(scrubberMinMark, (input.book.height(at: mark.rowIndex) * scale).rounded())
-    let y = min(
-      max(0, railH - h), (input.book.offset(at: mark.rowIndex) * scale).rounded())
+    //
+    // EXCEPT an item that SHARES its row (a task block's absorbed child, a
+    // folded run's member): there the row's extent is mostly other items' work,
+    // and expanded it is the whole subagent area — one failed child of a
+    // hundred-call task used to paint a solid band down the entire rail. Such a
+    // mark is a tick at its fractional position within the row.
+    //
+    // The height book already reflects expansion (it is planned from the live
+    // `TerminalExpansion`), so collapsed the fraction rounds onto the row's one
+    // line and siblings merge exactly as before. The fraction is deliberately
+    // approximate — this renderer COULD compute a child's true line offset from
+    // the book, and using the same fraction as the web client instead is what
+    // keeps the two implementations one rule. Applied here rather than per kind
+    // because a bookmark on an absorbed child has the identical bug; the recap
+    // mark is `itemIndex: -1`, hence the guard.
+    let within = mark.itemIndex >= 0 ? input.rows.position(forItem: mark.itemIndex) : nil
+    let rowH = input.book.height(at: mark.rowIndex)
+    let h = within != nil ? scrubberMinMark : max(scrubberMinMark, (rowH * scale).rounded())
+    let offset =
+      input.book.offset(at: mark.rowIndex)
+      + (within.map { CGFloat($0.ordinal) / CGFloat($0.count) * rowH } ?? 0)
+    let y = min(max(0, railH - h), (offset * scale).rounded())
     lanes[mark.kind.lane, default: []].append(ScrubberMember(mark: mark, y: y))
     heights[mark.kind.lane, default: []].append(h)
   }

@@ -224,6 +224,12 @@ export interface TerminalScrubberProps {
   /** A virtual row's height in content space, same source — what a mark's own
    * height is scaled from. */
   sizeOfRow: (rowIndex: number) => number
+  /** Where an item sits inside a row shared with other items — a task block's
+   * absorbed child or a folded run's member (`positionInRow` in
+   * `agent/transcript-rows.ts`). Optional and additive: without it every mark
+   * spans its row's extent, which for an expanded task block is the whole
+   * subagent area. */
+  positionInRow?: (itemIndex: number) => { ordinal: number; count: number } | undefined
   totalSize: number
   scrollOffset: number
   viewportH: number
@@ -255,6 +261,7 @@ export function buildClusters(
     rowIndexFor,
     offsetOfRow,
     sizeOfRow,
+    positionInRow,
     totalSize,
     viewportH,
   } = props
@@ -322,8 +329,30 @@ export function buildClusters(
     // A mark's height is its row's, at rail scale, floored at the hit target —
     // the row the mark *anchors* (for a turn, the final response), which is
     // where the reader lands and what they came to gauge the size of.
-    const h = Math.max(MIN_MARK, Math.round(sizeOfRow(mark.rowIndex) * scale))
-    const y = Math.min(Math.max(0, railH - h), Math.round(offsetOfRow(mark.rowIndex) * scale))
+    //
+    // EXCEPT an item that SHARES its row (a task block's absorbed child, a
+    // folded run's member): there the row's extent is mostly other items' work,
+    // and expanded it is the entire subagent area — one failed child of a
+    // hundred-call task used to paint a solid red band down the whole rail.
+    // Such a mark is a tick at its fractional position within the row.
+    // `sizeOfRow` is the virtualizer's *measurement*, so expansion is reflected
+    // with no expansion state here (which the scrubber deliberately cannot see,
+    // `height.ts`'s "unmounted is collapsed" invariant being load-bearing):
+    // collapsed, the fraction rounds onto the row's one line and siblings merge
+    // exactly as before; expanded, the ticks distribute down the block —
+    // approximately, since children differ in height, which a 12px rail cannot
+    // show and exactness would cost the scrubber the one thing it must not know.
+    // Applied here rather than per kind because a bookmark on an absorbed child
+    // has the identical bug; `recap` is `itemIndex: -1`, hence the guard.
+    const within = mark.itemIndex >= 0 ? positionInRow?.(mark.itemIndex) : undefined
+    const rowH = sizeOfRow(mark.rowIndex)
+    const h = within ? MIN_MARK : Math.max(MIN_MARK, Math.round(rowH * scale))
+    const y = Math.min(
+      Math.max(0, railH - h),
+      Math.round(
+        (offsetOfRow(mark.rowIndex) + (within ? (within.ordinal / within.count) * rowH : 0)) * scale,
+      ),
+    )
     const lane = LANE[mark.kind]
     const list = lanes.get(lane) ?? []
     list.push({ mark, y, h })

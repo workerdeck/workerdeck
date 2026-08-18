@@ -122,3 +122,52 @@ export function rowIndexForItem(rows: readonly TranscriptRow[], itemIndex: numbe
   }
   return best
 }
+
+/** Where an item sits inside a row it shares with other items: its 0-based
+ * ordinal in stream order, out of `count` siblings. `0 ≤ ordinal < count`. */
+export type RowPosition = { ordinal: number; count: number }
+
+const positionCache = new WeakMap<readonly TranscriptRow[], Map<number, RowPosition>>()
+
+function rowPositions(rows: readonly TranscriptRow[]): Map<number, RowPosition> {
+  const hit = positionCache.get(rows)
+  if (hit) return hit
+  const map = new Map<number, RowPosition>()
+  for (const row of rows) {
+    if ('task' in row) {
+      const count = row.childIndices.length
+      row.childIndices.forEach((itemIndex, ordinal) => map.set(itemIndex, { ordinal, count }))
+    } else if ('run' in row && row.run.length > 1) {
+      const count = row.run.length
+      row.indices.forEach((itemIndex, ordinal) => map.set(itemIndex, { ordinal, count }))
+    }
+  }
+  positionCache.set(rows, map)
+  return map
+}
+
+/**
+ * Where an item sits inside a row that holds MORE than itself — a task block's
+ * absorbed child, or a member of a folded run of two or more. `undefined` for
+ * everything else, including a row's own head item (the `Task` call, a run's
+ * first member is *not* exempt) and a **singleton run**: there the row's extent
+ * IS the item's, and a mark spanning it is honest.
+ *
+ * That carve-out is load-bearing rather than tidy: `pushLeaf` makes *every*
+ * top-level tool call a `RunBlock`, usually of length 1, so without it every
+ * ordinary failed call's scrubber mark would shrink from its row's extent to a
+ * tick and the rail would stop reading as a map — a regression traded for a fix.
+ *
+ * The scrubber is the consumer: a mark for a shared-row item anchors at
+ * `ordinal / count` of the row's *measured* height instead of inheriting an
+ * extent that is mostly other items' work (one failed child of a hundred-call
+ * task painted the whole expanded block red). Memoized per rows array identity
+ * exactly like {@link absorbedRows}, and pure — the answer is a function of the
+ * array alone, and a discarded array takes its map with it.
+ */
+export function positionInRow(
+  rows: readonly TranscriptRow[],
+  itemIndex: number,
+): RowPosition | undefined {
+  return rowPositions(rows).get(itemIndex)
+}

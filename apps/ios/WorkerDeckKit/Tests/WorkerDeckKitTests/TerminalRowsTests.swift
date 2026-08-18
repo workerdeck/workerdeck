@@ -49,6 +49,55 @@ struct TerminalRowsTests {
     for item in 1...3 { #expect(rows.rowIndex(forItem: item) == 1) }
   }
 
+  @Test("a run records every member's global index, across an absorbed gap")
+  func runIndicesSkipAbsorbed() {
+    // Two top-level calls separated only by a subagent's step are adjacent on
+    // screen, so `[index, index + count)` cannot describe the run's coverage.
+    let rows = TerminalRows.build(items: [
+      .toolCall(call("T", "Task")),                   // 0
+      .toolCall(call("a")),                           // 1 ┐ one run
+      .toolCall(call("c", parent: "T")),              // 2 absorbed
+      .toolCall(call("b")),                           // 3 ┘
+      text("done"),                                   // 4
+    ])
+    guard case .block(.run(let run)) = rows[1] else {
+      Issue.record("expected a run at row 1")
+      return
+    }
+    #expect(run.indices == [1, 3])
+    #expect(run.index == 1)
+  }
+
+  @Test("an item that shares its row knows where it sits in it")
+  func sharedRowPositions() {
+    let rows = TerminalRows.build(items: [
+      text("intro"),                                  // 0 own row
+      .toolCall(call("T", "Task")),                   // 1 ┐
+      .toolCall(call("c0", parent: "T")),             // 2 │ absorbed
+      .toolCall(call("c1", parent: "T")),             // 3 ┘
+      .toolCall(call("x")),                           // 4 ┐ run of two
+      .toolCall(call("y")),                           // 5 ┘
+    ])
+    #expect(rows.position(forItem: 2) == RowPosition(ordinal: 0, count: 2))
+    #expect(rows.position(forItem: 3) == RowPosition(ordinal: 1, count: 2))
+    #expect(rows.position(forItem: 4) == RowPosition(ordinal: 0, count: 2))
+    #expect(rows.position(forItem: 5) == RowPosition(ordinal: 1, count: 2))
+    // A row's own head item, the Task itself, and out-of-range have none.
+    #expect(rows.position(forItem: 0) == nil)
+    #expect(rows.position(forItem: 1) == nil)
+    #expect(rows.position(forItem: -1) == nil)
+    #expect(rows.position(forItem: 99) == nil)
+  }
+
+  @Test("a run of one has no position — the rail must stay a map")
+  func singletonRunHasNoPosition() {
+    // The fold makes EVERY top-level tool call a run block. Without this
+    // carve-out every ordinary failed call's mark would shrink from its row's
+    // extent to a tick.
+    let rows = TerminalRows.build(items: [text("intro"), .toolCall(call("a")), text("outro")])
+    #expect(rows.position(forItem: 1) == nil)
+  }
+
   @Test("the recap seam is never the answer")
   func recapIsNeverTheAnswer() {
     let rows = TerminalRows.build(

@@ -15,6 +15,7 @@ import {
 import { taskSummary } from '../src/components/terminal/tool-run.ts'
 import {
   gapBefore,
+  positionInRow,
   rowIndexForItem,
   rowItem,
   type TranscriptRow,
@@ -151,6 +152,65 @@ describe('rowIndexForItem', () => {
         for (let i = 0; i < items.length; i++) {
           expect(rows[rowIndexForItem(rows, i)]!.key).not.toBe('recap')
         }
+      }
+    }
+  })
+})
+
+describe('positionInRow', () => {
+  it('gives a task’s children stream-order ordinals', () => {
+    const rows = buildRows(TRANSCRIPTS.parallel!)
+    // Task A absorbed items 3 and 6; task B items 4 and 7. Ordinals are the
+    // child's place in ITS task, not in the transcript.
+    expect(positionInRow(rows, 3)).toEqual({ ordinal: 0, count: 2 })
+    expect(positionInRow(rows, 6)).toEqual({ ordinal: 1, count: 2 })
+    expect(positionInRow(rows, 4)).toEqual({ ordinal: 0, count: 2 })
+    expect(positionInRow(rows, 7)).toEqual({ ordinal: 1, count: 2 })
+  })
+
+  it('gives a single-child task a position too — the row is still shared', () => {
+    const rows = buildRows(TRANSCRIPTS.contiguousTask!)
+    // The task's own head line and its result share the row with the brief
+    // and the one call it made.
+    expect(positionInRow(rows, 2)).toEqual({ ordinal: 0, count: 2 })
+    expect(positionInRow(rows, 3)).toEqual({ ordinal: 1, count: 2 })
+  })
+
+  it('gives a folded run’s members positions, across an absorbed gap', () => {
+    const rows = buildRows(TRANSCRIPTS.gappedRun!)
+    expect(positionInRow(rows, 1)).toEqual({ ordinal: 0, count: 2 })
+    expect(positionInRow(rows, 3)).toEqual({ ordinal: 1, count: 2 })
+  })
+
+  it('is undefined for a row that holds nothing but the item', () => {
+    const rows = buildRows(TRANSCRIPTS.plain!)
+    expect(positionInRow(rows, 0)).toBeUndefined() // the prompt, its own row
+    expect(positionInRow(rows, 1)).toBeUndefined() // assistant text
+    // A run of two DOES share: items 2 and 3 fold together.
+    expect(positionInRow(rows, 2)).toEqual({ ordinal: 0, count: 2 })
+    // ...and a singleton run does not — `pushLeaf` makes every top-level call
+    // a RunBlock, so without this carve-out every plain failed call's mark
+    // would shrink from its row's extent to a tick.
+    const single = buildRows([user('go'), tool('Bash'), text('done')])
+    expect(positionInRow(single, 1)).toBeUndefined()
+  })
+
+  it('is undefined for a task’s own index and for out-of-range', () => {
+    const rows = buildRows(TRANSCRIPTS.parallel!)
+    expect(positionInRow(rows, 1)).toBeUndefined() // task A itself
+    expect(positionInRow(rows, -1)).toBeUndefined()
+    expect(positionInRow(rows, 999)).toBeUndefined()
+  })
+
+  it('survives a recap splice — positions come from row contents, not indices', () => {
+    const items = TRANSCRIPTS.parallel!
+    for (let boundary = 1; boundary < items.length; boundary++) {
+      const rows = buildRows(items, boundary)
+      for (let i = 0; i < items.length; i++) {
+        const within = positionInRow(rows, i)
+        if (!within) continue
+        expect(within.ordinal, `boundary=${boundary} item=${i}`).toBeGreaterThanOrEqual(0)
+        expect(within.ordinal, `boundary=${boundary} item=${i}`).toBeLessThan(within.count)
       }
     }
   })
