@@ -89,7 +89,18 @@ protocol. Read these before changing scope or structure:
   back red claiming it had failed. Two surfaces, one rule, one spelling;
   an interrupted turn **sweeps to `failed`** on `turn_result`/`session_closed`/the status coming to
   rest, because a resume backfill replays no `turn_result` and a woken mid-Task session would
-  otherwise read `running` forever; and it is **bounded** — every running record plus the newest
+  otherwise read `running` forever — **except a background agent**, which is *designed* to outlive
+  its turn: a real session ended three turns while three `Agent`s ran and the sweep re-branded all
+  three as failures. So the turn and idle sweeps spare a record the **live** stream marked
+  background (`task_started`, or the async spawn's "Async agent launched" receipt, which is a
+  receipt and never a verdict — settling on it reads "0 of 3 running" while three agents burn
+  tokens); `session_closed` and the terminal statuses still settle everything, because the process
+  hosting those agents is gone, and evidence that is merely *replayed* is never spared for the same
+  reason. A background agent's real verdict is the CLI's `task_notification` (`completed` → `done`,
+  any other stop → `failed`), which on a resume survives only as the `<task-notification>` wrapper
+  text — the `SYNTHETIC_USER_PREFIXES` argument again. The spawner name is **not** the rule
+  (`Task` and `Agent` are both observed, and a third spelling is caught by `task_started`, the
+  receipt, or the nested-event fallback); and it is **bounded** — every running record plus the newest
   `SUBAGENT_HISTORY` settled, evicted by settle order and not insertion order, because this rides
   every row of a 1.2s poll and lands in park snapshots (the attachment-bytes rule again). Absent
   and empty mean the same thing. `sessionState` grows **no** fifth bucket for it: a session with
@@ -1196,9 +1207,9 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   folded run's last call), an item that *shares* a row marks as a tick at its fraction of it rather
   than inheriting an extent that is mostly other items' work, and the two lanes became **channels** —
   input left (prompts + a green band per sub-agent, drawn from membership and never the spawner's
-  name), output right (the answer, and every failure that produced one). One thing the same session
-  found and did **not** fix: `SubagentTracker` mis-reads the SDK's *async* agents — see
-  `docs/ROADMAP.md` §Next 0. Riding there too, and **not** subject to that debt: the iOS
+  name), output right (the answer, and every failure that produced one). The same session also found and fixed
+  `SubagentTracker`'s mis-reading of the SDK's *async* agents (above), which is the one piece of
+  this ledger proven against a **real captured log** rather than an authored one. Riding there too, and **not** subject to that debt: the iOS
   **native Swift terminal renderer** (phase 1 — virtualized, deterministic heights, the folds,
   diffs; `lines` deleted there as on the web) and the iOS **replay hold**. Those two are the
   opposite case — built, then run on a real device against a real session, which is how the

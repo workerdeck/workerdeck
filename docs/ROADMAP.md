@@ -414,16 +414,18 @@ command runs the production build beside dev (`pnpm start:prod`, 8788).
 
 ## Next
 
-0. **Sub-agent handling, end to end — the next session's work.** Three threads, all opened by a
-   real session run against the dev gateway on 2026-08-18 and written up in
-   `_docs/features/sub-agent-handling.md` (gitignored; harvest before deleting). In short: the
-   SDK's *async* agents break `SubagentTracker`'s inference (the spawner is named `Agent`, its
-   `tool_result` means "launched" and arrives before the first nested event, and the turn ends
-   while the agent runs — so every background agent reads `failed` and label-less); the CLI knows
-   its agents' state because it holds the handle, not because the stream carries it, which is the
-   question worth answering before writing more inference; and the CLI's **task summary** (the
-   expandable "tasks" checklist under the composer) is a surface WorkerDeck has no equivalent of
-   at all. Not to be confused with the `Task` *tool* — this is the turn's own to-do list.
+0. **Sub-agent handling — the tracker is fixed; the surface is not.** A real session run against
+   the dev gateway on 2026-08-18 showed every *async* agent reading as a failed, label-less run;
+   the cause and the fix are in the shipped-on-master notes above, and the lesson is the one worth
+   keeping: the CLI's background-task lifecycle (`task_started`, `task_notification`) was in the
+   stream all along, and the tracker had been inferring where it could have been reading. What is
+   still open: **the CLI's task summary** — the expandable "tasks" checklist under its composer,
+   which is the *turn's own to-do list* and not the `Task` tool — a surface WorkerDeck has no
+   equivalent of. First question is empirical and the same one that just paid off: is it a tool
+   whose calls already ride our stream (making it a rendering question) or CLI-side state? Check a
+   capture before designing. Also owed: a background agent **stopped or killed** mid-flight is the
+   one lifecycle path the fix did not exercise. Written up in
+   `_docs/features/sub-agent-handling.md` (gitignored; harvest before deleting).
 1. **APNs push for the iOS app — released in 0.7.0, not yet proven on a device.** The forwarder half is in
    (`packages/cli/src/apns/`: hand-rolled HTTP/2 client, device registry at `/apns/devices`,
    in-process hook onto the session notifications above) and so is the app half (entitlement,
