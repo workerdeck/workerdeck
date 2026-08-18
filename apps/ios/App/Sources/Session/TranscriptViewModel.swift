@@ -27,6 +27,14 @@ final class TranscriptViewModel {
   /// Bumped on every applied event — a cheap change signal for auto-scroll that
   /// also fires for streaming deltas (which don't change `items.count`).
   private(set) var revision = 0
+  /// True while the initial attach replay is still landing.
+  ///
+  /// The transcript is not drawn while this holds — see `ReplayHold.swift`. It
+  /// is derived from a stated seq rather than detected from arrival timing, so
+  /// it flips exactly once, on the event that completes the replay.
+  var replaying: Bool { replayTarget != nil }
+  private var replayTarget: Int?
+  private var replayBackstop: Task<Void, Never>?
   /// When a rate-limit window last arrived. Local receipt time, not the event's
   /// `ts`: what the usage sheet's freshness line answers is "how stale is what
   /// I'm looking at", and replayed events would date that to the session's start.
@@ -94,6 +102,30 @@ final class TranscriptViewModel {
     handle?.detach()
     handle = nil
     connection = .reconnecting
+    endReplayHold()
+  }
+
+  /// Hold the transcript until the replay this frame promised has landed.
+  ///
+  /// The backstop is armed **once, here** rather than re-armed per event: a
+  /// per-event timer is a quiet-window latch, and a quiet window is precisely
+  /// what this design exists not to be (a slow replay with a gap in it would
+  /// reveal early, and a fast one would reveal late).
+  private func armReplayHold(_ frame: AttachedFrame) {
+    replayBackstop?.cancel()
+    replayTarget = initialReplayTarget(frame)
+    guard replayTarget != nil else { return }
+    replayBackstop = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .seconds(replayHoldMaxSeconds))
+      guard !Task.isCancelled else { return }
+      self?.endReplayHold()
+    }
+  }
+
+  private func endReplayHold() {
+    replayBackstop?.cancel()
+    replayBackstop = nil
+    replayTarget = nil
   }
 
   private func apply(_ event: SessionHandle.Event) {
@@ -102,9 +134,13 @@ final class TranscriptViewModel {
       session = frame.session
       state = seedFromSessionInfo(state, frame.session)
       loadCatalogModels(for: frame.session.profile)
+      armReplayHold(frame)
     case .event(let sessionEvent):
       state = applyEvent(state, sessionEvent)
       revision &+= 1
+      // Cleared on the event that reaches the stated target, in the same pass
+      // that applies it — so the reveal and the last row land together.
+      if let target = replayTarget, state.lastSeq >= target { endReplayHold() }
       if case .rateLimit = sessionEvent.body { rateLimitsUpdatedAt = Date() }
       if case .systemInit(let info) = sessionEvent.body, initModel == nil {
         initModel = info.model

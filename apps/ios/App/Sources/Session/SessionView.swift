@@ -51,6 +51,10 @@ struct SessionView: View {
   /// How much of the bottom the floating stack occupies — the picker sits on top
   /// of it, so it needs the number the layout actually produced.
   @State private var footerHeight: CGFloat = 0
+  /// The terminal transcript's scroll handle. Held here rather than inside the
+  /// transcript because the surfaces that want to drive it — a scrubber, the
+  /// catch-up jump — sit beside the transcript, not in it.
+  @State private var transcriptScroll = TranscriptScrollModel()
   /// Files staged for the next message. Outlives the composer's focus and is
   /// cleared on send; uploads start as soon as something is picked.
   @State private var attachments = ComposerAttachmentStore()
@@ -85,7 +89,25 @@ struct SessionView: View {
     // neither full width nor full height. A stack child is proposed the
     // container's size, which is what the picker needs to fill it.
     ZStack(alignment: .top) {
-      TranscriptListView(items: vm.state.items, revision: vm.revision)
+      // Two renderers, not two code paths through one: the terminal theme draws
+      // every row itself, so nothing under the cards renderer asks which variant
+      // it is in. Adding a branch inside a row is how the old `lines` variant
+      // ended up duplicated across fifteen view bodies.
+      // Nothing is drawn until the attach replay has landed. The flicker this
+      // fixes was never a scroll bug: the replay arrives in bursts, and without
+      // a hold you watch a session's whole history stream past a correctly
+      // pinned viewport while the list re-lays-out under it. Holding both
+      // renderers rather than only the terminal one, because both had it.
+      Group {
+        if vm.replaying {
+          Color.clear
+        } else if settings.transcriptVariant.isTerminal {
+          TerminalTranscriptView(
+            items: vm.state.items, revision: vm.revision, scroll: transcriptScroll)
+        } else {
+          TranscriptListView(items: vm.state.items, revision: vm.revision)
+        }
+      }
         // Tapping the transcript puts the keyboard away. Simultaneous, so a tap
         // that lands on a tool card still expands it — dismissing on the way is
         // what you'd want there too.
@@ -281,11 +303,12 @@ struct SessionView: View {
   // MARK: - The floating stack
 
   private var footer: some View {
-    // In `lines` the composer is *docked*: edge to edge, flush with the bottom,
-    // its own opaque bar. So the gutter that makes the rest of the stack float
-    // moves onto the floating items themselves rather than wrapping everything —
-    // padding the whole footer would inset the very thing that must not be.
-    let docked = settings.transcriptVariant.isLines
+    // In `terminal` the composer is *docked*: edge to edge, flush with the
+    // bottom, its own opaque bar. So the gutter that makes the rest of the stack
+    // float moves onto the floating items themselves rather than wrapping
+    // everything — padding the whole footer would inset the very thing that must
+    // not be.
+    let docked = settings.transcriptVariant.isTerminal
     let gutter: CGFloat = 12
     // No gap under the status bar when docked: it and the composer are two bands
     // of one strip, and the rule between them is the composer's own.

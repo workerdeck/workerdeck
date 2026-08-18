@@ -524,3 +524,34 @@ struct TranscriptTests {
     #expect(seeded.engine == .provider)
   }
 }
+
+/// The replay hold — what stops a session opening in a flicker of its own
+/// history. See `ReplayHold.swift`; the rules are the web client's.
+@Suite("ReplayHold")
+struct ReplayHoldTests {
+  private func frame(replayingFrom: Int, lastSeq: Int) -> AttachedFrame {
+    AttachedFrame(
+      protocolVersion: WorkerProtocol.version,
+      session: SessionInfo(
+        id: "sess-1", status: .idle, cwd: "/w", createdAt: 0, lastSeq: lastSeq,
+        pendingPermissionCount: 0),
+      replayingFrom: replayingFrom)
+  }
+
+  @Test("a fresh attach holds until the seq the frame named")
+  func freshAttachHolds() {
+    #expect(initialReplayTarget(frame(replayingFrom: 0, lastSeq: 812)) == 812)
+  }
+
+  @Test("a reconnect never holds")
+  func reconnectDoesNotHold() {
+    // A reconnect replays into a transcript the reader is already looking at.
+    // Blanking it mid-turn would be a worse bug than the flicker.
+    #expect(initialReplayTarget(frame(replayingFrom: 400, lastSeq: 812)) == nil)
+  }
+
+  @Test("a brand-new session has nothing to hold for")
+  func emptySessionDoesNotHold() {
+    #expect(initialReplayTarget(frame(replayingFrom: 0, lastSeq: 0)) == nil)
+  }
+}
