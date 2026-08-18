@@ -554,4 +554,55 @@ struct ReplayHoldTests {
   func emptySessionDoesNotHold() {
     #expect(initialReplayTarget(frame(replayingFrom: 0, lastSeq: 0)) == nil)
   }
+
+  @Test("the hold ends on the stated seq, not on a timer")
+  func landsOnTarget() {
+    var hold = ReplayHold(target: 812, now: 0)
+    hold.advance(to: 811, now: 0.1)
+    #expect(!hold.landed)
+    hold.advance(to: 812, now: 0.2)
+    #expect(hold.landed)
+  }
+
+  @Test("a replay still arriving extends past the old flat deadline")
+  func progressExtendsTheDeadline() {
+    // The bug this fixes: a flat 1.5s from the attach fired on exactly the
+    // sessions the hold exists for — a big transcript replayed over a tailnet.
+    var hold = ReplayHold(target: 5000, now: 0)
+    for t in stride(from: 1.0, through: 6.0, by: 1.0) {
+      hold.advance(to: Int(t) * 500, now: t)
+      #expect(!hold.expired(now: t))
+    }
+    #expect(!hold.landed)
+  }
+
+  @Test("a stalled replay gives up — a blank screen forever is the worse failure")
+  func stallGivesUp() {
+    var hold = ReplayHold(target: 5000, now: 0)
+    hold.advance(to: 400, now: 1.0)
+    #expect(!hold.expired(now: 1.0 + replayHoldStallSeconds - 0.01))
+    #expect(hold.expired(now: 1.0 + replayHoldStallSeconds))
+  }
+
+  @Test("a seq that did not advance does not move the deadline")
+  func noProgressDoesNotExtend() {
+    // Progress is `lastSeq`, not raw arrival: a reconnect storm delivers events
+    // that are not this replay, and must not hold the transcript open.
+    var hold = ReplayHold(target: 5000, now: 0)
+    hold.advance(to: 400, now: 0)
+    #expect(hold.advance(to: 400, now: 1.4) == false)
+    #expect(hold.expired(now: replayHoldStallSeconds))
+  }
+
+  @Test("the ceiling still bounds a replay that dribbles forever")
+  func ceilingBounds() {
+    var hold = ReplayHold(target: 1_000_000, now: 0)
+    var t = 0.0
+    while t < replayHoldCeilingSeconds {
+      t += 1.0
+      hold.advance(to: Int(t), now: t)
+    }
+    #expect(hold.expired(now: replayHoldCeilingSeconds))
+    #expect(hold.deadline == replayHoldCeilingSeconds)
+  }
 }

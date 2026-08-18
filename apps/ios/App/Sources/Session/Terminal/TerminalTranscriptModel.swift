@@ -18,6 +18,10 @@ import WorkerDeckKit
 final class TerminalTranscriptModel {
   private(set) var rows = TerminalRows(rows: [])
   private(set) var book: TerminalHeightBook
+  /// Ascending row indices of the human's own prompts — what the sticky prompt
+  /// binary-searches. Cached with the fold rather than derived per scroll frame:
+  /// it is a walk of the transcript and it changes only when the rows do.
+  private(set) var promptRows: [Int] = []
 
   /// Which blocks are open. Here rather than in a row view, and that is the
   /// whole design of this feature: a `UICollectionViewLayout` takes every frame
@@ -63,6 +67,7 @@ final class TerminalTranscriptModel {
     if !metricsChanged && rows == self.rows { return }
 
     self.rows = rows
+    promptRows = rows.promptRows
     remeasure()
     // A long session would otherwise keep a plan for every row it has ever
     // shown, including the ones a `/clear` took away.

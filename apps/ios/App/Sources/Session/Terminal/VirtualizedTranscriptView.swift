@@ -115,19 +115,20 @@ final class TranscriptCollectionView: UICollectionView {
   }
 }
 
-private let transcriptRowReuseIdentifier = "row"
+private let transcriptRowReuseIdentifier = "term-row"
 
 // MARK: - Representable
 
 /// The virtualized terminal transcript: a `UICollectionView` under
-/// `TranscriptLayout`, cells hosting SwiftUI rows via `UIHostingConfiguration`.
+/// `TranscriptLayout`, drawing `TerminalRowCell`s.
 ///
-/// The row builder is a **generic `RowContent`, not `(Int) -> AnyView`**, and
-/// that is a recycling decision: with a concrete generic type every
-/// reconfigure of a reused cell is a SwiftUI *update* of the same view type —
-/// state-preserving diffing, no teardown — where `AnyView` erases identity and
-/// makes each reuse a remount. It also spares an allocation per configure on
-/// the hottest path there is (cells appearing during a fling).
+/// The cells are **hand-rolled UIKit, not `UIHostingConfiguration`**, and the
+/// reason is selection rather than speed: a row's body has to be one text run
+/// for a selection to cross the lines inside it. Recycling got cheaper on the
+/// way — three views per row instead of two SwiftUI views per *line* — but that
+/// was the consolation prize. The builder is therefore a `configure` closure
+/// against a concrete cell rather than the old generic `RowContent`; there is
+/// one renderer on this surface and genericity was buying nothing.
 ///
 /// Contract with the parent, stated because the types cannot express it:
 /// - `rows`, `book` and `metrics` are one epoch: the book was built from
@@ -141,7 +142,7 @@ private let transcriptRowReuseIdentifier = "row"
 ///   height the book doesn't know about is a frame the layout gets wrong.
 /// - A cell's frame includes the blank-line gap above its row (`gapBefore`);
 ///   the row view pads itself by one line when the fold says so.
-struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
+struct VirtualizedTranscriptView: UIViewRepresentable {
   var rows: TerminalRows
   var book: TerminalHeightBook
   var metrics: TerminalMetrics
@@ -159,10 +160,13 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
   /// Breathing room above the first and below the last row, applied as
   /// `contentInset` so it scrolls with the content and never enters the book.
   var verticalPadding: CGFloat = 0
-  @ViewBuilder var rowContent: (Int) -> RowContent
+  /// Fill a recycled cell with the row at this index. Called only when a row
+  /// (or the metrics) changed — parent state that should redraw a row must be
+  /// *in* the row.
+  var configureRow: (TerminalRowCell, Int) -> Void
 
   func makeCoordinator() -> Coordinator {
-    Coordinator(rowContent: rowContent)
+    Coordinator(configureRow: configureRow)
   }
 
   func makeUIView(context: Context) -> TranscriptCollectionView {
@@ -179,14 +183,13 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
     cv.showsHorizontalScrollIndicator = false
     cv.showsVerticalScrollIndicator = showsScrollIndicator
     cv.isPrefetchingEnabled = true
-    // The load-bearing negation: iOS 16+ would otherwise let the hosting
-    // configuration invalidate its own size, and every frame must come from
-    // the book — see `TranscriptLayout`.
+    // The load-bearing negation: a cell must never invalidate its own size.
+    // Every frame comes from the book — see `TranscriptLayout`.
     cv.selfSizingInvalidation = .disabled
     // Rows are not selectable things; taps belong to what is inside them.
     cv.allowsSelection = false
     cv.contentInset = UIEdgeInsets(top: verticalPadding, left: 0, bottom: verticalPadding, right: 0)
-    cv.register(UICollectionViewCell.self, forCellWithReuseIdentifier: transcriptRowReuseIdentifier)
+    cv.register(TerminalRowCell.self, forCellWithReuseIdentifier: transcriptRowReuseIdentifier)
     cv.dataSource = context.coordinator
     cv.delegate = context.coordinator
     context.coordinator.collectionView = cv
@@ -201,7 +204,7 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
 
   func updateUIView(_ uiView: TranscriptCollectionView, context: Context) {
     let coordinator = context.coordinator
-    coordinator.rowContent = rowContent
+    coordinator.configureRow = configureRow
     coordinator.attach(model: scroll)
     if uiView.showsVerticalScrollIndicator != showsScrollIndicator {
       uiView.showsVerticalScrollIndicator = showsScrollIndicator
@@ -246,7 +249,7 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
   final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegate,
     TranscriptScrollDriver
   {
-    var rowContent: (Int) -> RowContent
+    var configureRow: (TerminalRowCell, Int) -> Void
     weak var collectionView: TranscriptCollectionView?
     weak var layout: TranscriptLayout?
     private(set) var model: TranscriptScrollModel?
@@ -272,8 +275,8 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
     private var latest = TranscriptScrollReadings()
     private var publishScheduled = false
 
-    init(rowContent: @escaping (Int) -> RowContent) {
-      self.rowContent = rowContent
+    init(configureRow: @escaping (TerminalRowCell, Int) -> Void) {
+      self.configureRow = configureRow
     }
 
     func attach(model: TranscriptScrollModel) {
@@ -603,15 +606,9 @@ struct VirtualizedTranscriptView<RowContent: View>: UIViewRepresentable {
     {
       let cell = collectionView.dequeueReusableCell(
         withReuseIdentifier: transcriptRowReuseIdentifier, for: indexPath)
-      // Zero margins: the grid owns every point of geometry, and the default
-      // hosting margins would put the whole transcript off the cell frames the
-      // book computed.
-      cell.contentConfiguration = UIHostingConfiguration { [rowContent] in
-        rowContent(indexPath.item)
-      }
-      .margins(.all, 0)
-      cell.backgroundConfiguration = .clear()
-      return cell
+      guard let row = cell as? TerminalRowCell else { return cell }
+      configureRow(row, indexPath.item)
+      return row
     }
 
     // MARK: UIScrollViewDelegate

@@ -57,12 +57,24 @@ struct TerminalTranscriptView: View {
         if let model, proxy.size.width > 0 {
           VirtualizedTranscriptView(
             rows: model.rows, book: model.book, metrics: metrics, expansion: model.expansion,
-            scroll: scroll, reveal: model.reveal, showsScrollIndicator: false
-          ) { index in
-            TerminalRowView(
-              lines: model.plan(at: index), typography: typography, metrics: metrics,
-              gapAbove: model.gapAbove(index), bleed: bleed,
-              onPress: { model.press($0, row: index) })
+            scroll: scroll, reveal: model.reveal, showsScrollIndicator: false,
+            configureRow: { cell, index in
+              cell.configure(
+                lines: model.plan(at: index), typography: typography, metrics: metrics,
+                gapAbove: model.gapAbove(index), bleed: bleed,
+                onPress: { model.press($0, row: index) })
+            }
+          )
+          // The prompt of the turn being read, held at the top. An overlay for
+          // the same reason the rail is one: it is proposed the transcript's
+          // size, and it must sit in the transcript's own coordinate space or
+          // the line lands off the column every row below it sits on.
+          .overlay(alignment: .top) {
+            TerminalStickyPromptView(
+              rows: model.rows, book: model.book, metrics: metrics, typography: typography,
+              expansion: model.expansion, bleed: bleed, scroll: scroll,
+              promptRows: model.promptRows,
+              onJumpToRow: { scroll.scrollToRow($0, anchor: .top, animated: true) })
           }
           // The rail replaces the scrollbar rather than sitting beside it. An
           // overlay, so it is proposed the transcript's size — and it must be,
@@ -103,11 +115,20 @@ struct TerminalTranscriptView: View {
             // and a correctly-wrapped summary says nothing about the fifty
             // result lines folded behind it. Planning is pure, so the second
             // run costs a calculation and draws nothing.
-            onAudit(
-              TerminalAudit.run(
-                rows: model.rows, typography: typography, metrics: metrics,
-                expansion: model.expansion,
-                alsoFullyExpanded: true))
+            var report = TerminalAudit.run(
+              rows: model.rows, typography: typography, metrics: metrics,
+              expansion: model.expansion,
+              alsoFullyExpanded: true)
+            // The second claim, and the one the hand-rolled renderer added: the
+            // text really draws at the height the book handed the layout. Run
+            // over the row list as it stands, since that is what is on screen.
+            let heights = TerminalAudit.measureHeights(
+              rows: model.rows, typography: typography, metrics: metrics, bleed: bleed,
+              expansion: model.expansion)
+            report.heightsChecked = heights.checked
+            report.heightsCapped = heights.capped
+            report.heightFindings = heights.findings
+            onAudit(report)
           }
         #endif
       }

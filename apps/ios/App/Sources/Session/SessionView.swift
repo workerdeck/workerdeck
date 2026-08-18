@@ -100,7 +100,7 @@ struct SessionView: View {
       // renderers rather than only the terminal one, because both had it.
       Group {
         if vm.replaying {
-          Color.clear
+          replayPlaceholder
         } else if settings.transcriptVariant.isTerminal {
           TerminalTranscriptView(
             items: vm.state.items, pendingApprovals: vm.state.pendingApprovals,
@@ -364,6 +364,29 @@ struct SessionView: View {
       GeometryReader { proxy in
         Color.clear.preference(key: FooterHeight.self, value: proxy.size.height)
       })
+  }
+
+  /// What stands in for the transcript while the attach replay lands.
+  ///
+  /// Not `Color.clear`. The hold is bounded by the *stated* end of the replay,
+  /// which is right, and on a long session over a phone's network that is
+  /// seconds — and a blank screen for seconds is indistinguishable from a
+  /// session that failed to open. The counter is the same pair the hold itself
+  /// runs on, so it cannot drift from what is actually being waited for.
+  @ViewBuilder private var replayPlaceholder: some View {
+    if let progress = vm.replayProgress {
+      VStack(spacing: 6) {
+        ProgressView()
+        Text("\(progress.seq.formatted()) / \(progress.target.formatted())")
+          .font(.caption.monospaced())
+          .foregroundStyle(.secondary)
+          .monospacedDigit()
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .transition(.opacity)
+    } else {
+      Color.clear
+    }
   }
 
   /// Shown until the session says something. A `ZStack` sibling for the same

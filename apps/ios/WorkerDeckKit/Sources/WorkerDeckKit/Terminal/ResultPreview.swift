@@ -76,6 +76,16 @@ public enum ResultPreview {
   /// The budget an **expanded** row opens at. A hundred-thousand-character
   /// result lands in *one* virtual row, and a virtualizer recycles rows, not
   /// what is inside one — so this is a layout guard, not a preference.
+  ///
+  /// **`full` is deliberately not capped**, and that decision got more expensive
+  /// when the renderer became one TextKit run per row: the third state puts the
+  /// whole result into a single text container, and a very large one is a
+  /// visible hitch on that press. It stays uncapped anyway, because the
+  /// affordance *names the number* — "show all 9,828 chars" that then showed
+  /// 20,000 of them would be a lie, and this is a transcript that never elides.
+  /// What the cap would have bought is already bought twice over by the two
+  /// states below it: the collapsed preview and this budget are what bound the
+  /// **scrolling** path, and nothing enters `full` except a deliberate press.
   public static let expandedChars = 2000
 
   /// Whole lines only, and never zero of them: a first line longer than the

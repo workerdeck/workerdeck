@@ -14,8 +14,18 @@ import WorkerDeckKit
 /// because these are not brand colours to be tweaked by a designer — they are
 /// the ANSI-ish vocabulary of the theme, and they belong beside the code that
 /// draws with them.
+///
+/// Every token is a **`UIColor` first** and a SwiftUI `Color` derived from it.
+/// The terminal transcript draws by hand now — a text run, a gutter and a band
+/// per line, all in UIKit — and a token that existed only as a `Color` would
+/// have to be bridged at every draw, on the hottest path there is.
 enum TerminalPalette {
-  static func color(_ tone: TermTone) -> Color {
+  static func color(_ tone: TermTone) -> Color { Color(uiColor: uiColor(tone)) }
+  static func band(_ band: TermBand) -> Color { Color(uiColor: uiBand(band)) }
+  static var openWash: Color { Color(uiColor: uiOpenWash) }
+  static var nestedRule: Color { Color(uiColor: uiNestedRule) }
+
+  static func uiColor(_ tone: TermTone) -> UIColor {
     switch tone {
     // Body text is a light grey, *not* white: white is reserved for emphasis,
     // and a transcript set entirely in it has nothing left to emphasise with.
@@ -42,7 +52,7 @@ enum TerminalPalette {
   /// The wash behind a line. Alpha, never a flat colour: a row sits on whatever
   /// its host paints, and a value tuned against one ground is invisible on
   /// another.
-  static func band(_ band: TermBand) -> Color {
+  static func uiBand(_ band: TermBand) -> UIColor {
     switch band {
     case .none: return .clear
     case .output: return dynamicAlpha(dark: 0.04, light: 0.04)
@@ -56,26 +66,26 @@ enum TerminalPalette {
   /// read as one block rather than as the transcript having grown. The web
   /// client's `--term-row-hover`, which is where a pointer-driven surface also
   /// spends it — there is no hover here, so it is free.
-  static var openWash: Color { dynamicAlpha(dark: 0.05, light: 0.04) }
+  static var uiOpenWash: UIColor { dynamicAlpha(dark: 0.05, light: 0.04) }
 
   /// The rule drawn *inside* a nested row's padding, so the indent stays exactly
   /// two cells — a border would be layout, and would take every subagent row
   /// half a character off the column its parent sits on.
-  static var nestedRule: Color { dynamic(dark: 0x6a_6a_6a, light: 0x8d_8d_8d).opacity(0.5) }
-
-  private static func dynamic(dark: UInt32, light: UInt32) -> Color {
-    Color(
-      uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark ? rgb(dark) : rgb(light)
-      })
+  static var uiNestedRule: UIColor {
+    dynamic(dark: 0x6a_6a_6a, light: 0x8d_8d_8d).withAlphaComponent(0.5)
   }
 
-  private static func dynamicAlpha(dark: CGFloat, light: CGFloat) -> Color {
-    Color(
-      uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark
-          ? UIColor(white: 1, alpha: dark) : UIColor(white: 0, alpha: light)
-      })
+  private static func dynamic(dark: UInt32, light: UInt32) -> UIColor {
+    UIColor { traits in
+      traits.userInterfaceStyle == .dark ? rgb(dark) : rgb(light)
+    }
+  }
+
+  private static func dynamicAlpha(dark: CGFloat, light: CGFloat) -> UIColor {
+    UIColor { traits in
+      traits.userInterfaceStyle == .dark
+        ? UIColor(white: 1, alpha: dark) : UIColor(white: 0, alpha: light)
+    }
   }
 
   private static func rgb(_ value: UInt32) -> UIColor {

@@ -33,18 +33,91 @@ public struct TerminalHeightBook: Sendable {
     self.rows = rows
     self.metrics = metrics
 
+    let lines = Self.lineCounts(rows: rows, metrics: metrics, cache: cache, expansion: expansion)
+
     var heights = [CGFloat](repeating: 0, count: rows.count)
     var offsets = [CGFloat](repeating: 0, count: rows.count + 1)
     for index in 0..<rows.count {
-      let lines =
-        cache?.lineCount(rows[index], metrics: metrics, expansion: expansion)
-        ?? TerminalPlanner.plan(rows[index], metrics: metrics, expansion: expansion).count
       let gap = rows.gapBefore(index) ? 1 : 0
-      heights[index] = CGFloat(lines + gap) * metrics.line
+      heights[index] = CGFloat(lines[index] + gap) * metrics.line
       offsets[index + 1] = offsets[index] + heights[index]
     }
     self.heights = heights
     self.offsets = offsets
+  }
+
+  /// Below this many cache misses, plan on the calling thread. Spinning up
+  /// worker threads costs more than it saves for the case this is called in
+  /// almost every time — a streamed delta, where exactly one row missed.
+  private static let parallelPlanThreshold = 256
+
+  /// Every row's line count: cache hits taken first, and the misses planned in
+  /// parallel when there are enough of them to pay for it.
+  ///
+  /// The **cold** build is why this exists. Every other path through here is
+  /// warm by construction — a delta re-plans one row — but the first build of a
+  /// freshly attached session plans every row of its whole history, and that is
+  /// the one moment the reader is staring at a blank screen waiting for it.
+  /// Planning is pure and rows are independent, so it is embarrassingly
+  /// parallel; the only reason it was serial is that nothing had measured it.
+  private static func lineCounts(
+    rows: TerminalRows, metrics: TerminalMetrics, cache: TerminalPlanCache?,
+    expansion: TerminalExpansion
+  ) -> [Int] {
+    let count = rows.count
+    guard count > 0 else { return [] }
+
+    // The subset a row can read, computed once per row and outside any lock —
+    // free while nothing is open, which is the overwhelmingly common case.
+    let subsets: [TerminalExpansion] =
+      expansion.isEmpty
+      ? [TerminalExpansion](repeating: TerminalExpansion(), count: count)
+      : (0..<count).map { expansion.subset(for: rows[$0]) }
+
+    var lines = [Int](repeating: -1, count: count)
+    // `let`, because every worker below reads it concurrently.
+    let misses: [Int] = {
+      guard let cache else { return Array(0..<count) }
+      // Once, here, rather than per row: a cell change invalidates every entry,
+      // and the check is what makes a hit below trustworthy.
+      cache.beginEpoch(metrics)
+      var missed: [Int] = []
+      for index in 0..<count {
+        if let hit = cache.cachedLineCount(rows[index], expansionSubset: subsets[index]) {
+          lines[index] = hit
+        } else {
+          missed.append(index)
+        }
+      }
+      return missed
+    }()
+
+    if misses.count >= parallelPlanThreshold {
+      // Disjoint indices, one writer each, no shared mutable state — the plan
+      // is a pure function of the row, the metrics and the subset. The cache is
+      // deliberately *not* touched in here: it takes a lock, and a lock held
+      // around the planning is the parallelism given straight back.
+      lines.withUnsafeMutableBufferPointer { buffer in
+        let sink = UncheckedSendable(buffer)
+        DispatchQueue.concurrentPerform(iterations: misses.count) { slot in
+          let index = misses[slot]
+          sink.value[index] =
+            TerminalPlanner.plan(rows[index], metrics: metrics, expansion: subsets[index]).count
+        }
+      }
+    } else {
+      for index in misses {
+        lines[index] =
+          TerminalPlanner.plan(rows[index], metrics: metrics, expansion: subsets[index]).count
+      }
+    }
+
+    if let cache {
+      for index in misses {
+        cache.store(rows[index], expansionSubset: subsets[index], lines: lines[index])
+      }
+    }
+    return lines
   }
 
   public var count: Int { heights.count }
@@ -103,23 +176,46 @@ public final class TerminalPlanCache: @unchecked Sendable {
 
   public init() {}
 
-  public func lineCount(
-    _ row: TranscriptRow, metrics: TerminalMetrics,
-    expansion: TerminalExpansion = TerminalExpansion()
-  ) -> Int {
+  /// Enter the epoch this build measures in, clearing the cache if the cell
+  /// moved. Called once per build rather than per row: every `cachedLineCount`
+  /// after it is answering for *this* cell, which is what makes a hit sound.
+  public func beginEpoch(_ metrics: TerminalMetrics) {
     lock.lock()
     defer { lock.unlock() }
     if epoch != metrics {
       entries.removeAll(keepingCapacity: true)
       epoch = metrics
     }
-    let key = row.key
+  }
+
+  /// A hit, or `nil` for a row this cache cannot answer for. Never plans: the
+  /// planning happens outside the lock, so a cold build can do it in parallel.
+  public func cachedLineCount(_ row: TranscriptRow, expansionSubset: TerminalExpansion) -> Int? {
+    lock.lock()
+    defer { lock.unlock() }
+    guard let entry = entries[row.key], entry.row == row, entry.expansion == expansionSubset
+    else { return nil }
+    return entry.lines
+  }
+
+  public func store(_ row: TranscriptRow, expansionSubset: TerminalExpansion, lines: Int) {
+    lock.lock()
+    defer { lock.unlock() }
+    entries[row.key] = Entry(row: row, expansion: expansionSubset, lines: lines)
+  }
+
+  /// The whole of the above in one call, for a caller measuring a single row.
+  public func lineCount(
+    _ row: TranscriptRow, metrics: TerminalMetrics,
+    expansion: TerminalExpansion = TerminalExpansion()
+  ) -> Int {
+    beginEpoch(metrics)
     // Free in the overwhelmingly common case: nothing is open, so no row has to
     // be walked for its keys.
     let subset = expansion.isEmpty ? TerminalExpansion() : expansion.subset(for: row)
-    if let entry = entries[key], entry.row == row, entry.expansion == subset { return entry.lines }
+    if let hit = cachedLineCount(row, expansionSubset: subset) { return hit }
     let lines = TerminalPlanner.plan(row, metrics: metrics, expansion: subset).count
-    entries[key] = Entry(row: row, expansion: subset, lines: lines)
+    store(row, expansionSubset: subset, lines: lines)
     return lines
   }
 
@@ -132,4 +228,14 @@ public final class TerminalPlanCache: @unchecked Sendable {
     let live = Set(rows.rows.map(\.key))
     entries = entries.filter { live.contains($0.key) }
   }
+}
+
+
+/// A box that carries a non-`Sendable` value across a `concurrentPerform`
+/// closure. Sound only because the writes inside are to disjoint indices of a
+/// buffer that outlives the call — `concurrentPerform` does not return until
+/// every iteration has finished.
+private struct UncheckedSendable<Value>: @unchecked Sendable {
+  let value: Value
+  init(_ value: Value) { self.value = value }
 }

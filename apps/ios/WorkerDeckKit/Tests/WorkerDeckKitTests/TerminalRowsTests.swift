@@ -161,6 +161,34 @@ struct TerminalRowsTests {
     #expect(again.totalHeight == cold.totalHeight)
   }
 
+  @Test("a parallel cold build agrees with a serial one, row for row")
+  func parallelPlanAgreesWithSerial() {
+    // Above `TerminalHeightBook.parallelPlanThreshold` the misses are planned on
+    // worker threads writing disjoint indices. Row for row, not just in total:
+    // a transposition would leave the sum right and every offset wrong, which is
+    // precisely the failure a virtualizer cannot survive and a total cannot see.
+    var items: [TranscriptItem] = []
+    for index in 0..<600 {
+      items.append(text("t\(index)", String(repeating: "word\(index) ", count: 1 + index % 23)))
+    }
+    let rows = TerminalRows.build(items: items)
+    #expect(rows.count >= 512)
+
+    let book = TerminalHeightBook(rows: rows, metrics: metrics)
+    for index in 0..<rows.count {
+      let lines = TerminalPlanner.plan(rows[index], metrics: metrics).count
+      let gap = rows.gapBefore(index) ? 1 : 0
+      #expect(book.height(at: index) == CGFloat(lines + gap) * metrics.line, "row \(index)")
+    }
+
+    // And a cache filled by the parallel path answers the same on the next build.
+    let cache = TerminalPlanCache()
+    let first = TerminalHeightBook(rows: rows, metrics: metrics, cache: cache)
+    let second = TerminalHeightBook(rows: rows, metrics: metrics, cache: cache)
+    #expect(first.totalHeight == book.totalHeight)
+    #expect(second.totalHeight == book.totalHeight)
+  }
+
   @Test("a new cell clears the cache rather than answering from the old one")
   func cacheIsPerEpoch() {
     let rows = TerminalRows.build(items: [text("a", String(repeating: "word ", count: 40))])

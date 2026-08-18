@@ -126,3 +126,29 @@ public struct TerminalRows: Equatable, Sendable {
     return needsBlank(before, after)
   }
 }
+
+// MARK: - Prompt rows
+
+extension TerminalRows {
+  /// The row indices of the **human's own prompts**, ascending.
+  ///
+  /// What the sticky prompt is indexed by: "which turn am I reading" is
+  /// answered by the last prompt at or above the viewport's top edge, and that
+  /// is a binary search over this array rather than a walk of the transcript.
+  ///
+  /// A **subagent's brief is excluded**, and that is the rule worth stating: it
+  /// really is a `user_message` on the wire (which is why it once rendered with
+  /// the human's own `❯`), but it is the parent agent talking to its child. A
+  /// turn is a thing a person started, so a sticky header naming a subagent's
+  /// brief would answer a question nobody asked. `parentToolUseId` is the test.
+  public var promptRows: [Int] {
+    var found: [Int] = []
+    for (index, row) in rows.enumerated() {
+      guard case .block(.item(let block)) = row, case .user(_, _, _, let parent) = block.item,
+        parent == nil
+      else { continue }
+      found.append(index)
+    }
+    return found
+  }
+}

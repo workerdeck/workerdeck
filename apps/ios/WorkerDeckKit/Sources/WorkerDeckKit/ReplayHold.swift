@@ -12,15 +12,6 @@ import Foundation
 /// What makes this sound rather than a guess is that the end of the replay is
 /// **stated**, not detected.
 
-/// Backstop for the replay hold: if the target seq has not landed after this
-/// long, reveal whatever has arrived.
-///
-/// On a healthy attach the target is always reached, so this never fires. It
-/// exists because a blank screen forever is a far worse failure than a visible
-/// stream. It runs from the attach — a per-event re-arm would be a quiet-window
-/// heuristic in a new costume, which is exactly what this design refuses.
-public let replayHoldMaxSeconds: TimeInterval = 1.5
-
 /// The seq the initial attach replay ends on, or `nil` when there is nothing to
 /// hold for.
 ///
@@ -39,4 +30,76 @@ public let replayHoldMaxSeconds: TimeInterval = 1.5
 public func initialReplayTarget(_ frame: AttachedFrame) -> Int? {
   guard frame.replayingFrom == 0, frame.session.lastSeq > 0 else { return nil }
   return frame.session.lastSeq
+}
+
+/// How long the hold tolerates **no progress** before giving up and revealing
+/// whatever has arrived.
+///
+/// This was `replayHoldMaxSeconds`, a flat 1.5s from the attach — the web
+/// client's `REPLAY_HOLD_MAX_MS`, and the web client is usually talking to
+/// localhost. A phone on a tailnet replaying thousands of events does not finish
+/// in 1.5s, so the flat deadline fired on exactly the sessions the hold exists
+/// for, producing exactly the symptom it exists to prevent.
+public let replayHoldStallSeconds: TimeInterval = 1.5
+
+/// The absolute ceiling on the hold, however well the replay is progressing.
+///
+/// A blank screen forever is a far worse failure than a visible stream, so the
+/// extending deadline still needs a floor under it: a pathological replay that
+/// dribbles one event a second forever must not hold the transcript blank
+/// forever.
+public let replayHoldCeilingSeconds: TimeInterval = 20
+
+/// The state of one initial-attach hold.
+///
+/// **Why extending the deadline on progress is not the quiet-window heuristic
+/// this design refuses.** That refusal is about detecting the *end* of the
+/// replay by arrival timing — reveal once N ms have passed quietly — which is
+/// wrong because a burst with a gap in it reveals early and a fast replay
+/// reveals late. Nothing here decides the end: the end is still the stated
+/// `target`, and the hold still ends on the exact event that reaches it. This
+/// decides only *when to give up*, which is a question about liveness, not about
+/// completion, and for which arrival timing is the only available signal.
+///
+/// Progress is measured on `TranscriptState.lastSeq`, not on raw event arrival:
+/// a reconnect storm delivers events that are not this replay, and a stalled
+/// replay that is nonetheless receiving frames must still time out.
+public struct ReplayHold: Sendable, Equatable {
+  /// The stated seq the replay ends on.
+  public let target: Int
+  /// Highest seq applied so far.
+  public private(set) var seq: Int
+  /// Monotonic time the hold was armed.
+  public let startedAt: TimeInterval
+  /// Monotonic time `seq` last advanced (or `startedAt`).
+  public private(set) var progressedAt: TimeInterval
+
+  public init(target: Int, seq: Int = 0, now: TimeInterval) {
+    self.target = target
+    self.seq = seq
+    self.startedAt = now
+    self.progressedAt = now
+  }
+
+  /// The replay has landed: the stated end arrived.
+  public var landed: Bool { seq >= target }
+
+  /// Apply the transcript's current `lastSeq`. Returns `true` when it advanced,
+  /// which is what moves the stall deadline.
+  @discardableResult
+  public mutating func advance(to lastSeq: Int, now: TimeInterval) -> Bool {
+    guard lastSeq > seq else { return false }
+    seq = lastSeq
+    progressedAt = now
+    return true
+  }
+
+  /// When the hold gives up if nothing more arrives — the earlier of the stall
+  /// deadline and the absolute ceiling.
+  public var deadline: TimeInterval {
+    min(progressedAt + replayHoldStallSeconds, startedAt + replayHoldCeilingSeconds)
+  }
+
+  /// Give up now? (`>=` so a test can name the deadline exactly.)
+  public func expired(now: TimeInterval) -> Bool { now >= deadline }
 }

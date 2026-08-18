@@ -28,10 +28,27 @@
       var overflow: CGFloat
     }
 
+    /// A row whose drawn height disagrees with the height the book handed the
+    /// layout. See `measureHeights`.
+    struct HeightFinding {
+      var rowIndex: Int
+      var planned: CGFloat
+      var measured: CGFloat
+    }
+
     struct Report {
       var rowsChecked: Int
       var linesChecked: Int
       var findings: [Finding]
+      /// How many rows had their drawn height measured, and how they came out.
+      /// Zero means the height pass did not run, which is not the same as
+      /// passing — the summary says so.
+      var heightsChecked = 0
+      var heightFindings: [HeightFinding] = []
+      /// The height pass stops after a cap (see `measureHeights`). Reported
+      /// rather than silent: a gate that quietly covered a tenth of the rows
+      /// reads as a gate that covered them all.
+      var heightsCapped = false
       /// How many blocks are open. On the readout because this screen is also
       /// where a press is checked: a tap that lands but toggles nothing and a
       /// tap that never landed look identical from outside.
@@ -39,9 +56,20 @@
 
       var summary: String {
         let state = openCount > 0 ? " · \(openCount) open" : ""
-        return findings.isEmpty
-          ? "✔ \(linesChecked) lines over \(rowsChecked) rows, none overflowing\(state)"
-          : "✘ \(findings.count) of \(linesChecked) lines overflow (worst \(String(format: "%.2f", findings.map(\.overflow).max() ?? 0))pt)\(state)"
+        let width =
+          findings.isEmpty
+          ? "✔ \(linesChecked) lines over \(rowsChecked) rows, none overflowing"
+          : "✘ \(findings.count) of \(linesChecked) lines overflow (worst \(String(format: "%.2f", findings.map(\.overflow).max() ?? 0))pt)"
+        return width + " · " + heightSummary + state
+      }
+
+      private var heightSummary: String {
+        guard heightsChecked > 0 else { return "heights unmeasured" }
+        let scope = heightsCapped ? "first \(heightsChecked) rows" : "\(heightsChecked) rows"
+        guard let worst = heightFindings.map({ abs($0.measured - $0.planned) }).max() else {
+          return "✔ heights exact over \(scope)"
+        }
+        return "✘ \(heightFindings.count) rows mis-measure (worst \(String(format: "%.2f", worst))pt)"
       }
     }
 
@@ -70,6 +98,50 @@
       report.findings += expanded.findings
       report.openCount = expansion.open.count
       return report
+    }
+
+    /// The **height** claim, which is the one the hand-rolled renderer added and
+    /// the one nothing else can check.
+    ///
+    /// `TerminalRowCell` feeds the text system the lines the planner already
+    /// broke, one paragraph each, pinned to `metrics.line`. If that is right, a
+    /// row draws at exactly `lines.count × line` and the frames the layout took
+    /// from the book are the frames the text fills. If any one of
+    /// `lineFragmentPadding`, `textContainerInset`, the min/max line heights or
+    /// the line-break mode is wrong, every row is off by a fraction and *nothing
+    /// looks wrong* — the text simply drifts against the gutter drawn beside it.
+    /// That is the same class of failure as a silently clipped line, so it
+    /// belongs beside it, measured against real layout rather than asserted in a
+    /// unit test.
+    ///
+    /// Capped, and the cap is reported: this mounts a real text view per row,
+    /// and `terminalStress` is sixteen thousand of them.
+    @MainActor
+    static func measureHeights(
+      rows: TerminalRows, typography: TerminalTypography, metrics: TerminalMetrics,
+      bleed: CGFloat, expansion: TerminalExpansion = TerminalExpansion(),
+      limit: Int = 400, tolerance: CGFloat = 0.5
+    ) -> (checked: Int, capped: Bool, findings: [HeightFinding]) {
+      let geometry = TerminalRowGeometry(metrics: metrics, bleed: bleed)
+      let probe = TerminalRowCell.BodyTextView(frame: .zero, textContainer: nil)
+      let width = metrics.width + 2 * bleed
+      var findings: [HeightFinding] = []
+      let count = min(rows.count, limit)
+      for index in 0..<count {
+        let lines = TerminalPlanner.plan(rows[index], metrics: metrics, expansion: expansion)
+        guard !lines.isEmpty else { continue }
+        probe.attributedText = TerminalTextRun.make(
+          lines: lines, typography: typography, geometry: geometry)
+        let measured = probe.sizeThatFits(
+          CGSize(width: width, height: .greatestFiniteMagnitude)
+        ).height
+        let planned = CGFloat(lines.count) * metrics.line
+        if abs(measured - planned) > tolerance {
+          findings.append(
+            HeightFinding(rowIndex: index, planned: planned, measured: measured))
+        }
+      }
+      return (count, rows.count > limit, findings)
     }
 
     private static func pass(

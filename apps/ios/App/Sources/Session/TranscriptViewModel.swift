@@ -13,7 +13,22 @@ import Observation
 final class TranscriptViewModel {
   let sessionId: String
 
+  /// What the UI renders. **Not** what the replay is folding into — see
+  /// `replayBuffer`.
   private(set) var state = TranscriptState.initial
+  /// Where a held replay's events are reduced, published in one step when the
+  /// hold ends.
+  ///
+  /// The transcript was already held (`replaying`), but a session screen is more
+  /// than its transcript: approvals, the question prompt, the context and usage
+  /// readings, the composer's busy state and the empty state all read this same
+  /// reduced state, so a replay drove *every one of them* through the session's
+  /// entire history on the way past — a permission prompt for a decision made an
+  /// hour ago flashing up and vanishing, meters counting themselves up, the
+  /// empty state appearing and going. Holding one view was never the fix;
+  /// holding the **state** is, and it deletes the question of which views
+  /// remembered to opt in.
+  private var replayBuffer: TranscriptState?
   /// WS connectivity, from `connectionChange` and the handle's retry counter.
   /// Distinct from session status: a running session can be temporarily
   /// unreachable — and while it is, the status the app holds is stale.
@@ -32,8 +47,18 @@ final class TranscriptViewModel {
   /// The transcript is not drawn while this holds — see `ReplayHold.swift`. It
   /// is derived from a stated seq rather than detected from arrival timing, so
   /// it flips exactly once, on the event that completes the replay.
-  var replaying: Bool { replayTarget != nil }
-  private var replayTarget: Int?
+  var replaying: Bool { replayHold != nil }
+  /// How far the held replay has got, for the placeholder to say so.
+  ///
+  /// A hold that ends on the stated seq is honest about *when* it ends and
+  /// silent about how long that will take, and on a phone attaching to a long
+  /// session over a network that silence is seconds of blank screen. The
+  /// numbers are already here; not showing them was the omission.
+  var replayProgress: (seq: Int, target: Int)? {
+    guard let hold = replayHold else { return nil }
+    return (hold.seq, hold.target)
+  }
+  private var replayHold: ReplayHold?
   private var replayBackstop: Task<Void, Never>?
   /// When a rate-limit window last arrived. Local receipt time, not the event's
   /// `ts`: what the usage sheet's freshness line answers is "how stale is what
@@ -107,25 +132,59 @@ final class TranscriptViewModel {
 
   /// Hold the transcript until the replay this frame promised has landed.
   ///
-  /// The backstop is armed **once, here** rather than re-armed per event: a
-  /// per-event timer is a quiet-window latch, and a quiet window is precisely
-  /// what this design exists not to be (a slow replay with a gap in it would
-  /// reveal early, and a fast one would reveal late).
+  /// The hold **ends on the stated seq** — see `ReplayHold.swift`. What the
+  /// backstop below decides is only when to give up, and it gives up on a
+  /// *stall* rather than on a flat deadline from the attach: a phone replaying
+  /// thousands of events over a tailnet does not finish in 1.5s, and a flat
+  /// deadline fired on exactly the sessions the hold exists for. It is not the
+  /// quiet-window latch this design refuses; that refusal is about detecting the
+  /// replay's *end* by arrival timing, and the end is still stated.
   private func armReplayHold(_ frame: AttachedFrame) {
     replayBackstop?.cancel()
-    replayTarget = initialReplayTarget(frame)
-    guard replayTarget != nil else { return }
+    replayBackstop = nil
+    // `endReplayHold`, not `replayHold = nil`: a reconnect arrives here with a
+    // buffer possibly still pending, and dropping it rather than publishing it
+    // would lose the history it holds.
+    guard let target = initialReplayTarget(frame) else { return endReplayHold() }
+    var hold = ReplayHold(target: target, now: ProcessInfo.processInfo.systemUptime)
+    hold.advance(to: replayBuffer?.lastSeq ?? state.lastSeq, now: hold.startedAt)
+    guard !hold.landed else { return endReplayHold() }
+    replayHold = hold
     replayBackstop = Task { @MainActor [weak self] in
-      try? await Task.sleep(for: .seconds(replayHoldMaxSeconds))
+      // Re-checked rather than slept once: every advance moves the deadline, so
+      // this wakes at the current one and only gives up if nothing moved it.
+      while let hold = self?.replayHold {
+        let now = ProcessInfo.processInfo.systemUptime
+        if hold.expired(now: now) { break }
+        try? await Task.sleep(for: .seconds(hold.deadline - now))
+        if Task.isCancelled { return }
+      }
       guard !Task.isCancelled else { return }
       self?.endReplayHold()
     }
   }
 
+  /// Feed the transcript's seq to the hold, ending it on the event that reaches
+  /// the stated target — in the same pass that applies it, so the reveal and the
+  /// last row land together.
+  private func advanceReplayHold(lastSeq: Int) {
+    guard var hold = replayHold else { return }
+    hold.advance(to: lastSeq, now: ProcessInfo.processInfo.systemUptime)
+    if hold.landed { endReplayHold() } else { replayHold = hold }
+  }
+
+  /// End the hold and publish in the same pass, so the reveal and everything
+  /// the reveal implies land on one frame. Every exit goes through here — the
+  /// stated seq, the stall backstop, and a detach — because a buffer left
+  /// unpublished is a transcript that silently lost its history.
   private func endReplayHold() {
     replayBackstop?.cancel()
     replayBackstop = nil
-    replayTarget = nil
+    replayHold = nil
+    guard let buffer = replayBuffer else { return }
+    replayBuffer = nil
+    state = buffer
+    revision &+= 1
   }
 
   private func apply(_ event: SessionHandle.Event) {
@@ -136,11 +195,18 @@ final class TranscriptViewModel {
       loadCatalogModels(for: frame.session.profile)
       armReplayHold(frame)
     case .event(let sessionEvent):
-      state = applyEvent(state, sessionEvent)
-      revision &+= 1
-      // Cleared on the event that reaches the stated target, in the same pass
-      // that applies it — so the reveal and the last row land together.
-      if let target = replayTarget, state.lastSeq >= target { endReplayHold() }
+      if replayHold != nil {
+        // Into the buffer, and nothing observable moves. `state` and `revision`
+        // are the two things every view watches, so leaving both alone is what
+        // makes the hold cover the whole screen rather than one subview.
+        var buffer = replayBuffer ?? state
+        buffer = applyEvent(buffer, sessionEvent)
+        replayBuffer = buffer
+        advanceReplayHold(lastSeq: buffer.lastSeq)
+      } else {
+        state = applyEvent(state, sessionEvent)
+        revision &+= 1
+      }
       if case .rateLimit = sessionEvent.body { rateLimitsUpdatedAt = Date() }
       if case .systemInit(let info) = sessionEvent.body, initModel == nil {
         initModel = info.model

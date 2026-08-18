@@ -22,6 +22,21 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     cookie machinery the web dashboard uses.
   - `Transcript.swift` — pure transcript reducer, a 1:1 port of
     `packages/react/src/lib/transcript.ts`. Keep the two in sync when transcript semantics change.
+  - `ReplayHold.swift` — opening a session without watching its history stream past. The end of
+    the replay is **stated**, not detected: the `attached` frame arrives before the replayed
+    events and names the seq they end on. What the backstop decides is only *when to give up*,
+    and it gives up on a **stall** rather than on a flat deadline from the attach — a phone
+    replaying thousands of events over a tailnet does not finish in 1.5s, and the flat version
+    fired on exactly the sessions the hold exists for. Progress is `state.lastSeq`, never raw
+    arrival, so a reconnect storm cannot hold the screen. Not the quiet-window latch this design
+    refuses: that refusal is about detecting the replay's *end* by timing, and the end is still
+    stated. `TranscriptViewModel` holds the **whole reduced state** while it stands, not the
+    transcript view — a session screen is more than its transcript, and approvals, the question
+    prompt, the meters, the composer's busy state and the empty state all read the same state, so
+    a replay used to drive every one of them through the session's entire history on the way past.
+    Holding one view was never the fix; holding the state deletes the question of which views
+    remembered to opt in. The placeholder is a spinner and a live `seq / target` counter, because
+    a blank screen for several seconds is indistinguishable from a session that failed to open.
   - `MarkdownBlocks.swift` — splits assistant text into blocks: headings, lists, quotes, rules
     and fenced code, with anything it doesn't model (tables included) falling through as prose
     rather than being lost. Pure, so it lives here (this package is the only part of the app
@@ -135,17 +150,32 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
       line puts every second row on a half-pixel, which softens the text and seams the diff
       bands, while rounding the *cell* up costs a fraction of a point per cell — four characters
       a line at phone widths, about nine percent of the transcript.
-    - `TerminalRowViews.swift` / `TerminalPalette.swift` — the row primitives (gutter column +
-      body column, which is what gives every wrapped line its hanging indent for free) and the
-      palette, ported value-for-value from `styles/terminal.css` so a session reads the same here
-      as in the dashboard. Every planned line is exactly one rendered line, so each is drawn in a
-      fixed-height box with wrapping off — no `lineSpacing` arithmetic, and no row that measures
-      18pt and lays out at 18.4. Presses ride the plan too (`TermLine.press`), grouped into one
-      target per run of consecutive lines that answer to the same block — **the whole block, not
-      just its header, which is where the web client puts its `Pressable`**: a pointer can hit a
-      19px strip and a thumb cannot. An open block keeps a full-bleed wash (`TermLine.inOpen`,
-      the web's `.term-open`) so eighty lines that arrived at once read as one block rather than
-      as the transcript having grown.
+    - `TerminalRowCell.swift` / `TerminalPalette.swift` — the row, **drawn by hand in UIKit**,
+      and the palette, ported value-for-value from `styles/terminal.css` so a session reads the
+      same here as in the dashboard. Three views per row — a backdrop, a gutter and a body —
+      where there used to be a `UIHostingConfiguration` holding two SwiftUI views per *line*.
+      The reason is not performance (that came free): **the body has to be one selectable text
+      run**, and a stack of per-line `Text`s cannot be selected across. So each `TermLine`
+      becomes one TextKit *paragraph* with wrapping off (`.byClipping`) and
+      `minimumLineHeight == maximumLineHeight == metrics.line`, its head indent set to where its
+      body column starts — N planned lines are N line fragments of exactly `line` points, and
+      the height the book handed the layout is the height the text occupies, by construction.
+      Get `lineFragmentPadding`, `textContainerInset`, the min/max line heights or the break
+      mode wrong and every row is off by a fraction with nothing visibly wrong, which is why
+      `TerminalAudit.measureHeights` exists beside the width gate.
+      **The gutter stays its own column, and it is drawn, never text** — not for layout, for
+      what lands on the clipboard: `●`, `⎿` and a diff's line numbers are scaffolding nobody
+      typed and nobody wants pasted into a commit message. (It also gives every wrapped line its
+      hanging indent for free, which is why the planner pads gutters to a cell count rather than
+      prefixing the text.) The bands, the open wash and the nested rule are drawn per line for
+      the same reason the gutter is: an expanded result is fifty lines, and fifty background
+      views per row is exactly the per-cell view count this shed. Presses ride the plan
+      (`TermLine.press`), resolved by dividing the touch's `y` by the line — **the whole block,
+      not just its header, which is where the web client puts its `Pressable`**: a pointer can
+      hit a 19px strip and a thumb cannot. A press is refused while a selection stands in the
+      row, because collapsing the block would take the selection with it. An open block keeps a
+      full-bleed wash (`TermLine.inOpen`, the web's `.term-open`) so eighty lines that arrived
+      at once read as one block rather than as the transcript having grown.
     - `TranscriptLayout.swift` / `VirtualizedTranscriptView.swift` — a `UICollectionView` with a
       custom layout whose frames come **entirely** from the height book; no self-sizing anywhere.
       That is what makes the rest possible: an overview scrubber needs the pixel offset of rows
@@ -160,6 +190,20 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
       transition. The escaped case barely needs it (the anchor already holds the pressed row
       still); it exists for the **pinned** case, where expanding near the tail re-pins to the
       bottom and pushes the header you pressed clean off the top of the screen.
+    - `TerminalStickyPromptView.swift` / the kit's `StickyPrompt.swift` — the prompt of the turn
+      you are reading, held at the top of the scroller. **One line, and the prompt's first line**:
+      a pasted twenty-line prompt pinned whole covers the very answer being read. The arithmetic
+      is in the kit (and unit-tested) and the view only draws what it returns — a
+      `UIViewRepresentable` overlay cannot be driven by a test, and the arithmetic is the part
+      that can be wrong. Where the web client needs real machinery for this (a lane per turn, an
+      absolutely positioned head, a sentinel `IntersectionObserver`, and the compositor doing pin
+      and push-off because a JS-written pin trails it and wobbles), here it is a binary search and
+      a subtraction: the height book knows the pixel offset of every row, mounted or not. Two
+      rules earned their tests. **Content offsets, never frame offsets** — the blank line above a
+      row belongs to the row, so a prompt's frame starts one line before its text does and that
+      strip is visually the *previous* turn's; searching by frame handed over a line early. And a
+      **subagent's brief is not a prompt** — it really is a `user_message` on the wire, which is
+      why it once drew the human's own `❯`, but a turn is a thing a person started.
     - `TerminalScrubberView.swift` — the rail, drawn, and where the phone parts company with the
       web design twice. **There is no hover**: a pointer resting on a mark opens the peek there and
       a drag *dismisses* it, which would leave a finger no way to see a mark before committing to
@@ -190,6 +234,10 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
       second pass costs a calculation and draws nothing. `UIPREVIEW=terminalOpen` is the visual
       counterpart — the same fixture with every block open, through a real layout pass, which is
       the only thing that can show a planned line and a drawn line parting company.
+      `measureHeights` is the **second** claim, and the one the hand-rolled renderer added: the
+      text really draws at the height the book handed the layout. It mounts a real text view per
+      row, so it is **capped and says so** (`heights exact over first 400 rows`) — a gate that
+      quietly covered a tenth of the rows reads as a gate that covered them all.
   - `App/Sources/Session/SessionStatusBar.swift` — the mini status bar, one glass line floating
     just above the composer where a thumb reaches it: status, model, permission mode, usage. The
     status slot is **shared with connectivity, and connectivity wins it** — while the socket is
