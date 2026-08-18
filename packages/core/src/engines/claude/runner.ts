@@ -14,6 +14,9 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 import {
   ENGINE_CAPABILITIES,
+  replayRetains,
+  transcriptActivity,
+  transcriptContent,
   type CreateSessionRequest,
   type McpServerStatusInfo,
   type PermissionMode,
@@ -22,8 +25,6 @@ import {
   type SessionEventBody,
   type SessionInfo,
   type SessionStatus,
-  transcriptActivity,
-  transcriptContent,
 } from '@workerdeck/protocol'
 import {
   type AttachmentInput,
@@ -361,10 +362,14 @@ export class SessionRunner implements Runner {
     options?: { coalesceReplay?: boolean },
   ): () => void {
     const stale = options?.coalesceReplay ? staleReplaySeqs(this.#events, afterSeq) : undefined
+    const lastSeq = this.#events[this.#events.length - 1]?.seq ?? 0
     for (const event of this.#events) {
       if (event.seq <= afterSeq) continue
       if (event.seq < this.#resetSeq && transcriptContent(event)) continue
       if (stale?.has(event.seq)) continue
+      // Never the last event, whatever the rule says: a client's replay hold
+      // waits for `state.lastSeq` to reach the attach's, and would hang forever.
+      if (options?.coalesceReplay && event.seq !== lastSeq && !replayRetains(event)) continue
       listener(event)
     }
     this.#listeners.add(listener)

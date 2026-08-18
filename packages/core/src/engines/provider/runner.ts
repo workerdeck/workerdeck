@@ -9,6 +9,9 @@ import {
 } from 'ai'
 import {
   ENGINE_CAPABILITIES,
+  replayRetains,
+  snapshotRetains,
+  transcriptActivity,
   type ContentBlock,
   type CreateSessionRequest,
   type McpServerStatusInfo,
@@ -19,8 +22,6 @@ import {
   type SessionInfo,
   type SessionStatus,
   type ToolExecutionBackend,
-  snapshotRetains,
-  transcriptActivity,
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import { type AttachmentInput, attachmentRef, normalizeMediaType } from '../../lib/attachments.ts'
@@ -607,9 +608,13 @@ export class AiSdkRunner implements Runner {
     options?: { coalesceReplay?: boolean },
   ): () => void {
     const stale = options?.coalesceReplay ? staleReplaySeqs(this.#events, afterSeq) : undefined
+    const lastSeq = this.#events[this.#events.length - 1]?.seq ?? 0
     for (const event of this.#events) {
       if (event.seq <= afterSeq) continue
       if (stale?.has(event.seq)) continue
+      // Never the last event, whatever the rule says: a client's replay hold
+      // waits for `state.lastSeq` to reach the attach's, and would hang forever.
+      if (options?.coalesceReplay && event.seq !== lastSeq && !replayRetains(event)) continue
       listener(event)
     }
     this.#listeners.add(listener)

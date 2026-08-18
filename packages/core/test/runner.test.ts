@@ -569,6 +569,45 @@ describe('SessionRunner', () => {
     expect(replayed.map((e) => e.type)).toEqual(['assistant_message', 'turn_result', 'status_changed'])
   })
 
+  it('a coalesced replay drops the stream deltas the reducer discards', async () => {
+    // `replayRetains`. The rule's value is measured rather than assumed: over one
+    // real 1,270-row session the delta run was 774 KB and ~85% of it was frames
+    // the reducer reads and throws away — a tool call's `input_json_delta`
+    // arguments above all. Live delivery is untouched; this is the buffered
+    // replay alone.
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    const partial = (delta: Record<string, unknown>) =>
+      ({
+        type: 'stream_event',
+        uuid: 'u',
+        session_id: 's',
+        parent_tool_use_id: null,
+        event: delta,
+      }) as never
+    harness.emit(partial({ type: 'message_start' }))
+    harness.emit(partial({ type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: 'hm' } }))
+    harness.emit(partial({ type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: '{"a":1}' } }))
+    harness.emit(partial({ type: 'content_block_delta', delta: { type: 'text_delta', text: 'hi' } }))
+    harness.emit(partial({ type: 'content_block_stop' }))
+    harness.emit(assistantMessage)
+    await tick()
+
+    const full: SessionEvent[] = []
+    runner.subscribe((e) => full.push(e))
+    const thin: SessionEvent[] = []
+    runner.subscribe((e) => thin.push(e), 0, { coalesceReplay: true })
+
+    const deltas = (list: SessionEvent[]) => list.filter((e) => e.type === 'stream_delta')
+    expect(deltas(full)).toHaveLength(5)
+    // Only the two kinds the reducer models survive.
+    expect(deltas(thin)).toHaveLength(2)
+    // And the log's last event is delivered whatever the rule says — a client's
+    // replay hold waits for it and would hang on a blank panel forever.
+    expect(thin.at(-1)?.seq).toBe(full.at(-1)?.seq)
+  })
+
   it('close() denies pending approvals, closes the query, and goes terminal', async () => {
     const { harness, runner, events } = makeRunner()
     void runner.start()

@@ -1567,9 +1567,76 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
       // this event (a `parked` status triggers a park), so a coalesced log
       // handed to every subscriber would silently skip that side effect.
       return 'status_changed'
+    case 'sdk_event':
+      // The CLI's own liveness chatter — `{ type: 'system', subtype: 'status' }`
+      // saying "requesting" — and it is the single most numerous thing in a real
+      // log: 1,363 of them over 388 KB in a measured session, a ninth of the
+      // whole attach payload, for a field describing what the runner was doing
+      // an hour ago. Last-write-wins is the *generous* reading: the honest one
+      // is that a replayed status is never true, since the only status that can
+      // be is the current one.
+      //
+      // Narrow on purpose. `sdk_event` is the escape hatch for SDK messages this
+      // protocol version does not model, and the family's standing rule is that
+      // the safe failure is replaying a stale row rather than withholding state
+      // — so a compaction boundary or an auth notice keeps arriving in full, and
+      // only the one payload that is *by nature* transient is folded.
+      return body.payload.type === 'system' && body.payload.subtype === 'status'
+        ? 'sdk_event:system:status'
+        : undefined
     default:
       return undefined
   }
+}
+
+/**
+ * Does a **replay** have to deliver this event, or may it be dropped outright?
+ *
+ * The fifth of the family, and the closest relative of {@link snapshotRetains} —
+ * the same claim ("no client can tell") pointed at the wire instead of at a
+ * store. The difference from {@link replayCoalesceKey} is that this is not
+ * last-write-wins: there is nothing to keep. These are events the reducer reads
+ * and *discards*, so a replay that sends them is spending the reader's network
+ * on frames whose whole effect is `return base`.
+ *
+ * Today that is exactly one thing, and it is the second-largest item in a real
+ * attach: the `stream_delta`s the reducer does not model. Measured over one
+ * 1,270-row session, the delta run was 774 KB, and **~85% of it was frames the
+ * reducer throws away** — `input_json_delta` (a tool call's arguments, streamed
+ * character by character, 383 KB), `signature_delta` (encrypted-thinking
+ * signatures, 153 KB) and the `message_start`/`content_block_start`/`_stop`
+ * scaffolding (244 KB). The reducer models two delta kinds, `text_delta` and
+ * `thinking_delta`; everything else falls through its switch untouched.
+ *
+ * What is deliberately **not** dropped, though the arithmetic would allow it:
+ *
+ * - `thinking_delta` — the Claude SDK delivers thinking blocks whose `thinking`
+ *   is `''`, and the reducer backfills them from the accumulated streamed text
+ *   (`streamedThinking`). Dropping these erases every thought from a replayed
+ *   transcript. This is the same carve-out `snapshotRetains` documents, and it
+ *   is the reason that rule is provider-engine-only.
+ * - `text_delta` — superseded by the `assistant_message` that follows it, which
+ *   filters the streaming id and rebuilds from the full content blocks. It could
+ *   go, but only with a lookahead proving the message arrived, and at 24 KB in
+ *   the measured session it is not worth a rule that has to be right about
+ *   supersession. A merge is likewise not worth it: a *drop* needs no synthesized
+ *   event and therefore no invented seq.
+ *
+ * A live event is never affected — this is about the buffered replay alone — and
+ * the caller must never drop the log's highest-seq event whatever this says, for
+ * the reason {@link replayCoalesceKey} gives: the replay hold waits for
+ * `state.lastSeq` to reach the attach's `session.lastSeq` and would hang on a
+ * blank panel forever.
+ *
+ * The property is the family's usual one and is a test rather than an argument:
+ * folding the full log and the retained log through `applyEvent` yields
+ * identical state (`packages/react/test/replay-retain.test.ts`).
+ */
+export function replayRetains(body: SessionEventBody): boolean {
+  if (body.type !== 'stream_delta') return true
+  const delta = body.event as { type?: string; delta?: { type?: string } }
+  if (delta.type !== 'content_block_delta') return false
+  return delta.delta?.type === 'text_delta' || delta.delta?.type === 'thinking_delta'
 }
 
 /**
