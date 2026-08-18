@@ -1140,7 +1140,13 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   sub-agents — so the tests confirm the *fold* and say nothing about the real CLI's stream shape or
   whether the app boots with a key. See `_docs/VERIFICATION-DEBT.md`; clear it first, then bump.
   The change is a **minor** (additive, `persistLive` defaults off, and absent `subagents` means
-  empty). Protocol stays **7**.
+  empty). Protocol stays **7**. Riding there too, and **not** subject to that debt: the iOS
+  **native Swift terminal renderer** (phase 1 — virtualized, deterministic heights, the folds,
+  diffs; `lines` deleted there as on the web) and the iOS **replay hold**. Those two are the
+  opposite case — built, then run on a real device against a real session, which is how the
+  open-a-session flicker was found and fixed. They also touch **no published package**: the phone
+  app is side-loaded from this repo and has no `package.json`, so `version:set` does not reach it
+  and a bump neither helps nor hinders it.
 
   **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`
