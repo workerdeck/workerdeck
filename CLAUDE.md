@@ -47,7 +47,28 @@ protocol. Read these before changing scope or structure:
   attach. Keyed per *window* for rate limits, because the reducer stores them that way. It lives
   in protocol for the usual reason (only core coalesces, only react can prove it right, neither
   may import the other), and the property is testable rather than argued: folding the full log
-  and the coalesced log must yield identical state. Two more joined it, both lifted
+  and the coalesced log must yield identical state. It grew one case beyond the polls: an
+  `sdk_event` carrying the CLI's transient `system`/`status` chatter, which is the single most
+  numerous thing in a real log — 1,363 frames over 388 KB in one measured session, a ninth of the
+  whole attach, describing what the runner was doing an hour ago. Narrow on purpose, because
+  `sdk_event` is the escape hatch for SDK messages this version does not model and the family's
+  standing rule is that the safe failure is a stale row, never withheld state.
+  `replayRetains(event)` is the **fifth** of the family and the closest relative of
+  `snapshotRetains` — the same "no client can tell" claim pointed at the wire instead of at a
+  store, and *not* last-write-wins: these are events the reducer reads and discards, so a replay
+  that ships them spends the reader's network on frames whose whole effect is `return base`.
+  Today that is exactly one thing and it is the second-largest item in an attach: the
+  `stream_delta`s the reducer does not model. Measured over one 1,270-row session the delta run
+  was 774 KB and **~85% of it was thrown away on arrival** — `input_json_delta` (a tool call's
+  arguments, streamed character by character, 383 KB), `signature_delta` (153 KB) and the
+  `message_start`/`content_block_*` scaffolding (244 KB). `thinking_delta` is deliberately kept:
+  the Claude SDK sends thinking blocks whose text is `''` and the reducer backfills them from the
+  accumulated stream, so dropping those erases every thought — the same carve-out `snapshotRetains`
+  documents, which is why *that* rule is provider-engine-only. `text_delta` is kept too, being
+  superseded only by a lookahead nobody has needed to write for 24 KB. Proof in
+  `packages/react/test/replay-retain.test.ts`, the family's usual fold-equality property, and the
+  caller must never drop the log's highest-seq event whatever the rule says — a client's replay
+  hold waits for it. Two more joined it, both lifted
   out of the VS Code extension once a second client needed them. `FilePatch`/`PatchHunk` joined
   them for the same reason: a diff's line numbers are the *engine's*, carried on
   `user_message.patch`, because no client has read the file and one that computed them would point
@@ -1140,7 +1161,9 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   sub-agents — so the tests confirm the *fold* and say nothing about the real CLI's stream shape or
   whether the app boots with a key. See `_docs/VERIFICATION-DEBT.md`; clear it first, then bump.
   The change is a **minor** (additive, `persistLive` defaults off, and absent `subagents` means
-  empty). Protocol stays **7**. Riding there too, and **not** subject to that debt: the iOS
+  empty). Protocol stays **7** — `replayRetains` and the `sdk_event` coalesce key are gateway-side
+  rules with no wire shape, so a client that has never heard of them is bit-identical after the
+  fold, which is exactly what their property test asserts. Riding there too, and **not** subject to that debt: the iOS
   **native Swift terminal renderer** (phase 1 — virtualized, deterministic heights, the folds,
   diffs; `lines` deleted there as on the web) and the iOS **replay hold**. Those two are the
   opposite case — built, then run on a real device against a real session, which is how the
@@ -1149,8 +1172,19 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   `UICollectionViewLayout` takes every frame from the height book) and the **scrubber** (the port
   of `buildClusters`/`railScale` into the kit, where their two shipped pure-logic bugs are
   testable). Both are on the phone; both have one gesture the simulator could not be driven to
-  exercise. Next up is the renderer refactor to selectable text and the load flicker Tobias
-  reports — brief in `_docs/features/ios-terminal-selection.md`. They also touch **no published package**: the phone
+  exercise. Phase 3 rides there now too: the renderer is **hand-rolled UIKit**
+  (`TerminalRowCell`, three views per row instead of two SwiftUI views per *line*) with the body
+  as **one selectable TextKit run** — selection within a row works, across rows is still open —
+  gated by a second audit claim, `measureHeights`, since a wrong `lineFragmentPadding` puts every
+  row a fraction off with nothing visibly wrong. Beside it: the **sticky prompt**
+  (`StickyPrompt.swift`, arithmetic in the kit because a view cannot be tested, and its first test
+  caught the frame-vs-content offset bug), and the **replay hold made honest** — a deadline that
+  extends while `lastSeq` advances rather than a flat 1.5s that fired on exactly the sessions the
+  hold exists for, the *whole reduced state* held rather than the transcript view (approvals and
+  meters used to flicker through the session's history on every open), and a `seq / target`
+  counter in place of a blank screen. The **cold plan** is parallel now
+  (`TerminalHeightBook.lineCounts`, 690ms → 154ms at 16k rows), which was the other half of that
+  wait. Brief for what is left in `_docs/features/ios-terminal-selection.md`. They also touch **no published package**: the phone
   app is side-loaded from this repo and has no `package.json`, so `version:set` does not reach it
   and a bump neither helps nor hinders it.
 
