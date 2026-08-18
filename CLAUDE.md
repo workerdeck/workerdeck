@@ -1190,7 +1190,15 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   The change is a **minor** (additive, `persistLive` defaults off, and absent `subagents` means
   empty). Protocol stays **7** — `replayRetains` and the `sdk_event` coalesce key are gateway-side
   rules with no wire shape, so a client that has never heard of them is bit-identical after the
-  fold, which is exactly what their property test asserts. Riding there too, and **not** subject to that debt: the iOS
+  fold, which is exactly what their property test asserts. The **scrubber's failure semantics and its
+  two channels** ride there too and are proven the way the theme's pure logic always is (unit tests
+  on both platforms): a failure is an *outcome* (`taskFailed` is the task's own, `runFailed` is a
+  folded run's last call), an item that *shares* a row marks as a tick at its fraction of it rather
+  than inheriting an extent that is mostly other items' work, and the two lanes became **channels** —
+  input left (prompts + a green band per sub-agent, drawn from membership and never the spawner's
+  name), output right (the answer, and every failure that produced one). One thing the same session
+  found and did **not** fix: `SubagentTracker` mis-reads the SDK's *async* agents — see
+  `docs/ROADMAP.md` §Next 0. Riding there too, and **not** subject to that debt: the iOS
   **native Swift terminal renderer** (phase 1 — virtualized, deterministic heights, the folds,
   diffs; `lines` deleted there as on the web) and the iOS **replay hold**. Those two are the
   opposite case — built, then run on a real device against a real session, which is how the

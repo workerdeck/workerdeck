@@ -387,9 +387,13 @@ Bumped on master, not yet tagged or published. Three tracks:
 - **Terminal navigation.** Row heights are *computed*, not estimated (`terminal/height.ts` —
   `{px, exact}`, WeakMap cache per width×cell epoch, browser-measured regression gate in
   `dev/height-audit.ts`), which is what let the scrubber be a real draggable scrollbar: a 12px
-  overview ruler with two lanes (prompts / answers), full-width annotations for errors, the
-  pending approval and the recap seam, hover peeks from `state.items` (never the DOM), click
-  jumps through `rowIndexForItem`. The sticky prompt holds the first line of the turn you are
+  overview ruler whose two lanes are **channels** — left is input (your prompts, and a green band
+  per sub-agent you dispatched), right is output (each turn's answer, and every failure that
+  produced one) — with full width left for what is not a channel at all (the pending approval, a
+  bookmark, the recap seam), hover peeks from `state.items` (never the DOM), click jumps through
+  `rowIndexForItem`. A mark spans its row's extent, except an item that *shares* a row (a task
+  block's absorbed child, a folded run's member), which is a tick at its fraction of it — one
+  failed child of a hundred-call agent otherwise painted the whole expanded block red. The sticky prompt holds the first line of the turn you are
   reading via a compositor-pinned lane + head, kept mounted through the virtualizer's
   `rangeExtractor`. A session opens settled (the `replaying` hold on the attach frame's own
   signal), switching is cached (`transcript-cache.ts`, guarded by `staleAttach`), replay is
@@ -410,7 +414,17 @@ command runs the production build beside dev (`pnpm start:prod`, 8788).
 
 ## Next
 
-0. **APNs push for the iOS app — released in 0.7.0, not yet proven on a device.** The forwarder half is in
+0. **Sub-agent handling, end to end — the next session's work.** Three threads, all opened by a
+   real session run against the dev gateway on 2026-08-18 and written up in
+   `_docs/features/sub-agent-handling.md` (gitignored; harvest before deleting). In short: the
+   SDK's *async* agents break `SubagentTracker`'s inference (the spawner is named `Agent`, its
+   `tool_result` means "launched" and arrives before the first nested event, and the turn ends
+   while the agent runs — so every background agent reads `failed` and label-less); the CLI knows
+   its agents' state because it holds the handle, not because the stream carries it, which is the
+   question worth answering before writing more inference; and the CLI's **task summary** (the
+   expandable "tasks" checklist under the composer) is a surface WorkerDeck has no equivalent of
+   at all. Not to be confused with the `Task` *tool* — this is the turn's own to-do list.
+1. **APNs push for the iOS app — released in 0.7.0, not yet proven on a device.** The forwarder half is in
    (`packages/cli/src/apns/`: hand-rolled HTTP/2 client, device registry at `/apns/devices`,
    in-process hook onto the session notifications above) and so is the app half (entitlement,
    registration per gateway, Approve/Deny actions, deep link). Verified so far: the credential
