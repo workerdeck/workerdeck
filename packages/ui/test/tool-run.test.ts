@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { TranscriptItem } from '@workerdeck/react'
 import {
   foldsTogether,
+  runFailed,
   runSummary,
   taskBusy,
   taskFailed,
@@ -202,13 +203,35 @@ describe('taskBusy', () => {
 
 describe('taskFailed', () => {
   it('colours on the task’s own failure, by either spelling', () => {
-    expect(taskFailed(taskCall({ status: 'failed' }), [])).toBe(true)
-    expect(taskFailed(taskCall({ result: { text: 'no', isError: true } }), [])).toBe(true)
-    expect(taskFailed(taskCall(), [])).toBe(false)
+    expect(taskFailed(taskCall({ status: 'failed' }))).toBe(true)
+    expect(taskFailed(taskCall({ result: { text: 'no', isError: true } }))).toBe(true)
+    expect(taskFailed(taskCall())).toBe(false)
   })
 
-  it('colours on a child’s failure rather than hiding it in the fold', () => {
+  it('does not colour on a child’s failure — the agent’s outcome is the claim', () => {
+    // The case that motivated the rule: an agent runs a hundred calls, one of
+    // them a grep that matched nothing, and comes back having done exactly what
+    // it was asked. A red line saying otherwise spends the one colour reserved
+    // for things that need a human. The child is still red on its own row.
     const children = [{ ...call('Read', 'task-1'), status: 'failed' as const }]
-    expect(taskFailed(taskCall(), children)).toBe(true)
+    expect(taskFailed(taskCall())).toBe(false)
+    expect(children).toHaveLength(1)
+  })
+})
+
+describe('runFailed', () => {
+  it('is the run’s last call, not any of them', () => {
+    const ok = call('Read')
+    const bad = { ...call('Bash'), status: 'failed' as const }
+    // Recovered: the failure is history, and the run's outcome is fine.
+    expect(runFailed([bad, ok])).toBe(false)
+    // Unresolved: the run ended on it, so it is still the live fact.
+    expect(runFailed([ok, bad])).toBe(true)
+  })
+
+  it('reads both spellings of a failure, and an empty run never fails', () => {
+    expect(runFailed([{ ...call('Bash'), result: { text: 'no', isError: true } }])).toBe(true)
+    expect(runFailed([call('Read')])).toBe(false)
+    expect(runFailed([])).toBe(false)
   })
 })

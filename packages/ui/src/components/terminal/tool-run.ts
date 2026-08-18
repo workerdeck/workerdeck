@@ -130,8 +130,33 @@ export function taskLabel(task: ToolCallItem): string {
 const callBusy = (call: ToolCallItem): boolean =>
   call.status === 'running' || call.status === 'pending'
 
-const callFailed = (call: ToolCallItem): boolean =>
+/** Did this one call fail? Both spellings are needed: an out-of-loop execution
+ * failure sets `status` with no `is_error` block to read, and an engine can flag
+ * `is_error` on a call the reducer has not settled yet. */
+export const callFailed = (call: ToolCallItem): boolean =>
   call.status === 'failed' || call.result?.isError === true
+
+/**
+ * Does a folded run colour red? **Only when its last call failed.**
+ *
+ * It used to be `some`, on the argument that a failure should colour the block
+ * rather than fragment it. The argument was right about not fragmenting and
+ * wrong about `some`: a run is a sequence the model worked through, and a
+ * failure it recovered from two calls later is how work goes — a grep that
+ * matched nothing, a build fixed on the second go. Reddening the whole run for
+ * it means a normal working session is painted red, which spends the colour
+ * that should have been left for the one thing still broken.
+ *
+ * The last call is the run's *outcome*, and an outcome is what a collapsed row
+ * can honestly claim. The failures inside it are not hidden — they are one
+ * press away, each red on its own row, and the scrubber still marks every one
+ * of them individually (a different question, asked of the rail rather than of
+ * the row).
+ */
+export function runFailed(items: readonly ToolCallItem[]): boolean {
+  const last = items[items.length - 1]
+  return last !== undefined && callFailed(last)
+}
 
 /** Is anything inside still going? The call itself, normally — the Task
  * settles only when its subagent finishes — but a bridged or deferred child
@@ -142,13 +167,28 @@ export function taskBusy(task: ToolCallItem, children: readonly TranscriptItem[]
 }
 
 /**
- * Does the row colour red? The task's own failure, or any child call's — the
- * run fold's call exactly (and the scrubber's, by the same two-spelling
- * predicate): a failure does not fragment the block, it colours it, because
- * hiding it inside a longer list is worse than a red line the reader can open.
+ * Does the row colour red? **The task's own outcome, and nothing else.**
+ *
+ * It used to be "or any child call's", which does not survive contact with a
+ * real subagent: an agent that ran a hundred calls, one of them a grep that
+ * matched nothing, came back with a red line saying it had failed. It had not —
+ * it had done exactly what it was asked, and the transcript said otherwise in
+ * the one colour reserved for things that need a human.
+ *
+ * This is the call `SubagentInfo.status` already makes, and it made it for this
+ * reason (see `packages/protocol`): the sub-agent's **own** `tool_result`
+ * `is_error`, deliberately not `taskFailed`. The argument there was that a
+ * nothing-matched grep must not read as a failed run *beside a session name*;
+ * what a hundred-call agent shows is that it must not read that way beside the
+ * `Task` row either. Two surfaces, one rule, one spelling.
+ *
+ * Nothing is concealed by this. A failed child is red on its own row, one press
+ * away, and the scrubber marks it on the rail independently — the rail's
+ * question is "is there anything in here worth navigating to", which is not the
+ * row's question of "how did this end".
  */
-export function taskFailed(task: ToolCallItem, children: readonly TranscriptItem[]): boolean {
-  return callFailed(task) || children.some((child) => child.kind === 'tool_call' && callFailed(child))
+export function taskFailed(task: ToolCallItem): boolean {
+  return callFailed(task)
 }
 
 /**

@@ -8,7 +8,7 @@ import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { Pressable, useRevealOnOpen } from './press.tsx'
 import { collapsedResult } from './result-preview.ts'
-import { runSummary } from './tool-run.ts'
+import { runFailed, runSummary } from './tool-run.ts'
 import { type ToolCallItem } from './blocks.ts'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
 
@@ -265,10 +265,11 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
  * collapses to its count and gets out of the way — and opens, in full, the
  * moment it is the thing you actually want.
  *
- * The membership and wording rules live in `tool-run.ts`, shared with the height
- * calculator. A failed member does not break the run — it *colours* it, which is
- * the same call the scrubber makes: a failure is worth seeing, and fragmenting
- * the run around it would hide it in a longer list rather than surface it.
+ * The membership, wording and failure rules live in `tool-run.ts`, shared with
+ * the height calculator. A failure never breaks the run — fragmenting it around
+ * one would hide the failure in a longer list rather than surface it — but only
+ * the run's **last** call colours it, because that is the run's outcome and an
+ * outcome is what a collapsed row can honestly claim (see `runFailed`).
  */
 export function ToolRunRow({ items }: { items: ToolCallItem[] }) {
   const [open, setOpen] = useState(false)
@@ -277,7 +278,7 @@ export function ToolRunRow({ items }: { items: ToolCallItem[] }) {
     const status = item.status ?? (item.result === undefined ? 'running' : 'settled')
     return status === 'running' || status === 'pending'
   })
-  const failed = items.some((item) => item.status === 'failed' || item.result?.isError === true)
+  const failed = runFailed(items)
   const pulse = usePulse(busy)
 
   return (

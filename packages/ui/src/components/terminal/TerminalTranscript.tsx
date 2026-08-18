@@ -116,7 +116,7 @@ export function TaskRow({
   const reveal = useRevealOnOpen(open)
   const children = useMemo(() => taskChildItems(block), [block])
   const busy = taskBusy(block.task, children)
-  const failed = taskFailed(block.task, children)
+  const failed = taskFailed(block.task)
   const pulse = usePulse(busy)
 
   return (

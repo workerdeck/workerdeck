@@ -79,7 +79,7 @@ public enum TerminalPlanner {
       return planToolCall(only, metrics: metrics, expansion: expansion, inOpen: inOpen)
     }
     let busy = run.contains(where: callBusy)
-    let failed = run.contains(where: callFailed)
+    let failed = runFailed(run)
     let nested = run.first?.parentToolUseId != nil
     let open = expansion.isOpen(block.key)
     let wash = inOpen || open
@@ -110,7 +110,7 @@ public enum TerminalPlanner {
   ) -> [TermLine] {
     let children = taskChildItems(block)
     let busy = taskBusy(block.task, children)
-    let failed = taskFailed(block.task, children)
+    let failed = taskFailed(block.task)
     let open = expansion.isOpen(block.key)
     let wash = inOpen || open
 

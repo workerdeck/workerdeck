@@ -82,9 +82,11 @@ protocol. Read these before changing scope or structure:
   `pendingPermissionCount`'s shape — which is what puts it on the REST list, the attach snapshot
   and parking snapshots for free — folded in the claude runner's `#emit`, the one chokepoint, so a
   dormant rebuild reconstructs it from the resume backfill with no second path. Three rules that
-  are bugs if dropped: `status` is the sub-agent's **own** `tool_result.is_error` and deliberately
-  **not** `taskFailed` (which reddens a Task row when any *child* call failed — right for a row you
-  can expand, wrong beside a session name where a nothing-matched grep would read as a failed run);
+  are bugs if dropped: `status` is the sub-agent's **own** `tool_result.is_error`, which is now also
+  what `taskFailed` draws the `Task` row with — it had been "or any child's", and the argument made
+  here (a nothing-matched grep must not read as a failed run beside a session name) turned out to
+  hold just as well beside the row: an agent that ran a hundred calls, one of them that grep, came
+  back red claiming it had failed. Two surfaces, one rule, one spelling;
   an interrupted turn **sweeps to `failed`** on `turn_result`/`session_closed`/the status coming to
   rest, because a resume backfill replays no `turn_result` and a woken mid-Task session would
   otherwise read `running` forever; and it is **bounded** — every running record plus the newest
@@ -390,9 +392,14 @@ protocol. Read these before changing scope or structure:
   breaks the run, because that sentence is the reason the second one happened — and the recap
   boundary breaks it too, so a count never spans "what you already read"; `parentToolUseId` is the
   one addition the wider rule needs, since a subagent's calls are drawn stepped in behind a rule and
-  must not be counted with a top-level one. A **failure does not break a run, it colours it** — the
-  same call the scrubber makes, since fragmenting the run around a failure hides it in a longer list
-  rather than surfacing it. The same fold, one level up: **a `Task` and everything the subagent
+  must not be counted with a top-level one. A **failure does not break a run** — fragmenting it
+  around one hides the failure in a longer list rather than surfacing it — but only the run's
+  **last** call colours it (`runFailed`). A failure the model recovered from two calls later is how
+  work goes, and reddening the whole run for it paints a normal working session red, spending the
+  colour that should have been left for the one thing still broken; the last call is the run's
+  *outcome*, and an outcome is what a collapsed row can honestly claim. Nothing is concealed — each
+  failure is still red on its own row, and the scrubber still marks every one, because the rail's
+  question ("is there anything in here worth navigating to") is not the row's ("how did this end"). The same fold, one level up: **a `Task` and everything the subagent
   produced is one row** (`blocks.ts`'s `TaskBlock`, `TaskRow`, wording in `tool-run.ts`), reading
   `Task(Explore · permission mode parsing) · 7 tools`. A subagent is sixty rows of somebody else's
   working and none of it is what you came back to read — the report is the model's next sentence.

@@ -63,10 +63,37 @@ public func taskBusy(_ task: ToolCallItem, _ children: [TranscriptItem]) -> Bool
   return children.contains { if case .toolCall(let call) = $0 { return callBusy(call) } else { return false } }
 }
 
-/// Did anything inside this Task fail? Colours the row; never splits it.
-public func taskFailed(_ task: ToolCallItem, _ children: [TranscriptItem]) -> Bool {
-  if callFailed(task) { return true }
-  return children.contains { if case .toolCall(let call) = $0 { return callFailed(call) } else { return false } }
+/// Does a folded run colour red? **Only when its last call failed.**
+///
+/// It used to be `contains`, on the argument that a failure should colour the
+/// block rather than fragment it. The argument was right about not fragmenting
+/// and wrong about `contains`: a run is a sequence the model worked through, and
+/// a failure it recovered from two calls later is how work goes. Reddening the
+/// whole run for it paints a normal working session red and spends the colour
+/// that should have been left for the one thing still broken.
+///
+/// The last call is the run's *outcome*, and an outcome is what a collapsed row
+/// can honestly claim. Nothing is hidden: the failures inside are one tap away,
+/// each red on its own row, and the scrubber marks every one of them.
+public func runFailed(_ items: [ToolCallItem]) -> Bool {
+  guard let last = items.last else { return false }
+  return callFailed(last)
+}
+
+/// Does the Task row colour red? **The task's own outcome, and nothing else.**
+///
+/// It used to be "or any child's", which does not survive a real subagent: an
+/// agent that ran a hundred calls, one of them a grep that matched nothing, came
+/// back with a red line saying it had failed. It had not — and the transcript
+/// said otherwise in the one colour reserved for things that need a human.
+///
+/// This is the call `SubagentInfo.status` already makes, and for this reason:
+/// the sub-agent's **own** result, deliberately not `taskFailed`. The argument
+/// there was that a nothing-matched grep must not read as a failed run beside a
+/// session name; a hundred-call agent shows it must not read that way beside the
+/// `Task` row either. Two surfaces, one rule.
+public func taskFailed(_ task: ToolCallItem) -> Bool {
+  callFailed(task)
 }
 
 // MARK: - Summaries
