@@ -29,6 +29,34 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     the classifier is strictly line-local, so a block renders in its final shape from its first
     character — a bullet that appeared as a paragraph and snapped into place a token later would
     be worse than not rendering it at all.
+  - `Terminal/` — the terminal transcript's rules, ported from
+    `packages/ui/src/components/terminal/`. Pure and testable, which is the point: the geometry
+    of this theme is arithmetic, and arithmetic belongs where `swift test` can reach it.
+    - `TerminalBlocks.swift` / `TerminalRows.swift` — the two folds (a run of consecutive tool
+      calls is one row; a `Task` and everything its subagent produced is one row) and the row
+      addressing over them. The load-bearing distinction: a run is built from **adjacency**, a
+      task from **membership** (`parentToolUseId`), because parallel Tasks interleave in the
+      stream. So a row covers a *membership*, never a contiguous `[index, index + n)` range —
+      anything positional (a scrubber mark, a catch-up jump, "reveal that sub-agent") must go
+      through `TerminalRows.rowIndex(forItem:)`.
+    - `TerminalCells.swift` — the cell model and the wrap: grapheme widths, wide/pictographic
+      clusters flagged inexact, break-after-hyphen (so `protocol-0.16.0` stays together), and
+      preserved spaces that **hang** past the last column rather than forcing a break.
+    - `TerminalPlanner.swift` / `TerminalPlan.swift` / `TerminalHeightBook.swift` — the port of
+      `height.ts`, **turned inside out**. On the web the browser wraps and `height.ts` predicts
+      how many lines that will be. Here the planner wraps, the renderer draws the lines it
+      returned, and a row's height is `lines.count × line` by definition — there is no
+      prediction that can be wrong and no post-mount correction. It costs nothing: the wrap was
+      computed to measure the row anyway. `TerminalPlanCache` is what keeps a refold cheap on
+      every streamed token, standing in for the web client's `WeakMap` on item identity (a Swift
+      array is a value; there is no identity to hang one on).
+    - `MarkdownInline.swift` — inline markdown rendered once and shared by the measurer and the
+      renderer, so `**bold**` cannot be measured as eight characters and drawn as four. The web
+      client strips inline syntax with a regex chain; a second answer to "what does this render
+      as" is a second answer that drifts.
+    - `ToolRun.swift` / `ResultPreview.swift` / `TerminalFormat.swift` — the exact strings. In
+      this theme **the string is the height**, so every summary, preview and affordance is
+      spelled once, here, and never in a view.
   - `SessionList.swift` / `Watermarks.swift` — ports of `packages/protocol/src/session-list.ts`
     and `watermarks.ts`, the same way `Transcript.swift` is a port of the react reducer. The
     sessions-list view model (the `attention/working/idle/ended` buckets, the gateway/adapter/
@@ -67,6 +95,38 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     last snapshot don't come back as unread. Renaming is a leading swipe or a context menu →
     `PATCH /sessions/:id`, a gateway edit rather than a local override, so the name reaches the
     dashboard and the extension too (and an empty one restores the derived title).
+  - `App/Sources/Session/Terminal/` — the terminal transcript's *rendering* half, over the rules
+    in the kit's `Terminal/`. It is a **renderer, not a set of branches**: it draws every row
+    itself, and nothing under the cards path asks which variant it is in. (That is the lesson of
+    the deleted `lines` variant, which survived only as an `isLines` branch duplicated across
+    fifteen view bodies.)
+    - `TranscriptMetrics.swift` — the cell, **measured** over 200 characters rather than derived
+      from the font size (a 12pt monospace face advances ~7.4pt, not 7.2). The cell keeps its
+      exact fractional advance and only the **line** is rounded to a whole point: a fractional
+      line puts every second row on a half-pixel, which softens the text and seams the diff
+      bands, while rounding the *cell* up costs a fraction of a point per cell — four characters
+      a line at phone widths, about nine percent of the transcript.
+    - `TerminalRowViews.swift` / `TerminalPalette.swift` — the row primitives (gutter column +
+      body column, which is what gives every wrapped line its hanging indent for free) and the
+      palette, ported value-for-value from `styles/terminal.css` so a session reads the same here
+      as in the dashboard. Every planned line is exactly one rendered line, so each is drawn in a
+      fixed-height box with wrapping off — no `lineSpacing` arithmetic, and no row that measures
+      18pt and lays out at 18.4.
+    - `TranscriptLayout.swift` / `VirtualizedTranscriptView.swift` — a `UICollectionView` with a
+      custom layout whose frames come **entirely** from the height book; no self-sizing anywhere.
+      That is what makes the rest possible: an overview scrubber needs the pixel offset of rows
+      that were never mounted, and only a computed height can answer for a view that does not
+      exist. Stick-to-bottom and size-change correction are split into two regimes, as on the
+      web — pinned, corrections are suppressed entirely (being at the bottom *is* the scroll
+      position); escaped, the row under the viewport's top edge is re-anchored **by key**, since
+      "the same row" is a membership question once folds are in play.
+    - `TerminalAudit.swift` — the gate. The planner counts cells; if a line's real rendered width
+      ever exceeds the column it was planned for, it is clipped *silently*, which is worse than a
+      wrong height because nothing about it looks wrong. Debug-only and deliberately not a unit
+      test: a unit test would check the calculator against its author's assumptions. It is
+      reported on screen by the `terminal` preview — a gate nobody reads is a gate that has never
+      run. It ignores trailing spaces on purpose, those being the wrap model's own hanging
+      spaces rather than an overflow.
   - `App/Sources/Session/SessionStatusBar.swift` — the mini status bar, one glass line floating
     just above the composer where a thumb reaches it: status, model, permission mode, usage. The
     status slot is **shared with connectivity, and connectivity wins it** — while the socket is
@@ -343,6 +403,13 @@ SIMCTL_CHILD_UIPREVIEW=usage xcrun simctl launch --terminate-running-process boo
   bi.atomic.workerdeck.ios
 xcrun simctl io booted screenshot /tmp/usage.png
 ```
+
+`terminal` renders the terminal transcript over a fixture built to exercise the row model rather
+than to look plausible — a folded run, two `Task`s whose children interleave, a diff carrying the
+engine's own line numbers, and a result long enough to hit both preview budgets. It reports the
+**overflow audit** across the top: the one thing that can catch the cell model disagreeing with
+real text layout, which would clip a line silently. `terminalStress` is the same screen over
+16,000 rows, which is what the virtualized engine exists for.
 
 Two things that don't work and are worth not re-trying: driving the simulator's UI with System
 Events (clicking needs an Accessibility grant a CLI shell doesn't have), and guessing a layout

@@ -971,9 +971,24 @@ protocol. Read these before changing scope or structure:
   The three agent-view preferences are mirrored too (`AppSettings.swift`): variant and density as
   environment values the rows read, and the font as one `fontDesign` on the session view — with
   the composer's `UITextView` told separately, since UIKit sits outside SwiftUI's font
-  environment. In `lines` — which is **still the phone's own**, kept while the Swift terminal
-  renderer is unwritten rather than dropping the only compact view it has — every row is one type
-  size (`lineTextStyle`) and every marker is a character rather than an SF Symbol.
+  environment. `lines` is **gone**, replaced by a native Swift **terminal** renderer
+  (`App/Sources/Session/Terminal/` over `WorkerDeckKit/.../Terminal/`); a stored `lines`
+  preference migrates to it rather than falling back to cards, because someone who turned boxes
+  off should keep them off. Density and font stay Cards-only here as everywhere. The port carries
+  the rules across — the two folds, the row-covers-a-*membership* addressing, the cell/wrap model,
+  the strings that *are* the heights — and inverts one thing deliberately: **the planner wraps and
+  the renderer draws the lines it returned**, so a row's height is `lines.count × line` by
+  definition rather than a prediction that can be 99% right. Nothing is estimated, so a
+  `UICollectionView` with a custom layout takes every frame straight from the height book, and the
+  pixel offset of an unmounted row — what a scrubber needs — is simply available. Two divergences
+  from the web client are deliberate and tested as such: a **run of one draws the call**, not
+  `Ran 1 tool · 1 read` (the fold's justification is row-count compression, and at one call there
+  is none to be had while the name, input and result preview are all thrown away); and the
+  result-preview character budget is **derived from the column count**, since 400 characters is
+  "about four lines" at a hundred columns and thirteen lines at thirty. `TerminalAudit` is the
+  gate that keeps the exactness claim honest, reported on screen by the `terminal`/`terminalStress`
+  preview variants — a line wider than its planned column is clipped silently, which is worse than
+  a wrong height.
   `SessionList.swift` and `Watermarks.swift` are two more such mirrors — protocol's sessions-list
   view model and unread model — so the phone's list is **one list across every configured
   gateway**, gateway as a facet rather than the frame, with search/facets/group/sort, the subset

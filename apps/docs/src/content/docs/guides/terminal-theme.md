@@ -100,3 +100,12 @@ as anything that occupies space.
 The VS Code extension's dock defaults to it (`workerdeck.transcriptVariant`), the dashboard offers
 it as **Agent view style → Terminal** in Settings, and the reference embedding
 (`apps/embedded`) runs it in a 26rem rail — the densest thing there is.
+
+The **iOS app** has it too, as **Settings → Style → Terminal**, but it shares no code with the
+above: it is a native Swift renderer over a Swift port of the same rules (the two folds, the
+cell/wrap model, the strings that are the heights). One thing is deliberately inverted there and
+worth knowing if you are porting this yourself — on the web the browser wraps and the calculator
+*predicts* how many lines that will be, while on iOS the planner wraps and the renderer draws the
+lines it returned, so a row's height is exact by construction rather than by a prediction that is
+99% right. If you own the renderer, that is the better trade, and it costs nothing: the wrap was
+computed to measure the row anyway.
