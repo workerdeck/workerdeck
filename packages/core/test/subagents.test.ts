@@ -106,6 +106,69 @@ const taskCall = (id: string, input: Record<string, unknown> = {}) => ({
   input,
 })
 
+/** The async spawner, as a captured real session spelled it (`Agent`, not `Task`). */
+const agentCall = (id: string, input: Record<string, unknown> = {}) => ({
+  type: 'tool_use',
+  id,
+  name: 'Agent',
+  input,
+})
+
+/** The launch receipt's wrapper text, verbatim from the captured session — the
+ * tool_result that resolves the spawn call seconds after launch, long before
+ * the agent has done anything. */
+const ACK_TEXT =
+  'Async agent launched successfully. (This tool result is internal metadata — never quote ' +
+  'or paste any part of it, including the agentId below, into a user-facing reply.)\n' +
+  "agentId: a5ae18bf55ec3c1b1 (internal ID - do not mention to user.)\n" +
+  'The agent is working in the background. You will be notified automatically when it completes.'
+
+const launchAck = (toolUseId: string, uuid = nextUuid()) =>
+  user(
+    [{ type: 'tool_result', tool_use_id: toolUseId, content: [{ type: 'text', text: ACK_TEXT }] }],
+    null,
+    uuid,
+  )
+
+/** The CLI's background-task lifecycle, live: system messages the runner passes
+ * through as `sdk_event` bodies. Shapes from the captured session. */
+const taskStarted = (taskId: string, toolUseId: string, subagentType: string, description: string) =>
+  ({
+    type: 'system',
+    subtype: 'task_started',
+    task_id: taskId,
+    tool_use_id: toolUseId,
+    description,
+    subagent_type: subagentType,
+    task_type: 'local_agent',
+    prompt: 'the brief',
+    uuid: nextUuid(),
+    session_id: 'sdk-session-1',
+  }) as unknown as SDKMessage
+
+const taskNotification = (taskId: string, toolUseId: string, status: string) =>
+  ({
+    type: 'system',
+    subtype: 'task_notification',
+    task_id: taskId,
+    tool_use_id: toolUseId,
+    status,
+    output_file: `/tmp/tasks/${taskId}.output`,
+    summary: 'Agent finished',
+    uuid: nextUuid(),
+    session_id: 'sdk-session-1',
+  }) as unknown as SDKMessage
+
+/** The same fact as stored in the transcript a resume replays: a plain-string
+ * user message wearing the `<task-notification>` wrapper (shape verbatim from
+ * the captured session's JSONL — none of the system events above are stored). */
+const notificationText = (taskId: string, toolUseId: string, status: string) =>
+  `<task-notification>\n<task-id>${taskId}</task-id>\n<tool-use-id>${toolUseId}</tool-use-id>\n` +
+  `<output-file>/tmp/tasks/${taskId}.output</output-file>\n<status>${status}</status>\n` +
+  `<summary>Agent "the brief" finished</summary>\n` +
+  '<note>A task-notification fires each time this agent stops with no live background children ' +
+  'of its own.</note>\n<result>## Results\n\nEverything found.</result>'
+
 const toolCall = (id: string, name = 'Bash') => ({ type: 'tool_use', id, name, input: {} })
 
 const assistant = (content: unknown, parent: string | null = null) =>
@@ -404,5 +467,227 @@ describe('SessionRunner sub-agent rollup', () => {
       { toolUseId: 'task-done', status: 'done', toolCount: 2 },
       { toolUseId: 'task-cut', status: 'failed', toolCount: 1 },
     ])
+  })
+})
+
+/**
+ * Background (async) agents — event shapes condensed from a captured real
+ * session (5c753c85…) in which the SDK spawned three Explore agents through a
+ * tool named `Agent`, resolved each spawn call with an internal-metadata
+ * launch receipt seconds later, ended THREE turns while the agents ran, and
+ * delivered each verdict as a `task_notification` system event. Under the
+ * Task-only, sweep-everything tracker all three read `failed` and label-less;
+ * none had failed.
+ */
+describe('SessionRunner background sub-agents', () => {
+  it('survives the turn ending mid-flight, and settles on its notification — the captured shape', async () => {
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    const id = 'toolu_01RHsVuxRA5JDJ2n4ywoSKjU'
+    harness.emit(
+      assistant([
+        agentCall(id, {
+          description: 'Grep iOS terminal symbols',
+          subagent_type: 'Explore',
+          prompt: 'This is a read-only test fixture task…',
+        }),
+      ]),
+    )
+    harness.emit(taskStarted('a5ae18bf55ec3c1b1', id, 'Explore', 'Grep iOS terminal symbols'))
+    harness.emit(launchAck(id))
+    await tick()
+    // The receipt is a launch acknowledgement, not the agent's verdict:
+    // settling on it would read "0 of 3 running" while the agents work.
+    expect(runner.info().subagents).toMatchObject([
+      {
+        toolUseId: id,
+        agentType: 'Explore',
+        description: 'Grep iOS terminal symbols',
+        status: 'running',
+        toolCount: 0,
+      },
+    ])
+
+    harness.emit(assistant([toolCall('n1')], id))
+    harness.emit(
+      assistant([{ type: 'text', text: 'All three Explore agents are launched and running.' }]),
+    )
+    // The turn ends while the agent is mid-flight (and the runner's own idle
+    // transition follows it) — this is exactly where the old sweep re-branded
+    // a live, working agent as a failure.
+    harness.emit(turnResult)
+    await tick()
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: id, status: 'running' }])
+
+    // Still very much alive after the turn: the count keeps climbing.
+    harness.emit(assistant([toolCall('n2'), toolCall('n3')], id))
+    harness.emit(taskNotification('a5ae18bf55ec3c1b1', id, 'completed'))
+    await tick()
+    expect(runner.info().subagents).toMatchObject([
+      { toolUseId: id, status: 'done', toolCount: 3 },
+    ])
+  })
+
+  it('reads a notification that is not `completed` as the agent failing', async () => {
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    harness.emit(assistant([agentCall('agent-1', { subagent_type: 'Explore' })]))
+    harness.emit(taskStarted('t-1', 'agent-1', 'Explore', 'brief'))
+    harness.emit(launchAck('agent-1'))
+    harness.emit(taskNotification('t-1', 'agent-1', 'stopped'))
+    await tick()
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: 'agent-1', status: 'failed' }])
+  })
+
+  it('settles an un-notified background agent when the session closes — its process is gone', async () => {
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    harness.emit(assistant([agentCall('agent-1', { subagent_type: 'Explore' })]))
+    harness.emit(taskStarted('t-1', 'agent-1', 'Explore', 'brief'))
+    harness.emit(launchAck('agent-1'))
+    await tick()
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: 'agent-1', status: 'running' }])
+    harness.end()
+    await tick()
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: 'agent-1', status: 'failed' }])
+  })
+
+  it('opens, labels and settles from the lifecycle events alone — a third spawner spelling', async () => {
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    // A spawner name the allowlist has never heard of: no record from the block.
+    harness.emit(assistant([toolCall('spawn-x', 'LaunchAgent')]))
+    await tick()
+    expect(runner.info().subagents).toBeUndefined()
+    // task_started positively names the id an agent runs under, brief included.
+    harness.emit(taskStarted('t-x', 'spawn-x', 'Explore', 'find the auth check'))
+    harness.emit(launchAck('spawn-x'))
+    harness.emit(assistant([toolCall('x1')], 'spawn-x'))
+    await tick()
+    expect(runner.info().subagents).toMatchObject([
+      {
+        toolUseId: 'spawn-x',
+        agentType: 'Explore',
+        description: 'find the auth check',
+        status: 'running',
+        toolCount: 1,
+      },
+    ])
+    harness.emit(taskNotification('t-x', 'spawn-x', 'completed'))
+    await tick()
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: 'spawn-x', status: 'done' }])
+  })
+
+  it('rebuilds from a resume backfill: the stored notification is the verdict, and a never-notified agent died with its process', async () => {
+    // The stored transcript carries none of the CLI's system events and none of
+    // an async agent's sidechain — just the spawn blocks, the launch receipts
+    // and the `<task-notification>` wrappers (verified against the captured
+    // session's JSONL). The receipt's wrapper text is the only background
+    // signal the replayed path has, and background-by-replay is *not* spared by
+    // the at-rest sweep: the process that hosted the agent is gone, so one that
+    // never notified can never notify now.
+    const history = [
+      {
+        type: 'user' as const,
+        uuid: 'h-u1',
+        session_id: 'sdk-session-prev',
+        message: { role: 'user', content: 'launch two agents' },
+        parent_tool_use_id: null,
+        parent_agent_id: null,
+      },
+      {
+        type: 'assistant' as const,
+        uuid: 'h-a1',
+        session_id: 'sdk-session-prev',
+        message: {
+          role: 'assistant',
+          content: [
+            agentCall('agent-done', { subagent_type: 'Explore', description: 'finished one' }),
+            agentCall('agent-dead', { subagent_type: 'Explore', description: 'cut off one' }),
+          ],
+        },
+        parent_tool_use_id: null,
+        parent_agent_id: null,
+      },
+      {
+        type: 'user' as const,
+        uuid: 'h-u2',
+        session_id: 'sdk-session-prev',
+        message: {
+          role: 'user',
+          content: [
+            { type: 'tool_result', tool_use_id: 'agent-done', content: [{ type: 'text', text: ACK_TEXT }] },
+          ],
+        },
+        parent_tool_use_id: null,
+        parent_agent_id: null,
+      },
+      {
+        type: 'user' as const,
+        uuid: 'h-u3',
+        session_id: 'sdk-session-prev',
+        message: {
+          role: 'user',
+          content: [
+            { type: 'tool_result', tool_use_id: 'agent-dead', content: [{ type: 'text', text: ACK_TEXT }] },
+          ],
+        },
+        parent_tool_use_id: null,
+        parent_agent_id: null,
+      },
+      {
+        type: 'user' as const,
+        uuid: 'h-u4',
+        session_id: 'sdk-session-prev',
+        message: { role: 'user', content: notificationText('t-done', 'agent-done', 'completed') },
+        parent_tool_use_id: null,
+        parent_agent_id: null,
+      },
+    ]
+    const { harness, runner } = makeRunner({
+      resume: 'sdk-session-prev',
+      historyFn: async () => history as never,
+    })
+    void runner.start()
+    harness.emit(initMessage)
+    await tick()
+    expect(runner.info().subagents).toMatchObject([
+      { toolUseId: 'agent-done', agentType: 'Explore', description: 'finished one', status: 'done' },
+      { toolUseId: 'agent-dead', agentType: 'Explore', description: 'cut off one', status: 'failed' },
+    ])
+  })
+
+  it('opens from the replayed receipt alone when the spawner name is unknown', async () => {
+    // Worst case on a rebuild: an unrecognized spawner and no sidechain to
+    // fall back on. The receipt's wrapper text still says an agent launched
+    // under this id, so the record exists (label-less) and settles at rest
+    // rather than vanishing.
+    const history = [
+      {
+        type: 'user' as const,
+        uuid: 'h-u1',
+        session_id: 'sdk-session-prev',
+        message: {
+          role: 'user',
+          content: [
+            { type: 'tool_result', tool_use_id: 'spawn-y', content: [{ type: 'text', text: ACK_TEXT }] },
+          ],
+        },
+        parent_tool_use_id: null,
+        parent_agent_id: null,
+      },
+    ]
+    const { harness, runner } = makeRunner({
+      resume: 'sdk-session-prev',
+      historyFn: async () => history as never,
+    })
+    void runner.start()
+    harness.emit(initMessage)
+    await tick()
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: 'spawn-y', status: 'failed' }])
   })
 })
