@@ -9,9 +9,9 @@ import SwiftUI
 /// attach on the left, dismiss the keyboard and the one send/stop button on the
 /// right.
 ///
-/// In `lines` it is docked along the foot of the screen instead: flat, opaque,
-/// edge to edge, its buttons plain glyphs on the field's own row, and a single
-/// rule along the top that turns accent on focus. See `docked`.
+/// In `terminal` it is docked along the foot of the screen instead: flat,
+/// opaque, edge to edge, its buttons plain glyphs on the field's own row, and a
+/// single rule along the top that turns accent on focus. See `docked`.
 ///
 /// The draft, the caret and the focus flag are all the caller's: the `/command`
 /// and `@file` picker is a screen-level overlay (`PromptSuggestionList`), and it
@@ -42,7 +42,7 @@ struct ComposerView: View {
 
   @ViewBuilder
   var body: some View {
-    if variant.isLines { docked } else { card }
+    if variant.isTerminal { docked } else { card }
   }
 
   /// The chat shape: a floating glass card that unfolds an action row.

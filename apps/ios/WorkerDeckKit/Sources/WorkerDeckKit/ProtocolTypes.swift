@@ -629,6 +629,56 @@ public struct AssistantMessageEvent: Decodable, Sendable, Equatable {
   }
 }
 
+/// One hunk of a file edit, in unified-diff terms.
+///
+/// The numbers are the **engine's own**, never this client's: `newStart` is
+/// where the hunk begins in the file *after* the edit, which is what a reader
+/// needs to jump to the change. No client has read the file, so one that
+/// computed them would point confidently at the wrong line.
+public struct PatchHunk: Codable, Sendable, Equatable {
+  public let oldStart: Int
+  public let oldLines: Int
+  public let newStart: Int
+  public let newLines: Int
+  /// Body lines, each prefixed ' ' (context), '-' (removed) or '+' (added), as
+  /// unified diff spells them. The prefix is part of the string.
+  public let lines: [String]
+
+  public init(oldStart: Int, oldLines: Int, newStart: Int, newLines: Int, lines: [String]) {
+    self.oldStart = oldStart
+    self.oldLines = oldLines
+    self.newStart = newStart
+    self.newLines = newLines
+    self.lines = lines
+  }
+}
+
+/// What a file-editing tool changed — the renderable half of an engine's edit
+/// output, and deliberately only that half.
+///
+/// The Claude SDK's `FileEditOutput` also carries `originalFile`, the entire
+/// pre-edit file. That must not travel: this log is replayed to every attaching
+/// client and captured into parking snapshots, so a whole file on every edit is
+/// paid for again on every attach, forever. The runner projects it down to the
+/// hunks, which is exactly what a diff renders and nothing more.
+public struct FilePatch: Codable, Sendable, Equatable {
+  /// Absolute path the engine reported, when it named one.
+  public let path: String?
+  /// `create` when the file did not exist before this edit.
+  public let kind: String?
+  public let hunks: [PatchHunk]
+  /// Hunks were dropped to keep the event small. A renderer must say so rather
+  /// than present a partial diff as the whole change.
+  public let truncated: Bool?
+
+  public init(path: String? = nil, kind: String? = nil, hunks: [PatchHunk], truncated: Bool? = nil) {
+    self.path = path
+    self.kind = kind
+    self.hunks = hunks
+    self.truncated = truncated
+  }
+}
+
 public struct UserMessageEvent: Decodable, Sendable, Equatable {
   public let message: ApiMessage
   public let parentToolUseId: String?
@@ -638,17 +688,26 @@ public struct UserMessageEvent: Decodable, Sendable, Equatable {
   /// Files sent with this message, by reference. `message` carries the typed text
   /// alone — the bytes went to the model, not into the event log.
   public let attachments: [MessageAttachment]?
+  /// What a file-editing tool changed, when this message carries that tool's
+  /// result. Set by the runner from the engine's own structured output — never
+  /// derived by a client from the result text — and only when the message
+  /// carries exactly one `tool_result` block, which is what both engines send.
+  /// With two, nothing says which call the patch belongs to, and guessing would
+  /// hang a diff off the wrong row.
+  public let patch: FilePatch?
   public let uuid: String?
 
   public init(
     message: ApiMessage, parentToolUseId: String? = nil, replay: Bool? = nil,
-    synthetic: Bool? = nil, attachments: [MessageAttachment]? = nil, uuid: String? = nil
+    synthetic: Bool? = nil, attachments: [MessageAttachment]? = nil,
+    patch: FilePatch? = nil, uuid: String? = nil
   ) {
     self.message = message
     self.parentToolUseId = parentToolUseId
     self.replay = replay
     self.synthetic = synthetic
     self.attachments = attachments
+    self.patch = patch
     self.uuid = uuid
   }
 }

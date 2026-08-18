@@ -64,11 +64,14 @@ public struct ToolCallItem: Sendable, Equatable, Identifiable {
   public var backend: ToolExecutionBackend?
   /// Logs captured by the executor (guest console output).
   public var logs: [String]?
+  /// What this call changed, when it was a file edit and the engine said so.
+  /// The line numbers are the engine's; a client has never read the file.
+  public var patch: FilePatch?
 
   public init(
     id: String, name: String, input: JSONValue, parentToolUseId: String? = nil,
     status: ToolCallStatus, result: ToolCallResult? = nil, executionId: String? = nil,
-    backend: ToolExecutionBackend? = nil, logs: [String]? = nil
+    backend: ToolExecutionBackend? = nil, logs: [String]? = nil, patch: FilePatch? = nil
   ) {
     self.id = id
     self.name = name
@@ -79,6 +82,7 @@ public struct ToolCallItem: Sendable, Equatable, Identifiable {
     self.executionId = executionId
     self.backend = backend
     self.logs = logs
+    self.patch = patch
   }
 }
 
@@ -436,6 +440,10 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
           updated.status = isError ? .failed : .settled
           updated.result = ToolCallResult(
             text: toolResult.content?.joinedText ?? "", isError: isError)
+          // The engine's own hunks, carried on the message rather than parsed
+          // out of the result text — which is why this client needs no diff
+          // parser and cannot get the line numbers wrong.
+          if let patch = payload.patch { updated.patch = patch }
           return updated
         }
       case .text(let text) where payload.synthetic != true:

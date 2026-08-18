@@ -37,17 +37,10 @@ enum Markdown {
 /// is a single pass over the text a turn has produced so far, far cheaper than
 /// the layout SwiftUI does with the result.
 struct MarkdownText: View {
-  /// Assistant prose is the biggest block of text on screen, so it is where the
-  /// `lines` variant's one-size rule matters most.
-  @Environment(\.transcriptVariant) private var variant
-
   let text: String
 
   var body: some View {
-    // Tighter in `lines`: a terminal separates blocks by one line, not by a
-    // paragraph's worth of air, and a heading that is only bold needs less room
-    // around it than one that was also bigger.
-    VStack(alignment: .leading, spacing: variant.isLines ? 6 : 10) {
+    VStack(alignment: .leading, spacing: 10) {
       ForEach(Array(MarkdownBlocks.parse(text).enumerated()), id: \.offset) { _, block in
         switch block {
         case .prose(let prose):
@@ -61,7 +54,7 @@ struct MarkdownText: View {
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
         case .list(let items):
-          ListBlock(items: items, font: bodyFont, ascii: variant.isLines)
+          ListBlock(items: items, font: bodyFont)
         case .blockquote(let quote):
           QuoteBlock(text: quote, font: bodyFont)
         case .thematicBreak:
@@ -73,20 +66,13 @@ struct MarkdownText: View {
     }
   }
 
-  /// Body text for every block. In `lines` it is the transcript's one size, so a
-  /// bullet and the prompt above it are set in the same type; in `cards` it stays
-  /// `.body`, which is what a chat bubble wants.
-  private var bodyFont: Font { variant.isLines ? lineTextStyle : .body }
+  /// Body text for every block — `.body`, what a chat bubble wants.
+  private var bodyFont: Font { .body }
 
   /// Transcript-scaled: an h1 in a chat bubble is a section label, not a page
   /// title, so the ramp tops out at `.title2` and h4–h6 settle on emphasis
   /// rather than shrinking below body text.
-  ///
-  /// In `lines` the ramp collapses to weight alone: a terminal marks a heading by
-  /// making it bold, not by making it bigger, and a `.title2` in a column of
-  /// one-size rows is the loudest thing on the screen.
   private func headingFont(_ level: Int) -> Font {
-    if variant.isLines { return lineTextStyle.weight(level <= 2 ? .bold : .semibold) }
     switch level {
     case 1: return .title2.weight(.bold)
     case 2: return .title3.weight(.semibold)
@@ -104,23 +90,17 @@ private struct ListBlock: View {
   /// Handed down rather than read from the environment: the marker and the item
   /// share one size, and the parent already decided what it is.
   let font: Font
-  /// `lines` writes its lists the way a terminal does — `- item`, one character
-  /// and one space — rather than with a typographic bullet in a right-aligned
-  /// gutter. Same reason the row markers are characters: this variant does not
-  /// draw, it types.
-  var ascii = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
       ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-        HStack(alignment: .firstTextBaseline, spacing: ascii ? 0 : 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
           Text(marker(for: item))
             .font(font.monospacedDigit())
             .foregroundStyle(.secondary)
             // A right-aligned gutter is what keeps `•` and `10.` producing one
-            // text edge. In ascii the marker is one character followed by one
-            // space — the literal form — so it needs no gutter at all.
-            .frame(minWidth: ascii ? nil : 14, alignment: ascii ? .leading : .trailing)
+            // text edge.
+            .frame(minWidth: 14, alignment: .trailing)
           Text(Markdown.styledInline(item.text))
             .font(font)
             .textSelection(.enabled)
@@ -140,16 +120,7 @@ private struct ListBlock: View {
   }
 
   private func marker(for item: MarkdownListItem) -> String {
-    if let ordinal = item.ordinal { return ascii ? "\(ordinal). " : "\(ordinal)." }
-    if ascii {
-      // The three markdown source characters, in source order — what the model
-      // most likely typed, and what a terminal would have shown back.
-      switch item.depth {
-      case 0: return "- "
-      case 1: return "* "
-      default: return "+ "
-      }
-    }
+    if let ordinal = item.ordinal { return "\(ordinal)." }
     switch item.depth {
     case 0: return "•"
     case 1: return "◦"
@@ -183,8 +154,6 @@ private struct QuoteBlock: View {
 /// sideways rather than wrapping — wrapped code is unreadable, and a nested
 /// *vertical* scroll inside the transcript would steal the outer gesture.
 private struct CodeBlock: View {
-  @Environment(\.transcriptVariant) private var variant
-
   let language: String?
   let code: String
   let isClosed: Bool
@@ -207,22 +176,12 @@ private struct CodeBlock: View {
             UIPasteboard.general.string = code
             didCopy = true
           } label: {
-            // A character in `lines`, like every other marker in it.
-            if variant.isLines {
-              Text(didCopy ? "✓" : "⧉").font(.caption.monospaced())
-            } else {
-              Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
-                .font(.caption2)
-            }
+            Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
+              .font(.caption2)
           }
           .buttonStyle(.plain)
           .foregroundStyle(.secondary)
           .accessibilityLabel(didCopy ? "Copied" : "Copy code")
-        } else if variant.isLines {
-          PulseGlyph()
-            .font(.caption.monospaced())
-            .foregroundStyle(.secondary)
-            .accessibilityLabel("Still writing")
         } else {
           ProgressView()
             .controlSize(.mini)

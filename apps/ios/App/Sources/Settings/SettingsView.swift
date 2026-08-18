@@ -19,16 +19,23 @@ struct SettingsView: View {
             Text(variant.label).tag(variant)
           }
         }
+        // Density and font are Cards-only: Terminal has one line height and is
+        // monospace by construction, so neither choice has anything to change
+        // there. Disabled rather than hidden — the row stays in place so picking
+        // Terminal and back doesn't reflow the form, but a control that changes
+        // nothing is worse than an absent one, hence the footer saying so.
         Picker("Density", selection: $settings.transcriptDensity) {
           ForEach(TranscriptDensity.allCases, id: \.self) { density in
             Text(density.label).tag(density)
           }
         }
+        .disabled(settings.transcriptVariant.isTerminal)
         Picker("Font", selection: $settings.transcriptFont) {
           ForEach(TranscriptFont.allCases, id: \.self) { font in
             Text(font.label).tag(font)
           }
         }
+        .disabled(settings.transcriptVariant.isTerminal)
       } header: {
         Text("Agent view")
       } footer: {
@@ -45,13 +52,19 @@ struct SettingsView: View {
   }
 
   /// Says what each choice does rather than naming it twice — "Cards" and
-  /// "Lines" mean nothing until you've seen both.
+  /// "Terminal" mean nothing until you've seen both.
   private var explanation: String {
     let style =
       switch settings.transcriptVariant {
       case .cards: "Cards puts your messages in bubbles and boxes each tool call."
-      case .lines: "Lines draws every event as a full-width row behind a marker, like a terminal."
+      case .terminal: "Terminal draws the transcript like a CLI session, in one monospaced size."
       }
+    // Terminal's line saying they don't apply replaces the density/font
+    // sentences entirely, rather than joining them: a sentence explaining a
+    // disabled control is more useful than the control's own (inert) wording.
+    guard !settings.transcriptVariant.isTerminal else {
+      return "\(style) Density and font are fixed under Terminal."
+    }
     let density =
       switch settings.transcriptDensity {
       case .comfortable: "Comfortable leaves a blank line between rows."

@@ -6,27 +6,31 @@ import UIKit
 ///
 /// - `cards` — the chat convention: a bubble for what you typed, bordered tool
 ///   cards, generous gaps.
-/// - `lines` — one full-width line item per event, transparent, behind a glyph in
-///   a fixed left gutter. Nothing is boxed; the content and its marker carry the
-///   comprehension.
+/// - `terminal` — the CLI's own shape, drawn by its own renderer
+///   (`Session/Terminal/`) rather than by branches in the `cards` views: one
+///   line height, monospace by construction, a fixed glyph gutter instead of
+///   boxes. Nothing under `TranscriptItemView`/`Markdown` asks which variant it
+///   is in any more — if it is drawing, it is drawing cards.
 enum TranscriptVariant: String, Codable, CaseIterable, Sendable {
   case cards
-  case lines
+  case terminal
 
   var label: String {
     switch self {
     case .cards: "Cards"
-    case .lines: "Lines"
+    case .terminal: "Terminal"
     }
   }
 }
 
 /// How much room the transcript gives each row.
 ///
-/// Separate from the variant, and deliberately so: the variant decides *how a row
-/// is drawn* (boxed or not) and follows from the surface, while density decides
-/// *how much air is around it* and is a preference the reader holds. Coupling
-/// them would mean cards could not be dense and lines could not be roomy.
+/// **Cards-only.** Terminal has one line height and is monospace by
+/// construction, so there is no "how much air around a row" to prefer — its
+/// spacing is a blank *line* decided per pair of blocks, not a container gap
+/// (see `transcriptRowGap` below). A control that changed nothing under
+/// terminal would invite pressing it for no effect, so callers must hide or
+/// disable these when the variant is terminal (`SettingsView`).
 enum TranscriptDensity: String, Codable, CaseIterable, Sendable {
   case comfortable
   case compact
@@ -46,6 +50,10 @@ enum TranscriptDensity: String, Codable, CaseIterable, Sendable {
 /// list, the settings sheet and every other screen keep the system font, because
 /// the claim is a monospace agent view inside an ordinary app rather than a
 /// monospace app.
+///
+/// **Cards-only**, like density: terminal is monospace by construction (it
+/// takes its face from the terminal renderer's own cell font), so this choice
+/// has nothing to apply to there.
 enum TranscriptFont: String, Codable, CaseIterable, Sendable {
   case regular
   case monospace
@@ -108,8 +116,14 @@ final class AppSettings {
     self.defaults = defaults
     // Defaults match the web dashboard's, so a reader moving between the two
     // sees the same transcript until they say otherwise.
-    transcriptVariant =
-      defaults.string(forKey: Self.variantKey).flatMap(TranscriptVariant.init(rawValue:)) ?? .cards
+    // A stored "lines" predates the `terminal` renderer and migrates to it
+    // rather than falling back to the `cards` default: someone who turned
+    // boxes off should keep them off, not be silently opted back into cards.
+    switch defaults.string(forKey: Self.variantKey) {
+    case "lines": transcriptVariant = .terminal
+    case let raw?: transcriptVariant = TranscriptVariant(rawValue: raw) ?? .cards
+    case nil: transcriptVariant = .cards
+    }
     transcriptDensity =
       defaults.string(forKey: Self.densityKey).flatMap(TranscriptDensity.init(rawValue:))
       ?? .comfortable
@@ -155,8 +169,11 @@ extension EnvironmentValues {
 }
 
 extension TranscriptVariant {
-  /// True in `lines`, for the many `cond ? a : b` reads in the row views.
-  var isLines: Bool { self == .lines }
+  /// True in `terminal`, for the chrome that sits *beside* the transcript
+  /// (composer, status bar) rather than inside it — those still need to know
+  /// which shape they're docking against, even though the rows themselves no
+  /// longer branch on this.
+  var isTerminal: Bool { self == .terminal }
 }
 
 extension View {
@@ -177,61 +194,34 @@ extension View {
   }
 }
 
-/// The one text size every `lines` row uses.
-///
-/// A terminal has exactly one type size, and that is most of what makes it read
-/// like a terminal. `cards` keeps its ramp — a chat surface leans on size to
-/// separate a message from its furniture — but in `lines` the gutter glyph does
-/// that job already, which frees size to be constant.
-///
-/// `.subheadline` — one step under the chat variant's `.body`. A terminal's type
-/// is small: the whole trade of this variant is fitting more of a run on screen,
-/// and at `.callout` the rows were still chat-sized.
-let lineTextStyle: Font = .subheadline
-
-/// The same size in UIKit's vocabulary, for the composer's `UITextView` — which
-/// is outside SwiftUI's font environment and has to be told (see `DraftStyle`).
-/// A field set two points larger than the transcript above it reads as a
+/// The composer's own text size when the docked (terminal) shape is in force —
+/// the UIKit vocabulary, for the `UITextView` that sits outside SwiftUI's font
+/// environment and has to be told (see `DraftStyle`, `RichTextEditor`). The rest
+/// of the `lines` variant's one-size rule died with `lines` itself: the
+/// terminal transcript now draws its own rows in `Session/Terminal/`, at its own
+/// cell size, and does not route through here. This one survives because the
+/// composer is chrome *beside* the transcript, not a transcript row, and a field
+/// set two points larger than the terminal transcript above it would read as a
 /// different app's input box.
 let lineTextUIStyle: UIFont.TextStyle = .subheadline
 
-/// A row's text size: the caller's own in `cards`, one constant in `lines`.
-///
-/// A modifier rather than a computed font at each call site because the variant
-/// lives in the environment and most of these call sites are inside views that
-/// don't otherwise need to read it.
-private struct RowFont: ViewModifier {
-  @Environment(\.transcriptVariant) private var variant
-
-  let cards: Font
-  let lines: Font
-
-  func body(content: Content) -> some View {
-    content.font(variant.isLines ? lines : cards)
-  }
-}
-
-extension View {
-  /// Pass `lines:` only for the few places that must stay *subordinate* to the
-  /// row's own text (a chevron, a backend tag) — normalising those to the body
-  /// size would make them shout.
-  func rowFont(_ cards: Font, lines: Font = lineTextStyle) -> some View {
-    modifier(RowFont(cards: cards, lines: lines))
-  }
-}
-
-/// The gap between two rows, per variant and density — the whole of the density
+/// The gap between two `cards` rows, per density — the whole of the density
 /// feature, since `TranscriptListView`'s `LazyVStack` spacing is the only
 /// vertical separation between rows that exists.
 ///
-/// `lines` + `compact` is the tightest: there the rows sit directly against each
-/// other and the glyph gutter alone separates them, which is what makes it
-/// compact.
+/// Terminal returns 0 unconditionally: its rows are one line height apart by
+/// construction, and the blank line that separates *blocks* (not rows) is drawn
+/// per pair of blocks inside the terminal renderer itself, not by a container
+/// gap here — mirroring the web `ui` package, where density "reaches `cards`
+/// only" for the same reason.
 func transcriptRowGap(_ variant: TranscriptVariant, _ density: TranscriptDensity) -> CGFloat {
-  switch (variant, density) {
-  case (.cards, .comfortable): 12
-  case (.cards, .compact): 6
-  case (.lines, .comfortable): 10
-  case (.lines, .compact): 2
+  switch variant {
+  case .cards:
+    switch density {
+    case .comfortable: 12
+    case .compact: 6
+    }
+  case .terminal:
+    0
   }
 }

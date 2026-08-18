@@ -33,7 +33,7 @@ struct RichTextEditor: UIViewRepresentable {
 
   /// What `DraftStyle` should be set to for this render.
   private var wantedTextStyle: UIFont.TextStyle {
-    transcriptVariant.isLines ? lineTextUIStyle : .body
+    transcriptVariant.isTerminal ? lineTextUIStyle : .body
   }
 
   func makeCoordinator() -> Coordinator { Coordinator(self) }
