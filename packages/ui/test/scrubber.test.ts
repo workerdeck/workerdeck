@@ -72,6 +72,11 @@ const props = (
   ...extra,
 })
 
+/** Every mark, with the lane its cluster drew it in — clusters merge, so a
+ * cluster-level filter silently loses the quieter member. */
+const members = (clusters: ReturnType<typeof buildClusters>) =>
+  clusters.flatMap((c) => c.marks.map((m) => ({ lane: c.lane, ...m.mark })))
+
 const kinds = (items: TranscriptItem[], extra?: Partial<TerminalScrubberProps>) =>
   buildClusters(props(items, extra), RAIL).map((c) => `${c.lane}:${c.kind}`)
 
@@ -152,6 +157,94 @@ describe('buildClusters', () => {
     expect(turns[0]!.marks[0]!.mark.itemIndex).toBe(3)
   })
 
+  it('bands a sub-agent in the input lane, by membership and not by name', () => {
+    // The spawning call is named `Agent` here, not `Task`: the SDK's name is a
+    // convention (a background agent arrives as `Agent`), so the rule is that an
+    // id other items demonstrably nest under IS a sub-agent.
+    const spawn: TranscriptItem = {
+      kind: 'tool_call',
+      id: 'agent-1',
+      name: 'Agent',
+      input: {},
+      parentToolUseId: null,
+      status: 'settled',
+    }
+    const child: TranscriptItem = {
+      kind: 'tool_call',
+      id: 'c1',
+      name: 'Grep',
+      input: {},
+      parentToolUseId: 'agent-1',
+      status: 'settled',
+    }
+    const clusters = buildClusters(props([user('go'), spawn, child, assistant('done')]), RAIL)
+    // Marks, not clusters: a dispatch a row below the prompt merges with it in
+    // the shared input lane, which is the intended behaviour and would hide the
+    // mark from a cluster-level filter.
+    const band = members(clusters).filter((m) => m.kind === 'subagent')
+    expect(band).toHaveLength(1)
+    expect(band[0]!.lane).toBe('l')
+    expect(band[0]!.itemIndex).toBe(1)
+    // A childless tool call is not a sub-agent.
+    expect(members(buildClusters(props([user('go'), toolCall('settled')]), RAIL)).map(
+      (m) => `${m.lane}:${m.kind}`,
+    )).not.toContain('l:subagent')
+  })
+
+  it('gives a failed sub-agent a band AND a failure mark, one per channel', () => {
+    const spawn: TranscriptItem = {
+      kind: 'tool_call',
+      id: 'task-1',
+      name: 'Task',
+      input: {},
+      parentToolUseId: null,
+      status: 'failed',
+    }
+    const child: TranscriptItem = {
+      kind: 'tool_call',
+      id: 'c1',
+      name: 'Read',
+      input: {},
+      parentToolUseId: 'task-1',
+      status: 'settled',
+    }
+    const marks = members(buildClusters(props([user('go'), spawn, child]), RAIL))
+    // The two lanes answer different questions: a sub-agent ran here, and it
+    // came back broken.
+    expect(marks.filter((m) => m.kind === 'subagent').map((m) => m.lane)).toEqual(['l'])
+    expect(marks.filter((m) => m.kind === 'toolFailed').map((m) => m.lane)).toEqual(['r'])
+  })
+
+  it('lets a prompt keep the input lane when a dispatch merges with it', () => {
+    const spawn: TranscriptItem = {
+      kind: 'tool_call',
+      id: 'task-1',
+      name: 'Task',
+      input: {},
+      parentToolUseId: null,
+      status: 'settled',
+    }
+    const child: TranscriptItem = {
+      kind: 'tool_call',
+      id: 'c1',
+      name: 'Read',
+      input: {},
+      parentToolUseId: 'task-1',
+      status: 'settled',
+    }
+    // Same row for both, so they merge: the prompt is the step you navigate by
+    // and must keep the cluster's colour.
+    const clusters = buildClusters(
+      props([user('go'), spawn, child], { rowIndexFor: () => 0, offsetOfRow: () => 0 }),
+      RAIL,
+    )
+    const left = clusters.filter((c) => c.lane === 'l')
+    expect(left).toHaveLength(1)
+    expect(left[0]!.kind).toBe('user')
+    // ...and the dispatch is still IN it, one press away.
+    expect(left[0]!.marks.map((m) => m.mark.kind)).toContain('subagent')
+  })
+
   it('still marks a failed tool call inside a subagent', () => {
     // The row it anchors is the collapsed task block's (rowIndexFor maps an
     // absorbed index to that row), but the MARK is built from the item — the
@@ -164,11 +257,11 @@ describe('buildClusters', () => {
       parentToolUseId: 'task-1',
       status: 'failed',
     }
-    expect(kinds([failed])).toEqual(['f:toolFailed'])
+    expect(kinds([failed])).toEqual(['r:toolFailed'])
   })
 
   it('marks an error notice but not an info one', () => {
-    expect(kinds([notice('error', 'boom')])).toEqual(['f:error'])
+    expect(kinds([notice('error', 'boom')])).toEqual(['r:error'])
     expect(kinds([notice('info', 'fyi')])).toEqual([])
   })
 
@@ -176,9 +269,9 @@ describe('buildClusters', () => {
     // Both are needed: an out-of-loop execution failure sets `status` with no
     // `is_error` block to read, and an engine can flag `is_error` on a call the
     // reducer has not settled.
-    expect(kinds([toolCall('failed')])).toEqual(['f:toolFailed'])
+    expect(kinds([toolCall('failed')])).toEqual(['r:toolFailed'])
     expect(kinds([toolCall('settled', { text: 'no matches', isError: true })])).toEqual([
-      'f:toolFailed',
+      'r:toolFailed',
     ])
     expect(kinds([toolCall('settled', { text: 'ok', isError: false })])).toEqual([])
     expect(kinds([toolCall('running')])).toEqual([])

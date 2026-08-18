@@ -939,13 +939,26 @@
    as long without a tall solid bar shouting over the rail. A minimum-height
    mark shows only the solid segment, so short and long marks need no separate
    rules; the *lane* stays the pointer's target, so a 2px mark is still
-   findable. Full-width annotations (error, approval) stay solid: they are
-   alarms, not extents. */
+   findable. The alarms (error, approval) stay solid: they are alarms, not
+   extents. */
 .term-scrubber .term-scrub-mark[data-kind='user'] {
   background: linear-gradient(
     to bottom,
     var(--term-blue) 0 2px,
     color-mix(in srgb, var(--term-blue) 25%, transparent) 2px
+  );
+}
+/* A sub-agent's stretch of the transcript, in the input lane: green, because
+   every other colour on this rail is already spoken for and none of them means
+   "somebody else's working" — blue is you, white is the answer, red is an
+   alarm, magenta is your bookmark, yellow is the session waiting on you. Drawn
+   as an extent (2px head, 25% tail) like the two marks it shares its geometry
+   with: collapsed it is a tick, expanded it is the band the sub-agent covers. */
+.term-scrubber .term-scrub-mark[data-kind='subagent'] {
+  background: linear-gradient(
+    to bottom,
+    var(--term-green) 0 2px,
+    color-mix(in srgb, var(--term-green) 25%, transparent) 2px
   );
 }
 .term-scrubber .term-scrub-mark[data-kind='turn'] {
@@ -963,8 +976,8 @@
   );
 }
 .term-scrubber .term-scrub-mark[data-kind='error'] { background: var(--term-red); }
-/* A failed tool call is an alarm, so it is full-width and solid like the rest of
-   them — but at 55%, which is the one thing keeping the rail readable. A session
+/* A failed tool call is an alarm, so it is solid like the rest of them — in the
+   response lane, since it is something the run produced — but at 55%, which is the one thing keeping the rail readable. A session
    error is rare and a turn failure rarer; a tool that failed and was recovered
    from is routine (a grep that matched nothing, a build fixed on the second go),
    and at full strength a normal working session paints the rail solid red and

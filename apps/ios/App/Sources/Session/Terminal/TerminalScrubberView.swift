@@ -113,9 +113,15 @@ struct TerminalScrubberView: View {
         x: laneX(cluster.lane), y: cluster.y, width: laneW(cluster.lane), height: cluster.h)
       switch cluster.kind {
       case .user: twoTone(rect, TerminalPalette.color(.blue), in: &context)
+      // Green, because every other colour on this rail is spoken for and none of
+      // them means "somebody else's working": blue is you, white is the answer,
+      // red is an alarm, magenta is your bookmark, yellow is the session waiting
+      // on you. An extent like the two beside it — collapsed a tick, expanded
+      // the band the sub-agent covers.
+      case .subagent: twoTone(rect, TerminalPalette.color(.green), in: &context)
       case .turn: twoTone(rect, TerminalPalette.color(.fg), in: &context)
       case .turnFailed: twoTone(rect, TerminalPalette.color(.red), in: &context)
-      // Full-width annotations stay solid: they are alarms, not extents.
+      // The alarms stay solid: they are alarms, not extents.
       case .error:
         context.fill(Path(rect), with: .color(TerminalPalette.color(.red)))
       case .toolFailed:

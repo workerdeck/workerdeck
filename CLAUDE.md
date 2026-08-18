@@ -456,11 +456,21 @@ protocol. Read these before changing scope or structure:
   can check this: jsdom has no text layout, so a unit test would check the calculator against its
   author's assumptions. The one genuinely unit-testable piece is `textLines`.
   `scrubber` is the **overview ruler** (`terminal/scrubber.tsx`), VS Code's strip rather than its
-  minimap: a **12px** rail replacing the scrollbar, **two 6px lanes** (what you typed / the answer
-  and its turn end as **one** merged mark) with everything that is an *annotation on the run*
-  rather than a step through it — errors, **a failed tool call**, a waiting approval pinned at
-  the foot, `scrubberMarks`
-  bookmarks, the recap seam — spanning the full width instead. The tool failure is the one that
+  minimap: a **12px** rail replacing the scrollbar and **two 6px lanes that are channels, not
+  classes** — left is what went *in* (your prompts, and **the sub-agents you dispatched**, green),
+  right is what came *out* (each turn's answer and its turn end as **one** merged mark, and
+  **everything that went wrong producing one**: a session error, a failed tool call, a failed
+  turn). That is the question a reader asks of a rail — "where did I say something", "where did
+  it go wrong" — and it is why the failures were taken *out* of the full-width class they used to
+  share: "alarm" is not a lane, and half the failures sitting down the middle while `turnFailed`
+  sat in the right lane meant no single column answered the second question. Full width is left
+  for what is not a channel at all: a waiting approval pinned at the foot, `scrubberMarks`
+  bookmarks, the recap seam. The sub-agent band is drawn from **membership, never the spawning
+  call's name** (`Task` is the SDK's convention and a background agent arrives as `Agent`; an id
+  other items nest under *is* a sub-agent), it is the folded `Task` row's one honest signal on the
+  rail — collapsed a tick, expanded the band the sub-agent covers — and a failed dispatch earns
+  **both** marks, one per channel: green says a sub-agent ran here, red says it came back broken.
+  The tool failure is the one that
   is *routine* (a grep that matched nothing, a build fixed on the second go), which is why it
   alone is drawn at 55% rather than solid and sits under `turnFailed` in `LOUDNESS`: at full
   strength a normal working session paints the rail red and the two errors that actually ended

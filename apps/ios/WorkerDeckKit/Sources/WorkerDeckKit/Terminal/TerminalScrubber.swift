@@ -23,12 +23,14 @@ import Foundation
 
 /// Which column of the rail a mark sits in.
 ///
-/// Two lanes and a full-width annotation, which is a claim about what a rail is
-/// *for*: the two things you navigate by are what you asked and what came back,
-/// so they get a lane each and split the rail evenly. Everything else — an
-/// error, a waiting approval, a bookmark, the catch-up seam — is an annotation
-/// *on* the run rather than a step through it, so it spans the full width and
-/// reads as a different class of thing.
+/// The two lanes are **channels, not classes**: left is what went *in* — your
+/// prompts, and the sub-agents you dispatched — and right is what came *out* —
+/// each turn's answer, and everything that went wrong producing one. That is the
+/// question a reader actually asks of a rail ("where did I say something",
+/// "where did it go wrong"), and it puts every failure in one column instead of
+/// scattering some down the middle. Full width is left for what is not a channel
+/// at all: a waiting approval (the session asking *you*), a bookmark (the
+/// reader's own annotation) and the catch-up seam (a boundary across both).
 public enum ScrubberLane: String, Equatable, Sendable {
   case left = "l"
   case right = "r"
@@ -36,17 +38,22 @@ public enum ScrubberLane: String, Equatable, Sendable {
 }
 
 public enum ScrubberMarkKind: String, Equatable, Sendable, CaseIterable {
-  case user, turn, turnFailed, toolFailed, error, approval, recap, bookmark
+  case user, subagent, turn, turnFailed, toolFailed, error, approval, recap, bookmark
 
   public var lane: ScrubberLane {
     switch self {
-    case .user: return .left
-    case .turn, .turnFailed: return .right
-    // Full-width, like every other alarm: a failed tool call is something that
-    // went wrong *during* a step, not a step you scroll between. A lane mark
-    // would also put it in the response lane, competing with the turn marks
-    // that are the rail's actual navigation.
-    case .toolFailed, .error, .approval, .recap, .bookmark: return .full
+    // Delegated work is input: a sub-agent runs because you asked for it, and
+    // its stretch of the transcript is *your* dispatch rather than the session's
+    // answer. It is also a folded `Task`'s one honest signal on the rail —
+    // collapsed, sixty rows of somebody else's working are a single line.
+    case .user, .subagent: return .left
+    // Output, with the answers: a failed tool call is something the run
+    // produced. It had been full-width on the argument that it is an alarm
+    // rather than a step — but "alarm" is not a lane, and half the failures
+    // sitting down the middle while `turnFailed` sat in the right lane meant no
+    // single column answered "did anything go wrong".
+    case .turn, .turnFailed, .toolFailed, .error: return .right
+    case .approval, .recap, .bookmark: return .full
     }
   }
 
@@ -66,6 +73,10 @@ public enum ScrubberMarkKind: String, Equatable, Sendable, CaseIterable {
     case .user: return 3
     case .turn: return 2
     case .bookmark: return 1
+    // Lane `left`, so this is only ever weighed against `user`, and a prompt
+    // wins: the prompt is the step you navigate by and the sub-agent band is the
+    // annotation on it. (It ties with `bookmark`, which it can never meet.)
+    case .subagent: return 1
     case .recap: return 0
     }
   }
@@ -73,6 +84,7 @@ public enum ScrubberMarkKind: String, Equatable, Sendable, CaseIterable {
   public var name: String {
     switch self {
     case .user: return "you"
+    case .subagent: return "sub-agent"
     case .turn: return "response · turn end"
     case .turnFailed: return "turn failed"
     case .toolFailed: return "tool failed"
@@ -226,7 +238,29 @@ public func buildScrubberClusters(_ input: ScrubberInput, railH: CGFloat) -> [Sc
     segment = ScrubberSegment()
   }
 
+  // Which top-level calls a sub-agent ran inside — by `parentToolUseId` and
+  // never by the spawning call's *name*: `Task` is the SDK's convention, not a
+  // law (a background agent arrives as `Agent`), and an id that other items
+  // demonstrably nest under IS a sub-agent whatever spawned it. The same
+  // membership rule the fold uses, for the same reason.
+  var subagentParents: Set<String> = []
+  for item in input.items {
+    if let parent = parentToolUseId(of: item) { subagentParents.insert(parent) }
+  }
+
   for (index, item) in input.items.enumerated() {
+    // The dispatch itself, at its row — the folded `Task` block, so the band
+    // grows to the whole sub-agent area when it is opened and shrinks back to a
+    // tick when it is closed. Deliberately outside the switch: a `Task` whose
+    // own result errored earns a red tick in the response lane *and* this band
+    // in the input lane, which is the point of the two channels — one says a
+    // sub-agent ran here, the other says it came back broken.
+    if case .toolCall(let call) = item, subagentParents.contains(call.id) {
+      marks.append(
+        ScrubberMark(
+          kind: .subagent, itemIndex: index, rowIndex: input.rows.rowIndex(forItem: index)))
+    }
+
     switch item {
     // Top-level prompts only, like the answer check below: a subagent's brief is
     // a `user` item too, and it would both paint a "you" mark for something

@@ -47,6 +47,7 @@ import { TerminalSurface } from './surface.tsx'
 type Lane = 'l' | 'r' | 'f'
 type MarkKind =
   | 'user'
+  | 'subagent'
   | 'turn'
   | 'turnFailed'
   | 'toolFailed'
@@ -81,26 +82,38 @@ function nearestMember(cluster: Cluster, y: number): Mark | undefined {
 }
 
 /**
- * Two lanes and a full-width annotation, which is a claim about what a rail is
- * *for*: the two things you navigate by are what you asked and what came back,
- * so they get a lane each and split the rail evenly. Everything else — an error,
- * a waiting approval, a bookmark, the catch-up seam — is an **annotation on the
- * run** rather than a step through it, so it spans the full width and reads as
- * a different class of thing rather than as a third column of steps.
+ * The two lanes are **channels, not classes**: left is what went *in* — your
+ * prompts, and the sub-agents you dispatched — and right is what came *out* —
+ * each turn's answer, and everything that went wrong producing one. That is the
+ * question a reader actually asks of a rail ("where did I say something", "where
+ * did it go wrong"), and it puts every failure in one column instead of
+ * scattering some down the middle.
+ *
+ * Full width is reserved for what is not a channel at all: a waiting approval
+ * (which is the session asking *you*, pinned at the foot), a bookmark (the
+ * reader's own annotation) and the catch-up seam (a boundary across both).
  *
  * It also buys the marks their width back: three lanes in a 16px rail is 5px a
  * lane, which is a hard target to hit and a hard colour to see.
  */
 const LANE: Record<MarkKind, Lane> = {
   user: 'l',
+  // Delegated work is input: a sub-agent runs because you asked for it, and its
+  // stretch of the transcript is *your* dispatch rather than the session's
+  // answer. It also gives a folded `Task` its one honest signal on the rail —
+  // collapsed, sixty rows of somebody else's working are one line, and this is
+  // the mark that says the region is there at all.
+  subagent: 'l',
   turn: 'r',
   turnFailed: 'r',
-  // Full-width, like every other alarm: a failed tool call is something that
-  // went wrong *during* a step, not a step you scroll between. A lane mark would
-  // also put it in the response lane, where it would compete with the turn marks
-  // that are the rail's actual navigation.
-  toolFailed: 'f',
-  error: 'f',
+  // Output, with the answers: a failed tool call is something the run produced.
+  // It had been full-width on the argument that it is an alarm rather than a
+  // step — but "alarm" is not a lane, and half the failures ending up down the
+  // middle while `turnFailed` sat in the right lane meant no single column
+  // answered "did anything go wrong". Its rank in LOUDNESS and its 55% strength
+  // are what keep it from shouting over the turns it now sits beside.
+  toolFailed: 'r',
+  error: 'r',
   approval: 'f',
   recap: 'f',
   bookmark: 'f',
@@ -116,17 +129,22 @@ const LOUDNESS: Record<MarkKind, number> = {
   // keep the cluster. (It cannot merge with `turnFailed` — that is lane `r`, and
   // merging is per lane.) A failed tool call the model recovered from is routine
   // in a way a session error is not, hence quieter here and at 55% in the CSS.
-  // The one thing it does outrank is `bookmark`, which loses its magenta to a
-  // failure it sits beside.
+  // It now shares the response lane with the turn marks, which is the rank that
+  // matters: a failure a pixel from a turn end keeps the cluster red.
   toolFailed: 4,
   user: 3,
   turn: 2,
   bookmark: 1,
+  // Lane `l`, so this is only ever weighed against `user`, and a prompt wins:
+  // the prompt is the step you navigate by and the sub-agent band is the
+  // annotation on it. (It ties with `bookmark`, which it can never meet.)
+  subagent: 1,
   recap: 0,
 }
 
 const KIND_NAME: Record<MarkKind, string> = {
   user: 'you',
+  subagent: 'sub-agent',
   turn: 'response · turn end',
   turnFailed: 'turn failed',
   toolFailed: 'tool failed',
@@ -266,6 +284,16 @@ export function buildClusters(
     viewportH,
   } = props
   const marks: Mark[] = []
+  // Which top-level calls a sub-agent ran inside — by `parentToolUseId` and
+  // never by the spawning call's *name*: the SDK's own convention is `Task`,
+  // but it is a convention (a background agent arrives as `Agent`), and an id
+  // that other items demonstrably nest under IS a sub-agent whatever spawned
+  // it. The same membership rule `terminalBlocks` folds by, for the same reason.
+  const subagentParents = new Set<string>()
+  for (const item of items) {
+    const parent = parentOf(item)
+    if (parent !== undefined) subagentParents.add(parent)
+  }
   // One right-lane mark per segment, emitted when the segment closes. A segment
   // is closed by the next prompt, by its own turn end, or by running out of
   // items — that last one is what a replayed history is made of.
@@ -283,6 +311,17 @@ export function buildClusters(
     segment = {}
   }
   items.forEach((item, index) => {
+    // The dispatch itself, marked at its row — which is the folded `Task`
+    // block, so the band grows to the whole sub-agent area when it is opened
+    // and shrinks back to a tick when it is closed. Deliberately NOT part of
+    // the chain below: a `Task` whose own result errored earns a red tick in
+    // the response lane *and* this band in the input lane, which is the whole
+    // point of the two channels — one says a sub-agent ran here, the other says
+    // it came back broken. A failed child inside it still marks separately, at
+    // its own fraction of the row.
+    if (item.kind === 'tool_call' && subagentParents.has(item.id)) {
+      marks.push({ kind: 'subagent', itemIndex: index, rowIndex: rowIndexFor(index) })
+    }
     // Top-level prompts only, like the answer check below: a subagent's brief
     // is a `user` item too, and it would both paint a "you" mark for something
     // nobody typed and close the segment mid-turn — which mis-anchors the turn

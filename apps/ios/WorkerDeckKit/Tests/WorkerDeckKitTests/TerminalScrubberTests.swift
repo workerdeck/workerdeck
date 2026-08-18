@@ -168,14 +168,14 @@ struct TerminalScrubberTests {
 
   @Test("a session error keeps the colour when it merges with a tool failure")
   func loudestWinsTheMerge() {
-    // Both are the full lane, so a point apart they merge — and the rank that
-    // does the work is `error` over `toolFailed`.
+    // Both are the response lane, so a point apart they merge — and the rank
+    // that does the work is `error` over `toolFailed`.
     let items = [call("a", status: .failed), .notice(id: "n", level: .error, text: "bad")]
     let clusters = buildScrubberClusters(input(items, viewport: 4000), railH: 4)
-    let full = clusters.filter { $0.lane == .full }
-    #expect(full.count == 1)
-    #expect(full[0].kind == .error)
-    #expect(full[0].marks.count == 2)
+    let right = clusters.filter { $0.lane == .right }
+    #expect(right.count == 1)
+    #expect(right[0].kind == .error)
+    #expect(right[0].marks.count == 2)
   }
 
   @Test("a merged cluster keeps every member, so a press resolves to the nearest")
@@ -370,7 +370,9 @@ extension TerminalScrubberTests {
 
   @Test("a plain failed call still spans its own row — the rail stays a map")
   func singletonRunKeepsItsExtent() {
-    let items = [user("u1"), call("c1", result: "boom", error: true), say("a1")]
+    // No answer in it: the response mark now shares the right lane with the
+    // failure and would merge with it, hiding the very height under test.
+    let items = [user("u1"), call("c1", result: "boom", error: true)]
     let plain = input(items)
     let clusters = buildScrubberClusters(plain, railH: 100)
     guard let failed = clusters.first(where: { $0.kind == .toolFailed }) else {
@@ -382,5 +384,72 @@ extension TerminalScrubberTests {
     let scale = railScale(
       railH: 100, totalSize: plain.totalSize, viewportH: plain.viewportHeight)
     #expect(failed.h == max(scrubberMinMark, (plain.book.height(at: rowIndex) * scale).rounded()))
+  }
+
+  // MARK: - Channels
+
+  /// Every mark with the lane its cluster drew it in — clusters merge, so a
+  /// cluster-level filter silently loses the quieter member.
+  private func members(_ clusters: [ScrubberCluster]) -> [(lane: ScrubberLane, kind: ScrubberMarkKind, itemIndex: Int)] {
+    clusters.flatMap { cluster in
+      cluster.marks.map { (lane: cluster.lane, kind: $0.mark.kind, itemIndex: $0.mark.itemIndex) }
+    }
+  }
+
+  @Test("failures all land in the response lane — one column answers 'did it go wrong'")
+  func failuresShareTheOutputChannel() {
+    let items: [TranscriptItem] = [
+      user("u1"), call("a", status: .failed), .notice(id: "n", level: .error, text: "bad"),
+      say("s1"), turn("t1", failed: true),
+    ]
+    let marks = members(buildScrubberClusters(input(items, viewport: 4000), railH: 400))
+    for kind in [ScrubberMarkKind.toolFailed, .error, .turnFailed] {
+      #expect(marks.contains { $0.kind == kind && $0.lane == .right })
+      #expect(!marks.contains { $0.kind == kind && $0.lane != .right })
+    }
+  }
+
+  @Test("a sub-agent bands the input lane, by membership and not by name")
+  func subagentBandsTheInputChannel() {
+    // The spawning call is named `Agent`, not `Task`: the SDK's name is a
+    // convention, so the rule is that an id other items nest under is an agent.
+    let items: [TranscriptItem] = [
+      user("u1"), call("agent-1", "Agent"), call("c1", "Grep", parent: "agent-1"), say("s1"),
+    ]
+    let marks = members(buildScrubberClusters(input(items, viewport: 4000), railH: 400))
+    let band = marks.filter { $0.kind == .subagent }
+    #expect(band.count == 1)
+    #expect(band.first?.lane == .left)
+    #expect(band.first?.itemIndex == 1)
+
+    // A childless call is not a sub-agent.
+    let plain = members(
+      buildScrubberClusters(input([user("u1"), call("a")], viewport: 4000), railH: 400))
+    #expect(!plain.contains { $0.kind == .subagent })
+  }
+
+  @Test("a failed sub-agent gets a band and a failure mark, one per channel")
+  func failedSubagentMarksBothChannels() {
+    let items: [TranscriptItem] = [
+      user("u1"), call("task-1", "Task", status: .failed),
+      call("c1", "Read", parent: "task-1"),
+    ]
+    let marks = members(buildScrubberClusters(input(items, viewport: 4000), railH: 400))
+    #expect(marks.filter { $0.kind == .subagent }.map(\.lane) == [.left])
+    #expect(marks.filter { $0.kind == .toolFailed }.map(\.lane) == [.right])
+  }
+
+  @Test("a prompt keeps the input lane when a dispatch merges with it")
+  func promptOutranksTheBand() {
+    let items: [TranscriptItem] = [
+      user("u1"), call("task-1", "Task"), call("c1", "Read", parent: "task-1"),
+    ]
+    // A tiny rail, so everything in a lane chain-merges.
+    let clusters = buildScrubberClusters(input(items, viewport: 4000), railH: 4)
+    let left = clusters.filter { $0.lane == .left }
+    #expect(left.count == 1)
+    #expect(left[0].kind == .user)
+    // ...and the dispatch is still in it, one press away.
+    #expect(left[0].marks.contains { $0.mark.kind == .subagent })
   }
 }
