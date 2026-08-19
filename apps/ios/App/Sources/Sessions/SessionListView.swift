@@ -404,24 +404,47 @@ struct SessionListView: View {
 
   // MARK: - Toolbar
 
+  /// Every item carries an explicit `id`, and the filter menu's *content* is a
+  /// view of its own. Both halves are load-bearing, and they fix a real bug: the
+  /// filter dropdown closed itself whenever anything in the list changed — an
+  /// unread badge ticking up was enough — so on a busy gateway it could not be
+  /// used at all.
+  ///
+  /// The mechanism has two parts. The menu read `model.adapters`, which is
+  /// *computed from the session rows*, so `@Observable` registered a dependency
+  /// on every snapshot the 1.2s poll replaces: the menu's body was invalidated
+  /// on each refresh whether or not the engine list had changed. And a
+  /// `ToolbarItem` with no `id` is re-identified when the toolbar builder re-runs
+  /// — which tears down the presented menu rather than updating it.
+  ///
+  /// So: stable ids stop the teardown, and `FilterMenu` being `Equatable` over
+  /// plain values (never the model) stops the body re-running when the poll
+  /// brought nothing this control shows. `if let model` also moved *inside* the
+  /// item, because an optional at the top of a `ToolbarItem` makes the item
+  /// itself conditional, which is another way to lose identity.
   @ToolbarContentBuilder
   private var toolbar: some ToolbarContent {
-    ToolbarItem(placement: .topBarLeading) {
+    ToolbarItem(id: "hosts", placement: .topBarLeading) {
       Button { showHostManager = true } label: {
         Label("Servers", systemImage: "server.rack")
       }
     }
-    ToolbarItem(placement: .topBarLeading) {
+    ToolbarItem(id: "settings", placement: .topBarLeading) {
       Button { showSettings = true } label: {
         Label("Settings", systemImage: "gearshape")
       }
     }
-    ToolbarItem(placement: .topBarTrailing) {
-      if let model {
-        filterMenu(model)
+    ToolbarItem(id: "filter", placement: .topBarTrailing) {
+      Group {
+        if let model {
+          FilterMenu(
+            config: Binding(get: { model.config }, set: { model.config = $0 }),
+            hosts: hosts.hosts.map { FilterMenu.Gateway(id: $0.id, name: $0.displayName) },
+            adapters: model.adapters)
+        }
       }
     }
-    ToolbarItem(placement: .topBarTrailing) {
+    ToolbarItem(id: "add", placement: .topBarTrailing) {
       addButton
     }
   }
@@ -453,36 +476,65 @@ struct SessionListView: View {
     CreateSessionSeed(cwd: model?.context(for: host.id)?.recentCwds.first ?? "")
   }
 
-  // MARK: - Filter menu
+}
 
-  /// The three facets plus the two layout choices. Search is `.searchable` on
-  /// the list itself; everything else lives here, which is why the subset line
-  /// above the list is unconditional — with this menu closed it is the only
-  /// thing saying rows are hidden.
-  private func filterMenu(_ model: SessionListModel) -> some View {
+/// The three facets plus the two layout choices. Search is `.searchable` on the
+/// list itself; everything else lives here, which is why the subset line above
+/// the list is unconditional — with this menu closed it is the only thing saying
+/// rows are hidden.
+///
+/// **A view of its own, and `Equatable` over plain values.** It used to be a
+/// method on the list, which meant its body read `model.adapters` — a property
+/// *computed from the session rows* — so `@Observable` invalidated it on every
+/// one of the 1.2s poll's refreshes, and an open dropdown closed itself as soon
+/// as anything moved. An unread badge ticking up was enough. Taking `hosts` and
+/// `adapters` as values means SwiftUI can see that a refresh which brought no
+/// new engine and no new gateway changes nothing here, and skip the body
+/// entirely; the `config` binding still writes straight through to the model.
+///
+/// The `Binding` is deliberately not in the `==`: two bindings are never equal
+/// and comparing them would defeat the whole thing. It is safe to leave out
+/// because the *values* it reads — `config` — are covered by `configSnapshot`.
+private struct FilterMenu: View, Equatable {
+  struct Gateway: Equatable, Identifiable {
+    let id: UUID
+    let name: String
+  }
+
+  @Binding var config: ViewConfig
+  let hosts: [Gateway]
+  let adapters: [String]
+
+  /// `nonisolated` because SwiftUI compares views off the main actor. It only
+  /// touches value types, so there is nothing to race on.
+  nonisolated static func == (lhs: FilterMenu, rhs: FilterMenu) -> Bool {
+    lhs.hosts == rhs.hosts && lhs.adapters == rhs.adapters && lhs.config == rhs.config
+  }
+
+  var body: some View {
     Menu {
       Section("State") {
         ForEach(SessionState.order, id: \.self) { state in
-          Toggle(state.label, isOn: membership(model, \.states, state))
+          Toggle(state.label, isOn: membership(\.states, state))
         }
       }
-      if hosts.hosts.count > 1 {
+      if hosts.count > 1 {
         Section("Gateway") {
-          ForEach(hosts.hosts) { host in
-            Toggle(host.displayName, isOn: membership(model, \.gateways, host.id.uuidString))
+          ForEach(hosts) { host in
+            Toggle(host.name, isOn: membership(\.gateways, host.id.uuidString))
           }
         }
       }
-      if model.adapters.count > 1 {
+      if adapters.count > 1 {
         Section("Engine") {
-          ForEach(model.adapters, id: \.self) { adapter in
-            Toggle(adapter, isOn: membership(model, \.adapters, adapter))
+          ForEach(adapters, id: \.self) { adapter in
+            Toggle(adapter, isOn: membership(\.adapters, adapter))
           }
         }
       }
       Section {
         Menu("Group by") {
-          Picker("Group by", selection: config(model, \.groupBy)) {
+          Picker("Group by", selection: $config.groupBy) {
             Text("None").tag(GroupBy.none)
             Text("Gateway").tag(GroupBy.gateway)
             Text("Engine").tag(GroupBy.adapter)
@@ -490,7 +542,7 @@ struct SessionListView: View {
           }
         }
         Menu("Sort by") {
-          Picker("Sort by", selection: config(model, \.sortBy)) {
+          Picker("Sort by", selection: $config.sortBy) {
             Text("Recent").tag(SortBy.recent)
             Text("Name").tag(SortBy.name)
             Text("Gateway").tag(SortBy.gateway)
@@ -502,41 +554,30 @@ struct SessionListView: View {
     } label: {
       Label(
         "Filter",
-        systemImage: facetFilterOn(model)
+        systemImage: facetFilterOn
           ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
     }
   }
 
   /// Whether a *facet* is filtering (the funnel's fill). Search shows its own
   /// state in the search field, so it does not light the funnel too.
-  private func facetFilterOn(_ model: SessionListModel) -> Bool {
-    !model.config.gateways.isEmpty || !model.config.adapters.isEmpty
-      || !model.config.states.isEmpty
+  private var facetFilterOn: Bool {
+    !config.gateways.isEmpty || !config.adapters.isEmpty || !config.states.isEmpty
   }
 
   /// A Toggle binding for membership of one value in one facet array.
   private func membership<Value: Equatable>(
-    _ model: SessionListModel, _ keyPath: WritableKeyPath<ViewConfig, [Value]>, _ value: Value
+    _ keyPath: WritableKeyPath<ViewConfig, [Value]>, _ value: Value
   ) -> Binding<Bool> {
     Binding(
-      get: { model.config[keyPath: keyPath].contains(value) },
+      get: { config[keyPath: keyPath].contains(value) },
       set: { on in
-        var next = model.config
         if on {
-          if !next[keyPath: keyPath].contains(value) { next[keyPath: keyPath].append(value) }
+          if !config[keyPath: keyPath].contains(value) { config[keyPath: keyPath].append(value) }
         } else {
-          next[keyPath: keyPath].removeAll { $0 == value }
+          config[keyPath: keyPath].removeAll { $0 == value }
         }
-        model.config = next
       })
-  }
-
-  private func config<Value>(
-    _ model: SessionListModel, _ keyPath: WritableKeyPath<ViewConfig, Value>
-  ) -> Binding<Value> {
-    Binding(
-      get: { model.config[keyPath: keyPath] },
-      set: { model.config[keyPath: keyPath] = $0 })
   }
 }
 
