@@ -407,7 +407,11 @@ struct SessionView: View {
   /// its (empty) content — and it steps aside the moment a completion list opens.
   @ViewBuilder
   private var emptyState: some View {
-    if vm.state.items.isEmpty, !isPickerOpen {
+    // `!vm.replaying` is not belt and braces: the hold holds the reduced *state*,
+    // so while it stands `items` is legitimately empty and this drew itself
+    // underneath the placeholder — "Tell me what to do" behind a spinner, on
+    // every open of every session with any history at all.
+    if vm.state.items.isEmpty, !isPickerOpen, !vm.replaying {
       // Measured, not assumed. The area left over is the screen minus the
       // floating stack minus whatever the keyboard took, and the empty state
       // decides what it can afford from the number rather than from the device.

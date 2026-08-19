@@ -19,6 +19,13 @@ struct AttachProfile {
   var events = 0
   /// Wall time spent inside `applyEvent`, summed.
   var reduceSeconds = 0.0
+  /// When the last replayed event was applied, and the seq it took the
+  /// transcript to. The gap between this and `landedAt` is the hold *waiting*
+  /// rather than the replay *arriving* — the one distinction the first
+  /// on-device reading could not make, and the difference between "the phone is
+  /// slow" and "the phone is asleep".
+  var lastEventAt: Double?
+  var seq = 0
   var landedAt: Double?
 
   init(now: Double = ProcessInfo.processInfo.systemUptime) { startedAt = now }
@@ -34,12 +41,15 @@ struct AttachProfile {
     }
     let total = (end - startedAt) * 1000
     let reduce = reduceSeconds * 1000
-    let replaySpan = (end - (attachedAt ?? startedAt)) * 1000
+    let arrivalEnd = lastEventAt ?? attachedAt ?? startedAt
+    let replaySpan = (arrivalEnd - (attachedAt ?? startedAt)) * 1000
     let other = max(0, replaySpan - reduce)
+    let waiting = (end - arrivalEnd) * 1000
     return String(
       format:
         "attach %@ · total %.0fms · open %@ · attached %@ · replay %.0fms "
-        + "(reduce %.0fms, other %.0fms) · %d events to seq %d",
-      reason, total, ms(openedAt), ms(attachedAt), replaySpan, reduce, other, events, target)
+        + "(reduce %.0fms, other %.0fms) · then waiting %.0fms · %d events, seq %d of %d",
+      reason, total, ms(openedAt), ms(attachedAt), replaySpan, reduce, other, waiting, events,
+      seq, target)
   }
 }

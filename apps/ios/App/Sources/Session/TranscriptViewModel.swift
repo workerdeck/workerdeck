@@ -47,19 +47,31 @@ final class TranscriptViewModel {
   /// The transcript is not drawn while this holds — see `ReplayHold.swift`. It
   /// is derived from a stated seq rather than detected from arrival timing, so
   /// it flips exactly once, on the event that completes the replay.
-  var replaying: Bool { replayHold != nil }
+  private(set) var replaying = false
   /// How far the held replay has got, for the placeholder to say so.
   ///
   /// A hold that ends on the stated seq is honest about *when* it ends and
   /// silent about how long that will take, and on a phone attaching to a long
   /// session over a network that silence is seconds of blank screen. The
   /// numbers are already here; not showing them was the omission.
-  var replayProgress: (seq: Int, target: Int)? {
-    guard let hold = replayHold else { return nil }
-    return (hold.seq, hold.target)
-  }
-  private var replayHold: ReplayHold?
-  private var replayBackstop: Task<Void, Never>?
+  private(set) var replayProgress: (seq: Int, target: Int)?
+  /// When `replayProgress` was last published, so it can be published *rarely*.
+  ///
+  /// This is the whole of the phone's session-open cost, and it was invisible
+  /// until the counter was put on screen. `replayHold` mutates on **every**
+  /// applied event; observed, that is one SwiftUI invalidation per event, and
+  /// the placeholder — a spinner and a formatted counter — re-laid out 800
+  /// times while the replay landed. Measured on a real session: 1,533ms of
+  /// which the reducer fold was 6ms. The same replay costs 33ms on a Mac with
+  /// no SwiftUI attached to it, which is the 37x nobody could explain.
+  ///
+  /// So the hold's own state is `@ObservationIgnored` and exact, and what the
+  /// screen watches is a throttled copy. A counter is a reassurance that
+  /// something is happening; it does not need every value, and it must not cost
+  /// more than the thing it reports on.
+  @ObservationIgnored private var progressPublishedAt = 0.0
+  @ObservationIgnored private var replayHold: ReplayHold?
+  @ObservationIgnored private var replayBackstop: Task<Void, Never>?
   /// Stage timings for the attach in flight — see `AttachProfile`. Measurement
   /// scaffolding for `_docs/improvements/ios-session-load-time.md`.
   private var profile: AttachProfile?
@@ -166,6 +178,9 @@ final class TranscriptViewModel {
     hold.advance(to: replayBuffer?.lastSeq ?? state.lastSeq, now: hold.startedAt)
     guard !hold.landed else { return endReplayHold() }
     replayHold = hold
+    replaying = true
+    replayProgress = (hold.seq, hold.target)
+    progressPublishedAt = hold.startedAt
     replayBackstop = Task { @MainActor [weak self] in
       // Re-checked rather than slept once: every advance moves the deadline, so
       // this wakes at the current one and only gives up if nothing moved it.
@@ -185,9 +200,23 @@ final class TranscriptViewModel {
   /// last row land together.
   private func advanceReplayHold(lastSeq: Int) {
     guard var hold = replayHold else { return }
-    hold.advance(to: lastSeq, now: ProcessInfo.processInfo.systemUptime)
-    if hold.landed { endReplayHold() } else { replayHold = hold }
+    let now = ProcessInfo.processInfo.systemUptime
+    hold.advance(to: lastSeq, now: now)
+    // Written back before the landed check so the hold that ends is the
+    // advanced one — otherwise every landing reports itself as a stall.
+    replayHold = hold
+    if hold.landed { return endReplayHold() }
+    // Published on a clock, not on an event — see `progressPublishedAt`. Ten a
+    // second is more than a reader can follow and 80x fewer than the replay
+    // delivers.
+    if now - progressPublishedAt >= Self.progressInterval {
+      progressPublishedAt = now
+      replayProgress = (hold.seq, hold.target)
+    }
   }
+
+  /// How often the replay counter is allowed to move the screen.
+  private static let progressInterval = 0.1
 
   /// End the hold and publish in the same pass, so the reveal and everything
   /// the reveal implies land on one frame. Every exit goes through here — the
@@ -204,6 +233,8 @@ final class TranscriptViewModel {
     replayBackstop?.cancel()
     replayBackstop = nil
     replayHold = nil
+    replaying = false
+    replayProgress = nil
     guard let buffer = replayBuffer else { return }
     replayBuffer = nil
     state = buffer
@@ -233,6 +264,8 @@ final class TranscriptViewModel {
         // of what the replay cost.
         profile?.events += 1
         profile?.reduceSeconds += ProcessInfo.processInfo.systemUptime - reduceStart
+        profile?.lastEventAt = ProcessInfo.processInfo.systemUptime
+        profile?.seq = buffer.lastSeq
         advanceReplayHold(lastSeq: buffer.lastSeq)
       } else {
         state = applyEvent(state, sessionEvent)
