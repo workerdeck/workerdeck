@@ -487,8 +487,9 @@ protocol. Read these before changing scope or structure:
   **last** call colours it (`runFailed`). A failure the model recovered from two calls later is how
   work goes, and reddening the whole run for it paints a normal working session red, spending the
   colour that should have been left for the one thing still broken; the last call is the run's
-  *outcome*, and an outcome is what a collapsed row can honestly claim. **The rail marks what the
-  transcript reddens**, and that is a rule the scrubber was once exempt from: its question ("is
+  *outcome*, and an outcome is what a collapsed row can honestly claim. **If it is red in the
+  transcript, it is red on the rail** — one sentence, applied to a fold, and a rule the scrubber
+  was once exempt from: its question ("is
   there anything in here worth navigating to") was held to differ from the row's ("how did this
   end"), so it marked *every* failed call at 55%. Measured against a real session the exemption
   did not survive — 178 tool calls, 9 failed, **8 of the 9 recovered from inside their own run**,
@@ -498,9 +499,24 @@ protocol. Read these before changing scope or structure:
   row's **outcome** when it is top level and no later top-level call shares its row — which is
   `runFailed`'s last member for a folded run, the call itself for a lone one, and, because
   children are not top level, `taskFailed` for a `Task`, the same rule spelled a third way and
-  agreeing. So a sub-agent's failed child no longer marks either: the band still says it ran and
-  its own red tick still says it came back broken. Nothing is concealed — each failure is still
-  red on its own row, and the recap still counts every one. The same fold, one level up: **a `Task` and everything the subagent
+  agreeing. That fixed the noise and broke the other half — open a run of eight whose failures are
+  mid-chain and one is visibly red on its own line with nothing beside it on the rail — so the rule
+  is now **fold-aware** (`redItemIndices`): collapsed, a run draws one summary line and only its
+  outcome can be red, so only the outcome marks; **open**, every member is planned through
+  `planToolCall` and every failed one marks, at its own fraction of the row. A `Task` is the same
+  shape twice over — its header is `taskFailed` (its **own** result, never a child's) whatever it
+  does, and a failed child marks only once the *run inside it* is also open, because an open task
+  still draws its children as a folded run. This is the one rail rule that **reads `expansion`
+  rather than measuring the book**: a mark's extent and fraction follow from a height, but its
+  *existence* does not. Beside it, `expanded` is a fifth mark and the quietest thing on the rail —
+  a `dim` band in the **left** lane over any block you opened, because opening is something *you*
+  did, and it loses every merge so an opened `Task` keeps its green. Nothing is concealed either
+  way — each failure is still red on its own row, and the recap still counts every one.
+  **`packages/ui` has the collapsed half only, and cannot have the rest**: its expansion is
+  component-local `useState` per row, which is exactly what lets `height.ts` need *no expanded
+  branch* (an unmounted row is collapsed by definition). Lifting it to feed the rail would cost
+  that invariant, so the two clients share the rule and differ in how much of it they can see —
+  stated here rather than discovered. The same fold, one level up: **a `Task` and everything the subagent
   produced is one row** (`blocks.ts`'s `TaskBlock`, `TaskRow`, wording in `tool-run.ts`), reading
   `Task(Explore · permission mode parsing) · 7 tools`. A subagent is sixty rows of somebody else's
   working and none of it is what you came back to read — the report is the model's next sentence.

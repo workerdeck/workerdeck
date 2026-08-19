@@ -38,7 +38,7 @@ public enum ScrubberLane: String, Equatable, Sendable {
 }
 
 public enum ScrubberMarkKind: String, Equatable, Sendable, CaseIterable {
-  case user, subagent, turn, turnFailed, toolFailed, error, approval, recap, bookmark
+  case user, subagent, expanded, turn, turnFailed, toolFailed, error, approval, recap, bookmark
 
   public var lane: ScrubberLane {
     switch self {
@@ -46,7 +46,12 @@ public enum ScrubberMarkKind: String, Equatable, Sendable, CaseIterable {
     // its stretch of the transcript is *your* dispatch rather than the session's
     // answer. It is also a folded `Task`'s one honest signal on the rail —
     // collapsed, sixty rows of somebody else's working are a single line.
-    case .user, .subagent: return .left
+    // Opening a block is **something you did**, which is what the left lane
+    // holds: the prompts you typed and the sub-agents you dispatched. It is
+    // also the only way the rail can say that the tall stretch under your thumb
+    // is tall because you opened it, rather than because the session produced
+    // that much.
+    case .user, .subagent, .expanded: return .left
     // Output, with the answers: a failed tool call is something the run
     // produced. It had been full-width on the argument that it is an alarm
     // rather than a step — but "alarm" is not a lane, and half the failures
@@ -78,6 +83,13 @@ public enum ScrubberMarkKind: String, Equatable, Sendable, CaseIterable {
     // annotation on it. (It ties with `bookmark`, which it can never meet.)
     case .subagent: return 1
     case .recap: return 0
+    // The quietest thing on the rail, and deliberately below both of its lane
+    // mates: an expanded block is *context* for what is around it, never the
+    // thing you navigate to. A prompt inside the region you opened keeps its
+    // blue, and an opened `Task` stays green — the sub-agent band and this one
+    // cover the same rows by construction, so this losing is what keeps that
+    // band the colour it has always been.
+    case .expanded: return 0
     }
   }
 
@@ -92,6 +104,7 @@ public enum ScrubberMarkKind: String, Equatable, Sendable, CaseIterable {
     case .approval: return "pending approval"
     case .recap: return "catch-up boundary"
     case .bookmark: return "bookmark"
+    case .expanded: return "expanded"
     }
   }
 }
@@ -164,11 +177,20 @@ public struct ScrubberInput {
   public var bookmarks: [Int]
   public var recap: ScrubberRecap?
   public var viewportHeight: CGFloat
+  /// What is open, because **what the rail marks depends on it** — see
+  /// `redItemIndices`. The book is already built with the same value; this is
+  /// the one rule that needs to read it rather than measure its effect.
+  public var expansion: TerminalExpansion
 
   public init(
     items: [TranscriptItem], rows: TerminalRows, book: TerminalHeightBook,
     pendingApprovals: [PermissionRequest] = [], bookmarks: [Int] = [],
-    recap: ScrubberRecap? = nil, viewportHeight: CGFloat
+    recap: ScrubberRecap? = nil, viewportHeight: CGFloat,
+    // **No default.** The book is built with an expansion too, and a caller who
+    // passed it there and omitted it here would get a rail quietly describing a
+    // transcript that is not on screen — marks for a fold nobody is looking at,
+    // and none for the one they opened. Required, so the compiler asks.
+    expansion: TerminalExpansion
   ) {
     self.items = items
     self.rows = rows
@@ -177,6 +199,7 @@ public struct ScrubberInput {
     self.bookmarks = bookmarks
     self.recap = recap
     self.viewportHeight = viewportHeight
+    self.expansion = expansion
   }
 
   public var totalSize: CGFloat { book.totalHeight }
@@ -205,6 +228,72 @@ public let scrubberMinMark: CGFloat = 2
 /// content, because `viewportHeight` can never exceed the denominator.
 public func railScale(railH: CGFloat, totalSize: CGFloat, viewportH: CGFloat) -> CGFloat {
   totalSize > 0 ? railH / max(totalSize, viewportH) : 0
+}
+
+// MARK: - What the rail marks
+
+/// The transcript indices of tool calls **drawn red on a line of their own** —
+/// exactly what the rail paints a failure mark for.
+///
+/// The rule is one sentence: *if it is red in the transcript, it is red on the
+/// rail*. Everything below is that sentence applied to a fold.
+///
+/// It has been wrong in both directions. It began as "every failed call", which
+/// against a real session meant 178 calls, 9 failures, **8 of them recovered
+/// from inside their own run**, and nine alarms on a rail whose transcript
+/// reddened one row — a red mark beside nothing red sends a reader hunting for
+/// damage that is not there. Narrowing it to each row's *outcome* fixed that and
+/// broke the other half: open a run and one of its calls is visibly red on its
+/// own line with nothing on the rail beside it.
+///
+/// A fold is what reconciles them. **Collapsed**, a run draws one summary line
+/// and `runFailed` colours it by the run's last call, so the outcome is the only
+/// thing red and the only thing to mark. **Open**, every member is planned
+/// through `planToolCall` and a failed one is red on its own line — so every
+/// failed member marks. A `Task` is the same shape: its header is coloured by
+/// `taskFailed` (its **own** result, never a child's) whatever it does, and its
+/// children become markable only when it is open. Which is why this reads
+/// `expansion` rather than measuring the book: mark *existence* is not
+/// derivable from a height the way a mark's extent and fraction are.
+public func redItemIndices(rows: TerminalRows, expansion: TerminalExpansion) -> Set<Int> {
+  var red: Set<Int> = []
+
+  func addLeaf(_ leaf: TerminalLeafBlock) {
+    switch leaf {
+    case .item(let block):
+      // A lone call is its own row; there is no fold to ask about.
+      if case .toolCall(let call) = block.item, callFailed(call) { red.insert(block.index) }
+    case .run(let block):
+      if expansion.isOpen(block.key) {
+        for (ordinal, call) in block.run.enumerated() where callFailed(call) {
+          red.insert(block.indices[ordinal])
+        }
+      } else if runFailed(block.run), let last = block.indices.last {
+        red.insert(last)
+      }
+    }
+  }
+
+  for row in rows.rows {
+    guard case .block(let block) = row else { continue }
+    switch block {
+    case .item(let b):
+      if case .toolCall(let call) = b.item, callFailed(call) { red.insert(b.index) }
+    case .run(let b):
+      addLeaf(.run(b))
+    case .task(let b):
+      // The task's own outcome, collapsed or not: it is the header line, and it
+      // is always drawn.
+      if taskFailed(b.task) { red.insert(b.index) }
+      // A child is only on screen — and only red — once the task is open. This
+      // is the same call `taskFailed` makes and for the same reason: an agent
+      // that ran a hundred calls, one of them a grep that matched nothing, did
+      // not fail, and a red tick would say so while the row is forbidden to.
+      guard expansion.isOpen(b.key) else { continue }
+      for child in b.children { addLeaf(child) }
+    }
+  }
+  return red
 }
 
 // MARK: - Building the rail
@@ -248,13 +337,18 @@ public func buildScrubberClusters(_ input: ScrubberInput, railH: CGFloat) -> [Sc
     if let parent = parentToolUseId(of: item) { subagentParents.insert(parent) }
   }
 
-  // The **outcome** call of each row: the last top-level tool call the row
-  // holds. A failed call is marked only if it is one of these — see
-  // `toolFailed` below for why.
-  var rowOutcome: [Int: Int] = [:]
-  for (index, item) in input.items.enumerated() {
-    guard case .toolCall = item, parentToolUseId(of: item) == nil else { continue }
-    rowOutcome[input.rows.rowIndex(forItem: index)] = index
+  // Which failures are on screen as failures — see `redItemIndices`.
+  let red = redItemIndices(rows: input.rows, expansion: input.expansion)
+
+  // Every block you opened, banded over the rows it grew to. The extent comes
+  // from the book, which is already built with this expansion, so the band is
+  // the opened height with no extra bookkeeping — the same mechanic the
+  // sub-agent band uses. Top-level blocks only: a run opened *inside* an open
+  // task resolves through `rowIndex(forItem:)` onto the task's row, so marking
+  // it too would draw a second band over the one already there.
+  for (rowIndex, row) in input.rows.rows.enumerated() {
+    guard case .block(let block) = row, input.expansion.isOpen(block.key) else { continue }
+    marks.append(ScrubberMark(kind: .expanded, itemIndex: block.index, rowIndex: rowIndex))
   }
 
   for (index, item) in input.items.enumerated() {
@@ -289,42 +383,13 @@ public func buildScrubberClusters(_ input: ScrubberInput, railH: CGFloat) -> [Sc
       marks.append(
         ScrubberMark(kind: .error, itemIndex: index, rowIndex: input.rows.rowIndex(forItem: index)))
 
-    // **The rail marks what the transcript reddens** — that is the whole rule,
-    // and it is why this is not simply `callFailed`.
-    //
-    // The row model already decided, twice, that a routine failure the model
-    // recovered from is not a failure: `runFailed` colours a folded run by its
-    // **last** call, and `taskFailed` colours a `Task` by its **own** result and
-    // never a child's. Both were changed from `contains` for the same reason —
-    // a normal working session came back painted red, and the colour that
-    // should have been left for the one broken thing was spent on a grep that
-    // matched nothing. The rail was deliberately exempted, on the argument that
-    // its question ("is there anything in here worth navigating to") differs
-    // from the row's ("how did this end").
-    //
-    // Measured against a real session, the exemption did not survive: 178 tool
-    // calls, 9 failed, **8 of the 9 recovered from inside their own run**, no
-    // failed turn and no session error — so the rail showed nine alarms for a
-    // transcript that reddens one row. A red mark next to nothing red is worse
-    // than no mark, because it sends a reader looking for damage that is not
-    // there.
-    //
-    // One uniform test does all three cases, and needs no block lookup: a call
-    // is its row's **outcome** when it is top level and no later top-level call
-    // shares its row. For a folded run that is exactly `runFailed`'s last
-    // member; for a lone call it is the call; and for a `Task` it is the task
-    // itself, because its children are not top level — which is `taskFailed`,
-    // spelled a third way and agreeing. A failed child inside a sub-agent is
-    // therefore no longer marked, and that is the same call `taskFailed` makes:
-    // an agent that ran a hundred calls, one of them that grep, did not fail.
-    // The sub-agent band still says it ran, and its own red tick still says it
-    // came back broken. Nothing is concealed either way — every failure is
-    // still red on its own row, and the recap still counts every one.
-    //
-    // The disjunction inside `callFailed` is unchanged and both spellings are
-    // still needed: an out-of-loop execution failure sets only the status, and
-    // an engine can flag `is_error` on a call the reducer has not settled.
-    case .toolCall(let call) where callFailed(call) && rowOutcome[input.rows.rowIndex(forItem: index)] == index:
+    // **If it is red in the transcript, it is red on the rail** — the whole
+    // rule, and why this defers to `redItemIndices` rather than testing the
+    // call. That function owns the fold-aware half; the disjunction inside
+    // `callFailed` is unchanged, and both its spellings are still needed (an
+    // out-of-loop execution failure sets only the status, and an engine can
+    // flag `is_error` on a call the reducer has not settled).
+    case .toolCall where red.contains(index):
       marks.append(
         ScrubberMark(
           kind: .toolFailed, itemIndex: index, rowIndex: input.rows.rowIndex(forItem: index)))

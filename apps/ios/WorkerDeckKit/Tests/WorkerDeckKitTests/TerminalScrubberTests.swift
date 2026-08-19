@@ -49,7 +49,7 @@ struct TerminalScrubberTests {
       items: items, rows: rows,
       book: TerminalHeightBook(rows: rows, metrics: metrics, expansion: expansion),
       pendingApprovals: approvals,
-      bookmarks: bookmarks, recap: recap, viewportHeight: viewport)
+      bookmarks: bookmarks, recap: recap, viewportHeight: viewport, expansion: expansion)
   }
 
   private func kinds(_ clusters: [ScrubberCluster]) -> [ScrubberMarkKind] {
@@ -332,6 +332,83 @@ extension TerminalScrubberTests {
       call("c3", "Grep", result: "no matches", error: true),
       say("a1"),
     ]
+  }
+
+  // MARK: - Red on screen, red on the rail
+
+  /// Eight calls with the failures in the *middle* — the shape Tobias opened,
+  /// and the one that has to behave differently collapsed and open.
+  private var runWithMiddleFailures: [TranscriptItem] {
+    var items: [TranscriptItem] = [user("u1")]
+    for i in 0..<8 {
+      items.append(
+        call("c\(i)", result: i == 3 || i == 5 ? "boom" : "ok", error: i == 3 || i == 5))
+    }
+    items.append(say("a1"))
+    return items
+  }
+
+  @Test("collapsed, a run whose failures are all mid-chain marks nothing")
+  func middleFailuresCollapsedAreSilent() {
+    // The summary line is coloured by `runFailed` — the LAST call — and that
+    // call succeeded, so there is nothing red on screen to mark.
+    let marks = kinds(buildScrubberClusters(input(runWithMiddleFailures), railH: 100))
+    #expect(!marks.contains(.toolFailed))
+  }
+
+  @Test("opened, the same run marks each failure where it actually is")
+  func middleFailuresOpenedAreMarked() {
+    // Every member is planned through `planToolCall` once the run is open, and
+    // a failed one is red on its own line. Two failures, two marks.
+    let open = TerminalExpansion(open: ["run:c0"])
+    let clusters = buildScrubberClusters(input(runWithMiddleFailures, expansion: open), railH: 100)
+    let failures = clusters.flatMap { $0.marks.map(\.mark) }.filter { $0.kind == .toolFailed }
+    #expect(failures.count == 2)
+    // At the failures' own item indices — 1 is the first call, so c3 and c5.
+    #expect(Set(failures.map(\.itemIndex)) == [4, 6])
+  }
+
+  @Test("a sub-agent's failed child marks only once it is actually red on screen")
+  func openTaskMarksItsFailedChildOnlyWhenTheRunIsOpen() {
+    // Two folds deep, and the rule holds at each: opening the **task** reveals
+    // its children as a folded *run*, whose summary line `runFailed` colours by
+    // its last call — which succeeded. So there is still nothing red, and still
+    // nothing to mark. This is the case that shows the rule is about what is
+    // drawn rather than about nesting depth.
+    let taskOnly = TerminalExpansion(open: ["task:T"])
+    #expect(
+      !kinds(buildScrubberClusters(input(taskWithOneFailedChild, expansion: taskOnly), railH: 100))
+        .contains(.toolFailed))
+
+    // Open the run inside it and the Grep is red on its own line — so it marks.
+    let both = TerminalExpansion(open: ["task:T", "run:c0"])
+    #expect(
+      kinds(buildScrubberClusters(input(taskWithOneFailedChild, expansion: both), railH: 100))
+        .contains(.toolFailed))
+  }
+
+  // MARK: - The expanded band
+
+  @Test("an opened block bands the left lane, and a collapsed one does not")
+  func expandedBandsTheInputLane() {
+    let closed = kinds(buildScrubberClusters(input(runWithMiddleFailures), railH: 100))
+    #expect(!closed.contains(.expanded))
+
+    let open = TerminalExpansion(open: ["run:c0"])
+    let clusters = buildScrubberClusters(input(runWithMiddleFailures, expansion: open), railH: 100)
+    let band = clusters.flatMap { c in c.marks.map { (c.lane, $0.mark.kind) } }
+      .filter { $0.1 == .expanded }
+    #expect(band.count == 1)
+    // Opening is something *you* did, which is what the left lane holds.
+    #expect(band.first?.0 == .left)
+  }
+
+  @Test("the expanded band never takes a lane mate's colour when they merge")
+  func expandedLosesEveryMerge() {
+    // It covers the same rows as a sub-agent band by construction, so if it
+    // could win the merge it would repaint every opened `Task` grey.
+    #expect(ScrubberMarkKind.expanded.loudness < ScrubberMarkKind.subagent.loudness)
+    #expect(ScrubberMarkKind.expanded.loudness < ScrubberMarkKind.user.loudness)
   }
 
   // MARK: - The outcome rule

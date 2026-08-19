@@ -91,7 +91,11 @@ struct TerminalTranscriptView: View {
             TerminalScrubberView(
               input: ScrubberInput(
                 items: items, rows: model.rows, book: model.book,
-                pendingApprovals: pendingApprovals, viewportHeight: scroll.viewportHeight),
+                pendingApprovals: pendingApprovals, viewportHeight: scroll.viewportHeight,
+                // What is open decides which failures the rail marks: a call
+                // folded inside a collapsed run is not on screen as a failure,
+                // and the same call is red on its own line once it is.
+                expansion: model.expansion),
               scroll: scroll, typography: typography,
               // Through the row model, never by arithmetic — a mark's item index
               // is not its row index, and `buildScrubberClusters` has already
