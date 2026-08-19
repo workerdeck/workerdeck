@@ -254,13 +254,29 @@ public enum TerminalPlanner {
       text.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
       .components(separatedBy: "\n")
 
+    // The replay delivered a head. `full` then means "fetch the rest" rather than
+    // "lift the clip", and the marker outlives the clip — a head short enough to
+    // fit the open budget still is not the result.
+    let truncated = call.result?.truncated == true
+    let totalChars = call.result?.totalChars
+    let fetching = truncated && expansion.isFetching(fullKey)
+
     var shown: [String]
     var more: String?
     var morePress: TermPress?
     if open {
       shown = full ? all : ResultPreview.clipToChars(all)
       let hidden = all.count - shown.count
-      if hidden > 0 {
+      if fetching {
+        // Never a row that visibly does nothing: while the rest is in flight it
+        // says so, and names the size, because at this size the honest answer is
+        // sometimes "don't". No press — a second one would open a second fetch.
+        more = "… fetching \(TermFmt.grouped(totalChars ?? text.count)) chars"
+      } else if truncated {
+        more =
+          "… +\(TermFmt.grouped(max(0, (totalChars ?? text.count) - text.count))) chars — fetch the rest"
+        morePress = .expandFull(fullKey)
+      } else if hidden > 0 {
         // The affordance says what pressing it costs, because at this size the
         // honest answer is sometimes "don't".
         more =
@@ -268,7 +284,7 @@ public enum TerminalPlanner {
         morePress = .expandFull(fullKey)
       }
     } else {
-      let collapsed = ResultPreview.collapsed(all, cols: previewCols)
+      let collapsed = ResultPreview.collapsed(all, cols: previewCols, totalChars: totalChars)
       shown = collapsed.shown
       // Collapsed, the count is a label and not a second control: the header
       // above is already the toggle, and this line carries the same press so

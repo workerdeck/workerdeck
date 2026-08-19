@@ -86,11 +86,31 @@ public struct ToolResultBlock: Sendable, Equatable {
   public let toolUseId: String
   public let content: ToolResultContent?
   public let isError: Bool?
+  /// This block carries only the **head** of the result: the replay truncated it
+  /// (protocol's `TOOL_RESULT_HEAD_CHARS`), and the whole thing is one fetch
+  /// away (`WorkerClient.toolResult`).
+  ///
+  /// It can only arrive on a socket that asked for it — see
+  /// `WorkerClient.attach(truncateResults:)` — which is why it is additive at
+  /// protocol 7 rather than a version bump. Absent means the block is whole.
+  public let truncated: Bool?
+  /// How many characters the untruncated result had. Set iff `truncated`.
+  ///
+  /// A client cannot compute it, holding only the head, and it is not cosmetic:
+  /// a collapsed row spells "… +N chars" and the planner *wraps that exact
+  /// string* to size the row, so a count derived from the head would be both a
+  /// lie and a different height.
+  public let totalChars: Int?
 
-  public init(toolUseId: String, content: ToolResultContent?, isError: Bool?) {
+  public init(
+    toolUseId: String, content: ToolResultContent?, isError: Bool?, truncated: Bool? = nil,
+    totalChars: Int? = nil
+  ) {
     self.toolUseId = toolUseId
     self.content = content
     self.isError = isError
+    self.truncated = truncated
+    self.totalChars = totalChars
   }
 }
 
@@ -109,6 +129,8 @@ extension ContentBlock: Decodable {
     case toolUseId = "tool_use_id"
     case content
     case isError = "is_error"
+    case truncated
+    case totalChars = "total_chars"
   }
 
   public init(from decoder: Decoder) throws {
@@ -132,7 +154,9 @@ extension ContentBlock: Decodable {
           ToolResultBlock(
             toolUseId: try container.decode(String.self, forKey: .toolUseId),
             content: try container.decodeIfPresent(ToolResultContent.self, forKey: .content),
-            isError: try container.decodeIfPresent(Bool.self, forKey: .isError)
+            isError: try container.decodeIfPresent(Bool.self, forKey: .isError),
+            truncated: try container.decodeIfPresent(Bool.self, forKey: .truncated),
+            totalChars: try container.decodeIfPresent(Int.self, forKey: .totalChars)
           ))
       default:
         self = .unknown(type: type, raw: (try? JSONValue(from: decoder)) ?? .null)

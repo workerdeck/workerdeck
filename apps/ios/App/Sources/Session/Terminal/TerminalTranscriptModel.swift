@@ -59,6 +59,11 @@ final class TerminalTranscriptModel {
     let metricsChanged = metrics != self.metrics
     self.metrics = metrics
     self.items = items
+    // A fetch landing is an item mutation and arrives here like any other. The
+    // key crosses from `pending` to `full` in the same pass that plans the new
+    // text, so the row goes from "fetching 641,003 chars" straight to the whole
+    // result with no intermediate state on screen.
+    resolveFetched()
 
     let rows = TerminalRows.build(
       items: items, recapAt: recapAt, recapLabel: recapLabel)
@@ -79,12 +84,36 @@ final class TerminalTranscriptModel {
   /// The rows are untouched — expansion is not a refold — so keys, indices and
   /// `rowIndex(forItem:)` all stand, and the scroll view's escaped-regime anchor
   /// holds the reader still over the change for free.
-  func press(_ press: TermPress, row: Int) {
+  /// - Parameter fetch: how to ask for the rest of a truncated result. Absent
+  ///   outside a live session, and the press then does nothing rather than
+  ///   promising text nobody can deliver.
+  func press(_ press: TermPress, row: Int, fetch: ToolResultFetcher? = nil) {
+    // "Show everything" on a result the replay delivered as a head is a network
+    // round trip, so it does not lift a budget — it enters `pending`, the
+    // planner draws a line saying what is in flight, and the text arrives as a
+    // mutation of the item (see `update`). Planning from `totalChars` instead
+    // would invent a line count for text nobody has seen.
+    if case .expandFull(let key) = press, let call = truncatedCall(fullKey: key) {
+      guard expansion.beginFetch(fullKey: key) else { return }
+      remeasure()
+      fetch?(call.id)
+      return
+    }
     let opened = expansion.apply(press)
     remeasure()
     guard opened else { return }
     revealNonce += 1
     reveal = TranscriptRevealRequest(row: row, nonce: revealNonce)
+  }
+
+  /// The call behind a `full:` key, when its result is still only a head.
+  private func truncatedCall(fullKey key: String) -> ToolCallItem? {
+    let id = String(key.dropFirst("full:".count))
+    for item in items {
+      guard case .toolCall(let call) = item, call.id == id else { continue }
+      return call.result?.truncated == true ? call : nil
+    }
+    return nil
   }
 
   #if DEBUG
@@ -97,6 +126,19 @@ final class TerminalTranscriptModel {
       remeasure()
     }
   #endif
+
+  /// Promote every pending key whose result is no longer a head.
+  ///
+  /// Driven off the items rather than off the fetch's completion, which is what
+  /// makes it self-healing: the hydration lands in transcript state, and any
+  /// path that puts the whole text on an item — a fetch, a re-attach without
+  /// truncation — resolves the row the same way.
+  private func resolveFetched() {
+    guard !expansion.pending.isEmpty else { return }
+    for key in expansion.pending where truncatedCall(fullKey: key) == nil {
+      expansion.finishFetch(fullKey: key)
+    }
+  }
 
   private func remeasure() {
     book = TerminalHeightBook(rows: rows, metrics: metrics, cache: cache, expansion: expansion)

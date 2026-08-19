@@ -42,10 +42,31 @@ public enum ToolCallStatus: String, Sendable, Equatable {
 public struct ToolCallResult: Sendable, Equatable {
   public var text: String
   public var isError: Bool
+  /// `text` is only the **head** of the result: the replay truncated it, and the
+  /// rest is one fetch away (`WorkerClient.toolResult`, keyed by ``sourceSeq``).
+  ///
+  /// The three fields below are set **only** when that happened, so every other
+  /// result stays byte-identical to what it was — which matters here more than
+  /// on the web: `ToolCallItem` is `Equatable` and is half the plan cache's key,
+  /// so an always-present field would miss the cache on every row.
+  public var truncated: Bool
+  /// The untruncated length. Set iff ``truncated``; what a row must count from,
+  /// since it holds the head.
+  public var totalChars: Int?
+  /// The `seq` of the event this result arrived on — the only thing that can
+  /// name it to the fetch route. The item is what the UI holds, so without this
+  /// the press has nothing to ask for.
+  public var sourceSeq: Int?
 
-  public init(text: String, isError: Bool) {
+  public init(
+    text: String, isError: Bool, truncated: Bool = false, totalChars: Int? = nil,
+    sourceSeq: Int? = nil
+  ) {
     self.text = text
     self.isError = isError
+    self.truncated = truncated
+    self.totalChars = totalChars
+    self.sourceSeq = sourceSeq
   }
 }
 
@@ -366,6 +387,37 @@ public func seedFromSessionInfo(_ state: TranscriptState, _ info: SessionInfo) -
   return next
 }
 
+/// Put the whole of a fetched tool result into transcript state, and clear the
+/// markers that said it was a head.
+///
+/// **Into the state, not into a row.** The copy action then copies the whole
+/// thing, the item is what every renderer already reads, and no later event can
+/// re-truncate it. Clearing the markers is the other half: a hydrated result is
+/// indistinguishable from one that was never cut, so every renderer needs a
+/// branch for one state rather than two.
+///
+/// Keyed on `toolUseId` — the id the row already holds. An unknown id, or a
+/// result that was never truncated, returns the state unchanged: a press
+/// answered after a `/clear` must not resurrect a row.
+public func hydrateToolResult(
+  _ state: TranscriptState, toolUseId: String, text: String
+) -> TranscriptState {
+  var changed = false
+  let items = state.items.map { item -> TranscriptItem in
+    guard case .toolCall(let call) = item, call.id == toolUseId,
+      call.result?.truncated == true, let result = call.result
+    else { return item }
+    changed = true
+    var updated = call
+    updated.result = ToolCallResult(text: text, isError: result.isError)
+    return .toolCall(updated)
+  }
+  guard changed else { return state }
+  var next = state
+  next.items = items
+  return next
+}
+
 public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> TranscriptState {
   guard event.seq > state.lastSeq else { return state }
   var next = state
@@ -438,8 +490,12 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
         items = mapToolCall(items, id: toolResult.toolUseId) { call in
           var updated = call
           updated.status = isError ? .failed : .settled
+          let truncated = toolResult.truncated == true
           updated.result = ToolCallResult(
-            text: toolResult.content?.joinedText ?? "", isError: isError)
+            text: toolResult.content?.joinedText ?? "", isError: isError,
+            truncated: truncated,
+            totalChars: truncated ? toolResult.totalChars : nil,
+            sourceSeq: truncated ? event.seq : nil)
           // The engine's own hunks, carried on the message rather than parsed
           // out of the result text — which is why this client needs no diff
           // parser and cannot get the line numbers wrong.

@@ -574,3 +574,13 @@ mobile). When `packages/protocol` changes:
 
 Not yet mirrored (later phases): the job-queue REST/WS surface, profile create/update/delete,
 browser-bridge tool hosting (the app answers `tool_call_request` with a polite refusal).
+
+**Truncated tool results.** The attach asks for `?truncateResults=1` (in `TranscriptViewModel.run`
+and nowhere else — the opt-in belongs to the unit that renders), so an oversized `tool_result`
+arrives as its head with `truncated`/`total_chars` set, and the rest is one
+`WorkerClient.toolResult` away. The press is the terminal renderer's third expansion state:
+`TerminalExpansion.pending`, drawn as `… fetching N chars` with no press of its own, promoted to
+`full` by `TerminalTranscriptModel.update` when the fetched text lands on the item. It is
+deliberately not planned from `total_chars` — that would invent a line count for text nobody has
+seen, which is the estimate-and-correct model this renderer exists not to be. The cards renderer
+carries the same affordance, because the variant is a preference and a head reaches both.

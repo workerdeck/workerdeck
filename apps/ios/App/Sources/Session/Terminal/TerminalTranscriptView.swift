@@ -36,6 +36,10 @@ struct TerminalTranscriptView: View {
   private static let fontSize: CGFloat = 12
 
   @State private var model: TerminalTranscriptModel?
+  /// How a press asks for the rest of a truncated result. Nil outside a live
+  /// session (the preview harness), and the press is then a no-op — which is
+  /// correct there, since nothing truncated a replay nobody asked for.
+  @Environment(\.toolResultFetcher) private var fetchToolResult
 
   private var typography: TerminalTypography { .measure(fontSize: Self.fontSize) }
 
@@ -62,7 +66,7 @@ struct TerminalTranscriptView: View {
               cell.configure(
                 lines: model.plan(at: index), typography: typography, metrics: metrics,
                 gapAbove: model.gapAbove(index), bleed: bleed,
-                onPress: { model.press($0, row: index) })
+                onPress: { model.press($0, row: index, fetch: fetchToolResult) })
             }
           )
           // The prompt of the turn being read, held at the top. An overlay for

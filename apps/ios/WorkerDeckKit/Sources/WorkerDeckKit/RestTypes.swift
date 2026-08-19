@@ -891,6 +891,18 @@ public struct GetProfileResponse: Decodable, Sendable {
   public let config: ProfileConfigSnapshot
 }
 
+/// `GET /sessions/:id/events/:seq/result?toolUseId=` — the whole of a tool
+/// result whose replay delivered only its head.
+public struct ToolResultResponse: Decodable, Sendable, Equatable {
+  public let seq: Int
+  public let toolUseId: String
+  public let content: ToolResultContent?
+  public let isError: Bool
+
+  /// The result as one string, by the same rule the reducer folds a block with.
+  public var text: String { content?.joinedText ?? "" }
+}
+
 public struct ErrorResponse: Decodable, Sendable {
   public let error: String
 }

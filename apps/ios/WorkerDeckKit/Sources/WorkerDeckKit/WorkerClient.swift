@@ -313,32 +313,65 @@ public struct WorkerClient: Sendable {
   /// - Parameters:
   ///   - afterSeq: replay events with `seq` greater than this (0 = full replay).
   ///   - reconnect: auto-reconnect with backoff on unexpected disconnects.
+  ///   - truncateResults: replay an oversized `tool_result` block as its **head**,
+  ///     marked, with the rest one ``toolResult(sessionId:seq:toolUseId:)`` away.
+  ///     Measured, three such frames were 68% of one 3.1 MB attach. Default off,
+  ///     and permanently: only the unit that *renders* may ask for heads, since a
+  ///     caller that cannot fetch them back would present one as the whole result.
   @MainActor
-  public func attach(sessionId: String, afterSeq: Int = 0, reconnect: Bool = true) -> SessionHandle {
+  public func attach(
+    sessionId: String, afterSeq: Int = 0, reconnect: Bool = true, truncateResults: Bool = false
+  ) -> SessionHandle {
     let client = self
     return SessionHandle(sessionId: sessionId, afterSeq: afterSeq, reconnect: reconnect) { seq in
-      try client.openSocket(sessionId: sessionId, afterSeq: seq)
+      try client.openSocket(sessionId: sessionId, afterSeq: seq, truncateResults: truncateResults)
     }
+  }
+
+  /// The whole of a tool result whose replay delivered only its head.
+  ///
+  /// `toolUseId` is required and the gateway verifies it against the block: a
+  /// woken dormant session has a fresh log with fresh seqs, so a `sourceSeq`
+  /// cached across a gateway restart can name a different event, and being handed
+  /// another tool's output under the row you pressed is the exact failure this
+  /// feature exists to remove. A 404 means "ask again after a fresh attach", not
+  /// "empty".
+  public func toolResult(sessionId: String, seq: Int, toolUseId: String) async throws
+    -> ToolResultResponse
+  {
+    let data = try await call(
+      "GET",
+      "/sessions/\(Self.encodeComponent(sessionId))/events/\(seq)/result?toolUseId=\(Self.encodeComponent(toolUseId))"
+    )
+    return try decode(ToolResultResponse.self, from: data)
   }
 
   /// WebSocket URL for a session attach: the REST base with `http`→`ws`
   /// (`https`→`wss`), mirroring the reference client's `replace(/^http/, 'ws')`.
-  public func webSocketURL(sessionId: String, afterSeq: Int) throws -> URL {
+  public func webSocketURL(sessionId: String, afterSeq: Int, truncateResults: Bool = false) throws
+    -> URL
+  {
     var base = Self.trimmedBase(baseURL)
     if base.hasPrefix("https") {
       base = "wss" + base.dropFirst("https".count)
     } else if base.hasPrefix("http") {
       base = "ws" + base.dropFirst("http".count)
     }
-    let string = "\(base)/sessions/\(Self.encodeComponent(sessionId))/ws?afterSeq=\(afterSeq)"
+    let string =
+      "\(base)/sessions/\(Self.encodeComponent(sessionId))/ws?afterSeq=\(afterSeq)"
+      + (truncateResults ? "&truncateResults=1" : "")
     guard let url = URL(string: string) else {
       throw WorkerClientError(message: "Invalid WebSocket URL: \(string)")
     }
     return url
   }
 
-  func openSocket(sessionId: String, afterSeq: Int) throws -> any WebSocketConnecting {
-    var request = URLRequest(url: try webSocketURL(sessionId: sessionId, afterSeq: afterSeq))
+  func openSocket(sessionId: String, afterSeq: Int, truncateResults: Bool = false) throws
+    -> any WebSocketConnecting
+  {
+    var request = URLRequest(
+      url: try webSocketURL(
+        sessionId: sessionId, afterSeq: afterSeq, truncateResults: truncateResults))
     applyAuth(&request)
     if let socketFactory {
       return socketFactory(request, urlSession)

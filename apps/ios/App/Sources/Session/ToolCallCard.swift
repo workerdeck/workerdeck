@@ -11,12 +11,24 @@ struct ToolCallCard: View {
   @Binding var isExpanded: Bool
 
   @Environment(\.producedImageLoader) private var producedImages
+  /// How to ask for the rest of a truncated result. Nil where nothing asked for
+  /// heads, and the affordance is then unreachable because none arrive.
+  @Environment(\.toolResultFetcher) private var fetchToolResult
+  /// Row-local, unlike the text itself: this is a spinner, not a fact about the
+  /// session.
+  @State private var fetching = false
 
   /// The host path this call says it wrote, when the engine reported one. Only
   /// `savedPath` — a file the agent merely *read* is not a produced file and
   /// has no route to fetch it from.
   private var producedPath: String? {
     call.input["savedPath"]?.stringValue
+  }
+
+  /// What the row is missing, counted from `totalChars` — it holds the head, so
+  /// counting from the text in hand would be counting the wrong number.
+  private func missingChars(_ result: ToolCallResult) -> String {
+    TermFmt.grouped(max(0, (result.totalChars ?? result.text.count) - result.text.count))
   }
 
   var body: some View {
@@ -107,6 +119,27 @@ struct ToolCallCard: View {
       if let result = call.result, !result.text.isEmpty {
         MonospacedBlock(
           title: result.isError ? "Error" : "Result", text: result.text, isError: result.isError)
+        // The replay delivered a head. Saying so — and offering the rest — is
+        // not optional: this renderer would otherwise present eight thousand
+        // characters as the whole result, which is the one thing the truncating
+        // attach must never cause. The fetched text lands in transcript state,
+        // so the card simply re-renders without this row.
+        if result.truncated {
+          Button {
+            fetchToolResult?(call.id)
+            fetching = true
+          } label: {
+            Text(
+              fetching
+                ? "Fetching \(missingChars(result)) more characters…"
+                : "… +\(missingChars(result)) characters — fetch the rest"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          }
+          .buttonStyle(.plain)
+          .disabled(fetching)
+        }
       }
 
       if let logs = call.logs, !logs.isEmpty {

@@ -122,6 +122,9 @@ struct SessionView: View {
     .navigationBarTitleDisplayMode(.inline)
       .toolbar { toolbarMenu }
       .environment(\.fileDownloader, downloader)
+      // The other end of the truncating attach: a row presses, this fetches, and
+      // the text lands in transcript state rather than in the row that asked.
+      .environment(\.toolResultFetcher, { vm.loadFullResult(toolUseId: $0) })
       .environment(\.attachmentLoader, attachmentLoader)
       .environment(\.producedImageLoader, producedImages)
       // Reader preferences enter the transcript here, once, and every row below

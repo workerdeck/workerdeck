@@ -21,24 +21,66 @@ import Foundation
 /// * `run:<first call id>` / `task:<call id>` — a folded block's own key.
 /// * `call:<id>` — one tool call's result.
 /// * `full:<id>` — that result's character budget lifted.
+///
+/// ``pending`` is the third, and it exists because a truncated result's press
+/// cannot be answered synchronously: the replay delivered a head, so "show
+/// everything" is a network round trip. Planning from `total_chars` was the
+/// alternative and is refused — it invents a line count for text nobody has
+/// seen and then corrects it by thousands of points mid-scroll, which is the
+/// estimate-and-correct model this renderer was built not to be. So the press
+/// enters `pending`, the planner draws a line saying what is in flight, and the
+/// fetched text arrives as a **mutation of the item** — one row misses the plan
+/// cache, one row re-plans, and the planner is never asked about text it does
+/// not have.
 public struct TerminalExpansion: Equatable, Sendable {
   /// Blocks and calls that are open.
   public var open: Set<String>
   /// Results whose ``ResultPreview/expandedChars`` budget has been lifted.
   public var full: Set<String>
+  /// Full keys whose result is a head, with the rest **in flight**.
+  ///
+  /// Disjoint from ``full`` by construction: a key here is holding the reader's
+  /// press until the text lands, and ``finishFetch(fullKey:)`` moves it across
+  /// in one step. Lifting the budget first would show eight thousand characters
+  /// of head and then replace them, which is a flash, not a state.
+  public var pending: Set<String>
 
-  public init(open: Set<String> = [], full: Set<String> = []) {
+  public init(open: Set<String> = [], full: Set<String> = [], pending: Set<String> = []) {
     self.open = open
     self.full = full
+    self.pending = pending
   }
 
-  public var isEmpty: Bool { open.isEmpty && full.isEmpty }
+  public var isEmpty: Bool { open.isEmpty && full.isEmpty && pending.isEmpty }
 
   public static func openKey(callId: String) -> String { "call:\(callId)" }
   public static func fullKey(callId: String) -> String { "full:\(callId)" }
 
   public func isOpen(_ key: String) -> Bool { open.contains(key) }
   public func isFull(_ key: String) -> Bool { full.contains(key) }
+  public func isFetching(_ key: String) -> Bool { pending.contains(key) }
+
+  /// The reader pressed "fetch the rest". Returns `true` when this is a new
+  /// request — the caller starts the fetch on that, so a second press on a row
+  /// already waiting does not open a second connection.
+  @discardableResult
+  public mutating func beginFetch(fullKey key: String) -> Bool {
+    guard !full.contains(key) else { return false }
+    return pending.insert(key).inserted
+  }
+
+  /// The text landed. The key crosses from ``pending`` to ``full`` in one step,
+  /// which is what makes the row go from "fetching 641,003 chars" straight to
+  /// the whole result with nothing in between.
+  ///
+  /// A key the reader closed in the meantime is **not** promoted: closing forgets
+  /// the request, and re-opening should not reveal a result the reader has since
+  /// walked away from. The hydrated text is untouched either way — it lives on
+  /// the item, not here.
+  public mutating func finishFetch(fullKey key: String) {
+    guard pending.remove(key) != nil else { return }
+    full.insert(key)
+  }
 
   /// Apply a press. Returns `true` when it *opened* something — the caller uses
   /// that to decide whether the reader needs bringing back to the row's first
@@ -54,7 +96,14 @@ public struct TerminalExpansion: Equatable, Sendable {
         // hundred-thousand-character result straight into its unclipped form
         // would undo the layout guard for a reader who has since scrolled a
         // thousand rows away and forgotten they ever asked.
-        if key.hasPrefix("call:") { full.remove("full:" + key.dropFirst("call:".count)) }
+        if key.hasPrefix("call:") {
+          let fullKey = "full:" + key.dropFirst("call:".count)
+          full.remove(fullKey)
+          // And forgets a fetch in flight. The bytes may still land — they are
+          // hydrated onto the item and kept — but this reader is no longer
+          // waiting for them, so re-opening starts from the head again.
+          pending.remove(fullKey)
+        }
         return false
       }
       open.insert(key)
@@ -74,9 +123,22 @@ public struct TerminalExpansion: Equatable, Sendable {
   /// on screen.
   public static func everything(in rows: TerminalRows) -> TerminalExpansion {
     var expansion = TerminalExpansion()
+    // A truncated result has no full state to plan — the text is a head — so its
+    // key lands in `pending`, which is the state a reader who pressed it really
+    // sees. Auditing a `full` state whose text was never delivered would be
+    // auditing a screen nobody can reach.
+    let truncated = truncatedCallIds(in: rows)
     for row in rows.rows {
       for key in expansionKeys(of: row) {
-        if key.hasPrefix("full:") { expansion.full.insert(key) } else { expansion.open.insert(key) }
+        guard key.hasPrefix("full:") else {
+          expansion.open.insert(key)
+          continue
+        }
+        if truncated.contains(String(key.dropFirst("full:".count))) {
+          expansion.pending.insert(key)
+        } else {
+          expansion.full.insert(key)
+        }
       }
     }
     return expansion
@@ -93,7 +155,8 @@ public struct TerminalExpansion: Equatable, Sendable {
     let keys = expansionKeys(of: row)
     guard !keys.isEmpty else { return TerminalExpansion() }
     return TerminalExpansion(
-      open: open.intersection(keys), full: full.intersection(keys))
+      open: open.intersection(keys), full: full.intersection(keys),
+      pending: pending.intersection(keys))
   }
 }
 
@@ -148,4 +211,35 @@ public func expansionKeys(of block: TerminalBlock) -> Set<String> {
 
 private func callKeys(_ call: ToolCallItem) -> Set<String> {
   [TerminalExpansion.openKey(callId: call.id), TerminalExpansion.fullKey(callId: call.id)]
+}
+
+/// Ids of the tool calls in these rows whose result is a truncated head.
+///
+/// Only reached by ``TerminalExpansion/everything(in:)``, which is the audit's
+/// input and runs over the whole transcript exactly once.
+public func truncatedCallIds(in rows: TerminalRows) -> Set<String> {
+  var ids: Set<String> = []
+  func note(_ call: ToolCallItem) {
+    if call.result?.truncated == true { ids.insert(call.id) }
+  }
+  func walk(_ block: TerminalBlock) {
+    switch block {
+    case .item(let leaf):
+      if case .toolCall(let call) = leaf.item { note(call) }
+    case .run(let leaf):
+      leaf.run.forEach(note)
+    case .task(let leaf):
+      for child in leaf.children {
+        switch child {
+        case .item(let item): if case .toolCall(let call) = item.item { note(call) }
+        case .run(let run): run.run.forEach(note)
+        }
+      }
+    }
+  }
+  for row in rows.rows {
+    guard case .block(let block) = row else { continue }
+    walk(block)
+  }
+  return ids
 }

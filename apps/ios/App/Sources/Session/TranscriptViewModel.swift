@@ -101,6 +101,9 @@ final class TranscriptViewModel {
 
   private let client: WorkerClient
   private var handle: SessionHandle?
+  /// Tool results whose rest is in flight — one fetch per row, however many
+  /// times it is pressed.
+  private var fetchingResults: Set<String> = []
 
   init(sessionId: String, client: WorkerClient) {
     self.sessionId = sessionId
@@ -111,7 +114,11 @@ final class TranscriptViewModel {
   func run() async {
     guard handle == nil else { return }
     // afterSeq 0: full replay, so opening a session mid-run shows its history.
-    let handle = client.attach(sessionId: sessionId, afterSeq: 0)
+    // `truncateResults` is asked for **here and nowhere else**: the opt-in
+    // belongs to the unit that renders, because a caller that cannot fetch a
+    // head back would present one as the whole result. Both renderers below can
+    // (see `loadFullResult`).
+    let handle = client.attach(sessionId: sessionId, afterSeq: 0, truncateResults: true)
     self.handle = handle
     await withTaskCancellationHandler {
       for await event in handle.events {
@@ -385,6 +392,34 @@ final class TranscriptViewModel {
     guard let info = try? await client.getSession(id: sessionId) else { return nil }
     session = info
     return info
+  }
+
+  /// Fetch the whole of a tool result whose replay delivered only its head, and
+  /// hydrate it into transcript state.
+  ///
+  /// Into the state rather than into the row that asked: the copy action then
+  /// copies the whole thing and no later event can re-truncate it. A failure is
+  /// **silent on purpose** — a 404 means the log that seq belonged to is gone (a
+  /// dormant rebuild, a restart), and the head stays on screen still saying what
+  /// it is, which is honest and better than an error about a press.
+  func loadFullResult(toolUseId: String) {
+    guard !fetchingResults.contains(toolUseId) else { return }
+    guard case .toolCall(let call) = state.items.first(where: { $0.id == toolUseId }),
+      let result = call.result, result.truncated, let seq = result.sourceSeq
+    else { return }
+    fetchingResults.insert(toolUseId)
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      defer { self.fetchingResults.remove(toolUseId) }
+      guard
+        let response = try? await self.client.toolResult(
+          sessionId: self.sessionId, seq: seq, toolUseId: toolUseId)
+      else { return }
+      let hydrated = hydrateToolResult(self.state, toolUseId: toolUseId, text: response.text)
+      guard hydrated != self.state else { return }
+      self.state = hydrated
+      self.revision &+= 1
+    }
   }
 
   func dismissProtocolError() { lastProtocolError = nil }

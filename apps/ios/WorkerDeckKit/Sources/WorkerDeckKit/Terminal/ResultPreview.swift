@@ -40,14 +40,25 @@ public enum ResultPreview {
   /// of what the budget is for. Deriving it from `cols` keeps the promise the
   /// constant was making (four lines' worth) on any width, and reduces to the
   /// web client's number at the width the web client has.
-  public static func collapsed(_ lines: [String], cols: Int) -> Collapsed {
+  ///
+  /// `totalChars` is the **untruncated** length when the replay delivered only a
+  /// head (protocol's `ToolResultBlock.total_chars`). Passing it is not
+  /// cosmetic: computed from the head this row would say "… +7,600 chars" where
+  /// the truth is 641,003, and the wrong string is a *different row height* —
+  /// exactly the drift this module exists to prevent, since the planner sizes
+  /// the row by wrapping this same text. Omitted for a whole result, where the
+  /// lines in hand are the whole truth.
+  public static func collapsed(_ lines: [String], cols: Int, totalChars: Int? = nil) -> Collapsed {
     // Minus one: the ellipsis the clip appends is itself a character, and a
     // budget of exactly four lines' worth would spill it onto a fifth line
     // holding nothing else.
-    collapsed(lines, chars: cols > 0 ? previewLines * cols - 1 : previewChars)
+    collapsed(
+      lines, chars: cols > 0 ? previewLines * cols - 1 : previewChars, totalChars: totalChars)
   }
 
-  public static func collapsed(_ lines: [String], chars budget: Int = previewChars) -> Collapsed {
+  public static func collapsed(
+    _ lines: [String], chars budget: Int = previewChars, totalChars: Int? = nil
+  ) -> Collapsed {
     var shown: [String] = []
     var chars = 0
     var cutInsideLine = false
@@ -64,8 +75,16 @@ public enum ResultPreview {
       chars += line.count + 1  // + 1 for the newline that rejoins them
     }
 
-    if cutInsideLine {
-      let whole = lines.joined(separator: "\n").count
+    // `joined` because the newlines are part of what is not being shown — and
+    // `totalChars` wins when it exists, the lines in hand being a head rather
+    // than the result.
+    let held = lines.joined(separator: "\n").count
+    let whole = totalChars ?? held
+    // Characters when the cut happened inside a line — and also whenever the
+    // result is a head, however few of its lines were shown: a truncated result
+    // always has more, and a row that fit its head into four lines must not
+    // claim to be showing everything.
+    if cutInsideLine || whole > held {
       return Collapsed(shown: shown, more: "… +\(TermFmt.grouped(whole - chars)) chars")
     }
     let hidden = lines.count - shown.count
