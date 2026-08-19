@@ -99,6 +99,13 @@
   /* The user's own prompt row. */
   --term-user-bg: rgb(255 255 255 / 0.05);
   --term-row-hover: rgb(255 255 255 / 0.05);
+  /* Behind an OPEN block. Yellow, not neutral, and the theme's one deliberate
+     reuse of that tone for something other than "waiting on you": an open block
+     is a state the reader put the transcript into, and on the phone it wants
+     the same colour as the rail mark that says so. Kept very low — this washes
+     whole regions, and at band strength an opened run would shout louder than
+     anything inside it. */
+  --term-open-wash: rgb(215 186 125 / 0.1);
 }
 
 [data-theme='light'] [data-terminal],
@@ -125,6 +132,7 @@
   --term-band-bg: rgb(0 0 0 / 0.04);
   --term-user-bg: rgb(0 0 0 / 0.05);
   --term-row-hover: rgb(0 0 0 / 0.04);
+  --term-open-wash: rgb(215 186 125 / 0.25);
 }
 
 /* ── Rows ────────────────────────────────────────────────────────────────────
@@ -284,7 +292,7 @@
    stack without a step. (The other half is `useRevealOnOpen`, which brings that
    first line back when it has gone above the fold.) */
 [data-terminal] .term-open {
-  background: var(--term-row-hover);
+  background: var(--term-open-wash);
   margin-inline: calc(-1 * var(--term-bleed, 0px));
   padding-inline: var(--term-bleed, 0px);
 }

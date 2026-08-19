@@ -119,10 +119,11 @@ struct TerminalScrubberView: View {
       // on you. An extent like the two beside it — collapsed a tick, expanded
       // the band the sub-agent covers.
       case .subagent: twoTone(rect, TerminalPalette.color(.green), in: &context)
-      // Context rather than an event, so the theme's `dim` and nothing louder:
-      // this band says "you opened this", and it sits under a prompt's blue and
-      // a sub-agent's green wherever they overlap.
-      case .expanded: twoTone(rect, TerminalPalette.color(.dim), in: &context)
+      // Yellow, matching the wash the opened rows themselves carry — the rail
+      // and the region are saying the same thing and should say it in the same
+      // colour. It still loses every merge, so an opened `Task` keeps its green
+      // and a prompt inside the region keeps its blue.
+      case .expanded: twoTone(rect, TerminalPalette.color(.yellow), in: &context)
       case .turn: twoTone(rect, TerminalPalette.color(.fg), in: &context)
       case .turnFailed: twoTone(rect, TerminalPalette.color(.red), in: &context)
       // The alarms stay solid: they are alarms, not extents.

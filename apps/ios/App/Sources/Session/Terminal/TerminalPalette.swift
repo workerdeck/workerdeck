@@ -66,7 +66,21 @@ enum TerminalPalette {
   /// read as one block rather than as the transcript having grown. The web
   /// client's `--term-row-hover`, which is where a pointer-driven surface also
   /// spends it — there is no hover here, so it is free.
-  static var uiOpenWash: UIColor { dynamicAlpha(dark: 0.05, light: 0.04) }
+  ///
+  /// **Yellow**, not neutral, and it is the theme's one deliberate reuse of that
+  /// tone for something other than "waiting on you". The argument is that an
+  /// open block *is* a state the reader put the transcript into, and it wants
+  /// the same colour as the mark that says so on the rail — one thing, two
+  /// surfaces, one spelling. Kept very low so it reads as a tint on the ground
+  /// rather than as a highlight: this washes whole regions, and at band strength
+  /// an opened run would shout louder than anything inside it.
+  static var uiOpenWash: UIColor {
+    UIColor { traits in
+      traits.userInterfaceStyle == .dark
+        ? rgb(0xd7_ba_7d).withAlphaComponent(0.10)
+        : rgb(0xd7_ba_7d).withAlphaComponent(0.25)
+    }
+  }
 
   /// Behind a line a press would act on. Deliberately below the open wash
   /// (0.05/0.04) and the bands (0.04/0.05): this is a hint about what a finger

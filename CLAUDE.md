@@ -509,8 +509,14 @@ protocol. Read these before changing scope or structure:
   still draws its children as a folded run. This is the one rail rule that **reads `expansion`
   rather than measuring the book**: a mark's extent and fraction follow from a height, but its
   *existence* does not. Beside it, `expanded` is a fifth mark and the quietest thing on the rail —
-  a `dim` band in the **left** lane over any block you opened, because opening is something *you*
-  did, and it loses every merge so an opened `Task` keeps its green. Nothing is concealed either
+  a **yellow** band in the **left** lane over any block you opened, because opening is something
+  *you* did, and it loses every merge so an opened `Task` keeps its green. Yellow because the
+  opened rows themselves now carry a yellow wash (`--term-open-wash`, `uiOpenWash`), which is the
+  theme's **one deliberate reuse of that tone for something other than "waiting on you"**: an open
+  block is a state the reader put the transcript into, and the rail and the region should say that
+  in one colour. Kept very low (0.10 dark / 0.25 light) because it washes whole regions — at band
+  strength an opened run shouts louder than anything inside it. The wash crosses to `packages/ui`;
+  the rail mark cannot, for the `height.ts` reason below. Nothing is concealed either
   way — each failure is still red on its own row, and the recap still counts every one.
   **`packages/ui` has the collapsed half only, and cannot have the rest**: its expansion is
   component-local `useState` per row, which is exactly what lets `height.ts` need *no expanded
