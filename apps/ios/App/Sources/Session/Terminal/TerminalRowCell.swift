@@ -36,6 +36,8 @@ final class TerminalRowCell: UICollectionViewCell {
   private let gutter = GutterView()
   private let body = BodyTextView()
   private var press: ((TermPress) -> Void)?
+  /// How much text was selected when the finger went down — see `handleTap`.
+  private var selectionAtTouchDown = 0
   private var lines: [TermLine] = []
   private var geometry = TerminalRowGeometry(
     metrics: TerminalMetrics(cell: 8, line: 18, width: 0, fontSize: 13), bleed: 0)
@@ -67,6 +69,13 @@ final class TerminalRowCell: UICollectionViewCell {
     // The text view's own recognizers own the long press (that is the
     // selection); a plain tap falls through to this one.
     tap.cancelsTouchesInView = false
+    // …but only if it is allowed to run *beside* them. A selectable
+    // `UITextView` installs its own single-tap recognizer, and UIKit resolves a
+    // conflict in the inner view's favour, so the first tap on a row was spent
+    // making the text view first responder and every block needed pressing
+    // twice to open. Simultaneous recognition is the fix; the selection guard
+    // below is what keeps it honest.
+    tap.delegate = self
     contentView.addGestureRecognizer(tap)
   }
 
@@ -147,13 +156,43 @@ final class TerminalRowCell: UICollectionViewCell {
   @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
     // A selection standing in this row means the tap is a dismissal of it, not
     // a press: collapsing the block out from under a selection would take the
-    // selection with it.
-    guard body.selectedRange.length == 0 else { return }
+    // selection with it. Read at **touch down** as well as now, because running
+    // beside the text view's own recognizer means the selection it is clearing
+    // may already be gone by the time this fires.
+    guard selectionAtTouchDown == 0, body.selectedRange.length == 0 else { return }
+    guard !lines.isEmpty else { return }
     let point = recognizer.location(in: contentView)
-    let index = Int(((point.y - topInset) / geometry.metrics.line).rounded(.down))
-    guard index >= 0, index < lines.count, let press = lines[index].press else { return }
+    // Clamped rather than bounds-checked, which is the row's whole hit-target
+    // story: a one-line block is `metrics.line` tall — around 19pt, well under
+    // anyone's thumb — and the blank line `gapAbove` puts above it is dead
+    // space belonging to no one. Clamping hands that space to the row it
+    // separates from the block above, roughly doubling the target for exactly
+    // the rows that are hardest to hit, and costs nothing anywhere else: an
+    // overshoot at the bottom edge lands on the last line, which is where it
+    // visually was.
+    let raw = Int(((point.y - topInset) / geometry.metrics.line).rounded(.down))
+    let index = min(max(raw, 0), lines.count - 1)
+    guard let press = lines[index].press else { return }
     self.press?(press)
   }
+}
+
+extension TerminalRowCell: UIGestureRecognizerDelegate {
+  /// Snapshot the selection before the text view can act on this touch.
+  func gestureRecognizer(
+    _ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch
+  ) -> Bool {
+    selectionAtTouchDown = body.selectedRange.length
+    return true
+  }
+
+  /// Beside the text view's recognizers, never instead of them: selection
+  /// within a row still works, and a plain tap now reaches the row on the first
+  /// press rather than the second.
+  func gestureRecognizer(
+    _ recognizer: UIGestureRecognizer,
+    shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+  ) -> Bool { true }
 }
 
 // MARK: - Geometry
@@ -323,6 +362,18 @@ extension TerminalRowCell {
         }
         if line.inOpen {
           context.setFillColor(TerminalPalette.uiOpenWash.cgColor)
+          context.fill(box)
+        }
+        // What a press would do something to. Only the lines that carry one
+        // *and* wear nothing else: a tool call's preview rows are pressable
+        // too, but they already sit in the output band, and a second wash on
+        // top would say "these are two targets" when the block is one. So it
+        // marks the summary lines — the folded run, the task, the tool header —
+        // which are precisely the one-line rows that are hardest to find and to
+        // hit. There is no hover on a phone, so this is the only affordance
+        // there can be.
+        if line.band == .none && !line.inOpen && line.press != nil {
+          context.setFillColor(TerminalPalette.uiPressable.cgColor)
           context.fill(box)
         }
         if line.nested {

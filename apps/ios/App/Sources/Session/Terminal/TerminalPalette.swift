@@ -68,6 +68,13 @@ enum TerminalPalette {
   /// spends it — there is no hover here, so it is free.
   static var uiOpenWash: UIColor { dynamicAlpha(dark: 0.05, light: 0.04) }
 
+  /// Behind a line a press would act on. Deliberately below the open wash
+  /// (0.05/0.04) and the bands (0.04/0.05): this is a hint about what a finger
+  /// can do, not a state the row is in, and a transcript is mostly pressable —
+  /// at band strength every second row would be washed and the ones that carry
+  /// real meaning would stop standing out.
+  static var uiPressable: UIColor { dynamicAlpha(dark: 0.028, light: 0.024) }
+
   /// The rule drawn *inside* a nested row's padding, so the indent stays exactly
   /// two cells — a border would be layout, and would take every subagent row
   /// half a character off the column its parent sits on.
