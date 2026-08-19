@@ -22,6 +22,7 @@ const GROUP_LABELS: Record<GroupBy, string> = {
   gateway: 'Gateway',
   adapter: 'Adapter',
   state: 'State',
+  project: 'Project',
 }
 
 const SORT_LABELS: Record<SortBy, string> = {
@@ -30,6 +31,7 @@ const SORT_LABELS: Record<SortBy, string> = {
   gateway: 'Gateway',
   adapter: 'Adapter',
   state: 'State',
+  project: 'Project',
 }
 
 /**

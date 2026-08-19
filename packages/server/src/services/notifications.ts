@@ -1,4 +1,4 @@
-import type { SessionNotification, SessionWebhookConfig } from '@workerdeck/protocol'
+import type { SessionInfo, SessionNotification, SessionWebhookConfig } from '@workerdeck/protocol'
 import type { Runner } from '@workerdeck/core'
 
 export type SessionNotificationOptions = {
@@ -12,6 +12,11 @@ export type SessionNotificationOptions = {
   attempts?: number
   /** Initial backoff between attempts. Default 500ms. */
   retryDelayMs?: number
+  /** Gateway wiring, not a host option: the serve-time `SessionInfo` decoration
+   * (project identity today), so a webhook or push consumer reads the same
+   * record every REST caller does. The assembly supplies it; identity when
+   * absent. */
+  decorateInfo?: (info: SessionInfo) => SessionInfo
 }
 
 /**
@@ -119,7 +124,7 @@ export class SessionNotifier {
     const notification: SessionNotification = {
       ...body,
       sessionId: runner.id,
-      session: runner.info(),
+      session: (this.#options.decorateInfo ?? ((info) => info))(runner.info()),
       seq,
       ts,
     }

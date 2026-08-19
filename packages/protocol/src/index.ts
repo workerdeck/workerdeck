@@ -1470,6 +1470,115 @@ export type SubagentInfo = {
  */
 export const SUBAGENT_HISTORY = 8
 
+/**
+ * A project's icon, as declared by its `.workerdeck.json` — either a named
+ * glyph or a reference to an image the gateway serves.
+ *
+ * A discriminated union rather than one stringly field, because the two arms
+ * have opposite render paths: a glyph is looked up in the client's own icon
+ * set with no I/O, an image is a fetch. Collapsing them would put "is this a
+ * name or an address" back on every renderer, which is the inference this
+ * family keeps refusing (`ImageRefPart` is a new part type, never a
+ * hollowed-out `image`, for the same reason).
+ *
+ * `glyph.name` is a lucide icon name, validated by the gateway for *shape*
+ * only (lowercase kebab-case): the gateway has no lucide catalog and must not
+ * grow one — icon sets version independently of this protocol. A client whose
+ * set lacks the name renders its no-project fallback rather than erroring;
+ * an unknown name is a stale row, never withheld state.
+ *
+ * `image` carries an **address, never bytes** — the attachment-bytes rule.
+ * `SessionInfo` rides every row of `GET /sessions`, which clients poll at 1.2s
+ * while anything is working, so an inlined base64 icon would be paid for on
+ * every poll of every session forever (the same argument that keeps
+ * `originalFile` off {@link FilePatch} and message bytes off events). The
+ * bytes come from `GET {basePath}/sessions/:id/project/icon` — session-scoped
+ * on purpose, so the fetch rides the same `canSee` gate as every other
+ * `/sessions/:id/*` route and a scoped principal's miss is the uniform 404. A
+ * project-keyed route would need the project root in the URL, and a route
+ * addressed by host paths is an existence oracle for the gateway's
+ * filesystem. `hash` (sha256 hex of the bytes) is the cross-session cache
+ * key: two sessions in one project serve identical bytes, so a client caches
+ * by hash rather than by URL and fetches once per project, not once per
+ * session. The route answers with `ETag: "<hash>"` and honors
+ * `If-None-Match`.
+ */
+export type ProjectIcon =
+  | { type: 'glyph'; name: string }
+  | { type: 'image'; mediaType: 'image/png' | 'image/svg+xml'; hash: string }
+
+/**
+ * Project identity for a session — what a `.workerdeck.json` in the session's
+ * ancestry declares, resolved by the **gateway** and shipped on
+ * {@link SessionInfo.project}.
+ *
+ * The gateway reads the file, not each client: the iOS app and a browser
+ * pointed at a remote gateway have no access to that filesystem, so a
+ * per-client reader would make the feature exist on exactly one client.
+ * Discovery is an ancestor walk from the session's `cwd` upward — nearest
+ * `.workerdeck.json` wins, so a session started in `packages/ui` still says
+ * "WorkerDeck" — over the *realpath'd* cwd, which is what makes `root`
+ * canonical below.
+ *
+ * The file's schema, stated here because this type is its wire projection
+ * (clients never read the file; the gateway is its only parser):
+ *
+ * ```json
+ * { "name": "WorkerDeck", "icon": "layers" }
+ * { "name": "WorkerDeck", "icon": "./docs/assets/icon.png" }
+ * ```
+ *
+ * Both keys optional, unknown keys ignored (forward compatibility). An empty
+ * `{}` still marks its directory as the project root — grouping is the point,
+ * and the name falls back to the root's basename. `icon` is one string with a
+ * total classification rule: a value ending in `.png`/`.svg`
+ * (case-insensitive) is a repo-relative image path — relative only, since the
+ * file is checked into a repo that clones onto other machines, where an
+ * absolute path is wrong by construction — and anything else must be a
+ * lucide-shaped glyph name (`^[a-z0-9]+(-[a-z0-9]+)*$`) or it is ignored. The
+ * two shapes cannot collide (a glyph name contains no dot), so the rule is a
+ * classification, not a guess. Every degradation degrades *fieldwise and
+ * silently*: a malformed or oversized file is skipped and the walk continues
+ * to an ancestor (a broken nested file must not shadow the repo root's valid
+ * one), a junk name falls back to the basename, a junk or escaping icon is
+ * dropped — a session must never fail, or even warn, because of a display
+ * declaration.
+ *
+ * `root` — the canonical (realpath'd) absolute directory holding the file, on
+ * the **gateway's** filesystem — is the grouping key: two sessions are in the
+ * same project iff same root *on the same gateway* (a remote gateway's
+ * identical-looking path is another machine's directory — the `ScopeRoot`
+ * argument). A *name* is not a key: two repos can both be called "api".
+ * Canonicalizing at discovery is what makes two differently-spelled cwds of
+ * one project agree on it.
+ *
+ * Resolved at **serve time** from a TTL cache, never persisted — the same
+ * placement argument as the profile tracker's 0%-after-reset inference: it is
+ * a function of the gateway's current filesystem, and a copy captured into a
+ * parking record would replay a stale name forever. Editing the file shows up
+ * on every session in the project within the TTL, with no migration and no
+ * event.
+ *
+ * Additive at protocol **7**: an optional field on `SessionInfo`, where
+ * absent means exactly what today's wire means (no project declared — render
+ * the folder basename), an old client ignores it, and a new client against an
+ * old gateway sees absent. The icon route is likewise unreachable by
+ * accident: a client only fetches it when this gateway told it an image
+ * exists.
+ */
+export type ProjectInfo = {
+  /** Display name — the file's `name`, else the root's basename. Never empty. */
+  name: string
+  /** Canonical absolute path of the directory holding `.workerdeck.json`, on
+   * the gateway's filesystem. The grouping key (per gateway); an opaque string
+   * to clients beyond equality and display. */
+  root: string
+  /** Absent = the file declared none (or declared one the gateway refused —
+   * malformed, escaping, oversized — which a client cannot and must not
+   * distinguish). */
+  icon?: ProjectIcon
+}
+
 export type SessionInfo = {
   /** Server-assigned id (stable across SDK session forks/resumes). */
   id: string
@@ -1553,6 +1662,15 @@ export type SessionInfo = {
    * {@link CreateSessionRequest.scope}. Echoed by the runner, re-stamped by the
    * gateway, and never editable. */
   scope?: Record<string, string>
+  /**
+   * Project identity discovered from the session's `cwd` — see
+   * {@link ProjectInfo}. Stamped by the **gateway at serve time** (runners
+   * never set it; a runner-echoed value would be persisted into parking
+   * records and replay a stale name forever). Absent = no `.workerdeck.json`
+   * in the cwd's ancestry, and also = an older gateway: both mean "render the
+   * folder basename", which is exactly today's behaviour.
+   */
+  project?: ProjectInfo
 }
 
 /**

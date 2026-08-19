@@ -1,7 +1,7 @@
 /** The `/sessions` route family, parsed. Pattern:
  * {basePath}/sessions[/:id[/ws | /permissions/:requestId | /files[/<path>] |
  *   /attachments[/:attachmentId] | /mcp[/:serverName] | /produced[/:fileId] |
- *   /events/:seq/result]]
+ *   /events/:seq/result | /project/icon]]
  */
 export type SessionRoute = {
   id?: string
@@ -17,6 +17,8 @@ export type SessionRoute = {
   producedFileId?: string
   /** `/events/:seq/result` — the untruncated tool result in that event. */
   resultSeq?: number
+  /** `/project/icon` — the bytes behind `SessionInfo.project.icon`. */
+  projectIcon?: boolean
 }
 
 export function parseSessionRoute(basePath: string, url: string): SessionRoute | null {
@@ -45,6 +47,9 @@ export function parseSessionRoute(basePath: string, url: string): SessionRoute |
       produced: true,
       producedFileId: parts[2] === undefined ? undefined : decodeURIComponent(parts[2]),
     }
+  }
+  if (parts.length === 3 && parts[1] === 'project' && parts[2] === 'icon') {
+    return { id: decodeURIComponent(parts[0]!), projectIcon: true }
   }
   if (parts.length === 4 && parts[1] === 'events' && parts[3] === 'result') {
     const seq = Number(parts[2])

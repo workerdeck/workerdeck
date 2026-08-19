@@ -7,12 +7,20 @@ import {
   groupRows,
   hasFacetFilter,
   inScope,
+  projectKey,
+  projectLabel,
   scopeActive,
   sessionLabel,
   sessionState,
   subsetSummary,
 } from '@workerdeck/protocol'
-import type { SessionInfo, SessionRow, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
+import type {
+  SessionInfo,
+  SessionRow,
+  SubagentInfo,
+  ViewConfig,
+  WorkspaceScope,
+} from '@workerdeck/protocol'
 
 /**
  * The sessions-list view model. It lives in `protocol` because three clients
@@ -65,6 +73,40 @@ describe('sessionState', () => {
     expect(sessionState(info({ status: 'parked' }))).toBe('idle')
     expect(sessionState(info({ status: 'failed' }))).toBe('ended')
     expect(sessionState(info({ status: 'closed' }))).toBe('ended')
+  })
+
+  const sub = (status: SubagentInfo['status']): SubagentInfo => ({
+    toolUseId: `tu-${status}`,
+    status,
+    startedAt: 1_000,
+    toolCount: 3,
+  })
+
+  it('reads working while a background sub-agent outlives its turn', () => {
+    // A background agent ends its turn on purpose: status comes to rest at
+    // `idle` while the agent keeps working. The row must not read Idle.
+    expect(sessionState(info({ status: 'idle', subagents: [sub('running')] }))).toBe('working')
+  })
+
+  it('reads idle once every sub-agent has settled', () => {
+    expect(
+      sessionState(info({ status: 'idle', subagents: [sub('done'), sub('failed')] })),
+    ).toBe('idle')
+  })
+
+  it('never resurrects a terminal session off a stale running record', () => {
+    // `session_closed` settles every record, so this should be unreachable —
+    // asserted anyway, because a stale record must read ended, never working.
+    expect(sessionState(info({ status: 'closed', subagents: [sub('running')] }))).toBe('ended')
+    expect(sessionState(info({ status: 'failed', subagents: [sub('running')] }))).toBe('ended')
+  })
+
+  it('lets a pending approval outrank a running sub-agent', () => {
+    expect(
+      sessionState(
+        info({ status: 'idle', pendingPermissionCount: 1, subagents: [sub('running')] }),
+      ),
+    ).toBe('attention')
   })
 })
 
@@ -220,5 +262,79 @@ describe('labels', () => {
       'claude',
       'codex',
     ])
+  })
+})
+
+describe('project facet', () => {
+  const project = { name: 'WorkerDeck', root: '/work/deck' }
+  const declaredUi = row({
+    info: info({ id: 'p1', cwd: '/work/deck/packages/ui', project }),
+  })
+  const declaredWeb = row({
+    info: info({ id: 'p2', cwd: '/work/deck/packages/web', project }),
+  })
+  const undeclared = row({ info: info({ id: 'u1', cwd: '/work/alpha' }) })
+  const remoteTwin = row({
+    hostId: 'pi',
+    hostName: 'Pi',
+    local: false,
+    info: info({ id: 'r1', cwd: '/work/deck/packages/ui', project }),
+  })
+  const nowhere = row({ info: info({ id: 'n1', cwd: '' }) })
+
+  it('keys by root per gateway — a name is not a key and a remote twin is not this project', () => {
+    // Two cwds inside one project share the key; the identical root on another
+    // gateway is another machine's directory (the ScopeRoot argument).
+    expect(projectKey(declaredUi)).toBe(projectKey(declaredWeb))
+    expect(projectKey(declaredUi)).not.toBe(projectKey(remoteTwin))
+    // Undeclared sessions key by their cwd, so grouping works before anyone
+    // has written a .workerdeck.json.
+    expect(projectKey(undeclared)).toBe('mac:/work/alpha')
+  })
+
+  it('labels by the declared name, else the cwd basename, else No project', () => {
+    expect(projectLabel(declaredUi)).toBe('WorkerDeck')
+    expect(projectLabel(undeclared)).toBe('alpha')
+    expect(projectLabel(nowhere)).toBe('No project')
+  })
+
+  it('groups declared and undeclared rows side by side, alphabetically by label', () => {
+    const groups = groupRows(
+      [undeclared, declaredUi, declaredWeb],
+      config({ groupBy: 'project', sortBy: 'recent' }),
+    )
+    expect(groups.map((g) => g.label)).toEqual(['alpha', 'WorkerDeck'])
+    expect(groups[1]?.rows.map((r) => r.info.id)).toEqual(['p1', 'p2'])
+  })
+
+  it('filters by project key, and a config predating the field filters nothing', () => {
+    const rows = [declaredUi, undeclared]
+    const filtered = filterRows(
+      rows,
+      config({ scoped: false, projects: [projectKey(declaredUi)] }),
+    )
+    expect(filtered.map((r) => r.info.id)).toEqual(['p1'])
+    // A stored ViewConfig restored from before the field existed: absent and
+    // empty must mean the same thing.
+    const legacy = config({ scoped: false })
+    delete (legacy as { projects?: string[] }).projects
+    expect(filterRows(rows, legacy).length).toBe(2)
+    expect(hasFacetFilter(legacy)).toBe(false)
+  })
+
+  it('matches search against the declared project name', () => {
+    // The person knows the repo as "WorkerDeck", not by the folder's basename.
+    const found = filterRows(
+      [declaredUi, undeclared],
+      config({ scoped: false, search: 'workerdeck' }),
+    )
+    expect(found.map((r) => r.info.id)).toEqual(['p1'])
+  })
+
+  it('counts a project filter into the subset line and clearFilters resets it', () => {
+    const filtered = config({ projects: ['mac:/work/deck'], scoped: false })
+    expect(subsetSummary(filtered, undefined, 1, 2)?.causes).toEqual(['1 filter'])
+    expect(hasFacetFilter(filtered)).toBe(true)
+    expect(clearFilters(filtered).projects).toEqual([])
   })
 })

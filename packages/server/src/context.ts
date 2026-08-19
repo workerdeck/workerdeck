@@ -16,6 +16,7 @@ import type { HostFileRoots } from './services/host-files.ts'
 import type { SessionParkManager } from './services/parking.ts'
 import type { ProducedFileStore } from './services/produced-files.ts'
 import type { ProfileService } from './services/profiles.ts'
+import type { ProjectInfoService } from './services/project-info.ts'
 import type { SessionRegistry } from './services/registry.ts'
 import type { SessionFactory } from './services/session-factory.ts'
 
@@ -35,6 +36,9 @@ export type ServerContext = {
   registry: SessionRegistry
   parking: SessionParkManager
   bridge: BridgeHub
+  /** Serve-time `.workerdeck.json` discovery — every route that writes a
+   * `SessionInfo` to a client stamps `project` through `withProject`. */
+  projects: ProjectInfoService
   queue: JobQueue | undefined
   attachmentStore: AttachmentStore
   producedFiles: ProducedFileStore

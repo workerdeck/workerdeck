@@ -112,8 +112,10 @@ function invalidRequest(requested: string): boolean {
 /** Both sides are realpath output, so this is a pure lexical question — but a
  * bare prefix check gets the boundary wrong (`/x/app` would swallow
  * `/x/application`). `relative` answers it exactly: inside iff the walk from
- * root to candidate is empty or never has to leave through `..`. */
-function contained(rootCanonical: string, candidate: string): boolean {
+ * root to candidate is empty or never has to leave through `..`. Exported for
+ * the project-icon resolver (`project-info.ts`), which makes the same claim
+ * against a project root; both callers must hand it realpath output only. */
+export function contained(rootCanonical: string, candidate: string): boolean {
   const rel = relative(rootCanonical, candidate)
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
 }

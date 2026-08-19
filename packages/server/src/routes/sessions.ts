@@ -16,6 +16,7 @@ import type { ServerContext } from '../context.ts'
 import { handleAttachments } from './attachments.ts'
 import { handleMcp } from './mcp.ts'
 import { handleProducedFiles } from './produced-files.ts'
+import { handleProjectIcon } from './project-icon.ts'
 import { handleToolResult } from './tool-results.ts'
 
 export async function handleSessions(
@@ -25,14 +26,20 @@ export async function handleSessions(
   route: SessionRoute,
   auth: AuthContext,
 ): Promise<void> {
-  const { attachmentStore, auth: authSvc, availability, bridge, factory, parking, producedFiles, registry } = ctx
+  const { attachmentStore, auth: authSvc, availability, bridge, factory, parking, producedFiles, projects, registry } = ctx
 
   if (!route.id) {
     if (req.method === 'GET') {
       // Parked sessions are live sessions that happen to have no runner right
       // now — leaving them out would read as "gone".
       const sessions = [...registry.list(), ...(await parking.listInfo())]
-      json(res, 200, { sessions: sessions.filter((session) => authSvc.canSee(auth, session)) })
+      json(res, 200, {
+        // Project identity is stamped at serve time, after the scope filter:
+        // decorating a row nobody may see would spend walks on hidden sessions.
+        sessions: sessions
+          .filter((session) => authSvc.canSee(auth, session))
+          .map((session) => projects.withProject(session)),
+      })
       return
     }
     if (req.method === 'POST') {
@@ -74,7 +81,7 @@ export async function handleSessions(
       body.profile = resolved.profile?.name
       const runner = await factory.createRunner(factory.buildRunnerConfig(body))
       factory.watchAuthSource(runner)
-      json(res, 201, { session: runner.info() })
+      json(res, 201, { session: projects.withProject(runner.info()) })
       return
     }
     json(res, 405, { error: 'method not allowed' })
@@ -163,6 +170,12 @@ export async function handleSessions(
     await handleProducedFiles(ctx, req, res, route.id, route.producedFileId)
     return
   }
+  if (route.projectIcon) {
+    // The cwd is the gateway's own record of this session, never client input,
+    // and the `canSee` gate above is the route's whole authorization story.
+    handleProjectIcon(projects, req, res, (runner?.info() ?? parked!.info).cwd)
+    return
+  }
   if (route.resultSeq !== undefined) {
     const snapshot = parked && !isDormant(parked) ? parked.snapshot.events : undefined
     handleToolResult(
@@ -198,7 +211,7 @@ export async function handleSessions(
     return
   }
   if (req.method === 'GET') {
-    json(res, 200, { session: runner?.info() ?? parked!.info })
+    json(res, 200, { session: projects.withProject(runner?.info() ?? parked!.info) })
     return
   }
   if (req.method === 'PATCH') {
@@ -221,7 +234,7 @@ export async function handleSessions(
       // survives only until the next restart.
       parking.touch(runner)
     }
-    json(res, 200, { session: runner.info() })
+    json(res, 200, { session: projects.withProject(runner.info()) })
     return
   }
   if (req.method === 'DELETE') {
@@ -235,7 +248,9 @@ export async function handleSessions(
     attachmentStore.drop(route.id)
     producedFiles.drop(route.id)
     json(res, 200, {
-      session: runner?.info() ?? { ...parked!.info, status: 'closed' as const },
+      session: projects.withProject(
+        runner?.info() ?? { ...parked!.info, status: 'closed' as const },
+      ),
     })
     return
   }

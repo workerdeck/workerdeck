@@ -30,21 +30,36 @@ export const STATE_LABELS: Record<SessionState, string> = {
 }
 
 export function sessionState(info: SessionInfo): SessionState {
+  // A pending approval outranks everything, a running background agent
+  // included: it is the one thing the person has to act on.
   if (info.pendingPermissionCount > 0 || info.status === 'awaiting_approval') return 'attention'
-  if (info.status === 'running' || info.status === 'starting') return 'working'
+  // Terminal statuses are checked before the sub-agent arm, defensively: the
+  // `session_closed` sweep settles every sub-agent record (the process hosting
+  // them is gone), so a closed session carrying a `running` record should be
+  // unreachable — but a stale record must read `ended`, never `working`.
   if (info.status === 'failed' || info.status === 'closed') return 'ended'
+  if (info.status === 'running' || info.status === 'starting') return 'working'
+  // A *background* agent outlives its turn by design (`task_started`, the
+  // async spawn): the turn ends, `status` comes to rest at `idle`, and the
+  // agent keeps burning tokens. Without this arm the row read Idle while an
+  // agent was actively working in it — the status alone cannot carry it,
+  // because the status is the turn's.
+  if (runningSubagents(info).length > 0) return 'working'
   return 'idle'
 }
 
 /**
  * The sub-agents a list row draws as live.
  *
- * `sessionState` deliberately does **not** grow a `subagents` bucket. A session
- * with three agents running is already `working`, and a fifth state would split
- * that bucket in two for every client that filters by it — including the ones
- * that have not shipped this yet. Sub-agents are an *annotation* on a working
- * row, the same call the scrubber makes about errors: they say more about a row
- * you can already see, rather than moving it somewhere else.
+ * `sessionState` deliberately does **not** grow a `subagents` bucket — a fifth
+ * state would split `working` in two for every client that filters by it,
+ * including the ones that have not shipped this yet. Instead `working` *counts*
+ * them: a synchronous `Task` keeps the turn in flight so the status already
+ * says `working`, and a **background** agent — which outlives its turn on
+ * purpose — is the carve-out the extra arm in `sessionState` exists for.
+ * That is what makes "sub-agents are an annotation on a working row" true
+ * rather than assumed: the row is in the working bucket whichever kind is
+ * running, and this list only says more about it.
  */
 export function runningSubagents(info: SessionInfo): SubagentInfo[] {
   return (info.subagents ?? []).filter((sub) => sub.status === 'running')
@@ -67,7 +82,7 @@ export function subagentLabel(sub: SubagentInfo): string {
 }
 
 /** The facets a session can be grouped or sorted by. */
-export type Facet = 'gateway' | 'adapter' | 'state'
+export type Facet = 'gateway' | 'adapter' | 'state' | 'project'
 export type GroupBy = 'none' | Facet
 export type SortBy = 'recent' | 'name' | Facet
 
@@ -77,6 +92,16 @@ export type ViewConfig = {
   gateways: string[]
   adapters: string[]
   states: SessionState[]
+  /**
+   * Empty = no filter. Keys are {@link projectKey} output — never names, which
+   * are neither unique (two repos both called "api") nor stable (editing
+   * `.workerdeck.json` renames every session at once and must not empty a
+   * saved filter). Optional, unlike its three siblings, because stored view
+   * configs predate it: a config restored from `localStorage`/`globalState`
+   * without the key must keep filtering, so absent and empty mean the same
+   * thing.
+   */
+  projects?: string[]
   /** Show only sessions inside the host's own folders. Inert where there is no
    * such notion (no folder open, a dashboard with no workspace), which is why it
    * can default on. */
@@ -90,6 +115,7 @@ export const DEFAULT_VIEW_CONFIG: ViewConfig = {
   gateways: [],
   adapters: [],
   states: [],
+  projects: [],
   scoped: true,
   groupBy: 'state',
   sortBy: 'recent',
@@ -135,6 +161,38 @@ export function sessionLabel(info: SessionInfo): string {
 }
 
 /**
+ * The project facet's grouping key: gateway id + the project root, falling
+ * back to the session's cwd when no project is declared.
+ *
+ * The root and not the name, because a name is not a key (two repos can both
+ * be called "api", and a rename must regroup nothing); qualified by gateway,
+ * because a remote gateway's identical-looking path is another machine's
+ * directory — the same rule `ScopeRoot` states. The cwd fallback is what makes
+ * grouping by project useful before anyone has written a `.workerdeck.json`:
+ * undeclared sessions group by their folder, declared ones by their root, and
+ * a session in `packages/ui` joins its repo's group the moment the file
+ * exists. Sessions with no cwd at all (a filesystem-less engine) share one
+ * per-gateway bucket — see {@link projectLabel}.
+ */
+export function projectKey(row: SessionRow): string {
+  return `${row.hostId}:${normalizePath(row.info.project?.root ?? row.info.cwd)}`
+}
+
+/**
+ * What a project group (or a row's project slot) is called: the declared name,
+ * else the cwd's basename — the exact string clients rendered before this
+ * feature existed, so an undeclared project looks like today. 'No project' is
+ * only ever the no-cwd case (a sandboxed provider session), where there is no
+ * folder to name.
+ */
+export function projectLabel(row: SessionRow): string {
+  const name = row.info.project?.name
+  if (name) return name
+  const dir = normalizePath(row.info.cwd)
+  return dir.slice(dir.lastIndexOf('/') + 1) || 'No project'
+}
+
+/**
  * This session is a job run — the queue created it, and `JobInfo.sessionId`
  * points at it.
  *
@@ -153,6 +211,9 @@ function matchesSearch(row: SessionRow, needle: string): boolean {
   return (
     sessionLabel(row.info).toLowerCase().includes(needle) ||
     row.info.cwd.toLowerCase().includes(needle) ||
+    // The declared project name: the whole point of it is that a person knows
+    // the repo as "WorkerDeck", not by whatever the folder happens to be called.
+    (row.info.project?.name.toLowerCase().includes(needle) ?? false) ||
     row.hostName.toLowerCase().includes(needle) ||
     row.adapter.toLowerCase().includes(needle) ||
     row.info.id.startsWith(needle)
@@ -204,13 +265,22 @@ export function filterRows(
       (config.gateways.length === 0 || config.gateways.includes(row.hostId)) &&
       (config.adapters.length === 0 || config.adapters.includes(row.adapter)) &&
       (config.states.length === 0 || config.states.includes(row.state)) &&
+      // `?.` and not a default: see `ViewConfig.projects` — a stored config
+      // predating the field must behave as "no filter".
+      (!config.projects?.length || config.projects.includes(projectKey(row))) &&
       (!scoping || inScope(row, scoping)) &&
       matchesSearch(row, needle),
   )
 }
 
 function facetKey(row: SessionRow, facet: Facet): string {
-  return facet === 'gateway' ? row.hostId : facet === 'adapter' ? row.adapter : row.state
+  return facet === 'gateway'
+    ? row.hostId
+    : facet === 'adapter'
+      ? row.adapter
+      : facet === 'project'
+        ? projectKey(row)
+        : row.state
 }
 
 function facetLabel(row: SessionRow, facet: Facet): string {
@@ -218,7 +288,9 @@ function facetLabel(row: SessionRow, facet: Facet): string {
     ? row.hostName
     : facet === 'adapter'
       ? row.adapter
-      : STATE_LABELS[row.state]
+      : facet === 'project'
+        ? projectLabel(row)
+        : STATE_LABELS[row.state]
 }
 
 /** Comparable rank for a facet: states run worst-first (attention before ended),
@@ -299,7 +371,8 @@ export function subsetSummary(
   const facets =
     (config.gateways.length ? 1 : 0) +
     (config.adapters.length ? 1 : 0) +
-    (config.states.length ? 1 : 0)
+    (config.states.length ? 1 : 0) +
+    (config.projects?.length ? 1 : 0)
   if (facets > 0) causes.push(`${facets} filter${facets === 1 ? '' : 's'}`)
   if (config.search.trim()) causes.push('search')
   return { shown, total, causes }
@@ -318,7 +391,8 @@ export function hasFacetFilter(config: ViewConfig): boolean {
     config.search.trim().length > 0 ||
     config.gateways.length > 0 ||
     config.adapters.length > 0 ||
-    config.states.length > 0
+    config.states.length > 0 ||
+    (config.projects?.length ?? 0) > 0
   )
 }
 

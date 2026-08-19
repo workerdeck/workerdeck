@@ -40,6 +40,7 @@ import { SessionParkManager } from './services/parking.ts'
 import { ProducedFileStore } from './services/produced-files.ts'
 import { ProfileService } from './services/profiles.ts'
 import { ProfileUsageTracker } from './services/profile-usage.ts'
+import { ProjectInfoService } from './services/project-info.ts'
 import { SessionRegistry } from './services/registry.ts'
 import { createSessionFactory } from './services/session-factory.ts'
 import { isDormant, MemorySessionStore } from './services/session-store.ts'
@@ -130,10 +131,17 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   })
 
   // ---- The stateful services.
+  // Project identity (`SessionInfo.project`), resolved from `.workerdeck.json`
+  // at serve time and never persisted — see ProjectInfoService.
+  const projects = new ProjectInfoService()
   // Notifications ride the registry hook rather than the create paths, because the
   // session that most needs to reach a phone may be one that parked and was
   // rebuilt — and that path never goes near `createRunner`.
-  const notifier = new SessionNotifier(options.notifications ?? {})
+  const notifier = new SessionNotifier({
+    ...options.notifications,
+    // A push consumer reads the same decorated record every REST caller does.
+    decorateInfo: (info) => projects.withProject(info),
+  })
   const producedFiles = new ProducedFileStore()
   const registry = new SessionRegistry({
     onRegister: (runner) => {
@@ -291,6 +299,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     registry,
     parking,
     bridge,
+    projects,
     queue,
     attachmentStore,
     producedFiles,

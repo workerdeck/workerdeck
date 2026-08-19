@@ -35,7 +35,9 @@ export function attachClient(
   send({
     type: 'attached',
     protocolVersion: PROTOCOL_VERSION,
-    session: runner.info(),
+    // The attach snapshot is the session-level source (no event carries it),
+    // so project identity is stamped here like everywhere a SessionInfo ships.
+    session: ctx.projects.withProject(runner.info()),
     replayingFrom: afterSeq,
   })
   // `coalesceReplay` is opt-in and this is the one caller: a client's reducer
