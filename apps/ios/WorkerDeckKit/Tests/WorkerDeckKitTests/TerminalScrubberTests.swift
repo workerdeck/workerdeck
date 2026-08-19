@@ -437,6 +437,45 @@ extension TerminalScrubberTests {
     #expect(band.h > scrubberMinMark)
   }
 
+  @Test("a lone top-level call bands when opened — its run key opens nothing")
+  func loneCallBandsWhenOpened() {
+    // The fold makes every top-level call a run block, usually of one, and
+    // `planRun` draws a run of one as the call itself — so the press writes
+    // `call:<id>` and the block's own `run:<id>` is never opened. Asking
+    // `block.key` meant expanding a lone `Bash` banded nothing at all.
+    let items = [user("u1"), call("c0", result: "a long result"), say("a1")]
+    let open = TerminalExpansion(open: [TerminalExpansion.openKey(callId: "c0")])
+    let marks = kinds(buildScrubberClusters(input(items, expansion: open), railH: 100))
+    #expect(marks.contains(.expanded))
+    // ...and nothing is banded while it is shut.
+    #expect(!kinds(buildScrubberClusters(input(items), railH: 100)).contains(.expanded))
+  }
+
+  @Test("a tall band does not swallow the lane and repaint it")
+  func tallBandDoesNotSwallowTheLane() {
+    // Opening a tool *inside* an opened run made the row enormous, and a merged
+    // cluster grows to cover its members and takes the loudest one's colour — so
+    // the band absorbed every prompt in the lane and the whole rail went blue.
+    // A region is not a point: it gets its own cluster and never merges.
+    var items: [TranscriptItem] = [user("u1")]
+    items += (0..<8).map { call("c\($0)", result: String(repeating: "line\n", count: 40)) }
+    items.append(say("a1"))
+    items.append(user("u2"))
+    items.append(say("a2"))
+
+    let open = TerminalExpansion(
+      open: ["run:c0", TerminalExpansion.openKey(callId: "c3")])
+    let clusters = buildScrubberClusters(input(items, expansion: open), railH: 100)
+
+    // Both prompts keep their own clusters and their own colour.
+    let prompts = clusters.filter { $0.kind == .user }
+    #expect(prompts.count == 2)
+    // The band is exactly one cluster, and it carries nothing but itself.
+    let bands = clusters.filter { $0.kind == .expanded }
+    #expect(bands.count == 1)
+    #expect(bands.first?.marks.count == 1)
+  }
+
   @Test("the expanded band never takes a lane mate's colour when they merge")
   func expandedLosesEveryMerge() {
     // It covers the same rows as a sub-agent band by construction, so if it

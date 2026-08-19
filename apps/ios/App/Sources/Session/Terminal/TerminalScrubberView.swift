@@ -108,7 +108,13 @@ struct TerminalScrubberView: View {
   // MARK: - Paint
 
   private func draw(clusters: [ScrubberCluster], in context: inout GraphicsContext) {
-    for cluster in clusters {
+    // Bands first, marks over them. `.expanded` is a *region* and everything
+    // else is a point inside one, so painting in list order would let a band
+    // cover the very marks it contains — the failures and prompts inside the
+    // part you opened are exactly what you still need to see.
+    for cluster in clusters.sorted(by: { left, right in
+      (left.kind == .expanded ? 0 : 1) < (right.kind == .expanded ? 0 : 1)
+    }) {
       let rect = CGRect(
         x: laneX(cluster.lane), y: cluster.y, width: laneW(cluster.lane), height: cluster.h)
       switch cluster.kind {

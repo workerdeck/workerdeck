@@ -342,12 +342,20 @@ public func buildScrubberClusters(_ input: ScrubberInput, railH: CGFloat) -> [Sc
 
   // Every block you opened, banded over the rows it grew to. The extent comes
   // from the book, which is already built with this expansion, so the band is
-  // the opened height with no extra bookkeeping — the same mechanic the
-  // sub-agent band uses. Top-level blocks only: a run opened *inside* an open
-  // task resolves through `rowIndex(forItem:)` onto the task's row, so marking
-  // it too would draw a second band over the one already there.
+  // the opened height with no extra bookkeeping.
+  //
+  // Asked through `expansionKeys`, **never `block.key`**: a block has more than
+  // one key and for two common shapes its own is not the one a press writes. A
+  // run of one is drawn as the call itself (`TerminalPlanner.planRun`
+  // delegates), so it toggles `call:<id>` and its `run:<id>` opens nothing —
+  // which is why expanding a lone top-level `Bash` banded nothing at all. A call
+  // opened *inside* an already-open run toggles its own key too. One row can
+  // hold several of these; it is one band either way, because it is one row.
   for (rowIndex, row) in input.rows.rows.enumerated() {
-    guard case .block(let block) = row, input.expansion.isOpen(block.key) else { continue }
+    guard case .block(let block) = row else { continue }
+    let keys = expansionKeys(of: block)
+    guard keys.contains(where: { input.expansion.isOpen($0) || input.expansion.isFull($0) })
+    else { continue }
     marks.append(ScrubberMark(kind: .expanded, itemIndex: block.index, rowIndex: rowIndex))
   }
 
@@ -471,6 +479,19 @@ public func buildScrubberClusters(_ input: ScrubberInput, railH: CGFloat) -> [Sc
     }
     var current: Int?
     for (member, h) in sorted {
+      // `.expanded` never merges, in either direction, and that is not a
+      // preference — it is a *region* where every other mark is a point.
+      // Merging grows a cluster to cover its members and paints the whole thing
+      // in the loudest member's colour, which is exactly right for ticks a pixel
+      // apart and catastrophic for a band: opening a tool inside an opened run
+      // made the band tall enough to swallow every prompt in the lane, and the
+      // entire rail turned blue because `user` is louder. So it gets a cluster
+      // of its own and is drawn underneath the rest.
+      if member.mark.kind == .expanded {
+        clusters.append(
+          ScrubberCluster(lane: lane, kind: .expanded, y: member.y, h: h, marks: [member]))
+        continue
+      }
       // Merge when the gap is under a point; the merged mark grows and takes the
       // loudest member's colour.
       if let index = current, member.y <= clusters[index].y + clusters[index].h + 1 {
