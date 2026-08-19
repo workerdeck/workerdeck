@@ -487,9 +487,20 @@ protocol. Read these before changing scope or structure:
   **last** call colours it (`runFailed`). A failure the model recovered from two calls later is how
   work goes, and reddening the whole run for it paints a normal working session red, spending the
   colour that should have been left for the one thing still broken; the last call is the run's
-  *outcome*, and an outcome is what a collapsed row can honestly claim. Nothing is concealed — each
-  failure is still red on its own row, and the scrubber still marks every one, because the rail's
-  question ("is there anything in here worth navigating to") is not the row's ("how did this end"). The same fold, one level up: **a `Task` and everything the subagent
+  *outcome*, and an outcome is what a collapsed row can honestly claim. **The rail marks what the
+  transcript reddens**, and that is a rule the scrubber was once exempt from: its question ("is
+  there anything in here worth navigating to") was held to differ from the row's ("how did this
+  end"), so it marked *every* failed call at 55%. Measured against a real session the exemption
+  did not survive — 178 tool calls, 9 failed, **8 of the 9 recovered from inside their own run**,
+  no failed turn and no session error, so the rail showed nine alarms for a transcript that
+  reddens one row, and a red mark beside nothing red sends a reader hunting for damage that is not
+  there. One uniform test replaces it and needs no block lookup, only `rowIndexFor`: a call is its
+  row's **outcome** when it is top level and no later top-level call shares its row — which is
+  `runFailed`'s last member for a folded run, the call itself for a lone one, and, because
+  children are not top level, `taskFailed` for a `Task`, the same rule spelled a third way and
+  agreeing. So a sub-agent's failed child no longer marks either: the band still says it ran and
+  its own red tick still says it came back broken. Nothing is concealed — each failure is still
+  red on its own row, and the recap still counts every one. The same fold, one level up: **a `Task` and everything the subagent
   produced is one row** (`blocks.ts`'s `TaskBlock`, `TaskRow`, wording in `tool-run.ts`), reading
   `Task(Explore · permission mode parsing) · 7 tools`. A subagent is sixty rows of somebody else's
   working and none of it is what you came back to read — the report is the model's next sentence.

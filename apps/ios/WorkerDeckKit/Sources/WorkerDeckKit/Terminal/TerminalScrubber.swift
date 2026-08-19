@@ -248,6 +248,15 @@ public func buildScrubberClusters(_ input: ScrubberInput, railH: CGFloat) -> [Sc
     if let parent = parentToolUseId(of: item) { subagentParents.insert(parent) }
   }
 
+  // The **outcome** call of each row: the last top-level tool call the row
+  // holds. A failed call is marked only if it is one of these — see
+  // `toolFailed` below for why.
+  var rowOutcome: [Int: Int] = [:]
+  for (index, item) in input.items.enumerated() {
+    guard case .toolCall = item, parentToolUseId(of: item) == nil else { continue }
+    rowOutcome[input.rows.rowIndex(forItem: index)] = index
+  }
+
   for (index, item) in input.items.enumerated() {
     // The dispatch itself, at its row — the folded `Task` block, so the band
     // grows to the whole sub-agent area when it is opened and shrinks back to a
@@ -280,11 +289,42 @@ public func buildScrubberClusters(_ input: ScrubberInput, railH: CGFloat) -> [Sc
       marks.append(
         ScrubberMark(kind: .error, itemIndex: index, rowIndex: input.rows.rowIndex(forItem: index)))
 
-    // The same disjunction the row reddens with and the recap counts by. Both
-    // spellings are needed: an out-of-loop execution failure sets only the
-    // status, and an engine can flag `is_error` on a call the reducer has not
-    // settled.
-    case .toolCall(let call) where callFailed(call):
+    // **The rail marks what the transcript reddens** — that is the whole rule,
+    // and it is why this is not simply `callFailed`.
+    //
+    // The row model already decided, twice, that a routine failure the model
+    // recovered from is not a failure: `runFailed` colours a folded run by its
+    // **last** call, and `taskFailed` colours a `Task` by its **own** result and
+    // never a child's. Both were changed from `contains` for the same reason —
+    // a normal working session came back painted red, and the colour that
+    // should have been left for the one broken thing was spent on a grep that
+    // matched nothing. The rail was deliberately exempted, on the argument that
+    // its question ("is there anything in here worth navigating to") differs
+    // from the row's ("how did this end").
+    //
+    // Measured against a real session, the exemption did not survive: 178 tool
+    // calls, 9 failed, **8 of the 9 recovered from inside their own run**, no
+    // failed turn and no session error — so the rail showed nine alarms for a
+    // transcript that reddens one row. A red mark next to nothing red is worse
+    // than no mark, because it sends a reader looking for damage that is not
+    // there.
+    //
+    // One uniform test does all three cases, and needs no block lookup: a call
+    // is its row's **outcome** when it is top level and no later top-level call
+    // shares its row. For a folded run that is exactly `runFailed`'s last
+    // member; for a lone call it is the call; and for a `Task` it is the task
+    // itself, because its children are not top level — which is `taskFailed`,
+    // spelled a third way and agreeing. A failed child inside a sub-agent is
+    // therefore no longer marked, and that is the same call `taskFailed` makes:
+    // an agent that ran a hundred calls, one of them that grep, did not fail.
+    // The sub-agent band still says it ran, and its own red tick still says it
+    // came back broken. Nothing is concealed either way — every failure is
+    // still red on its own row, and the recap still counts every one.
+    //
+    // The disjunction inside `callFailed` is unchanged and both spellings are
+    // still needed: an out-of-loop execution failure sets only the status, and
+    // an engine can flag `is_error` on a call the reducer has not settled.
+    case .toolCall(let call) where callFailed(call) && rowOutcome[input.rows.rowIndex(forItem: index)] == index:
       marks.append(
         ScrubberMark(
           kind: .toolFailed, itemIndex: index, rowIndex: input.rows.rowIndex(forItem: index)))

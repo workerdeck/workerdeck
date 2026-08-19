@@ -318,28 +318,103 @@ extension TerminalScrubberTests {
     ]
   }
 
-  @Test("an expanded task's failed child is a tick inside the row, not a band over it")
+  /// A folded run of four whose **last** call failed — the shape the rail still
+  /// marks, and therefore the shape the fractional anchor has to be tested on.
+  /// It was a task's absorbed child until the outcome rule landed; the geometry
+  /// under test is identical (a member of a row that covers a membership) and
+  /// only the membership that earns a mark has narrowed.
+  private var runEndingInFailure: [TranscriptItem] {
+    [
+      user("u1"),
+      call("c0", result: "ok"),
+      call("c1", result: "ok"),
+      call("c2", result: "ok"),
+      call("c3", "Grep", result: "no matches", error: true),
+      say("a1"),
+    ]
+  }
+
+  // MARK: - The outcome rule
+
+  @Test("a failure the model recovered from inside its run earns no mark")
+  func recoveredFailureIsNotMarked() {
+    // The measured case: a `cd` to the wrong directory, retried and fixed two
+    // calls later. Against one real session this was 8 of 9 failures — the rail
+    // showed nine alarms for a transcript that reddens one row.
+    let items = [
+      user("u1"),
+      call("c0", result: "no such file or directory", error: true),
+      call("c1", result: "ok"),
+      call("c2", result: "ok"),
+      say("a1"),
+    ]
+    #expect(!kinds(buildScrubberClusters(input(items), railH: 100)).contains(.toolFailed))
+  }
+
+  @Test("a run whose last call failed is the one that marks")
+  func runOutcomeIsMarked() {
+    #expect(kinds(buildScrubberClusters(input(runEndingInFailure), railH: 100)).contains(.toolFailed))
+  }
+
+  @Test("a lone failed call still marks — a run of one is its own outcome")
+  func standaloneFailureIsMarked() {
+    let items = [user("u1"), call("c0", result: "boom", error: true), say("a1")]
+    #expect(kinds(buildScrubberClusters(input(items), railH: 100)).contains(.toolFailed))
+  }
+
+  @Test("a sub-agent's failed child does not mark — the rail says what taskFailed says")
+  func absorbedChildIsNotMarked() {
+    // `taskFailed` already refuses to redden a `Task` for a child's failure: an
+    // agent that ran a hundred calls, one of them a grep that matched nothing,
+    // did not fail. A red tick on the rail says exactly what the row is
+    // forbidden from saying, so it goes too. The band stays: a sub-agent still
+    // ran here.
+    let marks = kinds(buildScrubberClusters(input(taskWithOneFailedChild), railH: 100))
+    #expect(!marks.contains(.toolFailed))
+    #expect(marks.contains(.subagent))
+  }
+
+  @Test("a Task whose own result errored still marks, child or no child")
+  func taskOutcomeIsMarked() {
+    let items = [
+      user("u1"),
+      .toolCall(
+        ToolCallItem(
+          id: "T", name: "Task", input: .object(["description": .string("explore")]),
+          parentToolUseId: nil, status: .settled,
+          result: ToolCallResult(text: "crashed", isError: true))),
+      call("c0", parent: "T", result: "ok"),
+      say("a1"),
+    ]
+    let marks = kinds(buildScrubberClusters(input(items), railH: 100))
+    // Both channels, which is the point of having two: green says a sub-agent
+    // ran here, red says it came back broken.
+    #expect(marks.contains(.toolFailed))
+    #expect(marks.contains(.subagent))
+  }
+
+  @Test("an expanded run's failed outcome is a tick inside the row, not a band over it")
   func absorbedChildAnchorsFractionally() {
-    let items = taskWithOneFailedChild
-    let open = TerminalExpansion(open: ["task:T"])
+    let items = runEndingInFailure
+    let open = TerminalExpansion(open: ["run:c0"])
     let expanded = input(items, expansion: open)
     let clusters = buildScrubberClusters(expanded, railH: 100)
     guard let failed = clusters.first(where: { $0.kind == .toolFailed }) else {
       Issue.record("expected a toolFailed cluster")
       return
     }
-    let rowIndex = expanded.rows.rowIndex(forItem: 3)
+    let rowIndex = expanded.rows.rowIndex(forItem: 4)
     let rowH = expanded.book.height(at: rowIndex)
     let scale = railScale(
       railH: 100, totalSize: expanded.totalSize, viewportH: expanded.viewportHeight)
-    // The task absorbed four children and this is the second of them.
-    #expect(expanded.rows.position(forItem: 3) == RowPosition(ordinal: 1, count: 4))
+    // The run folded four calls and this is the last of them.
+    #expect(expanded.rows.position(forItem: 4) == RowPosition(ordinal: 3, count: 4))
     #expect(failed.h == scrubberMinMark)
     #expect(
       failed.y
         == min(
           max(0, 100 - scrubberMinMark),
-          ((expanded.book.offset(at: rowIndex) + rowH / 4) * scale).rounded()))
+          ((expanded.book.offset(at: rowIndex) + rowH * 3 / 4) * scale).rounded()))
     // The bug: without the fraction the mark would be the whole expanded block.
     #expect(failed.h < (rowH * scale).rounded())
   }
@@ -349,7 +424,7 @@ extension TerminalScrubberTests {
     // Padded to a session's worth of rows, which is the regime that matters:
     // the collapsed task row is one line out of thousands, so every fraction of
     // it rounds onto the row's own offset and siblings merge as they always did.
-    let items = taskWithOneFailedChild + (0..<300).map { say("pad\($0)", "line \($0)") }
+    let items = runEndingInFailure + (0..<300).map { say("pad\($0)", "line \($0)") }
     let collapsed = input(items)
     let clusters = buildScrubberClusters(collapsed, railH: 100)
     guard let failed = clusters.first(where: { $0.kind == .toolFailed }) else {
@@ -358,7 +433,7 @@ extension TerminalScrubberTests {
     }
     // One line, so the fraction rounds onto the row's own offset — the mark is
     // the hit target at the top of the task row, exactly as before.
-    let rowIndex = collapsed.rows.rowIndex(forItem: 3)
+    let rowIndex = collapsed.rows.rowIndex(forItem: 4)
     #expect(failed.h == scrubberMinMark)
     #expect(
       failed.y

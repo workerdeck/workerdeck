@@ -245,10 +245,11 @@ describe('buildClusters', () => {
     expect(left[0]!.marks.map((m) => m.mark.kind)).toContain('subagent')
   })
 
-  it('still marks a failed tool call inside a subagent', () => {
-    // The row it anchors is the collapsed task block's (rowIndexFor maps an
-    // absorbed index to that row), but the MARK is built from the item — the
-    // failure stays on the rail even though its row folded away.
+  it('does NOT mark a failed tool call inside a subagent', () => {
+    // The rail marks what the transcript reddens, and `taskFailed` already
+    // refuses to redden a `Task` for a child's failure: an agent that ran a
+    // hundred calls, one of them a grep that matched nothing, did not fail. A
+    // red tick on the rail says exactly what the row is forbidden from saying.
     const failed: TranscriptItem = {
       kind: 'tool_call',
       id: `t${++seq}`,
@@ -257,7 +258,26 @@ describe('buildClusters', () => {
       parentToolUseId: 'task-1',
       status: 'failed',
     }
-    expect(kinds([failed])).toEqual(['r:toolFailed'])
+    expect(kinds([failed])).toEqual([])
+  })
+
+  it('does NOT mark a failure the model recovered from inside its run', () => {
+    // The measured case, and the reason the rail's exemption was withdrawn:
+    // over one real session, 178 tool calls, 9 failed and EIGHT of the nine
+    // were recovered from two calls later. The rail showed nine alarms for a
+    // transcript that reddens one row.
+    //
+    // `kinds` maps every item to one row per item by default, so a run has to
+    // be spelled by pinning them to a shared row — which is what folding does.
+    const a = toolCall('settled', { text: 'no such file', isError: true })
+    const b = toolCall('settled', { text: 'ok', isError: false })
+    expect(kinds([a, b], { rowIndexFor: () => 0 })).toEqual([])
+  })
+
+  it('marks the run outcome when it is the failure', () => {
+    const a = toolCall('settled', { text: 'ok', isError: false })
+    const b = toolCall('settled', { text: 'no matches', isError: true })
+    expect(kinds([a, b], { rowIndexFor: () => 0 })).toEqual(['r:toolFailed'])
   })
 
   it('marks an error notice but not an info one', () => {

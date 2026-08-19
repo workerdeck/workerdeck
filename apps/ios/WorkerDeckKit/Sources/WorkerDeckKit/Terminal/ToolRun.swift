@@ -74,7 +74,11 @@ public func taskBusy(_ task: ToolCallItem, _ children: [TranscriptItem]) -> Bool
 ///
 /// The last call is the run's *outcome*, and an outcome is what a collapsed row
 /// can honestly claim. Nothing is hidden: the failures inside are one tap away,
-/// each red on its own row, and the scrubber marks every one of them.
+/// each red on its own row, and the recap counts every one. The **scrubber
+/// agrees with this rule** rather than overriding it — it marks a failed call
+/// only when the call is its row's outcome, which for a run is exactly this
+/// one. It used to mark every member, and against a real session that meant
+/// nine alarms on the rail for a transcript reddening one row.
 public func runFailed(_ items: [ToolCallItem]) -> Bool {
   guard let last = items.last else { return false }
   return callFailed(last)

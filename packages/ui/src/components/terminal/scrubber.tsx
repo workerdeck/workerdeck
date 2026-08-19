@@ -294,6 +294,15 @@ export function buildClusters(
     const parent = parentOf(item)
     if (parent !== undefined) subagentParents.add(parent)
   }
+  // The **outcome** call of each row: the last top-level tool call the row
+  // holds. A failed call is marked only when it is one of these — see the
+  // `toolFailed` branch below for why, and note this needs no block lookup,
+  // only `rowIndexFor`.
+  const rowOutcome = new Map<number, number>()
+  items.forEach((item, index) => {
+    if (item.kind !== 'tool_call' || parentOf(item) !== undefined) return
+    rowOutcome.set(rowIndexFor(index), index)
+  })
   // One right-lane mark per segment, emitted when the segment closes. A segment
   // is closed by the next prompt, by its own turn end, or by running out of
   // items — that last one is what a replayed history is made of.
@@ -336,13 +345,44 @@ export function buildClusters(
     } else if (item.kind === 'notice' && item.level === 'error') {
       marks.push({ kind: 'error', itemIndex: index, rowIndex: rowIndexFor(index) })
     } else if (
-      // The same predicate the row itself reddens with (`items.tsx`), and the
-      // same one the recap counts errors by — the two spellings are not
-      // redundant: an out-of-loop execution failure sets `status` with no
-      // `is_error` block to read, and an engine can flag `is_error` on a call
-      // this reducer has not settled yet.
+      // **The rail marks what the transcript reddens** — the whole rule, and
+      // why this is not simply the per-call predicate it used to be.
+      //
+      // The row model already decided, twice, that a routine failure the model
+      // recovered from is not a failure: `runFailed` colours a folded run by
+      // its LAST call, and `taskFailed` colours a `Task` by its OWN result and
+      // never a child's. Both were changed from `contains` for the same reason
+      // — a normal working session came back painted red, spending the colour
+      // that should have been left for the one broken thing on a grep that
+      // matched nothing. The rail was deliberately exempted, on the argument
+      // that its question ("is there anything worth navigating to") differs
+      // from the row's ("how did this end").
+      //
+      // Measured against a real session, the exemption did not survive: 178
+      // tool calls, 9 failed, EIGHT OF THE NINE recovered from inside their own
+      // run, no failed turn and no session error — nine alarms on the rail for
+      // a transcript that reddens one row. A red mark beside nothing red is
+      // worse than no mark: it sends a reader hunting for damage that is not
+      // there.
+      //
+      // One uniform test covers all three cases: a call is its row's OUTCOME
+      // when it is top level and no later top-level call shares its row. For a
+      // folded run that is exactly `runFailed`'s last member; for a lone call
+      // it is the call; and for a `Task` it is the task itself, because its
+      // children are not top level — which is `taskFailed`, spelled a third way
+      // and agreeing. A failed child inside a sub-agent is therefore no longer
+      // marked, the same call `taskFailed` makes. The sub-agent band still says
+      // it ran and its own red tick still says it came back broken, every
+      // failure is still red on its own row, and the recap still counts them
+      // all.
+      //
+      // The disjunction is unchanged and both spellings are still needed: an
+      // out-of-loop execution failure sets `status` with no `is_error` block to
+      // read, and an engine can flag `is_error` on a call this reducer has not
+      // settled yet.
       item.kind === 'tool_call' &&
-      (item.status === 'failed' || item.result?.isError === true)
+      (item.status === 'failed' || item.result?.isError === true) &&
+      rowOutcome.get(rowIndexFor(index)) === index
     ) {
       marks.push({ kind: 'toolFailed', itemIndex: index, rowIndex: rowIndexFor(index) })
     } else if (item.kind === 'assistant_text' && item.parentToolUseId == null) {

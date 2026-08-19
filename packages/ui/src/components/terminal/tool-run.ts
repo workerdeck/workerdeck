@@ -149,9 +149,12 @@ export const callFailed = (call: ToolCallItem): boolean =>
  *
  * The last call is the run's *outcome*, and an outcome is what a collapsed row
  * can honestly claim. The failures inside it are not hidden — they are one
- * press away, each red on its own row, and the scrubber still marks every one
- * of them individually (a different question, asked of the rail rather than of
- * the row).
+ * press away, each red on its own row, and the recap counts every one. The
+ * **scrubber agrees with this rule** rather than overriding it: it marks a
+ * failed call only when the call is its row's outcome, which for a run is
+ * exactly this one. It used to mark every member on the argument that the
+ * rail asks a different question; against a real session that was nine alarms
+ * on the rail for a transcript reddening one row.
  */
 export function runFailed(items: readonly ToolCallItem[]): boolean {
   const last = items[items.length - 1]
@@ -183,9 +186,11 @@ export function taskBusy(task: ToolCallItem, children: readonly TranscriptItem[]
  * `Task` row either. Two surfaces, one rule, one spelling.
  *
  * Nothing is concealed by this. A failed child is red on its own row, one press
- * away, and the scrubber marks it on the rail independently — the rail's
- * question is "is there anything in here worth navigating to", which is not the
- * row's question of "how did this end".
+ * away, and the recap counts it. The **scrubber follows this rule too** and no
+ * longer marks such a child: a red tick on the rail says precisely what this
+ * row is forbidden from saying. The sub-agent band still says an agent ran
+ * here, and the task's own red tick still says it came back broken — which is
+ * what the two channels are for.
  */
 export function taskFailed(task: ToolCallItem): boolean {
   return callFailed(task)
