@@ -6,6 +6,7 @@
 #   apps/ios/scripts/deploy.sh              # generate, build, install, launch
 #   apps/ios/scripts/deploy.sh --no-launch  # install only (works on a locked phone)
 #   apps/ios/scripts/deploy.sh --hot        # ...and bundle InjectionNext, for hot reload
+#   apps/ios/scripts/deploy.sh --release    # optimized build — what a shipped app costs
 #   apps/ios/scripts/deploy.sh --device "Tobias's iPhone"
 #
 # Three facts shape this script (learned the hard way, see apps/ios/README.md):
@@ -27,7 +28,12 @@ PROJECT="$IOS_DIR/WorkerDeckApp.xcodeproj"
 SCHEME="WorkerDeckApp"
 BUNDLE_ID="bi.atomic.workerdeck.ios"
 DERIVED="$IOS_DIR/DerivedData"
-APP="$DERIVED/Build/Products/Debug-iphoneos/WorkerDeckApp.app"
+# Debug by default: the loop this script exists for is edit-build-look, and
+# `--hot` needs it. `--release` is for measuring, and the difference is not
+# cosmetic — the transcript fold alone is ~5.6x slower unoptimized (measured
+# 2026-08-19 over a captured replay), so a performance number taken from a Debug
+# build is a number about the build, not about the app.
+configuration="Debug"
 # Team and default device live outside git: a Team ID is not a secret but it is
 # not this repo's business either, and the device is per-machine.
 ENV_FILE="$IOS_DIR/.deploy.env"
@@ -45,13 +51,20 @@ while [[ $# -gt 0 ]]; do
     --no-launch) launch=0; shift ;;
     --no-generate) generate=0; shift ;;
     --hot) hot=1; shift ;;
-    -h|--help) sed -n '3,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --release) configuration="Release"; shift ;;
+    -h|--help) sed -n '3,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
 
 # shellcheck disable=SC1090
 [[ -f "$ENV_FILE" ]] && source "$ENV_FILE"
+APP="$DERIVED/Build/Products/$configuration-iphoneos/WorkerDeckApp.app"
+if [[ "$configuration" == "Release" && $hot -eq 1 ]]; then
+  echo "--hot needs a Debug build (InjectionNext swaps code the optimizer inlined away)" >&2
+  exit 2
+fi
+
 device="${device:-${IOS_DEVICE:-}}"
 team="${team:-${IOS_DEVELOPMENT_TEAM:-}}"
 
@@ -120,7 +133,7 @@ fi
 build_log="$(mktemp -t workerdeck-build)"
 trap 'rm -f "$devices_json" "$build_log"' EXIT
 if ! xcodebuild \
-  -project "$PROJECT" -scheme "$SCHEME" -configuration Debug \
+  -project "$PROJECT" -scheme "$SCHEME" -configuration "$configuration" \
   -destination 'generic/platform=iOS' \
   -derivedDataPath "$DERIVED" \
   -allowProvisioningUpdates \

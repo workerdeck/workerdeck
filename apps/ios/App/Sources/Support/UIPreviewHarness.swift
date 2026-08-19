@@ -60,9 +60,17 @@ private struct TerminalAuditPreview: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(Color.black)
-      TerminalTranscriptView(
-        items: items, revision: 0, scroll: TranscriptScrollModel(),
-        onAudit: { verdict = $0.summary }, expandAll: expandAll)
+      // `onAudit`/`expandAll` are `#if DEBUG` on the view — the audit is a dev
+      // gate, not shipped surface — so the Release build has to construct it
+      // without them. `deploy.sh --release` is what found this: nothing had
+      // ever compiled this file optimized.
+      #if DEBUG
+        TerminalTranscriptView(
+          items: items, revision: 0, scroll: TranscriptScrollModel(),
+          onAudit: { verdict = $0.summary }, expandAll: expandAll)
+      #else
+        TerminalTranscriptView(items: items, revision: 0, scroll: TranscriptScrollModel())
+      #endif
     }
   }
 }
