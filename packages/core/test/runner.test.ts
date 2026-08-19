@@ -950,3 +950,105 @@ describe('SessionRunner', () => {
     })
   })
 })
+
+/**
+ * A session must never claim to be running a turn that has ended.
+ *
+ * Both routes to `idle` — the SDK's authoritative `session_state_changed` and
+ * the `turn_result` fallback — are gated on there being no pending approval,
+ * and the gate **discarded** that signal rather than deferring it. The settle
+ * path then asserted `running` unconditionally, on the assumption that an
+ * answered approval means work resumes. When the turn had already ended that
+ * assumption is false, and nothing ever re-emitted the truth: status is purely
+ * edge-driven — no poll, no reconciliation — so one dropped edge is permanent
+ * for the life of the session.
+ *
+ * Observed in the wild as a session reading "running" for hours on the web
+ * dashboard, the VS Code dock and the phone at once, which is one runner field
+ * faithfully rendered three times rather than three bugs.
+ *
+ * The display rule the original guard was protecting is still right and is
+ * asserted here too: while an approval stands, `awaiting_approval` outranks
+ * whatever the engine says about the turn.
+ */
+describe('status after a turn ends under a standing approval', () => {
+  const askApproval = (
+    harness: ReturnType<typeof makeRunner>['harness'],
+    id: string,
+  ): void =>
+    void harness.captured.options!.canUseTool!(
+      'Bash',
+      { command: 'ls' },
+      { signal: new AbortController().signal, requestId: id, toolUseID: `tool-${id}` },
+    )
+
+  const stateChanged = (state: 'idle' | 'running') =>
+    ({ type: 'system', subtype: 'session_state_changed', state }) as unknown as SDKMessage
+
+  it('settles to idle when turn_result arrived while the approval was pending', async () => {
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    await tick()
+
+    askApproval(harness, 'creq-a')
+    expect(runner.status).toBe('awaiting_approval')
+
+    // The turn ends while the approval still stands — what an interrupt does.
+    harness.emit(resultMessage)
+    await tick()
+    expect(runner.status).toBe('awaiting_approval')
+
+    runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'deny', message: 'no' })
+    await tick()
+    // Was 'running', for a turn that had already produced its result.
+    expect(runner.status).toBe('idle')
+  })
+
+  it('settles to idle when the SDK reported idle while the approval was pending', async () => {
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    await tick()
+
+    askApproval(harness, 'creq-b')
+    harness.emit(stateChanged('idle'))
+    await tick()
+    expect(runner.status).toBe('awaiting_approval')
+
+    runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'allow' })
+    await tick()
+    expect(runner.status).toBe('idle')
+  })
+
+  it('still resumes to running when the turn did not end — the common case', async () => {
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    await tick()
+
+    askApproval(harness, 'creq-c')
+    runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'allow' })
+    await tick()
+    expect(runner.status).toBe('running')
+  })
+
+  it('does not let a stale turn-over settle a NEW turn as idle', async () => {
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    await tick()
+
+    askApproval(harness, 'creq-d')
+    harness.emit(resultMessage)
+    await tick()
+    // Work resumes before the approval is answered, so the recorded turn-over
+    // belongs to a turn that is gone and must not outlive it.
+    harness.emit(stateChanged('running'))
+    await tick()
+
+    runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'allow' })
+    await tick()
+    expect(runner.status).toBe('running')
+  })
+})

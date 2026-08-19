@@ -82,6 +82,31 @@ protocol. Read these before changing scope or structure:
   byte-identical to an untruncated attach and only the uncapped press fetches. Additive at
   protocol **7** rather than a bump, and that is sound only because it is opt-in *and the opt-in
   is issued by the unit that renders*: a client that never asked cannot receive one.
+  `ImageRefPart`/`imagePartRef` are the **seventh** and the first written *after* its measurement
+  rather than before it — which is the point, since the sixth's own 68% projection turned out to be
+  0.3% on the wire. Measured across 214 local sessions, **91% of all tool-result payload is base64
+  no client renders** (489 MB against 44 MB of text), present in 189 of them, and two thirds of it
+  from `Read` looking at a PNG rather than from any browser tool. So a base64 `image` part replays
+  as an *address* — media type, decoded size, and the index it holds in the **stored** block — and
+  its bytes come back from the same `/events/:seq/result` route the sixth rule built, now with
+  `?part=N`. On the wire that is **4,548 KB → 1,275 KB** on a real session, with the control (no
+  pictures in it) byte-identical and the text char-identical in both: the fold does not move, which
+  is the justification measured rather than argued. A **new part type, never a hollowed-out
+  `image`** — a head is a valid shorter text, but an image with no bytes is not a smaller image,
+  and an unfamiliar type falls through every existing fold exactly as the CLI's own
+  `tool_reference` does. It is **narrow on purpose**: `image` with a base64 source, never
+  "non-text", because the only other non-text part in the corpus is `tool_reference` and every
+  instance of it totals 122 KB. `part_index` is a stamped field rather than the position it arrived
+  at, and that is load-bearing: `headOf` drops non-text parts while building a head, so the two
+  rules composed renumber a block — which is also why refs are applied **before** truncation and
+  why `headOf` now keeps an `image_ref`. Its **own** opt-in (`imageRefs`) rather than a widening of
+  `truncateResults`, because this family's additive-at-**7** argument rests on "a client that never
+  asked cannot receive one" holding by construction, and a flag whose meaning grew after shipping
+  is the fact a later reader cannot recover. The one place it departs from the sixth: it applies to
+  **live events as well as replays**, since the render path is ref-then-fetch and bytes arriving
+  live would only be discarded or pinned in `TranscriptState` — which is what `SubscriberSet`
+  (`packages/core/src/lib/subscribers.ts`) exists for, the live half of what `replaySlice` did for
+  the replay.
   `FilePatch`/`PatchHunk` joined
   them for the same reason: a diff's line numbers are the *engine's*, carried on
   `user_message.patch`, because no client has read the file and one that computed them would point
@@ -198,7 +223,14 @@ protocol. Read these before changing scope or structure:
   source; reachable the moment `snapshot()` existed. And `seedVfs`/`id` are the two
   options that make the *other* rehydration rules unmissable — `seedVfs` is ignored on a restore
   (seeding over a parked turn's files destroys exactly what was preserved) and `id` is what a
-  session comes back as itself under. `replaySlice` (`src/lib/replay.ts`) is now **the one replay body all three runners deliver
+  session comes back as itself under. `SubscriberSet` (`src/lib/subscribers.ts`) is the other half and arrived with the seventh
+  rule: three runners had a byte-identical `subscribe` body *and* a byte-identical fan-out loop,
+  and a bare `Set<listener>` has nowhere to keep what each subscriber **asked for** — which stops
+  being tidiness the moment a rule applies to live events too. So a subscriber is a listener plus
+  its options, delivery is one method, and which rules reach the live path is stated in one place:
+  `coalesceReplay` is replay-only by construction (live, there is no "later"), `truncateResults` is
+  replay-only by decision (the head budget already exceeds both clients' display budgets), and
+  `imageRefs` is **both**. `replaySlice` (`src/lib/replay.ts`) is **the one replay body all three runners deliver
   through** — they had a byte-identical copy each, including three copies of the comment carrying
   the "never drop the highest-seq event" invariant — and it owns the fourth filter with them:
   `truncateResults` hands an oversized `tool_result` block over as its head plus the markers that
@@ -1303,6 +1335,21 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   at a PNG, not a browser tool — so it is not a niche. The control session is the argument: same
   order of tool calls, more text, **771 KB of attach against 4,550 KB.** The lesson belongs beside
   the feature: **no other rule in this family has been measured after shipping.**
+
+  That lesson was then acted on rather than filed. Riding on master too: **image parts replay as
+  references** (`ImageRefPart`/`imagePartRef`, `refImageParts`, `?part=N` on the existing route,
+  `result.images`, a fixed 12-line box in both web themes and on the phone) — the family's seventh
+  rule, and **the first measured on the wire before it was called finished**: 4,548 KB → 1,275 KB
+  and 4,299 KB → 1,186 KB on two real sessions, a no-images control byte-identical, and the
+  tool-result text char-identical in every case. Protocol stays **7** (its own opt-in, so a client
+  that never asked cannot receive one). It carried two things worth keeping separately: the
+  `SubscriberSet` refactor, which gave the *live* fan-out the one home `replaySlice` had already
+  given the replay; and a `packages/ui/dev` fixture (`image refs`), because a row type the
+  playground cannot draw is a row type its two audits do not gate. Beside it, a **session-status
+  fix**: a turn ending under a standing approval had its turn-over signal *discarded* rather than
+  deferred, and the settle path asserted `running` — so an interrupted or timed-out turn left the
+  session claiming to run, on every client at once, permanently, because status is edge-driven with
+  no reconciliation. Reproduced by test first, then fixed; see `docs/GOTCHAS.md` §Permissions.
 
   **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`

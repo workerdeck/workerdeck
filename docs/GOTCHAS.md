@@ -113,6 +113,21 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 
 ## Permissions
 
+- **A turn that ends under a standing approval must be *deferred*, not discarded.** Session status
+  is purely edge-driven — no poll, no reconciliation, ~11 `#setStatus` call sites — so a single
+  dropped edge is permanent for the life of the session. `awaiting_approval` rightly outranks
+  `idle` for *display*, but the guard used to `return` on the turn-over signal (both the SDK's
+  `session_state_changed` and the `turn_result` fallback), and `#settleApproval` then asserted
+  `running` on the assumption that an answered approval means work resumes. When the turn was
+  already over — an interrupt, an approval timeout — the session claimed to be running a turn that
+  had produced its result, **for hours, on every client at once**, because it is one runner field
+  faithfully rendered three times. So `#turnOverWhileBlocked` remembers the fact and the settle
+  path applies it; it is cleared the moment work genuinely resumes, because a turn-over belongs to
+  the turn that produced it and must not settle the next one. Tests in `core/test/runner.test.ts`
+  §"status after a turn ends under a standing approval" — including the two that must keep
+  passing, the ordinary resume and the stale-turn-over case. The codex runner does not share this:
+  it applies `idle` ungated at turn end, so it has the inverse (and harmless) display trade.
+
 - Allowing a permission MUST echo the tool input as `updatedInput` (undefined → ZodError → tool
   errors). The fake harness can't catch this class of bug — permission changes need a smoke.
 - Switching a live session into `bypassPermissions` needs `allowDangerouslySkipPermissions` at
@@ -964,7 +979,26 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   the running CLI; nothing is written to a `.mcp.json`. The iOS screen's footer says this, because
   "Disable" on a server list otherwise reads as an edit to config.
 
-## Attach replay (the hold, the cache, the four filters)
+## Attach replay (the hold, the cache, the five filters)
+
+- **Image refs are the fifth filter, and the only one that also applies to the LIVE path.** With
+  `imageRefs`, a `tool_result`'s base64 `image` parts are delivered as `image_ref` addresses
+  (`media_type`, decoded `bytes`, `part_index`) and the bytes come back from the *same* route the
+  fourth filter built, with `?part=N`. Measured, this is the one that was actually worth doing:
+  **91% of all tool-result payload across 214 local sessions is base64 no client rendered**, and a
+  real attach falls 4,548 KB → 1,275 KB while a session with no pictures is byte-identical. Four
+  things not to re-derive. It is a **new part type, never a hollowed-out `image`** — a head is a
+  valid shorter text, an image with no bytes is not a smaller image, and an unfamiliar type falls
+  through every existing fold exactly as the CLI's own `tool_reference` does. It targets **`image`
+  with a base64 source, never "non-text"**: the only other non-text part in the corpus is
+  `tool_reference`, and every instance of it totals 122 KB. `part_index` is **stamped from the
+  stored array, not the delivered position** — `headOf` drops non-text parts while building a head,
+  so the two filters composed renumber a block; that is also why refs are applied *before*
+  truncation and why `headOf` now keeps an `image_ref`. And it is its **own flag**, because this
+  family's additive-at-protocol-7 argument rests on "a client that never asked cannot receive one"
+  holding by construction, which a flag whose meaning grew after shipping would destroy. The live
+  half is `SubscriberSet` (`core/src/lib/subscribers.ts`), which is also where the answer to "which
+  filters reach live events" is now written down once instead of three times.
 
 - **A truncating replay is the fourth filter, and the only one that changes an event's
   *content*.** With `truncateResults`, a `tool_result` block over

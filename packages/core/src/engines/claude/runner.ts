@@ -120,6 +120,25 @@ export class SessionRunner implements Runner {
   #apiKeySource: string | undefined
   #permissionMode: PermissionMode | undefined
   #pending = new Map<string, PendingApproval>()
+  /**
+   * The turn ended while an approval was standing, and nothing has started a
+   * new one since.
+   *
+   * `awaiting_approval` rightly outranks `idle` for display, so a turn-over
+   * signal arriving under a standing approval cannot be applied when it lands.
+   * It used to be **discarded** for that reason, which is a different thing
+   * from outranked: the settle path then asserted `running` on the assumption
+   * that an answered approval means work resumes, and when the turn was already
+   * over — an interrupt, a timeout — the session claimed to be running one that
+   * had produced its result. Status is purely edge-driven here, with no poll and
+   * no reconciliation anywhere, so that single dropped edge never came back and
+   * every client rendered it faithfully for the life of the session.
+   *
+   * So the fact is *deferred* rather than dropped, and it is deliberately
+   * cleared the moment work genuinely resumes — a turn-over belongs to the turn
+   * that produced it and must not settle the next one.
+   */
+  #turnOverWhileBlocked = false
   /** The read-time sub-agent rollup (`SessionInfo.subagents`), fed from #emit —
    * the one chokepoint — so the resume backfill reconstructs it for free. */
   #subagents = new SubagentTracker()
@@ -517,6 +536,7 @@ export class SessionRunner implements Runner {
         claudeCodeVersion: msg.claude_code_version,
         mcpServers: msg.mcp_servers,
       })
+      this.#turnOverWhileBlocked = false
       this.#setStatus('running')
       void this.#fetchCapabilities()
       void this.#fetchContextUsage()
@@ -527,8 +547,14 @@ export class SessionRunner implements Runner {
       return
     }
     if (msg.type === 'system' && msg.subtype === 'session_state_changed') {
-      // Authoritative turn-over signal — but a pending approval outranks it.
-      if (this.#pending.size > 0) return
+      // Authoritative turn-over signal — but a pending approval outranks it for
+      // *display*, which is not a reason to forget what it said. Remember, and
+      // apply it when the approval settles.
+      if (this.#pending.size > 0) {
+        if (msg.state === 'idle') this.#turnOverWhileBlocked = true
+        else if (msg.state === 'running') this.#turnOverWhileBlocked = false
+        return
+      }
       if (msg.state === 'idle') this.#setStatus('idle')
       else if (msg.state === 'running') this.#setStatus('running')
       return
@@ -551,8 +577,10 @@ export class SessionRunner implements Runner {
         // total_cost_usd / num_turns are session-cumulative on each result message.
         this.#totalCostUsd = body.totalCostUsd
         this.#numTurns = body.numTurns
-        // Fallback for SDK versions without session_state_changed.
+        // Fallback for SDK versions without session_state_changed, deferred
+        // under a standing approval for the reason above.
         if (this.#pending.size === 0) this.#setStatus('idle')
+        else this.#turnOverWhileBlocked = true
         // Context usage moves every turn; the poll is a cheap control request.
         void this.#fetchContextUsage()
         void this.#fetchRateLimits()
@@ -810,8 +838,14 @@ export class SessionRunner implements Runner {
       resolvedBy,
       message: decision.behavior === 'deny' ? (decision.message ?? 'Denied') : undefined,
     })
-    if (this.#pending.size === 0 && this.#status === 'awaiting_approval') {
-      this.#setStatus('running')
+    if (this.#pending.size === 0) {
+      // The deferred turn-over wins: this approval was the only thing standing
+      // between the session and the truth. Consumed either way, so a later
+      // approval in a live turn cannot inherit it.
+      const endedWhileBlocked = this.#turnOverWhileBlocked
+      this.#turnOverWhileBlocked = false
+      if (endedWhileBlocked) this.#setStatus('idle')
+      else if (this.#status === 'awaiting_approval') this.#setStatus('running')
     }
   }
 
