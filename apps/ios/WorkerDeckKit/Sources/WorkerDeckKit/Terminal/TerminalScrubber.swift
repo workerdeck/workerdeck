@@ -438,7 +438,19 @@ public func buildScrubberClusters(_ input: ScrubberInput, railH: CGFloat) -> [Sc
     // keeps the two implementations one rule. Applied here rather than per kind
     // because a bookmark on an absorbed child has the identical bug; the recap
     // mark is `itemIndex: -1`, hence the guard.
-    let within = mark.itemIndex >= 0 ? input.rows.position(forItem: mark.itemIndex) : nil
+    //
+    // `.expanded` is exempt, and it is the one kind that must be: every other
+    // mark denotes an *item*, which may share its row with siblings, but this
+    // one denotes the **block** — it is the row. It is addressed by
+    // `block.index`, which for a run of more than one is also its first
+    // member's index and therefore carries a position, so without this it came
+    // out as a 2px tick at ordinal 0: a slim marker where the opened region
+    // starts instead of a band over the region itself. (A `Task`'s own index
+    // carries no position — only its `childIndices` do — which is why the
+    // sub-agent band never had this bug and why it was not obvious.)
+    let within =
+      mark.kind != .expanded && mark.itemIndex >= 0
+      ? input.rows.position(forItem: mark.itemIndex) : nil
     let rowH = input.book.height(at: mark.rowIndex)
     let h = within != nil ? scrubberMinMark : max(scrubberMinMark, (rowH * scale).rounded())
     let offset =

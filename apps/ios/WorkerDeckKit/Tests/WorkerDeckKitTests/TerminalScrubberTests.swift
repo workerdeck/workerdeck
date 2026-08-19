@@ -403,6 +403,40 @@ extension TerminalScrubberTests {
     #expect(band.first?.0 == .left)
   }
 
+  @Test("the expanded band spans the region it opened, not a tick at its start")
+  func expandedSpansTheRegion() {
+    // The bug this pins: a run block is addressed by its first member's index,
+    // and a member of a run longer than one carries a `RowPosition` — so the
+    // band came out as a 2px tick at ordinal 0, a slim marker where the opened
+    // region starts rather than a band over the region. A `Task`'s own index
+    // carries no position, which is why the sub-agent band never showed it.
+    //
+    // Padded away from the prompt on purpose: `user` outranks `expanded`, so a
+    // band a pixel from the prompt merges into a cluster whose *kind* is
+    // `user`, and the assertion would be about the wrong thing.
+    var items: [TranscriptItem] = [user("u1")]
+    items += (0..<60).map { say("pad\($0)", "line \($0)") }
+    let firstCall = items.count
+    items += (0..<8).map { call("c\($0)", result: "ok") }
+    items.append(say("a1"))
+
+    let open = TerminalExpansion(open: ["run:c0"])
+    let state = input(items, expansion: open)
+    let clusters = buildScrubberClusters(state, railH: 100)
+    guard let band = clusters.first(where: { c in c.marks.contains { $0.mark.kind == .expanded } })
+    else {
+      Issue.record("expected a cluster carrying the expanded mark")
+      return
+    }
+    let rowIndex = state.rows.rowIndex(forItem: firstCall)
+    let scale = railScale(
+      railH: 100, totalSize: state.totalSize, viewportH: state.viewportHeight)
+    #expect(band.h == max(scrubberMinMark, (state.book.height(at: rowIndex) * scale).rounded()))
+    // Eight calls drawn open is many lines, so this is a real band and not the
+    // floor a tick would have collapsed to.
+    #expect(band.h > scrubberMinMark)
+  }
+
   @Test("the expanded band never takes a lane mate's colour when they merge")
   func expandedLosesEveryMerge() {
     // It covers the same rows as a sub-agent band by construction, so if it
