@@ -9,6 +9,7 @@ import {
   inScope,
   projectKey,
   projectLabel,
+  projectsOf,
   scopeActive,
   sessionLabel,
   sessionState,
@@ -296,6 +297,20 @@ describe('project facet', () => {
     expect(projectLabel(declaredUi)).toBe('WorkerDeck')
     expect(projectLabel(undeclared)).toBe('alpha')
     expect(projectLabel(nowhere)).toBe('No project')
+  })
+
+  it('offers one filter entry per project, keyed by root and labelled by name', () => {
+    const options = projectsOf([declaredUi, declaredWeb, undeclared, remoteTwin, nowhere])
+    // Two cwds of one project collapse to one entry; the remote twin does not,
+    // because it is another machine's directory wearing the same word.
+    // Alphabetical by label, case-insensitively, so the picker reads as a list
+    // of words rather than of roots.
+    expect(options).toEqual([
+      { key: projectKey(undeclared), label: 'alpha' },
+      { key: projectKey(nowhere), label: 'No project' },
+      { key: projectKey(declaredUi), label: 'WorkerDeck' },
+      { key: projectKey(remoteTwin), label: 'WorkerDeck' },
+    ])
   })
 
   it('groups declared and undeclared rows side by side, alphabetically by label', () => {

@@ -156,6 +156,25 @@ export function adaptersOf(rows: readonly SessionRow[]): string[] {
   return [...new Set(rows.map((r) => r.adapter))].sort()
 }
 
+/**
+ * The projects actually present, as `{ key, label }` for a filter control —
+ * derived like {@link adaptersOf}, and paired because the two halves differ:
+ * the *key* is what {@link ViewConfig.projects} holds (gateway-qualified root,
+ * so a rename regroups nothing) and the *label* is what a person picks by.
+ *
+ * Sorted by label, deduped by key. Two projects with the same name on two
+ * gateways therefore stay two entries wearing one word — which is honest: they
+ * really are two different directories, and the alternative is a filter that
+ * silently selects both.
+ */
+export function projectsOf(rows: readonly SessionRow[]): { key: string; label: string }[] {
+  const byKey = new Map<string, string>()
+  for (const row of rows) byKey.set(projectKey(row), projectLabel(row))
+  return [...byKey]
+    .map(([key, label]) => ({ key, label }))
+    .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()))
+}
+
 export function sessionLabel(info: SessionInfo): string {
   return info.title ?? info.id.slice(0, 8)
 }
@@ -184,8 +203,14 @@ export function projectKey(row: SessionRow): string {
  * feature existed, so an undeclared project looks like today. 'No project' is
  * only ever the no-cwd case (a sandboxed provider session), where there is no
  * folder to name.
+ *
+ * Takes only the `info` it reads, so a surface holding a bare `SessionInfo` —
+ * a row component, an iOS cell — can call it without inventing the rest of a
+ * `SessionRow`. That matters more than it looks: this string is what a client
+ * renders *in place of* the cwd basename it used to draw, and two spellings of
+ * it would put the list and its group headers on different names.
  */
-export function projectLabel(row: SessionRow): string {
+export function projectLabel(row: Pick<SessionRow, 'info'>): string {
   const name = row.info.project?.name
   if (name) return name
   const dir = normalizePath(row.info.cwd)

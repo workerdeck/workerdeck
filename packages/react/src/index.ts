@@ -22,6 +22,8 @@ export type {
 } from './hooks/use-host-files.ts'
 export { ancestorsWithin, flattenHostTree } from './lib/host-tree.ts'
 export type { HostDirState, HostTreeRow } from './lib/host-tree.ts'
+export { useProjectIcons } from './hooks/use-project-icons.ts'
+export type { ClientForHost } from './hooks/use-project-icons.ts'
 export { useProfileUsage } from './hooks/use-profile-usage.ts'
 export type { UseProfileUsageOptions, UseProfileUsageResult } from './hooks/use-profile-usage.ts'
 export { useSessionInfo } from './hooks/use-session-info.ts'

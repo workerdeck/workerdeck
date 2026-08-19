@@ -558,6 +558,48 @@ export class WorkerDeckClient {
     return await res.blob()
   }
 
+  /**
+   * The URL behind a `ProjectIcon.image`. Session-scoped, like
+   * {@link producedFileUrl}: the fetch rides the same `canSee` gate as every
+   * other `/sessions/:id/*` route, and it takes **no path** — the gateway
+   * serves whatever its own discovery resolved for this session's cwd.
+   */
+  projectIconUrl(sessionId: string): string {
+    return `${this.#options.baseUrl}/sessions/${encodeURIComponent(sessionId)}/project/icon`
+  }
+
+  /**
+   * Fetch a project icon's bytes.
+   *
+   * Here rather than left to each client for the reason `readProducedFile`
+   * exists, plus one this route makes sharper: a VS Code webview has **no
+   * external `connect-src` at all**, so it cannot point an `<img src>` at a
+   * gateway even in principle — the bytes have to come back through a bridged
+   * fetch, which is exactly what this wraps. Three clients building the same
+   * URL from `baseUrl` was the other half of the argument.
+   *
+   * Cache the result by `ProjectIcon.image.hash`, never by session: two
+   * sessions in one project serve identical bytes, and the hash is on the wire
+   * precisely so a client fetches once per project.
+   *
+   * A 404 is the uniform "no icon" — no project, a glyph-only project, or an
+   * icon the gateway refused. It is deliberately not distinguishable, so treat
+   * it as "draw no image", never as an error worth reporting.
+   */
+  async projectIcon(sessionId: string): Promise<Blob> {
+    const res = await this.#fetch(this.projectIconUrl(sessionId), {
+      headers: { ...this.#options.headers },
+    })
+    if (!res.ok) {
+      const payload = (await res.json().catch(() => ({}))) as { error?: string }
+      throw new WorkerDeckError(
+        payload.error ?? `project icon request failed with ${res.status}`,
+        res.status,
+      )
+    }
+    return await res.blob()
+  }
+
   /** The session's MCP servers and their tools, live from the engine. 501 when the
    * session's engine has no MCP surface; 409 while the session is parked. */
   async listMcpServers(sessionId: string): Promise<McpServerStatusInfo[]> {

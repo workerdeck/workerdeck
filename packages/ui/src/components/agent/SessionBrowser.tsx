@@ -20,6 +20,8 @@ import {
   filterRows,
   groupRows,
   hasFacetFilter,
+  projectLabel,
+  projectsOf,
   sessionLabel,
   subsetSummary,
 } from '@workerdeck/protocol'
@@ -36,6 +38,7 @@ import { Empty } from '../ui/Empty.tsx'
 import { Input } from '../ui/Input.tsx'
 import { Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from '../ui/Select.tsx'
 import { Spinner } from '../ui/Spinner.tsx'
+import { ProjectIcon } from './ProjectIcon.tsx'
 import { cn } from '../../lib/utils.ts'
 import { formatCost, formatRelativeTime, friendlyModel } from '../../lib/format.ts'
 
@@ -88,6 +91,15 @@ export interface SessionBrowserProps {
    * filtered by a control you can't currently see still says so.
    */
   showControls?: boolean
+  /**
+   * Resolved project-icon bytes by content hash — `useProjectIcons`' output.
+   *
+   * Passed in rather than fetched here for the reason `ProjectIcon` states: the
+   * wire carries an *address*, and who can fetch it differs per client. Absent,
+   * or a hash not in it yet, simply draws no picture; the project's name is
+   * already there.
+   */
+  projectIcons?: Record<string, string>
   className?: string
 }
 
@@ -125,6 +137,7 @@ export function SessionBrowser({
   onRename,
   emptyState,
   showControls = true,
+  projectIcons,
   className,
 }: SessionBrowserProps) {
   const visible = useMemo(() => filterRows(rows, config, scope), [rows, config, scope])
@@ -133,6 +146,7 @@ export function SessionBrowser({
   // Derived, not enumerated: a new engine or a new gateway needs no change here,
   // and a facet with one possible value is not a choice worth showing.
   const adapters = useMemo(() => adaptersOf(rows), [rows])
+  const projects = useMemo(() => projectsOf(rows), [rows])
   const gateways = useMemo(() => {
     const seen = new Map<string, string>()
     for (const row of rows) seen.set(row.hostId, row.hostName)
@@ -187,6 +201,16 @@ export function SessionBrowser({
             />
           </FilterRow>
         ) : null}
+        {projects.length > 1 ? (
+          <FilterRow label='Project'>
+            <FacetSelect
+              label='Project'
+              value={config.projects ?? []}
+              options={projects.map((p) => ({ value: p.key, label: p.label }))}
+              onChange={(next) => set({ projects: next })}
+            />
+          </FilterRow>
+        ) : null}
         <FilterRow label='Group'>
           <OneOfSelect
             label='Group'
@@ -195,6 +219,7 @@ export function SessionBrowser({
               { value: 'none', label: 'No grouping' },
               { value: 'state', label: 'By state' },
               { value: 'adapter', label: 'By engine' },
+              ...(projects.length > 1 ? [{ value: 'project' as const, label: 'By project' }] : []),
               ...(gateways.length > 1 ? [{ value: 'gateway' as const, label: 'By gateway' }] : []),
             ]}
             onChange={(groupBy) => set({ groupBy: groupBy as GroupBy })}
@@ -208,6 +233,7 @@ export function SessionBrowser({
               { value: 'recent', label: 'Recent' },
               { value: 'name', label: 'Name' },
               { value: 'state', label: 'State' },
+              ...(projects.length > 1 ? [{ value: 'project' as const, label: 'Project' }] : []),
               ...(gateways.length > 1 ? [{ value: 'gateway' as const, label: 'Gateway' }] : []),
             ]}
             onChange={(sortBy) => set({ sortBy: sortBy as SortBy })}
@@ -253,7 +279,16 @@ export function SessionBrowser({
           {groups.map((group) => (
             <div key={group.key} className='flex flex-col gap-1'>
               {config.groupBy !== 'none' && group.label ? (
-                <div className='flex items-baseline gap-2 px-3 text-label font-medium text-fg-4'>
+                <div className='flex items-center gap-2 px-3 text-label font-medium text-fg-4'>
+                  {/* Only the project facet has a mark of its own, and a group
+                      IS one project root, so the first row is a fair source. */}
+                  {config.groupBy === 'project' ? (
+                    <ProjectIcon
+                      icon={group.rows[0]?.info.project?.icon}
+                      src={iconSrcOf(group.rows[0], projectIcons)}
+                      name={group.label}
+                    />
+                  ) : null}
                   <span className='uppercase tracking-wide'>{group.label}</span>
                   <span className='text-fg-4/70'>{group.rows.length}</span>
                 </div>
@@ -264,6 +299,8 @@ export function SessionBrowser({
                   row={row}
                   active={row.info.id === activeId}
                   showGateway={gateways.length > 1}
+                  showProject={config.groupBy !== 'project'}
+                  projectIcons={projectIcons}
                   onSelect={onSelect}
                   onDelete={onDelete}
                   onRename={onRename}
@@ -277,10 +314,27 @@ export function SessionBrowser({
   )
 }
 
+/** The bytes for a row's project icon, if it has an image one and the caller has
+ * fetched it yet. Shared by the row and its group header so the two cannot draw
+ * different pictures for one project. */
+function iconSrcOf(
+  row: SessionRow | undefined,
+  icons: Record<string, string> | undefined,
+): string | undefined {
+  const icon = row?.info.project?.icon
+  return icon?.type === 'image' ? icons?.[icon.hash] : undefined
+}
+
 interface SessionRowItemProps {
   row: SessionRow
   active?: boolean
   showGateway?: boolean
+  /** False when the list is already grouped by project — the header has said
+   * the name, so the slot goes back to the cwd's basename, which inside a
+   * project group is the one thing the header cannot say. The rule `showGateway`
+   * follows one facet over. */
+  showProject?: boolean
+  projectIcons?: Record<string, string>
   onSelect?: (row: SessionRow) => void
   onDelete?: (row: SessionRow) => void
   onRename?: (row: SessionRow, title: string) => void
@@ -290,6 +344,8 @@ function SessionRowItem({
   row,
   active,
   showGateway,
+  showProject = true,
+  projectIcons,
   onSelect,
   onDelete,
   onRename,
@@ -300,13 +356,23 @@ function SessionRowItem({
   // What it is and what it has spent, in one line — the same set the extension
   // shows, joined the same way, so the two lists read as one product.
   const folder = info.cwd.split('/').filter(Boolean).pop() ?? info.cwd
+  // protocol's own spelling, so this row, the group header above it and the
+  // project facet cannot disagree about what a project is called. It falls back
+  // to exactly the basename this line drew before the feature existed.
+  const project = showProject ? projectLabel(row) : folder
+  const projectIcon = showProject ? info.project?.icon : undefined
   const details = [
     showGateway ? row.hostName : undefined,
     friendlyModel(info.model),
-    folder,
+    project,
     info.profile ? `@${info.profile}` : undefined,
     formatCost(info.totalCostUsd),
   ].filter(Boolean)
+  // Where the icon goes: immediately before the project's own name, wherever
+  // that landed in the joined line. Split rather than interleaved as nodes,
+  // because everything here is one truncating mono run and a flex of pieces
+  // would each shrink a little and leave several half-words.
+  const cut = details.indexOf(project)
 
   return (
     <div
@@ -371,7 +437,22 @@ function SessionRowItem({
           type='button'
           tabIndex={-1}
           className='min-w-0 flex-1 truncate text-left font-mono outline-none'>
-          {details.join(' · ')}
+          {cut < 0 ? (
+            details.join(' · ')
+          ) : (
+            <>
+              {details.slice(0, cut).map((part) => `${part} · `)}
+              <ProjectIcon
+                icon={projectIcon}
+                src={iconSrcOf(row, projectIcons)}
+                name={project}
+                /* Nudged onto the text baseline: a 12px glyph box against an
+                   11px line sits a hair proud without it. */
+                className='mr-1 align-[-0.2em]'
+              />
+              {details.slice(cut).join(' · ')}
+            </>
+          )}
         </button>
         {onRename && !editing ? (
           <Button

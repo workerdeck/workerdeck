@@ -16,6 +16,7 @@ import { CreateSessionDialog } from '@/views/SessionsView.tsx'
 import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
 import { clientFor, primaryHost } from '@/lib/hosts.ts'
 import { getFiltersShown, setFiltersShown } from '@/lib/sidebar.ts'
+import { useProjectIcons } from '@workerdeck/react'
 import { useSessionRows, useSessions } from '@/hooks/useSessions.ts'
 import { useViewConfig } from '@/hooks/useViewConfig.ts'
 
@@ -35,6 +36,9 @@ export function SessionsSidebar() {
   })
   const { snapshots, refresh } = useSessions()
   const rows = useSessionRows(snapshots)
+  // Project icon bytes, per gateway — `clientFor` is module scope and stable,
+  // so this is not a dependency that re-fires the fetch effect every render.
+  const projectIcons = useProjectIcons(rows, clientFor)
   // Per gateway, so one unreachable gateway names itself instead of the list
   // going quiet or — worse — blaming the ones that are fine.
   const failures = snapshots.filter((s) => s.error !== undefined)
@@ -150,6 +154,7 @@ export function SessionsSidebar() {
             config={config}
             onConfigChange={setConfig}
             showControls={filtersOpen}
+            projectIcons={projectIcons}
             activeId={activeId}
             onSelect={open}
             onRename={rename}

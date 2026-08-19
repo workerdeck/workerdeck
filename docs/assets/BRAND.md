@@ -74,6 +74,7 @@ editor's theme rather than ours.
 | --- | --- |
 | `icon.svg` | Canonical mark. Theme-adaptive (`prefers-color-scheme`), favicon-ready. |
 | `icon-loading.svg` | The animated mark — see "The loading state" below. Same file, pure CSS, no JS. |
+| `icon.png` | The mark rasterised, 192px, for consumers that cannot render SVG. |
 | `app-icon-apple-dark.svg` / `-light.svg` | iOS/macOS tile render (512, ~22.4% corner radius baked in for preview). |
 | `app-icon-apple-master.svg` | Square 1024 master, **no** baked mask — what the shipped iOS icon is built from. |
 | `app-icon-apple-layer.svg` | Same glyph, transparent ground — feeds the iOS 18 Dark/Tinted appearances. |
@@ -119,6 +120,36 @@ a single theme colour, so a `#2fbf71` marker is silently flattened to whatever
 the activity bar's foreground is. It therefore draws the marker in
 `currentColor` and lets the silhouette carry the mark. Don't "fix" it by putting
 the green back — you would only be writing a colour nobody ever sees.
+
+## Regenerating icon.png
+
+`icon.png` exists because **Apple cannot decode an SVG from bytes** — ImageIO
+lists 62 image types and none of them is SVG, and asset catalogs convert at
+*compile* time, which a file downloaded at runtime cannot use. The iOS app is
+the consumer: this repo's own `.workerdeck.json` declares an icon, and the phone
+would otherwise show none.
+
+Two deliberate differences from `icon.svg`:
+
+- **The `prefers-color-scheme` block is dropped**, because a raster cannot
+  adapt. Leaving it in the source would make the file look like it still does.
+- **One stroke tone for both grounds.** `#787878` was chosen by measuring
+  contrast rather than by eye: it lands at 4.02:1 on the dark ground (`#181818`)
+  and 4.16:1 on the light one (`#f8f8f8`), the best available balance and above
+  the 3:1 WCAG threshold for a graphical object either way. The adaptive SVG
+  scores better on each (7.4 and 12.0) — that is simply what a single tone
+  costs, and the mark is decoration beside a name it does not have to carry.
+
+The green accent (`#2fbf71`) is untouched: it has `stroke="none"` and reads on
+both grounds already.
+
+```sh
+sed 's|stroke="#525252"|stroke="#787878"|' icon.svg \
+  | perl -0pe 's|<style>.*?</style>||s' > /tmp/icon-flat.svg
+rsvg-convert -w 192 -h 192 -o icon.png /tmp/icon-flat.svg
+```
+
+Keep the geometry byte-identical to `icon.svg` — the rule below applies here too.
 
 ## Regenerating banner.png
 
