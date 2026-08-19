@@ -233,7 +233,7 @@ boundary: anything a client needs must be expressible as protocol events and com
   feeding the virtualizer's `estimateSize`), the scrubber overview ruler, the sticky prompt and
   the terminal composer. `'cards'` is the chat-convention variant; density and font are
   cards-only seams. Geometry and palette live in `src/styles/terminal.css`, and the theme's
-  invariants are in CLAUDE.md's `packages/ui` section and gotchas §Terminal theme.
+  invariants are in `docs/PACKAGES.md`'s `packages/ui` section and gotchas §Terminal theme.
   `@workerdeck/ui/format` is a React-free entry carrying both the formatters and
   `lib/status.ts`'s presentation rules (status severity, meter thresholds, the binding
   rate-limit window, the lenient model match), so a non-React host spells them identically. Tailwind v4 + Base UI + cva;

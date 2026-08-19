@@ -3,7 +3,7 @@
 What's shipped, what's next, and what's still undecided. Status as of 2026-08-20: **0.16.0** is
 tagged and on npm — the terminal theme adopted everywhere, terminal navigation (scrubber, sticky
 prompt, computed row heights), and per-account plan usage. A substantial body sits on master
-above it, unreleased and deliberately so; the ledger for it is in the root `CLAUDE.md`, and
+above it, unreleased and deliberately so; the ledger for it is in `docs/RELEASING.md`, and
 `_docs/VERIFICATION-DEBT.md` is what gates the next bump. Protocol stays **7** and has since
 0.9.0.
 
@@ -416,7 +416,7 @@ command runs the production build beside dev (`pnpm start:prod`, 8788).
 ### On master, unreleased
 
 Held back from a bump on purpose — see `_docs/VERIFICATION-DEBT.md`, which gates it. The full
-ledger lives in the root `CLAUDE.md`; the headline tracks are live-session persistence
+ledger lives in `docs/RELEASING.md`; the headline tracks are live-session persistence
 (`parking.persistLive`, `Runner.snapshot()`), sub-agents made visible (`forwardSubagentText`,
 `SessionInfo.subagents`, the terminal theme's `Task` fold), the iOS native terminal renderer
 through phase 3, on-demand tool results and image-part references, and:

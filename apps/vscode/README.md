@@ -8,7 +8,7 @@ session surface does (streaming transcript, approvals, composer with attachments
 completion, model/permission switches, capability gating per engine) works here unchanged.
 
 Design + decisions: [`docs/ROADMAP.md`](../../docs/ROADMAP.md) (what shipped, and what is still
-open) and the extension section of the root [`CLAUDE.md`](../../CLAUDE.md) (the navigation rule
+open) and the extension section of [`docs/CLIENTS.md`](../../docs/CLIENTS.md) (the navigation rule
 the sidebar was rebuilt around). Not published to the Marketplace yet — build the `.vsix` and
 side-load it.
 
@@ -209,4 +209,4 @@ deepseek, moonshot/kimi, gpt/o1/o3), and falls back to no mark rather than a wro
 
 Rules that bind this app: it imports `client`/`react`/`ui`/`protocol` only — never
 `core`/`server` — and session-surface features belong in `ui`/`react` so every embedder gets
-them; the extension adds only VS Code glue (per the repo-wide rule in the root CLAUDE.md).
+them; the extension adds only VS Code glue (per the repo-wide rule in `docs/CLIENTS.md`).
