@@ -406,6 +406,12 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
 # Kit tests (no Xcode project needed)
 cd apps/ios/WorkerDeckKit && swift test
 
+# What an attach actually costs, over a REAL replay — both opt-in, both silent
+# without their inputs, so the suite stays green on a machine with neither.
+node _docs/capture-attach.mjs <host> <sessionId> /tmp/attach.jsonl   # from the repo root
+WD_ATTACH_CAPTURE=/tmp/attach.jsonl swift test -c release --filter AttachReplayBench
+WD_ATTACH_HOST=<host> WD_ATTACH_SESSION=<id> swift test -c release --filter AttachPipelineBench
+
 # App
 cd apps/ios && xcodegen generate && open WorkerDeckApp.xcodeproj
 # or headless:
@@ -427,7 +433,14 @@ use.
 ```sh
 apps/ios/scripts/deploy.sh              # generate, build, install, launch
 apps/ios/scripts/deploy.sh --no-launch  # install only — works on a locked phone
+apps/ios/scripts/deploy.sh --release    # optimized build — what a shipped app costs
 ```
+
+`--release` matters for one thing and it is not cosmetic: **any performance number taken off a
+Debug build is a number about the build.** The transcript fold alone is ~5.6× slower unoptimized
+(26 ms → 151 ms over a captured 779-event replay, measured 2026-08-19), and every build this
+script has ever pushed was Debug. `--hot` still needs Debug — InjectionNext swaps code the
+optimizer inlined away — so the two refuse each other.
 
 This is the loop to run while working on the app, so a change can be looked at on the real
 device rather than in a simulator screenshot. It works over Wi-Fi with no cable: CoreDevice

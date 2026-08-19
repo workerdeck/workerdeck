@@ -60,6 +60,9 @@ final class TranscriptViewModel {
   }
   private var replayHold: ReplayHold?
   private var replayBackstop: Task<Void, Never>?
+  /// Stage timings for the attach in flight — see `AttachProfile`. Measurement
+  /// scaffolding for `_docs/improvements/ios-session-load-time.md`.
+  private var profile: AttachProfile?
   /// When a rate-limit window last arrived. Local receipt time, not the event's
   /// `ts`: what the usage sheet's freshness line answers is "how stale is what
   /// I'm looking at", and replayed events would date that to the session's start.
@@ -122,6 +125,7 @@ final class TranscriptViewModel {
     // reason: this is the unit that renders, and it can fetch a picture back
     // (see `loadToolImage`). It is where the bytes actually were — 91% of all
     // tool-result payload, none of it ever drawn.
+    profile = AttachProfile()
     let handle = client.attach(
       sessionId: sessionId, afterSeq: 0, truncateResults: true, imageRefs: true)
     self.handle = handle
@@ -190,6 +194,13 @@ final class TranscriptViewModel {
   /// stated seq, the stall backstop, and a detach — because a buffer left
   /// unpublished is a transcript that silently lost its history.
   private func endReplayHold() {
+    if var profile {
+      profile.landedAt = ProcessInfo.processInfo.systemUptime
+      self.profile = nil
+      let reason = replayHold?.landed == true ? "landed" : "released"
+      AttachProfile.log.notice("\(profile.report(reason: reason), privacy: .public)")
+      print("[attach] " + profile.report(reason: reason))
+    }
     replayBackstop?.cancel()
     replayBackstop = nil
     replayHold = nil
@@ -202,11 +213,14 @@ final class TranscriptViewModel {
   private func apply(_ event: SessionHandle.Event) {
     switch event {
     case .attached(let frame):
+      profile?.attachedAt = ProcessInfo.processInfo.systemUptime
+      profile?.target = frame.session.lastSeq
       session = frame.session
       state = seedFromSessionInfo(state, frame.session)
       loadCatalogModels(for: frame.session.profile)
       armReplayHold(frame)
     case .event(let sessionEvent):
+      let reduceStart = ProcessInfo.processInfo.systemUptime
       if replayHold != nil {
         // Into the buffer, and nothing observable moves. `state` and `revision`
         // are the two things every view watches, so leaving both alone is what
@@ -214,6 +228,11 @@ final class TranscriptViewModel {
         var buffer = replayBuffer ?? state
         buffer = applyEvent(buffer, sessionEvent)
         replayBuffer = buffer
+        // Charged before the hold is advanced: `advanceReplayHold` can end the
+        // hold, which reports, and the fold that completed the replay is part
+        // of what the replay cost.
+        profile?.events += 1
+        profile?.reduceSeconds += ProcessInfo.processInfo.systemUptime - reduceStart
         advanceReplayHold(lastSeq: buffer.lastSeq)
       } else {
         state = applyEvent(state, sessionEvent)
@@ -225,6 +244,9 @@ final class TranscriptViewModel {
         defaultPermissionMode = info.permissionMode
       }
     case .connectionChange(let connected):
+      if connected, profile?.openedAt == nil {
+        profile?.openedAt = ProcessInfo.processInfo.systemUptime
+      }
       connection = connected ? .live : .reconnecting
     case .reconnectAttempt(let attempts):
       // The handle retries forever, so "offline" is a judgement about how long
