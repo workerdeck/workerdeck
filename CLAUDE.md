@@ -1307,9 +1307,24 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   extends while `lastSeq` advances rather than a flat 1.5s that fired on exactly the sessions the
   hold exists for, the *whole reduced state* held rather than the transcript view (approvals and
   meters used to flicker through the session's history on every open), and a `seq / target`
-  counter in place of a blank screen. The **cold plan** is parallel now
-  (`TerminalHeightBook.lineCounts`, 690ms → 154ms at 16k rows), which was the other half of that
-  wait. Brief for what is left in `_docs/features/ios-terminal-selection.md`. They also touch **no published package**: the phone
+  counter in place of a blank screen — which then turned out to be **most of what a session open
+  cost**. Opening a session took 2–3s on the phone against under 50ms in VS Code, and the
+  measurement (`AttachProfile`, plus two opt-in kit benchmarks that ruled out the fold at 6ms and
+  the `@MainActor` receive loop at 0.05ms/event) put it somewhere nobody would look:
+  `TranscriptViewModel` is `@Observable`, `replayHold` was a stored property on it written back on
+  **every applied event**, and the `seq / target` counter was computed from it — so 818 replayed
+  events meant 818 layout passes of a spinner and a formatted number. **1,692ms → 126ms** once the
+  hold's own state became `@ObservationIgnored` (still exact — it ends on the stated seq, and
+  nothing in `ReplayHold.swift` changed) and the screen was told ten times a second instead. The
+  rule generalizes and is the one worth carrying: **a per-event write to observed state, on a path
+  that replays hundreds of events, costs a render per event** — which is also why the hold now
+  *lands* rather than expiring on its 1.5s stall backstop, having previously been held open by its
+  own rendering. The web client is clear of the same pathology by construction (its placeholder is
+  prop-stable and count-free, and the catch-up count is gated on `!replaying`), though it does
+  dispatch per replayed event — bounded by virtualization — and `onVitals` fires per event with
+  it, which in the VS Code webview is a `postMessage` per replayed event. The **cold plan** is
+  parallel now (`TerminalHeightBook.lineCounts`, 690ms → 154ms at 16k rows), which was the other
+  half of that wait. Brief for what is left in `_docs/features/ios-terminal-selection.md`. They also touch **no published package**: the phone
   app is side-loaded from this repo and has no `package.json`, so `version:set` does not reach it
   and a bump neither helps nor hinders it.
 
