@@ -38,10 +38,52 @@ public enum SessionState: String, Codable, Sendable, Hashable, CaseIterable {
 }
 
 public func sessionState(_ info: SessionInfo) -> SessionState {
+  // A pending approval outranks everything, a running background agent
+  // included: it is the one thing the person has to act on.
   if info.pendingPermissionCount > 0 || info.status == .awaitingApproval { return .attention }
-  if info.status == .running || info.status == .starting { return .working }
+  // Terminal statuses before the sub-agent arm, defensively: the gateway's
+  // `session_closed` sweep settles every sub-agent record (the process hosting
+  // them is gone), so a closed session carrying a `running` record should be
+  // unreachable — but a stale one must read `ended`, never `working`.
   if info.status == .failed || info.status == .closed { return .ended }
+  if info.status == .running || info.status == .starting { return .working }
+  // A *background* agent outlives its turn by design: the turn ends, `status`
+  // comes to rest at idle, and the agent keeps working. Without this arm the
+  // row read Idle while an agent burned tokens — the status alone cannot carry
+  // it, because the status is the *turn's*.
+  if !runningSubagents(info).isEmpty { return .working }
   return .idle
+}
+
+/// The sub-agents a list row draws as live.
+///
+/// `sessionState` deliberately does **not** grow a `subagents` bucket — a fifth
+/// state would split `working` in two for every client that filters by it,
+/// including the ones that have not shipped this yet. Instead `working`
+/// *counts* them: a synchronous `Task` keeps the turn in flight so the status
+/// already says `working`, and a **background** agent is the carve-out the
+/// extra arm exists for. That is what makes "sub-agents are an annotation on a
+/// working row" true rather than assumed.
+public func runningSubagents(_ info: SessionInfo) -> [SubagentInfo] {
+  (info.subagents ?? []).filter { $0.status == .running }
+}
+
+/// A sub-agent's identity on one line: `Explore · find the auth check`.
+///
+/// The mirror of protocol's `subagentLabel`, and the reason it is shared: the
+/// dashboard, the extension and this app render the same records, and two
+/// spellings would be two answers to "which agent is this". Falls back to the
+/// bare type, then to a generic word — a row with no label reads as a bug, and
+/// an engine may send neither field.
+public func subagentLabel(_ sub: SubagentInfo) -> String {
+  let agent = sub.agentType?.trimmingCharacters(in: .whitespacesAndNewlines)
+  let description = sub.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+  if let agent, !agent.isEmpty, let description, !description.isEmpty {
+    return "\(agent) · \(description)"
+  }
+  if let agent, !agent.isEmpty { return agent }
+  if let description, !description.isEmpty { return description }
+  return "Sub-agent"
 }
 
 // MARK: - View config

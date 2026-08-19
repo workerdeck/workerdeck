@@ -344,6 +344,52 @@ public struct ProfileConfigSnapshot: Decodable, Sendable, Equatable {
 
 // MARK: - Sessions
 
+/// One sub-agent a session has spawned, as the *gateway* reconstructs it — the
+/// stream carries no lifecycle events, only nested messages tagged with a
+/// `parentToolUseId`, so this is a rollup the runner keeps and a client reads.
+///
+/// `status` is the sub-agent's **own** outcome, deliberately narrower than the
+/// terminal theme's `taskFailed`, which reddens a `Task` row when any child
+/// call failed. That is right for a transcript row you can expand — the failure
+/// is one press away. It is wrong beside a session's name in a list, where a
+/// grep that matched nothing inside an otherwise successful agent would read as
+/// a failed run with nothing to open.
+public struct SubagentInfo: Decodable, Sendable, Equatable, Identifiable {
+  /// The `tool_use` id of the `Task` call that spawned it — the same id its
+  /// nested events carry as `parentToolUseId`, and so the handle for jumping to
+  /// that Task's row.
+  public let toolUseId: String
+  public var id: String { toolUseId }
+  /// The Task input's `subagent_type` ("Explore"), when it named one.
+  public let agentType: String?
+  /// The Task input's short description. With `agentType` this is what tells two
+  /// parallel sub-agents apart; a row reading only `Task` answers nothing.
+  public let description: String?
+  public let status: SubagentStatus
+  /// Epoch ms the `Task` call was emitted.
+  public let startedAt: Double
+  /// Tool calls made so far — the progress reading while it runs.
+  public let toolCount: Int
+
+  public init(
+    toolUseId: String, agentType: String? = nil, description: String? = nil,
+    status: SubagentStatus, startedAt: Double, toolCount: Int
+  ) {
+    self.toolUseId = toolUseId
+    self.agentType = agentType
+    self.description = description
+    self.status = status
+    self.startedAt = startedAt
+    self.toolCount = toolCount
+  }
+}
+
+public enum SubagentStatus: String, Decodable, Sendable, Equatable {
+  case running
+  case done
+  case failed
+}
+
 public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// Server-assigned id (stable across SDK session forks/resumes).
   public let id: String
@@ -384,6 +430,17 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   public let activityCount: Int?
   /// Epoch ms of the most recent emitted event.
   public let lastActivityAt: Double?
+  /// Sub-agents this session has running, plus a short tail of settled ones.
+  ///
+  /// Absent on an engine with no sidechains and on an older gateway, and
+  /// **absent and empty mean the same thing** — render nothing rather than
+  /// "0 sub-agents". Bounded by the gateway (every running one, plus the newest
+  /// settled ones): it rides every row of a list polled at 1.2s.
+  ///
+  /// Mirrored late. The phone read `sessionState` off `status` alone, which was
+  /// wrong for a *background* agent — see `sessionState` in `SessionList.swift`
+  /// — and it could not be right without this field to count.
+  public let subagents: [SubagentInfo]?
   /// Opaque tags naming what this session belongs to. Assigned at create,
   /// immutable, and enforced by the gateway — a client only ever echoes them.
   public let scope: [String: String]?
@@ -404,7 +461,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     createdAt: Double, lastSeq: Int, pendingPermissionCount: Int,
     meta: [String: JSONValue]? = nil, title: String? = nil, totalCostUsd: Double? = nil,
     numTurns: Int? = nil, activityCount: Int? = nil, lastActivityAt: Double? = nil,
-    scope: [String: String]? = nil
+    subagents: [SubagentInfo]? = nil, scope: [String: String]? = nil
   ) {
     self.id = id
     self.sdkSessionId = sdkSessionId
@@ -426,6 +483,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.numTurns = numTurns
     self.activityCount = activityCount
     self.lastActivityAt = lastActivityAt
+    self.subagents = subagents
     self.scope = scope
   }
 }

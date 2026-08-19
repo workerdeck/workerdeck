@@ -11,12 +11,18 @@ struct SessionListTests {
   private func info(
     id: String = "sess-00000001", status: SessionStatus = .idle, cwd: String = "/work/alpha",
     title: String? = nil, pendingPermissionCount: Int = 0, createdAt: Double = 1_000,
-    lastActivityAt: Double? = 1_000
+    lastActivityAt: Double? = 1_000, subagents: [SubagentInfo]? = nil
   ) -> SessionInfo {
     SessionInfo(
       id: id, status: status, cwd: cwd, createdAt: createdAt, lastSeq: 0,
       pendingPermissionCount: pendingPermissionCount, title: title,
-      lastActivityAt: lastActivityAt)
+      lastActivityAt: lastActivityAt, subagents: subagents)
+  }
+
+  private func agent(_ status: SubagentStatus, id: String = "toolu_1") -> SubagentInfo {
+    SubagentInfo(
+      toolUseId: id, agentType: "Explore", description: "find the auth check", status: status,
+      startedAt: 1_000, toolCount: 3)
   }
 
   private func row(
@@ -44,6 +50,32 @@ struct SessionListTests {
     #expect(sessionState(info(status: .parked)) == .idle)
     #expect(sessionState(info(status: .failed)) == .ended)
     #expect(sessionState(info(status: .closed)) == .ended)
+  }
+
+  @Test func countsARunningSubagentAsWorkingThoughTheTurnHasEnded() {
+    // The bug this arm exists for. A *background* agent outlives its turn by
+    // design: the turn ends, the status comes to rest at idle, and the record
+    // stays `running` because the gateway's turn-end sweep deliberately spares
+    // it. Read off the status alone the row said Idle while an agent worked.
+    #expect(sessionState(info(status: .idle, subagents: [agent(.running)])) == .working)
+  }
+
+  @Test func settledSubagentsLeaveAnIdleSessionIdle() {
+    #expect(sessionState(info(status: .idle, subagents: [agent(.done), agent(.failed, id: "t2")])) == .idle)
+    #expect(sessionState(info(status: .idle, subagents: [])) == .idle)
+  }
+
+  @Test func aTerminalStatusOutranksAStaleRunningRecord() {
+    // Should be unreachable — `session_closed` settles every record, the process
+    // hosting them being gone — but a stale one must never read `working`.
+    #expect(sessionState(info(status: .closed, subagents: [agent(.running)])) == .ended)
+    #expect(sessionState(info(status: .failed, subagents: [agent(.running)])) == .ended)
+  }
+
+  @Test func aPendingApprovalStillOutranksARunningSubagent() {
+    #expect(
+      sessionState(info(status: .idle, pendingPermissionCount: 1, subagents: [agent(.running)]))
+        == .attention)
   }
 
   // MARK: - filterRows
