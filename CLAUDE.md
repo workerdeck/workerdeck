@@ -141,12 +141,24 @@ protocol. Read these before changing scope or structure:
   receipt, or the nested-event fallback); and it is **bounded** — every running record plus the newest
   `SUBAGENT_HISTORY` settled, evicted by settle order and not insertion order, because this rides
   every row of a 1.2s poll and lands in park snapshots (the attachment-bytes rule again). Absent
-  and empty mean the same thing. `sessionState` grows **no** fifth bucket for it: a session with
-  agents running is already `working`, and a new state would split that bucket for every client
-  that has not shipped this — sub-agents are an *annotation* on a working row, the call the
-  scrubber makes about errors. `session-list.ts` is the
+  and empty mean the same thing. `sessionState` grows **no** fifth bucket for it — a new state
+  would split `working` for every client that has not shipped this, and sub-agents are an
+  *annotation* on a working row, the call the scrubber makes about errors — but it does **count**
+  them, and the difference between counting and assuming was a real bug. The rule used to read "a
+  session with agents running is already `working`", which is true of a synchronous `Task` (the
+  turn is in flight, so the *status* carries it) and false of the **background** agent
+  `SubagentTracker` goes out of its way to spare (`if (!final && record.background === 'live')
+  continue`): the turn ends, the status comes to rest at `idle`, and the row read Idle while an
+  agent burned tokens. So `working` is a disjunction — the running statuses **or** any running
+  sub-agent — with the terminal statuses moved *above* it defensively, since a stale `running`
+  record on a closed session must read `ended`; `attention` still outranks everything, a pending
+  approval being the one thing a person has to act on. What makes this worth reading twice is how
+  it survived: **no existing test built a row with `subagents` at all**, on either platform, so
+  the premise had a hole exactly where nothing looked — and on iOS the field had never been
+  mirrored, so the phone could not have been right whatever it computed.
+  `session-list.ts` is the
   **sessions-list view model** (the `attention/working/idle/ended` buckets, the
-  gateway/adapter/state facets, `filterRows`/`groupRows`/`subsetSummary`/`clearFilters`, and
+  gateway/adapter/state/**project** facets, `filterRows`/`groupRows`/`subsetSummary`/`clearFilters`, and
   the scope-containment rule where a gateway-tagged root scopes only that gateway and an
   untagged one only loopback), and `watermarks.ts` is the **unread model** (monotonic marks
   behind a `WatermarkStore` seam, and `unseenCount`'s rows-not-turns arithmetic). They are
@@ -166,6 +178,22 @@ protocol. Read these before changing scope or structure:
   renders windows off a merged transcript and the dashboard's profile page renders them off
   `ProfileInfo.usage` with no session in sight. Tests in `packages/react/test/usage.test.ts`;
   **no Swift mirror yet** — the phone still renders its session's own reading.
+  `ProjectInfo` (`SessionInfo.project`) is **what a folder is called**, and it is on the wire for
+  the same reason `SubagentInfo` is: a client cannot work it out. A `.workerdeck.json` declares a
+  name and an icon; the *gateway* finds it by ancestor walk from the session's realpath'd cwd,
+  nearest wins, because the phone and any browser talking to a remote gateway have no access to
+  that filesystem and a per-client reader would make the feature exist on one client. `root` — the
+  canonical directory holding the file — is the **grouping key**, never `name`: two repos are both
+  called "api", and renaming one must not empty a saved filter (which is also why
+  `ViewConfig.projects` holds `projectKey` output, and why it is the one *optional* facet array —
+  a stored config predating it must keep filtering). The icon is the attachment-bytes rule
+  arriving where it always does: `SessionInfo` rides every row of a 1.2s poll and lands in park
+  snapshots, so a base64 icon there would be thirty copies a second of something that never
+  changes. The wire carries a **content hash** (`{type:'image', mediaType, hash}`) and the bytes
+  come from a route, fetched once and cached by that hash across every session in the project;
+  `{type:'glyph', name}` is the other arm and costs nothing, validated by *shape* only since the
+  gateway has no lucide catalog — a client must fall back on a name it does not know. Protocol
+  stays **7**: an optional field, absent meaning no project, which an older client ignores.
 - `packages/core` — the engines, shipped as **adapters** (`src/engines/`): one `EngineAdapter`
   per engine (capability record pinned by identity to protocol's `ENGINE_CAPABILITIES`, a model
   catalog versioned with the release, a credential-availability probe, a runner factory), looked
@@ -274,6 +302,22 @@ protocol. Read these before changing scope or structure:
   `eventAt` or a *parked* snapshot's own events, and a dormant record, holding no log, 404s like
   `/files` does. `toolUseId` is required and verified against the block, because a woken dormant
   session has fresh seqs and a cached one can name a different call),
+  `/sessions/:id/project/icon` (`project-icon.ts` + `services/project-info.ts` — the bytes behind
+  `ProjectInfo`'s image arm, and the **discovery** that produced it: an ancestor walk from the
+  realpath'd cwd, TTL-cached per cwd so it never runs per row of a 1.2s poll, degrading to the
+  folder basename for a missing, malformed or oversized file and *continuing the walk* past a
+  broken one — a bad `.workerdeck.json` in `packages/ui` must not shadow the repo root's good one.
+  Stamped at **serve time**, never persisted, which is `profile-usage`'s placement argument again:
+  parking and dormant records need no migration and an edited file reaches every session within
+  the TTL. The route takes **no client input at all** beyond the session id — it serves whatever
+  the gateway's own discovery resolved — so `"icon": "../../../../etc/key.png"` and a planted
+  symlink die on the same single check: resolve against the root, `realpath` the result *whole*,
+  then `contained()` from `host-files.ts`, which is reused deliberately where `cwdAllowed` is not
+  (see `docs/GOTCHAS.md` §Host filesystem). Every refusal is the same 404 as "no icon declared",
+  because distinguishing them says *why* a path outside the root was refused; scope rides the
+  existing `/sessions/:id/*` gate rather than a second policy that could drift, and a
+  project-keyed route was rejected outright — its URL would be a host path, i.e. an existence
+  oracle for the gateway's filesystem),
   `/sessions/:id/produced[/:fileId]` (`produced-files.ts` — host files the *engine* wrote, served
   with **no roots and no byte cap** because the allowlist is built solely from `file_produced`
   events; a path the *agent* named is not a produced file and stays behind `/fs/*`)
@@ -1049,6 +1093,29 @@ protocol. Read these before changing scope or structure:
   rows, hidden entirely at zero, and coloured on the **foreground** (`charts.blue`) because VS Code
   ignores every background but the two alarm ones. Either badge keeps the poll watcher alive:
   gating it on `unread` alone left someone who turned unread off watching a frozen count.
+  The list is drawn as **inset rounded cards** (the Figma sidebar design), and it reverses two
+  rules the row's own comments once stated, deliberately. The **state glyph leads the title**: the
+  earlier rule optimised for reading one row, this one for scanning twenty, and the glyph is what
+  tells you which row to read — an idle row's title dims with it, since spending full contrast on
+  twelve of them is what made the one that is working hard to find. And **selection is the card's
+  own fill** rather than a gutter bar, the card being an inset shape with air around it, which
+  leaves the left edge to the glyph. Line two is the engine's mark and model in the **vendor's own
+  colour**, then folder and age muted; that coral survives this webview's `--term-mark` repoint
+  ("a single coral element in an otherwise theme-following surface looks like a stray token")
+  because it is doing a different job — that rule retired coral from the *panel*, where it meant
+  "working" and competed with the editor's accent for a meaning the editor owns, while here it
+  sits against Anthropic's mark and names the vendor. Gated to Claude alone: OpenAI's mark is
+  monochrome by design and a green would read as a status. The two hover actions became one
+  always-visible `⋯` opening a **native QuickPick**, decided host-side off the polled model — a
+  popover anchored in a 280px view would be clipped by the view's own bounds, and a card that went
+  stale between the poll and the press must not offer Stop for a finished session. The disclosure
+  reads `1/6` rather than `1 of 6 agents`, the words having truncated the folder name away to say
+  what three characters say, with the sentence kept for the tooltip and the screen reader.
+  `dev/preview.html` + `pnpm dev:preview` renders the cards in a browser against canned data,
+  because every state worth checking is otherwise rare or expensive to produce on demand; its
+  fidelity risk is named in the file (it hand-supplies the `--vscode-*` variables, so a token it
+  forgets looks fine there and wrong in the editor), and `.vscodeignore` allows `dist/` only, so
+  none of it ships.
   A session row **expands** to its sub-agents (`SessionInfo.subagents`) — disclosure on the
   *second* line, since the first line's left edge belongs to the name you scan by, doubling as the
   count (`2 of 3 agents`, because "how many are still going" is the live question); expansion is
@@ -1174,6 +1241,36 @@ protocol. Read these before changing scope or structure:
   Zero third-party Swift deps — including for hot reload, where InjectionNext is wired in
   through its prebuilt bundle and a dozen lines of `HotReload.swift` rather than a package;
   auth is the header transport (no cookie machinery). Assistant text renders through
+  The **prompts** (permission and `AskUserQuestion`) live in the footer, which is a
+  `safeAreaInset` — sized to its content, with no scrolling of its own — so a prompt taller than
+  the screen pushed its own action row past the bottom edge and could not be answered at all. The
+  `lineLimit`s that used to sit on descriptions and previews were an attempt at the same problem
+  and made it worse in the way that matters: they hid the text you needed *in order to choose*
+  while still not bounding the height. So the shape is a capped, scrolling body with the actions
+  pinned under it (`PromptBodyScroll`), the cap being half the *measured* container rather than a
+  constant — one that fits an SE wastes half a Pro Max and one tuned for a Pro Max is the original
+  bug on an SE. Nothing is truncated any more, which is why `toolInputSubject` joins
+  `toolInputSummary`: the summary's 140-character cap is right for a collapsed transcript row and
+  wrong for an approval, where the string it clips is the command about to run. Under the terminal
+  theme they are **their own views** rather than the Cards views restyled — one question at a time
+  behind a chip strip, ending in a review step, which is bounded by construction where a stacked
+  form is not; the numbering survives as *structure*, the web's `↑/↓ · 1–3 to choose` hint does
+  not, there being no keyboard here. `UIPREVIEW=prompts` is the gate, and the claim it tests is
+  not "does this look right" but **"can it be answered"** — which is what caught the clipped
+  command. `TerminalTypography.session` is the cell all three terminal surfaces measure against,
+  the web's `terminalMetrics` lesson stated once here.
+  Two more mirrors landed with the `sessionState` fix: `SubagentInfo`/`SessionInfo.subagents` had
+  **never been mirrored at all**, so the phone was not computing the bucket wrongly — it had no
+  field to compute it from, which is the more interesting half of why that bug survived the rule
+  being written down. Nothing *renders* sub-agents here yet: the correct bucket, not the
+  extension's expandable rows.
+  A **`Menu` in a toolbar closes when its item is re-identified**, and the sessions list's filter
+  dropdown shut itself on every poll because of it — the menu read `model.adapters`, a property
+  computed from the session rows, so `@Observable` invalidated it whenever a snapshot was
+  replaced, and a `ToolbarItem` with no `id` is re-identified when the builder re-runs. Stable
+  ids, plus a `FilterMenu` that is `Equatable` over plain values and never the model. Worth
+  remembering as a shape, not an incident: any toolbar control whose body touches polled state
+  wants both halves.
   `MarkdownBlocks` (headings, lists, quotes, rules, fences; tables stay literal, and anything
   unmodelled falls through as prose rather than being lost) — the classifier is **line-local by
   design**, because the parser reruns on every streamed delta and a block that changed shape a
@@ -1301,7 +1398,13 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   thousand characters of it) and the shell fold widened to **any run of consecutive tool calls**.
 
   **Unreleased on master, deliberately.** 0.16.0 is the published latest and `package.json` still
-  reads it. Master carries **live-session persistence** (`parking.persistLive`, `Runner.snapshot()`,
+  reads it. Riding there too, from the sidebar/prompts session: **project identity**
+  (`.workerdeck.json` → `SessionInfo.project`, the ancestor walk, the icon route, the `project`
+  facet — gateway and wire only, **no client renders it yet**), the **`sessionState` fix** (a
+  background sub-agent now counts as `working`, on both platforms, plus the Swift `SubagentInfo`
+  mirror that had never existed), the VS Code sidebar's **card redesign**, and the iOS **prompt
+  scroll + terminal prompts + filter-menu** fixes. Protocol stays **7** throughout. Master also
+  carries **live-session persistence** (`parking.persistLive`, `Runner.snapshot()`,
   protocol's `snapshotRetains`, `kind: 'live'` records, `apps/embedded` turned on) plus vitest in
   `packages/ui`, and **sub-agents made visible** (`forwardSubagentText`, the reducer's per-agent
   streaming singleton, the terminal theme's `Task` fold, `SessionInfo.subagents` +
