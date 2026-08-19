@@ -666,7 +666,7 @@ function toolRowHeight(item: ToolCallItem, m: CellMetrics, extraPx: number): Acc
   // the lines and the exact trailing label, so this cannot drift from what
   // `items.tsx` draws — which it previously could, and which its own comment
   // said only the dev audit was catching.
-  const { shown, more } = collapsedResult(text.trimEnd().split('\n'))
+  const { shown, more } = collapsedResult(text.trimEnd().split('\n'), item.result?.totalChars)
   for (const line of shown) {
     // indent=1 with columns=3 resolves the indent against the row's own
     // --term-cell: 3ch of padding + 3ch of gutter.

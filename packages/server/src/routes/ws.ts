@@ -16,6 +16,10 @@ export function attachClient(
   const { bridge, parking } = ctx
   const url = new URL(req.url ?? '/', 'http://internal')
   const afterSeq = Number(url.searchParams.get('afterSeq') ?? '0') || 0
+  // Opt-in, from the query string, because only the attaching *renderer* knows
+  // whether it can fetch the rest (see `Runner.subscribe`). A gateway that
+  // truncated for everyone would hand an older client a head with no marker.
+  const truncateResults = url.searchParams.get('truncateResults') === '1'
 
   const send = (frame: ServerFrame): void => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(frame))
@@ -36,6 +40,7 @@ export function attachClient(
   // every attach.
   const unsubscribe = runner.subscribe((event) => send({ type: 'event', event }), afterSeq, {
     coalesceReplay: true,
+    truncateResults,
   })
   // Register for bridged tool calls: this client can be asked to execute them
   // in its own sandbox (see BridgeHub).

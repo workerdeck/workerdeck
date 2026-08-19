@@ -964,9 +964,33 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   the running CLI; nothing is written to a `.mcp.json`. The iOS screen's footer says this, because
   "Disable" on a server list otherwise reads as an edit to config.
 
-## Attach replay (the hold, the cache, the three filters)
+## Attach replay (the hold, the cache, the four filters)
 
-- **Three independent filters now sit on a replay, and they compose.** `subscribe()` skips
+- **A truncating replay is the fourth filter, and the only one that changes an event's
+  *content*.** With `truncateResults`, a `tool_result` block over
+  `TOOL_RESULT_HEAD_CHARS` (8,000) is delivered as its head with `truncated`/`total_chars` set,
+  and the rest is one `GET /sessions/:id/events/:seq/result?toolUseId=` away. Three rules hold it
+  up. It is **replay-path only** — `replaySlice` copies, the stored log is never mutated, because
+  the live path, the parking snapshot and the fetch route all need the whole thing. It is
+  **opt-in from the unit that renders**, which is stricter than `coalesceReplay`'s opt-in and for
+  a sharper reason: `client` and `react` are separate packages an embedder can skew, so a caller
+  that asked for heads without knowing how to fetch them back would show one as if it were the
+  whole result — the silent lie this family exists to prevent. `useClaudeSession` sets it and
+  nothing else does. And the head is **chosen against the clients' own budgets** (~400 collapsed,
+  2,000 open), so both un-pressed states are byte-identical to an untruncated attach and only the
+  uncapped "show everything" press ever fetches; `packages/ui/test/result-budget.test.ts` asserts
+  that relationship, because a head lowered under the open budget would clip it with no marker.
+  Two consequences worth knowing before touching it: the **highest-seq event is exempt from
+  dropping but not from truncation** (a session ending on a `find /` puts its 641 KB frame exactly
+  there), and the marker outlives the clip — a head short enough to fit the open budget is still
+  not the result, so the affordance is `clipped || truncated`, never `hidden > 0`.
+- **A stale `sourceSeq` must be refused, not guessed.** The fetch route requires `toolUseId` and
+  verifies it against the block it found. A woken dormant session has a fresh log with fresh seqs,
+  so a seq cached across a rebuild can name a different event entirely, and handing the reader
+  another tool's output under the row they pressed is the exact bug class the feature exists to
+  remove. 404 there means "re-attach", and `loadFullResult` answers `false` rather than throwing:
+  the caller is a press on a row, and an exception there has nowhere to go.
+- **Three independent filters sit on the *dropping* side of a replay, and they compose.** `subscribe()` skips
   transcript *content* strictly below the latest `conversation_reset`; it skips events at or
   below `afterSeq`; and, **only when the caller opts in**, it skips state readings superseded
   later in the same replay (`coalesceReplay` → `replayCoalesceKey` → `staleReplaySeqs`).

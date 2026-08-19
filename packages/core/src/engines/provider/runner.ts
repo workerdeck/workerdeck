@@ -9,7 +9,6 @@ import {
 } from 'ai'
 import {
   ENGINE_CAPABILITIES,
-  replayRetains,
   snapshotRetains,
   transcriptActivity,
   type ContentBlock,
@@ -33,7 +32,7 @@ import type {
   SessionEventListener,
 } from '../../runner-interface.ts'
 import type { ToolExecutionCall, ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
-import { staleReplaySeqs } from '../../lib/replay.ts'
+import { replaySlice } from '../../lib/replay.ts'
 
 /** Permission modes this engine can honor. The rest of the protocol vocabulary
  * (acceptEdits/plan/auto) is Claude Code CLI semantics with no meaning here —
@@ -602,21 +601,19 @@ export class AiSdkRunner implements Runner {
     }
   }
 
+  /** See `Runner.eventAt`. A linear scan: the one caller is a reader pressing
+   * "show everything" on one row, so a per-runner seq index would be a map
+   * maintained on every emit to save a walk nobody makes twice a minute. */
+  eventAt(seq: number): SessionEvent | undefined {
+    return this.#events.find((event) => event.seq === seq)
+  }
+
   subscribe(
     listener: SessionEventListener,
     afterSeq = 0,
-    options?: { coalesceReplay?: boolean },
+    options?: { coalesceReplay?: boolean; truncateResults?: boolean },
   ): () => void {
-    const stale = options?.coalesceReplay ? staleReplaySeqs(this.#events, afterSeq) : undefined
-    const lastSeq = this.#events[this.#events.length - 1]?.seq ?? 0
-    for (const event of this.#events) {
-      if (event.seq <= afterSeq) continue
-      if (stale?.has(event.seq)) continue
-      // Never the last event, whatever the rule says: a client's replay hold
-      // waits for `state.lastSeq` to reach the attach's, and would hang forever.
-      if (options?.coalesceReplay && event.seq !== lastSeq && !replayRetains(event)) continue
-      listener(event)
-    }
+    for (const event of replaySlice(this.#events, { ...options, afterSeq })) listener(event)
     this.#listeners.add(listener)
     return () => this.#listeners.delete(listener)
   }

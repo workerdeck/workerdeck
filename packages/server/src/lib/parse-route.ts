@@ -1,6 +1,7 @@
 /** The `/sessions` route family, parsed. Pattern:
  * {basePath}/sessions[/:id[/ws | /permissions/:requestId | /files[/<path>] |
- *   /attachments[/:attachmentId] | /mcp[/:serverName] | /produced[/:fileId]]]
+ *   /attachments[/:attachmentId] | /mcp[/:serverName] | /produced[/:fileId] |
+ *   /events/:seq/result]]
  */
 export type SessionRoute = {
   id?: string
@@ -14,6 +15,8 @@ export type SessionRoute = {
   mcpServer?: string
   produced?: boolean
   producedFileId?: string
+  /** `/events/:seq/result` — the untruncated tool result in that event. */
+  resultSeq?: number
 }
 
 export function parseSessionRoute(basePath: string, url: string): SessionRoute | null {
@@ -42,6 +45,11 @@ export function parseSessionRoute(basePath: string, url: string): SessionRoute |
       produced: true,
       producedFileId: parts[2] === undefined ? undefined : decodeURIComponent(parts[2]),
     }
+  }
+  if (parts.length === 4 && parts[1] === 'events' && parts[3] === 'result') {
+    const seq = Number(parts[2])
+    if (!Number.isInteger(seq) || seq < 0) return null
+    return { id: decodeURIComponent(parts[0]!), resultSeq: seq }
   }
   if (parts.length <= 3 && parts[1] === 'mcp') {
     // Server names are opaque and may contain ':' (plugin:gtm:gtm) — one segment,

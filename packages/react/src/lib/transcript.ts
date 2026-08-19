@@ -69,7 +69,25 @@ export type TranscriptItem =
        * deferred call has no result yet and is not the same as a running one.
        */
       status: 'running' | 'pending' | 'deferred' | 'settled' | 'failed'
-      result?: { text: string; isError: boolean }
+      /**
+       * `truncated`/`totalChars`/`sourceSeq` are set **only** when the replay
+       * delivered a head (protocol's {@link ToolResultBlock.truncated}), so
+       * every other result stays byte-identical to what it was before this
+       * feature existed. That matters beyond tidiness: on iOS `ToolCallItem` is
+       * `Equatable` and is half the row-plan cache key.
+       *
+       * `sourceSeq` is what makes the press possible at all — the item is what a
+       * renderer holds, and it must be able to name the event to fetch. It goes
+       * away again on hydration, along with the other two, so a hydrated result
+       * is indistinguishable from one that was never cut.
+       */
+      result?: {
+        text: string
+        isError: boolean
+        truncated?: boolean
+        totalChars?: number
+        sourceSeq?: number
+      }
       /**
        * What this call changed on disk, when it was a file edit — the engine's
        * own hunks and line numbers (see protocol's {@link FilePatch}).
@@ -326,6 +344,35 @@ export function rateLimitWindows(state: TranscriptState): UsageWindowRow[] {
   )
 }
 
+/**
+ * Put a fetched tool result back where its head was — the other half of
+ * `truncateResults`.
+ *
+ * Into **transcript state**, not row-local state, and the three reasons are the
+ * design: the copy button then copies the whole thing rather than the head, the
+ * transcript cache retains it across a session switch, and no later event can
+ * re-truncate it. The markers are cleared, so a hydrated result is
+ * indistinguishable from one that was never cut and every renderer needs a
+ * branch for exactly one state, not two.
+ *
+ * Keyed on `toolUseId`, which is the id the row already holds; `seq` is what the
+ * *fetch* needed, not what the fold needs. Unknown id returns `state` unchanged
+ * — a press answered after the session was cleared must not resurrect a row.
+ */
+export function hydrateToolResult(
+  state: TranscriptState,
+  toolUseId: string,
+  text: string,
+): TranscriptState {
+  let changed = false
+  const items = state.items.map((item) => {
+    if (item.kind !== 'tool_call' || item.id !== toolUseId || !item.result?.truncated) return item
+    changed = true
+    return { ...item, result: { text, isError: item.result.isError } }
+  })
+  return changed ? { ...state, items } : state
+}
+
 export function applyEvent(state: TranscriptState, event: SessionEvent): TranscriptState {
   if (event.seq <= state.lastSeq) return state
   const base: TranscriptState = { ...state, lastSeq: event.seq }
@@ -422,7 +469,17 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
               ? {
                   ...item,
                   status: isError ? 'failed' : 'settled',
-                  result: { text: blockText(toolResult.content), isError },
+                  result: {
+                    text: blockText(toolResult.content),
+                    isError,
+                    // Set together or not at all: a marker without the seq is a
+                    // press that cannot be answered.
+                    ...(toolResult.truncated && {
+                      truncated: true as const,
+                      totalChars: toolResult.total_chars,
+                      sourceSeq: event.seq,
+                    }),
+                  },
                   // Absent on most results; the runner sets it only for a file
                   // edit, and only when the message answers one call.
                   ...(event.patch && { patch: event.patch }),

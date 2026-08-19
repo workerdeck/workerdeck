@@ -82,12 +82,36 @@ export interface Runner {
    * default must stay off: it is only sound for a consumer whose handling of
    * those events is last-write-wins, and `parking.ts` — which subscribes from
    * seq 0 — branches on `status_changed` instead. Live events are never
-   * affected; this touches the buffered replay alone. */
+   * affected; this touches the buffered replay alone.
+   *
+   * `truncateResults` delivers an oversized `tool_result` block as its head plus
+   * the markers that say so (protocol's {@link TOOL_RESULT_HEAD_CHARS}), leaving
+   * the whole thing one fetch away. Measured, that is 68% of a long session's
+   * attach in three frames. Opt-in for the same reason and with one extra
+   * condition: **the opt-in must be issued by the unit that renders**, because
+   * `client` and `react` are separate packages an embedder can skew, and a
+   * client that asked for heads without knowing how to fetch the rest would show
+   * one as though it were the whole result. Live events are untouched — a result
+   * arriving while you watch is already on screen — and so is the stored log,
+   * which parking snapshots and the fetch route both read. */
   subscribe(
     listener: SessionEventListener,
     afterSeq?: number,
-    options?: { coalesceReplay?: boolean },
+    options?: { coalesceReplay?: boolean; truncateResults?: boolean },
   ): () => void
+  /** One buffered event by seq, or undefined — the read side of the log the
+   * replay already walks.
+   *
+   * Optional, like every member added after `Runner` became public API: an
+   * out-of-tree runner that declines it declines only the on-demand tool result
+   * with it (the route 404s), which is exactly the degradation a runner with no
+   * `truncateResults` support wants anyway.
+   *
+   * Deliberately **not** a "give me the whole log" accessor. The one caller
+   * needs a single event by a seq a client is holding, and a method that handed
+   * out the array would invite a second copy of the bytes this feature exists
+   * to stop shipping. */
+  eventAt?(seq: number): SessionEvent | undefined
   /** Queue a user message for the session (starts the next turn when idle).
    * `attachments` carry their bytes to the engine and their reference to the
    * event log (see {@link AttachmentInput}). */

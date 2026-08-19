@@ -7,6 +7,7 @@ import { Spinner } from '../ui/Spinner.tsx'
 import { cn } from '../../lib/utils.ts'
 import { toolInputPreview } from '../../lib/format.ts'
 import { toolIcon } from '../../lib/tool-icon.ts'
+import { useToolResultFetcher } from './tool-result-fetch.tsx'
 
 export type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
 
@@ -81,6 +82,8 @@ type Status = keyof typeof STATE_BADGE
 export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) {
   const [open, setOpen] = useState(false)
   const [fullResult, setFullResult] = useState(false)
+  const [fetching, setFetching] = useState(false)
+  const fetchResult = useToolResultFetcher()
   const imagePath = imagePathOf(item)
   const status: Status = item.status ?? (item.result === undefined ? 'running' : 'settled')
   const badge = STATE_BADGE[status]
@@ -88,8 +91,14 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
   const Icon = toolIcon(item.name)
 
   const resultText = item.result?.text ?? ''
-  const truncated = !fullResult && resultText.length > RESULT_PREVIEW_CHARS
-  const shownResult = truncated ? resultText.slice(0, RESULT_PREVIEW_CHARS) : resultText
+  const clipped = !fullResult && resultText.length > RESULT_PREVIEW_CHARS
+  const shownResult = clipped ? resultText.slice(0, RESULT_PREVIEW_CHARS) : resultText
+  // The replay sent a head (see protocol's `ToolResultBlock.truncated`): what is
+  // on screen is not merely clipped, it is all this client was given. The press
+  // therefore fetches rather than only lifting the clip, and the count has to be
+  // the real one — `resultText.length` here is the head's.
+  const headOnly = item.result?.truncated === true
+  const totalChars = item.result?.totalChars ?? resultText.length
 
   const details = open ? (
     <div className='flex flex-col gap-2 border-t border-border p-2.5'>
@@ -109,12 +118,21 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
             label={isError ? 'Error' : 'Result'}
                 className={cn(isError && 'border-danger/40 [&_pre]:text-danger')}
           />
-          {truncated ? (
+          {fetching ? (
+            <p className='mt-1 text-label text-fg-3'>
+              Fetching {totalChars.toLocaleString()} chars…
+            </p>
+          ) : clipped || headOnly ? (
             <button
               type='button'
               className='mt-1 text-label text-fg-3 underline-offset-2 hover:underline'
-              onClick={() => setFullResult(true)}>
-              Show all {resultText.length.toLocaleString()} chars
+              onClick={() => {
+                setFullResult(true)
+                if (!headOnly) return
+                setFetching(true)
+                void fetchResult(item.id).finally(() => setFetching(false))
+              }}>
+              Show all {totalChars.toLocaleString()} chars
             </button>
           ) : null}
         </div>

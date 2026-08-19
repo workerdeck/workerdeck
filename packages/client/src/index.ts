@@ -37,6 +37,7 @@ import type {
   ToolCallRequestFrame,
   ToolExecutionOutput,
   UpdateProfileRequest,
+  ToolResultBlock,
 } from '@workerdeck/protocol'
 
 /** Whatever the ambient `fetch` accepts as a body — `Blob`/`File` in a browser,
@@ -51,7 +52,7 @@ export type ClientOptions = {
    * `buildWsUrl` (ticket query param) or cookies for WS auth. */
   headers?: Record<string, string>
   /** Override WS URL construction (auth tickets, proxies). */
-  buildWsUrl?: (sessionId: string, afterSeq: number) => string
+  buildWsUrl?: (sessionId: string, afterSeq: number, truncateResults?: boolean) => string
   /** Override the queue WS URL (`{baseUrl}/queue/ws` by default). */
   buildQueueWsUrl?: () => string
   /** Injectable for non-browser environments/tests. Defaults to globalThis.WebSocket. */
@@ -81,6 +82,20 @@ export type AttachOptions = {
   afterSeq?: number
   /** Auto-reconnect with backoff on unexpected disconnects. Default true. */
   reconnect?: boolean
+  /**
+   * Ask the gateway to replay an oversized tool result as its **head**, with
+   * `truncated`/`total_chars` on the block and the whole thing one
+   * {@link WorkerDeckClient.toolResult} call away. Measured, that is 68% of a
+   * long session's attach in three frames.
+   *
+   * Default off, and the default must stay off: **only the unit that renders may
+   * ask for it**. `client` and `react` are separate packages an embedder can
+   * skew, and a caller that asked for heads without knowing how to fetch the
+   * rest would show one as though it were the whole result — the silent lie this
+   * rule family exists to prevent. `useClaudeSession` sets it; nothing else here
+   * does. Live events are never affected.
+   */
+  truncateResults?: boolean
 }
 
 export type SessionHandleEvents = {
@@ -240,7 +255,11 @@ export class SessionHandle {
 
   #connect(): void {
     if (this.#closed) return
-    const ws = this.#client.openSocket(this.sessionId, this.#lastSeq)
+    const ws = this.#client.openSocket(
+      this.sessionId,
+      this.#lastSeq,
+      this.#options.truncateResults,
+    )
     this.#ws = ws
     ws.onopen = () => {
       this.#retries = 0
@@ -730,11 +749,38 @@ export class WorkerDeckClient {
   }
 
   /** @internal used by SessionHandle */
-  openSocket(sessionId: string, afterSeq: number): WebSocket {
+  openSocket(sessionId: string, afterSeq: number, truncateResults = false): WebSocket {
+    // A third *optional* parameter rather than an options object, so every
+    // existing `buildWsUrl` implementation still typechecks. The hazard worth
+    // naming: a custom one that ignores it yields a full replay — safe only
+    // because every client keys its rendering off the server's own `truncated`
+    // marker and never off what it asked for.
+    const query = `afterSeq=${afterSeq}${truncateResults ? '&truncateResults=1' : ''}`
     const url =
-      this.#options.buildWsUrl?.(sessionId, afterSeq) ??
-      `${this.#options.baseUrl.replace(/^http/, 'ws')}/sessions/${encodeURIComponent(sessionId)}/ws?afterSeq=${afterSeq}`
+      this.#options.buildWsUrl?.(sessionId, afterSeq, truncateResults) ??
+      `${this.#options.baseUrl.replace(/^http/, 'ws')}/sessions/${encodeURIComponent(sessionId)}/ws?${query}`
     return new this.#WebSocketImpl(url)
+  }
+
+  /**
+   * The whole of a tool result whose replay delivered only its head.
+   *
+   * `toolUseId` is required and the gateway verifies it against the block: a
+   * woken dormant session has a fresh log with fresh seqs, so a `sourceSeq`
+   * cached across a gateway restart can name a different event, and being handed
+   * another tool's output under the row you pressed is the exact failure this
+   * feature exists to remove. A 404 here means "ask again with a fresh attach",
+   * not "empty".
+   */
+  async toolResult(
+    sessionId: string,
+    seq: number,
+    toolUseId: string,
+  ): Promise<{ seq: number; toolUseId: string; content: ToolResultBlock['content']; isError: boolean }> {
+    return (await this.#call(
+      'GET',
+      `/sessions/${encodeURIComponent(sessionId)}/events/${seq}/result?toolUseId=${encodeURIComponent(toolUseId)}`,
+    )) as { seq: number; toolUseId: string; content: ToolResultBlock['content']; isError: boolean }
   }
 
   /** @internal used by QueueHandle */

@@ -36,6 +36,7 @@ export { createToolCallHost } from './lib/tool-host.ts'
 export type { ToolCallHostOptions, ToolHostExecution, ToolHostRunner } from './lib/tool-host.ts'
 export {
   applyEvent,
+  hydrateToolResult,
   initialTranscriptState,
   rateLimitWindows,
   seedFromSessionInfo,

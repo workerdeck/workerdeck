@@ -45,7 +45,16 @@ export type CollapsedResult = {
  * lines otherwise — a one-line JSON blob has no hidden lines to count, and
  * "+0 lines" under a visibly cut-off row is worse than saying nothing.
  */
-export function collapsedResult(lines: string[]): CollapsedResult {
+/**
+ * `totalChars` is the **untruncated** length when the replay delivered only a
+ * head (protocol's `ToolResultBlock.total_chars`). Passing it is not cosmetic:
+ * computed from the head this row would say "… +7,600 chars" where the truth is
+ * 641,003, and the wrong string is a *different pixel height* — which is exactly
+ * the drift this module exists to prevent, since `height.ts` sizes the row by
+ * wrapping this same text. Omitted for a whole result, where the lines are the
+ * whole truth.
+ */
+export function collapsedResult(lines: string[], totalChars?: number): CollapsedResult {
   const shown: string[] = []
   let chars = 0
   let cut = false
@@ -62,11 +71,16 @@ export function collapsedResult(lines: string[]): CollapsedResult {
     chars += line.length + 1
   }
 
-  if (cut) {
-    // `join` because the newlines are part of what is not being shown.
-    const hidden = lines.join('\n').length - chars
-    return { shown, more: `… +${hidden.toLocaleString()} chars` }
-  }
+  // `join` because the newlines are part of what is not being shown — and
+  // `totalChars` wins when it exists, because the lines in hand are then a head
+  // rather than the result.
+  const held = lines.join('\n').length
+  const total = totalChars ?? held
+  if (cut) return { shown, more: `… +${(total - chars).toLocaleString()} chars` }
+  // A truncated result always has more, even when its head happened to fit the
+  // line budget: the row must never claim to be showing everything.
+  if (totalChars !== undefined && total > held)
+    return { shown, more: `… +${(total - chars).toLocaleString()} chars` }
   const hidden = lines.length - shown.length
   return { shown, more: hidden > 0 ? `… +${hidden} line${hidden === 1 ? '' : 's'}` : undefined }
 }

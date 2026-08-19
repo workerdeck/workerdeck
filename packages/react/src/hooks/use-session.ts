@@ -10,6 +10,7 @@ import type {
 import {
   applyEvent,
   initialTranscriptState,
+  hydrateToolResult,
   seedFromSessionInfo,
   type TranscriptState,
 } from '../lib/transcript.ts'
@@ -23,14 +24,20 @@ import {
 /** Replace the state wholesale — an in-place session switch, or the stale-log
  * resync. Internal to the hook; the wire never carries it. */
 type SeedAction = { type: 'transcript_seed'; state: TranscriptState }
+/** A fetched tool result landing back on the row that showed its head. Local,
+ * not an event: nothing was emitted, and inventing a seq for it would put a
+ * frame in the log that no other client will ever see. */
+type HydrateAction = { type: 'transcript_hydrate_result'; toolUseId: string; text: string }
 
 /** Session events drive the reducer; the attach snapshot seeds fields (permission
  * mode, model) that a promptless session's event stream doesn't carry yet. */
 function reduce(
   state: TranscriptState,
-  action: SessionEvent | AttachedFrame | SeedAction,
+  action: SessionEvent | AttachedFrame | SeedAction | HydrateAction,
 ): TranscriptState {
   if (action.type === 'transcript_seed') return action.state
+  if (action.type === 'transcript_hydrate_result')
+    return hydrateToolResult(state, action.toolUseId, action.text)
   return action.type === 'attached'
     ? seedFromSessionInfo(state, action.session)
     : applyEvent(state, action)
@@ -191,6 +198,17 @@ export type UseClaudeSessionResult = {
   closeSession: () => void
   /** Skip the reconnect backoff — what a tab returning to the foreground does. */
   reconnectNow: () => void
+  /**
+   * Fetch the whole of a tool result the replay delivered as a head, and put it
+   * back on its row (`result.truncated` clears with it).
+   *
+   * Resolves `false` when there was nothing to do — an untruncated row, an
+   * unknown id, or a gateway that refused (a stale `sourceSeq` after a dormant
+   * rebuild 404s by design; re-attaching is what fixes that, not a retry). It
+   * never throws, because the caller is a press on a row and an exception there
+   * has nowhere sensible to go.
+   */
+  loadFullResult: (toolUseId: string) => Promise<boolean>
 }
 
 /** Attach to a session and maintain live transcript state. Detaches on unmount. */
@@ -261,7 +279,14 @@ export function useClaudeSession(
     // `afterSeq` comes from the state actually held, never from a separate
     // cache read: they are the same object here, and deriving both from one
     // source keeps a racing write from another mount from opening a gap.
-    const handle = client.attach(sessionId, held.lastSeq > 0 ? { afterSeq: held.lastSeq } : {})
+    // `truncateResults` is asked for **here**, and here only: this hook is the
+    // unit that renders, so it is the one that knows a head can be fetched back
+    // (see `AttachOptions.truncateResults`). An embedder holding `client`
+    // without `react` gets whole results, which is the safe default.
+    const handle = client.attach(sessionId, {
+      truncateResults: true,
+      ...(held.lastSeq > 0 ? { afterSeq: held.lastSeq } : {}),
+    })
     handleRef.current = handle
     setHandleState(handle)
     const offEvent = handle.on('event', (event: SessionEvent) => dispatch(event))
@@ -347,6 +372,42 @@ export function useClaudeSession(
   const replaying = replayTarget !== undefined && state.lastSeq < replayTarget
   const reconnectNow = useCallback(() => handleRef.current?.reconnectNow(), [])
 
+  // The press's other half. The seq comes off the *item* (`result.sourceSeq`),
+  // never off anything the caller passes: the row is what a reader pressed, and
+  // making the caller carry a seq would invite a stale one from a cache. Read
+  // through `stateRef` so this identity is stable across every render — it is a
+  // prop on a virtualized row, and a new function each render is a new prop on
+  // every row in the transcript.
+  const loadFullResult = useCallback(
+    async (toolUseId: string): Promise<boolean> => {
+      if (!sessionId) return false
+      const item = stateRef.current.items.find(
+        (candidate) => candidate.kind === 'tool_call' && candidate.id === toolUseId,
+      )
+      const result = item?.kind === 'tool_call' ? item.result : undefined
+      if (!result?.truncated || result.sourceSeq === undefined) return false
+      try {
+        const full = await client.toolResult(sessionId, result.sourceSeq, toolUseId)
+        const text =
+          typeof full.content === 'string'
+            ? full.content
+            : (full.content ?? [])
+                .map((part) => (typeof part.text === 'string' ? part.text : ''))
+                .filter(Boolean)
+                .join('\n')
+        dispatch({ type: 'transcript_hydrate_result', toolUseId, text })
+        return true
+      } catch {
+        // A 404 here means the log this seq belonged to is gone (dormant
+        // rebuild, restart). The head stays, with its marker, and the row still
+        // says what it is — which is the honest state, and better than an error
+        // toast about a press.
+        return false
+      }
+    },
+    [client, sessionId],
+  )
+
   return useMemo(
     () => ({
       state,
@@ -366,8 +427,19 @@ export function useClaudeSession(
       setModel: (model) => handleRef.current?.setModel(model),
       closeSession: () => handleRef.current?.closeSession(),
       reconnectNow,
+      loadFullResult,
     }),
-    [state, connected, connection, replaying, protocolMismatch, models, handleState, reconnectNow],
+    [
+      state,
+      connected,
+      connection,
+      replaying,
+      protocolMismatch,
+      models,
+      handleState,
+      reconnectNow,
+      loadFullResult,
+    ],
   )
 }
 

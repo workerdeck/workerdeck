@@ -57,7 +57,52 @@ export type ToolResultBlock = {
   tool_use_id: string
   content?: string | Array<{ type: string; text?: string; [key: string]: unknown }>
   is_error?: boolean
+  /**
+   * This block carries only the **head** of the result: the replay truncated it
+   * (see {@link TOOL_RESULT_HEAD_CHARS}), and the whole thing is one fetch away
+   * at `GET /sessions/:id/events/:seq/result?toolUseId=`.
+   *
+   * On the **block**, never the event, and that is the same argument
+   * `user_message.patch` has to make in reverse: the patch sits on the event and
+   * its doc must therefore caveat "only when the message carries exactly one
+   * `tool_result` block — with two, nothing says which one it belongs to". A
+   * message answering three calls truncates whichever of them is large, so
+   * paying that caveat a second time would make the marker unusable exactly
+   * when it matters. {@link FilePatch.truncated} is the shipped precedent.
+   *
+   * Only ever set on a **replay** a client asked for (`truncateResults`), so a
+   * client that has never heard of this field cannot receive one — which is why
+   * this is additive at protocol 7 rather than a bump. Absent means the block is
+   * whole.
+   */
+  truncated?: boolean
+  /** How many characters the untruncated result had. Set iff `truncated`.
+   *
+   * A client cannot compute it — it holds the head — and the number is not
+   * cosmetic: a collapsed row spells "… +N chars", and `height.ts` sizes the row
+   * by wrapping **that exact string**, so a count derived from the head would be
+   * both a lie and a different pixel height. */
+  total_chars?: number
 }
+
+/**
+ * How much of a tool result a truncating replay keeps.
+ *
+ * Chosen against the two clients' *own* budgets, and the relationship is the
+ * whole point: the terminal theme shows ~400 characters collapsed and ~2,000
+ * open, so at 8,000 the collapsed and open states are **byte-identical to an
+ * untruncated attach** and only the uncapped "show everything" press ever
+ * fetches. That collapses the entire feature to one press, and it is asserted
+ * in a test rather than trusted — lowered below the open budget, this would
+ * silently clip the open state with no marker, which is the one failure this
+ * design must not have.
+ *
+ * Measured justification: on one 1,270-row session three `tool_result` frames
+ * were 641 / 463 / 396 KB, 68% of a 3.1 MB attach. The cut is *structural* —
+ * proportional to the thing that is actually large, wherever in the log it sits
+ * — which a row window is not.
+ */
+export const TOOL_RESULT_HEAD_CHARS = 8_000
 /** Forward-compatible fallback for block types this protocol version doesn't model. */
 export type UnknownBlock = { type: string; [key: string]: unknown }
 

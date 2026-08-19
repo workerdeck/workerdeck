@@ -176,6 +176,12 @@ process), and allows the idle case `park()` exists to refuse.
 
 Things the compiler will not tell you, each of which has cost someone real time:
 
+- **Truncation happens on the replay path, never at emit.** `subscribe(..., { truncateResults })`
+  hands out a copy; `#events` keeps the whole result, because the live path, the parking snapshot
+  and `Runner.eventAt` (which serves `GET /sessions/:id/events/:seq/result`) all read it. Refuse
+  the temptation to truncate into a snapshot: it would break the fetch for exactly the sessions
+  most likely to be read late.
+
 - **A declared MCP server that never connected is refused, not degraded.** If a profile's
   `session.mcpServers` names a server and it isn't there, `createEngineSession` throws. The old
   behaviour — start anyway, minus those tools — produced a session that reported perfectly healthy

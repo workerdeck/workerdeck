@@ -16,6 +16,7 @@ import type { ServerContext } from '../context.ts'
 import { handleAttachments } from './attachments.ts'
 import { handleMcp } from './mcp.ts'
 import { handleProducedFiles } from './produced-files.ts'
+import { handleToolResult } from './tool-results.ts'
 
 export async function handleSessions(
   ctx: ServerContext,
@@ -160,6 +161,17 @@ export async function handleSessions(
   }
   if (route.produced) {
     await handleProducedFiles(ctx, req, res, route.id, route.producedFileId)
+    return
+  }
+  if (route.resultSeq !== undefined) {
+    const snapshot = parked && !isDormant(parked) ? parked.snapshot.events : undefined
+    handleToolResult(
+      req,
+      res,
+      runner?.eventAt?.bind(runner) ??
+        (snapshot && ((seq: number) => snapshot.find((event) => event.seq === seq))),
+      route.resultSeq,
+    )
     return
   }
   if (route.permissionId) {

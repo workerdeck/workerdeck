@@ -69,7 +69,20 @@ protocol. Read these before changing scope or structure:
   `packages/react/test/replay-retain.test.ts`, the family's usual fold-equality property, and the
   caller must never drop the log's highest-seq event whatever the rule says — a client's replay
   hold waits for it. Two more joined it, both lifted
-  out of the VS Code extension once a second client needed them. `FilePatch`/`PatchHunk` joined
+  out of the VS Code extension once a second client needed them. `ToolResultBlock.truncated`/`total_chars` and
+  `TOOL_RESULT_HEAD_CHARS` are the family's **sixth** rule and the only one that changes an
+  event's *content* rather than deciding whether to send it: a `tool_result` over 8,000 characters
+  replays as its head, with the rest one fetch away. Measured, three frames of 641/463/396 KB were
+  68% of one session's 3.1 MB attach, and the cut is *structural* — proportional to whatever is
+  actually large, wherever it sits, which a row window is not. On the **block**, never the event,
+  because `user_message.patch` already has to caveat "only when the message carries exactly one
+  `tool_result`" and a message answering three calls truncates whichever of them is large. The
+  constant lives here so `packages/ui` can assert the relationship that matters: at 8,000 it
+  exceeds both clients' own budgets (~400 collapsed, 2,000 open), so both un-pressed states are
+  byte-identical to an untruncated attach and only the uncapped press fetches. Additive at
+  protocol **7** rather than a bump, and that is sound only because it is opt-in *and the opt-in
+  is issued by the unit that renders*: a client that never asked cannot receive one.
+  `FilePatch`/`PatchHunk` joined
   them for the same reason: a diff's line numbers are the *engine's*, carried on
   `user_message.patch`, because no client has read the file and one that computed them would point
   confidently at the wrong line. What rides there is only the hunks — the Claude SDK's
@@ -185,7 +198,14 @@ protocol. Read these before changing scope or structure:
   source; reachable the moment `snapshot()` existed. And `seedVfs`/`id` are the two
   options that make the *other* rehydration rules unmissable — `seedVfs` is ignored on a restore
   (seeding over a parked turn's files destroys exactly what was preserved) and `id` is what a
-  session comes back as itself under. `subscribe(listener, afterSeq, { coalesceReplay })` is the
+  session comes back as itself under. `replaySlice` (`src/lib/replay.ts`) is now **the one replay body all three runners deliver
+  through** — they had a byte-identical copy each, including three copies of the comment carrying
+  the "never drop the highest-seq event" invariant — and it owns the fourth filter with them:
+  `truncateResults` hands an oversized `tool_result` block over as its head plus the markers that
+  say so. Per **block**, so a message answering three calls keeps the small results whole; it
+  returns the *same object* when nothing is over budget, because an attach is mostly small events;
+  and it never mutates the stored log, which the live path, the parking snapshot and
+  `Runner.eventAt` (the optional read side behind `/events/:seq/result`) all read. `subscribe(listener, afterSeq, { coalesceReplay })` is the
   third filter on a replay and the only opt-in one, because it is only sound for a consumer whose
   handling of those events is last-write-wins: the WS attach is the single caller, while
   `parking.ts` — which subscribes from seq 0 — *branches* on `status_changed`, so coalescing for
@@ -217,6 +237,11 @@ protocol. Read these before changing scope or structure:
   `GET /sessions/:id/files`,
   message attachments (`attachments.ts` — bytes held per session so the event log carries only
   `MessageAttachment` refs; **never** inline base64 into an event),
+  `/sessions/:id/events/:seq/result?toolUseId=` (`tool-results.ts` — the other half of a truncating
+  replay, and **no new store**: the bytes are already in the log, so it reads a live runner's
+  `eventAt` or a *parked* snapshot's own events, and a dormant record, holding no log, 404s like
+  `/files` does. `toolUseId` is required and verified against the block, because a woken dormant
+  session has fresh seqs and a cached one can name a different call),
   `/sessions/:id/produced[/:fileId]` (`produced-files.ts` — host files the *engine* wrote, served
   with **no roots and no byte cap** because the allowlist is built solely from `file_produced`
   events; a path the *agent* named is not a produced file and stays behind `/fs/*`)
@@ -303,6 +328,13 @@ protocol. Read these before changing scope or structure:
   the WS frame surface, so new frames need `SessionHandle` methods/events here. A refused REST
   call throws `WorkerDeckError` (an `Error` subclass carrying `status`), which is what lets a
   caller tell "this server has no such route" (404 — stop asking) from "that file was too big".
+  `AttachOptions.truncateResults` + `client.toolResult(...)` are the client half of the truncating
+  replay, and the default is off **on purpose and permanently**: only the unit that renders may ask
+  for heads, since a caller that cannot fetch them back would present one as the whole result.
+  `buildWsUrl` took an optional third parameter rather than becoming an options object, so every
+  existing implementation still typechecks — and a custom one that ignores it merely gets a full
+  replay, which is safe because every client keys its rendering off the server's own marker and
+  never off what it asked for.
   It also owns `apiUrl`/`isLoopbackHost` (`src/host-url.ts`): what an operator types turned into
   a `baseUrl`, and whether that gateway is this machine — decided from the URL, never by probing
   paths. Here because every host that lets someone type a gateway address must normalize it
@@ -319,7 +351,14 @@ protocol. Read these before changing scope or structure:
   attaches with `afterSeq` and replays only the gap. That cache's whole risk is `staleAttach`: a
   seq from a *different* log (a dormant rebuild starts at 0) delivers **nothing**, leaving stale
   rows standing with no error — which was already reachable on a plain reconnect after a restart,
-  so the check fixes more than it costs. The recap counters
+  so the check fixes more than it costs. The two halves of **on-demand tool results** (`result.truncated`/`totalChars`/`sourceSeq`, set
+  only when the replay cut something, so every other item stays byte-identical — which matters on
+  iOS, where `ToolCallItem` is `Equatable` and half the plan-cache key; and `hydrateToolResult`,
+  which puts the fetched text into **transcript state** rather than row-local state, so the copy
+  button copies the whole thing, the cache retains it, and no later event can re-truncate it —
+  clearing the markers, so a hydrated result is indistinguishable from one never cut and every
+  renderer needs one branch, not two). `loadFullResult` on the hook is the press's other end, and
+  the *only* place the truncation opt-in is issued. The recap counters
   behind catch-up (`src/lib/recap.ts`: `summarizeSince` + `recapLine` — **counted, never written**;
   a prose recap would spend a turn on a summary nobody asked for, and would be worst in the
   case that matters most, a session that failed unattended), the composer's two
@@ -361,7 +400,15 @@ protocol. Read these before changing scope or structure:
   move into the panel's **own** status bar, at the end of the readings cluster (status → context
   → usage → model → mode) so what you can *change* sits beside the facts it acts on, and the
   composer collapses the same way. With `statusSurface: 'external'` there is no bar to hold them,
-  so that combination falls back to the composer rather than hiding them. `toolHost` is the
+  so that combination falls back to the composer rather than hiding them.
+  The **fetch-the-rest press** is in both themes (`items.tsx` and `ToolCallCard.tsx`, so the
+  dashboard, the VS Code webview and `apps/embedded` all have it) and rides
+  `ToolResultFetchProvider`, a context whose default is a no-op returning `false` — correct for the
+  playground and any hand-composed row, since nothing truncates a replay nobody asked for. Only
+  `SessionPanel` supplies a real one, because it owns the session's one attach.
+  `collapsedResult` takes `totalChars` for the reason the module exists at all: computed from the
+  head the row would say "+7,600 chars" where the truth is 641,003, and the wrong string is a
+  different pixel height. `toolHost` is the
   escape hatch for the panel's own browser tool host — options through to `useToolCallHost`, or
   `false` for none — because the panel owns the session's one attach, so an embedder subscribing
   separately would find this host already refusing anything outside its allow-list.
@@ -1233,6 +1280,19 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   wait. Brief for what is left in `_docs/features/ios-terminal-selection.md`. They also touch **no published package**: the phone
   app is side-loaded from this repo and has no `package.json`, so `version:set` does not reach it
   and a bump neither helps nor hinders it.
+
+  Riding there too, and in the *proven* half rather than the debt half: **on-demand tool results**
+  (protocol's `ToolResultBlock.truncated`, `replaySlice`, `/events/:seq/result`,
+  `loadFullResult`, the press in both themes). Its justification is a measurement — three
+  `tool_result` frames were 68% of one 3.1 MB attach — and its property is tested as an
+  *inequality*, which is what the rest of this family cannot say: a truncated replay's fold
+  differs from the full one in `result.text` and three markers and **nowhere else**, and hydration
+  restores exact equality. The server test asserts backward compatibility rather than arguing it
+  (an attach with no param is byte-identical to before). What is **not** done: iOS neither asks
+  for truncation nor knows how to fetch, so the phone is correct today and simply keeps paying the
+  bytes — and the measurement has not been re-run against a real session, which is the acceptance
+  criterion the design wrote down. Both are in `_docs/features/session-load-and-selection.md`.
+  Protocol stays **7**: the marker can only reach a client that asked for it.
 
   **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`

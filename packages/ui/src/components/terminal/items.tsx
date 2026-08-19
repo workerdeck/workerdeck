@@ -8,6 +8,7 @@ import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { Pressable, useRevealOnOpen } from './press.tsx'
 import { collapsedResult } from './result-preview.ts'
+import { useToolResultFetcher } from '../agent/tool-result-fetch.tsx'
 import { runFailed, runSummary } from './tool-run.ts'
 import { type ToolCallItem } from './blocks.ts'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
@@ -63,8 +64,13 @@ export {
 export const PROMPT_GLYPH = '❯'
 
 /** How much the expanded row shows before offering the rest. The collapsed
- * budget is `collapsedResult`'s, shared with the height calculator. */
-const RESULT_PREVIEW_CHARS = 2000
+ * budget is `collapsedResult`'s, shared with the height calculator.
+ *
+ * Exported for one test and not from the package: protocol's
+ * `TOOL_RESULT_HEAD_CHARS` is chosen to exceed it, so that a truncated result's
+ * open state is byte-identical to an untruncated one and only the uncapped
+ * `full` press ever fetches. That relationship is asserted, not assumed. */
+export const RESULT_PREVIEW_CHARS = 2000
 
 /** Whole lines up to a character budget — never zero, because a single line
  * longer than the budget still has to be shown or the row would open onto
@@ -144,6 +150,11 @@ const TOOL_TONE: Record<string, Tone> = {
 export function ToolRow({ item }: { item: ToolCallItem }) {
   const [open, setOpen] = useState(false)
   const [full, setFull] = useState(false)
+  // Set while the rest of a truncated result is in flight. Row-local, unlike the
+  // text itself, which lands in transcript state — this is a spinner, not a
+  // fact about the session.
+  const [fetching, setFetching] = useState(false)
+  const fetchResult = useToolResultFetcher()
   const reveal = useRevealOnOpen(open)
   const status = item.status ?? (item.result === undefined ? 'running' : 'settled')
   const busy = status === 'running' || status === 'pending'
@@ -161,7 +172,9 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
   // the virtualizer mounts rows, so it cannot help with what is inside a single
   // one. Without the clip, expanding one row commits thousands of DOM nodes and
   // the transcript stops being smooth for the rest of the session.
-  const collapsed = collapsedResult(lines)
+  // The true total when the replay delivered only a head — the row must count
+  // what is missing, not what it happens to hold.
+  const collapsed = collapsedResult(lines, item.result?.totalChars)
   const preview = open
     ? full
       ? lines
@@ -169,6 +182,11 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
     : collapsed.shown
   const hidden = lines.length - preview.length
   const clipped = open && !full && hidden > 0
+  // The replay sent a head. `full` then means "fetch the rest", not "lift the
+  // clip" — and the marker outlives the clip, because a head short enough to fit
+  // the open budget still is not the result.
+  const truncated = item.result?.truncated === true
+  const missing = truncated ? (item.result?.totalChars ?? 0) - text.length : 0
 
   const tone: Tone = isError
     ? 'red'
@@ -231,21 +249,40 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
                 {collapsed.more}
               </Row>
             ) : null
-          ) : hidden > 0 ? (
+          ) : clipped || truncated ? (
             <Row indent={1} columns={3} tone='faint'>
-              {clipped ? (
+              {fetching ? (
+                // Never a row that does nothing when pressed: it says what it is
+                // doing instead. See `planToolCall`'s comment on the same rule.
+                <>… fetching {(item.result?.totalChars ?? 0).toLocaleString()} chars</>
+              ) : clipped || truncated ? (
                 <button
                   type='button'
                   className='term-press term-link'
-                  onClick={() => setFull(true)}>
-                  … +{hidden} line{hidden === 1 ? '' : 's'} — show all{' '}
-                  {text.length.toLocaleString()} chars
+                  onClick={() => {
+                    // One press, two acts, in the order that keeps the row
+                    // honest: lift the clip immediately (that part is local and
+                    // instant), and fetch the rest when there is a rest. The
+                    // fetched text lands in transcript state, so the row
+                    // re-renders with the marker gone.
+                    setFull(true)
+                    if (!truncated) return
+                    setFetching(true)
+                    void fetchResult(item.id).finally(() => setFetching(false))
+                  }}>
+                  {truncated
+                    ? `… +${missing.toLocaleString()} chars — fetch the rest`
+                    : `… +${hidden} line${hidden === 1 ? '' : 's'} — show all ${text.length.toLocaleString()} chars`}
                 </button>
               ) : (
                 <>
                   … +{hidden} line{hidden === 1 ? '' : 's'}
                 </>
               )}
+            </Row>
+          ) : hidden > 0 ? (
+            <Row indent={1} columns={3} tone='faint'>
+              … +{hidden} line{hidden === 1 ? '' : 's'}
             </Row>
           ) : null}
         </>

@@ -63,6 +63,7 @@ import type { TerminalAffordances } from '../terminal/affordances.tsx'
 import { SessionInfoDialog } from './SessionInfoDialog.tsx'
 import { StatusBar } from './StatusBar.tsx'
 import { Transcript } from './Transcript.tsx'
+import { ToolResultFetchProvider } from './tool-result-fetch.tsx'
 import {
   TranscriptDensityProvider,
   TranscriptVariantProvider,
@@ -488,6 +489,7 @@ export function SessionPanel({
     setModel,
     setPermissionMode,
     reconnectNow,
+    loadFullResult,
   } = useClaudeSession(client, sessionId, { onProtocolError: setProtocolError, cacheTranscript })
   // Callers are told to remount on a session switch, but a changed prop must not leave
   // the previous session's failure on screen.
@@ -816,6 +818,11 @@ export function SessionPanel({
     // run, and they read it from this context rather than a prop chain.
     <TranscriptVariantProvider value={transcriptVariant}>
       <TranscriptDensityProvider value={transcriptDensity}>
+      {/* The panel owns the session's one attach, so it is the only thing that
+          can answer a row asking for the rest of a truncated tool result. Rows
+          rendered anywhere else fall back to the context's no-op, which is
+          correct for them: nothing truncates a replay they never asked for. */}
+      <ToolResultFetchProvider value={loadFullResult}>
       <div
         data-slot='session-panel'
         // The typeface is a cascade fact, not a React one — one attribute here,
@@ -1019,6 +1026,7 @@ export function SessionPanel({
           </>
         ) : null}
       </div>
+      </ToolResultFetchProvider>
       </TranscriptDensityProvider>
     </TranscriptVariantProvider>
   )

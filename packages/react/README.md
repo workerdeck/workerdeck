@@ -137,6 +137,13 @@ input by construction: fine for the user's own data, never a source of server-au
 
 ## Rules you cannot infer from the types
 
+- **A truncated tool result is hydrated into transcript state, not into a row.** The hook attaches
+  with `truncateResults`, so a huge result arrives as a head carrying
+  `result.truncated`/`totalChars`/`sourceSeq`; `loadFullResult(toolUseId)` fetches the rest and
+  folds it in through `hydrateToolResult`, which clears the markers. Keeping it in row-local state
+  instead would mean the copy button copies the head, the transcript cache drops it on a session
+  switch, and the next event re-truncates the row.
+
 - **Companions must ride the hook's own `handle`.** The server's tool bridge asks the *first
   attached client*, so a second `useClaudeSession` for the same session is a second attach that
   will never be asked anything. `useAttachments`, `useHostFileSearch` and `useToolCallHost` all

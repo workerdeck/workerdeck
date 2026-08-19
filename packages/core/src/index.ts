@@ -1,4 +1,10 @@
 export { SessionRunner } from './engines/claude/runner.ts'
+/** The one replay body every runner delivers through, and the truncation it can
+ * apply. Exported because the property that matters — what a truncated replay
+ * does to a *fold* — can only be proven in `packages/react`, which owns the
+ * reducer and cannot be imported from here. Same split as the rest of this
+ * family. */
+export { replaySlice, truncateResultBlocks } from './lib/replay.ts'
 export { AiSdkRunner } from './engines/provider/runner.ts'
 export type {
   AiSdkRunnerConfig,

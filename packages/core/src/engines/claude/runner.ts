@@ -14,9 +14,7 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 import {
   ENGINE_CAPABILITIES,
-  replayRetains,
   transcriptActivity,
-  transcriptContent,
   type CreateSessionRequest,
   type McpServerStatusInfo,
   type PermissionMode,
@@ -43,7 +41,7 @@ import {
   toApiMessage,
 } from '../../lib/normalize.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
-import { staleReplaySeqs } from '../../lib/replay.ts'
+import { replaySlice } from '../../lib/replay.ts'
 import { SubagentTracker } from './subagents.ts'
 
 export type QueryFn = (params: {
@@ -343,6 +341,13 @@ export class SessionRunner implements Runner {
     this.#setStatus('closed')
   }
 
+  /** See `Runner.eventAt`. A linear scan: the one caller is a reader pressing
+   * "show everything" on one row, so a per-runner seq index would be a map
+   * maintained on every emit to save a walk nobody makes twice a minute. */
+  eventAt(seq: number): SessionEvent | undefined {
+    return this.#events.find((event) => event.seq === seq)
+  }
+
   /**
    * Replay buffered events with seq > afterSeq, then deliver live events.
    * Returns an unsubscribe function.
@@ -359,19 +364,10 @@ export class SessionRunner implements Runner {
   subscribe(
     listener: SessionEventListener,
     afterSeq = 0,
-    options?: { coalesceReplay?: boolean },
+    options?: { coalesceReplay?: boolean; truncateResults?: boolean },
   ): () => void {
-    const stale = options?.coalesceReplay ? staleReplaySeqs(this.#events, afterSeq) : undefined
-    const lastSeq = this.#events[this.#events.length - 1]?.seq ?? 0
-    for (const event of this.#events) {
-      if (event.seq <= afterSeq) continue
-      if (event.seq < this.#resetSeq && transcriptContent(event)) continue
-      if (stale?.has(event.seq)) continue
-      // Never the last event, whatever the rule says: a client's replay hold
-      // waits for `state.lastSeq` to reach the attach's, and would hang forever.
-      if (options?.coalesceReplay && event.seq !== lastSeq && !replayRetains(event)) continue
+    for (const event of replaySlice(this.#events, { ...options, afterSeq, resetSeq: this.#resetSeq }))
       listener(event)
-    }
     this.#listeners.add(listener)
     return () => this.#listeners.delete(listener)
   }

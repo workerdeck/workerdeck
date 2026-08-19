@@ -86,6 +86,13 @@ The queue stream has no replay: on (re)connect, re-list jobs and treat the strea
 
 ## Rules you cannot infer from the types
 
+- **`truncateResults` is for renderers only.** It asks the gateway to replay an oversized
+  `tool_result` as its *head*, with `truncated`/`total_chars` set and the rest available from
+  `client.toolResult(...)`. Ask for it only if you also fetch it back — otherwise you will show a
+  head as though it were the whole result, which is the one failure this option is designed to
+  avoid. `@workerdeck/react`'s `useClaudeSession` sets it; nothing else in this package does, and
+  the default must stay off.
+
 - **One client per gateway.** Session ids are unique within a gateway, not across them; two
   clients for one gateway means two of everything that is meant to be shared.
 - **A refused call throws `WorkerDeckError`, and its `status` is the useful part.** 404 means this
