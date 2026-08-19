@@ -37,6 +37,13 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     Holding one view was never the fix; holding the state deletes the question of which views
     remembered to opt in. The placeholder is a spinner and a live `seq / target` counter, because
     a blank screen for several seconds is indistinguishable from a session that failed to open.
+    That counter is also where the phone's whole session-open cost turned out to live:
+    `TranscriptViewModel` is `@Observable` and the hold was a stored property on it, written back
+    on **every applied event**, so 818 replayed events meant 818 layout passes of a spinner and a
+    formatted number — 1,533 ms of a 1,692 ms open. The hold's state is `@ObservationIgnored` now
+    and still exact; `replayProgress` is published at most ten times a second. The general rule is
+    not iOS-specific: **a per-event write to observed state, on a path that replays hundreds of
+    events, costs a render per event.**
   - `MarkdownBlocks.swift` — splits assistant text into blocks: headings, lists, quotes, rules
     and fenced code, with anything it doesn't model (tables included) falling through as prose
     rather than being lost. Pure, so it lives here (this package is the only part of the app
