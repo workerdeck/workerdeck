@@ -31,9 +31,10 @@ struct RichTextEditor: UIViewRepresentable {
   @Environment(\.transcriptFont) private var transcriptFont
   @Environment(\.transcriptVariant) private var transcriptVariant
 
-  /// What `DraftStyle` should be set to for this render.
-  private var wantedTextStyle: UIFont.TextStyle {
-    transcriptVariant.isTerminal ? lineTextUIStyle : .body
+  /// This render's styling — a value, so nothing is left behind for the next
+  /// field to inherit.
+  private var style: DraftStyle {
+    DraftStyle(variant: transcriptVariant, font: transcriptFont)
   }
 
   /// The typeface, and the one place the variant outranks the preference.
@@ -46,9 +47,8 @@ struct RichTextEditor: UIViewRepresentable {
   /// only row not on the grid. The web says the same thing in CSS, where the VS
   /// Code webview repoints `--cw-font-mono` unconditionally for exactly this
   /// reason.
-  private var wantedDesign: UIFontDescriptor.SystemDesign {
-    transcriptVariant.isTerminal ? .monospaced : transcriptFont.uiDesign
-  }
+  /// (Spelled once, in `DraftStyle.init(variant:font:)`; this stays as the
+  /// place the reasoning lives.)
 
   func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -60,10 +60,10 @@ struct RichTextEditor: UIViewRepresentable {
     view.textContainerInset = DraftStyle.containerInset
     view.textContainer.lineFragmentPadding = 0
     view.adjustsFontForContentSizeCategory = true
-    DraftStyle.design = wantedDesign
-    DraftStyle.textStyle = wantedTextStyle
-    view.font = DraftStyle.base
-    view.typingAttributes = DraftStyle.baseAttributes
+    let style = self.style
+    context.coordinator.style = style
+    view.font = style.base
+    view.typingAttributes = style.baseAttributes
     // A prompt carries paths, code and flags: curly quotes and em-dashes would
     // corrupt them silently.
     view.smartQuotesType = .no
@@ -83,12 +83,12 @@ struct RichTextEditor: UIViewRepresentable {
     }
     // Before the restyle, which paints `baseAttributes` over the whole draft:
     // that is what carries a font change through to text already typed.
-    if DraftStyle.design != wantedDesign || DraftStyle.textStyle != wantedTextStyle {
-      DraftStyle.design = wantedDesign
-      DraftStyle.textStyle = wantedTextStyle
-      view.font = DraftStyle.base
+    let style = self.style
+    if context.coordinator.style != style {
+      context.coordinator.style = style
+      view.font = style.base
     }
-    DraftStyle.restyle(view)
+    style.restyle(view)
 
     let clamped = clamp(selection, to: view.text as NSString)
     if view.selectedRange != clamped {
@@ -120,7 +120,7 @@ struct RichTextEditor: UIViewRepresentable {
   }
 
   private func maxHeight(for view: UITextView) -> CGFloat {
-    let line = (view.font ?? DraftStyle.base).lineHeight
+    let line = (view.font ?? style.base).lineHeight
     return line * CGFloat(maxLines) + view.textContainerInset.top
       + view.textContainerInset.bottom
   }
@@ -134,6 +134,10 @@ struct RichTextEditor: UIViewRepresentable {
 
   final class Coordinator: NSObject, UITextViewDelegate {
     var parent: RichTextEditor
+    /// This field's styling, held here because the delegate below runs with
+    /// nothing in hand but the view — which is exactly what the process-wide
+    /// statics used to be working around.
+    var style = DraftStyle(variant: .cards, font: .regular)
     /// True while `updateUIView` is writing into the view. The delegate fires
     /// synchronously from those writes, and reporting them back as user edits
     /// would both loop and mutate SwiftUI state mid-update.
@@ -145,7 +149,7 @@ struct RichTextEditor: UIViewRepresentable {
 
     func textViewDidChange(_ view: UITextView) {
       guard !isApplyingBinding else { return }
-      DraftStyle.restyle(view)
+      style.restyle(view)
       parent.text = view.text
       parent.selection = view.selectedRange
       parent.onEdit(view.text, view.selectedRange)
@@ -171,38 +175,79 @@ struct RichTextEditor: UIViewRepresentable {
 
 /// Draft styling: the same rules `PromptTokenStyle` uses in the transcript, in the
 /// vocabulary UIKit needs, so a token looks identical before and after sending.
-@MainActor
-enum DraftStyle {
-  /// The typeface the draft is typed in — the UIKit half of `transcriptFont`.
-  ///
-  /// Static, and deliberately: `restyle` runs from a `UITextViewDelegate` with
-  /// nothing in hand but the view, and the preference is process-wide anyway
-  /// (`AppSettings` is one object for the whole app). `RichTextEditor` is the
-  /// only writer, and it writes it from the environment before reading `base`.
-  static var design: UIFontDescriptor.SystemDesign = .default
+///
+/// **A value, derived from its two inputs.** `design` and `textStyle` were
+/// process-wide mutable statics, written by `RichTextEditor` during its own
+/// `makeUIView`/`updateUIView` and read by anyone — which is a cache of a
+/// preference dressed as a constant, and it bit: the composer's placeholder read
+/// it during the same render pass and got the *previous* field's font, so the
+/// placeholder had to be re-derived from the variant by hand, which is two
+/// spellings of one rule. Any second text field in the app would have inherited
+/// whatever the last one set.
+///
+/// Constructed from `(variant, font)`, so the placeholder and the field are the
+/// same derivation rather than two that have to agree, and threaded to the
+/// delegate through the coordinator — which is what the statics were really
+/// working around: `restyle` runs from a `UITextViewDelegate` with nothing in
+/// hand but the view.
+struct DraftStyle: Equatable {
+  var design: UIFontDescriptor.SystemDesign
+  var textStyle: UIFont.TextStyle
 
-  /// The draft's size, likewise written by `RichTextEditor` from the variant:
-  /// `lines` types at the transcript's own size, `cards` at body.
-  static var textStyle: UIFont.TextStyle = .body
+  /// The one derivation. `variant` outranks `font` — see
+  /// `RichTextEditor.wantedDesign` for why the terminal theme is monospace by
+  /// construction rather than by preference.
+  init(variant: TranscriptVariant, font: TranscriptFont) {
+    design = variant.isTerminal ? .monospaced : font.uiDesign
+    textStyle = variant.isTerminal ? lineTextUIStyle : .body
+  }
+
+  /// The field's own padding. A genuine constant, so it stays static: three
+  /// places need to agree with it — the text view, the placeholder that has to
+  /// land exactly where the first character will, and the composer's glyph
+  /// buttons, which sit on the *last line's* box rather than on the field's
+  /// bottom edge.
+  static let containerInset = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
 
   /// Dynamic Type's body font in the chosen design. Built from the descriptor
   /// rather than `monospacedSystemFont(ofSize:)` so it keeps tracking the
   /// content-size category — `adjustsFontForContentSizeCategory` needs a font
   /// that came from a text style.
-  static var base: UIFont {
+  var base: UIFont {
     let body = UIFont.preferredFont(forTextStyle: textStyle)
     guard let descriptor = body.fontDescriptor.withDesign(design) else { return body }
     return UIFont(descriptor: descriptor, size: 0)
   }
 
-  /// The field's own padding. Named here rather than written at the call site
-  /// because three places need to agree with it: the text view, the placeholder
-  /// that has to land exactly where the first character will, and the composer's
-  /// glyph buttons, which sit on the *last line's* box rather than on the field's
-  /// bottom edge.
-  static let containerInset = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+  /// The same face for SwiftUI, which is what the placeholder needs. A mapping
+  /// rather than `Font(base)`: that would freeze the resolved size, and this one
+  /// keeps scaling with Dynamic Type the way the field does.
+  ///
+  /// A `switch` on the style rather than `textStyle == lineTextUIStyle`, which
+  /// hardcoded what `lineTextUIStyle` happens to *be*: repoint that constant and
+  /// the field, the glyphs and `glyphBaseline` all follow it (they derive from
+  /// `base`) while the placeholder would silently keep the old size and stop
+  /// landing on the first character — the placeholder's one job, and the same
+  /// two-spellings-of-one-rule this type was rewritten to end.
+  var swiftUIFont: Font {
+    let scale: Font.TextStyle =
+      switch textStyle {
+      case .largeTitle: .largeTitle
+      case .title1: .title
+      case .title2: .title2
+      case .title3: .title3
+      case .headline: .headline
+      case .subheadline: .subheadline
+      case .callout: .callout
+      case .footnote: .footnote
+      case .caption1: .caption
+      case .caption2: .caption2
+      default: .body
+      }
+    return .system(scale, design: design == .monospaced ? .monospaced : .default)
+  }
 
-  static var baseAttributes: [NSAttributedString.Key: Any] {
+  var baseAttributes: [NSAttributedString.Key: Any] {
     [.font: base, .foregroundColor: UIColor.label]
   }
 
@@ -216,7 +261,7 @@ enum DraftStyle {
 
   /// Repaint the draft. Only *confirmed* tokens are styled — the word still being
   /// typed stays plain, so the composer doesn't flicker on every keystroke.
-  static func restyle(_ view: UITextView) {
+  func restyle(_ view: UITextView) {
     // Mid-composition (IME, dictation): the marked range carries its own
     // attributes and rewriting them breaks the candidate UI.
     guard view.markedTextRange == nil else { return }
@@ -226,7 +271,8 @@ enum DraftStyle {
     storage.beginEditing()
     storage.setAttributes(baseAttributes, range: NSRange(location: 0, length: storage.length))
     for token in PromptTokens.confirmed(in: text) {
-      storage.addAttributes(tokenAttributes(token.kind), range: NSRange(token.range, in: text))
+      storage.addAttributes(
+        Self.tokenAttributes(token.kind), range: NSRange(token.range, in: text))
     }
     storage.endEditing()
     // Otherwise the next character typed inherits the last token's monospace.

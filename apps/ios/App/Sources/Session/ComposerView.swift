@@ -20,6 +20,7 @@ struct ComposerView: View {
   /// The transcript's variant reaches here through the same environment the rows
   /// read, so the composer matches what is above it without a parameter.
   @Environment(\.transcriptVariant) private var variant
+  @Environment(\.transcriptFont) private var transcriptFont
 
   @Binding var text: String
   /// Caret in UTF-16 units — it decides which token is being completed and where
@@ -89,7 +90,7 @@ struct ComposerView: View {
         field
         TermGlyphButton(
           glyph: "\u{21B5}", label: "Send", tint: canSend ? TerminalPalette.color(.blue) : nil,
-          action: onSend
+          action: onSend, glyphSize: style.base.pointSize
         )
         .disabled(!canSend)
         .padding(.bottom, glyphBaseline)
@@ -144,13 +145,16 @@ struct ComposerView: View {
   private var gutterGlyph: some View {
     if isBusy {
       TermGlyphButton(
-        glyph: "\u{2715}", label: "Interrupt", tint: TerminalPalette.color(.yellow), action: onStop)
+        glyph: "\u{2715}", label: "Interrupt", tint: TerminalPalette.color(.yellow), action: onStop,
+        glyphSize: style.base.pointSize)
     } else if canAddMedia {
-      TermGlyphButton(glyph: "+", label: "Add media", action: onAddMedia)
+      TermGlyphButton(
+        glyph: "+", label: "Add media", action: onAddMedia,
+        glyphSize: style.base.pointSize)
         .disabled(!isEnabled)
     } else {
       Text(TermGlyph.prompt)
-        .font(.system(size: TermGlyphButton.glyphSize, design: .monospaced))
+        .font(.system(size: style.base.pointSize, design: .monospaced))
         .foregroundStyle(TerminalPalette.color(.blue))
         .frame(width: TermGlyphButton.side, height: TermGlyphButton.side)
         .accessibilityHidden(true)
@@ -163,12 +167,16 @@ struct ComposerView: View {
   /// `.bottom` alignment centres a 34pt button on the field's bottom 34pt, which
   /// includes the text container's 8pt inset — so the glyph rides low by exactly
   /// half the difference. Computed from the live font rather than nudged by a
-  /// constant, because `DraftStyle.base` is a Dynamic Type font: at accessibility
+  /// constant, because `style.base` is a Dynamic Type font: at accessibility
   /// sizes a hardcoded offset would be wrong in the other direction.
   private var glyphBaseline: CGFloat {
     let inset = DraftStyle.containerInset.bottom
-    return max(0, inset + DraftStyle.base.lineHeight / 2 - TermGlyphButton.side / 2)
+    return max(0, inset + style.base.lineHeight / 2 - TermGlyphButton.side / 2)
   }
+
+  /// The field's styling, from the same two inputs `RichTextEditor` derives it
+  /// from — one derivation rather than two that have to agree.
+  private var style: DraftStyle { DraftStyle(variant: variant, font: transcriptFont) }
 
   /// Expanded whenever there is something to act on: the keyboard is up, a draft
   /// is waiting, a photo is staged, or a turn is running and stopping it must stay
@@ -177,25 +185,18 @@ struct ComposerView: View {
     isFocused || !text.isEmpty || isBusy || !attachments.isEmpty
   }
 
-  /// The placeholder's font, matching what `RichTextEditor` will set on the
-  /// text view: monospaced at the transcript's size under `terminal` (the theme
-  /// is monospace by construction), body otherwise.
-  private var placeholderFont: Font {
-    variant.isTerminal ? .system(.subheadline, design: .monospaced) : .body
-  }
-
   private var field: some View {
     ZStack(alignment: .topLeading) {
       if text.isEmpty {
         // Matched to `RichTextEditor`'s `textContainerInset`, so the placeholder
         // sits exactly where the first character will.
         Text("Message")
-          // Derived from the variant, **not** read off `DraftStyle`: that is a
-          // process-wide static written by `RichTextEditor` during its own
-          // `makeUIView`, so a `Text` built in the same pass reads whatever the
-          // previous field left there. Spelled from the same two inputs
-          // instead, which is the only version that cannot be a render behind.
-          .font(placeholderFont)
+          // The field's own derivation, not a parallel spelling of it. It used
+          // to be one: `DraftStyle` was a process-wide static written by
+          // `RichTextEditor` during its own `makeUIView`, so a `Text` built in
+          // the same pass read whatever the previous field had left there, and
+          // the placeholder had to re-derive the rule by hand to be correct.
+          .font(style.swiftUIFont)
           .foregroundStyle(.tertiary)
           .padding(.horizontal, DraftStyle.containerInset.left)
           .padding(.vertical, DraftStyle.containerInset.top)
@@ -314,21 +315,22 @@ private struct TermGlyphButton: View {
   /// Taken from the field's own font rather than named as a constant: the
   /// composer types at `lineTextUIStyle` and that is a Dynamic Type style, so a
   /// hardcoded size would be right at one content-size category and wrong at
-  /// every other one — and these glyphs sit *on the typed line*.
-  static var glyphSize: CGFloat { DraftStyle.base.pointSize }
-
+  /// every other one — and these glyphs sit *on the typed line*. Handed in
+  /// rather than read off a static, so this button cannot be a render behind
+  /// the field it sits on.
   let glyph: String
   let label: String
   /// `nil` = the theme's `dim`; set only for the two states worth colouring.
   var tint: Color?
   let action: () -> Void
+  var glyphSize: CGFloat = UIFont.preferredFont(forTextStyle: lineTextUIStyle).pointSize
 
   @Environment(\.isEnabled) private var isEnabled
 
   var body: some View {
     Button(action: action) {
       Text(glyph)
-        .font(.system(size: Self.glyphSize, design: .monospaced))
+        .font(.system(size: glyphSize, design: .monospaced))
         .foregroundStyle(tint ?? TerminalPalette.color(.dim))
         .frame(width: Self.side, height: Self.side)
         .contentShape(Rectangle())
