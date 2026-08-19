@@ -975,8 +975,9 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   **opt-in from the unit that renders**, which is stricter than `coalesceReplay`'s opt-in and for
   a sharper reason: `client` and `react` are separate packages an embedder can skew, so a caller
   that asked for heads without knowing how to fetch them back would show one as if it were the
-  whole result — the silent lie this family exists to prevent. `useClaudeSession` sets it and
-  nothing else does. And the head is **chosen against the clients' own budgets** (~400 collapsed,
+  whole result — the silent lie this family exists to prevent. `useClaudeSession` sets it, and so
+  does the iOS app's own attach (`TranscriptViewModel.run`) — one per *renderer*, never anywhere
+  else. And the head is **chosen against the clients' own budgets** (~400 collapsed,
   2,000 open), so both un-pressed states are byte-identical to an untruncated attach and only the
   uncapped "show everything" press ever fetches; `packages/ui/test/result-budget.test.ts` asserts
   that relationship, because a head lowered under the open budget would clip it with no marker.
@@ -984,6 +985,17 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   dropping but not from truncation** (a session ending on a `find /` puts its 641 KB frame exactly
   there), and the marker outlives the clip — a head short enough to fit the open budget is still
   not the result, so the affordance is `clipped || truncated`, never `hidden > 0`.
+- **It cuts text, and text is not where the bytes are — measured.** Re-run against the session the
+  feature was designed on, a truncating attach came out at 3,092 KB against 3,101 KB: **0.3%**. Of
+  176 `tool_result` blocks, four held more than 8,000 characters of text (8 KB between them) and
+  the giant frames were base64 **image parts**, which `truncateResultBlocks` deliberately does not
+  touch — slicing one corrupts it. Across every local session log the ratio holds: 44 MB of
+  tool-result text against 458 MB of base64, in 189 of 215 sessions, two thirds of it produced by
+  **`Read`** (an agent looking at a PNG) rather than by a browser tool. Those parts are dropped by
+  `blockText`/`joinedText` on arrival and rendered by nobody, so they are a candidate for a
+  *drop* rule of this same family — not for this one. Keep the two apart, and do not restate the
+  old "68% of an attach" projection: it measured `JSON.stringify(content).length`, which counts
+  base64 as text.
 - **A stale `sourceSeq` must be refused, not guessed.** The fetch route requires `toolUseId` and
   verifies it against the block it found. A woken dormant session has a fresh log with fresh seqs,
   so a seq cached across a rebuild can name a different event entirely, and handing the reader

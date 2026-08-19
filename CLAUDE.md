@@ -1281,18 +1281,28 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   app is side-loaded from this repo and has no `package.json`, so `version:set` does not reach it
   and a bump neither helps nor hinders it.
 
-  Riding there too, and in the *proven* half rather than the debt half: **on-demand tool results**
-  (protocol's `ToolResultBlock.truncated`, `replaySlice`, `/events/:seq/result`,
-  `loadFullResult`, the press in both themes). Its justification is a measurement — three
-  `tool_result` frames were 68% of one 3.1 MB attach — and its property is tested as an
-  *inequality*, which is what the rest of this family cannot say: a truncated replay's fold
-  differs from the full one in `result.text` and three markers and **nowhere else**, and hydration
-  restores exact equality. The server test asserts backward compatibility rather than arguing it
-  (an attach with no param is byte-identical to before). What is **not** done: iOS neither asks
-  for truncation nor knows how to fetch, so the phone is correct today and simply keeps paying the
-  bytes — and the measurement has not been re-run against a real session, which is the acceptance
-  criterion the design wrote down. Both are in `_docs/features/session-load-and-selection.md`.
-  Protocol stays **7**: the marker can only reach a client that asked for it.
+  Riding there too: **on-demand tool results** (protocol's `ToolResultBlock.truncated`,
+  `replaySlice`, `/events/:seq/result`, `loadFullResult`, the press in both themes, and now the
+  phone — `TerminalExpansion.pending`, the third expansion state, because a head's "show
+  everything" is a network round trip and planning from `total_chars` would invent a line count
+  for text nobody has seen). Its property is tested as an *inequality*, which is what the rest of
+  this family cannot say: a truncated replay's fold differs from the full one in `result.text` and
+  three markers and **nowhere else**, and hydration restores exact equality. The server test
+  asserts backward compatibility rather than arguing it (an attach with no param is byte-identical
+  to before). Protocol stays **7**: the marker can only reach a client that asked for it.
+  **Its justification, however, did not survive being measured.** Re-run 2026-08-19 against the
+  session every number came from, the cut was **9 KB of 3,101 KB — 0.3%**, not 68%: the three
+  giant frames are base64 **screenshots**, the text rule deliberately does not touch non-text
+  parts, and of 176 `tool_result` blocks only four hold more than 8,000 characters of text. The
+  projection had measured `JSON.stringify(content).length`, counting base64 as text. The mechanism
+  is right and worth keeping; what it cut is small, and the 2.1 MB that is really there — parts
+  every client ships and then discards, `blockText`/`joinedText` keeping text only — is a separate
+  rule of this same family, written up in `_docs/features/replay-image-parts.md` and now measured
+  four ways: **91% of all tool-result payload across 214 local sessions is base64** (44 MB text vs
+  458 MB), present in **189 of 215**, and **`Read` produces two thirds of it** — an agent looking
+  at a PNG, not a browser tool — so it is not a niche. The control session is the argument: same
+  order of tool calls, more text, **771 KB of attach against 4,550 KB.** The lesson belongs beside
+  the feature: **no other rule in this family has been measured after shipping.**
 
   **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`
