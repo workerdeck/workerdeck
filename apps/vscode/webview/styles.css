@@ -180,3 +180,30 @@ a:hover {
   text-underline-offset: 2px;
   cursor: pointer;
 }
+
+/*
+ * The VENDOR colour — the engine's own, worn by its mark and its model name in
+ * the sessions list and nowhere else.
+ *
+ * This is the one place a brand colour is allowed in this webview, and it is a
+ * deliberate exception to the `--term-mark` repoint above. That rule retires
+ * coral from the *panel*, where it marked "the session is working" and competed
+ * with the editor's accent for a meaning the editor already owns. Here the
+ * colour has a different job: it sits against the vendor's mark and names whose
+ * engine this is. Nothing else in a sidebar row says that, and the mark alone is
+ * a 13px silhouette.
+ *
+ * Anthropic's coral is the only one carried, because it is the only one that
+ * survives at 13px against both grounds — OpenAI's mark is monochrome by design
+ * and a green would read as a status. Every other engine falls through to the
+ * muted foreground, which is what the line looked like before.
+ */
+#root {
+  --wd-vendor: #cc7c5e;
+}
+body.vscode-light #root {
+  --wd-vendor: #b3573a;
+}
+.text-vendor {
+  color: var(--wd-vendor);
+}

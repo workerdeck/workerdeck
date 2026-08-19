@@ -247,11 +247,11 @@
             "sans"
           ],
           "enumDescriptions": [
-            "The editor font (monospace) — matches the terminal and the code around it.",
+            "The editor font (monospace) \u2014 matches the terminal and the code around it.",
             "VS Code's UI font, like every other view."
           ],
           "default": "editor",
-          "description": "Typeface for the WorkerDeck agent panel's Cards style. The Terminal style always draws in the editor's monospace font — a proportional face there would break its character grid. The sidebar and the session views always follow VS Code's UI font."
+          "description": "Typeface for the WorkerDeck agent panel's Cards style. The Terminal style always draws in the editor's monospace font \u2014 a proportional face there would break its character grid. The sidebar and the session views always follow VS Code's UI font."
         },
         "workerdeck.newSession.permissionMode": {
           "type": "string",
@@ -266,12 +266,12 @@
           ],
           "enumDescriptions": [
             "Start on whatever the last session on that adapter was using.",
-            "Manual — ask before every tool that needs permission.",
-            "Auto — the engine decides each permission itself.",
-            "Accept edits — file edits go through, everything else asks.",
-            "Plan — research and propose, change nothing.",
-            "Don't ask — never prompt; refuse instead of asking.",
-            "Bypass — no permission checks at all. Decided at creation and unchangeable after."
+            "Manual \u2014 ask before every tool that needs permission.",
+            "Auto \u2014 the engine decides each permission itself.",
+            "Accept edits \u2014 file edits go through, everything else asks.",
+            "Plan \u2014 research and propose, change nothing.",
+            "Don't ask \u2014 never prompt; refuse instead of asking.",
+            "Bypass \u2014 no permission checks at all. Decided at creation and unchangeable after."
           ],
           "default": "remember",
           "description": "Permission mode for sessions created from VS Code. A mode the chosen engine does not support falls back to that profile's own default.",
@@ -298,7 +298,7 @@
           ],
           "enumDescriptions": [
             "A blank line between messages, like the Claude Code CLI.",
-            "No blank line — every row tight against the next."
+            "No blank line \u2014 every row tight against the next."
           ],
           "default": "comfortable",
           "description": "Vertical spacing between messages in the WorkerDeck agent panel's Cards style. The Terminal style has one line height by definition and ignores this."
@@ -323,7 +323,7 @@
         "workerdeck.statusBar.unread": {
           "type": "boolean",
           "default": true,
-          "description": "Show the unread badge — transcript rows produced since you last looked, summed over the sessions the Sessions view's filter is showing. This is the extension's only always-visible signal that a session wants you, so while it is on the sessions are polled even with every WorkerDeck view closed; turning it off also stops that background poll."
+          "description": "Show the unread badge \u2014 transcript rows produced since you last looked, summed over the sessions the Sessions view's filter is showing. This is the extension's only always-visible signal that a session wants you, so while it is on the sessions are polled even with every WorkerDeck view closed; turning it off also stops that background poll."
         },
         "workerdeck.statusBar.subagents": {
           "type": "boolean",
@@ -353,7 +353,7 @@
         "workerdeck.statusBar.modelUsage": {
           "type": "boolean",
           "default": false,
-          "description": "Show the per-model weekly plan-usage badge — the fullest of the model-scoped windows, labelled with that model's name (Fable, Opus, …). Off by default: it is the reading you want only while deliberately spending one model's budget. Hidden when the account has no model-scoped window."
+          "description": "Show the per-model weekly plan-usage badge \u2014 the fullest of the model-scoped windows, labelled with that model's name (Fable, Opus, \u2026). Off by default: it is the reading you want only while deliberately spending one model's budget. Hidden when the account has no model-scoped window."
         },
         "workerdeck.statusBar.model": {
           "type": "boolean",
@@ -380,7 +380,8 @@
     "typecheck": "tsgo -p tsconfig.json && tsgo -p tsconfig.webview.json",
     "package": "pnpm build && vsce package --no-dependencies -o workerdeck.vsix",
     "dev:host": "node scripts/dev-host.mjs",
-    "install:local": "pnpm package && code --install-extension workerdeck.vsix --force"
+    "install:local": "pnpm package && code --install-extension workerdeck.vsix --force",
+    "dev:preview": "vite --port 5199 --strictPort --open /dev/preview.html"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.1",

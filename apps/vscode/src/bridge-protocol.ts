@@ -187,6 +187,19 @@ export type SidebarToHost =
     }
   | { kind: 'wd-delete-session'; hostId: string; sessionId: string }
   | {
+      /**
+       * The card's `⋯`. The menu itself is a native QuickPick, built and shown
+       * host-side — no webview in this extension draws its own chrome, and a
+       * popover anchored inside a view this narrow would be clipped by the
+       * view's own bounds. It carries no action: the host reads the session's
+       * state from the model it already polls, so a stale card cannot offer
+       * Stop for a session that finished a second ago.
+       */
+      kind: 'wd-session-menu'
+      hostId: string
+      sessionId: string
+    }
+  | {
       /** Rename (double-click the name). Empty string clears it, restoring the
        * derived title. */
       kind: 'wd-rename-session'

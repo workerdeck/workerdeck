@@ -180,7 +180,7 @@ export {
 export { SessionStatusIcon } from './components/agent/SessionBrowser.tsx'
 // Lifted out of the VS Code sidebar once the dashboard grew a collapsed rail
 // that needs the same glyph — two copies of a trademark set is one too many.
-export { EngineIcon } from './components/agent/EngineIcon.tsx'
+export { EngineIcon, engineMark } from './components/agent/EngineIcon.tsx'
 export {
   SessionEmptyState,
   type SessionEmptyStateProps,

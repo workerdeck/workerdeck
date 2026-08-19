@@ -240,7 +240,43 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
         return this.#renameSession(msg.hostId, msg.sessionId, msg.title)
       case 'wd-delete-session':
         return this.#deleteSession(msg.hostId, msg.sessionId)
+      case 'wd-session-menu':
+        return this.#sessionMenu(msg.hostId, msg.sessionId)
     }
+  }
+
+  /**
+   * The card's overflow, as a native QuickPick — the same shape the create and
+   * resume flows use, and the only kind of menu this extension has.
+   *
+   * The items are decided **here**, off the polled model, not by the card: a
+   * card renders the last snapshot it was pushed, so a session that finished
+   * between the poll and the press would still be offering Stop. Rename is not
+   * among them — it is a double-click on the name, because a rename is a thing
+   * you do to the word you are looking at.
+   */
+  async #sessionMenu(hostId: string, sessionId: string): Promise<void> {
+    const info = this.#model.sessionsOf(hostId).find((s) => s.id === sessionId)
+    if (!info) return
+    const running = info.status === 'running' || info.status === 'starting'
+    const items: (vscode.QuickPickItem & { run: () => Promise<void> })[] = []
+    if (running) {
+      items.push({
+        label: '$(debug-stop) Stop',
+        detail: 'Interrupt the turn in flight',
+        run: () => this.#stopSession(hostId, sessionId),
+      })
+    }
+    items.push({
+      label: '$(trash) Delete',
+      detail: 'Remove the session from the gateway',
+      run: () => this.#deleteSession(hostId, sessionId),
+    })
+    const picked = await vscode.window.showQuickPick(items, {
+      title: info.title ?? sessionId.slice(0, 8),
+      placeHolder: 'Session actions',
+    })
+    await picked?.run()
   }
 
   /**

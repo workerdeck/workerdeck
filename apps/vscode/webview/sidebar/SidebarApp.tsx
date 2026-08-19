@@ -103,7 +103,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
 
       {subset ? <SubsetLine subset={subset} onClear={() => setConfig(clearFilters(config))} /> : null}
 
-      <div className='min-h-0 flex-1 overflow-y-auto py-1'>
+      <div className='min-h-0 flex-1 overflow-y-auto p-1'>
         {hosts.length === 0 ? (
           <Empty
             icon={<Plug />}
@@ -167,9 +167,9 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
           )
         ) : (
           groups.map((group) => (
-            <div key={group.key}>
+            <div key={group.key} className='flex flex-col gap-1'>
               {group.label ? (
-                <div className='px-2 pb-0.5 pt-2 text-label font-semibold uppercase tracking-wide text-fg-4'>
+                <div className='px-1.5 pb-0.5 pt-1.5 text-label font-semibold uppercase tracking-wide text-fg-4'>
                   {group.label}
                 </div>
               ) : null}
@@ -205,16 +205,9 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
                       title,
                     })
                   }
-                  onStop={() =>
+                  onMenu={() =>
                     bridge.post({
-                      kind: 'wd-stop-session',
-                      hostId: row.hostId,
-                      sessionId: row.info.id,
-                    })
-                  }
-                  onDelete={() =>
-                    bridge.post({
-                      kind: 'wd-delete-session',
+                      kind: 'wd-session-menu',
                       hostId: row.hostId,
                       sessionId: row.info.id,
                     })

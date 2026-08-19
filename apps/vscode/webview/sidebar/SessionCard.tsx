@@ -1,32 +1,47 @@
 import type { SessionInfo, SubagentInfo } from '@workerdeck/protocol'
 import { Spinner, formatRelativeTime, friendlyModel, cn } from '@workerdeck/ui'
 import {
+  ArrowRight,
   BellRing,
   Check,
   ChevronDown,
   ChevronRight,
   CircleAlert,
   CircleSlash,
+  MoreHorizontal,
   Moon,
   PauseCircle,
-  Square,
-  Trash2,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { EngineIcon } from '@workerdeck/ui'
+import { EngineIcon, engineMark } from '@workerdeck/ui'
 import { sessionLabel, subagentLabel } from '../../src/view-config.ts'
 
 /**
- * One session in the sidebar list. Dense on purpose — VS Code sidebars are
- * narrow — but each state is legible at a glance: a live spinner while the
- * agent works, a ringing bell when it waits on a human, a moon when idle.
+ * One session in the sidebar list — an inset rounded **card**, two lines and an
+ * optional list of work under them.
  *
- * Two lines, each with a job. The **title** owns the left edge of the first line
- * because that is what you scan a list by; everything saying *how it is doing* —
- * unread count, age, state — rides the right, state last. The **second line** is
- * what it is (engine mark, model, folder) and what it has spent, with the
- * actions revealed on hover at its far right — away from the state icon, and
- * away from the top line you are actually reading.
+ * **Line one is what it is doing and what it is called**: the state leads, as a
+ * glyph in front of the title, and the unread count closes the line. The glyph
+ * leads because a sessions list is scanned for *state* first — which of these is
+ * working, which is waiting on me — and the title is what you read once the
+ * glyph has told you which row to read. (This reverses an earlier rule, "the
+ * title owns the left edge"; the earlier rule optimised for reading one row and
+ * this one for scanning twenty.) The title also **dims when the session is not
+ * live**: an idle row is context, and spending full contrast on twelve of them
+ * is what made the one that is working hard to find.
+ *
+ * **Line two is what it is**: the engine's mark and its model in the engine's
+ * own colour, then the folder and the age, muted. The colour is a *vendor* cue —
+ * it sits against the mark and identifies whose engine this is — which is why it
+ * survives this webview's rule that a lone coral element reads as a stray token
+ * (`styles.css`, the `--term-mark` repoint). That rule is about the panel's
+ * working marker, where coral competed with the editor's accent for the same
+ * meaning; here it competes with nothing and names Anthropic.
+ *
+ * **Selection is the card's own fill**, not a gutter bar: the card is already an
+ * inset shape with air around it, so filling it is unambiguous in a way a fill
+ * on a full-bleed row is not, and it leaves the left edge to the state glyph.
+ * Hover is the same fill one step down.
  *
  * The name is editable in place by **double-clicking it** — there is no menu
  * entry, because a rename is a thing you do to the word you are looking at. A
@@ -41,8 +56,7 @@ export function SessionCard({
   onSelect,
   onSelectSubagent,
   onRename,
-  onStop,
-  onDelete,
+  onMenu,
 }: {
   info: SessionInfo
   /** Shown when the list isn't already grouped by gateway. */
@@ -55,31 +69,30 @@ export function SessionCard({
    * `revealToolUse`. */
   onSelectSubagent: (toolUseId: string) => void
   onRename: (title: string) => void
-  onStop: () => void
-  onDelete: () => void
+  /** Open the card's overflow menu. Native, host-side — see `onMenu` below. */
+  onMenu: () => void
 }) {
   const [editing, setEditing] = useState(false)
   // Expansion is the row's own state and deliberately not persisted: a list that
-  // reopened yesterday's sub-agents on every window reload would be showing a
-  // settled tail nobody asked for. It also cannot be a native twisty — every
-  // view in this extension is a webview, so there is no tree to hang one on.
+  // reopened yesterday's work on every window reload would be showing a settled
+  // tail nobody asked for. It also cannot be a native twisty — every view in
+  // this extension is a webview, so there is no tree to hang one on.
   const [expanded, setExpanded] = useState(false)
-  const subagents = info.subagents ?? []
-  const runningAgents = subagents.filter((sub) => sub.status === 'running').length
-  const needsHuman = info.pendingPermissionCount > 0 || info.status === 'awaiting_approval'
+  const steps = sessionSteps(info, onSelectSubagent)
   const running = info.status === 'running' || info.status === 'starting'
+  const needsHuman = info.pendingPermissionCount > 0 || info.status === 'awaiting_approval'
+  const live = running || needsHuman
   const age = info.lastActivityAt ?? info.createdAt
   const folder = info.cwd.split('/').filter(Boolean).pop() ?? info.cwd
   const engine = info.engine ?? 'claude'
   // The model id as a person says it — `claude-opus-5[1m]` is a wire value, and
   // a sidebar line has no room to spend on a context-window suffix.
-  const details = [
-    hostName,
-    friendlyModel(info.model),
-    folder,
-    info.numTurns !== undefined ? `${info.numTurns} turn${info.numTurns === 1 ? '' : 's'}` : undefined,
-    info.totalCostUsd !== undefined ? `$${info.totalCostUsd.toFixed(2)}` : undefined,
-  ].filter(Boolean)
+  const model = friendlyModel(info.model)
+  // Only Anthropic's coral is carried (see `--wd-vendor` in `styles.css`);
+  // everything else keeps the muted line it always had rather than being given
+  // a colour invented for it here.
+  const vendor = engineMark(engine, info.model) === 'claude' ? 'text-vendor' : 'text-fg-3'
+  const rest = [hostName, folder, formatRelativeTime(age)].filter(Boolean).join(' · ')
 
   return (
     <div
@@ -97,91 +110,141 @@ export function SessionCard({
       }}
       onKeyDown={(e) => {
         // Only when the card ITSELF has focus. A press on something inside it —
-        // the disclosure, a sub-agent, a hover action — already fires that
-        // control's own click, and `stopPropagation` there cannot help: the
-        // keydown is a separate event travelling the same path, so an unguarded
-        // handler ran the control's action AND selected the session.
+        // the disclosure, a step, the menu — already fires that control's own
+        // click, and `stopPropagation` there cannot help: the keydown is a
+        // separate event travelling the same path, so an unguarded handler ran
+        // the control's action AND selected the session.
         if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') onSelect()
       }}
       className={cn(
-        'group flex w-full cursor-pointer flex-col gap-0.5 border-l-2 px-2 py-1.5 text-left',
+        'group flex w-full cursor-pointer flex-col overflow-hidden rounded-[5px] text-left',
         selected
-          ? 'border-l-(--vscode-button-background,var(--accent)) bg-(--vscode-list-activeSelectionBackground,var(--surface-hover)) text-(--vscode-list-activeSelectionForeground,inherit)'
-          : 'border-l-transparent hover:bg-surface-hover',
+          ? 'bg-(--vscode-list-activeSelectionBackground,var(--surface-hover)) text-(--vscode-list-activeSelectionForeground,inherit)'
+          : 'hover:bg-(--vscode-list-hoverBackground,var(--surface-hover))',
       )}>
-      <div className='flex items-center gap-1.5'>
-        {editing ? (
-          <NameEditor
-            initial={info.title ?? ''}
-            onCommit={(title) => {
-              setEditing(false)
-              if (title !== (info.title ?? '')) onRename(title)
-            }}
-            onCancel={() => setEditing(false)}
-          />
-        ) : (
-          <span
-            onDoubleClick={(e) => {
-              e.stopPropagation()
-              setEditing(true)
-            }}
-            className={cn(
-              'min-w-0 flex-1 truncate text-body-sm',
-              selected ? 'font-medium text-current' : 'text-fg-2',
-            )}>
-            {sessionLabel(info)}
+      <div className='flex flex-col gap-1 px-2.5 py-1.5'>
+        <div className='flex items-center gap-1.5 overflow-hidden'>
+          <StatusIcon needsHuman={needsHuman} running={running} status={info.status} />
+          {editing ? (
+            <NameEditor
+              initial={info.title ?? ''}
+              onCommit={(title) => {
+                setEditing(false)
+                if (title !== (info.title ?? '')) onRename(title)
+              }}
+              onCancel={() => setEditing(false)}
+            />
+          ) : (
+            <span
+              onDoubleClick={(e) => {
+                e.stopPropagation()
+                setEditing(true)
+              }}
+              className={cn(
+                'min-w-0 flex-1 truncate text-body-sm font-medium',
+                live || selected ? 'text-fg-1' : 'text-fg-3',
+              )}>
+              {sessionLabel(info)}
+            </span>
+          )}
+          {/* What arrived while you were elsewhere. Turns, because that is what
+              the sessions poll can count without attaching. */}
+          {unseen > 0 ? (
+            <span
+              title={`${unseen} new turn${unseen === 1 ? '' : 's'} since you last looked`}
+              className='shrink-0 rounded-full bg-(--vscode-activityBarBadge-background,var(--accent)) px-2 py-0.5 text-label leading-none text-(--vscode-activityBarBadge-foreground,var(--accent-fg))'>
+              {unseen}
+            </span>
+          ) : null}
+        </div>
+        <div className='flex items-center gap-1.5 overflow-hidden text-label'>
+          <span className={cn('shrink-0', vendor)}>
+            <EngineIcon engine={engine} model={info.model} />
           </span>
-        )}
-        {/* What arrived while you were elsewhere. Turns, because that is what
-            the sessions poll can count without attaching. */}
-        {unseen > 0 ? (
-          <span
-            title={`${unseen} new turn${unseen === 1 ? '' : 's'} since you last looked`}
-            className='shrink-0 rounded-full bg-(--vscode-activityBarBadge-background,var(--accent)) px-1.5 text-label text-(--vscode-activityBarBadge-foreground,var(--accent-fg))'>
-            {unseen}
+          <span className='min-w-0 flex-1 truncate'>
+            <span className={vendor}>{model}</span>
+            {rest ? <span className='text-fg-4'>{` · ${rest}`}</span> : null}
           </span>
-        ) : null}
-        <span className='shrink-0 text-label text-fg-4'>{formatRelativeTime(age)}</span>
-        <StatusIcon needsHuman={needsHuman} running={running} status={info.status} />
-      </div>
-      <div className='flex items-center gap-1 text-label text-fg-4'>
-        <EngineIcon engine={engine} model={info.model} />
-        {/* The disclosure lives here, not in front of the title: the first
-            line's left edge belongs to the name, which is what you scan the
-            list by. It doubles as the count, so the row says how many there are
-            without being opened. */}
-        {subagents.length > 0 ? (
-          <SubagentToggle
-            expanded={expanded}
-            running={runningAgents}
-            total={subagents.length}
-            onToggle={() => setExpanded((open) => !open)}
-          />
-        ) : null}
-        <span className='min-w-0 flex-1 truncate'>{details.join(' · ')}</span>
-        {running ? (
-          <RowAction label='Stop session' onClick={onStop}>
-            <Square className='size-3' />
-          </RowAction>
-        ) : null}
-        {/* Delete confirms in a modal on the host side, so the icon is a
-            request, not the deed. */}
-        <RowAction label='Delete session' danger onClick={onDelete}>
-          <Trash2 className='size-3' />
-        </RowAction>
+          {/* The disclosure lives here, not in front of the title: line one's
+              left edge belongs to the state glyph and the name. It doubles as
+              the count, so the row says how much there is without being
+              opened. */}
+          {steps.length > 0 ? (
+            <StepToggle
+              expanded={expanded}
+              running={steps.filter((s) => s.state === 'running').length}
+              total={steps.length}
+              noun={steps[0]!.noun}
+              onToggle={() => setExpanded((open) => !open)}
+            />
+          ) : null}
+          {/* Always visible, not hover-revealed. A hover action is undiscoverable
+              on a touchpad-shy scan and there are three of them now; one glyph
+              that opens a native menu costs the row less than three icons. */}
+          <CardMenu onOpen={onMenu} />
+        </div>
       </div>
       {expanded
-        ? subagents.map((sub) => (
-            <SubagentRow
-              key={sub.toolUseId}
-              sub={sub}
-              onSelect={() => onSelectSubagent(sub.toolUseId)}
-            />
-          ))
+        ? steps.map((step) => <StepRow key={step.key} step={step} onSelect={step.onSelect} />)
         : null}
     </div>
   )
+}
+
+/**
+ * A line of work under a session, and the one row shape two sources render
+ * through.
+ *
+ * Today the only source is `SessionInfo.subagents`. The other — the CLI's own
+ * **task checklist**, the to-do list it keeps for the current turn — is what the
+ * design was drawn from, and it is not built: nothing on the wire carries it yet
+ * (see `_docs/features/sub-agent-handling.md`, second thread, which opens with
+ * "check a capture" rather than "design a surface"). When it arrives it is a
+ * *source*, not a second row component: checklist when the session has one, its
+ * sub-agents otherwise.
+ *
+ * That is also why `state` has a `pending` arm no sub-agent can produce. A
+ * sub-agent record exists only once dispatched, so it is never queued; a to-do
+ * is queued for most of its life, and dropping the state would mean widening the
+ * union later — the shape is cheaper to state now than to retrofit.
+ */
+type Step = {
+  key: string
+  label: string
+  /** What one of these is called, for the disclosure's count. */
+  noun: string
+  state: 'done' | 'running' | 'pending' | 'failed'
+  /** A trailing reading — a sub-agent's tool count. Absent draws nothing. */
+  detail?: string
+  title: string
+  onSelect: () => void
+}
+
+function sessionSteps(info: SessionInfo, onSelectSubagent: (toolUseId: string) => void): Step[] {
+  // The label is protocol's `subagentLabel`, not a spelling of its own: the
+  // dashboard and the phone render the same rows from the same records, and two
+  // spellings would be two different answers to "which agent is this".
+  return (info.subagents ?? []).map((sub) => ({
+    key: sub.toolUseId,
+    label: subagentLabel(sub),
+    noun: 'agent',
+    state: stepState(sub.status),
+    detail: sub.toolCount > 0 ? String(sub.toolCount) : undefined,
+    title: `${subagentLabel(sub)} · ${sub.toolCount} tool${sub.toolCount === 1 ? '' : 's'}`,
+    onSelect: () => onSelectSubagent(sub.toolUseId),
+  }))
+}
+
+function stepState(status: SubagentInfo['status']): Step['state'] {
+  switch (status) {
+    case 'running':
+      return 'running'
+    case 'failed':
+      return 'failed'
+    default:
+      return 'done'
+  }
 }
 
 /**
@@ -191,32 +254,42 @@ export function SessionCard({
  *
  * Sub-agents are an annotation on a working row rather than a state of their
  * own (see `runningSubagents` in protocol's `session-list.ts`), so this never
- * competes with the row's status icon: that still says what the *session* is
+ * competes with the row's status glyph: that still says what the *session* is
  * doing.
  */
-function SubagentToggle({
+function StepToggle({
   expanded,
   running,
   total,
+  noun,
   onToggle,
 }: {
   expanded: boolean
   running: number
   total: number
+  noun: string
   onToggle: () => void
 }) {
-  const label =
-    running > 0 && running < total ? `${running} of ${total} agents` : `${total} agent${total === 1 ? '' : 's'}`
+  // Two spellings of one count. The **words** are the honest reading and go in
+  // the tooltip and to a screen reader; the line itself gets the digits, because
+  // this sits on the second line of a 280px card next to the folder and the age,
+  // and `1 of 6 agents` truncated the folder name away to say something the row
+  // could say in three characters.
+  const label = running > 0 && running < total ? `${running}/${total}` : String(total)
+  const words =
+    running > 0 && running < total
+      ? `${running} of ${total} ${noun}s running`
+      : `${total} ${noun}${total === 1 ? '' : 's'}`
   const Chevron = expanded ? ChevronDown : ChevronRight
   return (
     <button
       type='button'
       aria-expanded={expanded}
-      aria-label={`${expanded ? 'Hide' : 'Show'} sub-agents`}
-      title={`${expanded ? 'Hide' : 'Show'} sub-agents`}
+      aria-label={`${expanded ? 'Hide' : 'Show'} ${words}`}
+      title={`${expanded ? 'Hide' : 'Show'} ${words}`}
       onClick={(e) => {
         // The whole card is a button and this one does not mean "select" — the
-        // same guard `RowAction` needs, and the reason a drag-select inside the
+        // same guard `CardMenu` needs, and the reason a drag-select inside the
         // row does not toggle it.
         e.stopPropagation()
         onToggle()
@@ -227,52 +300,85 @@ function SubagentToggle({
         running > 0 ? 'text-info' : 'text-fg-4',
       )}>
       <Chevron className='size-3' />
-      {label}
+      <span className='tabular-nums'>{label}</span>
     </button>
   )
 }
 
 /**
- * One sub-agent under its session. Pressing it opens the session *at* that
- * `Task`'s row — a sub-agent is not a session and has no screen of its own, so
- * that is the only honest meaning of opening one.
+ * One step under its session. Pressing it opens the session *at* that `Task`'s
+ * row — a sub-agent is not a session and has no screen of its own, so that is
+ * the only honest meaning of opening one.
  *
- * The label is protocol's `subagentLabel`, not a spelling of its own: the
- * dashboard and the phone render the same rows from the same records, and two
- * spellings would be two different answers to "which agent is this".
+ * Divided from the card's header and from each other by a rule rather than by
+ * indentation: these are a list *inside* the card, and at 11px an indent is not
+ * enough to say so. The rule is black at 25% so it darkens whatever the card is
+ * filled with, selected or not, without needing a colour per state.
  */
-function SubagentRow({ sub, onSelect }: { sub: SubagentInfo; onSelect: () => void }) {
+function StepRow({ step, onSelect }: { step: Step; onSelect: () => void }) {
   return (
     <button
       type='button'
-      title={`${subagentLabel(sub)} · ${sub.toolCount} tool${sub.toolCount === 1 ? '' : 's'}`}
+      title={step.title}
       onClick={(e) => {
         e.stopPropagation()
         onSelect()
       }}
-      /* Stepped in to sit under the details line, with the same rule the
-         terminal theme's nested rows use: the indent is the whole signal that
-         this happened *inside* the row above it. */
-      className='flex w-full items-center gap-1.5 rounded py-0.5 pl-4 text-left text-label text-fg-4 outline-none hover:bg-surface-hover hover:text-fg-2'>
-      <SubagentIcon status={sub.status} />
-      <span className='min-w-0 flex-1 truncate'>{subagentLabel(sub)}</span>
+      className={cn(
+        'flex w-full items-center gap-2 border-t border-black/25 py-1 pl-3 pr-2 text-left text-label outline-none',
+        'hover:bg-(--vscode-list-hoverBackground,var(--surface-hover))',
+        step.state === 'running'
+          ? 'text-info'
+          : step.state === 'failed'
+            ? 'text-danger'
+            : step.state === 'pending'
+              ? 'text-fg-4'
+              : 'text-fg-2',
+      )}>
+      <StepIcon state={step.state} />
+      <span className='min-w-0 flex-1 truncate'>{step.label}</span>
       {/* The progress reading while it works, and what it cost when it is done.
           Zero draws nothing: `0 tools` beside a thinking agent reads as a stall,
           which is the same call `taskSummary` makes one surface over. */}
-      {sub.toolCount > 0 ? <span className='shrink-0 tabular-nums'>{sub.toolCount}</span> : null}
+      {step.detail ? <span className='shrink-0 tabular-nums text-fg-4'>{step.detail}</span> : null}
+      <ArrowRight className='size-3 shrink-0 opacity-60' />
     </button>
   )
 }
 
-function SubagentIcon({ status }: { status: SubagentInfo['status'] }) {
-  switch (status) {
+function StepIcon({ state }: { state: Step['state'] }) {
+  switch (state) {
     case 'running':
-      return <Spinner className='size-3 shrink-0 text-info' />
+      return <Spinner className='size-3 shrink-0' />
     case 'failed':
-      return <CircleAlert className='size-3 shrink-0 text-danger' />
+      return <CircleAlert className='size-3 shrink-0' />
+    case 'pending':
+      return <PauseCircle className='size-3 shrink-0' />
     default:
-      return <Check className='size-3 shrink-0 text-fg-4' />
+      return <Check className='size-3 shrink-0' />
   }
+}
+
+/**
+ * The card's overflow. The menu itself is a native QuickPick, opened host-side:
+ * no webview in this extension draws its own chrome, and a popover anchored in a
+ * sidebar this narrow would be clipped by the view's own bounds anyway.
+ */
+function CardMenu({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      type='button'
+      aria-label='Session actions'
+      title='Session actions'
+      onClick={(e) => {
+        // The whole card is a button; this one does not mean "select".
+        e.stopPropagation()
+        onOpen()
+      }}
+      className='shrink-0 rounded p-0.5 text-fg-4 outline-none hover:bg-surface-hover hover:text-fg-1'>
+      <MoreHorizontal className='size-3.5' />
+    </button>
+  )
 }
 
 /**
@@ -334,39 +440,6 @@ function NameEditor({
          exactly, so the row keeps its height and the list never shifts. */
       className='-my-0.5 min-w-0 flex-1 rounded-sm border border-(--vscode-focusBorder,var(--accent)) bg-bg px-1 py-px text-body-sm leading-5 text-fg-1 outline-none'
     />
-  )
-}
-
-/** An action on the card's second line: invisible until the row is hovered or
- * something in it is focussed, so a dense list stays a list. */
-function RowAction({
-  label,
-  danger,
-  onClick,
-  children,
-}: {
-  label: string
-  danger?: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type='button'
-      aria-label={label}
-      title={label}
-      onClick={(e) => {
-        // The whole card is a button; this one does not mean "select".
-        e.stopPropagation()
-        onClick()
-      }}
-      className={cn(
-        'shrink-0 rounded p-0.5 text-fg-4 opacity-0 transition-opacity outline-none',
-        'hover:bg-surface-hover focus-visible:opacity-100 group-hover:opacity-100',
-        danger ? 'hover:text-danger' : 'hover:text-fg-1',
-      )}>
-      {children}
-    </button>
   )
 }
 
