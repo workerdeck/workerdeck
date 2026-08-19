@@ -1,10 +1,11 @@
 # Roadmap & open questions
 
-What's shipped, what's next, and what's still undecided. Status as of 2026-08-16: **0.16.0** on
-master, bumped but **not yet tagged or published** — npm's latest is 0.15.0 (the embedding seams
-and `apps/embedded`), and everything since rides inside the pending 0.16.0: the terminal theme
-adopted everywhere, terminal navigation (scrubber, sticky prompt, computed row heights), and
-per-account plan usage. Protocol stays **7** and has since 0.9.0.
+What's shipped, what's next, and what's still undecided. Status as of 2026-08-20: **0.16.0** is
+tagged and on npm — the terminal theme adopted everywhere, terminal navigation (scrubber, sticky
+prompt, computed row heights), and per-account plan usage. A substantial body sits on master
+above it, unreleased and deliberately so; the ledger for it is in the root `CLAUDE.md`, and
+`_docs/VERIFICATION-DEBT.md` is what gates the next bump. Protocol stays **7** and has since
+0.9.0.
 
 The registry goes 0.13.0 → 0.15.0 with no 0.14.0, and that gap is deliberate: 0.14.0 was bumped
 and committed but never tagged, so nothing under that number ever reached npm and its content
@@ -370,9 +371,9 @@ session with no tools.
 - The documentation half: a "Rules you cannot infer from the types" section in every package
   README, and three new site pages — the app-embedding guide, engines and executors, writing tools.
 
-### The terminal theme adopted, terminal navigation, per-account usage (0.16.0 — pending release)
+### The terminal theme adopted, terminal navigation, per-account usage (0.16.0)
 
-Bumped on master, not yet tagged or published. Three tracks:
+Three tracks:
 
 - **The terminal theme everywhere, `lines` deleted.** `transcriptVariant: 'terminal'` is a
   renderer, not a set of branches (`packages/ui/src/components/terminal/`): the VS Code dock at
@@ -411,6 +412,31 @@ unread as a window status-bar item, window-reload session restore; and in core, 
 back under the CLI's own title (polled off `getSessionInfo`, never overwriting a rename) and a
 resumed transcript no longer shows rows nobody typed (`isSyntheticUserText` on both paths). One
 command runs the production build beside dev (`pnpm start:prod`, 8788).
+
+### On master, unreleased
+
+Held back from a bump on purpose — see `_docs/VERIFICATION-DEBT.md`, which gates it. The full
+ledger lives in the root `CLAUDE.md`; the headline tracks are live-session persistence
+(`parking.persistLive`, `Runner.snapshot()`), sub-agents made visible (`forwardSubagentText`,
+`SessionInfo.subagents`, the terminal theme's `Task` fold), the iOS native terminal renderer
+through phase 3, on-demand tool results and image-part references, and:
+
+- **Project identity, drawn.** A `.workerdeck.json` gives a directory a name and an icon,
+  resolved by the *gateway* on an ancestor walk from the session's realpath'd cwd (a phone
+  cannot see that filesystem) and stamped at serve time, so an edit reaches every session within
+  the TTL with no migration. The wire carries an **address** — a glyph name, or a media type and
+  a content hash whose bytes come from `GET /sessions/:id/project/icon` — because `SessionInfo`
+  rides every row of a 1.2s poll. It had shipped with no consumer; now all three clients draw
+  it, and `project` is a filter/group/sort facet beside adapter and state. The clients agree on
+  the rules and differ where the surface does: VS Code and the dashboard put the name in the cwd
+  basename's slot, while iOS — the only client that draws the whole path — prefixes instead
+  (`WorkerDeck · packages/ui`). Two platform facts shaped the rest: Apple cannot decode an SVG
+  from bytes, so an SVG icon degrades to the name alone on the phone (rasterising on the gateway
+  was rejected — the session cwd is the agent's working tree, and the icon route deliberately
+  parses nothing), and lucide does not exist on iOS, so 111 glyph names are translated to SF
+  Symbols and validated twice, against the catalog at authoring time and `UIImage(systemName:)`
+  at runtime. This repo now carries its own `.workerdeck.json`, which is what turned a tested
+  feature into an observed one: nothing had ever resolved a real file or served a real byte.
 
 ## Next
 

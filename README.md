@@ -110,6 +110,10 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
 - **The host's files, in the trees sessions already run in.** Browse, read and fuzzy-search over
   your `--cwd-root` directories, so a remote client gets a real file tree instead of guessing at
   paths. Reading needs no extra grant; writing is a separate opt-in.
+- **Projects, not folder basenames.** A `.workerdeck.json` at the root of a repo gives it a name
+  and an icon, found by an ancestor walk from the session's cwd — so a list of sessions reads as
+  a list of projects, and can be filtered, grouped and sorted by one. The gateway resolves it
+  (a phone cannot see the gateway's filesystem) and the wire carries an address, not bytes.
 - **Sessions you can put in front of your own users.** A gateway embedded in an app's backend can
   run the provider engine with nothing granted — no shell, no host filesystem, no egress, just the
   QuickJS guest and an in-memory VFS (`sandboxedProviderProfile()`) — and tag each session with

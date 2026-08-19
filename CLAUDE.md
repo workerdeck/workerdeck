@@ -192,7 +192,13 @@ protocol. Read these before changing scope or structure:
   changes. The wire carries a **content hash** (`{type:'image', mediaType, hash}`) and the bytes
   come from a route, fetched once and cached by that hash across every session in the project;
   `{type:'glyph', name}` is the other arm and costs nothing, validated by *shape* only since the
-  gateway has no lucide catalog — a client must fall back on a name it does not know. Protocol
+  gateway has no lucide catalog — a client must fall back on a name it does not know, which
+  `packages/ui`'s `ProjectIcon` does by drawing `Folder`: it carries a **curated** 110-glyph table,
+  because a namespace import over lucide's ~1,600 measured **927 KB against 77 KB** on the VS Code
+  sidebar's own bundle. `projectsOf(rows)` is the filter control's source and returns
+  `{key, label}` pairs for the reason `projectKey` exists — the key is what `ViewConfig.projects`
+  holds and the label is what a person picks by, so two same-named repos stay two entries wearing
+  one word. Protocol
   stays **7**: an optional field, absent meaning no project, which an older client ignores.
 - `packages/core` — the engines, shipped as **adapters** (`src/engines/`): one `EngineAdapter`
   per engine (capability record pinned by identity to protocol's `ENGINE_CAPABILITIES`, a model
@@ -411,6 +417,11 @@ protocol. Read these before changing scope or structure:
   existing implementation still typechecks — and a custom one that ignores it merely gets a full
   replay, which is safe because every client keys its rendering off the server's own marker and
   never off what it asked for.
+  `projectIcon(sessionId)` is the third blob-returning method beside `readProducedFile` and
+  `toolResultImage`, and the one whose existence a client settled rather than convenience: a VS
+  Code webview has **no external `connect-src` at all**, so it cannot point an `<img src>` at a
+  gateway even in principle and the bytes must ride the bridged fetch. Cache by
+  `ProjectIcon.image.hash`, never by session — that is what the hash is on the wire for.
   It also owns `apiUrl`/`isLoopbackHost` (`src/host-url.ts`): what an operator types turned into
   a `baseUrl`, and whether that gateway is this machine — decided from the URL, never by probing
   paths. Here because every host that lets someone type a gateway address must normalize it
@@ -446,7 +457,16 @@ protocol. Read these before changing scope or structure:
   (reload / keep mine / dismiss), never a message, and nothing but `revert` and an explicit reload
   may discard a draft; `useHostFileRoots` for `canWrite`, which is a *separate* server opt-in from
   reading and defaults off; `useSessionInfo`, one REST record — never a second `useClaudeSession`,
-  see the bridge rule below; `useProfileUsage`, the plan's windows as the *gateway* knows them,
+  see the bridge rule below; `useProjectIcons`, project icon bytes as object URLs keyed by the
+  icon's own **content hash** — module-scope and cached for the life of the page, because a hash
+  names its bytes: an entry can never go stale (an edited icon arrives as a new key), twelve rows of
+  one repo cost one request, and two gateways serving the same repo cost one between them. Failures
+  are cached too, the route's 404 being the uniform "no icon" that would otherwise be re-asked every
+  poll; object URLs are never revoked, which is the same decision stated twice — they *are* the
+  cache. The VS Code extension keeps its own copy of this three-set structure
+  (`src/project-icons.ts`) and cannot share this one: its webview has no external `connect-src`, so
+  its bytes arrive as data URLs pushed from the extension host — one design, two implementations,
+  for a reason that lives in the transport. `useProfileUsage`, the plan's windows as the *gateway* knows them,
   a **poll** because nothing pushes them — a session's own `rate_limit` readings land only at a
   turn's edges, so an idle session's meters age silently and a sibling session's spend never
   reaches them at all), the
@@ -790,8 +810,15 @@ protocol. Read these before changing scope or structure:
   `SessionVitals` rather than importing it, so the React-free entry stays React-free.
   `SessionBrowser` is the styled sessions list built on protocol's view model — search, facets,
   grouping, the subset line, unread badges, inline rename — for a host that wants the
-  dashboard's look without reimplementing the rules; `SessionList` stays beside it for the
-  plain fixed-set case.
+  dashboard's look without reimplementing the rules. It draws **projects** the way the extension's
+  cards do, and to the same rules: `projectLabel` in the cwd-basename slot (falling back to exactly
+  that basename, so an undeclared project is byte-identical to what shipped), the icon inline
+  immediately before the name because line two is one truncating mono run, the icon again on a
+  project group's header, and the name **suppressed on the row when the list is grouped by it** —
+  the slot going back to the basename, which inside a project group is the one thing the header
+  cannot say. `projectIcons` is handed in rather than fetched (`useProjectIcons`), for the reason
+  `ProjectIcon` states: the wire carries an address and who can fetch it differs per client.
+  `SessionList` stays beside it for the plain fixed-set case.
   The file rail reads in the **UI font, never mono** — it is workbench chrome you scan, and the
   editors it sits beside set filenames in their UI face; mono is for content on a grid and nothing
   in a file list is on one. It had carried a hardcoded `font-mono` since it shipped, which only
@@ -1100,12 +1127,41 @@ protocol. Read these before changing scope or structure:
   twelve of them is what made the one that is working hard to find. And **selection is the card's
   own fill** rather than a gutter bar, the card being an inset shape with air around it, which
   leaves the left edge to the glyph. Line two is the engine's mark and model in the **vendor's own
-  colour**, then folder and age muted; that coral survives this webview's `--term-mark` repoint
+  colour**, then the **project** and age muted — the project having replaced the cwd basename in
+  that slot, because the folder was only ever a proxy for the question the project name answers
+  (`projectLabel` falls back to exactly that basename, so an undeclared project is byte-identical
+  to what shipped). Its icon rides *inside* the same truncating span rather than holding a slot of
+  its own: the parts have a priority order and one ellipsis honours it, where flex children each
+  shrink a little and leave four half-words. Grouping by project **suppresses it on the row** and
+  hands the slot back to the basename — `ui`, `server`, `web` under one WorkerDeck heading, which
+  is the one thing the header cannot say — exactly the rule `hostName` already followed one facet
+  over, and the answer to "what about the subdirectory". Icon bytes come from the host
+  (`src/project-icons.ts`, keyed by content hash, cached forever because a hash cannot go stale,
+  failures cached too), pushed as their own `wd-project-icons` message rather than on
+  `SidebarState`: the state rides a 1.2s poll and an icon is hundreds of kilobytes that changes
+  when someone edits a repo. That coral survives this webview's `--term-mark` repoint
   ("a single coral element in an otherwise theme-following surface looks like a stray token")
   because it is doing a different job — that rule retired coral from the *panel*, where it meant
   "working" and competed with the editor's accent for a meaning the editor owns, while here it
-  sits against Anthropic's mark and names the vendor. Gated to Claude alone: OpenAI's mark is
-  monochrome by design and a green would read as a status. The two hover actions became one
+  sits against Anthropic's mark and names the vendor. It is carried by the **mark and the model
+  together** — neither alone identifies a vendor at 13px — which is why the class goes *on* the
+  `EngineIcon`: it draws `fill="currentColor"` and carries its own `text-fg-3`, so a colour
+  inherited from a wrapper loses to the svg's own class, and the mark sat muted beside a coral
+  model from the day the cards shipped. **One token per vendor** (`--wd-vendor-claude`,
+  `--wd-vendor-openai`, two values each for the two grounds), which reverses the original "gated to
+  Claude alone". The two vendors are **asymmetric, and that is the brands' doing rather than ours**:
+  coral is Anthropic's accent, while OpenAI's guidelines forbid adding colour to the mark at all, so
+  theirs is monochrome: **`#fff` on dark, `#373737` on light** — both sanctioned by that guidance,
+  and the only kind of pair legible on both grounds (the light value is their near-black rather than
+  `#000`, which also keeps a 12px mark from sitting harder than the `#1f1f1f` title above it) (a green was tried first and is simply wrong, however well it
+  reads). That full contrast also decides **how far the colour reaches**: Anthropic's covers the mark
+  *and* the model name, OpenAI's covers the **mark only** (`VENDOR_MARK`/`VENDOR_TEXT`), because a
+  pure-white 11px model name is brighter than the session title above it and inverts the card's
+  hierarchy to repeat something the mark has already said — which is also the most literal reading
+  of "don't add any colors". Both lines also share **one 14px icon gutter** (`Gutter`), because the
+  state glyph is 14px and the vendor mark 12px: as plain flex children each line's text started at
+  `icon + gap`, 20px against 18px, and two pixels is invisible as a measurement and obvious as a
+  misalignment. The two hover actions became one
   always-visible `⋯` opening a **native QuickPick**, decided host-side off the polled model — a
   popover anchored in a 280px view would be clipped by the view's own bounds, and a card that went
   stale between the poll and the press must not offer Stop for a finished session. The disclosure
@@ -1400,7 +1456,41 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   **Unreleased on master, deliberately.** 0.16.0 is the published latest and `package.json` still
   reads it. Riding there too, from the sidebar/prompts session: **project identity**
   (`.workerdeck.json` → `SessionInfo.project`, the ancestor walk, the icon route, the `project`
-  facet — gateway and wire only, **no client renders it yet**), the **`sessionState` fix** (a
+  facet), now **drawn on all three clients**. The VS Code sidebar took it first — a card's second
+  line reads the project in place of the cwd basename it was only ever a proxy for — and the repo
+  grew a `.workerdeck.json` of its own so the walk, the route and the wire have all been exercised
+  against a real file rather than only a fixture (the icon route had never served a byte). The
+  dashboard followed, via `SessionBrowser` and `useProjectIcons`. **iOS** was the biggest of the
+  three and is the one that diverges: the whole facet had to be mirrored into `WorkerDeckKit` first
+  (`ProjectInfo`/`ProjectIcon` with a hand-written `Decodable`, the `project` case in
+  `Facet`/`GroupBy`/`SortBy`, `ViewConfig.projects`, `projectKey`/`projectLabel`/`projectsOf`,
+  `WorkerClient.projectIcon`), and then the **row deliberately does not follow the other two**: the
+  phone is the only client that draws the *whole cwd*, so replacing it with a name would remove
+  information the others never had. Line two prefixes instead — `WorkerDeck · packages/ui` — with
+  the relative half dropped when the session sits at the root (it would say one thing twice) and
+  when the cwd is not under the root at all, which is not paranoia: `root` is the gateway's
+  **realpath'd** directory and `cwd` is the path as given, so a session started through a symlink
+  has a perfectly good project and no computable relative path. Two platform facts shape the rest.
+  **Apple cannot decode an SVG from bytes** — `CGImageSourceCopyTypeIdentifiers()` lists 62 types
+  and none is SVG; asset catalogs convert at *compile* time, which a downloaded blob cannot use —
+  so an `image/svg+xml` icon degrades to the name alone, and a repo that wants its mark on the
+  phone must declare a **PNG**, which is why this one now does (`docs/assets/icon.png`, regenerated
+  per `BRAND.md`). Rasterising **on the gateway** was considered and rejected, and the reason is
+  worth keeping: the icon route deliberately parses nothing — it serves bytes with `nosniff` and an
+  attachment disposition precisely so a hostile file is inert — and the session cwd *is* the agent's
+  working tree, so converting would mean running an SVG parser over agent-writable input on the
+  shared gateway, where the CVE history is long and the blast radius is every user of it. It would
+  also have to bake one colour scheme, losing the `prefers-color-scheme` adaptation the web clients
+  get for free. A `WKWebView` snapshot on the phone is the answer if this ever needs solving
+  properly (it parses in the client's own sandbox, exactly as an `<img>` already does on web, and
+  the cache is already once-per-hash-for-the-process) — not built. And the **glyph arm is a vocabulary translation, not a bundle-size
+  trade** (`ProjectGlyphs.swift`): lucide does not exist on iOS, so 111 names are mapped to SF
+  Symbols, every one validated against `CoreGlyphs.bundle/symbol_order.plist` because a guessed
+  symbol name renders *nothing* rather than failing to compile — and then checked **again at
+  runtime** with `UIImage(systemName:)`, since this Mac's catalog is newer than the app's iOS 17
+  floor and a name valid here can be absent on a phone. Both fall back to `folder`, which is what
+  protocol's `ProjectIcon` requires of every client. `UIPREVIEW=projects` is the fixture that
+  proves all of it. The **`sessionState` fix** (a
   background sub-agent now counts as `working`, on both platforms, plus the Swift `SubagentInfo`
   mirror that had never existed), the VS Code sidebar's **card redesign**, and the iOS **prompt
   scroll + terminal prompts + filter-menu** fixes. Protocol stays **7** throughout. Master also

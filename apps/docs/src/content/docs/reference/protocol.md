@@ -103,7 +103,12 @@ must decide it before the attach, not after.
   CLI refuses to *switch into* bypass unless the process was spawned for it, so a picker can
   disable the mode rather than offer a refusal), `apiKeySource`, `lastSeq`,
   `pendingPermissionCount`, `title`, cumulative `totalCostUsd` / `numTurns`, `activityCount`,
-  `lastActivityAt`, `scope`.
+  `lastActivityAt`, `scope`, `subagents`, and `project` — the `.workerdeck.json` name/root/icon
+  the *gateway* resolved by an ancestor walk from the session's realpath'd cwd, since no client
+  can see that filesystem. Its icon is an **address** (a glyph name, or a media type plus a
+  content hash whose bytes come from `GET /sessions/:id/project/icon`), never bytes: this record
+  rides every row of a 1.2s poll. Absent means no project; see the
+  [Project identity](../../guides/projects/) guide.
 - `UpdateSessionRequest` — the `PATCH` body behind renaming. `title` is **three-state**: a string
   sets `meta.title`, an explicit `null` clears it so the derived title (the first prompt) comes
   back, and omitting it leaves the name alone. A rename never reaches the model.
