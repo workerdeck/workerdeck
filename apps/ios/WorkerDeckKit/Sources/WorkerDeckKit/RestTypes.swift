@@ -390,6 +390,101 @@ public enum SubagentStatus: String, Decodable, Sendable, Equatable {
   case failed
 }
 
+// MARK: - Project identity
+
+/// How a project asks to be drawn — mirror of the protocol's `ProjectIcon`.
+///
+/// `image` carries an **address, never bytes**: `SessionInfo` rides every row
+/// of a list polled at 1.2s, so an inlined base64 icon would be paid for on
+/// every poll of every session forever. The bytes are one
+/// `WorkerClient.projectIcon(sessionId:)` fetch away, and `hash` (sha256 hex of
+/// the bytes) is the cross-session cache key: two sessions in one project
+/// serve identical bytes, so cache by hash — never by session — and fetch once
+/// per project.
+///
+/// `glyph` is validated by *shape only* at the gateway (it has no icon
+/// catalog), so a name this build does not recognise is expected input — draw
+/// a generic folder mark for it, never an empty slot.
+public enum ProjectIcon: Sendable, Equatable, Hashable {
+  case glyph(name: String)
+  case image(mediaType: MediaType, hash: String)
+
+  /// Closed on the wire — the gateway's own classification emits only these
+  /// two. A third value is a newer gateway's vocabulary, and it degrades to
+  /// "no icon" in `ProjectInfo`'s decode rather than failing the session row.
+  public enum MediaType: String, Decodable, Sendable, Equatable, Hashable {
+    case png = "image/png"
+    case svg = "image/svg+xml"
+  }
+}
+
+extension ProjectIcon: Decodable {
+  private enum CodingKeys: String, CodingKey {
+    case type, name, mediaType, hash
+  }
+
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    switch try c.decode(String.self, forKey: .type) {
+    case "glyph":
+      self = .glyph(name: try c.decode(String.self, forKey: .name))
+    case "image":
+      self = .image(
+        mediaType: try c.decode(MediaType.self, forKey: .mediaType),
+        hash: try c.decode(String.self, forKey: .hash))
+    default:
+      // A newer gateway's arm. Throwing is what lets `ProjectInfo` degrade it
+      // to nil — this build could not draw it anyway, and the alternative (an
+      // `unknown` case) would make every renderer branch on a value that
+      // means "pretend I am not here".
+      throw DecodingError.dataCorruptedError(
+        forKey: .type, in: c, debugDescription: "unknown project icon type")
+    }
+  }
+}
+
+/// Project identity for a session — what a `.workerdeck.json` in the session's
+/// cwd ancestry declares, resolved by the **gateway** and shipped on
+/// `SessionInfo.project`. The gateway reads the file, not each client: this
+/// phone has no access to that filesystem, so a per-client reader would make
+/// the feature exist on exactly one client.
+public struct ProjectInfo: Decodable, Sendable, Equatable, Hashable {
+  /// Display name — the file's `name`, else the root's basename. Never empty.
+  public let name: String
+  /// Canonical absolute path of the directory holding `.workerdeck.json`, on
+  /// the *gateway's* filesystem — an opaque string to this client beyond
+  /// equality and display. The grouping key, per gateway (see `projectKey` in
+  /// `SessionList.swift`), and never `name`: two repos can both be called
+  /// "api", and a rename must regroup nothing.
+  public let root: String
+  /// Absent = the file declared none, or declared one the gateway refused —
+  /// malformed, escaping, oversized — which a client cannot and must not
+  /// distinguish.
+  public let icon: ProjectIcon?
+
+  public init(name: String, root: String, icon: ProjectIcon? = nil) {
+    self.name = name
+    self.root = root
+    self.icon = icon
+  }
+
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    name = try c.decode(String.self, forKey: .name)
+    root = try c.decode(String.self, forKey: .root)
+    // `try?`, deliberately: an icon this build cannot parse — a newer
+    // gateway's third arm, a new media type — must read as "no icon", never
+    // fail the decode of the whole `SessionInfo`. A display declaration must
+    // not cost a session its row; same posture as `EngineCapabilities`'
+    // unknown permission-mode strings.
+    icon = try? c.decodeIfPresent(ProjectIcon.self, forKey: .icon)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case name, root, icon
+  }
+}
+
 public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// Server-assigned id (stable across SDK session forks/resumes).
   public let id: String
@@ -444,6 +539,13 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// Opaque tags naming what this session belongs to. Assigned at create,
   /// immutable, and enforced by the gateway — a client only ever echoes them.
   public let scope: [String: String]?
+  /// Project identity discovered from the session's `cwd` — stamped by the
+  /// **gateway at serve time** (runners never set it; a runner-echoed copy
+  /// would be persisted into parking records and replay a stale name forever).
+  /// Absent = no `.workerdeck.json` in the cwd's ancestry, and also = an older
+  /// gateway: both mean "render the folder basename", which is exactly what
+  /// this client drew before the field existed.
+  public let project: ProjectInfo?
 
   public var resolvedEngine: ProfileEngine { engine ?? .claude }
   /// The record to render from: the runner-reported copy when present, else the
@@ -461,7 +563,8 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     createdAt: Double, lastSeq: Int, pendingPermissionCount: Int,
     meta: [String: JSONValue]? = nil, title: String? = nil, totalCostUsd: Double? = nil,
     numTurns: Int? = nil, activityCount: Int? = nil, lastActivityAt: Double? = nil,
-    subagents: [SubagentInfo]? = nil, scope: [String: String]? = nil
+    subagents: [SubagentInfo]? = nil, scope: [String: String]? = nil,
+    project: ProjectInfo? = nil
   ) {
     self.id = id
     self.sdkSessionId = sdkSessionId
@@ -485,6 +588,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.lastActivityAt = lastActivityAt
     self.subagents = subagents
     self.scope = scope
+    self.project = project
   }
 }
 

@@ -93,18 +93,19 @@ public enum Facet: String, Codable, Sendable, Hashable {
   case gateway
   case adapter
   case state
+  case project
 }
 
 /// TS `GroupBy` is `'none' | Facet`; the extra case folds in here.
 public enum GroupBy: String, Codable, Sendable, Hashable, CaseIterable {
-  case none, gateway, adapter, state
+  case none, gateway, adapter, state, project
 
   public var facet: Facet? { Facet(rawValue: rawValue) }
 }
 
 /// TS `SortBy` is `'recent' | 'name' | Facet`.
 public enum SortBy: String, Codable, Sendable, Hashable, CaseIterable {
-  case recent, name, gateway, adapter, state
+  case recent, name, gateway, adapter, state, project
 
   public var facet: Facet? { Facet(rawValue: rawValue) }
 }
@@ -115,6 +116,13 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
   public var gateways: [String]
   public var adapters: [String]
   public var states: [SessionState]
+  /// Empty = no filter. `projectKey` output, never names: a name is neither
+  /// unique (two repos both called "api") nor stable (editing
+  /// `.workerdeck.json` renames every session at once and must not empty a
+  /// saved filter). TS keeps this field *optional* so a stored config
+  /// predating it keeps filtering; here the lenient decode below carries that
+  /// rule — absent decodes to empty, and empty means no filter.
+  public var projects: [String]
   /// Show only sessions inside the host's own folders. Inert where there is no
   /// such notion (no folder open — which on a phone is always), which is why it
   /// can default on.
@@ -124,13 +132,14 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
 
   public init(
     search: String = "", gateways: [String] = [], adapters: [String] = [],
-    states: [SessionState] = [], scoped: Bool = true, groupBy: GroupBy = .state,
-    sortBy: SortBy = .recent
+    states: [SessionState] = [], projects: [String] = [], scoped: Bool = true,
+    groupBy: GroupBy = .state, sortBy: SortBy = .recent
   ) {
     self.search = search
     self.gateways = gateways
     self.adapters = adapters
     self.states = states
+    self.projects = projects
     self.scoped = scoped
     self.groupBy = groupBy
     self.sortBy = sortBy
@@ -150,6 +159,10 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
     adapters = try c.decodeIfPresent([String].self, forKey: .adapters) ?? []
     let rawStates = try c.decodeIfPresent([String].self, forKey: .states) ?? []
     states = rawStates.compactMap { SessionState(rawValue: $0) }
+    // Absent must mean "no filter", never "filter by nothing": a config
+    // persisted before the project facet existed has no such key, and failing
+    // — or filtering — here would empty the list for everyone who upgraded.
+    projects = try c.decodeIfPresent([String].self, forKey: .projects) ?? []
     scoped = try c.decodeIfPresent(Bool.self, forKey: .scoped) ?? true
     groupBy =
       (try c.decodeIfPresent(String.self, forKey: .groupBy)).flatMap { GroupBy(rawValue: $0) }
@@ -160,7 +173,7 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
   }
 
   private enum CodingKeys: String, CodingKey {
-    case search, gateways, adapters, states, scoped, groupBy, sortBy
+    case search, gateways, adapters, states, projects, scoped, groupBy, sortBy
   }
 }
 
@@ -246,14 +259,96 @@ public func adaptersOf(_ rows: [SessionRow]) -> [String] {
   Array(Set(rows.map(\.adapter))).sorted()
 }
 
+/// One entry of the project filter control — a pair because the two halves
+/// differ: the *key* is what `ViewConfig.projects` holds (gateway-qualified
+/// root, so a rename regroups nothing) and the *label* is what a person picks
+/// by.
+public struct ProjectOption: Sendable, Equatable, Hashable, Identifiable {
+  public var key: String
+  public var label: String
+
+  public var id: String { key }
+
+  public init(key: String, label: String) {
+    self.key = key
+    self.label = label
+  }
+}
+
+/// The projects actually present, for the filter control — derived like
+/// `adaptersOf`, so nothing needs enumerating. Sorted by label
+/// case-insensitively, deduped by key. Two projects with the same name on two
+/// gateways therefore stay two entries wearing one word — which is honest:
+/// they really are two different directories, and the alternative is a filter
+/// that silently selects both.
+public func projectsOf(_ rows: [SessionRow]) -> [ProjectOption] {
+  var order: [String] = []
+  var labels: [String: String] = [:]
+  for row in rows {
+    let key = projectKey(row)
+    if labels[key] == nil { order.append(key) }
+    labels[key] = projectLabel(row.info)
+  }
+  // TS sorts a Map's entries with the stable `Array.sort`, so equal labels
+  // (the remote twin) keep first-seen order; Swift's sort promises no such
+  // thing, hence the explicit offset tiebreak.
+  return order.enumerated()
+    .sorted { a, b in
+      let la = (labels[a.element] ?? "").lowercased()
+      let lb = (labels[b.element] ?? "").lowercased()
+      return la == lb ? a.offset < b.offset : la < lb
+    }
+    .map { ProjectOption(key: $0.element, label: labels[$0.element] ?? "") }
+}
+
 public func sessionLabel(_ info: SessionInfo) -> String {
   info.title ?? String(info.id.prefix(8))
+}
+
+/// The project facet's grouping key: gateway id + the project root, falling
+/// back to the session's cwd when no project is declared.
+///
+/// The root and not the name, because a name is not a key (two repos can both
+/// be called "api", and a rename must regroup nothing); qualified by gateway,
+/// because a remote gateway's identical-looking path is another machine's
+/// directory — the same rule `ScopeRoot` states. The cwd fallback is what
+/// makes grouping by project useful before anyone has written a
+/// `.workerdeck.json`: undeclared sessions group by their folder, and a
+/// session in `packages/ui` joins its repo's group the moment the file
+/// exists. Sessions with no cwd at all (a filesystem-less engine) share one
+/// per-gateway bucket — see `projectLabel`.
+public func projectKey(_ row: SessionRow) -> String {
+  "\(row.hostId):\(normalizePath(row.info.project?.root ?? row.info.cwd))"
+}
+
+/// What a project group (or a row's project slot) is called: the declared
+/// name, else the cwd's basename — the exact string this client rendered
+/// before the feature existed, so an undeclared project looks like today.
+/// "No project" is only ever the no-cwd case (a sandboxed provider session),
+/// where there is no folder to name.
+///
+/// Takes the bare `SessionInfo` — the mirror of TS narrowing its parameter to
+/// `Pick<SessionRow, 'info'>`: a cell holding only the info must not invent
+/// the rest of a row to name it, and two spellings of this string would put
+/// the list and its group headers on different names.
+public func projectLabel(_ info: SessionInfo) -> String {
+  if let name = info.project?.name, !name.isEmpty { return name }
+  let dir = normalizePath(info.cwd)
+  if let slash = dir.lastIndex(of: "/") {
+    let base = String(dir[dir.index(after: slash)...])
+    return base.isEmpty ? "No project" : base
+  }
+  return dir.isEmpty ? "No project" : dir
 }
 
 private func matchesSearch(_ row: SessionRow, needle: String) -> Bool {
   if needle.isEmpty { return true }
   return sessionLabel(row.info).lowercased().contains(needle)
     || row.info.cwd.lowercased().contains(needle)
+    // The declared project name: the whole point of it is that a person knows
+    // the repo as "WorkerDeck", not by whatever the folder happens to be
+    // called.
+    || (row.info.project?.name.lowercased().contains(needle) ?? false)
     || row.hostName.lowercased().contains(needle)
     || row.adapter.lowercased().contains(needle)
     // An id is matched by prefix only — a hex soup matching mid-string would
@@ -307,6 +402,7 @@ public func filterRows(
     (config.gateways.isEmpty || config.gateways.contains(row.hostId))
       && (config.adapters.isEmpty || config.adapters.contains(row.adapter))
       && (config.states.isEmpty || config.states.contains(row.state))
+      && (config.projects.isEmpty || config.projects.contains(projectKey(row)))
       && (scoping.map { inScope(row, scope: $0) } ?? true)
       && matchesSearch(row, needle: needle)
   }
@@ -319,6 +415,7 @@ private func facetKey(_ row: SessionRow, _ facet: Facet) -> String {
   case .gateway: return row.hostId
   case .adapter: return row.adapter
   case .state: return row.state.rawValue
+  case .project: return projectKey(row)
   }
 }
 
@@ -327,6 +424,7 @@ private func facetLabel(_ row: SessionRow, _ facet: Facet) -> String {
   case .gateway: return row.hostName
   case .adapter: return row.adapter
   case .state: return row.state.label
+  case .project: return projectLabel(row.info)
   }
 }
 
@@ -441,7 +539,7 @@ public func subsetSummary(
   // and the filter control beside it is where their detail already lives.
   let facets =
     (config.gateways.isEmpty ? 0 : 1) + (config.adapters.isEmpty ? 0 : 1)
-    + (config.states.isEmpty ? 0 : 1)
+    + (config.states.isEmpty ? 0 : 1) + (config.projects.isEmpty ? 0 : 1)
   if facets > 0 { causes.append("\(facets) filter\(facets == 1 ? "" : "s")") }
   if !config.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
     causes.append("search")
@@ -458,6 +556,7 @@ public func subsetSummary(
 public func hasFacetFilter(_ config: ViewConfig) -> Bool {
   !config.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     || !config.gateways.isEmpty || !config.adapters.isEmpty || !config.states.isEmpty
+    || !config.projects.isEmpty
 }
 
 /// "Show me everything": every filter off, including scope. The group/sort

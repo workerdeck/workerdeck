@@ -306,6 +306,26 @@ public struct WorkerClient: Sendable {
       "/sessions/\(Self.encodeComponent(sessionId))/produced/\(Self.encodeComponent(fileId))")
   }
 
+  /// The bytes behind a `ProjectIcon.image` — the session-scoped icon route.
+  ///
+  /// Session-scoped, taking **no path**: the gateway serves whatever its own
+  /// discovery resolved for this session's cwd, so the fetch rides the same
+  /// gate as every other `/sessions/:id/*` route. Fetched rather than pointed
+  /// at, for the reason `fetchAttachment` is: the gateway authenticates with a
+  /// header, so an image view aimed at the URL would render a 401.
+  ///
+  /// Cache the result by `ProjectIcon.image.hash`, never by session: two
+  /// sessions in one project serve identical bytes, and the hash is on the
+  /// wire precisely so a client fetches once per project.
+  ///
+  /// A 404 is the uniform "no icon" — no project, a glyph-only project, or an
+  /// icon the gateway refused, deliberately indistinguishable (saying which
+  /// would say *why* a path was refused). Treat it as "draw no image", never
+  /// as an error worth reporting.
+  public func projectIcon(sessionId: String) async throws -> Data {
+    try await call("GET", "/sessions/\(Self.encodeComponent(sessionId))/project/icon")
+  }
+
   // MARK: - Live attach
 
   /// Open a live connection to a session's event stream.

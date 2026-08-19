@@ -257,7 +257,10 @@ struct SessionListView: View {
                   // Grouped by gateway, the section header already names it.
                   hostName: showsHostNames(model) && model.config.groupBy != .gateway
                     ? row.hostName : nil,
-                  unseen: row.unseen)
+                  unseen: row.unseen,
+                  projectImage: projectImage(for: row, model: model),
+                  // Grouped by project, the section header already names it.
+                  showsProject: model.config.groupBy != .project)
               }
               // Two different actions wearing one gesture. Closing a *live*
               // session terminates a run someone may be relying on, so it asks
@@ -313,6 +316,14 @@ struct SessionListView: View {
   /// one gateway to tell apart.
   private func showsHostNames(_ model: SessionListModel) -> Bool {
     hosts.hosts.count > 1
+  }
+
+  /// The picture for this row's project, when it declared an image one and the
+  /// loader has it. Nil for a glyph (drawn from SF Symbols, no bytes involved),
+  /// for bytes not in yet, and for an icon that could not be decoded.
+  private func projectImage(for row: SessionRow, model: SessionListModel) -> UIImage? {
+    guard case .image(_, let hash) = row.info.project?.icon else { return nil }
+    return model.projectIcons.image(forHash: hash)
   }
 
   @ViewBuilder
@@ -440,7 +451,8 @@ struct SessionListView: View {
           FilterMenu(
             config: Binding(get: { model.config }, set: { model.config = $0 }),
             hosts: hosts.hosts.map { FilterMenu.Gateway(id: $0.id, name: $0.displayName) },
-            adapters: model.adapters)
+            adapters: model.adapters,
+            projects: model.projects)
         }
       }
     }
@@ -504,11 +516,17 @@ private struct FilterMenu: View, Equatable {
   @Binding var config: ViewConfig
   let hosts: [Gateway]
   let adapters: [String]
+  /// Passed as a *value* for the same reason `adapters` is: it is derived from
+  /// the session rows, so reading it off the model inside this body would make
+  /// every 1.2s refresh invalidate the menu and shut an open dropdown. It is in
+  /// the `==` below for the other half of that rule.
+  let projects: [ProjectOption]
 
   /// `nonisolated` because SwiftUI compares views off the main actor. It only
   /// touches value types, so there is nothing to race on.
   nonisolated static func == (lhs: FilterMenu, rhs: FilterMenu) -> Bool {
-    lhs.hosts == rhs.hosts && lhs.adapters == rhs.adapters && lhs.config == rhs.config
+    lhs.hosts == rhs.hosts && lhs.adapters == rhs.adapters && lhs.projects == rhs.projects
+      && lhs.config == rhs.config
   }
 
   var body: some View {
@@ -532,6 +550,13 @@ private struct FilterMenu: View, Equatable {
           }
         }
       }
+      if projects.count > 1 {
+        Section("Project") {
+          ForEach(projects) { project in
+            Toggle(project.label, isOn: membership(\.projects, project.key))
+          }
+        }
+      }
       Section {
         Menu("Group by") {
           Picker("Group by", selection: $config.groupBy) {
@@ -539,6 +564,7 @@ private struct FilterMenu: View, Equatable {
             Text("Gateway").tag(GroupBy.gateway)
             Text("Engine").tag(GroupBy.adapter)
             Text("State").tag(GroupBy.state)
+            Text("Project").tag(GroupBy.project)
           }
         }
         Menu("Sort by") {
@@ -548,6 +574,7 @@ private struct FilterMenu: View, Equatable {
             Text("Gateway").tag(SortBy.gateway)
             Text("Engine").tag(SortBy.adapter)
             Text("State").tag(SortBy.state)
+            Text("Project").tag(SortBy.project)
           }
         }
       }
@@ -583,13 +610,24 @@ private struct FilterMenu: View, Equatable {
 
 /// One live session. Title falls back to the working directory's leaf, which is
 /// what the session is "about" before the agent has said anything.
-private struct SessionRowView: View {
+/// Internal rather than private so `UIPreviewHarness` can render it against
+/// canned data: every project state below (bytes in, bytes not in, a glyph this
+/// build cannot map, no project at all) needs a differently-configured gateway
+/// to reach in the real app.
+struct SessionRowView: View {
   let session: SessionInfo
   /// Named only when more than one gateway is in the list (and the grouping
   /// isn't already saying it).
   var hostName: String?
   /// Transcript rows since this session was last on screen; 0 renders nothing.
   var unseen: Int = 0
+  /// Resolved bytes for an `image` project icon, if this project has one and the
+  /// loader has fetched it. Nil draws no picture — the name is already there.
+  var projectImage: UIImage?
+  /// False when the list is already grouped by project: the section header has
+  /// said the name, so line two goes back to being purely the path. The rule
+  /// `hostName` follows one facet over.
+  var showsProject: Bool = true
 
   var body: some View {
     VStack(alignment: .leading, spacing: 5) {
@@ -613,11 +651,24 @@ private struct SessionRowView: View {
             .foregroundStyle(.secondary)
         }
       }
-      Text(session.cwd)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-        .truncationMode(.head)
+      // Line two is *where this session is*, and on the phone that has always
+      // been the whole path — this is the only client that draws it, so the
+      // other two replacing a basename with a project name has no analogue
+      // here. Replacing the path outright would REMOVE information they never
+      // had; prefixing it keeps both, and `WorkerDeck · packages/ui` beats
+      // `…/projects/ai/workerdeck/packages/ui` at this width by some distance.
+      HStack(spacing: 4) {
+        if showsProject, let icon = session.project?.icon {
+          ProjectIconView(icon: icon, image: projectImage)
+        }
+        Text(location)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          // Head-truncation is right for a bare path (the tail identifies it)
+          // and wrong for a project line, where the name leads and must survive.
+          .truncationMode(showsProject && session.project != nil ? .tail : .head)
+      }
       HStack(spacing: 8) {
         StatusBadge(status: session.status, pendingCount: session.pendingPermissionCount)
         if let hostName {
@@ -646,6 +697,31 @@ private struct SessionRowView: View {
     if let title = session.title, !title.isEmpty { return title }
     return Fmt.lastComponent(session.cwd)
   }
+
+  /// What line two says: the project and where inside it, else the raw cwd.
+  ///
+  /// The relative half is dropped when the session sits *at* the root, because
+  /// `WorkerDeck · workerdeck` says one thing twice. It is also dropped when the
+  /// cwd is not under the root at all — which is not paranoia: `root` is the
+  /// gateway's **realpath'd** directory while `cwd` is the path as given, so a
+  /// session started through a symlink (`/tmp/x` against `/private/tmp/x`) has a
+  /// perfectly good project and no computable relative path. The name alone is
+  /// the honest answer there; inventing a path would be worse than omitting one.
+  private var location: String {
+    guard showsProject, let project = session.project else { return session.cwd }
+    guard let relative = relativePath(of: session.cwd, under: project.root), !relative.isEmpty
+    else { return project.name }
+    return "\(project.name) · \(relative)"
+  }
+}
+
+/// `cwd` expressed inside `root`, or nil when it is not under it. Empty means
+/// they are the same directory.
+private func relativePath(of cwd: String, under root: String) -> String? {
+  let root = root.hasSuffix("/") ? String(root.dropLast()) : root
+  if cwd == root { return "" }
+  guard cwd.hasPrefix(root + "/") else { return nil }
+  return String(cwd.dropFirst(root.count + 1))
 }
 
 private struct SdkSessionRowView: View {

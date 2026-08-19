@@ -145,6 +145,64 @@ struct ProtocolDecodingTests {
     #expect(record.slashCommands == true)
   }
 
+  // MARK: - Project identity
+
+  private func decodeSession(project json: String) throws -> SessionInfo {
+    try JSONDecoder().decode(
+      SessionInfo.self,
+      from: Data(
+        #"""
+        {"id":"s1","status":"idle","cwd":"/work/deck/packages/ui","createdAt":1722300000000,
+         "lastSeq":4,"pendingPermissionCount":0,"project":\#(json)}
+        """#.utf8))
+  }
+
+  @Test func decodesAGlyphProjectIcon() throws {
+    let session = try decodeSession(
+      project: #"{"name":"WorkerDeck","root":"/work/deck","icon":{"type":"glyph","name":"layers"}}"#)
+    #expect(session.project == ProjectInfo(
+      name: "WorkerDeck", root: "/work/deck", icon: .glyph(name: "layers")))
+  }
+
+  @Test func decodesAnImageProjectIconAsAnAddressNeverBytes() throws {
+    // `hash` is the cross-session cache key; the bytes are a
+    // `projectIcon(sessionId:)` fetch away.
+    let png = try decodeSession(
+      project:
+        #"{"name":"WorkerDeck","root":"/work/deck","icon":{"type":"image","mediaType":"image/png","hash":"abc123"}}"#)
+    #expect(png.project?.icon == .image(mediaType: .png, hash: "abc123"))
+    let svg = try decodeSession(
+      project:
+        #"{"name":"WorkerDeck","root":"/work/deck","icon":{"type":"image","mediaType":"image/svg+xml","hash":"def456"}}"#)
+    #expect(svg.project?.icon == .image(mediaType: .svg, hash: "def456"))
+  }
+
+  /// A newer gateway's icon vocabulary — a third arm, a new media type — must
+  /// degrade to "no icon", never fail the decode of the whole `SessionInfo`: a
+  /// display declaration must not cost a session its row.
+  @Test func anUnknownIconShapeDegradesToNoIconNotAFailedRow() throws {
+    let unknownType = try decodeSession(
+      project: #"{"name":"WorkerDeck","root":"/work/deck","icon":{"type":"sprite","name":"x"}}"#)
+    #expect(unknownType.project == ProjectInfo(name: "WorkerDeck", root: "/work/deck"))
+    let unknownMedia = try decodeSession(
+      project:
+        #"{"name":"WorkerDeck","root":"/work/deck","icon":{"type":"image","mediaType":"image/webp","hash":"h"}}"#)
+    #expect(unknownMedia.project?.name == "WorkerDeck")
+    #expect(unknownMedia.project?.icon == nil)
+  }
+
+  /// An older gateway (or no `.workerdeck.json` at all — the wire cannot tell
+  /// them apart and a client must not try): absent means "render the folder
+  /// basename", exactly what this client drew before the field existed.
+  @Test func aSessionWithoutAProjectStillDecodes() throws {
+    let session = try JSONDecoder().decode(
+      SessionInfo.self,
+      from: Data(
+        #"{"id":"s1","status":"idle","cwd":"/work/alpha","createdAt":1722300000000,"lastSeq":4,"pendingPermissionCount":0}"#
+          .utf8))
+    #expect(session.project == nil)
+  }
+
   /// The CLI names its rows with aliases and reports a resolved wire id; the chip
   /// is only useful if those meet.
   @Test func matchesTheModelASessionReports() throws {

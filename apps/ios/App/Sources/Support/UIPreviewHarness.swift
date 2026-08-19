@@ -33,9 +33,118 @@ enum UIPreview: String {
   case terminal
   case terminalOpen
   case terminalStress
+  case projects
 
   static var active: UIPreview? {
     ProcessInfo.processInfo.environment["UIPREVIEW"].flatMap(UIPreview.init(rawValue:))
+  }
+}
+
+/// The sessions list's second line, in every project state it has.
+///
+/// The claim being checked is not "does this look right" but **"does each rule
+/// actually fire"** — the project replacing a path, the relative half appearing
+/// and disappearing, a glyph this build cannot map falling back to a folder
+/// rather than a hole, and an SVG (which Apple cannot decode from bytes at all)
+/// degrading to the name rather than to a gap. Every one of those needs a
+/// differently-configured gateway to produce for real, which is exactly what
+/// this harness is for.
+private struct ProjectsPreview: View {
+  private static func session(
+    id: String, title: String, cwd: String, project: ProjectInfo? = nil
+  ) -> SessionInfo {
+    SessionInfo(
+      id: id, status: .idle, cwd: cwd, engine: .claude, model: "claude-opus-5",
+      createdAt: 0, lastSeq: 0, pendingPermissionCount: 0, title: title,
+      // A plausible age: `lastActivityAt` is epoch **ms**, and a fixture that
+      // reads "20684d" is a fixture nobody trusts the rest of.
+      lastActivityAt: Date().timeIntervalSince1970 * 1000 - 15 * 60 * 1000,
+      project: project)
+  }
+
+  /// A red square, so "the bytes arrived" is unmistakable against "they did not".
+  private static var pngBytes: UIImage? {
+    UIGraphicsImageRenderer(size: .init(width: 32, height: 32)).image { ctx in
+      UIColor.systemIndigo.setFill()
+      ctx.fill(CGRect(x: 0, y: 0, width: 32, height: 32))
+    }
+  }
+
+  private struct Case: Identifiable {
+    let id = UUID()
+    let caption: String
+    let session: SessionInfo
+    var image: UIImage?
+  }
+
+  private var cases: [Case] {
+    let wd = ProjectInfo(
+      name: "WorkerDeck", root: "/Users/you/projects/workerdeck",
+      icon: .image(mediaType: .png, hash: "abc"))
+    return [
+      Case(
+        caption: "image icon, bytes in, session at the project root",
+        session: Self.session(
+          id: "1", title: "Terminal fold audit", cwd: "/Users/you/projects/workerdeck",
+          project: wd),
+        image: Self.pngBytes),
+      Case(
+        caption: "…and deeper in: the relative half earns its place",
+        session: Self.session(
+          id: "2", title: "Scrubber lanes",
+          cwd: "/Users/you/projects/workerdeck/packages/ui", project: wd),
+        image: Self.pngBytes),
+      Case(
+        caption: "bytes not in yet — no hole, no placeholder box",
+        session: Self.session(
+          id: "3", title: "Waiting on its icon",
+          cwd: "/Users/you/projects/workerdeck/packages/web", project: wd)),
+      Case(
+        caption: "SVG: Apple cannot decode one from bytes, so it reads as no icon",
+        session: Self.session(
+          id: "4", title: "The platform limit", cwd: "/Users/you/projects/deck",
+          project: ProjectInfo(
+            name: "Deck", root: "/Users/you/projects/deck",
+            icon: .image(mediaType: .svg, hash: "svg")))),
+      Case(
+        caption: "glyph this build maps (tree-pine → tree)",
+        session: Self.session(
+          id: "5", title: "Theme rework", cwd: "/Users/you/projects/silktree/app",
+          project: ProjectInfo(
+            name: "Silktree", root: "/Users/you/projects/silktree",
+            icon: .glyph(name: "tree-pine")))),
+      Case(
+        caption: "well-formed glyph this build has never heard of → folder, not a hole",
+        session: Self.session(
+          id: "6", title: "Grid layout", cwd: "/Users/you/projects/zigby",
+          project: ProjectInfo(
+            name: "Zigby", root: "/Users/you/projects/zigby",
+            icon: .glyph(name: "some-icon-shipped-last-tuesday")))),
+      Case(
+        caption: "cwd NOT under root (a symlinked start) — name alone, never a wrong path",
+        session: Self.session(
+          id: "7", title: "Through a symlink", cwd: "/tmp/deck-link/packages/ui",
+          project: ProjectInfo(name: "WorkerDeck", root: "/private/tmp/deck", icon: nil))),
+      Case(
+        caption: "no .workerdeck.json anywhere above it — the raw cwd, exactly as before",
+        session: Self.session(
+          id: "8", title: "Launch preparation",
+          cwd: "/Users/you/projects/atomic/services/gtm")),
+    ]
+  }
+
+  var body: some View {
+    NavigationStack {
+      List {
+        ForEach(cases) { item in
+          VStack(alignment: .leading, spacing: 2) {
+            Text(item.caption).font(.caption2).foregroundStyle(.tertiary)
+            SessionRowView(session: item.session, unseen: 0, projectImage: item.image)
+          }
+        }
+      }
+      .navigationTitle("Project line")
+    }
   }
 }
 
@@ -492,6 +601,11 @@ struct UIPreviewHarness: View {
       // what must be true on screen is that the action row is visible in every
       // one of them, which is the entire bug.
       PromptsPreview()
+
+    case .projects:
+      // Every shape line two can take, because each one is a different rule and
+      // most need a differently-configured gateway to reach for real.
+      ProjectsPreview()
 
     case .composer:
       // Every state the gutter cell has, stacked, because the whole point of

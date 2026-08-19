@@ -50,6 +50,10 @@ final class SessionListModel {
   }
   private(set) var snapshots: [UUID: HostSnapshot] = [:]
   private(set) var hasLoaded = false
+  /// Project icon bytes, keyed by content hash and shared across every gateway
+  /// in the list — see `ProjectIconLoader`. Held here because this is where the
+  /// per-gateway clients live and where new rows arrive.
+  let projectIcons = ProjectIconLoader()
 
   private let hostStore: HostStore
   private let unread: UnreadModel
@@ -128,7 +132,25 @@ final class SessionListModel {
       }
     }
     hasLoaded = true
+    ensureProjectIcons()
     await syncAppBadge()
+  }
+
+  /// Ask for any project icon this list needs and does not have.
+  ///
+  /// Driven off `snapshots` rather than `rows` for the plain reason that these
+  /// are keyed by the gateway's `UUID`, which is what `context(for:)` wants —
+  /// `SessionRow.hostId` is that id stringified for the shared view model.
+  /// Cheap on the common path: a walk that finds every hash already known.
+  private func ensureProjectIcons() {
+    var requests: Set<ProjectIconLoader.Request> = []
+    for (hostId, snapshot) in snapshots {
+      for info in snapshot.sessions {
+        guard case .image(_, let hash) = info.project?.icon else { continue }
+        requests.insert(.init(hostId: hostId, sessionId: info.id, hash: hash))
+      }
+    }
+    projectIcons.ensure(requests) { [weak self] id in self?.context(for: id)?.client }
   }
 
   /// The Agent SDK's on-disk sessions, per gateway, for the Resume tab.
@@ -207,6 +229,9 @@ final class SessionListModel {
 
   /// Adapter chips for the filter menu, derived from what is actually present.
   var adapters: [String] { adaptersOf(rows) }
+  /// The projects present, for the filter control. Derived like `adapters`, and
+  /// handed to `FilterMenu` as a value for the reason documented there.
+  var projects: [ProjectOption] { projectsOf(rows) }
 
   /// Gateways that failed their last fetch, in host order, for the trouble strip.
   var failedHosts: [(host: Host, message: String)] {

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import WorkerDeckKit
@@ -11,12 +12,13 @@ struct SessionListTests {
   private func info(
     id: String = "sess-00000001", status: SessionStatus = .idle, cwd: String = "/work/alpha",
     title: String? = nil, pendingPermissionCount: Int = 0, createdAt: Double = 1_000,
-    lastActivityAt: Double? = 1_000, subagents: [SubagentInfo]? = nil
+    lastActivityAt: Double? = 1_000, subagents: [SubagentInfo]? = nil,
+    project: ProjectInfo? = nil
   ) -> SessionInfo {
     SessionInfo(
       id: id, status: status, cwd: cwd, createdAt: createdAt, lastSeq: 0,
       pendingPermissionCount: pendingPermissionCount, title: title,
-      lastActivityAt: lastActivityAt, subagents: subagents)
+      lastActivityAt: lastActivityAt, subagents: subagents, project: project)
   }
 
   private func agent(_ status: SubagentStatus, id: String = "toolu_1") -> SubagentInfo {
@@ -251,5 +253,100 @@ struct SessionListTests {
       row(info: info()), row(adapter: "codex", info: info()), row(adapter: "codex", info: info()),
     ]
     #expect(adaptersOf(rows) == ["claude", "codex"])
+  }
+
+  // MARK: - Project facet
+
+  private var deckProject: ProjectInfo { ProjectInfo(name: "WorkerDeck", root: "/work/deck") }
+  private var declaredUi: SessionRow {
+    row(info: info(id: "p1", cwd: "/work/deck/packages/ui", project: deckProject))
+  }
+  private var declaredWeb: SessionRow {
+    row(info: info(id: "p2", cwd: "/work/deck/packages/web", project: deckProject))
+  }
+  private var undeclared: SessionRow { row(info: info(id: "u1", cwd: "/work/alpha")) }
+  /// The identical root on another gateway — another machine's directory
+  /// wearing the same word.
+  private var remoteTwin: SessionRow {
+    row(
+      hostId: "pi", hostName: "Pi", local: false,
+      info: info(id: "r1", cwd: "/work/deck/packages/ui", project: deckProject))
+  }
+  /// A filesystem-less engine: no cwd, no project, no folder to name.
+  private var nowhere: SessionRow { row(info: info(id: "n1", cwd: "")) }
+
+  @Test func keysByRootPerGatewayANameIsNotAKeyAndARemoteTwinIsNotThisProject() {
+    // Two cwds inside one project share the key; the identical root on another
+    // gateway is another machine's directory (the ScopeRoot argument).
+    #expect(projectKey(declaredUi) == projectKey(declaredWeb))
+    #expect(projectKey(declaredUi) != projectKey(remoteTwin))
+    // Undeclared sessions key by their cwd, so grouping works before anyone
+    // has written a .workerdeck.json.
+    #expect(projectKey(undeclared) == "mac:/work/alpha")
+  }
+
+  @Test func labelsByTheDeclaredNameElseTheCwdBasenameElseNoProject() {
+    #expect(projectLabel(declaredUi.info) == "WorkerDeck")
+    #expect(projectLabel(undeclared.info) == "alpha")
+    #expect(projectLabel(nowhere.info) == "No project")
+  }
+
+  @Test func offersOneFilterEntryPerProjectKeyedByRootAndLabelledByName() {
+    let options = projectsOf([declaredUi, declaredWeb, undeclared, remoteTwin, nowhere])
+    // Two cwds of one project collapse to one entry; the remote twin does not,
+    // because it is another machine's directory wearing the same word.
+    // Alphabetical by label, case-insensitively, so the picker reads as a list
+    // of words rather than of roots.
+    #expect(
+      options == [
+        ProjectOption(key: projectKey(undeclared), label: "alpha"),
+        ProjectOption(key: projectKey(nowhere), label: "No project"),
+        ProjectOption(key: projectKey(declaredUi), label: "WorkerDeck"),
+        ProjectOption(key: projectKey(remoteTwin), label: "WorkerDeck"),
+      ])
+  }
+
+  @Test func groupsDeclaredAndUndeclaredRowsSideBySideAlphabeticallyByLabel() {
+    var config = ViewConfig.default
+    config.groupBy = .project
+    config.sortBy = .recent
+    let groups = groupRows([undeclared, declaredUi, declaredWeb], config: config)
+    #expect(groups.map(\.label) == ["alpha", "WorkerDeck"])
+    #expect(groups.last?.rows.map(\.info.id) == ["p1", "p2"])
+  }
+
+  @Test func filtersByProjectKeyAndAConfigPredatingTheFieldFiltersNothing() throws {
+    let rows = [declaredUi, undeclared]
+    var config = ViewConfig.default
+    config.scoped = false
+    config.projects = [projectKey(declaredUi)]
+    #expect(filterRows(rows, config: config).map(\.info.id) == ["p1"])
+    // A stored ViewConfig restored from before the field existed: absent and
+    // empty must mean the same thing. TS deletes the property; the Swift
+    // equivalent is a persisted config decoded without the key.
+    let legacy = try JSONDecoder().decode(
+      ViewConfig.self,
+      from: Data(
+        #"{"search":"","gateways":[],"adapters":[],"states":[],"scoped":false,"groupBy":"state","sortBy":"recent"}"#
+          .utf8))
+    #expect(filterRows(rows, config: legacy).count == 2)
+    #expect(!hasFacetFilter(legacy))
+  }
+
+  @Test func matchesSearchAgainstTheDeclaredProjectName() {
+    // The person knows the repo as "WorkerDeck", not by the folder's basename.
+    var config = ViewConfig.default
+    config.scoped = false
+    config.search = "workerdeck"
+    #expect(filterRows([declaredUi, undeclared], config: config).map(\.info.id) == ["p1"])
+  }
+
+  @Test func countsAProjectFilterIntoTheSubsetLineAndClearFiltersResetsIt() {
+    var config = ViewConfig.default
+    config.scoped = false
+    config.projects = ["mac:/work/deck"]
+    #expect(subsetSummary(config: config, scope: nil, shown: 1, total: 2)?.causes == ["1 filter"])
+    #expect(hasFacetFilter(config))
+    #expect(clearFilters(config).projects == [])
   }
 }
