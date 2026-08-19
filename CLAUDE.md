@@ -1321,7 +1321,48 @@ the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:cod
   input left (prompts + a green band per sub-agent, drawn from membership and never the spawner's
   name), output right (the answer, and every failure that produced one). The same session also found and fixed
   `SubagentTracker`'s mis-reading of the SDK's *async* agents (above), which is the one piece of
-  this ledger proven against a **real captured log** rather than an authored one. Riding there too, and **not** subject to that debt: the iOS
+  this ledger proven against a **real captured log** rather than an authored one. A **structural
+  pass over the iOS terminal surface** rides there behind it (`_docs/refactors/`), called after
+  seven of eleven commits in one session turned out to be incremental fixes to the same three
+  files, and it is three seams rather than a tidy-up. `ExpansionKey` replaced a stringly-typed
+  protocol whose trap had already cost a bug: a block's `key` is its **row identity** (produced by
+  the fold, mirrored in web's `blocks.ts`, used for diffing and the plan cache) and coincides with
+  an expansion key for only two of five block shapes — an `.item` call's row key is
+  `toolCall:<id>` while what opens it is `call:<id>`, and a run of one is *drawn as the call*, so
+  its `run:<id>` opened nothing. Typed, `expansion.isOpen(block.key)` does not compile, row keys
+  stay `String` so web parity is untouched, `full`/`pending` became **call ids** (there is no
+  fully-expanded run) which deleted the `dropFirst("full:")` surgery from two files, and the
+  run-of-one rule is now `TerminalRunBlock.expansionKey: ExpansionKey?` — an `Optional` the
+  compiler asks about rather than a comment that had to be obeyed. `blockCalls(in:expansion:)` is
+  the **one walk of a block**, where the item/run/task/task-children switch had been written four
+  times (`redItemIndices`, `expansionKeys`, `truncatedCallIds`, the planner); its `ownLine` flag
+  *is* the fold rule stated once, which is what makes "if it is red in the transcript, it is red on
+  the rail" a fact the rail reads rather than a claim that two derivations agree — `redItemIndices`
+  is four lines now and `truncatedCallIds` is gone. And `ScrubberRegion`/`ScrubberRail` split
+  **ground from points**: `.expanded` had been a `ScrubberMarkKind` needing three exemptions from
+  the mark machinery within an hour (skip the fractional `RowPosition` rule, never merge, paint
+  first) plus a loudness rationale, which is a type saying it is the wrong type. Regions paint
+  under, marks over, and the order is structural instead of a `sorted(by:)` in the view; a latent
+  bug went with it, since a band spanning hundreds of points could win the press over the very
+  marks inside it. The web/iOS **expansion divergence is now decided and written on both sides**
+  (`height.ts`'s first invariant and `TerminalExpansion.swift`): expansion is per-row `useState`
+  there and a planner input here, closing it either way costs one client its central
+  simplification, and that inversion is exactly *why* this rail can be expansion-aware and the web
+  rail cannot. The pass was then **reviewed adversarially** — the reviewer reconstructed the
+  pre-refactor functions from `git show HEAD` and diffed them against the new ones over 2,000
+  randomized transcripts, which is what makes `ownLine`'s equivalence verified rather than argued —
+  and the most instructive thing it found is that the fix for the fold walk had *re-offered the very
+  trap the typed key was built to kill*, one namespace over: unifying on `blockCalls` made
+  `expansionKeys` emit `.call(taskId)` for a `Task`'s header, and `planTask` never plans a task's
+  own result. Hence `BlockCall.drawsResult`, false for exactly that one thing. Two seams went with
+  it: the rail was rebuilt inside `TerminalScrubberView.body` while `peek`/`dragging` were `@State`
+  on the same view, so one drag re-ran `scrubberMarks` + `redItemIndices` + `expandedRegions` per
+  **touch event** over the whole transcript — the same lesson as the replay counter above, in a
+  gesture instead of a stream, and the file already knew it (`ScrubberBandView` exists for exactly
+  that reason; the peek was on the wrong side of the split, now `ScrubberTouchLayer`); and
+  `TerminalTranscriptModel.plan(at:)` passed the whole expansion where the book had cached a height
+  planned from `subset(for:)`, which made "the lines drawn are as tall as the height reserved" —
+  the one claim this renderer cannot get wrong — rest on two derivations agreeing. Riding there too, and **not** subject to that debt: the iOS
   **native Swift terminal renderer** (phase 1 — virtualized, deterministic heights, the folds,
   diffs; `lines` deleted there as on the web) and the iOS **replay hold**. Those two are the
   opposite case — built, then run on a real device against a real session, which is how the

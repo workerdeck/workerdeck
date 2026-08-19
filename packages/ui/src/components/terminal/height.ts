@@ -38,6 +38,20 @@ import { runSummary, taskSummary } from './tool-run.ts'
  *   row is always collapsed — and an expanded row is by definition mounted,
  *   which means the virtualizer has its real measurement. There is no
  *   open/expanded branch here on purpose.
+ *
+ *   **This is a decided, permanent divergence from iOS**, not a gap anyone
+ *   should close. There (`apps/ios/WorkerDeckKit/.../TerminalExpansion.swift`)
+ *   nothing self-measures — a `UICollectionViewLayout` takes every frame from
+ *   the height book — so expansion has to be an *input to the planner*, and a
+ *   height the book does not know about is a frame the layout gets wrong. That
+ *   inversion is what lets the iOS scrubber be expansion-aware (a band over the
+ *   region you opened; a failed member of an *open* run marking on its own
+ *   line) and it is the one thing this client's rail cannot do. Lifting
+ *   expansion to shared state here to match would buy one rail feature and cost
+ *   this invariant — the central simplification of the whole calculator — so
+ *   the two clients share the *rule* and differ in how much of it each can see.
+ *   Said here as well as in the Swift, because this is the file where someone
+ *   would go looking to "fix" it.
  * - **Mutation is object replacement.** The transcript reducer never mutates an
  *   item in place — streaming text, a result arriving, a patch attaching each
  *   produce a new object — which is what lets {@link HeightEpoch}'s cache key on
