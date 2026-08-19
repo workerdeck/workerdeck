@@ -244,6 +244,24 @@ export type HostToSidebar =
       kind: 'wd-vitals'
       vitals?: SessionVitals
     }
+  | {
+      /**
+       * Project icon bytes, as data URLs keyed by the icon's own content hash
+       * — the value `SessionInfo.project.icon` carries on the wire.
+       *
+       * Its own message rather than a field on `SidebarState` because the two
+       * have opposite economics: the state is pushed on every poll (1.2s while
+       * anything is working) and must stay small, while an icon is a few
+       * hundred kilobytes that changes only when someone edits a repo. Sent
+       * once per hash, on resolution, and re-sent whole after `wd-ready` —
+       * a webview VS Code has torn down and rebuilt has no map left.
+       *
+       * The map is cumulative and the webview merges rather than replaces: a
+       * later resolution must not drop an earlier icon.
+       */
+      kind: 'wd-project-icons'
+      icons: Record<string, string>
+    }
 
 /**
  * Gateways view → host.

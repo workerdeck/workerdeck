@@ -1,7 +1,9 @@
 import { FolderOpen, Layers, Plug, SearchX } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import type { SessionInfo } from '@workerdeck/protocol'
 import type { SidebarState } from '../../src/bridge-protocol.ts'
 import type { AppHostMessage, Bridge } from '../bridge.ts'
+import { ProjectIcon } from '@workerdeck/ui'
 import { Empty, Key } from '../ui/Empty.tsx'
 import { SessionCard } from './SessionCard.tsx'
 import { SubsetLine } from './SubsetLine.tsx'
@@ -14,12 +16,24 @@ import {
   filterRows,
   groupRows,
   hasFacetFilter,
+  projectsOf,
   scopeActive,
   subsetSummary,
   type ViewConfig,
 } from '../../src/view-config.ts'
 
 type Persisted = { config?: ViewConfig }
+
+/** The resolved bytes for a session's project icon, if it has an image one and
+ * the host has fetched it yet. Shared by the row and its group header so the
+ * two cannot draw different pictures for one project. */
+function iconSrcOf(
+  info: SessionInfo | undefined,
+  icons: Record<string, string>,
+): string | undefined {
+  const icon = info?.project?.icon
+  return icon?.type === 'image' ? icons[icon.hash] : undefined
+}
 
 /**
  * The Sessions view: every gateway's sessions in one list, grouped and sorted,
@@ -39,6 +53,9 @@ type Persisted = { config?: ViewConfig }
  */
 export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const [state, setState] = useState<SidebarState | undefined>(undefined)
+  // Merged, never replaced: the host sends each hash once as it resolves, and
+  // the whole map again after a `wd-ready` (a webview VS Code rebuilt has none).
+  const [projectIcons, setProjectIcons] = useState<Record<string, string>>({})
   const [filterOpen, setFilterOpen] = useState(false)
   const persisted = bridge.getState<Persisted>()
   // Spread over the defaults, not instead of them: a config persisted by an
@@ -67,6 +84,9 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
           case 'wd-sidebar-state':
             setState(msg.state)
             return
+          case 'wd-project-icons':
+            setProjectIcons((held) => ({ ...held, ...msg.icons }))
+            return
           case 'wd-filter-open':
             setFilterOpen(msg.open)
             return
@@ -79,6 +99,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const scope = state?.scope
   const rows = useMemo(() => buildRows(state), [state])
   const adapters = useMemo(() => adaptersOf(rows), [rows])
+  const projects = useMemo(() => projectsOf(rows), [rows])
   const filtered = useMemo(() => filterRows(rows, config, scope), [rows, config, scope])
   const groups = useMemo(() => groupRows(filtered, config), [filtered, config])
   const connected = hosts.filter((h) => h.probe === 'connected')
@@ -96,6 +117,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
           config={config}
           hosts={hosts}
           adapters={adapters}
+          projects={projects}
           scope={scope}
           onChange={setConfig}
         />
@@ -169,7 +191,17 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
           groups.map((group) => (
             <div key={group.key} className='flex flex-col gap-1'>
               {group.label ? (
-                <div className='px-1.5 pb-0.5 pt-1.5 text-label font-semibold uppercase tracking-wide text-fg-4'>
+                <div className='flex items-center gap-1.5 px-1.5 pb-0.5 pt-1.5 text-label font-semibold uppercase tracking-wide text-fg-4'>
+                  {/* Only the project facet has a mark of its own, and every
+                      row in the group shares it by construction (a group IS one
+                      project root), so the first row is a fair source. */}
+                  {config.groupBy === 'project' ? (
+                    <ProjectIcon
+                      icon={group.rows[0]?.info.project?.icon}
+                      src={iconSrcOf(group.rows[0]?.info, projectIcons)}
+                      name={group.label}
+                    />
+                  ) : null}
                   {group.label}
                 </div>
               ) : null}
@@ -177,6 +209,8 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
                 <SessionCard
                   key={row.info.id}
                   info={row.info}
+                  showProject={config.groupBy !== 'project'}
+                  projectIcons={projectIcons}
                   unseen={row.unseen}
                   hostName={
                     config.groupBy !== 'gateway' && hosts.length > 1 ? row.hostName : undefined

@@ -56,12 +56,16 @@ export function ViewConfigPanel({
   config,
   hosts,
   adapters,
+  projects,
   scope,
   onChange,
 }: {
   config: ViewConfig
   hosts: readonly WireHost[]
   adapters: readonly string[]
+  /** `{ key, label }` from protocol's `projectsOf` — key, because a name is not
+   * a key (two repos are both called "api"). */
+  projects: readonly { key: string; label: string }[]
   scope: WorkspaceScope | undefined
   onChange: (next: ViewConfig) => void
 }) {
@@ -126,6 +130,16 @@ export function ViewConfigPanel({
               values={config.adapters}
               options={adapters.map((adapter) => ({ value: adapter, label: adapter }))}
               onChange={(v) => set('adapters', v)}
+            />
+          </Row>
+        ) : null}
+
+        {projects.length > 1 ? (
+          <Row label='Project'>
+            <AnyOf
+              values={config.projects ?? []}
+              options={projects.map((p) => ({ value: p.key, label: p.label }))}
+              onChange={(v) => set('projects', v)}
             />
           </Row>
         ) : null}

@@ -12,6 +12,7 @@ import {
   type ViewConfig,
 } from './view-config.ts'
 import { webviewHtml } from './webview-html.ts'
+import { ProjectIconCache } from './project-icons.ts'
 
 /** The webview's own filter, mirrored here for the badge (see `wd-view-config`). */
 const VIEW_CONFIG_KEY = 'workerdeck.viewConfig.v1'
@@ -90,6 +91,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
    * globalState so a window badges correctly before the sidebar is ever opened.
    */
   #viewConfig: ViewConfig
+  /** Project icon bytes by hash — see `ProjectIconCache`. Owned here because
+   * this is the view that renders them and the only one that needs them. */
+  readonly #icons: ProjectIconCache
 
   constructor(
     context: vscode.ExtensionContext,
@@ -103,6 +107,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     this.#store = store
     this.#model = model
     this.#delegate = delegate
+    this.#icons = new ProjectIconCache(store, () =>
+      this.#post({ kind: 'wd-project-icons', icons: this.#icons.entries() }),
+    )
     this.#viewConfig = {
       ...DEFAULT_VIEW_CONFIG,
       ...context.globalState.get<ViewConfig>(VIEW_CONFIG_KEY),
@@ -160,7 +167,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
 
   #pushState(): void {
     if (this.#view && this.#ready) {
-      this.#post({ kind: 'wd-sidebar-state', state: this.#model.sidebarState() })
+      const state = this.#model.sidebarState()
+      this.#post({ kind: 'wd-sidebar-state', state })
+      // Fire-and-forget: whatever is already cached went out with the last
+      // resolution, and anything new arrives as its own message. The list draws
+      // before its pictures do, which is the right order for a list.
+      this.#icons.ensure(state.sessions)
     }
     this.refreshUnread()
   }
@@ -216,6 +228,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     switch (msg.kind) {
       case 'wd-ready':
         this.#ready = true
+        // Whole, not incremental: VS Code tears webviews down freely and a
+        // rebuilt one has no map to merge into.
+        this.#post({ kind: 'wd-project-icons', icons: this.#icons.entries() })
         this.#pushState()
         // The webview boots with the bar closed and learns otherwise from here
         // — it cannot read a context key.

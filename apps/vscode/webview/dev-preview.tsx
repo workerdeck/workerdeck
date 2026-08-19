@@ -41,12 +41,40 @@ const agents = [
   { toolUseId: 'f', name: 'Explore', description: 'Fix release build and redeploy', status: 'failed', toolCount: 1 },
 ]
 
+/**
+ * Projects, in all four shapes a row can be in: an image icon (the bytes
+ * arrived), an image icon whose bytes have NOT arrived — the state every card
+ * is in for the first beat after a poll — a glyph, a glyph name this build does
+ * not know (which must draw the folder fallback, not a hole), and no project at
+ * all, which must still read exactly as it did before the feature existed.
+ */
+const ICON_HASH = 'deadbeef'
+const projectIcons = {
+  [ICON_HASH]:
+    'data:image/svg+xml;base64,' +
+    btoa(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#d4d4d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20.5 7.75 12 12.5 3.5 7.75Z"/><path d="M3.5 12.25 12 17l8.5-4.75"/><path d="M3.5 16.5 12 21.25l8.5-4.75"/></svg>',
+    ),
+}
+const wd = {
+  name: 'WorkerDeck',
+  root: '/Users/atomic/projects/ai/workerdeck',
+  icon: { type: 'image', mediaType: 'image/svg+xml', hash: ICON_HASH },
+}
+
 const rows = [
-  mk({ id: '1', title: 'Continue session load optimization', status: 'running', model: 'claude-opus-5-20260101[1m]', subagents: agents }),
-  mk({ id: '2', title: 'Theme design rework', status: 'idle', model: 'claude-fable-5', cwd: '/x/silktree', lastActivityAt: Date.now() - 2_700_000 }),
-  mk({ id: '3', title: 'Grid layout exploration', status: 'idle', model: 'claude-opus-5', cwd: '/x/zigby', lastActivityAt: Date.now() - 7_200_000 }),
+  mk({ id: '1', title: 'Continue session load optimization', status: 'running', model: 'claude-opus-5-20260101[1m]', subagents: agents, project: wd }),
+  // Same project, deep in a package — the row that used to read `ui`.
+  mk({ id: '6', title: 'Terminal fold audit', status: 'idle', model: 'claude-opus-5', cwd: '/Users/atomic/projects/ai/workerdeck/packages/ui', project: wd, lastActivityAt: Date.now() - 900_000 }),
+  // Bytes not in yet: name, no picture, no reserved hole.
+  mk({ id: '7', title: 'Waiting on its icon', status: 'idle', model: 'claude-opus-5', project: { ...wd, icon: { type: 'image', mediaType: 'image/png', hash: 'notyet' } }, lastActivityAt: Date.now() - 1_200_000 }),
+  mk({ id: '2', title: 'Theme design rework', status: 'idle', model: 'claude-fable-5', cwd: '/x/silktree', project: { name: 'Silktree', root: '/x/silktree', icon: { type: 'glyph', name: 'tree-pine' } }, lastActivityAt: Date.now() - 2_700_000 }),
+  // A well-formed glyph name this build has never heard of → the folder.
+  mk({ id: '3', title: 'Grid layout exploration', status: 'idle', model: 'claude-opus-5', cwd: '/x/zigby', project: { name: 'Zigby', root: '/x/zigby', icon: { type: 'glyph', name: 'some-icon-shipped-last-tuesday' } }, lastActivityAt: Date.now() - 7_200_000 }),
+  // No `.workerdeck.json` anywhere above it: the basename, exactly as before.
   mk({ id: '4', title: 'Launch preparation', status: 'idle', model: 'claude-opus-5', cwd: '/x/atomic', lastActivityAt: Date.now() - 21_600_000 }),
-  mk({ id: '5', title: 'Codex parity sweep', status: 'awaiting_approval', engine: 'codex', model: 'gpt-5-codex', cwd: '/x/wd', pendingPermissionCount: 1 }),
+  mk({ id: '8', title: 'Codex spawn options', status: 'idle', engine: 'codex', model: 'gpt-5-codex', cwd: '/x/wd', project: { name: 'WorkerDeck', root: '/x/wd', icon: { type: 'glyph', name: 'layers' } }, lastActivityAt: Date.now() - 300_000 }),
+  mk({ id: '5', title: 'Codex parity sweep', status: 'awaiting_approval', engine: 'codex', model: 'gpt-5-codex', cwd: '/x/wd', project: { name: 'WorkerDeck', root: '/x/wd', icon: { type: 'glyph', name: 'layers' } }, pendingPermissionCount: 1 }),
 ]
 
 const unseen: Record<string, number> = { '2': 12, '3': 33 }
@@ -58,6 +86,7 @@ createRoot(document.getElementById('root')!).render(
         <SessionCard
           key={i}
           info={r}
+          projectIcons={projectIcons}
           unseen={unseen[(r as { id: string }).id] ?? 0}
           selected={i === 0}
           onSelect={() => {}}

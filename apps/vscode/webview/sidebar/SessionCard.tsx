@@ -13,8 +13,8 @@ import {
   PauseCircle,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { EngineIcon, engineMark } from '@workerdeck/ui'
-import { sessionLabel, subagentLabel } from '../../src/view-config.ts'
+import { EngineIcon, ProjectIcon, engineMark } from '@workerdeck/ui'
+import { projectLabel, sessionLabel, subagentLabel } from '../../src/view-config.ts'
 
 /**
  * One session in the sidebar list — an inset rounded **card**, two lines and an
@@ -31,12 +31,23 @@ import { sessionLabel, subagentLabel } from '../../src/view-config.ts'
  * is what made the one that is working hard to find.
  *
  * **Line two is what it is**: the engine's mark and its model in the engine's
- * own colour, then the folder and the age, muted. The colour is a *vendor* cue —
- * it sits against the mark and identifies whose engine this is — which is why it
- * survives this webview's rule that a lone coral element reads as a stray token
- * (`styles.css`, the `--term-mark` repoint). That rule is about the panel's
- * working marker, where coral competed with the editor's accent for the same
- * meaning; here it competes with nothing and names Anthropic.
+ * own colour, then the **project** and the age, muted. The project replaced the
+ * cwd's basename in that slot, and it is a replacement rather than an addition
+ * because the folder was only ever a proxy for the question the project name
+ * answers directly — *which of my repos is this*. `projectLabel` falls back to
+ * exactly the basename the row drew before, so an undeclared project is
+ * byte-identical to what shipped; a declared one says `WorkerDeck` where twelve
+ * rows used to say `ui`, `server`, `web`.
+ *
+ * **The colour is a vendor cue, and it is carried by the mark and the model
+ * together** — neither alone says whose engine this is at 13px. It survives
+ * this webview's rule that a lone coral element reads as a stray token
+ * (`styles.css`, the `--term-mark` repoint), because that rule is about the
+ * *panel's* working marker, where coral competed with the editor's accent for a
+ * meaning the editor owns; here it competes with nothing and names a vendor.
+ * Two of them do now (`VENDOR_CLASS`): the rule is symmetric, so colouring one
+ * vendor and not the other made the absence of colour mean something it does
+ * not.
  *
  * **Selection is the card's own fill**, not a gutter bar: the card is already an
  * inset shape with air around it, so filling it is unambiguous in a way a fill
@@ -48,9 +59,55 @@ import { sessionLabel, subagentLabel } from '../../src/view-config.ts'
  * session is named on the gateway, so the new name travels to every other
  * client; clearing it restores the derived title.
  */
+/**
+ * The card's icon column — one fixed width, shared by both lines.
+ *
+ * The two glyphs are deliberately different sizes (the state leads line one and
+ * has to be findable at a glance; the vendor mark is a label on line two), and
+ * laying them out as plain flex children meant each line's text started at
+ * `icon + gap` — 20px against 18px. Two pixels is invisible as a measurement
+ * and obvious as a misalignment: the title sat a notch right of the model
+ * under it, and the glyphs' own ink disagreed by more, the smaller mark being
+ * flush left in a narrower box.
+ *
+ * A fixed 14px cell with the glyph centred in it fixes both at once — the text
+ * columns land on one edge because the cell is one width, and the ink centres
+ * agree because centring is what the cell does. It is `packages/ui`'s terminal
+ * gutter argument (a marker column is a column, not a leading character) at
+ * card scale.
+ */
+function Gutter({ children }: { children: React.ReactNode }) {
+  return <span className='flex w-3.5 shrink-0 items-center justify-center'>{children}</span>
+}
+
+/**
+ * Which engines wear their vendor's colour, and **how far it reaches**.
+ *
+ * `MARK` is the glyph, `TEXT` is the model name beside it. They are the same
+ * for Anthropic and deliberately not for OpenAI, because the two brands are
+ * different in kind rather than in hue: coral is an accent, and OpenAI's
+ * guidelines forbid adding colour to the mark at all, so theirs is pure
+ * white/black. At full contrast that is fine on a 12px glyph and wrong on an
+ * 11px label — a pure-white model name is *brighter than the session title
+ * above it*, which inverts the card's whole hierarchy to say something the mark
+ * has already said. So OpenAI's name keeps the muted line it always had, which
+ * is also the most literal possible reading of "don't add any colors".
+ *
+ * Anything absent falls through to muted on both counts.
+ */
+const VENDOR_MARK: Record<string, string> = {
+  claude: 'text-vendor-claude',
+  codex: 'text-vendor-openai',
+}
+const VENDOR_TEXT: Record<string, string> = {
+  claude: 'text-vendor-claude',
+}
+
 export function SessionCard({
   info,
   hostName,
+  showProject = true,
+  projectIcons,
   unseen = 0,
   selected,
   onSelect,
@@ -61,6 +118,17 @@ export function SessionCard({
   info: SessionInfo
   /** Shown when the list isn't already grouped by gateway. */
   hostName?: string
+  /**
+   * False when the list is already grouped by project — the header above this
+   * row has said the name, so the slot goes back to the cwd's basename, which
+   * inside a project group is the one thing the header cannot say (`ui`,
+   * `server`, `web` under one WorkerDeck). Exactly the rule `hostName` follows
+   * one facet over.
+   */
+  showProject?: boolean
+  /** Resolved project-icon bytes by content hash — see `ProjectIconCache`.
+   * A hash this map has not got yet simply draws no icon. */
+  projectIcons?: Record<string, string>
   /** Turns since this session was last on screen. 0 draws no badge. */
   unseen?: number
   selected: boolean
@@ -83,16 +151,24 @@ export function SessionCard({
   const needsHuman = info.pendingPermissionCount > 0 || info.status === 'awaiting_approval'
   const live = running || needsHuman
   const age = info.lastActivityAt ?? info.createdAt
+  // protocol's own spelling, so the row, the group header this row sits under
+  // and the project facet cannot disagree about what a project is called.
   const folder = info.cwd.split('/').filter(Boolean).pop() ?? info.cwd
+  const project = showProject ? projectLabel({ info }) : folder
+  const projectIcon = showProject ? info.project?.icon : undefined
   const engine = info.engine ?? 'claude'
   // The model id as a person says it — `claude-opus-5[1m]` is a wire value, and
   // a sidebar line has no room to spend on a context-window suffix.
   const model = friendlyModel(info.model)
-  // Only Anthropic's coral is carried (see `--wd-vendor` in `styles.css`);
-  // everything else keeps the muted line it always had rather than being given
-  // a colour invented for it here.
-  const vendor = engineMark(engine, info.model) === 'claude' ? 'text-vendor' : 'text-fg-3'
-  const rest = [hostName, folder, formatRelativeTime(age)].filter(Boolean).join(' · ')
+  // The vendor's own colour (see `--wd-vendor-*` in `styles.css`). How far it
+  // reaches past the mark is per vendor — see `VENDOR_MARK`/`VENDOR_TEXT`.
+  const mark = engineMark(engine, info.model) ?? ''
+  const vendorMark = VENDOR_MARK[mark] ?? 'text-fg-3'
+  const vendor = VENDOR_TEXT[mark] ?? 'text-fg-3'
+  // Only the `image` arm needs bytes, and only once the host has fetched them;
+  // until then (and for a glyph) this is undefined and draws nothing.
+  const iconSrc =
+    projectIcon?.type === 'image' ? projectIcons?.[projectIcon.hash] : undefined
 
   return (
     <div
@@ -125,7 +201,9 @@ export function SessionCard({
       )}>
       <div className='flex flex-col gap-1 px-2.5 py-1.5'>
         <div className='flex items-center gap-1.5 overflow-hidden'>
-          <StatusIcon needsHuman={needsHuman} running={running} status={info.status} />
+          <Gutter>
+            <StatusIcon needsHuman={needsHuman} running={running} status={info.status} />
+          </Gutter>
           {editing ? (
             <NameEditor
               initial={info.title ?? ''}
@@ -159,12 +237,34 @@ export function SessionCard({
           ) : null}
         </div>
         <div className='flex items-center gap-1.5 overflow-hidden text-label'>
-          <span className={cn('shrink-0', vendor)}>
-            <EngineIcon engine={engine} model={info.model} />
-          </span>
-          <span className='min-w-0 flex-1 truncate'>
+          {/* The class goes ON the icon, not on the gutter. `EngineIcon` draws
+              `fill="currentColor"` and carries its own `text-fg-3`, so a colour
+              inherited from a parent loses to the svg's own class — which is
+              exactly how the mark stayed muted while the model went coral.
+              `cn` is tailwind-merge, so passing it in replaces the default. */}
+          <Gutter>
+            <EngineIcon engine={engine} model={info.model} className={vendorMark} />
+          </Gutter>
+          {/* One truncating span, not a flex of pieces: the parts have a
+              priority order (model, then gateway, then project, then age) and
+              a single ellipsis honours it for free, where flex children would
+              each shrink a little and leave four half-words. The icon rides
+              inside it as an inline element for the same reason — it clips with
+              the text it labels instead of holding a slot the text has lost. */}
+          <span className='min-w-0 flex-1 truncate text-fg-4'>
             <span className={vendor}>{model}</span>
-            {rest ? <span className='text-fg-4'>{` · ${rest}`}</span> : null}
+            {hostName ? ` · ${hostName}` : ''}
+            {' · '}
+            <ProjectIcon
+              icon={projectIcon}
+              src={iconSrc}
+              name={project}
+              /* Nudged onto the text baseline: the glyph box is 12px against an
+                 11px line, so it sits a hair proud without this. */
+              className='mr-1 align-[-0.2em]'
+            />
+            {project}
+            {` · ${formatRelativeTime(age)}`}
           </span>
           {/* The disclosure lives here, not in front of the title: line one's
               left edge belongs to the state glyph and the name. It doubles as
