@@ -14,6 +14,13 @@ public enum TerminalPlanner {
   /// The expanded state is planned here rather than measured on screen — see
   /// `TerminalExpansion.swift` for why that inversion is forced on this
   /// renderer and not on the web one.
+  ///
+  /// **Called concurrently**, by `TerminalHeightBook.lineCounts`'s cold path
+  /// (`DispatchQueue.concurrentPerform` over disjoint row indices). Everything
+  /// below it must stay a pure function of `(row, metrics, expansion)` — no
+  /// memo, no shared formatter or regex, no static `var`. That holds today and
+  /// nothing but this sentence pins it; a cache added here would make the
+  /// parallel build racy with no test that could see it.
   public static func plan(
     _ row: TranscriptRow, metrics: TerminalMetrics,
     expansion: TerminalExpansion = TerminalExpansion()
@@ -75,20 +82,25 @@ public enum TerminalPlanner {
     inOpen: Bool
   ) -> [TermLine] {
     let run = block.run
-    if run.count == 1, let only = run.first {
-      return planToolCall(only, metrics: metrics, expansion: expansion, inOpen: inOpen)
+    // The absence of a key *is* the run-of-one case: `expansionKey` is `nil`
+    // exactly when there is no summary line to press, so the branch and the
+    // rule are one thing rather than two that have to be kept in step.
+    guard let key = block.expansionKey else {
+      return run.first.map {
+        planToolCall($0, metrics: metrics, expansion: expansion, inOpen: inOpen)
+      } ?? []
     }
     let busy = run.contains(where: callBusy)
     let failed = runFailed(run)
     let nested = run.first?.parentToolUseId != nil
-    let open = expansion.isOpen(block.key)
+    let open = expansion.isOpen(key)
     let wash = inOpen || open
 
     var lines = wrapBody(
       runSummary(run, busy: busy), metrics: metrics,
       gutter: busy ? TermGlyph.pulseRest : "", gutterTone: .mark,
       tone: failed ? .red : .dim, nested: nested, pulsing: busy,
-      press: .toggle(block.key), inOpen: wash)
+      press: .toggle(key), inOpen: wash)
     guard open else { return lines }
     // No blank between them: `needsBlank` says two tool calls sit flush, and
     // that is exactly what the run is made of.
@@ -111,14 +123,15 @@ public enum TerminalPlanner {
     let children = taskChildItems(block)
     let busy = taskBusy(block.task, children)
     let failed = taskFailed(block.task)
-    let open = expansion.isOpen(block.key)
+    let key = block.expansionKey
+    let open = expansion.isOpen(key)
     let wash = inOpen || open
 
     var lines = wrapBody(
       taskSummary(block.task, children), metrics: metrics,
       gutter: busy ? TermGlyph.pulseRest : TermGlyph.bullet,
       gutterTone: failed ? .red : (busy ? .mark : .dim),
-      tone: failed ? .red : .fg, pulsing: busy, press: .toggle(block.key), inOpen: wash)
+      tone: failed ? .red : .fg, pulsing: busy, press: .toggle(key), inOpen: wash)
     guard open else { return lines }
 
     // The children step themselves in: every one of them carries a
@@ -214,8 +227,7 @@ public enum TerminalPlanner {
     let nested = call.parentToolUseId != nil
     let busy = callBusy(call)
     let tone = toolTone(call)
-    let openKey = TerminalExpansion.openKey(callId: call.id)
-    let fullKey = TerminalExpansion.fullKey(callId: call.id)
+    let openKey = ExpansionKey.call(call.id)
     // Only a result has anything folded behind it. A call that produced none —
     // and a file edit that produced only a patch, which is already drawn — must
     // not advertise a press: a target that visibly does nothing when pressed is
@@ -223,7 +235,7 @@ public enum TerminalPlanner {
     // broken rather than that this row is empty.
     let expandable = call.result.map { !$0.text.isEmpty } ?? false
     let open = expandable && expansion.isOpen(openKey)
-    let full = expansion.isFull(fullKey)
+    let full = expansion.isFull(callId: call.id)
     let wash = inOpen || open
     let press: TermPress? = expandable ? .toggle(openKey) : nil
 
@@ -274,7 +286,7 @@ public enum TerminalPlanner {
     // fit the open budget still is not the result.
     let truncated = call.result?.truncated == true
     let totalChars = call.result?.totalChars
-    let fetching = truncated && expansion.isFetching(fullKey)
+    let fetching = truncated && expansion.isFetching(callId: call.id)
 
     var shown: [String]
     var more: String?
@@ -290,13 +302,13 @@ public enum TerminalPlanner {
       } else if truncated {
         more =
           "… +\(TermFmt.grouped(max(0, (totalChars ?? text.count) - text.count))) chars — fetch the rest"
-        morePress = .expandFull(fullKey)
+        morePress = .expandFull(callId: call.id)
       } else if hidden > 0 {
         // The affordance says what pressing it costs, because at this size the
         // honest answer is sometimes "don't".
         more =
           "… +\(hidden) line\(hidden == 1 ? "" : "s") — show all \(TermFmt.grouped(text.count)) chars"
-        morePress = .expandFull(fullKey)
+        morePress = .expandFull(callId: call.id)
       }
     } else {
       let collapsed = ResultPreview.collapsed(all, cols: previewCols, totalChars: totalChars)

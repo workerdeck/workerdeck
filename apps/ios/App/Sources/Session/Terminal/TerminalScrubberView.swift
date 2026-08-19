@@ -42,14 +42,6 @@ struct TerminalScrubberView: View {
   private static let slop: CGFloat = 3
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @State private var peek: Peek?
-  @State private var dragging = false
-
-  private struct Peek: Equatable {
-    var cluster: ScrubberCluster
-    var mark: ScrubberMark?
-    var y: CGFloat
-  }
 
   var body: some View {
     // Full width, with only the strip at the trailing edge answering touches.
@@ -62,11 +54,12 @@ struct TerminalScrubberView: View {
     // control that happens to be narrow.
     GeometryReader { proxy in
       let railH = proxy.size.height
-      let clusters = buildScrubberClusters(input, railH: railH)
+      let rail = buildScrubberRail(input, railH: railH)
+      let clusters = rail.clusters
 
       ZStack(alignment: .topTrailing) {
         Canvas { context, _ in
-          draw(clusters: clusters, in: &context)
+          draw(rail, in: &context)
         }
         .frame(width: Self.railWidth)
         .allowsHitTesting(false)
@@ -91,15 +84,18 @@ struct TerminalScrubberView: View {
           .frame(width: Self.railWidth)
           .allowsHitTesting(false)
 
-        if let peek {
-          peekPanel(peek, railH: railH, available: proxy.size.width)
-        }
-
-        // The strip that answers the finger, last so it is on top.
-        Color.clear
-          .frame(width: Self.hitWidth)
-          .contentShape(Rectangle())
-          .gesture(gesture(clusters: clusters, railH: railH))
+        // The peek and the strip that answers the finger, last so they are on
+        // top — and in a child view for the reason the band is, one step
+        // further. Observation invalidates a whole body, and `peek`/`dragging`
+        // are written from **every** `onChanged`: held here, a single drag
+        // re-ran `buildScrubberRail` — `scrubberMarks` + `redItemIndices` +
+        // `expandedRegions`, O(items + calls) — once per touch event, over the
+        // whole transcript, during the exact gesture the rail exists for. The
+        // clusters it needs are already computed; the touch state that changes
+        // sixty times a second now lives beside them rather than above them.
+        ScrubberTouchLayer(
+          clusters: clusters, input: input, scroll: scroll, typography: typography,
+          railH: railH, available: proxy.size.width, onJumpToRow: onJumpToRow)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
     }
@@ -107,14 +103,24 @@ struct TerminalScrubberView: View {
 
   // MARK: - Paint
 
-  private func draw(clusters: [ScrubberCluster], in context: inout GraphicsContext) {
-    // Bands first, marks over them. `.expanded` is a *region* and everything
-    // else is a point inside one, so painting in list order would let a band
-    // cover the very marks it contains — the failures and prompts inside the
-    // part you opened are exactly what you still need to see.
-    for cluster in clusters.sorted(by: { left, right in
-      (left.kind == .expanded ? 0 : 1) < (right.kind == .expanded ? 0 : 1)
-    }) {
+  private func draw(_ rail: ScrubberRail, in context: inout GraphicsContext) {
+    // Ground first, marks over it — and that order is the type's now, not a
+    // `sorted(by:)` here. A band drawn in list order covered the very marks it
+    // contains, and the failures and prompts inside the part you opened are
+    // exactly what you still need to see.
+    for region in rail.regions {
+      let rect = CGRect(
+        x: laneX(region.lane), y: region.y, width: laneW(region.lane), height: region.h)
+      switch region.kind {
+      // Yellow, matching the wash the opened rows themselves carry — the rail
+      // and the region are saying the same thing and should say it in the same
+      // colour. Kept very low, because it washes whole regions: at band strength
+      // an opened run shouts louder than anything inside it.
+      case .expanded: twoTone(rect, TerminalPalette.color(.yellow), in: &context)
+      }
+    }
+
+    for cluster in rail.clusters {
       let rect = CGRect(
         x: laneX(cluster.lane), y: cluster.y, width: laneW(cluster.lane), height: cluster.h)
       switch cluster.kind {
@@ -125,11 +131,6 @@ struct TerminalScrubberView: View {
       // on you. An extent like the two beside it — collapsed a tick, expanded
       // the band the sub-agent covers.
       case .subagent: twoTone(rect, TerminalPalette.color(.green), in: &context)
-      // Yellow, matching the wash the opened rows themselves carry — the rail
-      // and the region are saying the same thing and should say it in the same
-      // colour. It still loses every merge, so an opened `Task` keeps its green
-      // and a prompt inside the region keeps its blue.
-      case .expanded: twoTone(rect, TerminalPalette.color(.yellow), in: &context)
       case .turn: twoTone(rect, TerminalPalette.color(.fg), in: &context)
       case .turnFailed: twoTone(rect, TerminalPalette.color(.red), in: &context)
       // The alarms stay solid: they are alarms, not extents.
@@ -208,6 +209,65 @@ struct TerminalScrubberView: View {
   private func laneW(_ lane: ScrubberLane) -> CGFloat {
     lane == .full ? Self.railWidth : Self.laneWidth
   }
+}
+
+/// The peek and the gesture — everything whose state changes under a finger.
+///
+/// Its own view purely so that touch state does not invalidate the body that
+/// builds the rail. It re-derives nothing: the clusters are handed in, and what
+/// a peek *says* was decided in `TerminalScrubber.swift` like everything else.
+///
+/// Regions are deliberately not passed. A region is ground rather than a point,
+/// and it does not answer the finger: a band spans hundreds of points, so under
+/// the nearest-cluster arithmetic below it tied with — and could beat — the very
+/// marks inside it, jumping the reader to the top of a region instead of to the
+/// prompt they pressed.
+private struct ScrubberTouchLayer: View {
+  let clusters: [ScrubberCluster]
+  let input: ScrubberInput
+  let scroll: TranscriptScrollModel
+  let typography: TerminalTypography
+  let railH: CGFloat
+  let available: CGFloat
+  var onJumpToRow: (Int) -> Void
+
+  private static let laneWidth: CGFloat = 6
+  /// How far a touch may travel before it stops being a press and starts being
+  /// a scrub.
+  private static let slop: CGFloat = 3
+
+  @State private var peek: Peek?
+  @State private var dragging = false
+
+  private struct Peek: Equatable {
+    var cluster: ScrubberCluster
+    var mark: ScrubberMark?
+    var y: CGFloat
+  }
+
+  var body: some View {
+    ZStack(alignment: .topTrailing) {
+      if let peek {
+        peekPanel(peek, railH: railH, available: available)
+      }
+      Color.clear
+        .frame(width: TerminalScrubberView.hitWidth)
+        .contentShape(Rectangle())
+        .gesture(gesture(clusters: clusters, railH: railH))
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+  }
+
+  private func laneX(_ lane: ScrubberLane) -> CGFloat {
+    switch lane {
+    case .left, .full: return 0
+    case .right: return Self.laneWidth
+    }
+  }
+
+  private func laneW(_ lane: ScrubberLane) -> CGFloat {
+    lane == .full ? TerminalScrubberView.railWidth : Self.laneWidth
+  }
 
   // MARK: - The peek
 
@@ -226,7 +286,7 @@ struct TerminalScrubberView: View {
     let height = peekHeight(content)
     // Never wider than what is beside the rail. A peek is a glance; a panel that
     // covered the transcript would be answering a question nobody asked.
-    let width = min(260, max(120, available - Self.railWidth - 24))
+    let width = min(260, max(120, available - TerminalScrubberView.railWidth - 24))
     VStack(alignment: .leading, spacing: 0) {
       Text(content.title)
         .foregroundStyle(TerminalPalette.color(.faint))
@@ -251,7 +311,7 @@ struct TerminalScrubberView: View {
     // would otherwise hang off the transcript. The height is computed rather
     // than measured because this is positioned while a finger is moving, and a
     // measured panel needs a layout pass before it can be placed.
-    .padding(.trailing, Self.railWidth + 4)
+    .padding(.trailing, TerminalScrubberView.railWidth + 4)
     .offset(y: max(4, min(railH - height - 4, peek.y - height / 2)))
     .allowsHitTesting(false)
     .transition(.opacity)
@@ -313,7 +373,7 @@ struct TerminalScrubberView: View {
     // press left of the rail still resolves, and to the lane it is nearest.
     // The gesture rides the hit strip, so its x is already strip-local: the
     // strip's trailing edge is the rail's, and the rail is its last 12 points.
-    let x = point.x - (Self.hitWidth - Self.railWidth)
+    let x = point.x - (TerminalScrubberView.hitWidth - TerminalScrubberView.railWidth)
     var best: (cluster: ScrubberCluster, distance: CGFloat)?
     for cluster in clusters {
       let minX = laneX(cluster.lane)

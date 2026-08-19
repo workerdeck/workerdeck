@@ -141,17 +141,16 @@ struct TruncatedResultTests {
   @Test("a press on a head starts one fetch, and says so instead of doing nothing")
   func pressEntersPendingAndDrawsIt() {
     var expansion = TerminalExpansion()
-    let key = TerminalExpansion.fullKey(callId: "t1")
-    let first = expansion.beginFetch(fullKey: key)
+    let first = expansion.beginFetch(callId: "t1")
     // A second press on a row already waiting must not open a second connection.
-    let second = expansion.beginFetch(fullKey: key)
+    let second = expansion.beginFetch(callId: "t1")
     #expect(first)
     #expect(!second)
-    #expect(expansion.isFetching(key))
-    #expect(!expansion.isFull(key))
+    #expect(expansion.isFetching(callId: "t1"))
+    #expect(!expansion.isFull(callId: "t1"))
 
     let rows = TerminalRows.build(items: [.toolCall(head("t1"))])
-    expansion.open.insert(TerminalExpansion.openKey(callId: "t1"))
+    expansion.open.insert(.call("t1"))
     let plan = TerminalPlanner.plan(rows[0], metrics: metrics, expansion: expansion)
     let fetching = plan.filter { $0.text.contains("fetching") }
     #expect(!fetching.isEmpty)
@@ -164,36 +163,35 @@ struct TruncatedResultTests {
   @Test("open and not yet asked, the row offers the rest and names the size")
   func openOffersTheFetch() {
     var expansion = TerminalExpansion()
-    expansion.open.insert(TerminalExpansion.openKey(callId: "t1"))
+    expansion.open.insert(.call("t1"))
     let rows = TerminalRows.build(items: [.toolCall(head("t1"))])
     let plan = TerminalPlanner.plan(rows[0], metrics: metrics, expansion: expansion)
     let offer = plan.filter { $0.text.contains("fetch the rest") }
     #expect(!offer.isEmpty)
     #expect(
-      offer.allSatisfy { $0.press == .expandFull(TerminalExpansion.fullKey(callId: "t1")) })
+      offer.allSatisfy { $0.press == .expandFull(callId: "t1") })
   }
 
   @Test("closing forgets the request, and the text lands full when it arrives")
   func closeForgetsAndArrivalPromotes() {
     var expansion = TerminalExpansion()
-    let openKey = TerminalExpansion.openKey(callId: "t1")
-    let fullKey = TerminalExpansion.fullKey(callId: "t1")
+    let openKey = ExpansionKey.call("t1")
     expansion.apply(.toggle(openKey))
-    expansion.beginFetch(fullKey: fullKey)
+    expansion.beginFetch(callId: "t1")
     expansion.apply(.toggle(openKey))
-    #expect(!expansion.isFetching(fullKey))
+    #expect(!expansion.isFetching(callId: "t1"))
     // And the bytes landing afterwards do not re-open what the reader closed.
-    expansion.finishFetch(fullKey: fullKey)
-    #expect(!expansion.isFull(fullKey))
+    expansion.finishFetch(callId: "t1")
+    #expect(!expansion.isFull(callId: "t1"))
 
     var waiting = TerminalExpansion()
-    waiting.beginFetch(fullKey: fullKey)
-    waiting.finishFetch(fullKey: fullKey)
+    waiting.beginFetch(callId: "t1")
+    waiting.finishFetch(callId: "t1")
     // One step, so the row goes from "fetching" straight to the whole result —
     // lifting the budget first would show 8,000 characters of head and then
     // replace them, which is a flash, not a state.
-    #expect(waiting.isFull(fullKey))
-    #expect(!waiting.isFetching(fullKey))
+    #expect(waiting.isFull(callId: "t1"))
+    #expect(!waiting.isFetching(callId: "t1"))
   }
 
   @Test("the audit's fully-open expansion plans a head as pending, never as full")
@@ -208,9 +206,9 @@ struct TruncatedResultTests {
     let everything = TerminalExpansion.everything(in: rows)
     // A `full` state whose text was never delivered is a screen nobody can
     // reach; auditing it would be auditing a fiction.
-    #expect(everything.pending.contains(TerminalExpansion.fullKey(callId: "t1")))
-    #expect(!everything.full.contains(TerminalExpansion.fullKey(callId: "t1")))
-    #expect(everything.full.contains(TerminalExpansion.fullKey(callId: "t2")))
+    #expect(everything.pending.contains("t1"))
+    #expect(!everything.full.contains("t1"))
+    #expect(everything.full.contains("t2"))
   }
 
   @Test("a row reads only its own share of what is pending")
@@ -223,7 +221,7 @@ struct TruncatedResultTests {
       .toolCall(head("t2")),
     ])
     var expansion = TerminalExpansion()
-    expansion.beginFetch(fullKey: TerminalExpansion.fullKey(callId: "t1"))
+    expansion.beginFetch(callId: "t1")
     // The plan cache's second key: a fetch on one row must not re-plan the
     // sixteen thousand rows that know nothing about it.
     #expect(expansion.subset(for: rows[0]).pending.count == 1)

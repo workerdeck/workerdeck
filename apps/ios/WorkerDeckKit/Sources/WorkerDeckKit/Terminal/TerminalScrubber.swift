@@ -38,7 +38,7 @@ public enum ScrubberLane: String, Equatable, Sendable {
 }
 
 public enum ScrubberMarkKind: String, Equatable, Sendable, CaseIterable {
-  case user, subagent, expanded, turn, turnFailed, toolFailed, error, approval, recap, bookmark
+  case user, subagent, turn, turnFailed, toolFailed, error, approval, recap, bookmark
 
   public var lane: ScrubberLane {
     switch self {
@@ -46,12 +46,7 @@ public enum ScrubberMarkKind: String, Equatable, Sendable, CaseIterable {
     // its stretch of the transcript is *your* dispatch rather than the session's
     // answer. It is also a folded `Task`'s one honest signal on the rail —
     // collapsed, sixty rows of somebody else's working are a single line.
-    // Opening a block is **something you did**, which is what the left lane
-    // holds: the prompts you typed and the sub-agents you dispatched. It is
-    // also the only way the rail can say that the tall stretch under your thumb
-    // is tall because you opened it, rather than because the session produced
-    // that much.
-    case .user, .subagent, .expanded: return .left
+    case .user, .subagent: return .left
     // Output, with the answers: a failed tool call is something the run
     // produced. It had been full-width on the argument that it is an alarm
     // rather than a step — but "alarm" is not a lane, and half the failures
@@ -83,13 +78,6 @@ public enum ScrubberMarkKind: String, Equatable, Sendable, CaseIterable {
     // annotation on it. (It ties with `bookmark`, which it can never meet.)
     case .subagent: return 1
     case .recap: return 0
-    // The quietest thing on the rail, and deliberately below both of its lane
-    // mates: an expanded block is *context* for what is around it, never the
-    // thing you navigate to. A prompt inside the region you opened keeps its
-    // blue, and an opened `Task` stays green — the sub-agent band and this one
-    // cover the same rows by construction, so this losing is what keeps that
-    // band the colour it has always been.
-    case .expanded: return 0
     }
   }
 
@@ -104,7 +92,6 @@ public enum ScrubberMarkKind: String, Equatable, Sendable, CaseIterable {
     case .approval: return "pending approval"
     case .recap: return "catch-up boundary"
     case .bookmark: return "bookmark"
-    case .expanded: return "expanded"
     }
   }
 }
@@ -151,6 +138,61 @@ public struct ScrubberCluster: Equatable, Sendable {
     }
     return best?.mark
   }
+}
+
+/// A stretch of the rail that is **ground rather than a point** — painted under
+/// the marks, and inert.
+///
+/// It exists because `.expanded` was a `ScrubberMarkKind` and needed three
+/// exemptions from the mark machinery inside an hour: skip the ``RowPosition``
+/// fractional rule (every other mark denotes an *item*, which may share its row;
+/// this one denotes the **row**), never merge (merging paints a cluster in its
+/// loudest member's colour, which is right for ticks a pixel apart and
+/// catastrophic for a band — an opened tool inside an opened run once swallowed
+/// every prompt in the lane and turned the rail blue), and paint first (a band
+/// drawn in list order covers the very failures and prompts inside the part you
+/// opened). Three exemptions for one case is the type saying it is the wrong
+/// type; a region needs none of them, because none of those rules is *about* a
+/// region.
+///
+/// A fourth thing falls out and was a latent bug: regions do not answer the
+/// finger. A band spans hundreds of points, so under ``ScrubberCluster``'s
+/// nearest-cluster arithmetic it tied with — and could beat — the marks inside
+/// it, jumping the reader to the top of a region instead of to the prompt they
+/// pressed. A region is context for what surrounds it, never the thing you
+/// navigate to.
+public struct ScrubberRegion: Equatable, Sendable {
+  public var lane: ScrubberLane
+  public var kind: ScrubberRegionKind
+  public var y: CGFloat
+  public var h: CGFloat
+  public var rowIndex: Int
+}
+
+public enum ScrubberRegionKind: String, Equatable, Sendable {
+  /// Every block you opened, banded over the rows it grew to.
+  ///
+  /// The **left** lane, because opening is something *you* did, which is what
+  /// that lane holds — the prompts you typed and the sub-agents you dispatched.
+  /// It is also the only way the rail can say that the tall stretch under your
+  /// thumb is tall because you opened it rather than because the session
+  /// produced that much.
+  case expanded
+
+  public var lane: ScrubberLane {
+    switch self {
+    case .expanded: return .left
+    }
+  }
+}
+
+/// What the rail draws: ground, then marks.
+///
+/// The order is structural now rather than a `sorted(by:)` in the view — a
+/// painter draws ``regions`` and then ``clusters``, and cannot get it wrong.
+public struct ScrubberRail: Equatable, Sendable {
+  public var regions: [ScrubberRegion]
+  public var clusters: [ScrubberCluster]
 }
 
 /// The catch-up seam's position on the rail, when one is spliced in.
@@ -246,51 +288,23 @@ public func railScale(railH: CGFloat, totalSize: CGFloat, viewportH: CGFloat) ->
 /// broke the other half: open a run and one of its calls is visibly red on its
 /// own line with nothing on the rail beside it.
 ///
-/// A fold is what reconciles them. **Collapsed**, a run draws one summary line
-/// and `runFailed` colours it by the run's last call, so the outcome is the only
-/// thing red and the only thing to mark. **Open**, every member is planned
-/// through `planToolCall` and a failed one is red on its own line — so every
-/// failed member marks. A `Task` is the same shape: its header is coloured by
-/// `taskFailed` (its **own** result, never a child's) whatever it does, and its
-/// children become markable only when it is open. Which is why this reads
-/// `expansion` rather than measuring the book: mark *existence* is not
-/// derivable from a height the way a mark's extent and fraction are.
+/// A fold is what reconciles them, and the fold is stated **once**, in
+/// ``BlockCall/ownLine`` — which is why this function is now four lines. It used
+/// to re-derive that rule here, from the same leaf predicates as the planner but
+/// by separate reasoning, in the same nested item/run/task switch that
+/// `expansionKeys` and `truncatedCallIds` also each carried a copy of. Four
+/// walks of one shape, and the sentence above is precisely a claim that two of
+/// them agree.
+///
+/// It reads `expansion` rather than measuring the book because mark *existence*
+/// is not derivable from a height the way a mark's extent and fraction are.
 public func redItemIndices(rows: TerminalRows, expansion: TerminalExpansion) -> Set<Int> {
   var red: Set<Int> = []
-
-  func addLeaf(_ leaf: TerminalLeafBlock) {
-    switch leaf {
-    case .item(let block):
-      // A lone call is its own row; there is no fold to ask about.
-      if case .toolCall(let call) = block.item, callFailed(call) { red.insert(block.index) }
-    case .run(let block):
-      if expansion.isOpen(block.key) {
-        for (ordinal, call) in block.run.enumerated() where callFailed(call) {
-          red.insert(block.indices[ordinal])
-        }
-      } else if runFailed(block.run), let last = block.indices.last {
-        red.insert(last)
-      }
-    }
-  }
-
   for row in rows.rows {
     guard case .block(let block) = row else { continue }
-    switch block {
-    case .item(let b):
-      if case .toolCall(let call) = b.item, callFailed(call) { red.insert(b.index) }
-    case .run(let b):
-      addLeaf(.run(b))
-    case .task(let b):
-      // The task's own outcome, collapsed or not: it is the header line, and it
-      // is always drawn.
-      if taskFailed(b.task) { red.insert(b.index) }
-      // A child is only on screen — and only red — once the task is open. This
-      // is the same call `taskFailed` makes and for the same reason: an agent
-      // that ran a hundred calls, one of them a grep that matched nothing, did
-      // not fail, and a red tick would say so while the row is forbidden to.
-      guard expansion.isOpen(b.key) else { continue }
-      for child in b.children { addLeaf(child) }
+    for drawn in blockCalls(in: block, expansion: expansion)
+    where drawn.ownLine && callFailed(drawn.call) {
+      red.insert(drawn.index)
     }
   }
   return red
@@ -305,7 +319,7 @@ private struct ScrubberSegment {
   var failed = false
 }
 
-/// Fold a transcript into the clusters a rail draws.
+/// Fold a transcript into the rail it draws: ground, then marks.
 ///
 /// The response lane is anchored on **the answer, not the turn end**. Built from
 /// `turn_result` alone it was silently history-blind: a resumed session's
@@ -313,7 +327,23 @@ private struct ScrubberSegment {
 /// all and the whole lane came back empty — while the prompt lane survived,
 /// which is what made it look like a rendering bug rather than a missing input.
 /// So a `turn_result` *decorates* a mark rather than conjuring it.
+public func buildScrubberRail(_ input: ScrubberInput, railH: CGFloat) -> ScrubberRail {
+  let scale = railScale(railH: railH, totalSize: input.totalSize, viewportH: input.viewportHeight)
+  return ScrubberRail(
+    regions: expandedRegions(input, scale: scale, railH: railH),
+    clusters: clusterMarks(
+      scrubberMarks(input), input: input, scale: scale, railH: railH))
+}
+
+/// The marks alone, for a caller that only wants the points.
 public func buildScrubberClusters(_ input: ScrubberInput, railH: CGFloat) -> [ScrubberCluster] {
+  buildScrubberRail(input, railH: railH).clusters
+}
+
+// MARK: - Marks
+
+/// Every point on the rail, in transcript order, before any geometry.
+private func scrubberMarks(_ input: ScrubberInput) -> [ScrubberMark] {
   var marks: [ScrubberMark] = []
   var segment = ScrubberSegment()
 
@@ -339,25 +369,6 @@ public func buildScrubberClusters(_ input: ScrubberInput, railH: CGFloat) -> [Sc
 
   // Which failures are on screen as failures — see `redItemIndices`.
   let red = redItemIndices(rows: input.rows, expansion: input.expansion)
-
-  // Every block you opened, banded over the rows it grew to. The extent comes
-  // from the book, which is already built with this expansion, so the band is
-  // the opened height with no extra bookkeeping.
-  //
-  // Asked through `expansionKeys`, **never `block.key`**: a block has more than
-  // one key and for two common shapes its own is not the one a press writes. A
-  // run of one is drawn as the call itself (`TerminalPlanner.planRun`
-  // delegates), so it toggles `call:<id>` and its `run:<id>` opens nothing —
-  // which is why expanding a lone top-level `Bash` banded nothing at all. A call
-  // opened *inside* an already-open run toggles its own key too. One row can
-  // hold several of these; it is one band either way, because it is one row.
-  for (rowIndex, row) in input.rows.rows.enumerated() {
-    guard case .block(let block) = row else { continue }
-    let keys = expansionKeys(of: block)
-    guard keys.contains(where: { input.expansion.isOpen($0) || input.expansion.isFull($0) })
-    else { continue }
-    marks.append(ScrubberMark(kind: .expanded, itemIndex: block.index, rowIndex: rowIndex))
-  }
 
   for (index, item) in input.items.enumerated() {
     // The dispatch itself, at its row — the folded `Task` block, so the band
@@ -423,75 +434,95 @@ public func buildScrubberClusters(_ input: ScrubberInput, railH: CGFloat) -> [Sc
   if let recap = input.recap {
     marks.append(ScrubberMark(kind: .recap, itemIndex: -1, rowIndex: recap.rowIndex))
   }
+  return marks
+}
 
-  let scale = railScale(railH: railH, totalSize: input.totalSize, viewportH: input.viewportHeight)
-  var lanes: [ScrubberLane: [ScrubberMember]] = [:]
-  var heights: [ScrubberLane: [CGFloat]] = [:]
+// MARK: - Geometry
+
+/// Where a mark sits on the rail, and how tall it is.
+///
+/// A mark's height is its row's, at rail scale, floored at the hit target — the
+/// row the mark *anchors* (for a turn, the final response), which is where the
+/// reader lands and what they came to gauge the size of.
+///
+/// EXCEPT an item that **shares** its row (a task block's absorbed child, a
+/// folded run's member): there the row's extent is mostly other items' work, and
+/// expanded it is the whole subagent area — one failed child of a hundred-call
+/// task used to paint a solid band down the entire rail. Such a mark is a tick
+/// at its fractional position within the row.
+///
+/// The height book already reflects expansion (it is planned from the live
+/// `TerminalExpansion`), so collapsed the fraction rounds onto the row's one line
+/// and siblings merge exactly as before. The fraction is deliberately
+/// approximate — this renderer COULD compute a child's true line offset from the
+/// book, and using the same fraction as the web client instead is what keeps the
+/// two implementations one rule. Applied to every kind rather than per kind
+/// because a bookmark on an absorbed child has the identical bug; the recap mark
+/// is `itemIndex: -1`, hence the guard.
+private func place(_ mark: ScrubberMark, input: ScrubberInput, scale: CGFloat, railH: CGFloat)
+  -> (y: CGFloat, h: CGFloat)
+{
+  let within = mark.itemIndex >= 0 ? input.rows.position(forItem: mark.itemIndex) : nil
+  let rowH = input.book.height(at: mark.rowIndex)
+  let h = within != nil ? scrubberMinMark : max(scrubberMinMark, (rowH * scale).rounded())
+  let offset =
+    input.book.offset(at: mark.rowIndex)
+    + (within.map { CGFloat($0.ordinal) / CGFloat($0.count) * rowH } ?? 0)
+  return (min(max(0, railH - h), (offset * scale).rounded()), h)
+}
+
+/// Every block you opened, banded over the rows it grew to.
+///
+/// The extent comes from the book, which is already built with this expansion,
+/// so a band is the opened height with no extra bookkeeping — and a *row's*
+/// height, never an item's, which is what makes this a region and not a mark
+/// (see ``ScrubberRegion``).
+///
+/// Asked through `expansionKeys`, **never a block's own key**: a block has more
+/// than one, and for two common shapes its own is not the one a press writes. A
+/// run of one is drawn as the call itself, so it toggles `.call` and its `.run`
+/// key does not exist at all — which is why expanding a lone top-level `Bash`
+/// banded nothing. A call opened *inside* an already-open run toggles its own
+/// key too. One row can hold several of these; it is one band either way,
+/// because it is one row.
+private func expandedRegions(_ input: ScrubberInput, scale: CGFloat, railH: CGFloat)
+  -> [ScrubberRegion]
+{
+  var regions: [ScrubberRegion] = []
+  for (rowIndex, row) in input.rows.rows.enumerated() {
+    guard case .block(let block) = row else { continue }
+    let keys = expansionKeys(of: block)
+    guard keys.contains(where: input.expansion.isOpen) else { continue }
+    let rowH = input.book.height(at: rowIndex)
+    let h = max(scrubberMinMark, (rowH * scale).rounded())
+    let y = min(max(0, railH - h), (input.book.offset(at: rowIndex) * scale).rounded())
+    regions.append(
+      ScrubberRegion(
+        lane: ScrubberRegionKind.expanded.lane, kind: .expanded, y: y, h: h, rowIndex: rowIndex))
+  }
+  return regions
+}
+
+/// Marks into the bars a rail paints: laned, sorted, and merged under a point.
+private func clusterMarks(
+  _ marks: [ScrubberMark], input: ScrubberInput, scale: CGFloat, railH: CGFloat
+) -> [ScrubberCluster] {
+  var lanes: [ScrubberLane: [(ScrubberMember, CGFloat)]] = [:]
   for mark in marks {
-    // A mark's height is its row's, at rail scale, floored at the hit target —
-    // the row the mark *anchors* (for a turn, the final response), which is
-    // where the reader lands and what they came to gauge the size of.
-    //
-    // EXCEPT an item that SHARES its row (a task block's absorbed child, a
-    // folded run's member): there the row's extent is mostly other items' work,
-    // and expanded it is the whole subagent area — one failed child of a
-    // hundred-call task used to paint a solid band down the entire rail. Such a
-    // mark is a tick at its fractional position within the row.
-    //
-    // The height book already reflects expansion (it is planned from the live
-    // `TerminalExpansion`), so collapsed the fraction rounds onto the row's one
-    // line and siblings merge exactly as before. The fraction is deliberately
-    // approximate — this renderer COULD compute a child's true line offset from
-    // the book, and using the same fraction as the web client instead is what
-    // keeps the two implementations one rule. Applied here rather than per kind
-    // because a bookmark on an absorbed child has the identical bug; the recap
-    // mark is `itemIndex: -1`, hence the guard.
-    //
-    // `.expanded` is exempt, and it is the one kind that must be: every other
-    // mark denotes an *item*, which may share its row with siblings, but this
-    // one denotes the **block** — it is the row. It is addressed by
-    // `block.index`, which for a run of more than one is also its first
-    // member's index and therefore carries a position, so without this it came
-    // out as a 2px tick at ordinal 0: a slim marker where the opened region
-    // starts instead of a band over the region itself. (A `Task`'s own index
-    // carries no position — only its `childIndices` do — which is why the
-    // sub-agent band never had this bug and why it was not obvious.)
-    let within =
-      mark.kind != .expanded && mark.itemIndex >= 0
-      ? input.rows.position(forItem: mark.itemIndex) : nil
-    let rowH = input.book.height(at: mark.rowIndex)
-    let h = within != nil ? scrubberMinMark : max(scrubberMinMark, (rowH * scale).rounded())
-    let offset =
-      input.book.offset(at: mark.rowIndex)
-      + (within.map { CGFloat($0.ordinal) / CGFloat($0.count) * rowH } ?? 0)
-    let y = min(max(0, railH - h), (offset * scale).rounded())
-    lanes[mark.kind.lane, default: []].append(ScrubberMember(mark: mark, y: y))
-    heights[mark.kind.lane, default: []].append(h)
+    let (y, h) = place(mark, input: input, scale: scale, railH: railH)
+    lanes[mark.kind.lane, default: []].append((ScrubberMember(mark: mark, y: y), h))
   }
 
   var clusters: [ScrubberCluster] = []
   // Sorted so the rail is deterministic: a dictionary's order is not, and this
   // list is diffed by a view.
   for lane in [ScrubberLane.left, .right, .full] {
-    guard let members = lanes[lane], let laneHeights = heights[lane] else { continue }
-    let sorted = zip(members, laneHeights).sorted { left, right in
+    guard let members = lanes[lane] else { continue }
+    let sorted = members.sorted { left, right in
       left.0.y == right.0.y ? left.0.mark.itemIndex < right.0.mark.itemIndex : left.0.y < right.0.y
     }
     var current: Int?
     for (member, h) in sorted {
-      // `.expanded` never merges, in either direction, and that is not a
-      // preference — it is a *region* where every other mark is a point.
-      // Merging grows a cluster to cover its members and paints the whole thing
-      // in the loudest member's colour, which is exactly right for ticks a pixel
-      // apart and catastrophic for a band: opening a tool inside an opened run
-      // made the band tall enough to swallow every prompt in the lane, and the
-      // entire rail turned blue because `user` is louder. So it gets a cluster
-      // of its own and is drawn underneath the rest.
-      if member.mark.kind == .expanded {
-        clusters.append(
-          ScrubberCluster(lane: lane, kind: .expanded, y: member.y, h: h, marks: [member]))
-        continue
-      }
       // Merge when the gap is under a point; the merged mark grows and takes the
       // loudest member's colour.
       if let index = current, member.y <= clusters[index].y + clusters[index].h + 1 {
@@ -503,8 +534,7 @@ public func buildScrubberClusters(_ input: ScrubberInput, railH: CGFloat) -> [Sc
         continue
       }
       clusters.append(
-        ScrubberCluster(
-          lane: lane, kind: member.mark.kind, y: member.y, h: h, marks: [member]))
+        ScrubberCluster(lane: lane, kind: member.mark.kind, y: member.y, h: h, marks: [member]))
       current = clusters.count - 1
     }
   }

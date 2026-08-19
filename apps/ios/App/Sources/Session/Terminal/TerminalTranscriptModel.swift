@@ -93,8 +93,8 @@ final class TerminalTranscriptModel {
     // planner draws a line saying what is in flight, and the text arrives as a
     // mutation of the item (see `update`). Planning from `totalChars` instead
     // would invent a line count for text nobody has seen.
-    if case .expandFull(let key) = press, let call = truncatedCall(fullKey: key) {
-      guard expansion.beginFetch(fullKey: key) else { return }
+    if case .expandFull(let callId) = press, let call = truncatedCall(callId) {
+      guard expansion.beginFetch(callId: callId) else { return }
       remeasure()
       fetch?(call.id)
       return
@@ -106,9 +106,8 @@ final class TerminalTranscriptModel {
     reveal = TranscriptRevealRequest(row: row, nonce: revealNonce)
   }
 
-  /// The call behind a `full:` key, when its result is still only a head.
-  private func truncatedCall(fullKey key: String) -> ToolCallItem? {
-    let id = String(key.dropFirst("full:".count))
+  /// The call behind an id, when its result is still only a head.
+  private func truncatedCall(_ id: String) -> ToolCallItem? {
     for item in items {
       guard case .toolCall(let call) = item, call.id == id else { continue }
       return call.result?.truncated == true ? call : nil
@@ -135,8 +134,8 @@ final class TerminalTranscriptModel {
   /// truncation — resolves the row the same way.
   private func resolveFetched() {
     guard !expansion.pending.isEmpty else { return }
-    for key in expansion.pending where truncatedCall(fullKey: key) == nil {
-      expansion.finishFetch(fullKey: key)
+    for id in expansion.pending where truncatedCall(id) == nil {
+      expansion.finishFetch(callId: id)
     }
   }
 
@@ -149,7 +148,15 @@ final class TerminalTranscriptModel {
   /// transcript is megabytes of strings nobody is reading.
   func plan(at index: Int) -> [TermLine] {
     guard index >= 0, index < rows.count else { return [] }
-    return TerminalPlanner.plan(rows[index], metrics: metrics, expansion: expansion)
+    // The **subset**, not the whole expansion — which is what the book planned
+    // this row's cached height from (`TerminalHeightBook.lineCounts`). Handing
+    // the two a different value made "the lines drawn are as tall as the height
+    // reserved" a claim that two derivations agree, resting on the planner
+    // reading nothing outside the subset's domain. It is the one thing this
+    // renderer cannot get wrong, so it is now the same function of the same
+    // value rather than an argument.
+    return TerminalPlanner.plan(
+      rows[index], metrics: metrics, expansion: expansion.subset(for: rows[index]))
   }
 
   func gapAbove(_ index: Int) -> Bool { rows.gapBefore(index) }

@@ -59,17 +59,17 @@ struct TerminalExpansionTests {
       .toolCall(call("a", result: "alpha")), .toolCall(call("b", result: "beta")),
       .toolCall(call("c", result: "gamma")),
     ])
-    guard case .block(.run(let block)) = rows[0] else {
+    guard case .block(.run(let block)) = rows[0], let key = block.expansionKey else {
       Issue.record("expected one folded run")
       return
     }
     let collapsed = lines(rows[0], TerminalExpansion())
     #expect(collapsed.count == 1)
     #expect(collapsed[0].text.contains("Ran 3 shell commands"))
-    #expect(collapsed[0].press == .toggle(block.key))
+    #expect(collapsed[0].press == .toggle(key))
 
     var expansion = TerminalExpansion()
-    #expect(expansion.apply(.toggle(block.key)) == true)
+    #expect(expansion.apply(.toggle(key)) == true)
     let open = lines(rows[0], expansion)
     // The summary, then each call's header and its result — and every line of it
     // washed, so eighty new lines read as one block.
@@ -78,10 +78,10 @@ struct TerminalExpansionTests {
     #expect(open.filter { $0.text.contains("alpha") }.count == 1)
     #expect(open.filter { $0.text.contains("gamma") }.count == 1)
     // The nested calls answer to themselves; only the summary closes the run.
-    #expect(open[0].press == .toggle(block.key))
-    #expect(open.contains { $0.press == .toggle(TerminalExpansion.openKey(callId: "b")) })
+    #expect(open[0].press == .toggle(key))
+    #expect(open.contains { $0.press == .toggle(.call("b")) })
 
-    #expect(expansion.apply(.toggle(block.key)) == false)
+    #expect(expansion.apply(.toggle(key)) == false)
     #expect(lines(rows[0], expansion) == collapsed)
   }
 
@@ -95,8 +95,8 @@ struct TerminalExpansionTests {
     // The block still exists (the fold is untouched); it is the *rendering* that
     // draws the call itself, so opening the run key would do nothing and must
     // not be offered as something a press can reach.
-    #expect(!expansionKeys(of: rows[0]).contains(block.key))
-    #expect(expansionKeys(of: rows[0]).contains(TerminalExpansion.openKey(callId: "a")))
+    #expect(block.expansionKey == nil)
+    #expect(expansionKeys(of: rows[0]) == [.call("a")])
   }
 
   // MARK: - Tasks
@@ -117,7 +117,7 @@ struct TerminalExpansionTests {
     #expect(collapsed.count == 1)
 
     var expansion = TerminalExpansion()
-    expansion.apply(.toggle(block.key))
+    expansion.apply(.toggle(block.expansionKey))
     let open = lines(rows[0], expansion)
     #expect(open.contains { $0.text.contains("report") })
     // Everything below the summary is a subagent's own row, and a subagent's
@@ -132,14 +132,13 @@ struct TerminalExpansionTests {
   func resultHasThreeStates() {
     let long = (1...400).map { "line \($0) of the output" }.joined(separator: "\n")
     let rows = TerminalRows.build(items: [.toolCall(call("a", result: long)), text("after")])
-    let openKey = TerminalExpansion.openKey(callId: "a")
-    let fullKey = TerminalExpansion.fullKey(callId: "a")
+    let openKey = ExpansionKey.call("a")
 
     let collapsed = lines(rows[0], TerminalExpansion())
     var expansion = TerminalExpansion()
     expansion.apply(.toggle(openKey))
     let open = lines(rows[0], expansion)
-    expansion.apply(.expandFull(fullKey))
+    expansion.apply(.expandFull(callId: "a"))
     let full = lines(rows[0], expansion)
 
     #expect(collapsed.count < open.count)
@@ -148,7 +147,7 @@ struct TerminalExpansionTests {
     // character result lands in *one* virtual row, and the collection view
     // recycles rows, not what is inside one.
     #expect(open.contains { $0.text.contains("show all") })
-    #expect(open.last?.press == .expandFull(fullKey))
+    #expect(open.last?.press == .expandFull(callId: "a"))
     #expect(!full.contains { $0.text.contains("show all") })
     // Every planned line is one drawn line, expanded or not — the premise the
     // layout takes its frames from.
@@ -158,10 +157,9 @@ struct TerminalExpansionTests {
   @Test("closing a result forgets that its budget was lifted")
   func closingForgetsFull() {
     var expansion = TerminalExpansion()
-    let openKey = TerminalExpansion.openKey(callId: "a")
-    let fullKey = TerminalExpansion.fullKey(callId: "a")
+    let openKey = ExpansionKey.call("a")
     expansion.apply(.toggle(openKey))
-    expansion.apply(.expandFull(fullKey))
+    expansion.apply(.expandFull(callId: "a"))
     expansion.apply(.toggle(openKey))
     #expect(expansion.isEmpty)
   }
@@ -186,10 +184,9 @@ struct TerminalExpansionTests {
     // guards, and it can only happen to a row that was measured before.
     _ = TerminalHeightBook(rows: rows, metrics: metrics, cache: cache, expansion: expansion)
 
-    for key in rows.rows.flatMap({ Array(expansionKeys(of: $0)) }).sorted() {
-      guard key.hasPrefix("run:") || key.hasPrefix("task:") || key.hasPrefix("call:") else {
-        continue
-      }
+    for key in rows.rows.flatMap({ Array(expansionKeys(of: $0)) })
+      .sorted(by: { $0.description < $1.description })
+    {
       expansion.apply(.toggle(key))
       let warm = TerminalHeightBook(rows: rows, metrics: metrics, cache: cache, expansion: expansion)
       let cold = TerminalHeightBook(rows: rows, metrics: metrics, expansion: expansion)
@@ -207,12 +204,12 @@ struct TerminalExpansionTests {
       text("prose"),
       .toolCall(call("c", result: "gamma")), .toolCall(call("d", result: "delta")),
     ])
-    guard case .block(.run(let first)) = rows[0] else {
+    guard case .block(.run(let first)) = rows[0], let key = first.expansionKey else {
       Issue.record("expected a run first")
       return
     }
     var expansion = TerminalExpansion()
-    expansion.apply(.toggle(first.key))
+    expansion.apply(.toggle(key))
 
     // The scoping claim, stated as the thing it exists for: a row that holds
     // none of the open keys sees an *empty* expansion, so its cached height
@@ -235,7 +232,7 @@ struct TerminalExpansionTests {
       text("after"),
     ])
     var expansion = TerminalExpansion()
-    expansion.apply(.toggle(TerminalExpansion.openKey(callId: "a")))
+    expansion.apply(.toggle(.call("a")))
     let book = TerminalHeightBook(rows: rows, metrics: metrics, expansion: expansion)
     for index in 0..<rows.count {
       let planned = lines(rows[index], expansion).count
@@ -269,5 +266,109 @@ extension TerminalExpansionTests {
     // whose only content *is* the diff would swap the change for nothing.
     #expect(lines(rows[0], .everything(in: rows)) == collapsed)
     #expect(collapsed.contains { $0.text.contains("new") })
+  }
+}
+
+// MARK: - The fold, stated once
+
+extension TerminalExpansionTests {
+  /// `BlockCall.ownLine` is now the **single statement** of the fold — the rule
+  /// `redItemIndices` filters on and the planner draws by. It had been pinned
+  /// only through the scrubber's thirty-eight tests, i.e. through one consumer;
+  /// this is the truth table itself.
+  private func owned(_ items: [TranscriptItem], _ expansion: TerminalExpansion = .init())
+    -> [String]
+  {
+    let rows = TerminalRows.build(items: items)
+    return rows.rows.flatMap { row -> [String] in
+      guard case .block(let block) = row else { return [] }
+      return blockCalls(in: block, expansion: expansion).filter(\.ownLine).map(\.call.id)
+    }
+  }
+
+  @Test("a lone call is its own line; a run of one is drawn as the call")
+  func ownLineForSingles() {
+    #expect(owned([.toolCall(call("a", result: "x")), text("t")]) == ["a"])
+  }
+
+  @Test("collapsed, a run of many is stood for by its last call alone")
+  func ownLineForCollapsedRun() {
+    let run = (0..<4).map { TranscriptItem.toolCall(call("c\($0)", result: "x")) }
+    // The summary line is what is drawn, and `runFailed` colours it by the last
+    // call — so the last call *is* the row's outcome and nothing else is on a
+    // line of its own.
+    #expect(owned(run) == ["c3"])
+  }
+
+  @Test("opened, every member of a run draws its own line")
+  func ownLineForOpenRun() {
+    let run = (0..<4).map { TranscriptItem.toolCall(call("c\($0)", result: "x")) }
+    #expect(owned(run, TerminalExpansion(open: [.run("c0")])) == ["c0", "c1", "c2", "c3"])
+  }
+
+  @Test("a Task's header always draws; its children only once it is open")
+  func ownLineForTask() {
+    let items: [TranscriptItem] = [
+      .toolCall(call("T", "Task", result: "report")),
+      .toolCall(call("k0", parent: "T", result: "x")),
+      .toolCall(call("k1", parent: "T", result: "x")),
+      text("after"),
+    ]
+    // Closed: the header, and nothing of the sub-agent's own working.
+    #expect(owned(items) == ["T"])
+    // Open: the header, and the *run* inside it — still folded, so still stood
+    // for by its last call. Two folds deep, and the rule holds at each.
+    #expect(owned(items, TerminalExpansion(open: [.task("T")])) == ["T", "k1"])
+    // Both open: every child on its own line.
+    #expect(
+      owned(items, TerminalExpansion(open: [.task("T"), .run("k0")])) == ["T", "k0", "k1"])
+  }
+
+  @Test("an orphan child keeps its own row, so it is drawn like any top-level call")
+  func ownLineForOrphan() {
+    // Parent outside the slice — what a recap boundary and a compaction leave.
+    #expect(owned([.toolCall(call("k0", parent: "gone", result: "x")), text("t")]) == ["k0"])
+  }
+
+  @Test("a Task's own header has no result, so it offers no key that opens one")
+  func taskHeaderOffersNoCallKey() {
+    let rows = TerminalRows.build(items: [
+      .toolCall(call("T", "Task", result: "report")),
+      .toolCall(call("k0", parent: "T", result: "x")),
+      text("after"),
+    ])
+    guard case .block(let block) = rows[0] else {
+      Issue.record("expected a task block")
+      return
+    }
+    // `planTask` draws the summary and the children and never the task's own
+    // result, so `.call("T")` would be a key that opens nothing — the run-of-one
+    // trap in a second dialect, which is why `drawsResult` says so once.
+    #expect(!expansionKeys(of: rows[0]).contains(.call("T")))
+    #expect(expansionKeys(of: rows[0]).contains(.task("T")))
+    #expect(expansionKeys(of: rows[0]).contains(.call("k0")))
+    #expect(blockCalls(in: block).first { $0.call.id == "T" }?.drawsResult == false)
+  }
+
+  @Test("a task row's subset carries its children's pending and full state")
+  func subsetForATaskRow() {
+    // The plan cache's second key on the shape the existing subset tests miss:
+    // a wrong answer here is a wrong *height*, which is the worst failure this
+    // renderer has.
+    let rows = TerminalRows.build(items: [
+      .toolCall(call("T", "Task", result: "report")),
+      .toolCall(call("k0", parent: "T", result: "x")),
+      text("after"),
+    ])
+    var expansion = TerminalExpansion(open: [.task("T")])
+    expansion.beginFetch(callId: "k0")
+    expansion.full.insert("nothing-to-do-with-this-row")
+
+    let subset = expansion.subset(for: rows[0])
+    #expect(subset.open == [.task("T")])
+    #expect(subset.pending == ["k0"])
+    #expect(subset.full.isEmpty)
+    // And the row that knows nothing about it keeps its cached height.
+    #expect(expansion.subset(for: rows[1]).isEmpty)
   }
 }

@@ -36,6 +36,18 @@ public struct TerminalRunBlock: Equatable, Sendable {
   /// index arithmetic.
   public var indices: [Int]
   public var index: Int
+
+  /// What a press on the summary line toggles — and **`nil` for a run of one**,
+  /// which ``TerminalPlanner/planRun`` draws as the call itself, so there is no
+  /// summary line and nothing for a `run:` key to open.
+  ///
+  /// An `Optional` rather than a documented exception, because the exception was
+  /// invisible at every call site that mattered: `key` exists on every block, so
+  /// `expansion.isOpen(block.key)` compiled, read correctly, and quietly did
+  /// nothing for the commonest shape there is. Here the compiler asks.
+  public var expansionKey: ExpansionKey? {
+    run.count > 1 ? run.first.map { ExpansionKey.run($0.id) } : nil
+  }
 }
 
 /// What can sit at top level or inside a task. A task never contains a task.
@@ -74,6 +86,10 @@ public struct TerminalTaskBlock: Equatable, Sendable {
   /// resolve to the row that swallowed it.
   public var childIndices: [Int]
   public var index: Int
+
+  /// What a press on the header line toggles. Always present — a `Task` is
+  /// always drawn as a `Task`, whatever it holds.
+  public var expansionKey: ExpansionKey { .task(task.id) }
 }
 
 public enum TerminalBlock: Equatable, Sendable {

@@ -360,7 +360,7 @@ extension TerminalScrubberTests {
   func middleFailuresOpenedAreMarked() {
     // Every member is planned through `planToolCall` once the run is open, and
     // a failed one is red on its own line. Two failures, two marks.
-    let open = TerminalExpansion(open: ["run:c0"])
+    let open = TerminalExpansion(open: [.run("c0")])
     let clusters = buildScrubberClusters(input(runWithMiddleFailures, expansion: open), railH: 100)
     let failures = clusters.flatMap { $0.marks.map(\.mark) }.filter { $0.kind == .toolFailed }
     #expect(failures.count == 2)
@@ -375,80 +375,79 @@ extension TerminalScrubberTests {
     // its last call — which succeeded. So there is still nothing red, and still
     // nothing to mark. This is the case that shows the rule is about what is
     // drawn rather than about nesting depth.
-    let taskOnly = TerminalExpansion(open: ["task:T"])
+    let taskOnly = TerminalExpansion(open: [.task("T")])
     #expect(
       !kinds(buildScrubberClusters(input(taskWithOneFailedChild, expansion: taskOnly), railH: 100))
         .contains(.toolFailed))
 
     // Open the run inside it and the Grep is red on its own line — so it marks.
-    let both = TerminalExpansion(open: ["task:T", "run:c0"])
+    let both = TerminalExpansion(open: [.task("T"), .run("c0")])
     #expect(
       kinds(buildScrubberClusters(input(taskWithOneFailedChild, expansion: both), railH: 100))
         .contains(.toolFailed))
   }
 
-  // MARK: - The expanded band
+  // MARK: - The expanded region
+
+  /// `.expanded` was a `ScrubberMarkKind` and needed three exemptions from the
+  /// mark machinery inside an hour — skip the fractional rule, never merge,
+  /// paint first. It is a `ScrubberRegion` now, and these are the same claims
+  /// made against a type that needs none of them.
 
   @Test("an opened block bands the left lane, and a collapsed one does not")
   func expandedBandsTheInputLane() {
-    let closed = kinds(buildScrubberClusters(input(runWithMiddleFailures), railH: 100))
-    #expect(!closed.contains(.expanded))
+    #expect(buildScrubberRail(input(runWithMiddleFailures), railH: 100).regions.isEmpty)
 
-    let open = TerminalExpansion(open: ["run:c0"])
-    let clusters = buildScrubberClusters(input(runWithMiddleFailures, expansion: open), railH: 100)
-    let band = clusters.flatMap { c in c.marks.map { (c.lane, $0.mark.kind) } }
-      .filter { $0.1 == .expanded }
-    #expect(band.count == 1)
+    let open = TerminalExpansion(open: [.run("c0")])
+    let regions = buildScrubberRail(input(runWithMiddleFailures, expansion: open), railH: 100)
+      .regions
+    #expect(regions.count == 1)
     // Opening is something *you* did, which is what the left lane holds.
-    #expect(band.first?.0 == .left)
+    #expect(regions.first?.lane == .left)
+    #expect(regions.first?.kind == .expanded)
   }
 
   @Test("the expanded band spans the region it opened, not a tick at its start")
   func expandedSpansTheRegion() {
     // The bug this pins: a run block is addressed by its first member's index,
-    // and a member of a run longer than one carries a `RowPosition` — so the
-    // band came out as a 2px tick at ordinal 0, a slim marker where the opened
-    // region starts rather than a band over the region. A `Task`'s own index
-    // carries no position, which is why the sub-agent band never showed it.
-    //
-    // Padded away from the prompt on purpose: `user` outranks `expanded`, so a
-    // band a pixel from the prompt merges into a cluster whose *kind* is
-    // `user`, and the assertion would be about the wrong thing.
+    // and a member of a run longer than one carries a `RowPosition` — so under
+    // the mark machinery the band came out as a 2px tick at ordinal 0, a slim
+    // marker where the opened region starts rather than a band over it. A region
+    // is measured by its *row*, so the exemption is gone with the type.
     var items: [TranscriptItem] = [user("u1")]
     items += (0..<60).map { say("pad\($0)", "line \($0)") }
     let firstCall = items.count
     items += (0..<8).map { call("c\($0)", result: "ok") }
     items.append(say("a1"))
 
-    let open = TerminalExpansion(open: ["run:c0"])
+    let open = TerminalExpansion(open: [.run("c0")])
     let state = input(items, expansion: open)
-    let clusters = buildScrubberClusters(state, railH: 100)
-    guard let band = clusters.first(where: { c in c.marks.contains { $0.mark.kind == .expanded } })
-    else {
-      Issue.record("expected a cluster carrying the expanded mark")
+    guard let band = buildScrubberRail(state, railH: 100).regions.first else {
+      Issue.record("expected an expanded region")
       return
     }
     let rowIndex = state.rows.rowIndex(forItem: firstCall)
     let scale = railScale(
       railH: 100, totalSize: state.totalSize, viewportH: state.viewportHeight)
+    #expect(band.rowIndex == rowIndex)
     #expect(band.h == max(scrubberMinMark, (state.book.height(at: rowIndex) * scale).rounded()))
     // Eight calls drawn open is many lines, so this is a real band and not the
     // floor a tick would have collapsed to.
     #expect(band.h > scrubberMinMark)
   }
 
-  @Test("a lone top-level call bands when opened — its run key opens nothing")
+  @Test("a lone top-level call bands when opened — it has no run key at all")
   func loneCallBandsWhenOpened() {
     // The fold makes every top-level call a run block, usually of one, and
     // `planRun` draws a run of one as the call itself — so the press writes
-    // `call:<id>` and the block's own `run:<id>` is never opened. Asking
-    // `block.key` meant expanding a lone `Bash` banded nothing at all.
+    // `.call(id)` and the block has no `.run` key to open. Asking `block.key`
+    // meant expanding a lone `Bash` banded nothing at all; that call no longer
+    // compiles, and this is the behaviour it used to get wrong.
     let items = [user("u1"), call("c0", result: "a long result"), say("a1")]
-    let open = TerminalExpansion(open: [TerminalExpansion.openKey(callId: "c0")])
-    let marks = kinds(buildScrubberClusters(input(items, expansion: open), railH: 100))
-    #expect(marks.contains(.expanded))
+    let open = TerminalExpansion(open: [.call("c0")])
+    #expect(buildScrubberRail(input(items, expansion: open), railH: 100).regions.count == 1)
     // ...and nothing is banded while it is shut.
-    #expect(!kinds(buildScrubberClusters(input(items), railH: 100)).contains(.expanded))
+    #expect(buildScrubberRail(input(items), railH: 100).regions.isEmpty)
   }
 
   @Test("a tall band does not swallow the lane and repaint it")
@@ -456,32 +455,27 @@ extension TerminalScrubberTests {
     // Opening a tool *inside* an opened run made the row enormous, and a merged
     // cluster grows to cover its members and takes the loudest one's colour — so
     // the band absorbed every prompt in the lane and the whole rail went blue.
-    // A region is not a point: it gets its own cluster and never merges.
+    // A region is not a point: it is not a cluster at all, so there is no merge
+    // rule to exempt it from and no loudness that could win one.
     var items: [TranscriptItem] = [user("u1")]
     items += (0..<8).map { call("c\($0)", result: String(repeating: "line\n", count: 40)) }
     items.append(say("a1"))
     items.append(user("u2"))
     items.append(say("a2"))
 
-    let open = TerminalExpansion(
-      open: ["run:c0", TerminalExpansion.openKey(callId: "c3")])
-    let clusters = buildScrubberClusters(input(items, expansion: open), railH: 100)
+    let open = TerminalExpansion(open: [.run("c0"), .call("c3")])
+    let rail = buildScrubberRail(input(items, expansion: open), railH: 100)
 
     // Both prompts keep their own clusters and their own colour.
-    let prompts = clusters.filter { $0.kind == .user }
-    #expect(prompts.count == 2)
-    // The band is exactly one cluster, and it carries nothing but itself.
-    let bands = clusters.filter { $0.kind == .expanded }
-    #expect(bands.count == 1)
-    #expect(bands.first?.marks.count == 1)
-  }
-
-  @Test("the expanded band never takes a lane mate's colour when they merge")
-  func expandedLosesEveryMerge() {
-    // It covers the same rows as a sub-agent band by construction, so if it
-    // could win the merge it would repaint every opened `Task` grey.
-    #expect(ScrubberMarkKind.expanded.loudness < ScrubberMarkKind.subagent.loudness)
-    #expect(ScrubberMarkKind.expanded.loudness < ScrubberMarkKind.user.loudness)
+    #expect(rail.clusters.filter { $0.kind == .user }.count == 2)
+    // One row opened, one band — several keys inside it are still one region,
+    // because it is one row.
+    #expect(rail.regions.count == 1)
+    // And the band is not in the mark machinery at all: it is not a lane mate
+    // that has to lose a merge, it is ground. The left lane holds exactly the
+    // two prompts, and the region is the same rows without being one of them.
+    #expect(rail.clusters.filter { $0.lane == .left }.allSatisfy { $0.kind == .user })
+    #expect(rail.regions.allSatisfy { $0.lane == .left })
   }
 
   // MARK: - The outcome rule
@@ -546,7 +540,7 @@ extension TerminalScrubberTests {
   @Test("an expanded run's failed outcome is a tick inside the row, not a band over it")
   func absorbedChildAnchorsFractionally() {
     let items = runEndingInFailure
-    let open = TerminalExpansion(open: ["run:c0"])
+    let open = TerminalExpansion(open: [.run("c0")])
     let expanded = input(items, expansion: open)
     let clusters = buildScrubberClusters(expanded, railH: 100)
     guard let failed = clusters.first(where: { $0.kind == .toolFailed }) else {

@@ -185,7 +185,7 @@ struct ImageRefTests {
         ]))
     let row = TerminalRows.build(items: [.toolCall(call)])[0]
     var open = TerminalExpansion()
-    _ = open.apply(.toggle(TerminalExpansion.openKey(callId: "t1")))
+    _ = open.apply(.toggle(.call("t1")))
 
     let collapsed = TerminalPlanner.plan(row, metrics: metrics, expansion: TerminalExpansion())
     let expanded = TerminalPlanner.plan(row, metrics: metrics, expansion: open)
