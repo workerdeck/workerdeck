@@ -52,7 +52,12 @@ export type ClientOptions = {
    * `buildWsUrl` (ticket query param) or cookies for WS auth. */
   headers?: Record<string, string>
   /** Override WS URL construction (auth tickets, proxies). */
-  buildWsUrl?: (sessionId: string, afterSeq: number, truncateResults?: boolean) => string
+  buildWsUrl?: (
+    sessionId: string,
+    afterSeq: number,
+    truncateResults?: boolean,
+    imageRefs?: boolean,
+  ) => string
   /** Override the queue WS URL (`{baseUrl}/queue/ws` by default). */
   buildQueueWsUrl?: () => string
   /** Injectable for non-browser environments/tests. Defaults to globalThis.WebSocket. */
@@ -85,8 +90,10 @@ export type AttachOptions = {
   /**
    * Ask the gateway to replay an oversized tool result as its **head**, with
    * `truncated`/`total_chars` on the block and the whole thing one
-   * {@link WorkerDeckClient.toolResult} call away. Measured, that is 68% of a
-   * long session's attach in three frames.
+   * {@link WorkerDeckClient.toolResult} call away. Measured after shipping, that
+   * is a **0.3%** cut on a real session, not the 68% it was designed against —
+   * the projection had counted base64 as text. The mechanism is right and the
+   * bytes were elsewhere; see {@link AttachOptions.imageRefs}.
    *
    * Default off, and the default must stay off: **only the unit that renders may
    * ask for it**. `client` and `react` are separate packages an embedder can
@@ -96,6 +103,27 @@ export type AttachOptions = {
    * does. Live events are never affected.
    */
   truncateResults?: boolean
+  /**
+   * Ask the gateway to deliver a tool result's base64 image parts as
+   * `image_ref` addresses, their bytes one {@link
+   * WorkerDeckClient.toolResultImage} call away.
+   *
+   * This is where the bytes actually were: measured across 214 local sessions,
+   * **91% of all tool-result payload is base64 no client renders** — 489 MB
+   * against 44 MB of text, two thirds of it from `Read` looking at a PNG. One
+   * session's attach fell from 4,550 KB to 771 KB with no image in it.
+   *
+   * Default off under the same rule as {@link AttachOptions.truncateResults} —
+   * only the unit that renders may ask — and its **own** flag rather than a
+   * widening of that one, because this family's "additive at protocol 7"
+   * argument rests on a client that never asked being unable to receive one, by
+   * construction rather than by release archaeology.
+   *
+   * Unlike truncation this **also applies to live events**. The render path is
+   * ref-then-fetch, so bytes arriving live would only be discarded or pinned in
+   * client state.
+   */
+  imageRefs?: boolean
 }
 
 export type SessionHandleEvents = {
@@ -259,6 +287,7 @@ export class SessionHandle {
       this.sessionId,
       this.#lastSeq,
       this.#options.truncateResults,
+      this.#options.imageRefs,
     )
     this.#ws = ws
     ws.onopen = () => {
@@ -749,15 +778,23 @@ export class WorkerDeckClient {
   }
 
   /** @internal used by SessionHandle */
-  openSocket(sessionId: string, afterSeq: number, truncateResults = false): WebSocket {
+  openSocket(
+    sessionId: string,
+    afterSeq: number,
+    truncateResults = false,
+    imageRefs = false,
+  ): WebSocket {
     // A third *optional* parameter rather than an options object, so every
     // existing `buildWsUrl` implementation still typechecks. The hazard worth
     // naming: a custom one that ignores it yields a full replay — safe only
     // because every client keys its rendering off the server's own `truncated`
     // marker and never off what it asked for.
-    const query = `afterSeq=${afterSeq}${truncateResults ? '&truncateResults=1' : ''}`
+    const query =
+      `afterSeq=${afterSeq}` +
+      (truncateResults ? '&truncateResults=1' : '') +
+      (imageRefs ? '&imageRefs=1' : '')
     const url =
-      this.#options.buildWsUrl?.(sessionId, afterSeq, truncateResults) ??
+      this.#options.buildWsUrl?.(sessionId, afterSeq, truncateResults, imageRefs) ??
       `${this.#options.baseUrl.replace(/^http/, 'ws')}/sessions/${encodeURIComponent(sessionId)}/ws?${query}`
     return new this.#WebSocketImpl(url)
   }
@@ -776,11 +813,55 @@ export class WorkerDeckClient {
     sessionId: string,
     seq: number,
     toolUseId: string,
+    options?: { imageRefs?: boolean },
   ): Promise<{ seq: number; toolUseId: string; content: ToolResultBlock['content']; isError: boolean }> {
+    // `imageRefs` matters here for the same reason it does on the socket: without
+    // it, pressing "show everything" on an image-bearing result ships every
+    // screenshot's base64 in the JSON, and the reducer keeps only the text.
     return (await this.#call(
       'GET',
-      `/sessions/${encodeURIComponent(sessionId)}/events/${seq}/result?toolUseId=${encodeURIComponent(toolUseId)}`,
+      `/sessions/${encodeURIComponent(sessionId)}/events/${seq}/result?toolUseId=${encodeURIComponent(toolUseId)}` +
+        (options?.imageRefs ? '&imageRefs=1' : ''),
     )) as { seq: number; toolUseId: string; content: ToolResultBlock['content']; isError: boolean }
+  }
+
+  /**
+   * One image part's bytes, addressed by the `image_ref` a replay delivered in
+   * its place.
+   *
+   * A `Blob` and not a URL, and that is the whole reason this method exists: an
+   * `<img src>` pointing at the gateway carries a credential in exactly one of
+   * this project's four clients (the dashboard's same-origin implicit host,
+   * where the cookie rides along). Everywhere else — an added cross-origin
+   * gateway on a Bearer header, the VS Code webview whose every byte crosses a
+   * postMessage bridge, iOS — the URL is unauthenticated and the picture is a
+   * broken icon. Fetched rather than pointed at, then handed to
+   * `URL.createObjectURL`; `readProducedFile` is the shipped precedent.
+   *
+   * A 404 means "ask again with a fresh attach": a woken dormant session has a
+   * fresh log with fresh seqs, and the gateway refuses a stale address rather
+   * than serving another call's pixels under the row you are looking at.
+   */
+  async toolResultImage(
+    sessionId: string,
+    seq: number,
+    toolUseId: string,
+    partIndex: number,
+  ): Promise<Blob> {
+    const path =
+      `/sessions/${encodeURIComponent(sessionId)}/events/${seq}/result` +
+      `?toolUseId=${encodeURIComponent(toolUseId)}&part=${partIndex}`
+    const res = await this.#fetch(`${this.#options.baseUrl}${path}`, {
+      headers: { ...this.#options.headers },
+    })
+    if (!res.ok) {
+      const payload = (await res.json().catch(() => ({}))) as { error?: string }
+      throw new WorkerDeckError(
+        payload.error ?? `image part request failed with ${res.status}`,
+        res.status,
+      )
+    }
+    return await res.blob()
   }
 
   /** @internal used by QueueHandle */

@@ -1,4 +1,5 @@
 import {
+  imagePartRef,
   replayCoalesceKey,
   replayRetains,
   TOOL_RESULT_HEAD_CHARS,
@@ -60,7 +61,12 @@ export function staleReplaySeqs(events: readonly SessionEvent[], afterSeq: numbe
  *    same replay (`staleReplaySeqs`), plus everything `replayRetains` says the
  *    reducer reads and discards. Opt-in, and only sound for a consumer whose
  *    handling of those events is last-write-wins.
- * 4. `truncateResults` — a huge `tool_result` block is delivered as its head
+ * 4. `imageRefs` — a base64 image part is delivered as an `image_ref` address
+ *    (protocol's {@link imagePartRef}), its bytes one REST fetch away. Applied
+ *    **before** rule 5, because it stamps indices from the stored part array
+ *    which rule 5 then reshapes. Unlike rule 5 this also applies to the live
+ *    path (see `SubscriberSet`), which is the one place these two rules differ.
+ * 5. `truncateResults` — a huge `tool_result` block is delivered as its head
  *    plus the markers that say so. **Never mutates the stored event**: the live
  *    path, the parking snapshot and the fetch route all need the whole thing,
  *    so this builds a copy and the log stays the log.
@@ -77,9 +83,10 @@ export function replaySlice(
     resetSeq?: number
     coalesceReplay?: boolean
     truncateResults?: boolean
+    imageRefs?: boolean
   },
 ): SessionEvent[] {
-  const { afterSeq, resetSeq = 0, coalesceReplay, truncateResults } = options
+  const { afterSeq, resetSeq = 0, coalesceReplay, truncateResults, imageRefs } = options
   const stale = coalesceReplay ? staleReplaySeqs(events, afterSeq) : undefined
   const lastSeq = events[events.length - 1]?.seq ?? 0
   const out: SessionEvent[] = []
@@ -88,7 +95,12 @@ export function replaySlice(
     if (event.seq < resetSeq && transcriptContent(event)) continue
     if (stale?.has(event.seq)) continue
     if (coalesceReplay && event.seq !== lastSeq && !replayRetains(event)) continue
-    out.push(truncateResults ? truncateResultBlocks(event) : event)
+    // Refs before heads, always: `refImageParts` stamps addresses from the
+    // stored part array and `truncateResultBlocks` reshapes it.
+    let delivered = event
+    if (imageRefs) delivered = refImageParts(delivered)
+    if (truncateResults) delivered = truncateResultBlocks(delivered)
+    out.push(delivered)
   }
   return out
 }
@@ -153,11 +165,64 @@ function headOf(content: ToolResultBlock['content'], chars: number): ToolResultB
   const parts: Array<{ type: string; text?: string; [key: string]: unknown }> = []
   let used = 0
   for (const part of content) {
+    // An address this gateway itself just minted (`refImageParts` runs first).
+    // Keeping it is what lets the two rules compose: dropped here, a socket
+    // asking for both heads and refs would lose every picture with no marker.
+    // Raw `image` parts keep being dropped exactly as Part 4 shipped them,
+    // which is what keeps a truncate-only socket byte-identical.
+    if (part.type === 'image_ref') {
+      parts.push(part)
+      continue
+    }
     if (typeof part.text !== 'string') continue
-    if (used >= chars) break
+    // `continue`, not `break`: an exhausted text budget must not strand the
+    // refs that come after it. Identical output for text either way.
+    if (used >= chars) continue
     const text = part.text.slice(0, chars - used)
     parts.push({ ...part, text })
     used += text.length + 1
   }
   return parts
+}
+
+/**
+ * A copy of `event` whose `tool_result` blocks carry `image_ref` addresses in
+ * place of their base64 image parts — or `event` itself, unchanged and
+ * un-copied, when it holds none. Same identity rule as
+ * {@link truncateResultBlocks}, and it matters more here: an event carrying an
+ * image at all is the exception, so the common path must not allocate.
+ *
+ * **Never mutates the stored event.** The log is what the parking snapshot
+ * embeds, what `Runner.eventAt` reads, and therefore what the fetch route
+ * serves the bytes back from — a drop that reached the log would 404 the very
+ * lazy-load this rule promises.
+ *
+ * Indices are stamped from the **stored** array, which is why this runs *before*
+ * truncation rather than after: `headOf` reshapes a block's parts, so an address
+ * computed on its output would name the wrong part of the stored block. That
+ * ordering is asserted in `replay-image-ref.test.ts`, not merely intended.
+ */
+export function refImageParts(event: SessionEvent): SessionEvent {
+  if (event.type !== 'user_message') return event
+  const content = event.message.content
+  if (!Array.isArray(content)) return event
+  let changed = false
+  const blocks = content.map((block) => {
+    if (block.type !== 'tool_result') return block
+    const result = block as ToolResultBlock
+    const parts = result.content
+    if (!Array.isArray(parts)) return block
+    let blockChanged = false
+    const mapped = parts.map((part, index) => {
+      const ref = imagePartRef(part, index)
+      if (!ref) return part
+      blockChanged = true
+      return ref
+    })
+    if (!blockChanged) return block
+    changed = true
+    return { ...result, content: mapped } satisfies ToolResultBlock
+  })
+  if (!changed) return event
+  return { ...event, message: { ...event.message, content: blocks } }
 }

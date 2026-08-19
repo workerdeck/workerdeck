@@ -93,6 +93,16 @@ The queue stream has no replay: on (re)connect, re-list jobs and treat the strea
   avoid. `@workerdeck/react`'s `useClaudeSession` sets it; nothing else in this package does, and
   the default must stay off.
 
+- **`imageRefs` is the same bargain, for pictures.** It asks the gateway to replay a
+  `tool_result`'s base64 image parts as `image_ref` addresses — media type, decoded size, and the
+  part's index in the stored block — with the bytes available from `client.toolResultImage(...)`.
+  Measured across 214 local sessions this is **91% of all tool-result payload and none of what any
+  client drew**: one session's attach falls from 4,548 KB to 1,275 KB, and a session with no
+  pictures in it is byte-identical. Renderers only, same reason, same default. It is deliberately a
+  **separate flag** from `truncateResults` rather than a widening of it, and it is the one option
+  here that also applies to **live** events — the render path is ref-then-fetch, so bytes arriving
+  live would only be discarded or pinned in client state.
+
 - **One client per gateway.** Session ids are unique within a gateway, not across them; two
   clients for one gateway means two of everything that is meant to be shared.
 - **A refused call throws `WorkerDeckError`, and its `status` is the useful part.** 404 means this

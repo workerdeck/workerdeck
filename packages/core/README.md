@@ -182,6 +182,15 @@ Things the compiler will not tell you, each of which has cost someone real time:
   the temptation to truncate into a snapshot: it would break the fetch for exactly the sessions
   most likely to be read late.
 
+- **Image refs happen there too — and on the live path as well.** `subscribe(..., { imageRefs })`
+  replaces a `tool_result`'s base64 `image` parts with `image_ref` addresses, and unlike truncation
+  it applies to live events as well as the replay, because a client's one render path is
+  ref-then-fetch. The same "never at emit" rule holds for the same reason: `#events` keeps every
+  byte, which is what the fetch route serves back. `SubscriberSet` (`src/lib/subscribers.ts`) is
+  where that per-subscriber decision lives — a subscriber is a listener *plus what it asked for*,
+  so the three runners no longer each own a copy of the answer. Consumers that subscribe with no
+  options — parking, notifications, the queue — see everything, as they do for every rule here.
+
 - **A declared MCP server that never connected is refused, not degraded.** If a profile's
   `session.mcpServers` names a server and it isn't there, `createEngineSession` throws. The old
   behaviour — start anyway, minus those tools — produced a session that reported perfectly healthy

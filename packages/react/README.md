@@ -144,6 +144,16 @@ input by construction: fine for the user's own data, never a source of server-au
   instead would mean the copy button copies the head, the transcript cache drops it on a session
   switch, and the next event re-truncates the row.
 
+- **`result.images` is the same idea for pictures, and it is set only when there are any.** The
+  hook also attaches with `imageRefs`, so a `tool_result`'s base64 images arrive as addresses and
+  the reducer records `{ partIndex, mediaType, bytes, sourceSeq }` per picture — absent, never
+  empty, because an item that gained a field is an item every renderer re-measures (on iOS
+  `ToolCallItem` is `Equatable` and half the row-plan cache key). Each entry carries its **own**
+  `sourceSeq`: the result-level one is cleared by text hydration, and a reader who pressed "show
+  everything" must still be able to load the screenshot. Raw base64 parts are still dropped on
+  arrival, as they always were — folding them into state would pin megabytes inside the transcript
+  cache.
+
 - **Companions must ride the hook's own `handle`.** The server's tool bridge asks the *first
   attached client*, so a second `useClaudeSession` for the same session is a second attach that
   will never be asked anything. `useAttachments`, `useHostFileSearch` and `useToolCallHost` all

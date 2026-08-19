@@ -611,6 +611,26 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       return row
     }
 
+    // MARK: UICollectionViewDelegate
+
+    /// The virtualizer **is** the visibility system for a row's pictures. A
+    /// mounted row is by definition near the viewport, bounded by the layout's
+    /// own overscan, so a second observer could only ever disagree with this
+    /// one.
+    func collectionView(
+      _ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell,
+      forItemAt indexPath: IndexPath
+    ) {
+      (cell as? TerminalRowCell)?.beginImageLoads()
+    }
+
+    func collectionView(
+      _ collectionView: UICollectionView, didEndDisplaying cell: UICollectionViewCell,
+      forItemAt indexPath: IndexPath
+    ) {
+      (cell as? TerminalRowCell)?.cancelImageLoads()
+    }
+
     // MARK: UIScrollViewDelegate
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {

@@ -18,7 +18,7 @@
  * which is the whole authorization story here: visibility is full control.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { SessionEvent, ToolResultBlock } from '@workerdeck/protocol'
+import { imagePartRef, type SessionEvent, type ToolResultBlock } from '@workerdeck/protocol'
 import { json } from '../lib/http.ts'
 
 /** How this route reaches the log: a live runner's `eventAt`, or a **parked**
@@ -39,7 +39,8 @@ export function handleToolResult(
     json(res, 405, { error: 'method not allowed' })
     return
   }
-  const toolUseId = new URL(req.url ?? '/', 'http://internal').searchParams.get('toolUseId')
+  const url = new URL(req.url ?? '/', 'http://internal')
+  const toolUseId = url.searchParams.get('toolUseId')
   if (!toolUseId) {
     json(res, 400, { error: 'toolUseId is required' })
     return
@@ -65,5 +66,39 @@ export function handleToolResult(
     json(res, 404, { error: 'no such tool result in that event' })
     return
   }
-  json(res, 200, { seq, toolUseId, content: block.content ?? '', isError: block.is_error === true })
+
+  // `part=N` — one image part's bytes, which is the other half of the image-ref
+  // rule: the replay delivered an address, this answers it. Raw bytes rather
+  // than JSON+base64, because `readProducedFile` → Blob → object URL is the
+  // shipped precedent, the platform decodes it, and JSON would double the
+  // memory and put a decode on the client's main thread.
+  const partParam = url.searchParams.get('part')
+  if (partParam !== null) {
+    const index = Number(partParam)
+    const parts = block.content
+    const part = Number.isInteger(index) && Array.isArray(parts) ? parts[index] : undefined
+    // Verified against the STORED block, never trusted from the query: the
+    // address was stamped from this array and must still name a base64 image.
+    const ref = part ? imagePartRef(part, index) : undefined
+    if (!ref) {
+      json(res, 404, { error: 'no such image part in that tool result' })
+      return
+    }
+    const source = (part as { source?: { data?: string } }).source
+    const bytes = Buffer.from(source?.data ?? '', 'base64')
+    res.writeHead(200, { 'content-type': ref.media_type, 'content-length': String(bytes.length) })
+    res.end(bytes)
+    return
+  }
+
+  // The JSON mode. `imageRefs=1` projects the whole block's image parts through
+  // the same rule the replay used — without it a "show everything" press against
+  // an image-bearing block ships every screenshot's base64 inside the JSON, and
+  // `hydrateToolResult` keeps only the text. Default stays whole, so this is
+  // byte-identical to what shipped before the flag existed.
+  const content =
+    url.searchParams.get('imageRefs') === '1' && Array.isArray(block.content)
+      ? block.content.map((part, index) => imagePartRef(part, index) ?? part)
+      : (block.content ?? '')
+  json(res, 200, { seq, toolUseId, content, isError: block.is_error === true })
 }

@@ -32,7 +32,7 @@ import type {
   SessionEventListener,
 } from '../../runner-interface.ts'
 import type { ToolExecutionCall, ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
-import { replaySlice } from '../../lib/replay.ts'
+import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 
 /** Permission modes this engine can honor. The rest of the protocol vocabulary
  * (acceptEdits/plan/auto) is Claude Code CLI semantics with no meaning here —
@@ -153,7 +153,7 @@ export class AiSdkRunner implements Runner {
   #config: AiSdkRunnerConfig
   #model: LanguageModel
   #events: SessionEvent[] = []
-  #listeners = new Set<SessionEventListener>()
+  #subscribers = new SubscriberSet()
   #seq = 0
   #activityCount = 0
   #status: SessionStatus = 'starting'
@@ -330,7 +330,7 @@ export class AiSdkRunner implements Runner {
     this.#setStatus('parked')
     const snapshot = this.#buildSnapshot()
     this.#parked = true
-    this.#listeners.clear()
+    this.#subscribers.clear()
     try {
       void Promise.resolve(this.#config.onClose?.()).catch(() => {})
     } catch {
@@ -611,11 +611,9 @@ export class AiSdkRunner implements Runner {
   subscribe(
     listener: SessionEventListener,
     afterSeq = 0,
-    options?: { coalesceReplay?: boolean; truncateResults?: boolean },
+    options?: SubscribeOptions,
   ): () => void {
-    for (const event of replaySlice(this.#events, { ...options, afterSeq })) listener(event)
-    this.#listeners.add(listener)
-    return () => this.#listeners.delete(listener)
+    return this.#subscribers.subscribe(this.#events, listener, afterSeq, options)
   }
 
   #scheduleTurn(): void {
@@ -1027,13 +1025,7 @@ export class AiSdkRunner implements Runner {
     // Rows, not events: what a client diffs to know how much it missed.
     this.#activityCount += transcriptActivity(body)
     this.#events.push(event)
-    for (const listener of this.#listeners) {
-      try {
-        listener(event)
-      } catch {
-        // Listener errors must not break the runner loop.
-      }
-    }
+    this.#subscribers.emit(event)
   }
 }
 

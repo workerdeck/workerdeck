@@ -7,8 +7,10 @@ import { CopyAction, WithActions } from './affordances.tsx'
 import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { Pressable, useRevealOnOpen } from './press.tsx'
+import { IMAGE_BOX_LINES, IMAGE_UNAVAILABLE, imagePlaceholder } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
 import { useToolResultFetcher } from '../agent/tool-result-fetch.tsx'
+import { useToolResultImageSrc } from '../agent/tool-result-image.tsx'
 import { runFailed, runSummary } from './tool-run.ts'
 import { type ToolCallItem } from './blocks.ts'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
@@ -219,6 +221,13 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
           ) : null}
         </Row>
       </Pressable>
+      {/* Above the output, because when a call returned a picture the picture is
+          what the call was: a screenshot's result text is "took a screenshot".
+          Drawn collapsed as well as open — this is not detail behind a press,
+          it is the answer. */}
+      {item.result?.images?.map((image) => (
+        <TerminalImage key={image.partIndex} toolUseId={item.id} image={image} />
+      ))}
       {/* A file edit shows its diff, not its result prose: "The file has been
           updated" is what the *model* needed to hear, and the change is what the
           reader did. The text stays reachable by expanding. */}
@@ -289,6 +298,43 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
       ) : null}
     </WithActions>
     </div>
+  )
+}
+
+/** One image part of a tool result, as the reducer holds it. */
+type ToolResultImage = NonNullable<NonNullable<ToolCallItem['result']>['images']>[number]
+
+/**
+ * A picture a tool returned, in a box of {@link IMAGE_BOX_LINES} whole lines.
+ *
+ * **Three states, one height.** Before the fetch lands the box is a wash and the
+ * size the gateway declared; after it, the picture, letterboxed inside the same
+ * box; on a refusal, `image unavailable` in it. Nothing here may ever collapse
+ * to nothing — that is `HostImage`'s return-null-then-pop, which in a
+ * *virtualized* list is not a flicker but a reflow of every row below it, and
+ * the height calculator would have been lying about the row from plan time.
+ *
+ * The box is why the calculator can stay exact: it is a constant, not a function
+ * of pixels nobody has downloaded yet.
+ */
+function TerminalImage({ toolUseId, image }: { toolUseId: string; image: ToolResultImage }) {
+  const { src, failed } = useToolResultImageSrc({ toolUseId, ...image })
+  return (
+    <Row indent={1} columns={3}>
+      <div
+        className='term-image'
+        data-state={src ? 'loaded' : failed ? 'failed' : 'pending'}
+        // The one measurement in this file, and it is the shared constant
+        // spelled once — `height.ts` adds exactly this many lines for exactly
+        // this box.
+        style={{ height: `calc(var(--term-line) * ${IMAGE_BOX_LINES})` }}>
+        {src ? (
+          <img src={src} alt={imagePlaceholder(image)} />
+        ) : (
+          <Ink tone='faint'>{failed ? IMAGE_UNAVAILABLE : imagePlaceholder(image)}</Ink>
+        )}
+      </div>
+    </Row>
   )
 }
 

@@ -87,6 +87,27 @@ export type TranscriptItem =
         truncated?: boolean
         totalChars?: number
         sourceSeq?: number
+        /**
+         * The pictures this result carried, as addresses rather than bytes —
+         * set **only** when the replay delivered `image_ref` parts, so every
+         * other result stays byte-identical (the `Equatable` argument above,
+         * again).
+         *
+         * Each entry carries its **own** `sourceSeq`, which is not redundant
+         * with the one beside it: that one is cleared by text hydration, and a
+         * reader who pressed "show everything" must still be able to load the
+         * screenshot afterwards.
+         *
+         * Raw base64 `image` parts are still dropped on arrival, as they always
+         * were. Folding them in would pin megabytes inside `TranscriptState`,
+         * which the transcript LRU then retains across session switches.
+         */
+        images?: ReadonlyArray<{
+          partIndex: number
+          mediaType: string
+          bytes: number
+          sourceSeq: number
+        }>
       }
       /**
        * What this call changed on disk, when it was a file edit — the engine's
@@ -250,6 +271,29 @@ function blockText(content: ToolResultBlock['content']): string {
     .join('\n')
 }
 
+/** The `image_ref` addresses in a result's content, or undefined when it holds
+ * none — which is the common case, and is why this returns undefined rather than
+ * an empty array: an absent field keeps the item byte-identical. */
+function imageRefsOf(
+  content: ToolResultBlock['content'],
+  seq: number,
+): ReadonlyArray<{ partIndex: number; mediaType: string; bytes: number; sourceSeq: number }> | undefined {
+  if (!Array.isArray(content)) return undefined
+  const refs = content.flatMap((part) =>
+    part.type === 'image_ref'
+      ? [
+          {
+            partIndex: Number(part.part_index),
+            mediaType: String(part.media_type ?? 'application/octet-stream'),
+            bytes: Number(part.bytes ?? 0),
+            sourceSeq: seq,
+          },
+        ]
+      : [],
+  )
+  return refs.length > 0 ? refs : undefined
+}
+
 function contentToBlocks(content: string | ContentBlock[]): ContentBlock[] {
   return typeof content === 'string' ? [{ type: 'text', text: content }] : content
 }
@@ -368,7 +412,16 @@ export function hydrateToolResult(
   const items = state.items.map((item) => {
     if (item.kind !== 'tool_call' || item.id !== toolUseId || !item.result?.truncated) return item
     changed = true
-    return { ...item, result: { text, isError: item.result.isError } }
+    // `images` survives: hydration answers the *text* press, and clearing the
+    // addresses beside it would leave the row's pictures unloadable forever.
+    return {
+      ...item,
+      result: {
+        text,
+        isError: item.result.isError,
+        ...(item.result.images && { images: item.result.images }),
+      },
+    }
   })
   return changed ? { ...state, items } : state
 }
@@ -478,6 +531,9 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
                       truncated: true as const,
                       totalChars: toolResult.total_chars,
                       sourceSeq: event.seq,
+                    }),
+                    ...(imageRefsOf(toolResult.content, event.seq) && {
+                      images: imageRefsOf(toolResult.content, event.seq),
                     }),
                   },
                   // Absent on most results; the runner sets it only for a file

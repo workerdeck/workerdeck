@@ -1041,3 +1041,33 @@
 [data-term-scrubber-host]::-webkit-scrollbar {
   display: none;
 }
+
+/* ── Images ──────────────────────────────────────────────────────────────────
+ *
+ * A picture a tool returned, drawn in a box of whole lines (`IMAGE_BOX_LINES`,
+ * set inline by `TerminalImage` so the constant has one spelling across the
+ * renderer and the height calculator). The height is on the element and nothing
+ * here may add to it: no margin, no border, no padding — a box that is not
+ * exactly N lines is a row the virtualizer was told the wrong size for.
+ *
+ * `object-fit: contain` with a top-left origin rather than a centred one: the
+ * grid's origin is the top-left of the body cell, and a screenshot floating in
+ * the middle of its box reads as a figure in a document instead of output on a
+ * line. */
+.term-image {
+  display: block;
+  overflow: hidden;
+}
+.term-image > img {
+  max-width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: left top;
+}
+/* The wash is the placeholder's whole visual: it says "something is reserved
+   here" for as long as the bytes are in flight, and it says it at the same
+   height the picture will occupy. */
+.term-image[data-state='pending'],
+.term-image[data-state='failed'] {
+  background: var(--term-band-bg);
+}

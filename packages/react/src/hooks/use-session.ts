@@ -283,8 +283,14 @@ export function useClaudeSession(
     // unit that renders, so it is the one that knows a head can be fetched back
     // (see `AttachOptions.truncateResults`). An embedder holding `client`
     // without `react` gets whole results, which is the safe default.
+    //
+    // `imageRefs` is asked for on the same grounds and in the same breath: the
+    // reducer knows how to hold an address and the panel knows how to fetch it,
+    // so this hook is the only place that may say so. Measured, it is 91% of
+    // the tool-result payload and none of what was ever drawn.
     const handle = client.attach(sessionId, {
       truncateResults: true,
+      imageRefs: true,
       ...(held.lastSeq > 0 ? { afterSeq: held.lastSeq } : {}),
     })
     handleRef.current = handle

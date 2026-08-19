@@ -63,6 +63,10 @@ struct SessionView: View {
   /// Fetches (and caches) pictures the engine produced on the host — codex's
   /// generated images, which arrive as a path and never as bytes.
   @State private var producedImages = ProducedImageLoader()
+  /// The pictures a *tool result* carried, fetched by address rather than
+  /// arriving as bytes. A different store and a different route from
+  /// `producedImages`, which serves files the engine wrote to the host's disk.
+  @State private var toolImages = TerminalImageLoader()
   /// The two system pickers the Add Media sheet hands off to. Separate flags
   /// rather than `Sheet` cases: iOS presents both full screen and neither can be
   /// raised from underneath the half-height sheet that chose it.
@@ -127,6 +131,9 @@ struct SessionView: View {
       .environment(\.toolResultFetcher, { vm.loadFullResult(toolUseId: $0) })
       .environment(\.attachmentLoader, attachmentLoader)
       .environment(\.producedImageLoader, producedImages)
+      // The other end of the ref'd attach: a box scrolls into view, this fetches
+      // its bytes, and the picture lands in the row that reserved the space.
+      .environment(\.terminalImageLoader, toolImages)
       // Reader preferences enter the transcript here, once, and every row below
       // reads them from the environment.
       .transcriptPreferences(settings)
@@ -138,6 +145,9 @@ struct SessionView: View {
         }
         attachmentLoader.fetch = { [vm] id in try await vm.attachmentData(id) }
         producedImages.fetch = { [vm] id in try await vm.producedFileData(id) }
+        toolImages.fetch = { [vm] seq, toolUseId, part in
+          try await vm.loadToolImage(seq: seq, toolUseId: toolUseId, partIndex: part)
+        }
         await vm.run()
       }
       .onChange(of: scenePhase) { _, phase in

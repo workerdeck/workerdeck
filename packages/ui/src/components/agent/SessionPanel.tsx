@@ -64,6 +64,7 @@ import { SessionInfoDialog } from './SessionInfoDialog.tsx'
 import { StatusBar } from './StatusBar.tsx'
 import { Transcript } from './Transcript.tsx'
 import { ToolResultFetchProvider } from './tool-result-fetch.tsx'
+import { ToolResultImageProvider, useToolResultImages } from './tool-result-image.tsx'
 import {
   TranscriptDensityProvider,
   TranscriptVariantProvider,
@@ -641,6 +642,10 @@ export function SessionPanel({
   // path, never bytes). Stable and memoized per path: transcript rows re-render
   // on every delta, and a fresh function would re-fetch each time.
   const hostImage = useHostImage(client, sessionId, state.producedFiles)
+  // The other picture route, and the other store: an image *part* of a tool
+  // result, which an opted-in replay delivered as a reference rather than half a
+  // megabyte of base64. Bounded, unlike `useHostImage` — see the module.
+  const resultImages = useToolResultImages(client, sessionId)
   const composerRef = useRef<ComposerHandle>(null)
   // The catch-up strip's way of scrolling the (virtualized, usually unmounted)
   // recap row into view — the transcript fills it in. See TranscriptProps.
@@ -823,6 +828,7 @@ export function SessionPanel({
           rendered anywhere else fall back to the context's no-op, which is
           correct for them: nothing truncates a replay they never asked for. */}
       <ToolResultFetchProvider value={loadFullResult}>
+      <ToolResultImageProvider value={resultImages}>
       <div
         data-slot='session-panel'
         // The typeface is a cascade fact, not a React one — one attribute here,
@@ -1026,6 +1032,7 @@ export function SessionPanel({
           </>
         ) : null}
       </div>
+      </ToolResultImageProvider>
       </ToolResultFetchProvider>
       </TranscriptDensityProvider>
     </TranscriptVariantProvider>

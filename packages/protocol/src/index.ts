@@ -103,6 +103,101 @@ export type ToolResultBlock = {
  * — which a row window is not.
  */
 export const TOOL_RESULT_HEAD_CHARS = 8_000
+
+/**
+ * A base64 image part, delivered as an address instead of its bytes.
+ *
+ * The **seventh** rule of the family, and the first written *after* its
+ * measurement rather than before it. Across 214 local sessions, 91% of all
+ * tool-result payload is base64 image data — 489 MB against 44 MB of text — and
+ * **no client renders a byte of it**: `blockText` in the reducer and
+ * `joinedText` on iOS both fold a `tool_result` to its text parts, and both
+ * clients draw a tool's picture from a host *path* (`savedPath` → `/produced`,
+ * `/fs/read`), never from block content. So it is `replayRetains`' argument at
+ * nine times the size of the case that rule was written for: bytes whose entire
+ * effect on the reader is `return base`.
+ *
+ * A **new part type rather than a hollowed-out `image`**, and that is the one
+ * judgement here worth stating. `headOf`'s shape-preservation rule — "a
+ * truncation is a shorter result, never a different kind of one" — cuts the
+ * other way for pixels: a head *is* a valid shorter text, but an image with no
+ * bytes is not a smaller image, and spelling it `{ type: 'image', source }` with
+ * no `data` invites precisely the failure shape-preservation exists to prevent,
+ * a renderer that trusts `source.data` drawing `data:;base64,undefined`. An
+ * unfamiliar type instead falls through every fold that already exists, exactly
+ * as the CLI's own `tool_reference` part does: no `text`, so it contributes
+ * nothing, and an unaware consumer renders what it renders today, which is
+ * nothing. That is this family's safe failure.
+ *
+ * Only ever produced for a socket that asked (`imageRefs`), so a client that has
+ * never heard of this type cannot receive one — which is why this is additive at
+ * protocol 7, the same argument {@link ToolResultBlock.truncated} makes. Unlike
+ * truncation it applies to **live events as well as replays**: the client's one
+ * render path is ref-then-fetch, so bytes on a live event would either be
+ * discarded (335 KB median, once per attached watcher) or need a second
+ * decode-from-event path pinning megabytes inside the transcript cache — the
+ * disease relocated rather than cured.
+ */
+export type ImageRefPart = {
+  type: 'image_ref'
+  /** The stored part's own media type (`image/png`, `image/jpeg` and
+   * `image/webp` are the three observed), or `application/octet-stream` when it
+   * had none. Never the membership test — that is `image` plus a base64 source. */
+  media_type: string
+  /** Decoded size, which a client cannot compute from an address it has not
+   * fetched yet. Not cosmetic: the placeholder spells it, and in the terminal
+   * theme a rendered string *is* a row height. */
+  bytes: number
+  /**
+   * Index of this part in the **stored** block's content array, and the address
+   * a fetch is made with.
+   *
+   * A stamped field rather than the position it arrives at, because that
+   * position is not stable: `headOf` builds a truncated head by keeping text
+   * parts up to budget and dropping every other part, so a block that is both
+   * over the text budget and image-bearing has its parts renumbered the moment
+   * the two rules compose. Stamped, the address survives any later reshaping —
+   * and the route verifies it against the stored block rather than trusting it.
+   */
+  part_index: number
+}
+
+/** How many bytes a base64 payload decodes to, without decoding it. */
+function base64Bytes(data: string): number {
+  const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0
+  return Math.max(0, Math.floor((data.length * 3) / 4) - padding)
+}
+
+/**
+ * Project one `tool_result` content part onto its {@link ImageRefPart}, or
+ * `undefined` when the part is not a base64 image and must be delivered as it
+ * stands.
+ *
+ * The rule's **one spelling**, shared by the transform that replaces parts
+ * (core), the route that serves them back (server) and the property test that
+ * proves the fold is otherwise unchanged (react) — the same reason every other
+ * member of this family lives here rather than in whichever package applies it.
+ *
+ * Deliberately narrow. The corpus holds exactly two non-text part kinds: this
+ * one, and the CLI's `tool_reference`, of which every instance across 214
+ * sessions totals 122 KB. A "drop non-text parts" rule would sweep those in for
+ * no measurable gain, and narrowness is this family's standing habit.
+ */
+export function imagePartRef(
+  part: { type?: string; [key: string]: unknown },
+  index: number,
+): ImageRefPart | undefined {
+  if (part.type !== 'image') return undefined
+  const source = part.source as { type?: string; data?: unknown; media_type?: unknown } | undefined
+  if (!source || source.type !== 'base64' || typeof source.data !== 'string') return undefined
+  return {
+    type: 'image_ref',
+    media_type:
+      typeof source.media_type === 'string' ? source.media_type : 'application/octet-stream',
+    bytes: base64Bytes(source.data),
+    part_index: index,
+  }
+}
 /** Forward-compatible fallback for block types this protocol version doesn't model. */
 export type UnknownBlock = { type: string; [key: string]: unknown }
 

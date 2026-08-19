@@ -42,11 +42,58 @@ public enum PermissionMode: String, Codable, Sendable, CaseIterable {
 public struct ToolResultPart: Codable, Sendable, Equatable {
   public let type: String
   public let text: String?
+  /// The three fields of protocol's `ImageRefPart`, carried here rather than in
+  /// a part type of their own because `ToolResultContent` decodes one
+  /// heterogeneous array and a Swift enum per part kind would turn every fold
+  /// below into a switch.
+  ///
+  /// All optional, and that is the compatibility story: an old gateway — or a
+  /// socket that never asked (`WorkerClient.attach(imageRefs:)`) — sends parts
+  /// that carry none of them, and a part with no `text` and no ref contributes
+  /// nothing to ``ToolResultContent/joinedText`` exactly as the CLI's own
+  /// `tool_reference` part already does. That is this rule family's safe
+  /// failure: an unaware reader renders what it renders today, which is nothing.
+  public let mediaType: String?
+  /// Decoded size, which a holder of an address cannot compute. Not cosmetic:
+  /// the placeholder drawn before the fetch spells it, and in the terminal
+  /// theme a rendered string is a row's measured height.
+  public let bytes: Int?
+  /// Index of the part in the **stored** block, and the address a fetch is made
+  /// with. Never the position it arrived at: a head keeps text parts up to
+  /// budget and drops the rest, so positions are renumbered the moment
+  /// truncation and this rule compose.
+  public let partIndex: Int?
 
-  public init(type: String, text: String?) {
+  public init(
+    type: String, text: String?, mediaType: String? = nil, bytes: Int? = nil,
+    partIndex: Int? = nil
+  ) {
     self.type = type
     self.text = text
+    self.mediaType = mediaType
+    self.bytes = bytes
+    self.partIndex = partIndex
   }
+
+  private enum CodingKeys: String, CodingKey {
+    case type, text, bytes
+    case mediaType = "media_type"
+    case partIndex = "part_index"
+  }
+}
+
+/// How many bytes a base64 payload decodes to, without decoding it — the
+/// phone's copy of protocol's `base64Bytes`.
+///
+/// The projection itself happens on the **gateway**: a ref minted here would be
+/// an address with no route behind it, since only the gateway holds the stored
+/// log the fetch reads. This exists so the arithmetic the two clients agree on
+/// is written down once on this side too and can be pinned by a test against a
+/// real payload — the same reason `WorkerDeckKit` mirrors rules it does not
+/// drive.
+public func base64DecodedBytes(_ data: String) -> Int {
+  let padding = data.hasSuffix("==") ? 2 : data.hasSuffix("=") ? 1 : 0
+  return max(0, data.count * 3 / 4 - padding)
 }
 
 public enum ToolResultContent: Sendable, Equatable {
@@ -60,6 +107,26 @@ public enum ToolResultContent: Sendable, Equatable {
     case .parts(let parts):
       return parts.compactMap { $0.text }.filter { !$0.isEmpty }.joined(separator: "\n")
     }
+  }
+
+  /// The `image_ref` addresses in this content, or `nil` when it holds none —
+  /// which is the common case, and is why this is not an empty array: an absent
+  /// field keeps the tool-call item byte-identical, and that item is
+  /// `Equatable` and half the row-plan cache's key.
+  ///
+  /// Mirrors the react reducer's `imageRefsOf`. Reads `part_index` rather than
+  /// the array position for the reason the field exists: a truncated head has
+  /// already dropped parts by the time this runs.
+  public func imageRefs(sourceSeq: Int) -> [ToolResultImageRef]? {
+    guard case .parts(let parts) = self else { return nil }
+    let refs = parts.enumerated().compactMap { position, part -> ToolResultImageRef? in
+      guard part.type == "image_ref" else { return nil }
+      return ToolResultImageRef(
+        partIndex: part.partIndex ?? position,
+        mediaType: part.mediaType ?? "application/octet-stream",
+        bytes: part.bytes ?? 0, sourceSeq: sourceSeq)
+    }
+    return refs.isEmpty ? nil : refs
   }
 }
 

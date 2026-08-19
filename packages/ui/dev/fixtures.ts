@@ -724,6 +724,74 @@ const subagents: TranscriptItem[] = [
   }),
 ]
 
+/** Replayed image parts — the seventh rule's rows. The playground supplies no
+ * image loader (its default resolves `undefined`), so every box here settles
+ * into its *failure* state, which is deliberate: placeholder, picture and
+ * failure are all one box of `IMAGE_BOX_LINES`, so whichever state the audit
+ * catches must measure the same. A row whose height moved when the fetch failed
+ * would be the exact defect the fixed box exists to prevent.
+ *
+ * Three shapes on purpose: one image beside prose, several on one call (a run of
+ * screenshots), and an image on a call whose text is also over the collapsed
+ * budget — the two rules composed, which is where the addresses get renumbered.
+ */
+const images: TranscriptItem[] = [
+  item({ kind: 'user', text: 'Look at the three mockups and tell me which one holds up.' }),
+  item({
+    kind: 'tool_call',
+    name: 'Read',
+    input: { file_path: 'design/mockup-a.png' },
+    parentToolUseId: null,
+    status: 'settled',
+    result: {
+      text: 'Read image design/mockup-a.png (1440x900)',
+      isError: false,
+      images: [{ partIndex: 1, mediaType: 'image/png', bytes: 344_064, sourceSeq: 41 }],
+    },
+  }),
+  item({
+    kind: 'assistant_text',
+    text: 'The first holds up. Pulling the other two so they can be compared side by side:',
+    streaming: false,
+    parentToolUseId: null,
+  }),
+  item({
+    kind: 'tool_call',
+    name: 'mcp__chrome-devtools__take_screenshot',
+    input: { fullPage: true },
+    parentToolUseId: null,
+    status: 'settled',
+    result: {
+      text: 'Captured 2 viewports',
+      isError: false,
+      images: [
+        { partIndex: 0, mediaType: 'image/jpeg', bytes: 511_000, sourceSeq: 44 },
+        { partIndex: 2, mediaType: 'image/webp', bytes: 96_500, sourceSeq: 44 },
+      ],
+    },
+  }),
+  item({
+    kind: 'tool_call',
+    name: 'Bash',
+    input: { command: 'pnpm exec vitest run --reporter verbose' },
+    parentToolUseId: null,
+    status: 'settled',
+    result: {
+      text: Array.from({ length: 120 }, (_, i) => ` ✓ packages/ui/test/case ${i + 1} (${i * 2}ms)`).join('\n'),
+      isError: false,
+      // A picture after the text budget ran out: stored at index 7, and it must
+      // still be addressed as 7 rather than by where it landed.
+      images: [{ partIndex: 7, mediaType: 'image/png', bytes: 12_288, sourceSeq: 51 }],
+    },
+  }),
+  item({
+    kind: 'assistant_text',
+    text: 'Mockup A. The other two lose the header at narrow widths.',
+    streaming: false,
+    parentToolUseId: null,
+  }),
+]
+
 export const FIXTURES: { key: string; label: string; state: TranscriptState }[] = [
   { key: 'subagents', label: 'subagents (interleaved)', state: base(subagents, 'running') },
   { key: 'run', label: 'live run', state: base(run, 'running') },
@@ -734,6 +802,7 @@ export const FIXTURES: { key: string; label: string; state: TranscriptState }[] 
   { key: 'huge', label: 'huge (600 rows)', state: base(huge, 'idle') },
   { key: 'perf', label: 'perf (4k items)', state: base(perf, 'idle') },
   { key: 'adversarial', label: 'adversarial (spike)', state: base(adversarial, 'idle') },
+  { key: 'images', label: 'image refs', state: base(images, 'idle') },
   // A run with the approval standing — the scrubber pins its mark at the foot.
   {
     key: 'approval',

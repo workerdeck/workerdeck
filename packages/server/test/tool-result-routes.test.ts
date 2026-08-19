@@ -209,3 +209,150 @@ describe('GET /sessions/:id/events/:seq/result', () => {
     expect((await fetch(`${base}/sessions/nope/events/1/result?toolUseId=call-1`)).status).toBe(404)
   })
 })
+
+/**
+ * Image parts replayed as references, over the same real socket and route.
+ *
+ * The claim that matters most is the first one, and it is the same claim Part 4
+ * had to make: an attach that did **not** ask is byte-identical to what this
+ * gateway sent before the rule existed. That is what keeps this additive at
+ * protocol 7 — asserted here rather than argued in a doc.
+ */
+const IMG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02])
+const IMG_B64 = IMG.toString('base64')
+
+const imagePart = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: IMG_B64 } }
+
+/** A settled tool call whose result carries text and a picture. */
+async function seedImage(harness: ReturnType<typeof fakeHarness>, base: string) {
+  const id = await createSession(base)
+  harness.emit({
+    type: 'assistant',
+    session_id: 's',
+    message: {
+      role: 'assistant',
+      content: [{ type: 'tool_use', id: 'call-img', name: 'Read', input: { file_path: 'shot.png' } }],
+    },
+  } as unknown as SDKMessage)
+  harness.emit({
+    type: 'user',
+    session_id: 's',
+    message: {
+      role: 'user',
+      content: [
+        {
+          type: 'tool_result',
+          tool_use_id: 'call-img',
+          content: [{ type: 'text', text: 'read the screenshot' }, imagePart],
+        },
+      ],
+    },
+  } as unknown as SDKMessage)
+  await new Promise((resolve) => setTimeout(resolve, 60))
+  return id
+}
+
+describe('image-ref replay', () => {
+  const partsOf = (event: SessionEvent | undefined) =>
+    resultBlock(event)?.content as Array<Record<string, unknown>> | undefined
+
+  it('sends the base64 whole when nobody asked — byte-identical to before this rule', async () => {
+    const harness = fakeHarness()
+    const { base, wsBase } = await start(harness)
+    const id = await seedImage(harness, base)
+
+    const parts = partsOf((await replay(wsBase, id)).find((e) => e.type === 'user_message'))
+    expect(parts?.[1]).toEqual(imagePart)
+  })
+
+  it('sends an address instead, when the socket asked', async () => {
+    const harness = fakeHarness()
+    const { base, wsBase } = await start(harness)
+    const id = await seedImage(harness, base)
+
+    const parts = partsOf(
+      (await replay(wsBase, id, '?imageRefs=1')).find((e) => e.type === 'user_message'),
+    )
+    expect(parts?.[0]).toEqual({ type: 'text', text: 'read the screenshot' })
+    expect(parts?.[1]).toEqual({
+      type: 'image_ref',
+      media_type: 'image/png',
+      bytes: IMG.length,
+      part_index: 1,
+    })
+  })
+
+  it('leaves the stored log whole — the bytes are what the route serves back', async () => {
+    const harness = fakeHarness()
+    const { base, wsBase } = await start(harness)
+    const id = await seedImage(harness, base)
+
+    await replay(wsBase, id, '?imageRefs=1')
+    const parts = partsOf((await replay(wsBase, id)).find((e) => e.type === 'user_message'))
+    expect(parts?.[1]).toEqual(imagePart)
+  })
+
+  describe('?part=N', () => {
+    const seqOfImage = (events: SessionEvent[]) =>
+      events.find((e) => e.type === 'user_message' && resultBlock(e))!.seq
+
+    it('round-trips the exact bytes, with the stored media type', async () => {
+      const harness = fakeHarness()
+      const { base, wsBase } = await start(harness)
+      const id = await seedImage(harness, base)
+      const seq = seqOfImage(await replay(wsBase, id, '?imageRefs=1'))
+
+      const res = await fetch(`${base}/sessions/${id}/events/${seq}/result?toolUseId=call-img&part=1`)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toBe('image/png')
+      expect(Buffer.from(await res.arrayBuffer())).toEqual(IMG)
+    })
+
+    it('404s for a part that is not a base64 image', async () => {
+      const harness = fakeHarness()
+      const { base, wsBase } = await start(harness)
+      const id = await seedImage(harness, base)
+      const seq = seqOfImage(await replay(wsBase, id, '?imageRefs=1'))
+
+      // index 0 is the text part; index 9 is off the end.
+      for (const part of [0, 9]) {
+        const res = await fetch(
+          `${base}/sessions/${id}/events/${seq}/result?toolUseId=call-img&part=${part}`,
+        )
+        expect(res.status).toBe(404)
+      }
+    })
+
+    it('refuses a mismatched toolUseId rather than serving another call’s pixels', async () => {
+      const harness = fakeHarness()
+      const { base, wsBase } = await start(harness)
+      const id = await seedImage(harness, base)
+      const seq = seqOfImage(await replay(wsBase, id, '?imageRefs=1'))
+
+      const res = await fetch(`${base}/sessions/${id}/events/${seq}/result?toolUseId=other&part=1`)
+      expect(res.status).toBe(404)
+    })
+  })
+
+  it('the JSON mode ships base64 by default and addresses when asked', async () => {
+    const harness = fakeHarness()
+    const { base, wsBase } = await start(harness)
+    const id = await seedImage(harness, base)
+    const seq = (await replay(wsBase, id)).find((e) => e.type === 'user_message')!.seq
+
+    const whole = (await (
+      await fetch(`${base}/sessions/${id}/events/${seq}/result?toolUseId=call-img`)
+    ).json()) as { content: Array<Record<string, unknown>> }
+    expect(whole.content[1]).toEqual(imagePart)
+
+    const refd = (await (
+      await fetch(`${base}/sessions/${id}/events/${seq}/result?toolUseId=call-img&imageRefs=1`)
+    ).json()) as { content: Array<Record<string, unknown>> }
+    expect(refd.content[1]).toEqual({
+      type: 'image_ref',
+      media_type: 'image/png',
+      bytes: IMG.length,
+      part_index: 1,
+    })
+  })
+})

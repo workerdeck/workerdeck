@@ -35,6 +35,14 @@ final class TerminalRowCell: UICollectionViewCell {
   private let backdrop = BackdropView()
   private let gutter = GutterView()
   private let body = BodyTextView()
+  /// One per planned image box, laid over the blank lines the planner reserved
+  /// for it. A fourth view kind, and the only thing in this cell that is not
+  /// drawn: a picture is a picture, and `UIImageView` scales one correctly for
+  /// free. There are at most a handful per row, so the per-line view count this
+  /// rewrite exists to shed is untouched.
+  private var imageBoxes: [ImageBoxView] = []
+  private var imageTasks: [Task<Void, Never>] = []
+  private weak var imageLoader: TerminalImageLoader?
   private var press: ((TermPress) -> Void)?
   /// How much text was selected when the finger went down — see `handleTap`.
   private var selectionAtTouchDown = 0
@@ -85,17 +93,20 @@ final class TerminalRowCell: UICollectionViewCell {
 
   func configure(
     lines: [TermLine], typography: TerminalTypography, metrics: TerminalMetrics,
-    gapAbove: Bool, bleed: CGFloat, onPress: @escaping (TermPress) -> Void
+    gapAbove: Bool, bleed: CGFloat, imageLoader: TerminalImageLoader? = nil,
+    onPress: @escaping (TermPress) -> Void
   ) {
     self.lines = lines
     self.geometry = TerminalRowGeometry(metrics: metrics, bleed: bleed)
     self.topInset = gapAbove ? metrics.line : 0
     self.press = onPress
+    self.imageLoader = imageLoader
 
     body.attributedText = TerminalTextRun.make(
       lines: lines, typography: typography, geometry: geometry)
     gutter.set(lines: lines, typography: typography, geometry: geometry)
     backdrop.set(lines: lines, geometry: geometry)
+    rebuildImageBoxes(typography: typography)
     setNeedsLayout()
 
     syncPulse()
@@ -104,8 +115,50 @@ final class TerminalRowCell: UICollectionViewCell {
   override func prepareForReuse() {
     super.prepareForReuse()
     stopPulse()
+    cancelImageLoads()
     press = nil
     lines = []
+    imageLoader = nil
+    imageBoxes.forEach { $0.removeFromSuperview() }
+    imageBoxes = []
+  }
+
+  // MARK: - Images
+
+  /// A box per planned image, in whatever state the loader already knows.
+  ///
+  /// Rebuilt on configure rather than reused across rows: a recycled cell draws
+  /// a different call's pictures, and a box that kept the old image for a frame
+  /// would put someone else's screenshot under this row's header.
+  private func rebuildImageBoxes(typography: TerminalTypography) {
+    imageBoxes.forEach { $0.removeFromSuperview() }
+    imageBoxes = lines.enumerated().compactMap { index, line in
+      guard let box = line.image else { return nil }
+      let view = ImageBoxView(
+        box: box, lineIndex: index, typography: typography, lineHeight: geometry.metrics.line)
+      view.render(imageLoader?.state(for: box) ?? .placeholder)
+      contentView.insertSubview(view, aboveSubview: body)
+      return view
+    }
+  }
+
+  /// Fire the fetches for whatever this row is showing — called from
+  /// `willDisplay`, which is the collection view answering "is this on screen"
+  /// so nothing here has to.
+  func beginImageLoads() {
+    guard let imageLoader, imageTasks.isEmpty else { return }
+    imageTasks = imageBoxes.compactMap { view in
+      imageLoader.load(view.box) { [weak view] state in view?.render(state) }
+    }
+  }
+
+  /// Called from `didEndDisplaying`. Cancelling a scrolled-past fetch is the
+  /// whole reason a fast scrub through an image session does not pull fifty
+  /// screenshots nobody read; the ones that already landed stay in the loader's
+  /// cache, so a scroll back is free.
+  func cancelImageLoads() {
+    imageTasks.forEach { $0.cancel() }
+    imageTasks = []
   }
 
   /// Off the window is off the clock, and it is what stops a recycled-away cell
@@ -143,6 +196,18 @@ final class TerminalRowCell: UICollectionViewCell {
     backdrop.frame = frame
     gutter.frame = frame
     body.frame = frame
+    for view in imageBoxes {
+      // Exactly the lines the planner reserved: the body column at the left,
+      // one cell of bleed at the right, and `box.lines` whole lines tall. Every
+      // number here is the plan's, which is what makes the placeholder, the
+      // picture and the failure notice identical in size.
+      let line = lines[view.lineIndex]
+      let x = geometry.bodyX(line)
+      view.frame = CGRect(
+        x: x, y: topInset + CGFloat(view.lineIndex) * geometry.metrics.line,
+        width: max(0, bounds.width - x - geometry.bleed),
+        height: CGFloat(view.box.lines) * geometry.metrics.line)
+    }
   }
 
   /// What the text system says this row's body actually occupies. The claim the
@@ -446,6 +511,80 @@ extension TerminalRowCell {
       guard !UIAccessibility.isReduceMotionEnabled else { return TermGlyph.pulseRest }
       let step = Int(Date.timeIntervalSinceReferenceDate / TermGlyph.pulseInterval)
       return TermGlyph.pulseFrames[step % TermGlyph.pulseFrames.count]
+    }
+  }
+
+  /// One image's box: a dim wash, the placeholder words, and the picture over
+  /// them once it lands.
+  ///
+  /// **Its height never changes.** The frame is `box.lines × line` in all three
+  /// states, set by the cell from the plan, so nothing here can reflow the
+  /// transcript — which is the whole reason images are drawn in a fixed box
+  /// rather than at their intrinsic size. `.scaleAspectFit` is what that costs:
+  /// a wide screenshot letterboxes.
+  ///
+  /// Pointer-transparent throughout, so a tap on the picture is a tap on the
+  /// block — the theme's rule that every line a block drew is one target, and
+  /// the image is not an exception to it.
+  final class ImageBoxView: UIView {
+    let box: TermImageBox
+    /// Which planned line this box starts on — the cell's own arithmetic reads
+    /// it back to place the frame.
+    let lineIndex: Int
+    private let label = UILabel()
+    private let picture = UIImageView()
+
+    private let lineHeight: CGFloat
+
+    init(
+      box: TermImageBox, lineIndex: Int, typography: TerminalTypography, lineHeight: CGFloat
+    ) {
+      self.box = box
+      self.lineIndex = lineIndex
+      self.lineHeight = lineHeight
+      super.init(frame: .zero)
+      isUserInteractionEnabled = false
+      backgroundColor = TerminalPalette.uiBand(.output)
+      clipsToBounds = true
+
+      label.font = typography.uiFont
+      label.textColor = TerminalPalette.uiColor(.faint)
+      label.numberOfLines = 1
+      addSubview(label)
+
+      picture.contentMode = .scaleAspectFit
+      picture.isHidden = true
+      addSubview(picture)
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    func render(_ state: TerminalImageState) {
+      switch state {
+      case .placeholder:
+        label.text = TermImage.placeholder(bytes: box.bytes)
+        picture.image = nil
+        picture.isHidden = true
+      case .loaded(let image):
+        // Cleared, not merely covered: `.scaleAspectFit` letterboxes, so words
+        // left behind the picture would show beside it rather than under it.
+        label.text = nil
+        picture.image = image
+        picture.isHidden = false
+      case .failed:
+        label.text = TermImage.unavailable
+        picture.image = nil
+        picture.isHidden = true
+      }
+    }
+
+    override func layoutSubviews() {
+      super.layoutSubviews()
+      // The words sit on the box's **first line**, not centred in it: this is a
+      // grid, and a string floating at the box's midpoint would be the one
+      // piece of text in the transcript that is not on a line.
+      label.frame = CGRect(x: 0, y: 0, width: bounds.width, height: lineHeight)
+      picture.frame = bounds
     }
   }
 

@@ -40,6 +40,10 @@ struct TerminalTranscriptView: View {
   /// session (the preview harness), and the press is then a no-op — which is
   /// correct there, since nothing truncated a replay nobody asked for.
   @Environment(\.toolResultFetcher) private var fetchToolResult
+  /// How a row's image boxes get their bytes. Nil outside a live session, and
+  /// the boxes then rest on their placeholder — correct there, since nothing
+  /// refs a replay nobody asked for.
+  @Environment(\.terminalImageLoader) private var imageLoader
 
   private var typography: TerminalTypography { .measure(fontSize: Self.fontSize) }
 
@@ -65,7 +69,7 @@ struct TerminalTranscriptView: View {
             configureRow: { cell, index in
               cell.configure(
                 lines: model.plan(at: index), typography: typography, metrics: metrics,
-                gapAbove: model.gapAbove(index), bleed: bleed,
+                gapAbove: model.gapAbove(index), bleed: bleed, imageLoader: imageLoader,
                 onPress: { model.press($0, row: index, fetch: fetchToolResult) })
             }
           )

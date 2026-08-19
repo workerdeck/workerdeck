@@ -584,3 +584,37 @@ arrives as its head with `truncated`/`total_chars` set, and the rest is one
 deliberately not planned from `total_chars` — that would invent a line count for text nobody has
 seen, which is the estimate-and-correct model this renderer exists not to be. The cards renderer
 carries the same affordance, because the variant is a preference and a head reaches both.
+
+**Tool-result images.** The attach also asks for `?imageRefs=1` — its **own** flag beside
+`truncateResults`, not a widening of it, and asked for in the same one place. A `tool_result`'s
+base64 `image` parts then arrive as `image_ref` addresses (`media_type`, decoded `bytes`,
+`part_index`) and the bytes are fetched over `WorkerClient.toolResultImage` when the row is
+actually on screen. This is where the payload was: measured across 214 local sessions, **91% of
+all tool-result payload is base64 no client renders** — `joinedText` drops it exactly as the web's
+`blockText` does — so this makes a tool's pictures visible on the phone for the first time *and*
+takes them off the wire.
+
+The height model is what shapes the rendering. Everything else here is planned and then drawn, so
+an image cannot be sized by its own pixels: nobody has fetched them, and a row that self-corrected
+on load would be the estimate-and-correct model this renderer exists not to be. So the planner
+reserves a **fixed box of `TermImage.boxLines` (12) whole lines per image** — the same constant
+the web client uses — carried on the box's first `TermLine` as a `TermImageBox` with the lines
+under it merely holding the grid. The box is that size in all three states (placeholder
+`image · 335.0 KB`, the picture, `image unavailable`), so a fetch landing or failing can never
+reflow the transcript, and `TerminalAudit` needs no new claim: a box of K lines is exact by
+definition.
+
+Two divergences from the web client, both deliberate:
+
+- **The box stays fixed when the row is expanded.** There an expanded row is mounted and
+  self-measures, so an image may reveal its intrinsic size; here nothing self-measures. Tested as
+  a divergence, like run-of-one.
+- **Cards does not draw them.** The terminal renderer is the one that reserves grid, and a
+  fixed-height frame in the cards renderer is a separate piece of work. Images in the cards
+  variant stay as invisible as they are today, which is a gap rather than a regression.
+
+Laziness is the collection view's own: `willDisplay` fires the fetch, `didEndDisplaying` cancels
+the `URLSession` task, and `TerminalImageLoader` holds an `NSCache` of *decoded* images between —
+so a scroll back is free and a fast scrub through an image session does not pull fifty screenshots
+nobody read. A failure is remembered rather than retried, because a stale address after a dormant
+wake 404s by design (the gateway verifies `toolUseId` rather than serving another call's pixels).

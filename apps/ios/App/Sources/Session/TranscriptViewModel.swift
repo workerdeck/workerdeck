@@ -118,7 +118,12 @@ final class TranscriptViewModel {
     // belongs to the unit that renders, because a caller that cannot fetch a
     // head back would present one as the whole result. Both renderers below can
     // (see `loadFullResult`).
-    let handle = client.attach(sessionId: sessionId, afterSeq: 0, truncateResults: true)
+    // `imageRefs` is its own opt-in beside it, and asked for here for the same
+    // reason: this is the unit that renders, and it can fetch a picture back
+    // (see `loadToolImage`). It is where the bytes actually were — 91% of all
+    // tool-result payload, none of it ever drawn.
+    let handle = client.attach(
+      sessionId: sessionId, afterSeq: 0, truncateResults: true, imageRefs: true)
     self.handle = handle
     await withTaskCancellationHandler {
       for await event in handle.events {
@@ -412,14 +417,27 @@ final class TranscriptViewModel {
       guard let self else { return }
       defer { self.fetchingResults.remove(toolUseId) }
       guard
+        // `imageRefs` here too: without it this JSON carries every screenshot's
+        // base64 and the fold below keeps only the text — bytes paid for and
+        // discarded on a press that asked about words.
         let response = try? await self.client.toolResult(
-          sessionId: self.sessionId, seq: seq, toolUseId: toolUseId)
+          sessionId: self.sessionId, seq: seq, toolUseId: toolUseId, imageRefs: true)
       else { return }
       let hydrated = hydrateToolResult(self.state, toolUseId: toolUseId, text: response.text)
       guard hydrated != self.state else { return }
       self.state = hydrated
       self.revision &+= 1
     }
+  }
+
+  /// One image part's bytes, for a box the reader has scrolled into view.
+  ///
+  /// Nothing is cached here: the loader that calls this owns an `NSCache` of
+  /// *decoded* images, which is the expensive half, and a second copy of the raw
+  /// bytes beside it would be the memory this feature exists to stop spending.
+  func loadToolImage(seq: Int, toolUseId: String, partIndex: Int) async throws -> Data {
+    try await client.toolResultImage(
+      sessionId: sessionId, seq: seq, toolUseId: toolUseId, partIndex: partIndex)
   }
 
   func dismissProtocolError() { lastProtocolError = nil }

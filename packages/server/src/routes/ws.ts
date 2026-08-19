@@ -20,6 +20,13 @@ export function attachClient(
   // whether it can fetch the rest (see `Runner.subscribe`). A gateway that
   // truncated for everyone would hand an older client a head with no marker.
   const truncateResults = url.searchParams.get('truncateResults') === '1'
+  // Its own flag rather than a widening of `truncateResults`, and the reason is
+  // the family's no-bump argument itself: it rests on "a client that never asked
+  // cannot receive one" holding *by construction*. A flag whose meaning grew
+  // after it shipped is exactly the fact a later reader cannot recover, and a
+  // caller that asked for text heads never asked to have its pixels swapped for
+  // addresses it has no code to fetch.
+  const imageRefs = url.searchParams.get('imageRefs') === '1'
 
   const send = (frame: ServerFrame): void => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(frame))
@@ -41,6 +48,7 @@ export function attachClient(
   const unsubscribe = runner.subscribe((event) => send({ type: 'event', event }), afterSeq, {
     coalesceReplay: true,
     truncateResults,
+    imageRefs,
   })
   // Register for bridged tool calls: this client can be asked to execute them
   // in its own sandbox (see BridgeHub).

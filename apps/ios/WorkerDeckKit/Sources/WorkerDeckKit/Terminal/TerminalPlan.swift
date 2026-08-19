@@ -123,6 +123,11 @@ public struct TermLine: Equatable, Sendable {
   /// A pointer can hit a 19px strip; a thumb cannot, so here every line a block
   /// drew carries the block's press and the whole of it is one target.
   public var press: TermPress?
+  /// The picture this line begins, when the line is the head of an image box.
+  /// Never affects the height — the box is already `image.lines` planned lines,
+  /// this one included — so it rides the plan rather than making the view work
+  /// out which lines were reserved for what.
+  public var image: TermImageBox?
   /// Is this line inside a block that is open? Drawn as a full-bleed wash — the
   /// web client's `.term-open` — so eighty lines that appeared at once read as
   /// one block rather than as the transcript having grown.
@@ -132,7 +137,8 @@ public struct TermLine: Equatable, Sendable {
     gutter: String = "", gutterTone: TermTone = .dim, text: String,
     attributed: AttributedString? = nil, tone: TermTone = .fg, columns: Int = 2, indent: Int = 0,
     band: TermBand = .none, bold: Bool = false, italic: Bool = false, nested: Bool = false,
-    pulsing: Bool = false, press: TermPress? = nil, inOpen: Bool = false
+    pulsing: Bool = false, press: TermPress? = nil, image: TermImageBox? = nil,
+    inOpen: Bool = false
   ) {
     self.gutter = gutter
     self.gutterTone = gutterTone
@@ -147,8 +153,51 @@ public struct TermLine: Equatable, Sendable {
     self.nested = nested
     self.pulsing = pulsing
     self.press = press
+    self.image = image
     self.inOpen = inOpen
   }
+}
+
+/// A picture reserved on the grid: which image it is, and how many whole lines
+/// of the plan belong to it.
+///
+/// Carried on the **first** line of the box; the lines after it are ordinary
+/// blank ones. That is what keeps the height model intact — the box is
+/// `lines` planned lines whatever state it is in, so the placeholder, the
+/// loaded picture and the failure notice are all exactly as tall as each other
+/// and a load can never reflow the transcript.
+///
+/// It carries its own address rather than a pointer back into the item: the
+/// renderer is handed lines and nothing else, and a cell that had to find its
+/// call again would be a second answer to a question the planner already
+/// answered.
+public struct TermImageBox: Equatable, Sendable {
+  /// The `tool_use` id the gateway verifies the address against.
+  public var toolUseId: String
+  public var sourceSeq: Int
+  public var partIndex: Int
+  public var mediaType: String
+  public var bytes: Int
+  /// Whole lines this box occupies, always ``TermImage/boxLines``. On the box
+  /// rather than read from the constant at draw time so the view sizes what was
+  /// actually planned, never what the constant happens to say now.
+  public var lines: Int
+
+  public init(
+    toolUseId: String, sourceSeq: Int, partIndex: Int, mediaType: String, bytes: Int,
+    lines: Int = TermImage.boxLines
+  ) {
+    self.toolUseId = toolUseId
+    self.sourceSeq = sourceSeq
+    self.partIndex = partIndex
+    self.mediaType = mediaType
+    self.bytes = bytes
+    self.lines = lines
+  }
+
+  /// A stable identity for a cache and for an in-flight fetch. Not the row: the
+  /// same picture is the same picture whichever row it lands in after a fold.
+  public var key: String { "\(sourceSeq)/\(toolUseId)/\(partIndex)" }
 }
 
 /// The gutter glyph vocabulary — the CLI's own.

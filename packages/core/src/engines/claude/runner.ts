@@ -41,7 +41,7 @@ import {
   toApiMessage,
 } from '../../lib/normalize.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
-import { replaySlice } from '../../lib/replay.ts'
+import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { SubagentTracker } from './subagents.ts'
 
 export type QueryFn = (params: {
@@ -101,7 +101,7 @@ export class SessionRunner implements Runner {
   /** {@link SessionRunnerConfig.cwd}, checked once in the constructor. */
   readonly #cwd: string
   #events: SessionEvent[] = []
-  #listeners = new Set<SessionEventListener>()
+  #subscribers = new SubscriberSet()
   #seq = 0
   #activityCount = 0
   /**
@@ -364,12 +364,9 @@ export class SessionRunner implements Runner {
   subscribe(
     listener: SessionEventListener,
     afterSeq = 0,
-    options?: { coalesceReplay?: boolean; truncateResults?: boolean },
+    options?: SubscribeOptions,
   ): () => void {
-    for (const event of replaySlice(this.#events, { ...options, afterSeq, resetSeq: this.#resetSeq }))
-      listener(event)
-    this.#listeners.add(listener)
-    return () => this.#listeners.delete(listener)
+    return this.#subscribers.subscribe(this.#events, listener, afterSeq, options, this.#resetSeq)
   }
 
   async #run(): Promise<void> {
@@ -839,13 +836,7 @@ export class SessionRunner implements Runner {
     // event must see it already folded in.
     this.#subagents.observe(body, event.ts)
     this.#events.push(event)
-    for (const listener of this.#listeners) {
-      try {
-        listener(event)
-      } catch {
-        // Listener errors must not break the runner loop.
-      }
-    }
+    this.#subscribers.emit(event)
   }
 }
 

@@ -7,6 +7,7 @@ import {
   toolInputPreview,
 } from '../../lib/format.ts'
 import { taskChildItems, type TerminalBlock, type ToolCallItem } from './blocks.ts'
+import { IMAGE_BOX_LINES } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
 import { runSummary, taskSummary } from './tool-run.ts'
 
@@ -658,6 +659,15 @@ function toolRowHeight(item: ToolCallItem, m: CellMetrics, extraPx: number): Acc
   const preview = toolInputPreview(item.input)
   const backend = item.backend && item.backend !== 'server' ? ` · ${item.backend}` : ''
   let acc = rowH(`${item.name}(${preview})${backend}`, m, { gutterCells: 2, extraPx })
+
+  // Each replayed image part draws a box of whole lines, and it draws it in
+  // every state — placeholder, picture, failure — so the height is settled
+  // before the first byte is asked for and the load can never reflow the list.
+  // No wrap and no `exact: false`: the box is the constant, not the image (see
+  // `image-box.ts`).
+  const images = item.result?.images
+  if (images?.length)
+    acc = add(acc, { px: images.length * IMAGE_BOX_LINES * m.line, exact: true })
 
   if (item.patch) return add(acc, diffHeight(item.patch, m, extraPx))
   const text = item.result?.text ?? ''

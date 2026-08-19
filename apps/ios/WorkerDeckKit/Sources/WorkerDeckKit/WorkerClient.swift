@@ -318,13 +318,26 @@ public struct WorkerClient: Sendable {
   ///     Measured, three such frames were 68% of one 3.1 MB attach. Default off,
   ///     and permanently: only the unit that *renders* may ask for heads, since a
   ///     caller that cannot fetch them back would present one as the whole result.
+  ///   - imageRefs: deliver a `tool_result`'s base64 image parts as `image_ref`
+  ///     addresses, their bytes one ``toolResultImage(sessionId:seq:toolUseId:partIndex:)``
+  ///     away. This is where the bytes actually were: 91% of all tool-result
+  ///     payload across 214 sessions, and no client rendered a byte of it. Its
+  ///     **own** flag rather than a widening of `truncateResults`, because this
+  ///     family's "additive at protocol 7" argument rests on a client that never
+  ///     asked being unable to receive one, by construction. Default off under
+  ///     the same rule, and unlike truncation it applies to **live** events too:
+  ///     the render path is ref-then-fetch, so bytes arriving live would only be
+  ///     discarded or pinned in memory.
   @MainActor
   public func attach(
-    sessionId: String, afterSeq: Int = 0, reconnect: Bool = true, truncateResults: Bool = false
+    sessionId: String, afterSeq: Int = 0, reconnect: Bool = true, truncateResults: Bool = false,
+    imageRefs: Bool = false
   ) -> SessionHandle {
     let client = self
     return SessionHandle(sessionId: sessionId, afterSeq: afterSeq, reconnect: reconnect) { seq in
-      try client.openSocket(sessionId: sessionId, afterSeq: seq, truncateResults: truncateResults)
+      try client.openSocket(
+        sessionId: sessionId, afterSeq: seq, truncateResults: truncateResults,
+        imageRefs: imageRefs)
     }
   }
 
@@ -336,21 +349,48 @@ public struct WorkerClient: Sendable {
   /// another tool's output under the row you pressed is the exact failure this
   /// feature exists to remove. A 404 means "ask again after a fresh attach", not
   /// "empty".
-  public func toolResult(sessionId: String, seq: Int, toolUseId: String) async throws
-    -> ToolResultResponse
-  {
+  ///
+  /// `imageRefs` matters here for the same reason it does on the socket: without
+  /// it, pressing "show everything" on an image-bearing result ships every
+  /// screenshot's base64 inside the JSON and this client keeps only the text.
+  public func toolResult(
+    sessionId: String, seq: Int, toolUseId: String, imageRefs: Bool = false
+  ) async throws -> ToolResultResponse {
     let data = try await call(
       "GET",
       "/sessions/\(Self.encodeComponent(sessionId))/events/\(seq)/result?toolUseId=\(Self.encodeComponent(toolUseId))"
+        + (imageRefs ? "&imageRefs=1" : "")
     )
     return try decode(ToolResultResponse.self, from: data)
   }
 
+  /// One image part's bytes, addressed by the `image_ref` a replay delivered in
+  /// its place.
+  ///
+  /// Fetched rather than pointed at, for the reason `fetchAttachment` is: the
+  /// gateway authenticates with a header, so a `UIImageView` aimed at the URL
+  /// would render a 401. The route answers **raw bytes** with a `Content-Type`,
+  /// not JSON — base64 in a payload would double the memory and add a decode on
+  /// the main thread for something `UIImage(data:)` already does.
+  ///
+  /// A 404 means "ask again after a fresh attach": a woken dormant session has a
+  /// fresh log with fresh seqs, and the gateway verifies `toolUseId` against the
+  /// block rather than serving another call's pixels under the row you are
+  /// looking at.
+  public func toolResultImage(
+    sessionId: String, seq: Int, toolUseId: String, partIndex: Int
+  ) async throws -> Data {
+    try await call(
+      "GET",
+      "/sessions/\(Self.encodeComponent(sessionId))/events/\(seq)/result"
+        + "?toolUseId=\(Self.encodeComponent(toolUseId))&part=\(partIndex)")
+  }
+
   /// WebSocket URL for a session attach: the REST base with `http`→`ws`
   /// (`https`→`wss`), mirroring the reference client's `replace(/^http/, 'ws')`.
-  public func webSocketURL(sessionId: String, afterSeq: Int, truncateResults: Bool = false) throws
-    -> URL
-  {
+  public func webSocketURL(
+    sessionId: String, afterSeq: Int, truncateResults: Bool = false, imageRefs: Bool = false
+  ) throws -> URL {
     var base = Self.trimmedBase(baseURL)
     if base.hasPrefix("https") {
       base = "wss" + base.dropFirst("https".count)
@@ -360,18 +400,20 @@ public struct WorkerClient: Sendable {
     let string =
       "\(base)/sessions/\(Self.encodeComponent(sessionId))/ws?afterSeq=\(afterSeq)"
       + (truncateResults ? "&truncateResults=1" : "")
+      + (imageRefs ? "&imageRefs=1" : "")
     guard let url = URL(string: string) else {
       throw WorkerClientError(message: "Invalid WebSocket URL: \(string)")
     }
     return url
   }
 
-  func openSocket(sessionId: String, afterSeq: Int, truncateResults: Bool = false) throws
-    -> any WebSocketConnecting
-  {
+  func openSocket(
+    sessionId: String, afterSeq: Int, truncateResults: Bool = false, imageRefs: Bool = false
+  ) throws -> any WebSocketConnecting {
     var request = URLRequest(
       url: try webSocketURL(
-        sessionId: sessionId, afterSeq: afterSeq, truncateResults: truncateResults))
+        sessionId: sessionId, afterSeq: afterSeq, truncateResults: truncateResults,
+        imageRefs: imageRefs))
     applyAuth(&request)
     if let socketFactory {
       return socketFactory(request, urlSession)

@@ -38,6 +38,32 @@ public enum ToolCallStatus: String, Sendable, Equatable {
   case failed
 }
 
+/// One picture a tool result carried, as an address rather than as its bytes.
+///
+/// Mirrors the react reducer's `result.images` entry. The bytes are one
+/// `WorkerClient.toolResultImage` call away, and are paid for by exactly the
+/// reader who scrolls the row into view — measured, 91% of all tool-result
+/// payload was base64 no client rendered.
+public struct ToolResultImageRef: Sendable, Equatable {
+  public var partIndex: Int
+  public var mediaType: String
+  public var bytes: Int
+  /// The `seq` of the event this ref arrived on.
+  ///
+  /// Its **own** copy, not a read of the result's `sourceSeq` beside it, and
+  /// that is not redundancy: text hydration clears that one, and a reader who
+  /// pressed "fetch the rest" must still be able to load the screenshot
+  /// afterwards.
+  public var sourceSeq: Int
+
+  public init(partIndex: Int, mediaType: String, bytes: Int, sourceSeq: Int) {
+    self.partIndex = partIndex
+    self.mediaType = mediaType
+    self.bytes = bytes
+    self.sourceSeq = sourceSeq
+  }
+}
+
 /// Terminal output of a tool call, however it was produced (model loop or executor).
 public struct ToolCallResult: Sendable, Equatable {
   public var text: String
@@ -57,16 +83,27 @@ public struct ToolCallResult: Sendable, Equatable {
   /// name it to the fetch route. The item is what the UI holds, so without this
   /// the press has nothing to ask for.
   public var sourceSeq: Int?
+  /// The pictures this result carried, as addresses rather than bytes — set
+  /// **only** when the replay delivered `image_ref` parts, so a result with no
+  /// image stays byte-identical to what it was before this existed. `nil` and
+  /// empty are not the same thing here for the reason above: this type is
+  /// `Equatable` and half the plan cache's key, and an always-present `[]`
+  /// would be a new value for every row in the transcript.
+  ///
+  /// Raw base64 `image` parts are still dropped on arrival, as they always
+  /// were — folding them in would pin megabytes inside `TranscriptState`.
+  public var images: [ToolResultImageRef]?
 
   public init(
     text: String, isError: Bool, truncated: Bool = false, totalChars: Int? = nil,
-    sourceSeq: Int? = nil
+    sourceSeq: Int? = nil, images: [ToolResultImageRef]? = nil
   ) {
     self.text = text
     self.isError = isError
     self.truncated = truncated
     self.totalChars = totalChars
     self.sourceSeq = sourceSeq
+    self.images = images
   }
 }
 
@@ -409,7 +446,12 @@ public func hydrateToolResult(
     else { return item }
     changed = true
     var updated = call
-    updated.result = ToolCallResult(text: text, isError: result.isError)
+    // `images` survives, and the fetched text does **not** get to replace it:
+    // the pictures are addresses that were never truncated, each carrying its
+    // own `sourceSeq` precisely because the result-level one is being cleared
+    // on this line. Dropping them here would make a "fetch the rest" press
+    // silently erase every screenshot in the row.
+    updated.result = ToolCallResult(text: text, isError: result.isError, images: result.images)
     return .toolCall(updated)
   }
   guard changed else { return state }
@@ -495,7 +537,8 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
             text: toolResult.content?.joinedText ?? "", isError: isError,
             truncated: truncated,
             totalChars: truncated ? toolResult.totalChars : nil,
-            sourceSeq: truncated ? event.seq : nil)
+            sourceSeq: truncated ? event.seq : nil,
+            images: toolResult.content?.imageRefs(sourceSeq: event.seq))
           // The engine's own hunks, carried on the message rather than parsed
           // out of the result text — which is why this client needs no diff
           // parser and cannot get the line numbers wrong.

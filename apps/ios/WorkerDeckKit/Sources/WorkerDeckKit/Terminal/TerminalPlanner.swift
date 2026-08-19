@@ -235,6 +235,21 @@ public enum TerminalPlanner {
       gutterTone: tone, tone: .fg, bold: true, nested: nested, pulsing: busy, press: press,
       inOpen: wash)
 
+    // The pictures first, under the header and above whatever the call said in
+    // words — the web client's order, and the one that reads right: a
+    // screenshot is the result, and the prose beside it is a caption.
+    //
+    // Planned in **every** state, collapsed and expanded alike. That is a
+    // deliberate divergence from the web client, where an expanded row is
+    // mounted and self-measures so an image may reveal its intrinsic size; here
+    // nothing self-measures, so a box that grew on expansion would be a frame
+    // the layout got wrong. See `TerminalDivergences`.
+    for (offset, image) in (call.result?.images ?? []).enumerated() {
+      lines += planImageBox(
+        image, callId: call.id, first: offset == 0, metrics: metrics, nested: nested,
+        press: press, inOpen: wash)
+    }
+
     // A file edit shows its diff, not its result prose: "The file has been
     // updated" is what the *model* needed to hear, and the change is what the
     // reader did. Opening the row is how you reach the text underneath.
@@ -306,6 +321,35 @@ public enum TerminalPlanner {
         nested: nested, press: morePress, inOpen: wash)
     }
     return lines
+  }
+
+  /// One image's box: exactly ``TermImage/boxLines`` planned lines, the first
+  /// carrying the address and the rest reserving the grid under it.
+  ///
+  /// The lines hold a space rather than an empty string for the reason the
+  /// result preview does: a trailing empty paragraph is a line fragment the
+  /// text system may or may not produce, and the height claim cannot rest on
+  /// which. Nothing of them is visible — the box is drawn over them — but they
+  /// are what makes `lines.count × line` the box's height by construction, so
+  /// the placeholder, the picture and the failure notice are the same size and
+  /// a fetch landing can never reflow the transcript.
+  ///
+  /// `⎿` on the first box only: it says "this call produced output", and one
+  /// marker per screenshot would be a column of them down a call that returned
+  /// four.
+  static func planImageBox(
+    _ image: ToolResultImageRef, callId: String, first: Bool, metrics: TerminalMetrics,
+    nested: Bool, press: TermPress?, inOpen: Bool
+  ) -> [TermLine] {
+    let box = TermImageBox(
+      toolUseId: callId, sourceSeq: image.sourceSeq, partIndex: image.partIndex,
+      mediaType: image.mediaType, bytes: image.bytes)
+    return (0..<box.lines).map { offset in
+      TermLine(
+        gutter: first && offset == 0 ? TermGlyph.output : "", gutterTone: .dim, text: " ",
+        tone: .dim, columns: 3, indent: 1, nested: nested, press: press,
+        image: offset == 0 ? box : nil, inOpen: inOpen)
+    }
   }
 
   /// Failure first, because a failed write is not a green write; then the

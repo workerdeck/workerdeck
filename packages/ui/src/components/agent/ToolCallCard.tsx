@@ -8,6 +8,13 @@ import { cn } from '../../lib/utils.ts'
 import { toolInputPreview } from '../../lib/format.ts'
 import { toolIcon } from '../../lib/tool-icon.ts'
 import { useToolResultFetcher } from './tool-result-fetch.tsx'
+import { useToolResultImageSrc } from './tool-result-image.tsx'
+// From the terminal folder, which is where the box's one spelling lives: the
+// height calculator is the reason it is a constant at all, and a second copy
+// here would be a second thing to keep in step for no gain. Cards has no
+// calculator — this frame is about not reflowing a virtualized list when the
+// bytes land, which is a claim both themes make.
+import { IMAGE_UNAVAILABLE, imagePlaceholder } from '../terminal/image-box.ts'
 
 export type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
 
@@ -144,6 +151,18 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
   // tool's own output would be if the engine had sent bytes.
   const image = imagePath && hostImage ? <HostImage path={imagePath} load={hostImage} /> : null
 
+  // Beside the host-path picture above, never instead of it: that one is a file
+  // the engine wrote, read back through `/produced` or `/fs`; these are image
+  // parts of the result itself, addressed by `(seq, toolUseId, part)`. Different
+  // store, different route, and a call can plausibly have both.
+  const resultImages = item.result?.images?.length ? (
+    <div className='flex flex-col gap-2 border-t border-border p-2.5'>
+      {item.result.images.map((ref) => (
+        <ResultImage key={ref.partIndex} toolUseId={item.id} image={ref} />
+      ))}
+    </div>
+  ) : null
+
   return (
     <div
       data-slot='tool-call'
@@ -176,6 +195,7 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
         />
       </button>
       {image}
+      {resultImages}
       {details}
     </div>
   )
@@ -194,6 +214,35 @@ function PlainPayload({
   className?: string
 }) {
   return <CodeBlock code={code} label={label} variant='panel' className={className} />
+}
+
+/** One image part of a tool result, as the reducer holds it. */
+type ToolResultImage = NonNullable<NonNullable<ToolCallItem['result']>['images']>[number]
+
+/**
+ * An image part of the result, fetched by reference.
+ *
+ * The frame is a **fixed height in all three states** — placeholder, picture,
+ * failure — which is the one rule this shares with the terminal theme and the
+ * only reason it is worth a component: the transcript is virtualized in both,
+ * and a box that appears when the bytes land shoves every row below it down
+ * while the reader is mid-sentence. Unlike `HostImage`, a failure here is *said*
+ * rather than swallowed: there is no host path in the result text to fall back
+ * on, so silence would be a blank frame with no account of itself.
+ */
+function ResultImage({ toolUseId, image }: { toolUseId: string; image: ToolResultImage }) {
+  const { src, failed } = useToolResultImageSrc({ toolUseId, ...image })
+  return (
+    <div className='flex h-60 items-start overflow-hidden rounded-md border border-border bg-surface-hover'>
+      {src ? (
+        <img src={src} alt={imagePlaceholder(image)} className='h-full max-w-full object-contain' />
+      ) : (
+        <span className='p-2 text-label text-fg-4'>
+          {failed ? IMAGE_UNAVAILABLE : imagePlaceholder(image)}
+        </span>
+      )}
+    </div>
+  )
 }
 
 /**

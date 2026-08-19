@@ -93,11 +93,20 @@ export interface Runner {
    * client that asked for heads without knowing how to fetch the rest would show
    * one as though it were the whole result. Live events are untouched — a result
    * arriving while you watch is already on screen — and so is the stored log,
-   * which parking snapshots and the fetch route both read. */
+   * which parking snapshots and the fetch route both read.
+   *
+   * `imageRefs` replaces a `tool_result`'s base64 image parts with `image_ref`
+   * addresses (protocol's {@link ImageRefPart}), their bytes one REST fetch
+   * away. Opt-in under the same rule — issued by the unit that renders — but
+   * unlike the other two it applies to **live events as well as the replay**,
+   * because the client's one render path is ref-then-fetch and bytes on a live
+   * event would only be discarded or pinned. Measured, this is 91% of all
+   * tool-result payload and 0% of what any client draws. The stored log keeps
+   * every byte, which is what the fetch route serves back. */
   subscribe(
     listener: SessionEventListener,
     afterSeq?: number,
-    options?: { coalesceReplay?: boolean; truncateResults?: boolean },
+    options?: { coalesceReplay?: boolean; truncateResults?: boolean; imageRefs?: boolean },
   ): () => void
   /** One buffered event by seq, or undefined — the read side of the log the
    * replay already walks.
