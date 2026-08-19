@@ -28,12 +28,66 @@ enum UIPreview: String {
   case addMedia
   case mcp
   case markdown
+  case composer
   case terminal
   case terminalOpen
   case terminalStress
 
   static var active: UIPreview? {
     ProcessInfo.processInfo.environment["UIPREVIEW"].flatMap(UIPreview.init(rawValue:))
+  }
+}
+
+/// The docked (terminal) composer in each of its gutter states.
+///
+/// Stacked rather than switched, because the claim being checked is an
+/// *alignment* one: `\u{276F}`, `+` and `\u{2715}` occupy the same cell, and the typed line
+/// must start on the same column whichever of them is standing. A screenshot of
+/// one state cannot show that; a column of them can.
+private struct ComposerPreview: View {
+  private struct Row: View {
+    let caption: String
+    let busy: Bool
+    let canAddMedia: Bool
+    let draft: String
+    @State private var text: String
+    @State private var selection = NSRange(location: 0, length: 0)
+    @State private var focused = false
+
+    init(caption: String, busy: Bool, canAddMedia: Bool, draft: String) {
+      self.caption = caption
+      self.busy = busy
+      self.canAddMedia = canAddMedia
+      self.draft = draft
+      _text = State(initialValue: draft)
+    }
+
+    var body: some View {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(caption).font(.caption2).foregroundStyle(.tertiary).padding(.leading, 8)
+        ComposerView(
+          text: $text, selection: $selection, isFocused: $focused, isBusy: busy,
+          isEnabled: true, attachments: ComposerAttachmentStore(), canAddMedia: canAddMedia,
+          onEdit: { t, r in text = t; selection = r }, onSend: {}, onStop: {}, onAddMedia: {})
+      }
+    }
+  }
+
+  var body: some View {
+    ScrollView {
+      VStack(spacing: 22) {
+        Row(caption: "idle, nothing to attach - the column falls back to the prompt glyph",
+          busy: false, canAddMedia: false, draft: "")
+        Row(caption: "idle, attachments available", busy: false, canAddMedia: true, draft: "")
+        Row(caption: "draft - send is armed", busy: false, canAddMedia: true, draft: "explain the fold")
+        Row(caption: "working - stop takes the gutter, send keeps its slot",
+          busy: true, canAddMedia: true, draft: "")
+        Row(caption: "working WITH a draft - the bug the web fixed: stop must still be reachable",
+          busy: true, canAddMedia: true, draft: "and then run the tests")
+      }
+      .padding(.vertical, 24)
+    }
+    .environment(\.transcriptVariant, .terminal)
   }
 }
 
@@ -337,6 +391,11 @@ struct UIPreviewHarness: View {
         }
         .padding(.vertical, 60)
       }
+    case .composer:
+      // Every state the gutter cell has, stacked, because the whole point of
+      // that cell is that its three occupants must not move the text beside
+      // them — and the only way to see that is to see them above one another.
+      ComposerPreview()
     case .addMedia:
       // Presented over something, because a detent sheet has no shape on its own.
       Color.black.sheet(isPresented: .constant(true)) {

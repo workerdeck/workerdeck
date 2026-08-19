@@ -36,6 +36,20 @@ struct RichTextEditor: UIViewRepresentable {
     transcriptVariant.isTerminal ? lineTextUIStyle : .body
   }
 
+  /// The typeface, and the one place the variant outranks the preference.
+  ///
+  /// `transcriptFont` is a **Cards-only** setting everywhere else in the app,
+  /// because the terminal theme is monospace *by construction* — that is its
+  /// premise, not a preference expressed in it. The field had been following the
+  /// preference regardless, so a terminal transcript drawn in a monospaced grid
+  /// sat above a prompt typed in the system sans: the one row you author was the
+  /// only row not on the grid. The web says the same thing in CSS, where the VS
+  /// Code webview repoints `--cw-font-mono` unconditionally for exactly this
+  /// reason.
+  private var wantedDesign: UIFontDescriptor.SystemDesign {
+    transcriptVariant.isTerminal ? .monospaced : transcriptFont.uiDesign
+  }
+
   func makeCoordinator() -> Coordinator { Coordinator(self) }
 
   func makeUIView(context: Context) -> UITextView {
@@ -46,7 +60,7 @@ struct RichTextEditor: UIViewRepresentable {
     view.textContainerInset = DraftStyle.containerInset
     view.textContainer.lineFragmentPadding = 0
     view.adjustsFontForContentSizeCategory = true
-    DraftStyle.design = transcriptFont.uiDesign
+    DraftStyle.design = wantedDesign
     DraftStyle.textStyle = wantedTextStyle
     view.font = DraftStyle.base
     view.typingAttributes = DraftStyle.baseAttributes
@@ -69,8 +83,8 @@ struct RichTextEditor: UIViewRepresentable {
     }
     // Before the restyle, which paints `baseAttributes` over the whole draft:
     // that is what carries a font change through to text already typed.
-    if DraftStyle.design != transcriptFont.uiDesign || DraftStyle.textStyle != wantedTextStyle {
-      DraftStyle.design = transcriptFont.uiDesign
+    if DraftStyle.design != wantedDesign || DraftStyle.textStyle != wantedTextStyle {
+      DraftStyle.design = wantedDesign
       DraftStyle.textStyle = wantedTextStyle
       view.font = DraftStyle.base
     }

@@ -78,32 +78,83 @@ struct ComposerView: View {
   /// so an empty composer is one row tall instead of two, which is the point of
   /// this variant everywhere else in the app as well.
   private var docked: some View {
-    VStack(spacing: 4) {
+    VStack(spacing: 0) {
       if !attachments.isEmpty {
         AttachmentStrip(store: attachments)
+          .padding(.bottom, 8)
       }
       HStack(alignment: .bottom, spacing: 4) {
-        if canAddMedia {
-          GlyphButton(systemImage: "plus", label: "Add media", action: onAddMedia)
-            .padding(.bottom, glyphBaseline)
-            .disabled(!isEnabled)
-        }
-        field
-        dockedSendButton
+        gutterGlyph
           .padding(.bottom, glyphBaseline)
+        field
+        TermGlyphButton(
+          glyph: "\u{21B5}", label: "Send", tint: canSend ? TerminalPalette.color(.blue) : nil,
+          action: onSend
+        )
+        .disabled(!canSend)
+        .padding(.bottom, glyphBaseline)
       }
     }
     .padding(.horizontal, 6)
-    .padding(.vertical, 6)
+    // Air on each side of the prompt, inside the two rules. A plain 8, not a
+    // fraction of the line: this is chrome between two rules, not a transcript
+    // row, and the whole-multiple rule governs rows.
+    .padding(.vertical, 8)
     // Opaque and reaching past the home indicator: a docked bar with the
     // transcript's background showing under it is not docked.
     .background(Color(.systemBackground).ignoresSafeArea(edges: .bottom))
-    .overlay(alignment: .top) {
-      Rectangle()
-        .fill(isFocused ? Color.accentColor : Color.primary.opacity(0.15))
-        .frame(height: isFocused ? 1.5 : 0.5)
-    }
+    // **Two** rules, top and bottom, both turning accent on focus — the CLI's
+    // own frame for its prompt, and what makes the field its own strip of the
+    // screen rather than the transcript's last row. A side border would take
+    // the gutter glyph off the column every transcript marker sits on, which is
+    // the one thing this shape exists to hold.
+    .overlay(alignment: .top) { rule }
+    .overlay(alignment: .bottom) { rule }
     .animation(.easeOut(duration: 0.15), value: isFocused)
+  }
+
+  private var rule: some View {
+    Rectangle()
+      .fill(isFocused ? Color.accentColor : Color.primary.opacity(0.15))
+      .frame(height: isFocused ? 1.5 : 0.5)
+  }
+
+  /// The composer's **gutter cell** — the column every transcript row's marker
+  /// sits in, so whatever stands here cannot move the text beside it. It holds
+  /// one of three things, in this order:
+  ///
+  /// `\u{2715}` **while the session is working**, because the gutter is where the eye
+  /// already is and stop is the only action that matters mid-run. The condition
+  /// is `isBusy` **alone**, not `isBusy && !canSend`: with send living on the
+  /// other side of the field there is no slot to compete for. Under the old
+  /// test, typing a follow-up mid-run replaced stop with send and left no way to
+  /// stop the turn at all.
+  ///
+  /// A cross rather than a `\u{25A0}`: the square reads as a *state* ("stopped") in a
+  /// column where `\u{25CF}` and `\u{25C6}` really are states, so it looked like a status
+  /// marker rather than something to press.
+  ///
+  /// `+` **otherwise**, when there is anything to attach.
+  ///
+  /// `\u{276F}` when neither applies, so the column is never empty and the typed line
+  /// never shifts as the session starts and stops. Blue, not the brand's coral:
+  /// coral is the *working* mark, and a prompt waiting for you is not the
+  /// session working.
+  @ViewBuilder
+  private var gutterGlyph: some View {
+    if isBusy {
+      TermGlyphButton(
+        glyph: "\u{2715}", label: "Interrupt", tint: TerminalPalette.color(.yellow), action: onStop)
+    } else if canAddMedia {
+      TermGlyphButton(glyph: "+", label: "Add media", action: onAddMedia)
+        .disabled(!isEnabled)
+    } else {
+      Text(TermGlyph.prompt)
+        .font(.system(size: TermGlyphButton.glyphSize, design: .monospaced))
+        .foregroundStyle(TerminalPalette.color(.blue))
+        .frame(width: TermGlyphButton.side, height: TermGlyphButton.side)
+        .accessibilityHidden(true)
+    }
   }
 
   /// How far a glyph has to lift off the bottom to sit on the field's **last
@@ -116,23 +167,7 @@ struct ComposerView: View {
   /// sizes a hardcoded offset would be wrong in the other direction.
   private var glyphBaseline: CGFloat {
     let inset = DraftStyle.containerInset.bottom
-    return max(0, inset + DraftStyle.base.lineHeight / 2 - GlyphButton.side / 2)
-  }
-
-  /// Send and stop as glyphs rather than filled circles — the docked shape's
-  /// counterpart to `sendButton`, keeping the same one-button-two-jobs rule.
-  @ViewBuilder
-  private var dockedSendButton: some View {
-    if isBusy, !canSend {
-      GlyphButton(
-        systemImage: "stop.fill", label: "Stop the current turn", tint: .red, action: onStop)
-    } else {
-      GlyphButton(
-        systemImage: "return", label: "Send", tint: canSend ? Color.accentColor : nil,
-        action: onSend
-      )
-      .disabled(!canSend)
-    }
+    return max(0, inset + DraftStyle.base.lineHeight / 2 - TermGlyphButton.side / 2)
   }
 
   /// Expanded whenever there is something to act on: the keyboard is up, a draft
@@ -142,12 +177,25 @@ struct ComposerView: View {
     isFocused || !text.isEmpty || isBusy || !attachments.isEmpty
   }
 
+  /// The placeholder's font, matching what `RichTextEditor` will set on the
+  /// text view: monospaced at the transcript's size under `terminal` (the theme
+  /// is monospace by construction), body otherwise.
+  private var placeholderFont: Font {
+    variant.isTerminal ? .system(.subheadline, design: .monospaced) : .body
+  }
+
   private var field: some View {
     ZStack(alignment: .topLeading) {
       if text.isEmpty {
         // Matched to `RichTextEditor`'s `textContainerInset`, so the placeholder
         // sits exactly where the first character will.
         Text("Message")
+          // Derived from the variant, **not** read off `DraftStyle`: that is a
+          // process-wide static written by `RichTextEditor` during its own
+          // `makeUIView`, so a `Text` built in the same pass reads whatever the
+          // previous field left there. Spelled from the same two inputs
+          // instead, which is the only version that cannot be a render behind.
+          .font(placeholderFont)
           .foregroundStyle(.tertiary)
           .padding(.horizontal, DraftStyle.containerInset.left)
           .padding(.vertical, DraftStyle.containerInset.top)
@@ -247,19 +295,31 @@ private struct CircleButton: View {
   }
 }
 
-/// A composer action as a **character**, for the docked (terminal) shape: no
-/// pill, no glass, nothing drawn behind it — a glyph the size of the transcript's
-/// own gutter markers, so the typed row's furniture lines up with the
-/// conversation above it rather than towering over it.
-private struct GlyphButton: View {
-  /// Square, and public to the composer because the alignment maths needs it:
-  /// 34pt is the smallest that still reads as a button you can hit with a thumb.
+/// A composer action as a **character**, for the docked (terminal) shape.
+///
+/// A *character*, not an SF Symbol, and that is the whole point: this bar sits
+/// on the transcript's grid, and the glyphs it draws are the ones the CLI draws
+/// — `\u{276F}`, `+`, `\u{2715}`, `\u{21B5}`. A symbol is a picture of a button; these are the
+/// same vocabulary as the markers in the column above, so the furniture reads as
+/// part of the conversation rather than as chat chrome parked underneath it.
+///
+/// No pill and no glass behind it, for the same reason. What replaces them is
+/// tone: the two states worth colouring are coloured (an armed send is blue, a
+/// running turn's stop is yellow) and everything else is the theme's `dim`.
+private struct TermGlyphButton: View {
+  /// The hit target. 34pt is the smallest that still reads as a button under a
+  /// thumb, and it is deliberately larger than the glyph inside it — the target
+  /// is what a finger needs, the glyph is what the grid needs.
   static let side: CGFloat = 34
+  /// Taken from the field's own font rather than named as a constant: the
+  /// composer types at `lineTextUIStyle` and that is a Dynamic Type style, so a
+  /// hardcoded size would be right at one content-size category and wrong at
+  /// every other one — and these glyphs sit *on the typed line*.
+  static var glyphSize: CGFloat { DraftStyle.base.pointSize }
 
-  let systemImage: String
+  let glyph: String
   let label: String
-  /// `nil` = the neutral secondary; set for the two states worth colouring, an
-  /// armed send and a running turn's stop.
+  /// `nil` = the theme's `dim`; set only for the two states worth colouring.
   var tint: Color?
   let action: () -> Void
 
@@ -267,16 +327,10 @@ private struct GlyphButton: View {
 
   var body: some View {
     Button(action: action) {
-      Image(systemName: systemImage)
-        .font(.subheadline.weight(.medium))
-        .foregroundStyle(tint ?? .secondary)
+      Text(glyph)
+        .font(.system(size: Self.glyphSize, design: .monospaced))
+        .foregroundStyle(tint ?? TerminalPalette.color(.dim))
         .frame(width: Self.side, height: Self.side)
-        // A faint surface rather than none: a bare glyph on a flat bar reads as
-        // decoration, and there is nothing else here to say where to press. Faint
-        // enough that the field, not the furniture, is still what draws the eye.
-        .background(
-          Color.primary.opacity(0.07),
-          in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)

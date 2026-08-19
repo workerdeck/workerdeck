@@ -318,6 +318,23 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     does both jobs: a draft always sends — messages queue behind a running turn — and stop takes
     the slot only while a turn is live *and* there is nothing to send. Tapping the transcript puts
     the keyboard away.
+
+    Under `terminal` it is the **CLI's prompt** instead, and the port is the web's rule for rule.
+    The **gutter cell** — the column every transcript marker sits in, so nothing standing there
+    can move the text beside it — holds `✕` (yellow, Interrupt) whenever the session is working,
+    `+` when there is anything to attach, and `❯` (blue) when neither applies, so the column is
+    never empty and the typed line never shifts. `↵` sits alone at the trailing edge and therefore
+    means **one thing at all times**. The busy test is `isBusy` **alone**, not `isBusy && !canSend`:
+    while stop and send shared the trailing slot, typing a follow-up mid-run replaced stop with
+    send and left no way to stop the turn at all — the same bug the web fixed, ported here with
+    the fix. The glyphs are **characters, not SF Symbols**, because this bar sits on the
+    transcript's grid and its vocabulary should be the vocabulary of the column above it. Two
+    rules, top and bottom, both turning accent on focus, with 8pt of air inside them; no side
+    border, which would take the gutter glyph off the column. And the field is **monospaced by
+    construction** — `transcriptFont` is a Cards-only preference everywhere else, and a terminal
+    transcript above a prompt typed in the system sans made the one row you author the only row
+    off the grid. `UIPREVIEW=composer` renders every gutter state stacked, which is the only way
+    to see the alignment claim: `❯`, `+` and `✕` must not move the text beside them.
   - `App/Sources/Session/{AddMediaSheet,ComposerAttachments,AttachmentThumbnail}.swift` — the plus
     button's three sources (Camera / Photos / Files) and everything behind them. Files are
     **uploaded as they are picked**, not at send time, so by the time a message is typed its
@@ -534,6 +551,9 @@ SIMCTL_CHILD_UIPREVIEW=usage xcrun simctl launch --terminate-running-process boo
   bi.atomic.workerdeck.ios
 xcrun simctl io booted screenshot /tmp/usage.png
 ```
+
+`composer` renders the docked composer in each of its gutter states, stacked — an alignment claim
+needs to be seen as a column, not as five separate screenshots.
 
 `terminal` renders the terminal transcript over a fixture built to exercise the row model rather
 than to look plausible — a folded run, two `Task`s whose children interleave, a diff carrying the
