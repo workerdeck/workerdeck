@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { TranscriptState } from '@workerdeck/react'
+import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 import { TerminalPermissionPrompt } from '../src/components/terminal/PermissionPrompt.tsx'
 import { TerminalQuestionPrompt } from '../src/components/terminal/QuestionPrompt.tsx'
 import { TerminalStatusLine } from '../src/components/terminal/StatusLine.tsx'
@@ -67,7 +67,18 @@ export function App() {
   // only allowed smooth scrolling on a *live* status, so a replay under `idle`
   // could never reproduce the travel. Overridable so it can.
   const [statusOverride, setStatusOverride] = useState<TranscriptState['status'] | undefined>()
-  const whole = FIXTURES.find((f) => f.key === fixture)!.state
+  // What a send appends. The panel's re-pin is only interesting against a
+  // transcript that *grows* under it — the reply is what the reader is meant to
+  // be following — so the playground grows one. See `__wdPinTrace`.
+  const [sent, setSent] = useState<TranscriptItem[]>([])
+  const fixtureState = FIXTURES.find((f) => f.key === fixture)!.state
+  const whole = useMemo(
+    () =>
+      sent.length === 0
+        ? fixtureState
+        : { ...fixtureState, items: [...fixtureState.items, ...sent] },
+    [fixtureState, sent],
+  )
   const state = useMemo(() => {
     if (replayTo === undefined && !statusOverride) return whole
     return {
@@ -81,6 +92,33 @@ export function App() {
   const catchUp = fixture === 'huge' ? { from: 300 } : undefined
   const jumpRef = useRef<(() => void) | null>(null)
   const repinRef = useRef<(() => void) | null>(null)
+  // A send, as the panel's `handleSend` shapes it: the row you typed lands
+  // immediately, the answer arrives a few hundred ms later and keeps growing.
+  const sendFixture = (text: string) => {
+    const stamp = Date.now()
+    setSent((prior) => [
+      ...prior,
+      { id: `sent-${stamp}`, kind: 'user', text } as TranscriptItem,
+    ])
+    const reply = (n: number, body: string) =>
+      setTimeout(
+        () =>
+          setSent((prior) => [
+            ...prior,
+            {
+              id: `reply-${stamp}-${n}`,
+              kind: 'assistant_text',
+              text: body,
+              streaming: false,
+              parentToolUseId: null,
+            } as TranscriptItem,
+          ]),
+        150 * n,
+      )
+    reply(1, 'Working on it.')
+    reply(2, 'Reading the files that matter, then the two rules underneath them.')
+    reply(3, 'Done — the change is in `packages/ui`, and the reason is in the header comment.')
+  }
   // Staged attachments, faked. The real hook needs a gateway to upload to, but
   // the strip's geometry is the composer's and belongs in the grid audit —
   // one of each state, so the overlays get drawn too.
@@ -132,6 +170,79 @@ export function App() {
         '[data-slot="conversation"] > div',
       )
       return scroller ? perfSweep(scroller, { step }) : undefined
+    }
+    // The re-pin's own audit: does sending re-pin the transcript, and does the
+    // pin SURVIVE what sending sets off — the composer shedding its lines
+    // (which resizes the scroller, clamping `scrollTop` downward, which
+    // `use-stick-to-bottom` reads as the reader scrolling up), the row you
+    // typed appending, and the reply growing under it.
+    //
+    // Call it, then send. It samples every frame for `ms` and answers with the
+    // gap to the bottom at the end: 0 is pinned, anything else is the reply
+    // streaming off screen. `escapes` counts frames where the transcript sat
+    // more than a line short of the bottom while content was still arriving,
+    // which is what the reader actually sees.
+    w.__wdPinTrace = (ms = 2000) => {
+      const scroller = () =>
+        surface.current?.querySelector<HTMLElement>('[data-slot="conversation"] > div') ??
+        surface.current?.querySelector<HTMLElement>('[data-slot="conversation"]')
+      return new Promise<{ gaps: number[]; final: number; heights: number[] }>((resolve) => {
+        const gaps: number[] = []
+        const heights: number[] = []
+        const started = performance.now()
+        const raf = () => {
+          const el = scroller()
+          if (el) {
+            gaps.push(Math.round(el.scrollHeight - el.clientHeight - el.scrollTop))
+            heights.push(el.clientHeight)
+          }
+          if (performance.now() - started < ms) requestAnimationFrame(raf)
+          else resolve({ gaps, final: gaps[gaps.length - 1] ?? -1, heights })
+        }
+        requestAnimationFrame(raf)
+      })
+    }
+    // Scroll the transcript up by `px` from the bottom — the reader's escape,
+    // which is the precondition for everything above.
+    w.__wdScrollUp = (px = 1200) => {
+      const el =
+        surface.current?.querySelector<HTMLElement>('[data-slot="conversation"] > div') ??
+        surface.current?.querySelector<HTMLElement>('[data-slot="conversation"]')
+      if (el) el.scrollTop = Math.max(0, el.scrollTop - px)
+      return el ? Math.round(el.scrollTop) : -1
+    }
+    // A row that GROWS, not one that appends: a streaming answer changes the
+    // height of the last row on every delta, which is what makes the
+    // virtualizer's size-change correction fire — the other party that writes
+    // `scrollTop`. Appending alone never exercises it.
+    w.__wdStream = (deltas = 20, everyMs = 60) => {
+      const id = `stream-${Date.now()}`
+      let n = 0
+      setSent((prior) => [
+        ...prior,
+        {
+          id,
+          kind: 'assistant_text',
+          text: 'streaming',
+          streaming: true,
+          parentToolUseId: null,
+        } as TranscriptItem,
+      ])
+      const timer = setInterval(() => {
+        n += 1
+        setSent((prior) =>
+          prior.map((item) =>
+            item.id === id
+              ? ({
+                  ...item,
+                  text: `${(item as { text: string }).text} …and another clause of the answer, long enough to wrap the row and change its height (${n})`,
+                } as TranscriptItem)
+              : item,
+          ),
+        )
+        if (n >= deltas) clearInterval(timer)
+      }, everyMs)
+      return id
     }
     w.__wdSetFixture = (key: string) => setFixture(key)
     // Replay the current fixture in bursts, sampling `scrollTop` every frame —
@@ -393,7 +504,17 @@ export function App() {
       </aside>
 
       <main className='flex min-w-0 flex-1 justify-center overflow-auto'>
-        <div ref={surface} className='min-w-0 flex-1' style={width ? { maxWidth: width } : undefined}>
+        {/* Panel-shaped: one column of fixed height with the transcript taking
+            what is left, exactly as `SessionPanel` mounts it. It is not
+            decoration — the composer is a *sibling* of the scroller, so every
+            line it grows or sheds resizes the scroller, and that resize is the
+            other party writing `scrollTop`. A playground that let the composer
+            push a 70vh transcript around instead proved nothing about the one
+            integration it exists to prove. */}
+        <div
+          ref={surface}
+          className='flex h-[80vh] min-h-0 min-w-0 flex-1 flex-col'
+          style={width ? { maxWidth: width } : undefined}>
           {/* The real shell — virtualized, stick-to-bottom, recap — with the
               terminal theme as its variant. Proving the integration here is the
               point: the playground must exercise what an embedder gets. */}
@@ -410,7 +531,7 @@ export function App() {
             catchUp={catchUp}
             jumpToRecapRef={jumpRef}
             repinRef={repinRef}
-            className={cn('h-[70vh]', grid && 'term-grid-overlay')}
+            className={cn('min-h-0 flex-1', grid && 'term-grid-overlay')}
           />
           {/* The composer is the panel's foot and its own terminal surface, so
               it is mounted the way the panel mounts it — inside the variant
@@ -421,9 +542,12 @@ export function App() {
               onSend={(text) => {
                 // The panel re-pins on send (`SessionPanel.handleSend`), so the
                 // playground does too — otherwise the one integration this
-                // harness exists to prove is the one it skips.
+                // harness exists to prove is the one it skips. And it appends,
+                // because a re-pin that survives the send and not the reply is
+                // the bug this reproduces.
                 repinRef.current?.()
                 setAnswered(`sent: ${text}`)
+                sendFixture(text)
               }}
               onInterrupt={() => setAnswered('interrupted')}
               busy={false}
