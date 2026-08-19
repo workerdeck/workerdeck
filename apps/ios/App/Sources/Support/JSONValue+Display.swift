@@ -36,6 +36,32 @@ extension JSONValue {
     return Fmt.oneLine(prettyJSON)
   }
 
+  /// The same field `toolInputSummary` picks, **whole** — no 140-character cap
+  /// and newlines kept.
+  ///
+  /// The two exist because they answer different questions. A collapsed
+  /// transcript card is a row in a list and wants one flattened line; an
+  /// *approval* is a decision, and the string it clips is the command about to
+  /// run. A Bash approval reading `... | tee _docs/measurements/attach-parts-$(d…`
+  /// hides the half of the pipeline that touches the filesystem, which is the
+  /// half worth approving. Nothing bounds the height here because the prompt's
+  /// body scrolls (`PromptBodyScroll`) — that is what made showing it whole
+  /// affordable.
+  func toolInputSubject(toolName: String) -> String? {
+    guard let object = objectValue else {
+      if case .null = self { return nil }
+      return prettyJSON
+    }
+    guard !object.isEmpty else { return nil }
+    for key in Self.preferredKeys(for: toolName) {
+      if let value = object[key]?.stringValue, !value.isEmpty { return value }
+    }
+    for key in object.keys.sorted() {
+      if let value = object[key]?.stringValue, !value.isEmpty { return value }
+    }
+    return prettyJSON
+  }
+
   private static func preferredKeys(for toolName: String) -> [String] {
     switch toolName {
     case "Bash", "BashOutput", "KillShell":

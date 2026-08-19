@@ -7,6 +7,9 @@ import SwiftUI
 /// so plain Deny lets the turn continue while "Deny & stop" also interrupts.
 struct PermissionPromptView: View {
   let request: PermissionRequest
+  /// How tall the scrolling body may get — see `PromptBodyScroll`. Without it
+  /// this card pushed its own buttons off the bottom of the screen.
+  let maxBodyHeight: CGFloat
   let onAllow: () -> Void
   let onDeny: (_ message: String?, _ interrupt: Bool) -> Void
 
@@ -15,31 +18,40 @@ struct PermissionPromptView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
-      HStack(spacing: 8) {
-        Image(systemName: "hand.raised.fill")
-          .foregroundStyle(.orange)
-        Text(request.title ?? request.displayName ?? "Permission needed")
-          .font(.subheadline.weight(.semibold))
-          .fixedSize(horizontal: false, vertical: true)
-      }
+      // The body scrolls, the actions do not — whatever the tool call's length,
+      // the thing that ends the prompt is on screen. See `PromptBodyScroll`.
+      PromptBodyScroll(maxHeight: maxBodyHeight) {
+        VStack(alignment: .leading, spacing: 10) {
+          HStack(spacing: 8) {
+            Image(systemName: "hand.raised.fill")
+              .foregroundStyle(.orange)
+            Text(request.title ?? request.displayName ?? "Permission needed")
+              .font(.subheadline.weight(.semibold))
+              .fixedSize(horizontal: false, vertical: true)
+          }
 
-      if let description = request.description, !description.isEmpty {
-        Text(description)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
+          if let description = request.description, !description.isEmpty {
+            Text(description)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
 
-      HStack(spacing: 6) {
-        Image(systemName: ToolIcon.symbol(for: request.toolName))
-          .font(.caption2)
-        Text(request.toolName)
-          .font(.caption.weight(.medium))
-        if let summary = request.input.toolInputSummary(toolName: request.toolName) {
-          Text(summary)
-            .font(.caption.monospaced())
-            .foregroundStyle(.secondary)
-            .lineLimit(2)
+          HStack(alignment: .top, spacing: 6) {
+            Image(systemName: ToolIcon.symbol(for: request.toolName))
+              .font(.caption2)
+            Text(request.toolName)
+              .font(.caption.weight(.medium))
+            // Shown whole. This carried `lineLimit(2)`, which for a Bash
+            // approval hid most of the command being approved — the one string
+            // the decision actually rests on.
+            if let summary = request.input.toolInputSubject(toolName: request.toolName) {
+              Text(summary)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+          }
         }
       }
 

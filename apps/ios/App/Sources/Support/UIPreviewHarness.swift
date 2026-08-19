@@ -29,6 +29,7 @@ enum UIPreview: String {
   case mcp
   case markdown
   case composer
+  case prompts
   case terminal
   case terminalOpen
   case terminalStress
@@ -126,6 +127,98 @@ private struct TerminalAuditPreview: View {
         TerminalTranscriptView(items: items, revision: 0, scroll: TranscriptScrollModel())
       #endif
     }
+  }
+}
+
+/// The prompts, at a height that forces them to scroll.
+///
+/// The claim under test is not "does this look right" but "can it be answered":
+/// before this, a prompt taller than the screen pushed its own buttons past the
+/// bottom edge and the only way out was to kill the app. So every row here is
+/// deliberately over-long, and the thing to check in a screenshot is that the
+/// action row is on screen in all of them.
+/// The prompts, at a height that forces them to scroll.
+///
+/// The claim under test is not "does this look right" but **"can it be
+/// answered"**: before the cap, a prompt taller than the screen pushed its own
+/// buttons past the bottom edge and there was no way to reach them. So the rows
+/// here are deliberately over-long and the caps deliberately mean, and the thing
+/// to check in a screenshot is that the action row is visible in both.
+private struct PromptsPreview: View {
+  /// Built as the wire shape and parsed back through `parseUserQuestions`,
+  /// rather than as Swift values: `UserQuestion` is `Decodable` with no public
+  /// memberwise init, and going through the real parser means the fixture is
+  /// exercising the same path a live request does.
+  private static let questionInput: JSONValue = .object([
+    "questions": .array([
+      .object([
+        "question": .string(
+          "The truncation rule shipped on a 68% projection and measured 0.3% on the wire. What do you want to do about the other six rules in the family?"),
+        "header": .string("Verification"),
+        "options": .array([
+          .object([
+            "label": .string("Measure all six before the next bump"),
+            "description": .string(
+              "Re-run the attach measurement against a real session for each rule and record what it actually cut, not what it was projected to cut. Slow, and the only thing that retires the warning."),
+            "preview": .string("replayRetains    774 KB -> ?\nsnapshotRetains        ?\nreplayCoalesceKey 388 KB -> ?"),
+          ]),
+          .object([
+            "label": .string("Measure only the ones that ship bytes"),
+            "description": .string(
+              "The three that change what crosses the wire. The store-side rules can wait, since a wrong answer there costs disk rather than a reader's network."),
+          ]),
+          .object([
+            "label": .string("Leave it and keep the warning standing"),
+            "description": .string(
+              "The warning is honest as it is and each measurement costs a session. Nothing is claimed that has not been measured, because the claims are what would change."),
+          ]),
+        ]),
+      ])
+    ])
+  ])
+
+  private static func request(
+    id: String, tool: String, title: String, input: JSONValue
+  ) -> PermissionRequest {
+    PermissionRequest(id: id, toolName: tool, input: input, toolUseId: "toolu_\(id)", title: title)
+  }
+
+  private static var questionRequest: PermissionRequest {
+    request(
+      id: "q", tool: "AskUserQuestion", title: "The agent has a question", input: questionInput)
+  }
+
+  private static var permissionRequest: PermissionRequest {
+    request(
+      id: "p", tool: "Bash", title: "Run this command?",
+      input: .object([
+        "command": .string(
+          "node _docs/measure-attach-parts.mjs http://127.0.0.1:8787 01JQ8Z3K4M5N6P7Q8R9S0T1U2V truncate refs | tee _docs/measurements/attach-parts-$(date +%Y%m%d).txt")
+      ]))
+  }
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 24) {
+        caption("Question — three long options, body capped at 260")
+        TerminalQuestionPromptView(
+          request: Self.questionRequest,
+          questions: parseUserQuestions(Self.questionRequest),
+          maxBodyHeight: 260,
+          onAnswer: { _ in }, onDismiss: {})
+
+        caption("Permission — a command worth reading whole, body capped at 200")
+        TerminalPermissionPromptView(
+          request: Self.permissionRequest,
+          maxBodyHeight: 200,
+          onAllow: {}, onDeny: { _, _ in })
+      }
+      .padding(.vertical, 16)
+    }
+  }
+
+  private func caption(_ text: String) -> some View {
+    Text(text).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
   }
 }
 
@@ -391,6 +484,15 @@ struct UIPreviewHarness: View {
         }
         .padding(.vertical, 60)
       }
+    case .prompts:
+      // The two terminal prompts against the case that broke them: a question
+      // with three long options and a permission whose subject is a Bash command
+      // nobody would want clipped. Both are given a deliberately mean
+      // `maxBodyHeight` so the scroll is exercised on a big simulator too —
+      // what must be true on screen is that the action row is visible in every
+      // one of them, which is the entire bug.
+      PromptsPreview()
+
     case .composer:
       // Every state the gutter cell has, stacked, because the whole point of
       // that cell is that its three occupants must not move the text beside

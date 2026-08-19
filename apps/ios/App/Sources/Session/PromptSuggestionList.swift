@@ -114,6 +114,17 @@ private struct SuggestionRow: View {
 }
 
 /// The floating stack's measured height, so the picker can stop just above it.
+/// The session screen's own height, read off the stack the transcript and the
+/// footer both live in. Beside `FooterHeight` because it is the same kind of
+/// thing — a geometry a sibling needs and cannot ask for — and because a prompt
+/// capped at a fraction of the screen is measuring exactly the box this reports.
+struct ContainerHeight: PreferenceKey {
+  static let defaultValue: CGFloat = 0
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+    value = max(value, nextValue())
+  }
+}
+
 struct FooterHeight: PreferenceKey {
   static let defaultValue: CGFloat = 0
   static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {

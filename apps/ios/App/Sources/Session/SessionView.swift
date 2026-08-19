@@ -51,6 +51,11 @@ struct SessionView: View {
   /// How much of the bottom the floating stack occupies — the picker sits on top
   /// of it, so it needs the number the layout actually produced.
   @State private var footerHeight: CGFloat = 0
+  /// The session screen's own height, so a prompt can be capped as a fraction of
+  /// it. Measured rather than assumed: a constant that fits an iPhone SE wastes
+  /// half a Pro Max, and one tuned for a Pro Max reproduces the bug the cap
+  /// exists to fix — a prompt taller than the screen whose buttons are off it.
+  @State private var containerHeight: CGFloat = 0
   /// The terminal transcript's scroll handle. Held here rather than inside the
   /// transcript because the surfaces that want to drive it — a scrubber, the
   /// catch-up jump — sit beside the transcript, not in it.
@@ -121,6 +126,11 @@ struct SessionView: View {
       emptyState
       picker
     }
+    .background(
+      GeometryReader { proxy in
+        Color.clear.preference(key: ContainerHeight.self, value: proxy.size.height)
+      })
+    .onPreferenceChange(ContainerHeight.self) { containerHeight = $0 }
     .onPreferenceChange(FooterHeight.self) { footerHeight = $0 }
     .navigationTitle(vm.title)
     .navigationBarTitleDisplayMode(.inline)
@@ -612,9 +622,32 @@ struct SessionView: View {
   @ViewBuilder
   private func approvalPrompt(_ request: PermissionRequest) -> some View {
     let questions = parseUserQuestions(request)
-    if questions.isEmpty {
+    // Two renderers, not two code paths through one — the same split the
+    // transcript makes. The terminal prompts are not the Cards prompts restyled:
+    // they answer one question at a time behind a chip strip, which is a
+    // different interaction, and a variant branch inside the Cards views is how
+    // the retired `lines` variant ended up duplicated across fifteen bodies.
+    if settings.transcriptVariant.isTerminal {
+      if questions.isEmpty {
+        TerminalPermissionPromptView(
+          request: request,
+          maxBodyHeight: promptMaxHeight,
+          onAllow: { vm.approve(request.id) },
+          onDeny: { message, interrupt in
+            vm.deny(request.id, message: message, interrupt: interrupt)
+          })
+      } else {
+        TerminalQuestionPromptView(
+          request: request,
+          questions: questions,
+          maxBodyHeight: promptMaxHeight,
+          onAnswer: { input in vm.approve(request.id, updatedInput: input) },
+          onDismiss: { vm.deny(request.id, message: "Question dismissed by user") })
+      }
+    } else if questions.isEmpty {
       PermissionPromptView(
         request: request,
+        maxBodyHeight: promptMaxHeight,
         onAllow: { vm.approve(request.id) },
         onDeny: { message, interrupt in
           vm.deny(request.id, message: message, interrupt: interrupt)
@@ -623,9 +656,28 @@ struct SessionView: View {
       QuestionPromptView(
         request: request,
         questions: questions,
+        maxBodyHeight: promptMaxHeight,
         onAnswer: { input in vm.approve(request.id, updatedInput: input) },
         onDismiss: { vm.deny(request.id, message: "Question dismissed by user") })
     }
+  }
+
+  /// How tall a prompt's scrolling body may get.
+  ///
+  /// **Half the screen**, and the half is the whole argument. A prompt is
+  /// something you answer *about* the transcript, so leaving the transcript
+  /// visible is not decoration — the question is usually "should it run this",
+  /// and the evidence is the rows above. It is also what keeps the composer
+  /// reachable: deciding sometimes means typing a reason first, and a prompt
+  /// that owned the screen would make you dismiss it to do that.
+  ///
+  /// The floor matters more than the fraction. Before the container has been
+  /// measured — the first frame, and any frame where the geometry is zero — an
+  /// uncapped `0` would collapse the prompt to nothing, so it falls back to a
+  /// height that fits a question and its actions rather than to "unbounded",
+  /// which is the bug this whole cap replaces.
+  private var promptMaxHeight: CGFloat {
+    max(220, containerHeight * 0.5)
   }
 
   // MARK: - Toolbar

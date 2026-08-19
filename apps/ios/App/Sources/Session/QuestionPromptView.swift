@@ -11,6 +11,10 @@ import SwiftUI
 struct QuestionPromptView: View {
   let request: PermissionRequest
   let questions: [UserQuestion]
+  /// How tall the scrolling body may get — see `PromptBodyScroll`. Three
+  /// questions with four described options each is a screen and a half, and
+  /// without this the Answer button was below the bottom edge.
+  let maxBodyHeight: CGFloat
   let onAnswer: ([String: JSONValue]) -> Void
   let onDismiss: () -> Void
 
@@ -37,8 +41,15 @@ struct QuestionPromptView: View {
         .accessibilityLabel("Dismiss question")
       }
 
-      ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
-        questionBlock(index: index, question: question)
+      // The questions scroll, the confirm button does not. See
+      // `PromptBodyScroll` for why this is the fix and the old `lineLimit`s
+      // were not.
+      PromptBodyScroll(maxHeight: maxBodyHeight) {
+        VStack(alignment: .leading, spacing: 12) {
+          ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
+            questionBlock(index: index, question: question)
+          }
+        }
       }
 
       if isMultiStep {
@@ -111,10 +122,12 @@ struct QuestionPromptView: View {
               .multilineTextAlignment(.leading)
           }
           if isSelected, let preview = option.preview, !preview.isEmpty {
+            // Whole: a preview is the reason to pick this option, and the
+            // scroll — not a line limit — is what bounds the prompt now.
             Text(preview)
               .font(.caption2.monospaced())
               .foregroundStyle(.secondary)
-              .lineLimit(6)
+              .fixedSize(horizontal: false, vertical: true)
           }
         }
         Spacer(minLength: 0)

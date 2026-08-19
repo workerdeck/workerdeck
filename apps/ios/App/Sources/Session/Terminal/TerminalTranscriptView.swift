@@ -33,7 +33,6 @@ struct TerminalTranscriptView: View {
   /// at arm's length is read at arm's length; still a whole number of points,
   /// which is the theme's one non-negotiable — a fractional line puts every
   /// second row on a half-pixel and the text visibly softens.
-  private static let fontSize: CGFloat = 12
 
   @State private var model: TerminalTranscriptModel?
   /// How a press asks for the rest of a truncated result. Nil outside a live
@@ -45,7 +44,7 @@ struct TerminalTranscriptView: View {
   /// refs a replay nobody asked for.
   @Environment(\.terminalImageLoader) private var imageLoader
 
-  private var typography: TerminalTypography { .measure(fontSize: Self.fontSize) }
+  private var typography: TerminalTypography { .session }
 
   var body: some View {
     GeometryReader { proxy in

@@ -97,6 +97,22 @@ struct TerminalTypography: Equatable {
   /// The line is the web pair's ratio (18/13 ≈ 1.38) applied to the size,
   /// floored by the font's own line height — the grid must never be shorter
   /// than the glyphs it holds.
+  /// The size every terminal surface in a session draws at, and the reason it
+  /// is a constant here rather than a number in each view.
+  ///
+  /// The session screen mounts more than one terminal surface — the transcript,
+  /// and now the approval and question prompts under it — and the web client
+  /// learned this the expensive way: `SessionPanel.terminalMetrics` is **one**
+  /// prop precisely because handing two surfaces different numbers puts the
+  /// prompt's gutter glyph on a different column from every marker above it,
+  /// which is the single failure this theme exists to prevent.
+  static let sessionFontSize: CGFloat = 12
+
+  /// The measured grid for that size. Cheap enough to recompute (one `size(
+  /// withAttributes:)` on a 200-character sample) and already evaluated per
+  /// body pass by the transcript.
+  static var session: TerminalTypography { measure(fontSize: sessionFontSize) }
+
   static func measure(fontSize raw: CGFloat) -> TerminalTypography {
     let size = max(8, raw.rounded())
     let uiFont = UIFont.monospacedSystemFont(ofSize: size, weight: .regular)
