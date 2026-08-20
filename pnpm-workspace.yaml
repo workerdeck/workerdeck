@@ -27,6 +27,14 @@ overrides:
   dompurify: ^3.4.14
   mermaid: ^11.17.0
   brace-expansion: ^5.0.9
+  # Build/dev only — astro's image + frontmatter chain and vitest's vite. Pinned
+  # to the patched range rather than the latest major, which is why these read
+  # `^0.35.0`/`^4.3.1`/`^3.3.18` and not the newest versions on npm: the point is
+  # to clear the advisory inside the range the parent already expects, not to
+  # force a major through a dependency that did not ask for one.
+  sharp: ^0.35.0
+  js-yaml: ^4.3.1
+  nanoid: ^3.3.18
 
 allowBuilds:
   esbuild: true
@@ -56,3 +64,16 @@ minimumReleaseAgeExclude:
   - '@mermaid-js/parser@1.2.1'
   - dompurify@3.4.14
   - mermaid@11.17.0
+  - '@astrojs/internal-helpers@0.10.4'
+  - '@astrojs/markdown-satteri@0.3.7'
+  - '@bruits/satteri-darwin-arm64@0.10.3'
+  - '@bruits/satteri-darwin-x64@0.10.3'
+  - '@bruits/satteri-linux-arm64-gnu@0.10.3'
+  - '@bruits/satteri-linux-arm64-musl@0.10.3'
+  - '@bruits/satteri-linux-x64-gnu@0.10.3'
+  - '@bruits/satteri-linux-x64-musl@0.10.3'
+  - '@bruits/satteri-wasm32-wasi@0.10.3'
+  - '@bruits/satteri-win32-arm64-msvc@0.10.3'
+  - '@bruits/satteri-win32-x64-msvc@0.10.3'
+  - astro@7.2.4
+  - satteri@0.10.3

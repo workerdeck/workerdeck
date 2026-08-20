@@ -11,13 +11,13 @@
     "clean": "rimraf dist .astro"
   },
   "dependencies": {
-    "@workerdeck/ui": "workspace:*",
     "@fontsource/inter": "^5.2.8",
-    "@fontsource/jetbrains-mono": "^5.2.8"
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@workerdeck/ui": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.1",
-    "astro": "^5.16.0",
+    "astro": "^7.2.4",
     "rimraf": "^6.1.3",
     "tailwindcss": "^4.3.1"
   }

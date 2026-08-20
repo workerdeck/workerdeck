@@ -1,14 +1,17 @@
 ---
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import Base from '../layouts/Base.astro'
+// Imported, not read off disk. A `readFileSync` relative to `import.meta.url`
+// worked only while that URL was this source file: Astro 7 prerenders from a
+// bundled chunk in `dist/.prerender/chunks/`, so the same four `../` landed on
+// `apps/packages/cli/package.json` and the build died. An import is resolved by
+// Vite at build time and cannot care where the chunk ends up.
+import cliPkg from '../../../../packages/cli/package.json'
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '')
 const repo = 'https://github.com/workerdeck/workerdeck'
 
-// Read at build time so the hero badge can never drift from what's published.
-const cliPkg = fileURLToPath(new URL('../../../../packages/cli/package.json', import.meta.url))
-const version = (JSON.parse(readFileSync(cliPkg, 'utf8')) as { version: string }).version
+// Resolved at build time so the hero badge can never drift from what's published.
+const version = cliPkg.version
 
 /**
  * The three clients, above the one server.
