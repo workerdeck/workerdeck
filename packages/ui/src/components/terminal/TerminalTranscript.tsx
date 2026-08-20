@@ -127,10 +127,18 @@ export function TaskRow({
             the row stands for the whole of it. The body is `taskSummary`
             verbatim — it is the string `height.ts` wraps to size this row, and
             a second spelling here would be a second height. */}
+        {/* Green means sub-agent, and it means it here for the same reason it
+            means it on the rail: every other colour is spoken for — blue is
+            you, white is the answer, red is an alarm, magenta is your bookmark,
+            yellow is the session waiting on you (see `terminal.css`). The
+            *body* is green and the marker is not: a green glyph already means
+            "wrote to the workspace" a few rows down, and one colour cannot mean
+            two things in the same gutter. Failure still outranks it — an alarm
+            is not a category. */}
         <Row
           glyph={busy ? pulse : '●'}
           glyphTone={failed ? 'red' : busy ? 'mark' : 'dim'}
-          tone={failed ? 'red' : 'fg'}>
+          tone={failed ? 'red' : 'green'}>
           {taskSummary(block.task, children)}
         </Row>
       </Pressable>

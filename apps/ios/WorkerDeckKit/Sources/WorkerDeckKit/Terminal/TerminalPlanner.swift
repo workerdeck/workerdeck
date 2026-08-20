@@ -127,11 +127,19 @@ public enum TerminalPlanner {
     let open = expansion.isOpen(key)
     let wash = inOpen || open
 
+    // Green means sub-agent, exactly as it does on the scrubber's rail (see
+    // `TerminalScrubberView`, and the argument in `packages/ui`'s
+    // `terminal.css`): every other colour is already spoken for — blue is you,
+    // white is the answer, red is an alarm, magenta is your bookmark, yellow is
+    // the session waiting on you. The **body** takes it and the marker does
+    // not: a green glyph already means "wrote to the workspace" on a settled
+    // mutating tool, and one colour cannot mean two things in the same gutter.
+    // Failure still outranks it — an alarm is not a category.
     var lines = wrapBody(
       taskSummary(block.task, children), metrics: metrics,
       gutter: busy ? TermGlyph.pulseRest : TermGlyph.bullet,
       gutterTone: failed ? .red : (busy ? .mark : .dim),
-      tone: failed ? .red : .fg, pulsing: busy, press: .toggle(key), inOpen: wash)
+      tone: failed ? .red : .green, pulsing: busy, press: .toggle(key), inOpen: wash)
     guard open else { return lines }
 
     // The children step themselves in: every one of them carries a
