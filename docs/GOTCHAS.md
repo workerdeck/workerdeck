@@ -1316,6 +1316,20 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - The APNs key's **environment and restriction scope cannot be changed after the key is created**
   (the portal now forces the choice at creation, and a team gets only two active keys). WorkerDeck's
   is "Sandbox & Production" + "Team Scoped", which is what lets one key serve both endpoints.
+- **Never implement a UIKit completion-handler delegate requirement in its `async` form when
+  the completion must land on the main thread.** The compiler's synthesized `@objc` thunk calls
+  UIKit's completion block on whatever executor the async witness finishes on — a
+  cooperative-pool thread — and `UNUserNotificationCenterDelegate`'s `didReceive` completion
+  drives snapshot/state-restoration work that asserts main thread: every notification tap
+  aborted with `NSInternalInconsistencyException: 'Call must be made on main thread'` (eight
+  identical device crash logs, 2026-08-19/20). The fix is the completion-handler form — reduce
+  the `UN…` types to Sendable facts where the callback lands, hop to the main actor, call the
+  completion there. A `@MainActor` witness is not the alternative: the requirements are
+  nonisolated and Swift 6 rejects the conformance; `@preconcurrency` only moves the crash to a
+  dynamic isolation assert that bets on UIKit calling the delegate on main, which the SDK does
+  not promise (no actor or sendability audit on the protocol as of the iOS 26.5 SDK). Not
+  unit-testable: the delegate lives in the app target and `UN…` types cannot be constructed —
+  the gate is the compiler plus one tap on a real notification.
 
 ## Build, test & packaging
 

@@ -36,28 +36,57 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
   // MARK: - UNUserNotificationCenterDelegate
 
-  // Both requirements are `nonisolated`, and none of the `UN…` types are
-  // Sendable, so a `@MainActor` witness cannot satisfy them. The delegate stays
-  // off the main actor here and reduces the notification to Sendable facts
-  // before hopping — which is all `PushCoordinator` ever wanted anyway.
+  // Both requirements are `nonisolated` and none of the `UN…` types are
+  // Sendable (still true in the iOS 26.5 SDK — the protocol carries no actor or
+  // sendability audit), so a `@MainActor` witness cannot satisfy them; Swift 6's
+  // escape hatches (`@preconcurrency`, an isolated conformance) only turn that
+  // error into a runtime isolation assert that bets on UIKit calling the
+  // delegate on the main thread, which the SDK deliberately does not promise.
+  //
+  // But the **`async` forms of these witnesses are a trap, and the one that
+  // shipped**: the compiler's synthesized `@objc` thunk invokes UIKit's
+  // completion block on whatever executor the task finishes on — a
+  // cooperative-pool thread — and `didReceive`'s completion drives
+  // snapshot/state-restoration work that asserts main thread. Every
+  // notification tap aborted on that assert (`NSInternalInconsistencyException:
+  // 'Call must be made on main thread'`).
+  //
+  // So the witnesses are the completion-handler forms: reduce the notification
+  // to Sendable facts on whatever thread the callback arrives on, hop to the
+  // main actor for the decision, and call the completion from there — the one
+  // thread UIKit's completions are known to tolerate. `@Sendable` on the blocks
+  // declares that crossing; block sendability is not part of the ObjC type, so
+  // the witness still matches the requirement.
 
   /// Show the banner in the foreground too — except for the session already on
   /// screen, whose news is arriving over the socket. `PushCoordinator` owns that
   /// judgement; this only reduces the notification to something Sendable first.
   nonisolated func userNotificationCenter(
     _ center: UNUserNotificationCenter,
-    willPresent notification: UNNotification
-  ) async -> UNNotificationPresentationOptions {
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler:
+      @escaping @Sendable (UNNotificationPresentationOptions) -> Void
+  ) {
     let payload = PushPayload(userInfo: notification.request.content.userInfo)
-    return await MainActor.run { self.push.presentationOptions(for: payload) }
+    Task { @MainActor in
+      completionHandler(self.push.presentationOptions(for: payload))
+    }
   }
 
+  /// The completion is deliberately called only after `handle` finishes: for a
+  /// lock-screen Approve/Deny the app is woken in the background, and the
+  /// completion is the signal that it may be suspended again — completing
+  /// early would cut the REST call off mid-flight.
   nonisolated func userNotificationCenter(
     _ center: UNUserNotificationCenter,
-    didReceive response: UNNotificationResponse
-  ) async {
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping @Sendable () -> Void
+  ) {
     let action = response.actionIdentifier
     let payload = PushPayload(userInfo: response.notification.request.content.userInfo)
-    await push.handle(action: action, payload: payload)
+    Task { @MainActor in
+      await self.push.handle(action: action, payload: payload)
+      completionHandler()
+    }
   }
 }
