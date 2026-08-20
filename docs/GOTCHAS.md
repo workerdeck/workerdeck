@@ -1283,10 +1283,25 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - **Apple throttles a provider that repeatedly pushes to invalid device tokens** — connections
   start dying with GOAWAY and cancelled streams that look like a network fault. One probe with a
   bogus token is a legitimate credential check (a good JWT gets `BadDeviceToken`, a bad one gets
-  `InvalidProviderToken`); a loop of them is self-inflicted. Relatedly, a stream that never left
-  the queue reports only "the pending stream has been canceled", so the client keeps the
-  *session's* error and reports that instead — otherwise DNS failure, TLS failure and Apple
-  hanging up are indistinguishable.
+  `InvalidProviderToken`); a loop of them is self-inflicted.
+- **The session's `error` event fires a tick *after* the stream it kills settles**, so
+  "keep the session's error and report it for the canceled stream" can never work for the very
+  failure that canceled it — Node's `closeSession` destroys pending streams synchronously and
+  emits the session's own event after socket teardown. `pool.lastFailure` therefore only carries
+  failures that *preceded* the stream (a GOAWAY does; it emits before the teardown). The stream's
+  own killer is mined from `error.cause` instead — and when a dial fails on every address family
+  (api.push.apple.com has A + AAAA, Happy Eyeballs walks both), that cause is an `AggregateError`
+  whose own message is **empty**: the production log line was
+  `The pending stream has been canceled (caused by: ) (0)`, a silently lost push.
+- **A push failure is retried exactly once, and only with proof Apple never processed it**: the
+  stream was still `pending` (no stream id ⇒ HEADERS never handed to the transport ⇒ connect
+  failed; redial after a beat), `request()` threw before a stream existed, or the reset was
+  `REFUSED_STREAM` (the routine GOAWAY-rebalance race; RFC-guaranteed unprocessed, retry on the
+  spot). Everything else — `Timeout`, `INTERNAL_ERROR`, any post-response death — is **never**
+  retried: permission pushes carry no collapse id on purpose, so a duplicate is a second banner
+  asking for the same decision. A still-`connecting` session whose stream died pending is
+  destroyed so the retry (and every later push) dials fresh instead of queuing behind a doomed
+  connect; `destroy()` without an error emits no `'error'`, so the no-crash rule holds.
 - **A route that is never mounted is not unclaimed — the dashboard's SPA catch-all owns it.**
   With no `apns` config there is no device route, so `/apns/devices` fell through to the static
   host, which serves `GET, HEAD` and answered a registration POST with **405**, not the 404 every

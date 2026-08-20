@@ -1,6 +1,6 @@
 import { createPrivateKey, generateKeyPairSync, verify } from 'node:crypto'
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { createServer, type Http2Server, type ServerHttp2Stream } from 'node:http2'
+import { constants, createServer, type Http2Server, type ServerHttp2Stream } from 'node:http2'
 import { join } from 'node:path'
 import type { SessionNotification } from '@workerdeck/protocol'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -76,6 +76,9 @@ const startFakeApns = async (
   const seen: Recorded[] = []
   const server = createServer()
   server.on('stream', (stream, headers) => {
+    // Closing a server stream with an RST code errors the server's own stream
+    // object too; without a listener that would take the test process down.
+    stream.on('error', () => {})
     const chunks: Buffer[] = []
     stream.on('data', (chunk: Buffer) => chunks.push(chunk))
     stream.on('end', () => {
@@ -156,6 +159,7 @@ describe('apns client', () => {
     const url = `http://127.0.0.1:${port}`
     const client = createApnsClient(CONFIG, KEY, {
       hosts: { development: url, production: url },
+      retryDelayMs: 0,
     })
     const result = await client.send({
       deviceToken: TOKEN,
@@ -168,6 +172,113 @@ describe('apns client', () => {
       expect(result.reason).toContain('ECONNREFUSED')
       expect(result.unregistered).toBe(false)
     }
+  })
+
+  it('names the refusal even when every address family fails at once', async () => {
+    // The production failure this pins: a fresh dial to api.push.apple.com
+    // (A + AAAA records) fails on every family, net aggregates the attempts
+    // into an AggregateError whose own message is EMPTY, and the gateway
+    // logged "The pending stream has been canceled (caused by: ) (0)" — a
+    // lost push with nothing to debug from. `localhost` resolves to both
+    // families here too, so the same shape reproduces locally; on a
+    // v4-only resolver this degrades to the single-error case, which the
+    // test above already pins.
+    const probe = await startFakeApns(() => {})
+    const { port } = probe.server.address() as { port: number }
+    await new Promise((resolve) => probe.server.close(resolve))
+    const url = `http://localhost:${port}`
+    const client = createApnsClient(CONFIG, KEY, {
+      hosts: { development: url, production: url },
+      retryDelayMs: 0,
+    })
+    const result = await client.send({ deviceToken: TOKEN, environment: 'development', payload: {} })
+    client.close()
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.status).toBe(0)
+      expect(result.reason).toContain('ECONNREFUSED')
+      expect(result.unregistered).toBe(false)
+    }
+  })
+
+  it('redials and delivers a push whose first dial never connected', async () => {
+    // The stream was still pending — its HEADERS frame never reached the
+    // transport — so a retry cannot duplicate anything, and losing the push
+    // is the only alternative. The server comes back between the attempts,
+    // standing in for a network blip passing.
+    const fake = await startFakeApns((_recorded, stream) => {
+      stream.respond({ ':status': 200, 'apns-id': 'id-redial' })
+      stream.end()
+    })
+    const { port } = fake.server.address() as { port: number }
+    await new Promise((resolve) => fake.server.close(resolve))
+    const url = `http://localhost:${port}`
+    const client = createApnsClient(CONFIG, KEY, {
+      hosts: { development: url, production: url },
+      retryDelayMs: 400,
+    })
+    // The first attempt fails in milliseconds (local refusal); the server is
+    // back well inside the 400ms redial pause.
+    setTimeout(() => fake.server.listen(port), 100)
+    const result = await client.send({
+      deviceToken: TOKEN,
+      environment: 'development',
+      payload: { aps: { alert: 'hi' } },
+    })
+    client.close()
+    expect(result).toEqual({ ok: true, apnsId: 'id-redial' })
+    // The first attempt never connected, so the server saw exactly one push.
+    expect(fake.seen).toHaveLength(1)
+    await new Promise((resolve) => fake.server.close(resolve))
+  })
+
+  it('retries once when APNs refused the stream before processing it', async () => {
+    // REFUSED_STREAM is the routine GOAWAY-rebalance race: Apple guarantees
+    // the stream was not processed, so the retry is duplicate-safe and rides
+    // the same client — before this, the push was silently dropped.
+    let calls = 0
+    const fake = await startFakeApns((_recorded, stream) => {
+      calls += 1
+      if (calls === 1) {
+        stream.close(constants.NGHTTP2_REFUSED_STREAM)
+        return
+      }
+      stream.respond({ ':status': 200, 'apns-id': 'id-retry' })
+      stream.end()
+    })
+    const client = createApnsClient(CONFIG, KEY, { hosts: fake.hosts })
+    const result = await client.send({ deviceToken: TOKEN, environment: 'production', payload: {} })
+    client.close()
+    expect(result).toEqual({ ok: true, apnsId: 'id-retry' })
+    expect(calls).toBe(2)
+    await new Promise((resolve) => fake.server.close(resolve))
+  })
+
+  it('does not retry a stream Apple may already have processed', async () => {
+    // Anything other than "provably never sent" risks a duplicate
+    // notification — permission requests carry no collapse id on purpose, so
+    // a duplicate is a real second banner on someone's lock screen. An
+    // INTERNAL_ERROR reset after the request went up gives no such proof.
+    let calls = 0
+    const fake = await startFakeApns((_recorded, stream) => {
+      calls += 1
+      if (calls === 1) {
+        stream.close(constants.NGHTTP2_INTERNAL_ERROR)
+        return
+      }
+      stream.respond({ ':status': 200 })
+      stream.end()
+    })
+    const client = createApnsClient(CONFIG, KEY, { hosts: fake.hosts, retryDelayMs: 0 })
+    const result = await client.send({ deviceToken: TOKEN, environment: 'production', payload: {} })
+    client.close()
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.status).toBe(0)
+      expect(result.reason).toContain('NGHTTP2_INTERNAL_ERROR')
+    }
+    expect(calls).toBe(1)
+    await new Promise((resolve) => fake.server.close(resolve))
   })
 
   it('re-signs and retries exactly once on ExpiredProviderToken', async () => {

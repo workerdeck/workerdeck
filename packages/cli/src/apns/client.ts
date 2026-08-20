@@ -1,6 +1,6 @@
 import { createPrivateKey, type KeyObject, sign } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import { type ClientHttp2Session, connect } from 'node:http2'
+import { type ClientHttp2Session, connect, constants } from 'node:http2'
 
 /**
  * A minimal APNs provider client: an HTTP/2 POST carrying an ES256 JWT.
@@ -159,8 +159,20 @@ export function createProviderToken(key: KeyObject, keyId: string, teamId: strin
  */
 function createSessionPool(hosts: Record<ApnsEnvironment, string>): {
   get(environment: ApnsEnvironment): ClientHttp2Session
-  /** Why the last connection died, for reporting a stream that never got sent. */
+  /** Why the last connection died, for reporting a stream that never got sent.
+   * Only failures that *precede* the stream's own death are visible here: when
+   * one event kills both, Node cancels the stream synchronously inside the
+   * session teardown and emits the session 'error' a tick later, so the stream
+   * settles first. The stream's own cause is mined in `describeStreamError`. */
   lastFailure(environment: ApnsEnvironment): string | undefined
+  /** Put down a session that a failed send has proven is not making progress.
+   * Only ever called on a *connecting* session, where every stream is still
+   * pending — each canceled sibling classifies as never-sent and retries
+   * itself. Destroying a connected session here would cancel siblings
+   * mid-flight, which is exactly the loss this file exists to prevent. Note
+   * `destroy()` without an error emits no 'error' event, so this can never
+   * take the process down. */
+  discard(environment: ApnsEnvironment, session: ClientHttp2Session): void
   close(): void
 } {
   const sessions = new Map<ApnsEnvironment, ClientHttp2Session>()
@@ -177,10 +189,6 @@ function createSessionPool(hosts: Record<ApnsEnvironment, string>): {
       failures.delete(environment)
       // Without an error listener a GOAWAY-then-error would take the whole
       // process down; the forwarder is a side channel and must never do that.
-      // The reason is *kept* rather than dropped on the floor: when the
-      // connection dies the in-flight stream reports only "the pending stream
-      // has been canceled", which says nothing about whether this was a DNS
-      // failure, a TLS problem or Apple hanging up on us.
       session.on('error', (error) => {
         failures.set(environment, `${(error as NodeJS.ErrnoException).code ?? 'error'}: ${error.message}`)
         drop(environment, session)
@@ -201,6 +209,10 @@ function createSessionPool(hosts: Record<ApnsEnvironment, string>): {
       return session
     },
     lastFailure: (environment) => failures.get(environment),
+    discard(environment, session) {
+      drop(environment, session)
+      if (!session.destroyed) session.destroy()
+    },
     close() {
       for (const session of sessions.values()) session.close()
       sessions.clear()
@@ -208,23 +220,62 @@ function createSessionPool(hosts: Record<ApnsEnvironment, string>): {
   }
 }
 
+/**
+ * A stream that never left this machine is destroyed with
+ * ERR_HTTP2_STREAM_CANCEL, which buries the real failure in `cause` — and when
+ * every connect attempt fails (Happy Eyeballs walks both address families of
+ * api.push.apple.com), that cause is an AggregateError whose own message is
+ * EMPTY, so the text ends in "(caused by: )" and names nothing. Mine the
+ * aggregate so the log says ECONNREFUSED/EHOSTUNREACH instead of nothing.
+ */
+const describeStreamError = (error: Error): string => {
+  const cause = (error as Error & { cause?: unknown }).cause
+  if (!(cause instanceof AggregateError)) return error.message
+  const parts = cause.errors
+    .map((inner) => (inner instanceof Error ? inner.message : String(inner)))
+    .filter((message) => message !== '')
+  if (parts.length === 0) return error.message
+  return `${error.message.replace(' (caused by: )', '')} (caused by: ${parts.join('; ')})`
+}
+
+/**
+ * Whether — and how — a failed attempt may be retried without risking a
+ * duplicate notification on someone's lock screen:
+ *  - 'never': the request may have reached Apple. A push is not idempotent
+ *    (permission requests carry no collapse id on purpose), so give up.
+ *  - 'now': Apple provably refused the stream before processing anything
+ *    (REFUSED_STREAM — the routine GOAWAY-rebalance race, RFC 9113 §8.7), or
+ *    the cached session was found closed before a stream even existed. The
+ *    network is fine; retry immediately.
+ *  - 'redial': the stream never got an id, so its HEADERS frame was never
+ *    handed to the transport — the connect itself failed. Retry once on a
+ *    fresh connection after a beat, because whatever broke the dial (an
+ *    interface still coming up, say) may need a moment to pass.
+ */
+type Retry = 'never' | 'now' | 'redial'
+
+type Attempt = { result: ApnsResult; retry: Retry }
+
 export function createApnsClient(
   config: ApnsConfig,
   key: KeyObject,
-  /** Test seam: point the two environments at a local HTTP/2 server. Nothing in
-   * production should pass this — the real endpoints are not configurable, and
-   * an operator who could redirect them could exfiltrate every push. */
-  options: { hosts?: Record<ApnsEnvironment, string> } = {},
+  /** Test seam: point the two environments at a local HTTP/2 server, and
+   * shorten the redial pause so a test does not sit out the real one. Nothing
+   * in production should pass this — the real endpoints are not configurable,
+   * and an operator who could redirect them could exfiltrate every push. */
+  options: { hosts?: Record<ApnsEnvironment, string>; retryDelayMs?: number } = {},
 ): ApnsClient {
   const providerToken = createProviderToken(key, config.keyId, config.teamId)
   const pool = createSessionPool(options.hosts ?? HOSTS)
+  const retryDelayMs = options.retryDelayMs ?? 1000
 
-  const post = (request: ApnsRequest, jwt: string): Promise<ApnsResult> =>
+  const post = (request: ApnsRequest, jwt: string): Promise<Attempt> =>
     new Promise((resolve) => {
       const body = Buffer.from(JSON.stringify(request.payload))
+      const session = pool.get(request.environment)
       let stream: ReturnType<ClientHttp2Session['request']>
       try {
-        stream = pool.get(request.environment).request({
+        stream = session.request({
           ':method': 'POST',
           ':path': `/3/device/${request.deviceToken}`,
           authorization: `bearer ${jwt}`,
@@ -236,11 +287,16 @@ export function createApnsClient(
           ...(request.collapseId === undefined ? {} : { 'apns-collapse-id': request.collapseId }),
         })
       } catch (error) {
+        // request() refuses on a closed session before creating a stream, so
+        // nothing reached the wire and an immediate retry redials safely.
         resolve({
-          ok: false,
-          status: 0,
-          reason: error instanceof Error ? error.message : String(error),
-          unregistered: false,
+          result: {
+            ok: false,
+            status: 0,
+            reason: error instanceof Error ? error.message : String(error),
+            unregistered: false,
+          },
+          retry: 'now',
         })
         return
       }
@@ -249,15 +305,33 @@ export function createApnsClient(
       let apnsId: string | undefined
       const chunks: Buffer[] = []
       let settled = false
-      const settle = (result: ApnsResult): void => {
+      const settle = (result: ApnsResult, retry: Retry = 'never'): void => {
         if (settled) return
         settled = true
-        resolve(result)
+        resolve({ result, retry })
+      }
+
+      /** Classify a transport-level death. `pending` is true only while the
+       * stream has no id — its HEADERS frame was never handed to nghttp2, so a
+       * retry cannot duplicate anything. REFUSED_STREAM is Apple's explicit
+       * "received but not processed", defined by the RFC as safe to retry. */
+      const transportRetry = (): Retry => {
+        if (stream.pending) return 'redial'
+        if (stream.rstCode === constants.NGHTTP2_REFUSED_STREAM) return 'now'
+        return 'never'
+      }
+      /** A stream still pending when its attempt dies marks a connect that is
+       * failing or hanging; without this, every later push (and the retry)
+       * would queue behind the same doomed dial until the OS gave up on it. */
+      const dropDoomedDial = (): void => {
+        if (stream.pending && session.connecting) pool.discard(request.environment, session)
       }
 
       stream.setTimeout(REQUEST_TIMEOUT_MS, () => {
+        const retry = transportRetry()
+        dropDoomedDial()
         stream.close()
-        settle({ ok: false, status: 0, reason: 'Timeout', unregistered: false })
+        settle({ ok: false, status: 0, reason: 'Timeout', unregistered: false }, retry)
       })
       stream.on('response', (headers) => {
         status = Number(headers[':status'] ?? 0)
@@ -266,15 +340,25 @@ export function createApnsClient(
       })
       stream.on('data', (chunk: Buffer) => chunks.push(chunk))
       stream.on('error', (error) => {
-        // A stream that never left the queue reports only that it was canceled.
-        // The connection knows why, so prefer its account of it.
+        const retry = transportRetry()
+        dropDoomedDial()
+        // A stream that never left the queue reports only that it was
+        // canceled. When the failure *preceded* this stream, the session's
+        // account of it is on record; when one event killed both, the session
+        // 'error' has not fired yet (Node cancels the stream synchronously
+        // inside the teardown and emits the session's own event a tick later),
+        // so the cause is mined out of the stream error itself.
         const cause = pool.lastFailure(request.environment)
-        settle({
-          ok: false,
-          status,
-          reason: cause !== undefined ? `${cause} (stream: ${error.message})` : error.message,
-          unregistered: false,
-        })
+        const message = describeStreamError(error)
+        settle(
+          {
+            ok: false,
+            status,
+            reason: cause !== undefined ? `${cause} (stream: ${message})` : message,
+            unregistered: false,
+          },
+          retry,
+        )
       })
       stream.on('end', () => {
         if (status === 200) {
@@ -299,18 +383,47 @@ export function createApnsClient(
           unregistered: reason === 'Unregistered' || reason === 'BadDeviceToken',
         })
       })
+      // Last resort: a stream torn down with neither an error nor a response
+      // ('end' never fires on a destroyed readable) must still settle, or the
+      // forwarder's per-session delivery chain would hang on it forever.
+      stream.on('close', () => {
+        const retry = transportRetry()
+        settle(
+          {
+            ok: false,
+            status,
+            reason:
+              pool.lastFailure(request.environment) ??
+              `connection closed (RST code ${stream.rstCode})`,
+            unregistered: false,
+          },
+          retry,
+        )
+      })
       stream.end(body)
     })
 
+  const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
   return {
     async send(request) {
-      const first = await post(request, providerToken.get())
-      // The one error worth an automatic retry: our cached JWT aged out against
-      // Apple's clock rather than ours. Re-sign once and try again; anything
-      // else is the caller's problem.
+      let attempt = await post(request, providerToken.get())
+      // A push the transport provably never delivered is retried exactly once:
+      // redialling is cheap, and a lost approval request is the whole cost of
+      // this file. 'never' failures are never retried — the request may have
+      // reached Apple, and a duplicated notification is a real harm here
+      // (permission requests carry no collapse id on purpose).
+      if (!attempt.result.ok && attempt.retry !== 'never') {
+        if (attempt.retry === 'redial') await wait(retryDelayMs)
+        attempt = await post(request, providerToken.get())
+      }
+      const first = attempt.result
+      // The one *response* worth an automatic retry: our cached JWT aged out
+      // against Apple's clock rather than ours. Re-sign once and try again;
+      // anything else is the caller's problem.
       if (!first.ok && first.reason === 'ExpiredProviderToken') {
         providerToken.invalidate()
-        return post(request, providerToken.get())
+        return (await post(request, providerToken.get())).result
       }
       return first
     },
