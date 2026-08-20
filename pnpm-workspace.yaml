@@ -13,6 +13,21 @@ packages:
   - apps/*
 linkWorkspacePackages: true
 
+# Transitive advisories our direct deps pin below their fixed versions. Each of
+# these ships to a browser and renders **agent-authored** content, which is why
+# they are overridden rather than waited out: `streamdown` (the transcript's
+# markdown) pulls mermaid + dompurify, and `monaco-editor` pulls dompurify
+# again. `brace-expansion` is dev-only (rimraf's clean scripts) and pinned for
+# tidiness, not exposure.
+#
+# NOTE: overrides live HERE, not under a `pnpm` key in package.json — pnpm 11
+# ignores that key and only WARNS, so an override written there silently fixes
+# nothing while reading as though it did.
+overrides:
+  dompurify: ^3.4.14
+  mermaid: ^11.17.0
+  brace-expansion: ^5.0.9
+
 allowBuilds:
   esbuild: true
   '@swc/core': true
@@ -38,3 +53,6 @@ minimumReleaseAgeExclude:
   - '@silkweave/core@5.1.0'
   - '@silkweave/trpc@5.1.0'
   - '@silkweave/mcp@5.1.0'
+  - '@mermaid-js/parser@1.2.1'
+  - dompurify@3.4.14
+  - mermaid@11.17.0

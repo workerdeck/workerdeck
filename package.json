@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@11.8.0",
-  "description": "Run a coding agent — Claude Code, OpenAI Codex, or any model provider — as a session you can watch, steer, and embed. Gateway + wire protocol + web dashboard, with iOS and VS Code clients.",
+  "description": "Run a coding agent \u2014 Claude Code, OpenAI Codex, or any model provider \u2014 as a session you can watch, steer, and embed. Gateway + wire protocol + web dashboard, with iOS and VS Code clients.",
   "engines": {
     "node": ">=22"
   },
