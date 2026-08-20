@@ -11,6 +11,7 @@ Things `pnpm test` deliberately cannot check. Run these by hand.
 | Message attachments | `pnpm smoke:media [image\|pdf\|text]` | **Yes — real tokens** |
 | Codex engine | `pnpm smoke:codex --canary` / `pnpm smoke:codex [model]` | Canary: no. Full: **yes — plan/API usage** |
 | Attach bytes | `pnpm smoke:attach <host> <sessionId> [truncate] [refs]` | No |
+| APNs push | `pnpm smoke:push <host> [sessionId]` | No — but it rings a real phone |
 | Restart, end to end | `pnpm smoke:restart [claude\|codex] [noprofile] [swept] [all]` | **Yes — two short turns** |
 
 ## `smoke:sandbox` — the untrusted-code boundary
@@ -171,6 +172,31 @@ diff /tmp/before.jsonl /tmp/after.jsonl     # must be empty on a session with no
 ```
 
 The same capture feeds iOS's `AttachReplayBench` (`apps/ios/README.md`).
+
+## `smoke:push` — a real notification, on demand
+
+```bash
+WD_APNS_KEY=/path/AuthKey_XXXX.p8 WD_APNS_KEY_ID=XXXX \
+WD_APNS_TEAM_ID=YYYY WD_APNS_TOPIC=com.example.app \
+pnpm smoke:push <host> [sessionId]
+```
+
+Push is the one gateway surface that cannot be tested by asking for it. Everything else answers a
+request; a notification only exists when a session decides to raise one — so "does tapping this open
+the right session" is observable only by accident, and duly went unobserved while every tap aborted
+the iOS app (`docs/GOTCHAS.md`, §APNs push).
+
+It builds the payload with **`buildPush`**, not a hand-written `aps` dictionary, and that is the
+point rather than a convenience. A hand-rolled payload carries no `sessionId`, so `PushPayload.init?`
+returns nil and the tap routes nowhere — which looks exactly like a broken deep link and is not one.
+If you are testing routing, the payload has to be the one the forwarder really sends.
+
+Needs an `apns`-configured gateway: one without it answers `/apns/devices` with 404 and keeps no
+registry. Credentials come from the environment and must match that gateway's own `apns` config —
+this script is deliberately not a second place that knows how to mint one. `WD_STATE_DIR` points at
+the gateway's state directory (default `/tmp/workerdeck-prod`), whose `apns-devices.json` is read so
+the push goes to whatever is actually registered.
+
 
 ## `smoke:restart` — the restart, end to end, against a real engine
 

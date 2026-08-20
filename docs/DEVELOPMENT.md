@@ -45,4 +45,8 @@ engine's process contract can't either**: any change to `CodexRunner`'s spawn op
 handshake, or event mapping needs `pnpm smoke:codex`. Smokes live in `smoke/`: `smoke:sandbox` and
 `smoke:codex --canary` are free; `smoke:live`, `smoke:sdk`, `smoke:media` (the only check that
 the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:codex` are not.
+**Anything touching the APNs payload, the device route or the app's tap handling needs
+`pnpm smoke:push`** — it costs no tokens, but it is the only way to raise a notification without
+waiting for a session to decide to, and a tap is the only gate the delegate's main-thread contract
+has (`docs/GOTCHAS.md`, §APNs push).
 
