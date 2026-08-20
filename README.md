@@ -241,9 +241,12 @@ editor chrome and lifted the sessions-list and unread models into the protocol s
 shows the same list; 0.13 added cross-origin gateway auth and rebuilt the dashboard; 0.14 and 0.15
 shipped together as **0.15.0** — session `scope` enforced at every door, `sandboxedProviderProfile()`,
 a loud MCP failure instead of a silently tool-less session, host tools at a stated trust, and
-[`apps/embedded`](apps/embedded) as the reference embedding. The iOS app's APNs push is covered
-by tests but has not been exercised against a live gateway from a physical phone — treat it as
-new, not as settled. Expect the protocol to keep evolving: `PROTOCOL_VERSION` guards breaking
+[`apps/embedded`](apps/embedded) as the reference embedding. The iOS app's APNs push reached a
+physical phone from a live gateway for the first time on 2026-08-20 — registration, delivery and a
+tapped notification opening the session it names are all confirmed; the lock-screen Approve/Deny
+action still is not. That first real pass immediately found two bugs (every tap aborted the app on
+a main-thread assert, and a dial could fail silently), so treat push as newly proven rather than
+settled. Expect the protocol to keep evolving: `PROTOCOL_VERSION` guards breaking
 changes and is at 7. See the [roadmap](docs/ROADMAP.md) for what's next.
 
 MIT © Tobias Strebitzer

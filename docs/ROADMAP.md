@@ -463,17 +463,24 @@ through phase 3, on-demand tool results and image-part references, and:
    *region* rather than a mark, now that regions exist on the phone; and (d) expressing the iOS
    planner over `blockCalls` too, if a third consumer of that walk ever appears — deliberately not
    before, since the planner's copy is the one that has to stay pure.
-1. **APNs push for the iOS app — released in 0.7.0, not yet proven on a device.** The forwarder half is in
-   (`packages/cli/src/apns/`: hand-rolled HTTP/2 client, device registry at `/apns/devices`,
-   in-process hook onto the session notifications above) and so is the app half (entitlement,
-   registration per gateway, Approve/Deny actions, deep link). Verified so far: the credential
-   path end to end against real APNs (a bogus token gets `BadDeviceToken`, which only a valid JWT
-   and topic can earn) and presentation on the simulator via `xcrun simctl push`. **Not** yet
-   verified: a real device token, an actual push arriving from a running gateway, or the
-   Approve/Deny buttons resolving a live permission request. It ships in 0.7.0 rather than waiting
-   — the code is tested and the alternative was holding the host-filesystem release behind it —
-   but it stays here rather than under Shipped until a push has actually reached a phone, and the
-   README says as much. The same caveat covers the iOS file browser released alongside it.
+1. **APNs push for the iOS app — proven on a device 2026-08-20, one path still open.** The
+   forwarder half is in (`packages/cli/src/apns/`: hand-rolled HTTP/2 client, device registry at
+   `/apns/devices`, in-process hook onto the session notifications above) and so is the app half
+   (entitlement, registration per gateway, Approve/Deny actions, deep link). **Now verified against
+   a physical phone and a running gateway:** registration (fresh `hostId` against a restarted
+   gateway), delivery through real APNs, and a tapped notification opening the session it names.
+   **Still not verified: the Approve/Deny buttons resolving a live permission request from the lock
+   screen** — the one path that answers a request without the app coming forward, and the reason
+   the payload carries `requestId` at all.
+
+   That first real pass paid for itself immediately, which is the argument for doing it before a
+   release rather than after: every tap had been aborting the app on a main-thread assert (the
+   `async` delegate witness — `docs/GOTCHAS.md` §APNs push), and a dial could fail silently because
+   Node's Happy Eyeballs gives each address 250ms and Apple sometimes needs more. Both had shipped.
+   Neither is reachable by any test — hence `pnpm smoke:push`, which raises a real notification on
+   demand so the next person does not have to wait for one by accident. The deep link currently
+   lands at the tail of the transcript rather than on the event that triggered it, though `seq` is
+   already in the payload; that is tracked as its own item.
 1. **Finish the VS Code extension.** The surface is built and side-loadable, but three things
    are open, in order: (a) a live end-to-end run against a real gateway in an Extension
    Development Host. Partly done as of 0.11.x: a side-loaded build has been driven against a real
