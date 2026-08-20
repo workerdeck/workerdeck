@@ -1,6 +1,11 @@
 import { createPrivateKey, type KeyObject, sign } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import { type ClientHttp2Session, connect, constants } from 'node:http2'
+import {
+  type ClientHttp2Session,
+  connect,
+  constants,
+  type SecureClientSessionOptions,
+} from 'node:http2'
 
 /**
  * A minimal APNs provider client: an HTTP/2 POST carrying an ES256 JWT.
@@ -55,6 +60,12 @@ const HOSTS: Record<ApnsEnvironment, string> = {
  */
 const TOKEN_TTL_MS = 40 * 60 * 1000
 const REQUEST_TIMEOUT_MS = 10_000
+/** Per-address budget for a dial. Node defaults this to 250ms, which is under
+ * Apple's observed handshake on at least one real path; see the comment at the
+ * `connect()` call. Generous rather than tuned — the cost of being slow to give
+ * up on an address is a slower dial, and the cost of being quick is a lost
+ * notification. */
+const DIAL_ATTEMPT_TIMEOUT_MS = 2_000
 
 export type ApnsRequest = {
   deviceToken: string
@@ -184,7 +195,26 @@ function createSessionPool(hosts: Record<ApnsEnvironment, string>): {
     get(environment) {
       const existing = sessions.get(environment)
       if (existing !== undefined && !existing.closed && !existing.destroyed) return existing
-      const session = connect(hosts[environment])
+      const session = connect(hosts[environment], {
+        // Node's Happy Eyeballs (`autoSelectFamily`, default-on since v20) gives
+        // each candidate address `autoSelectFamilyAttemptTimeout` — **250ms** by
+        // default — before abandoning it and trying the next. Apple's handshake
+        // does not fit in that on every path: measured from one machine during a
+        // failure burst, IPv4 connects to api.sandbox.push.apple.com took
+        // ~600-700ms and every IPv6 candidate answered EHOSTUNREACH instantly, so
+        // all six candidates burned in ~765ms (≈3 × 250ms) and the dial failed —
+        // 0/5 on the default against 5/5 with this option, interleaved seconds
+        // apart. Each of those was a silently lost notification.
+        //
+        // Raising the window rather than setting `autoSelectFamily: false`
+        // deliberately: disabling it entirely would strand a genuinely IPv6-only
+        // host, and it measured no better (5/5 either way).
+        // `http2.connect` forwards its options to `net`/`tls`, but @types/node
+        // does not surface the family-selection ones on the http2 option type,
+        // so the cast is the types lagging the runtime rather than a claim
+        // about it — the measurement above was taken through this exact call.
+        autoSelectFamilyAttemptTimeout: DIAL_ATTEMPT_TIMEOUT_MS,
+      } as SecureClientSessionOptions)
       sessions.set(environment, session)
       failures.delete(environment)
       // Without an error listener a GOAWAY-then-error would take the whole

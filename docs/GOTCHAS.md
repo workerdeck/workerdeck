@@ -1302,6 +1302,18 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   asking for the same decision. A still-`connecting` session whose stream died pending is
   destroyed so the retry (and every later push) dials fresh instead of queuing behind a doomed
   connect; `destroy()` without an error emits no `'error'`, so the no-crash rule holds.
+- **Node's Happy Eyeballs gives each address 250ms, and Apple does not always answer in it.**
+  `autoSelectFamily` is default-on since Node 20 and `autoSelectFamilyAttemptTimeout` defaults to
+  **250ms**; `api.push.apple.com` publishes A *and* AAAA, so a dial walks up to six candidates.
+  Measured from one machine during a failure burst: every IPv6 candidate answered `EHOSTUNREACH`
+  instantly, IPv4 connects took ~600-700ms when allowed to finish, and the default therefore burned
+  all six in ~765ms (≈3 × 250ms) and failed — **0/5 on the default against 5/5 with a 2s attempt
+  timeout, interleaved seconds apart**. Each failure was a silently lost notification reported as
+  `The pending stream has been canceled (caused by: )`. The client sets the window explicitly.
+  Raising it beats `autoSelectFamily: false`, which measured no better and would strand an
+  IPv6-only host. Note the trap in *testing* this: the same three-way comparison run outside a
+  burst showed no difference at all (10/10 each), so a null result here means "no burst right now",
+  not "no bug" — sample while it is failing or not at all.
 - **A route that is never mounted is not unclaimed — the dashboard's SPA catch-all owns it.**
   With no `apns` config there is no device route, so `/apns/devices` fell through to the static
   host, which serves `GET, HEAD` and answered a registration POST with **405**, not the 404 every
