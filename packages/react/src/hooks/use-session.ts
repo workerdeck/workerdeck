@@ -20,6 +20,7 @@ import {
   transcriptCacheKey,
   writeTranscriptCache,
 } from '../lib/transcript-cache.ts'
+import { attachSeedToken, planAttach, shouldWriteParting } from '../lib/attach-plan.ts'
 
 /** Replace the state wholesale — an in-place session switch, or the stale-log
  * resync. Internal to the hook; the wire never carries it. */
@@ -249,7 +250,7 @@ export function useClaudeSession(
   // initializer above seeded for the mount's token; the effect re-seeds when its
   // token differs (an in-place session switch, or a resync).
   const seededForRef = useRef(
-    `0:${sessionId === undefined ? '' : transcriptCacheKey(client, sessionId)}`,
+    attachSeedToken(0, sessionId === undefined ? '' : transcriptCacheKey(client, sessionId)),
   )
   // True from a stale-log detection until the next attach: the cleanup must not
   // write the condemned state back into the cache (it would re-poison the very
@@ -261,24 +262,25 @@ export function useClaudeSession(
     if (!sessionId) return
     const cache = optionsRef.current?.cacheTranscript !== false
     const key = transcriptCacheKey(client, sessionId)
-    const seedToken = `${resyncSeq}:${key}`
-    const warm = cache && !skipCacheRef.current ? readTranscriptCache(key) : undefined
+    // Every decision — which state this attach holds, whether to re-seed the
+    // reducer, which afterSeq to request — is made in planAttach, pure and
+    // unit-tested (test/attach-plan.test.ts), because this hook itself never
+    // renders in a test: the package carries no jsdom, by design. This effect
+    // only reads its refs into inputs and applies the plan's instructions.
+    const plan = planAttach({
+      resyncSeq,
+      key,
+      seededFor: seededForRef.current,
+      current: stateRef.current,
+      cacheEnabled: cache,
+      skipCache: skipCacheRef.current,
+      warm: readTranscriptCache(key),
+    })
     skipCacheRef.current = false
-    // What the reducer holds for THIS attach. On the mount that initialized it,
-    // the live state (same object the initializer read); otherwise seed before
-    // any frame arrives — applyEvent's `seq <= lastSeq` dedupe would silently
-    // swallow a new session's (or a fresh log's) entire replay into old state.
-    let held: TranscriptState
-    if (seededForRef.current === seedToken) {
-      held = stateRef.current
-    } else {
-      held = warm ?? initialTranscriptState
-      dispatch({ type: 'transcript_seed', state: held })
-      seededForRef.current = seedToken
+    if (plan.seed) {
+      dispatch({ type: 'transcript_seed', state: plan.held })
+      seededForRef.current = plan.seedToken
     }
-    // `afterSeq` comes from the state actually held, never from a separate
-    // cache read: they are the same object here, and deriving both from one
-    // source keeps a racing write from another mount from opening a gap.
     // `truncateResults` is asked for **here**, and here only: this hook is the
     // unit that renders, so it is the one that knows a head can be fetched back
     // (see `AttachOptions.truncateResults`). An embedder holding `client`
@@ -291,7 +293,7 @@ export function useClaudeSession(
     const handle = client.attach(sessionId, {
       truncateResults: true,
       imageRefs: true,
-      ...(held.lastSeq > 0 ? { afterSeq: held.lastSeq } : {}),
+      ...(plan.afterSeq === undefined ? {} : { afterSeq: plan.afterSeq }),
     })
     handleRef.current = handle
     setHandleState(handle)
@@ -344,12 +346,11 @@ export function useClaudeSession(
       setConnection('reconnecting')
       setProtocolMismatch(undefined)
       setReplayTarget(undefined)
-      // Keep the transcript warm for a switch-back. Skipped when there is
-      // nothing real to keep (`lastSeq === 0`, which also protects an existing
-      // entry from being clobbered by a mount that never finished attaching)
-      // and after a stale-log detection (see skipCacheRef).
+      // Keep the transcript warm for a switch-back — when shouldWriteParting
+      // allows it (the guards, and the bugs each one prevents, live on that
+      // function).
       const parting = stateRef.current
-      if (cache && !skipCacheRef.current && parting.lastSeq > 0 && parting.session) {
+      if (shouldWriteParting({ cacheEnabled: cache, skipCache: skipCacheRef.current, parting })) {
         writeTranscriptCache(key, parting)
       }
     }
