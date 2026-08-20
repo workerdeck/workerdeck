@@ -151,9 +151,14 @@ struct SessionListView: View {
       .padding(.horizontal)
       .padding(.bottom, 8)
 
-      // A gateway that is unreachable or unauthorized is a visible state, never
-      // a broken list: the other gateways' rows are still below.
-      ForEach(model.failedHosts, id: \.host.id) { failed in
+      // A gateway that is unreachable or unauthorized is a visible state — but
+      // only when there is nothing else working. With one gateway down and
+      // another serving happily, the down one is a fact about a machine, not a
+      // problem with what is on screen, and a warning strip over a list that is
+      // fine reads as the app being broken. So: banners only while *no* gateway
+      // is answering, and then one per host, because which one failed and why
+      // is the whole content of the message.
+      ForEach(model.allGatewaysDown ? model.failedHosts : [], id: \.host.id) { failed in
         ErrorBanner(message: "\(failed.host.displayName): \(failed.message)") {
           Task { await model.refreshCurrentTab() }
         }
@@ -367,16 +372,25 @@ struct SessionListView: View {
 
   @ViewBuilder
   private func resumeList(_ model: SessionListModel) -> some View {
+    // A gateway that failed has settled too — it just settled badly. Waiting for
+    // `hasLoadedSdkSessions` on a host that will never set it leaves this tab
+    // permanently blank, which was survivable only while a banner was there to
+    // explain it. Now that one working gateway suppresses the banner, "loaded"
+    // has to mean "every host has answered", not "every host succeeded".
     let loaded = hosts.hosts.allSatisfy {
-      model.snapshots[$0.id]?.hasLoadedSdkSessions == true
+      guard let snapshot = model.snapshots[$0.id] else { return false }
+      if case .failed = snapshot.probe { return true }
+      return snapshot.hasLoadedSdkSessions
     }
     let empty = hosts.hosts.allSatisfy {
       (model.snapshots[$0.id]?.sdkSessions ?? []).isEmpty
     }
     List {
-      // Not while a load failed: "nothing to resume" under an error banner reads
-      // as a fact about the server's disk, and it isn't one.
-      if empty, loaded, model.failedHosts.isEmpty {
+      // Not while the banner is up: "nothing to resume" under an error strip
+      // reads as a fact about the server's disk, and it isn't one. With one
+      // gateway working the strip is gone, and then this line is the honest
+      // summary of every gateway that actually answered.
+      if empty, loaded, !model.allGatewaysDown {
         ContentUnavailableView {
           Label("Nothing to resume", systemImage: "clock.arrow.circlepath")
         } description: {

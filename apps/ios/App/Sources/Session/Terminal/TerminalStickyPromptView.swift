@@ -33,9 +33,10 @@ import WorkerDeckKit
 /// - **It must not be a header.** The line is drawn by the same primitives at
 ///   the same geometry, so it lands on the column its own row sits on. A
 ///   separate header with its own text arrangement drifts by a fraction of a
-///   cell, which reads as the font being wrong. The strip around it *is* chrome
-///   — air above and below, a rule under — which is the same exception the
-///   scrubber rail takes to the grid: it sits beside the grid rather than in it.
+///   cell, which reads as the font being wrong. So the line stays on the grid,
+///   at the grid's own *y*, and the only chrome is a rule under it — the strip
+///   has to hand over to the next one without moving the line a pixel, and air
+///   above it is exactly what would move it.
 struct TerminalStickyPromptView: View {
   let rows: TerminalRows
   let book: TerminalHeightBook
@@ -56,13 +57,23 @@ struct TerminalStickyPromptView: View {
   /// honestly — and it goes through the row model, like every other jump.
   let onJumpToRow: (Int) -> Void
 
-  /// Air above and below the line. The strip is chrome, so it is not on the
-  /// row grid — but a bare line at the very top edge reads as a row that failed
-  /// to scroll rather than as a header, and the padding is what tells them
-  /// apart.
-  private static let padding: CGFloat = 5
+  /// The rule under the line, and the only thing the strip carries beyond the
+  /// line itself.
+  ///
+  /// **There is deliberately no air above the line.** There was — 5pt of it —
+  /// and it put the pinned copy 5pt below where the real line sits at the
+  /// moment of hand-off, so every takeover jumped the line down by exactly that
+  /// padding. The lift out is continuous, which is why only the arrival
+  /// glitched. A header that is the same line at the same geometry has to
+  /// arrive at the same *y* too, so the line is on the grid and the rule is the
+  /// only chrome.
+  private static let rule: CGFloat = 1
 
-  private var stripHeight: CGFloat { metrics.line + 2 * Self.padding }
+  /// Line plus rule, and it must equal the `VStack`'s own height or `.clipped()`
+  /// eats the difference — which is what used to happen to the rule: the strip
+  /// measured `line + 10` while the stack drew `line + 11`, so the hairline was
+  /// cut off every frame and had never once been seen.
+  private var stripHeight: CGFloat { metrics.line + Self.rule }
 
   var body: some View {
     if let pinned {
@@ -70,12 +81,13 @@ struct TerminalStickyPromptView: View {
         TerminalLineStrip(
           line: pinned.line, typography: typography, metrics: metrics, bleed: bleed)
           .frame(height: metrics.line)
-          .padding(.vertical, Self.padding)
         // A rule, not a shadow or a box: the strip has to end somewhere, and a
-        // hairline is how this theme says so everywhere else.
+        // hairline is how this theme says so everywhere else. With the air gone
+        // it is the whole of what separates the held line from the moving text
+        // under it, so it has to actually be drawn — see `stripHeight`.
         Rectangle()
           .fill(TerminalPalette.nestedRule)
-          .frame(height: 1)
+          .frame(height: Self.rule)
       }
       .background(Color(uiColor: .systemBackground))
       // Push-off: the next prompt does not slide under this one, it lifts it
@@ -95,7 +107,7 @@ struct TerminalStickyPromptView: View {
   /// The arithmetic is `StickyPrompt.resolve`, in the kit, where a test can
   /// drive it — this view only draws what it returns. The strip's own height
   /// goes in, not the grid line: the hand-off has to be measured against what
-  /// is on screen, padding and rule included.
+  /// is on screen, the rule included.
   private var pinned: (line: TermLine, offset: CGFloat, row: Int)? {
     guard
       let pin = StickyPrompt.resolve(

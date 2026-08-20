@@ -245,6 +245,23 @@ final class SessionListModel {
     snapshots.values.contains { $0.probe == .connected }
   }
 
+  /// A gateway that has not answered yet, either way. Distinct from failure:
+  /// one slow gateway beside one that already failed is not "nothing is
+  /// reachable", it is a verdict that has not arrived. Without this, a fast
+  /// failure next to a slow success flashes a warning strip and then withdraws
+  /// it, which is worse than either state on its own.
+  var anyPending: Bool {
+    snapshots.values.contains { $0.probe == .pending }
+      || hostStore.hosts.contains { snapshots[$0.id] == nil }
+  }
+
+  /// Every gateway has answered, and every one of them failed — the only state
+  /// that earns the trouble strip. One gateway down beside one that works is a
+  /// fact about a machine, not a problem with the list on screen.
+  var allGatewaysDown: Bool {
+    !hostStore.hosts.isEmpty && !anyConnected && !anyPending
+  }
+
   // MARK: - App icon badge
 
   /// Rows unseen, summed over the sessions the filter is *showing* — the VS Code

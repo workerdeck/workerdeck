@@ -41,11 +41,15 @@ public enum StickyPrompt {
   ///   - top: the viewport's top edge, in content space.
   ///   - line: the grid line, which is what a row's blank-line gap is worth.
   ///   - stripHeight: how tall the drawn strip is, which is **not** the same
-  ///     number. The strip is chrome rather than a row — it carries air above
-  ///     and below its line and a rule under it — and the hand-off has to be
-  ///     measured against what is actually on screen, or the next prompt slides
-  ///     under the padding for a few points before the lift begins. Defaults to
-  ///     `line`, which is the strip drawn as a bare row.
+  ///     number: the strip carries a rule under its line, and the hand-off has
+  ///     to be measured against what is actually on screen, or the next prompt
+  ///     slides under that rule for a point before the lift begins. Defaults to
+  ///     `line`, the strip drawn as a bare row.
+  ///
+  ///     Note this is the *height*, not an offset: the line itself must still
+  ///     sit at the strip's top edge. A strip that padded its line down instead
+  ///     hands the next prompt over at a different `y` than the real row it
+  ///     replaces, and the takeover jumps by the padding.
   public static func resolve(
     promptRows: [Int], rows: TerminalRows, book: TerminalHeightBook, top: CGFloat, line: CGFloat,
     stripHeight: CGFloat? = nil
