@@ -5,7 +5,11 @@ import Foundation
 /// Each route names its gateway: the list shows every host's sessions at once,
 /// so "which server" is a fact about the destination, not ambient state.
 enum SessionRoute: Hashable {
-  case session(hostId: UUID, sessionId: String)
+  /// - Parameter seq: the event a push notification was about, when this route
+  ///   came from a tapped notification. Part of the case's identity, so a second
+  ///   notification about the same session is a route SwiftUI treats as new —
+  ///   which is what re-opens it at the newer row.
+  case session(hostId: UUID, sessionId: String, seq: Int? = nil)
   case create(hostId: UUID, seed: CreateSessionSeed)
 }
 

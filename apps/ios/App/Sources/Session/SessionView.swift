@@ -30,6 +30,9 @@ struct SessionView: View {
 
   /// The gateway this session belongs to — the watermark key's first half.
   private let hostId: UUID
+  /// The event a tapped notification was about, when this screen was opened by
+  /// one. Resolved to a row once the replay has landed — see `focusTarget`.
+  private let focusSeq: Int?
 
   @State private var vm: TranscriptViewModel
   @State private var draft = ""
@@ -80,8 +83,18 @@ struct SessionView: View {
   @State private var photoSelection: [PhotosPickerItem] = []
   @State private var photoPickerRequested = false
 
-  init(sessionId: String, hostId: UUID, client: WorkerClient) {
+  /// Where the transcript should open, once something has told it. Nil is the
+  /// normal case and means the tail.
+  @State private var focusTarget: TerminalTranscriptView.TranscriptFocusTarget?
+  /// Whether the question has been asked. Separate from the answer, because
+  /// "the seq could not be placed" is a settled outcome too — retrying it on
+  /// every later event is how a deep link turns into a transcript that jumps
+  /// under the reader minutes after they arrived.
+  @State private var focusResolved = false
+
+  init(sessionId: String, hostId: UUID, client: WorkerClient, focusSeq: Int? = nil) {
     self.hostId = hostId
+    self.focusSeq = focusSeq
     _vm = State(initialValue: TranscriptViewModel(sessionId: sessionId, client: client))
   }
 
@@ -113,7 +126,7 @@ struct SessionView: View {
         } else if settings.transcriptVariant.isTerminal {
           TerminalTranscriptView(
             items: vm.state.items, pendingApprovals: vm.state.pendingApprovals,
-            revision: vm.revision, scroll: transcriptScroll)
+            revision: vm.revision, scroll: transcriptScroll, focusItem: focusTarget)
         } else {
           TranscriptListView(items: vm.state.items, revision: vm.revision)
         }
@@ -182,6 +195,11 @@ struct SessionView: View {
       // is how an unread badge silently stops working.
       .task(id: SeenKey(revision: vm.revision, attached: vm.session != nil)) {
         markSeen()
+        // Ridden along on this key rather than given its own: it is the same
+        // question ("has anything landed?"), it fires per applied event, and a
+        // second `.task(id:)` on that key would double the per-event cost of a
+        // screen whose replay cost is already the thing being watched.
+        resolveFocus()
       }
       // The cwd arrives with the session snapshot, which lands after this view
       // does — and changes on a resume into a different directory.
@@ -288,6 +306,32 @@ struct SessionView: View {
       } message: {
         Text("The run is terminated on the server.")
       }
+  }
+
+  // MARK: - Deep-link focus
+
+  /// Turn the notification's `seq` into the transcript row to open on.
+  ///
+  /// Resolved **once**, and deliberately not retried as the session moves: this
+  /// is where a tap wanted to land, and a later event re-deciding it would drag
+  /// the reader somewhere they never asked to go. An unanswerable seq (an event
+  /// the gateway's retention dropped, or one that produced no row) leaves the
+  /// target nil, which is today's behaviour — the tail.
+  ///
+  /// Only the terminal renderer honours it; the cards renderer has no row model
+  /// to land on, and a deep link there opens at the tail as it always has.
+  private func resolveFocus() {
+    guard let focusSeq, !focusResolved, let info = vm.session, !vm.replaying else { return }
+    if let item = vm.itemIndex(forSeq: focusSeq) {
+      focusResolved = true
+      focusTarget = .init(item: item, nonce: focusSeq)
+      return
+    }
+    // Nothing to land on *yet*. Give up only once the attach's stated seq has
+    // actually been reached — the hold can also end on a stall (see
+    // `armReplayHold`), and a transcript that is still filling in has not
+    // answered the question, it has merely been shown early.
+    if vm.state.lastSeq >= info.lastSeq { focusResolved = true }
   }
 
   // MARK: - Unread watermark

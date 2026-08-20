@@ -20,6 +20,11 @@ struct TerminalTranscriptView: View {
   /// only change signal.
   let revision: Int
   let scroll: TranscriptScrollModel
+  /// Which transcript **item** to open on, rather than the tail. Set by a deep
+  /// link from a tapped notification and nothing else — see
+  /// `TranscriptSeqIndex`. In item space, because that is the only space the
+  /// caller can speak: rows are a fold of items and only this view holds one.
+  var focusItem: TranscriptFocusTarget?
   #if DEBUG
     /// Receives the overflow audit's verdict after each refold. Wired only by
     /// the preview harness — a gate nobody reads is a gate that has never run.
@@ -64,7 +69,14 @@ struct TerminalTranscriptView: View {
         if let model, proxy.size.width > 0 {
           VirtualizedTranscriptView(
             rows: model.rows, book: model.book, metrics: metrics, expansion: model.expansion,
-            scroll: scroll, reveal: model.reveal, showsScrollIndicator: false,
+            scroll: scroll, reveal: model.reveal,
+            // Converted here and nowhere else — an item index is not a row
+            // index, and `rowIndex(forItem:)` is the only thing that knows the
+            // difference (a folded run of tool calls is one row for many items).
+            focus: focusItem.map {
+              TranscriptFocusRequest(row: model.rows.rowIndex(forItem: $0.item), nonce: $0.nonce)
+            },
+            showsScrollIndicator: false,
             configureRow: { cell, index in
               cell.configure(
                 lines: model.plan(at: index), typography: typography, metrics: metrics,
@@ -145,6 +157,14 @@ struct TerminalTranscriptView: View {
       }
     }
     .background(Color(uiColor: .systemBackground))
+  }
+
+  /// The transcript item a deep link wants opened on, and a nonce so a second
+  /// notification about the same item still travels. Item space; the row it
+  /// folds into is this view's business.
+  struct TranscriptFocusTarget: Equatable {
+    var item: Int
+    var nonce: Int
   }
 
   /// What a refold is keyed on. The width belongs here as much as the revision

@@ -114,6 +114,13 @@ final class TranscriptViewModel {
     return catalogModels
   }
 
+  /// Where each event's rows landed, for the push deep link — see
+  /// `TranscriptSeqIndex`. `@ObservationIgnored` because nothing renders it:
+  /// observed, it would invalidate every view watching this model once per
+  /// applied event, which is the exact cost `replayProgress` was throttled to
+  /// avoid.
+  @ObservationIgnored private var seqIndex = TranscriptSeqIndex()
+
   private let client: WorkerClient
   private var handle: SessionHandle?
   /// Tool results whose rest is in flight — one fetch per row, however many
@@ -150,6 +157,11 @@ final class TranscriptViewModel {
     }
     detach()
   }
+
+  /// Which transcript item a notification's `seq` points at, or nil when there
+  /// is nothing to move to (the event has not landed, or produced no row — the
+  /// reader then stays pinned at the tail, where it is about to appear).
+  func itemIndex(forSeq seq: Int) -> Int? { seqIndex.item(forSeq: seq) }
 
   func detach() {
     handle?.detach()
@@ -257,7 +269,10 @@ final class TranscriptViewModel {
         // are the two things every view watches, so leaving both alone is what
         // makes the hold cover the whole screen rather than one subview.
         var buffer = replayBuffer ?? state
+        let before = buffer.items.count
         buffer = applyEvent(buffer, sessionEvent)
+        seqIndex.note(
+          seq: sessionEvent.seq, itemsBefore: before, itemsAfter: buffer.items.count)
         replayBuffer = buffer
         // Charged before the hold is advanced: `advanceReplayHold` can end the
         // hold, which reports, and the fold that completed the replay is part
@@ -268,7 +283,9 @@ final class TranscriptViewModel {
         profile?.seq = buffer.lastSeq
         advanceReplayHold(lastSeq: buffer.lastSeq)
       } else {
+        let before = state.items.count
         state = applyEvent(state, sessionEvent)
+        seqIndex.note(seq: sessionEvent.seq, itemsBefore: before, itemsAfter: state.items.count)
         revision &+= 1
       }
       if case .rateLimit = sessionEvent.body { rateLimitsUpdatedAt = Date() }

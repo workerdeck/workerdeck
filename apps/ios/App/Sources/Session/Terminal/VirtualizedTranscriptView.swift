@@ -24,6 +24,22 @@ struct TranscriptRevealRequest: Equatable, Sendable {
   var nonce: Int
 }
 
+/// A row to put the reader **on**, whatever they are looking at now.
+///
+/// Distinct from ``TranscriptRevealRequest`` on purpose, and the difference is
+/// the whole reason for a second type: a reveal is one-directional and
+/// apologetic — it moves nothing that is already in view, because the reader
+/// asked to *read*, not to travel. This is the opposite instruction: a tapped
+/// notification asked to be taken somewhere, and the tail it would otherwise
+/// land on is precisely the wrong place.
+///
+/// Nonce-keyed like a reveal, so a second notification about the same row is a
+/// second journey rather than an equal value nobody acts on.
+struct TranscriptFocusRequest: Equatable, Sendable {
+  var row: Int
+  var nonce: Int
+}
+
 /// One frame's worth of scroll geometry, all in **content space** (the top
 /// inset already folded in, so `contentOffset` is "how far into the content the
 /// first visible point is"). This is the coordinate system the scrubber's
@@ -152,6 +168,8 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
   var expansion: TerminalExpansion
   var scroll: TranscriptScrollModel
   var reveal: TranscriptRevealRequest?
+  /// Where a deep link wants the reader put — see ``TranscriptFocusRequest``.
+  var focus: TranscriptFocusRequest?
   /// Hidden while the overview rail is mounted: the rail *is* the scrollbar
   /// there, and two of them beside each other is one too many. The web client
   /// makes the same trade, and restores the native bar under
@@ -216,6 +234,9 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     coordinator.apply(rows: rows, book: book, metrics: metrics, expansion: expansion)
     // After the epoch has landed, so the offsets it reads are the new ones.
     coordinator.reveal(reveal)
+    // And after the reveal, which is the weaker claim on the offset: if both
+    // arrive in one pass, being *taken* somewhere beats being shown something.
+    coordinator.focus(focus)
   }
 
   // MARK: - Coordinator
@@ -259,6 +280,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     private var metrics: TerminalMetrics?
     private var expansion = TerminalExpansion()
     private var revealedNonce: Int?
+    private var focusedNonce: Int?
     /// Cached keys of `rows` — the diff runs per applied epoch and rebuilding
     /// the old side each time would double its cost.
     private var keys: [String] = []
@@ -455,6 +477,24 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       // it is. Anything else would be scrolling the reader for asking to read.
       guard book.offset(at: request.row) < foldY else { return }
       scrollToRow(request.row, anchor: .top, animated: true)
+    }
+
+    /// Take the reader to the row a deep link named.
+    ///
+    /// Unconditional, unlike ``reveal(_:)`` — and **unanimated**, which is the
+    /// one judgement here: this fires as the session opens, and animating it
+    /// would mean watching the whole transcript rush past on the way to a row
+    /// the reader has not seen yet. `scrollToRow` decides the pin from where it
+    /// lands, so landing anywhere but the foot leaves the tail unfollowed, which
+    /// is what stops the next applied event from yanking the reader back down.
+    func focus(_ request: TranscriptFocusRequest?) {
+      guard let request, request.nonce != focusedNonce else { return }
+      guard collectionView != nil, request.row >= 0, request.row < rows.count else { return }
+      // Only marked consumed once it can actually be served: this arrives with
+      // the very first epoch, and a request dropped because the collection view
+      // was not mounted yet would never be offered again.
+      focusedNonce = request.nonce
+      scrollToRow(request.row, anchor: .top, animated: false)
     }
 
     // MARK: Geometry
