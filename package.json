@@ -33,6 +33,7 @@
     "smoke:codex": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/codex.ts",
     "smoke:restart": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/restart.ts",
     "smoke:attach": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/attach-bytes.ts",
+    "smoke:push": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/push.ts",
     "example:server": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register examples/provider-server.ts"
   },
   "devDependencies": {
