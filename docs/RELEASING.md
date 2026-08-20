@@ -65,8 +65,11 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   as well as lines (a minified MCP reply is one line, so the old four-line slice kept all thirty
   thousand characters of it) and the shell fold widened to **any run of consecutive tool calls**.
 
-  **Unreleased on master, deliberately.** 0.16.0 is the published latest and `package.json` still
-  reads it. Riding there too, from the sidebar/prompts session: **project identity**
+  **0.17.0** — the release the two entries below were held back for, cut once the verification debt
+  they were gated on was cleared (see the verification paragraph at the end of this section).
+  Everything from here to that paragraph ships under this number; it is a **minor** — additive
+  throughout, `persistLive` defaults off, absent `subagents` means empty, and protocol stays **7**.
+  Riding there too, from the sidebar/prompts session: **project identity**
   (`.workerdeck.json` → `SessionInfo.project`, the ancestor walk, the icon route, the `project`
   facet), now **drawn on all three clients**. The VS Code sidebar took it first — a card's second
   line reads the project in place of the cwd basename it was only ever a proxy for — and the repo
@@ -245,6 +248,17 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   deferred, and the settle path asserted `running` — so an interrupted or timed-out turn left the
   session claiming to run, on every client at once, permanently, because status is edge-driven with
   no reconciliation. Reproduced by test first, then fixed; see `docs/GOTCHAS.md` §Permissions.
+
+  Cut with a **dependency sweep**: `pnpm audit` went 23 advisories to **zero**. The ones that
+  mattered were the ones rendered from model output — `streamdown` (the transcript's markdown) and
+  `monaco-editor` pinned mermaid and dompurify below their fixed versions, and both ship to a
+  browser — overridden in `pnpm-workspace.yaml`, **not** under a `pnpm` key in `package.json`,
+  which pnpm 11 ignores with only a warning. The rest was `apps/docs` build tooling, taken with an
+  astro 5 → 7 major that broke exactly one thing worth naming: `index.astro` read
+  `packages/cli/package.json` with `readFileSync` relative to `import.meta.url`, which held only
+  while that URL was the source file — astro 7 prerenders from a bundled chunk, so the same four
+  `../` resolved into `apps/packages/` and the build died. A plain JSON import cannot care where
+  the chunk lands.
 
   **The verification debt this ledger has twice deferred a bump on was cleared 2026-08-20**, and
   clearing it changed three claims above rather than merely confirming them.
