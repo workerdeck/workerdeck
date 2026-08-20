@@ -1,9 +1,10 @@
 /**
  * A real APNs push, on demand, through the real payload builder.
  *
- *   pnpm smoke:push <host> [sessionId]
+ *   pnpm smoke:push <host> [sessionId] [seq]
  *   pnpm smoke:push toby.example.ts.net:8788
  *   pnpm smoke:push 127.0.0.1:8787 a8cabb30-6ee9-449d-9819-8877b44a8416
+ *   pnpm smoke:push toby.example.ts.net:8787 a8cabb30-… 1800   # land mid-transcript
  *
  * **This exists because push is the one surface that cannot be tested by
  * waiting.** Everything else on this gateway answers a request; a notification
@@ -22,6 +23,20 @@
  * Reads the device registry the gateway itself writes, so it pushes to whatever
  * is really registered. Requires an `apns`-configured gateway (a gateway
  * without one answers `/apns/devices` with 404 and has no registry at all).
+ *
+ * **`[seq]` is what makes the deep link testable.** Without it the push carries
+ * the session's `lastSeq` — the tail — and a client that lands on the right row
+ * is indistinguishable from one that ignores `seq` entirely and scrolls to the
+ * bottom, which is exactly the bug the whole feature exists to fix. Pass a seq
+ * from the *middle* of a long session and the answer is unambiguous: the reader
+ * arrives with history above them, or the feature does not work.
+ *
+ * Two things that will 401 you against a real gateway, both learned here:
+ * `WD_AUTH_KEY` (the gateway's own operator secret, `<state-dir>/auth-key`) is
+ * needed the moment `--auth-key` is in play, and the host **must be spelled the
+ * way the gateway was started** — the Host-header guard rejects the tailnet IP
+ * of a gateway launched with `--host <name>`, and it answers `unauthorized`
+ * rather than anything that mentions hosts.
  */
 import { readFile } from 'node:fs/promises'
 import type { SessionInfo } from '@workerdeck/protocol'
@@ -37,9 +52,13 @@ type Registry = {
   }[]
 }
 
-const [host, wantedSession] = process.argv.slice(2)
+const [host, wantedSession, wantedSeq] = process.argv.slice(2)
 if (host === undefined) {
-  console.error('usage: pnpm smoke:push <host> [sessionId]')
+  console.error('usage: pnpm smoke:push <host> [sessionId] [seq]')
+  process.exit(2)
+}
+if (wantedSeq !== undefined && !/^\d+$/.test(wantedSeq)) {
+  console.error(`seq must be a positive integer, got ${wantedSeq}`)
   process.exit(2)
 }
 
@@ -60,7 +79,24 @@ if (keyFile === undefined || keyId === undefined || teamId === undefined || topi
 }
 
 const base = host.startsWith('http') ? host : `http://${host}`
-const { sessions } = (await (await fetch(`${base}/v1/sessions`)).json()) as {
+// The gateway's own operator secret, never a model credential (root CLAUDE.md,
+// auth red lines). Absent is normal — a gateway started without `--auth-key`
+// wants no header at all.
+const authKey = process.env.WD_AUTH_KEY
+const listed = await fetch(`${base}/v1/sessions`, {
+  headers: authKey === undefined ? {} : { authorization: `Bearer ${authKey}` },
+})
+if (!listed.ok) {
+  console.error(
+    `GET /v1/sessions -> ${listed.status}. ` +
+      (listed.status === 401
+        ? 'Set WD_AUTH_KEY to the gateway\'s <state-dir>/auth-key — and check the host is spelled\n' +
+          'the way the gateway was started: the Host-header guard also answers 401.'
+        : ''),
+  )
+  process.exit(1)
+}
+const { sessions } = (await listed.json()) as {
   sessions: SessionInfo[]
 }
 const session = wantedSession === undefined ? sessions[0] : sessions.find((s) => s.id === wantedSession)
@@ -72,7 +108,12 @@ if (session === undefined) {
 const registry = JSON.parse(
   await readFile(`${stateDir}/apns-devices.json`, 'utf8'),
 ) as Registry
-console.log(`session ${session.id} — ${registry.devices.length} device(s) registered`)
+// The tail unless told otherwise — see the `[seq]` note at the top of this file.
+const seq = wantedSeq === undefined ? session.lastSeq : Number(wantedSeq)
+console.log(
+  `session ${session.id} — seq ${seq}${seq === session.lastSeq ? ' (the tail)' : ` of ${session.lastSeq}`}` +
+    ` — ${registry.devices.length} device(s) registered`,
+)
 
 const key = await loadApnsKey(keyFile)
 const client = createApnsClient({ keyFile, keyId, teamId, topic }, key)
@@ -83,9 +124,12 @@ for (const device of registry.devices) {
       type: 'turn_completed',
       sessionId: session.id,
       session,
-      seq: session.lastSeq,
+      seq,
       ts: Date.now(),
-      preview: 'smoke:push — tapping this should open this session.',
+      preview:
+        wantedSeq === undefined
+          ? 'smoke:push — tapping this should open this session.'
+          : `smoke:push — tapping this should land on seq ${seq}, not at the bottom.`,
       result: { isError: false, durationMs: 1, numTurns: 1, totalCostUsd: 0 },
     },
     device.hostId,
