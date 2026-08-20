@@ -1287,6 +1287,16 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   the queue reports only "the pending stream has been canceled", so the client keeps the
   *session's* error and reports that instead — otherwise DNS failure, TLS failure and Apple
   hanging up are indistinguishable.
+- **A route that is never mounted is not unclaimed — the dashboard's SPA catch-all owns it.**
+  With no `apns` config there is no device route, so `/apns/devices` fell through to the static
+  host, which serves `GET, HEAD` and answered a registration POST with **405**, not the 404 every
+  doc promised. The app reads only 404 as "no push here", so it threw instead, never marked the
+  host synced, and retried on every foreground with a visible error — on what is the normal state
+  of every gateway that never wanted push. The fallback now claims `/apns/devices` whether or not
+  a forwarder exists. Generally: when a surface's contract is "absent means 404", something has to
+  answer that 404, because the catch-all below will otherwise answer for it — and it will answer
+  405 or a 200 with an HTML document, both of which read as a broken gateway rather than an absent
+  feature. Only reachable with the dashboard on; `--no-web` 404s and hid it.
 - `fetch`/undici will not do: APNs is HTTP/2 only, hence `node:http2` directly.
 - The APNs key's **environment and restriction scope cannot be changed after the key is created**
   (the portal now forces the choice at creation, and a team gets only two active keys). WorkerDeck's
@@ -1294,6 +1304,12 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 
 ## Build, test & packaging
 
+- **A test's name is not its assertion, and only the assertion runs.** `404s when the instance has
+  no forwarder` asserted `expect(status).not.toBe(200)`, which the 405 that was the actual bug
+  passed happily — green from the day it was written (see §APNs). A negative assertion is the
+  shape to distrust: it green-lights every wrong answer except one. Assert the status, the body,
+  the value — if the test name states a contract, check *that* contract, or rename the test to
+  what it really pins.
 - **Verifying "it is really production React" — check the right marker.** On a `pnpm start:prod`
   bundle, `grep jsxDEV` *does* hit the main chunk and it is a false positive: the one occurrence
   is a markdown library's own options check. The real markers are `react-stack-bottom-frame` and

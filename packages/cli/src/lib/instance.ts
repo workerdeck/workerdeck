@@ -58,6 +58,16 @@ export function createHostGuard(allowedHosts: Set<string> | null): (req: Incomin
   }
 }
 
+/** The request path, or null when the target is malformed enough that `URL`
+ * refuses it — a caller matching a fixed route wants a miss, not a throw. */
+function pathnameOf(req: IncomingMessage): string | null {
+  try {
+    return new URL(req.url ?? '/', 'http://internal').pathname
+  } catch {
+    return null
+  }
+}
+
 /**
  * Everything outside `/v1`. Order matters: the auth endpoints first (they are
  * how a browser gets a session in the first place), then assets, which stay
@@ -69,6 +79,15 @@ export function createHostGuard(allowedHosts: Set<string> | null): (req: Incomin
  * authentication (header only — it is never called by a browser), and it must
  * not fall through to the SPA's catch-all, which would answer a failed
  * registration with a 200 and an HTML document.
+ *
+ * That last rule holds whether or not a forwarder is configured, which is why
+ * the path is claimed unconditionally below. With no `apns` config the route
+ * does not exist, and an unclaimed `/apns/devices` reaches the catch-all, where
+ * a registration POST draws a 405 (`GET, HEAD`) rather than the documented 404.
+ * A client cannot tell that from a broken gateway: the iOS app reads only 404
+ * as `unsupported`, so it throws instead, never marks the host synced, and
+ * retries on every foreground with a visible error — for what is the normal
+ * state of every gateway that never wanted push.
  */
 function createFallback(
   auth: CliAuth,
@@ -91,6 +110,11 @@ function createFallback(
     }
     if (await auth.handleAuthRequest(req, res)) return
     if (apnsRoute !== undefined && (await apnsRoute(req, res))) return
+    if (apnsRoute === undefined && pathnameOf(req) === '/apns/devices') {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
+      res.end('this gateway runs without push\n')
+      return
+    }
 
     // Nothing below this point exists without a dashboard. Deliberately after
     // the auth and APNs routes: turning the *dashboard* off must not turn off

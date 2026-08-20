@@ -21,8 +21,8 @@ enum DeviceRegistration {
 
   enum Outcome: Sendable {
     case registered
-    /// The gateway answered 404: it is running without a push forwarder. A
-    /// normal state, not a failure — most instances will never configure one.
+    /// The gateway has no push forwarder. A normal state, not a failure — most
+    /// instances will never configure one.
     case unsupported
   }
 
@@ -42,7 +42,12 @@ enum DeviceRegistration {
 
     let (data, response) = try await URLSession.shared.data(for: request)
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-    if status == 404 { return .unsupported }
+    // 404 is the contract. 405 is what a gateway built before that contract was
+    // enforced answers: with no forwarder configured the path went unclaimed and
+    // the dashboard's SPA catch-all — which serves GET and HEAD only — replied
+    // for it. Both mean the same thing here, and treating 405 as a failure made
+    // every push-less gateway a permanent error the app retried forever.
+    if status == 404 || status == 405 { return .unsupported }
     guard (200..<300).contains(status) else {
       let detail = String(decoding: data.prefix(200), as: UTF8.self)
       throw WorkerClientError(

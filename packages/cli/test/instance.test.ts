@@ -447,8 +447,23 @@ describe('apns device route', () => {
       { token: TOKEN, environment: 'development' },
       { authorization: `Bearer ${SECRET}` },
     )
-    // No apns config means no route: the request reaches the static host, which
-    // refuses a POST it has no document for.
-    expect(res.status).not.toBe(200)
+    // Exactly 404, not merely "not 200". The app reads 404 as `unsupported` and
+    // stops asking; anything else it treats as a broken gateway, so it throws,
+    // never marks the host synced, and retries on every foreground. This
+    // assertion used to be `not.toBe(200)`, which the 405 the SPA catch-all
+    // actually returned passed happily — the bug was in the gap between this
+    // test's name and what it checked.
+    expect(res.status).toBe(404)
+  })
+
+  it('404s the same way with the dashboard off, and never serves a document there', async () => {
+    const { base } = await start(['--auth-key', SECRET, '--no-web'])
+    const res = await register(
+      base,
+      { token: TOKEN, environment: 'development' },
+      { authorization: `Bearer ${SECRET}` },
+    )
+    expect(res.status).toBe(404)
+    expect(res.headers.get('content-type') ?? '').not.toContain('text/html')
   })
 })
