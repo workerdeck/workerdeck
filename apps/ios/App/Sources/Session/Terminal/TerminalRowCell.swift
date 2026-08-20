@@ -46,6 +46,11 @@ final class TerminalRowCell: UICollectionViewCell {
   private var press: ((TermPress) -> Void)?
   /// How much text was selected when the finger went down — see `handleTap`.
   private var selectionAtTouchDown = 0
+  /// Was the transcript already moving when the finger went down, and where was
+  /// it? Both are read in `handleTap` to tell a press from the tap that merely
+  /// stopped a scroll — see the comment there.
+  private var scrollWasMovingAtTouchDown = false
+  private var contentOffsetAtTouchDown: CGPoint = .zero
   private var lines: [TermLine] = []
   private var geometry = TerminalRowGeometry(
     metrics: TerminalMetrics(cell: 8, line: 18, width: 0, fontSize: 13), bleed: 0)
@@ -74,6 +79,10 @@ final class TerminalRowCell: UICollectionViewCell {
     backgroundColor = .clear
 
     let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+    // `allowableMovement` is left at UIKit's default 10pt on purpose: that IS
+    // the platform's answer to "a finger moves a little during a tap", and
+    // hand-rolling a distance threshold here would only disagree with every
+    // other tappable thing on the phone.
     // The text view's own recognizers own the long press (that is the
     // selection); a plain tap falls through to this one.
     tap.cancelsTouchesInView = false
@@ -225,6 +234,25 @@ final class TerminalRowCell: UICollectionViewCell {
     // beside the text view's own recognizer means the selection it is clearing
     // may already be gone by the time this fires.
     guard selectionAtTouchDown == 0, body.selectedRange.length == 0 else { return }
+    // A tap that stopped a scroll is not a press.
+    //
+    // `allowableMovement` alone does not catch this, and the reason is worth
+    // keeping: a tap recognizer measures movement in **window** coordinates,
+    // and during momentum scrolling the finger is perfectly still while the
+    // content slides beneath it. Zero movement, so the tap recognizes — and
+    // whatever happened to arrive under the thumb got pressed. UIKit solves
+    // this for `UIControl`s inside a scroll view (`delaysContentTouches`), but
+    // a recognizer on a cell is outside that machinery, so the policy has to be
+    // stated here.
+    //
+    // Two signals, because neither covers both cases on its own: the scroll was
+    // already decelerating when the finger landed (the stop-the-scroll tap), or
+    // the content moved between touch-down and lift (a drag). A genuine tap on
+    // a resting transcript trips neither.
+    guard !scrollWasMovingAtTouchDown else { return }
+    if let scroll = enclosingScrollView, scroll.contentOffset != contentOffsetAtTouchDown {
+      return
+    }
     guard !lines.isEmpty else { return }
     let point = recognizer.location(in: contentView)
     // Clamped rather than bounds-checked, which is the row's whole hit-target
@@ -242,22 +270,45 @@ final class TerminalRowCell: UICollectionViewCell {
   }
 }
 
+extension TerminalRowCell {
+  /// The scroll view this row is riding in, if any. Walked rather than injected
+  /// so a cell stays usable outside a collection view (the sticky prompt draws
+  /// one with no scroll view above it at all).
+  fileprivate var enclosingScrollView: UIScrollView? {
+    var next = superview
+    while let view = next {
+      if let scroll = view as? UIScrollView { return scroll }
+      next = view.superview
+    }
+    return nil
+  }
+}
+
 extension TerminalRowCell: UIGestureRecognizerDelegate {
-  /// Snapshot the selection before the text view can act on this touch.
+  /// Snapshot the selection — and the scroll — before anything can act on this
+  /// touch. Read at touch-down because both are gone by the time the tap fires:
+  /// the text view may have cleared the selection, and touching a decelerating
+  /// scroll view stops it, so `isDecelerating` is false again a moment later.
   func gestureRecognizer(
     _ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch
   ) -> Bool {
     selectionAtTouchDown = body.selectedRange.length
+    let scroll = enclosingScrollView
+    scrollWasMovingAtTouchDown = scroll.map { $0.isDragging || $0.isDecelerating } ?? false
+    contentOffsetAtTouchDown = scroll?.contentOffset ?? .zero
     return true
   }
 
   /// Beside the text view's recognizers, never instead of them: selection
   /// within a row still works, and a plain tap now reaches the row on the first
   /// press rather than the second.
+  /// Beside the text view's recognizers — but never beside the scroll view's
+  /// pan. Sharing with the pan was the other half of pressing rows while
+  /// scrolling, and nothing here needs to run during a drag.
   func gestureRecognizer(
     _ recognizer: UIGestureRecognizer,
     shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
-  ) -> Bool { true }
+  ) -> Bool { !(other is UIPanGestureRecognizer) }
 }
 
 // MARK: - Geometry

@@ -30,9 +30,14 @@ export default defineConfig({
     // they are two origins — and the cookie is set by the app server. Proxying
     // keeps the browser on one origin anyway, which is what the production
     // single-port layout gives for free.
+    // Every prefix the app server owns has to be listed. A missing one does not
+    // fail loudly: Vite answers the SPA's `index.html` with a 200, so the caller
+    // gets HTML where it expected JSON and the feature just quietly never loads.
+    // That is what happened to `/trpc` when the wiki's data moved onto it.
     proxy: {
       '/v1': { target: appUrl, changeOrigin: false, ws: true },
       '/api': { target: appUrl, changeOrigin: false },
+      '/trpc': { target: appUrl, changeOrigin: false },
     },
   },
 })
