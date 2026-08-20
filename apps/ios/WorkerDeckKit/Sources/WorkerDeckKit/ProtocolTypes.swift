@@ -599,6 +599,26 @@ public struct ContextUsage: Decodable, Sendable, Equatable {
   }
 }
 
+/// The context reading that rides the **sessions list**, as opposed to the full
+/// ``ContextUsage`` that rides the event stream.
+///
+/// Three numbers, and the omission is the design: the category breakdown belongs
+/// to a sheet with a live session behind it, and this rides every row of a list
+/// polled at 1.2s. `percentage` alone would size a ring; the token pair is what
+/// lets a row *say* `142k / 200k` without a second round trip.
+public struct ContextReading: Decodable, Sendable, Equatable {
+  public let totalTokens: Int
+  public let maxTokens: Int
+  /// Used share of the window, 0–100.
+  public let percentage: Double
+
+  public init(totalTokens: Int, maxTokens: Int, percentage: Double) {
+    self.totalTokens = totalTokens
+    self.maxTokens = maxTokens
+    self.percentage = percentage
+  }
+}
+
 /// Emitted only for claude.ai subscription sessions — API-key sessions may never
 /// produce one, so clients must render nothing (not 0%) until data arrives.
 public struct RateLimitInfo: Decodable, Sendable, Equatable {

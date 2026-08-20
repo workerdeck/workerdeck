@@ -14,6 +14,8 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 import {
   ENGINE_CAPABILITIES,
+  contextReading,
+  type ContextReading,
   transcriptActivity,
   type CreateSessionRequest,
   type McpServerStatusInfo,
@@ -103,6 +105,13 @@ export class SessionRunner implements Runner {
   #events: SessionEvent[] = []
   #subscribers = new SubscriberSet()
   #seq = 0
+  /**
+   * Latest context-window reading, retained from the last `context_usage` this
+   * runner emitted so `GET /sessions` can answer it without an attach — see
+   * `SessionInfo.contextUsage`. Folded in the emit path, so it is by
+   * construction the same number the transcript last drew.
+   */
+  #contextUsage: ContextReading | undefined
   #activityCount = 0
   /**
    * Seq of the latest `conversation_reset` event, 0 when none. The log itself is
@@ -213,6 +222,7 @@ export class SessionRunner implements Runner {
       createdAt: this.createdAt,
       lastSeq: this.#seq,
       activityCount: this.#activityCount,
+      contextUsage: this.#contextUsage,
       pendingPermissionCount: this.#pending.size,
       subagents: this.#subagents.list(),
       meta: this.#config.meta,
@@ -865,7 +875,16 @@ export class SessionRunner implements Runner {
     // count is monotonic across a conversation_reset on purpose — it is an
     // unread cursor, not an item count (see SessionInfo.activityCount).
     this.#activityCount += transcriptActivity(body)
-    if (body.type === 'conversation_reset') this.#resetSeq = event.seq
+    // The list's copy of the reading the transcript already has. Folded here
+    // rather than at the point it is fetched, so every producer — and any
+    // future one — passes through the same rule.
+    this.#contextUsage = contextReading(body) ?? this.#contextUsage
+    if (body.type === 'conversation_reset') {
+      this.#resetSeq = event.seq
+      // A reset retires the conversation the window described; the old fill is
+      // not this conversation's, exactly as the transcript state clears it.
+      this.#contextUsage = undefined
+    }
     // Before fan-out, like #pending: a listener that reads info() on this very
     // event must see it already folded in.
     this.#subagents.observe(body, event.ts)

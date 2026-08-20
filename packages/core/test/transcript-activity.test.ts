@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  contextReading,
   transcriptActivity,
   transcriptContent,
   type SessionEventBody,
@@ -203,5 +204,40 @@ describe('transcriptContent', () => {
     // Unknown/future types default to not-content: the safe failure is
     // replaying a stale row, never withholding state.
     expect(transcriptContent({ type: 'sdk_event', payload: { type: 'x' } })).toBe(false)
+  })
+})
+
+/**
+ * The other rule that rides the sessions list. Same reason it lives in
+ * `protocol`: three runners fold it, every client reads it, and a second
+ * spelling of "which events move the reading" is a second answer.
+ */
+describe('contextReading', () => {
+  const usage = {
+    type: 'context_usage',
+    usage: {
+      categories: [{ name: 'system prompt', tokens: 1200, color: 'inactive' }],
+      totalTokens: 142_000,
+      maxTokens: 200_000,
+      percentage: 71,
+      model: 'claude-opus-4',
+    },
+  } as SessionEventBody
+
+  it('keeps the three numbers a list row needs and drops the breakdown', () => {
+    expect(contextReading(usage)).toEqual({
+      totalTokens: 142_000,
+      maxTokens: 200_000,
+      percentage: 71,
+    })
+  })
+
+  it('answers undefined for every other event, a reset included', () => {
+    // The reset's clearing is the caller's half of the rule — this function
+    // says what an event claims the reading *is*, and a reset claims nothing.
+    expect(contextReading({ type: 'conversation_reset' } as SessionEventBody)).toBeUndefined()
+    expect(
+      contextReading({ type: 'status_changed', status: 'idle' } as SessionEventBody),
+    ).toBeUndefined()
   })
 })

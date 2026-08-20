@@ -29,7 +29,12 @@ enum Fmt {
     return "\(Int(seconds / 86_400))d"
   }
 
-  /// Session cost, at the precision the protocol reports it: "$0.0142".
+  /// A *turn's* cost, at the precision the protocol reports it: "$0.0142".
+  ///
+  /// Deliberately not the web's `formatCost`, which rounds to cents and floors
+  /// at `<$0.01` — most single turns cost less than a cent, and a column of
+  /// `<$0.01` says nothing. For a **session total**, where the three clients sit
+  /// side by side and are compared, use `TermFmt.cost`, which *is* that port.
   static func cost(_ usd: Double) -> String {
     usd >= 10 ? String(format: "$%.2f", usd) : String(format: "$%.4f", usd)
   }

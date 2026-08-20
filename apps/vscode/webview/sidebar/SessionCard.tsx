@@ -13,8 +13,8 @@ import {
   PauseCircle,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { EngineIcon, ProjectIcon, engineMark } from '@workerdeck/ui'
-import { projectLabel, sessionLabel, subagentLabel } from '../../src/view-config.ts'
+import { ContextRing, EngineIcon, ProjectIcon, engineMark } from '@workerdeck/ui'
+import { projectLabel, projectSubpath, sessionLabel, subagentLabel } from '../../src/view-config.ts'
 
 /**
  * One session in the sidebar list — an inset rounded **card**, two lines and an
@@ -120,10 +120,12 @@ export function SessionCard({
   hostName?: string
   /**
    * False when the list is already grouped by project — the header above this
-   * row has said the name, so the slot goes back to the cwd's basename, which
-   * inside a project group is the one thing the header cannot say (`ui`,
-   * `server`, `web` under one WorkerDeck). Exactly the rule `hostName` follows
-   * one facet over.
+   * row has said the name, so the row must not spend its metadata line
+   * repeating it. What takes the slot is the *sub-path inside the project*
+   * (`projectSubpath`): `packages/ui`, `packages/server`, the one thing the
+   * header cannot say and the only thing telling two sessions in one repo
+   * apart. A session at the project root has nothing to add and the slot
+   * disappears. Exactly the rule `hostName` follows one facet over.
    */
   showProject?: boolean
   /** Resolved project-icon bytes by content hash — see `ProjectIconCache`.
@@ -153,8 +155,7 @@ export function SessionCard({
   const age = info.lastActivityAt ?? info.createdAt
   // protocol's own spelling, so the row, the group header this row sits under
   // and the project facet cannot disagree about what a project is called.
-  const folder = info.cwd.split('/').filter(Boolean).pop() ?? info.cwd
-  const project = showProject ? projectLabel({ info }) : folder
+  const project = showProject ? projectLabel({ info }) : projectSubpath({ info })
   const projectIcon = showProject ? info.project?.icon : undefined
   const engine = info.engine ?? 'claude'
   // The model id as a person says it — `claude-opus-5[1m]` is a wire value, and
@@ -235,6 +236,11 @@ export function SessionCard({
               {unseen}
             </span>
           ) : null}
+          {/* How full the window is, at a glance and across the whole list —
+              the question you cannot ask from inside one session. The same
+              component the dashboard's row draws, so the thresholds cannot
+              diverge; absent draws nothing (see `SessionInfo.contextUsage`). */}
+          <ContextRing usage={info.contextUsage} />
         </div>
         <div className='flex items-center gap-1.5 overflow-hidden text-label'>
           {/* The class goes ON the icon, not on the gutter. `EngineIcon` draws
@@ -254,16 +260,23 @@ export function SessionCard({
           <span className='min-w-0 flex-1 truncate text-fg-4'>
             <span className={vendor}>{model}</span>
             {hostName ? ` · ${hostName}` : ''}
-            {' · '}
-            <ProjectIcon
-              icon={projectIcon}
-              src={iconSrc}
-              name={project}
-              /* Nudged onto the text baseline: the glyph box is 12px against an
-                 11px line, so it sits a hair proud without this. */
-              className='mr-1 align-[-0.2em]'
-            />
-            {project}
+            {/* Conditional as a whole — separator, icon and name together. A
+                session at its project's root has no sub-path to show under a
+                project group, and an empty slot would leave ` ·  · ` behind. */}
+            {project === undefined ? null : (
+              <>
+                {' · '}
+                <ProjectIcon
+                  icon={projectIcon}
+                  src={iconSrc}
+                  name={project}
+                  /* Nudged onto the text baseline: the glyph box is 12px against
+                     an 11px line, so it sits a hair proud without this. */
+                  className='mr-1 align-[-0.2em]'
+                />
+                {project}
+              </>
+            )}
             {` · ${formatRelativeTime(age)}`}
           </span>
           {/* The disclosure lives here, not in front of the title: line one's

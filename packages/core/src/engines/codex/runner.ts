@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import {
   ENGINE_CAPABILITIES,
   PROTOCOL_VERSION,
+  contextReading,
+  type ContextReading,
   transcriptActivity,
   type ContentBlock,
   type CreateSessionRequest,
@@ -678,6 +680,13 @@ export class CodexRunner implements Runner {
   #events: SessionEvent[] = []
   #subscribers = new SubscriberSet()
   #seq = 0
+  /**
+   * Latest context-window reading, retained from the last `context_usage` this
+   * runner emitted so `GET /sessions` can answer it without an attach — see
+   * `SessionInfo.contextUsage`. Folded in the emit path, so it is by
+   * construction the same number the transcript last drew.
+   */
+  #contextUsage: ContextReading | undefined
   #activityCount = 0
   #status: SessionStatus = 'starting'
   #sdkSessionId: string | undefined
@@ -799,6 +808,7 @@ export class CodexRunner implements Runner {
       createdAt: this.createdAt,
       lastSeq: this.#seq,
       activityCount: this.#activityCount,
+      contextUsage: this.#contextUsage,
       pendingPermissionCount: this.#approvals.size,
       meta: this.#config.meta,
       scope: this.#config.scope,
@@ -2166,6 +2176,13 @@ export class CodexRunner implements Runner {
     this.#lastActivityAt = event.ts
     // Rows, not events: what a client diffs to know how much it missed.
     this.#activityCount += transcriptActivity(body)
+    // The list's copy of the reading the transcript already has. Folded here
+    // rather than at the point it is fetched, so every producer — and any
+    // future one — passes through the same rule.
+    this.#contextUsage = contextReading(body) ?? this.#contextUsage
+    // A reset retires the conversation the window described; the old fill is
+    // not this conversation's, exactly as the transcript state clears it.
+    if (body.type === 'conversation_reset') this.#contextUsage = undefined
     this.#events.push(event)
     this.#subscribers.emit(event)
   }

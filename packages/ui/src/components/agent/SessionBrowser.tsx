@@ -21,6 +21,7 @@ import {
   groupRows,
   hasFacetFilter,
   projectLabel,
+  projectSubpath,
   projectsOf,
   sessionLabel,
   subsetSummary,
@@ -38,6 +39,7 @@ import { Empty } from '../ui/Empty.tsx'
 import { Input } from '../ui/Input.tsx'
 import { Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from '../ui/Select.tsx'
 import { Spinner } from '../ui/Spinner.tsx'
+import { ContextRing } from './ContextRing.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
 import { cn } from '../../lib/utils.ts'
 import { formatCost, formatRelativeTime, friendlyModel } from '../../lib/format.ts'
@@ -329,9 +331,12 @@ interface SessionRowItemProps {
   row: SessionRow
   active?: boolean
   showGateway?: boolean
-  /** False when the list is already grouped by project — the header has said
-   * the name, so the slot goes back to the cwd's basename, which inside a
-   * project group is the one thing the header cannot say. The rule `showGateway`
+  /** False when the list is already grouped by project — the header has said the
+   * name, so the row must not spend its metadata line repeating it. What takes
+   * the slot is the *sub-path inside the project* (`projectSubpath`), which is
+   * the one thing the header cannot say and the only thing that tells two
+   * sessions in the same repo apart; a session sitting at the project root has
+   * nothing to add and the slot disappears entirely. The rule `showGateway`
    * follows one facet over. */
   showProject?: boolean
   projectIcons?: Record<string, string>
@@ -355,11 +360,11 @@ function SessionRowItem({
 
   // What it is and what it has spent, in one line — the same set the extension
   // shows, joined the same way, so the two lists read as one product.
-  const folder = info.cwd.split('/').filter(Boolean).pop() ?? info.cwd
   // protocol's own spelling, so this row, the group header above it and the
-  // project facet cannot disagree about what a project is called. It falls back
-  // to exactly the basename this line drew before the feature existed.
-  const project = showProject ? projectLabel(row) : folder
+  // project facet cannot disagree about what a project is called. Under a
+  // project group it is the sub-path instead — see `showProject` — and a session
+  // at the root contributes nothing at all rather than a name already on screen.
+  const project = showProject ? projectLabel(row) : projectSubpath(row)
   const projectIcon = showProject ? info.project?.icon : undefined
   const details = [
     showGateway ? row.hostName : undefined,
@@ -372,7 +377,7 @@ function SessionRowItem({
   // that landed in the joined line. Split rather than interleaved as nodes,
   // because everything here is one truncating mono run and a flex of pieces
   // would each shrink a little and leave several half-words.
-  const cut = details.indexOf(project)
+  const cut = project === undefined ? -1 : details.indexOf(project)
 
   return (
     <div
@@ -427,6 +432,7 @@ function SessionRowItem({
         <span className='shrink-0 text-label text-fg-4'>
           {formatRelativeTime(info.lastActivityAt ?? info.createdAt)}
         </span>
+        <ContextRing usage={info.contextUsage} />
         <SessionStatusIcon row={row} />
       </div>
 

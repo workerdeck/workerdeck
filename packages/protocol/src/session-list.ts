@@ -218,6 +218,33 @@ export function projectLabel(row: Pick<SessionRow, 'info'>): string {
 }
 
 /**
+ * Where inside its project a session actually sits — the cwd with the project
+ * root taken off the front, or `undefined` when it sits at the root, has no
+ * declared project, or has no cwd at all.
+ *
+ * The companion to {@link projectLabel}, and it exists for one situation: a list
+ * **grouped by project**. There the header has already said the project's name,
+ * so repeating it on every row spends the row's most valuable line on the one
+ * fact the reader already has. What the header cannot say is which *part* of the
+ * project a session is working in, and two sessions in the same repo are told
+ * apart by exactly that.
+ *
+ * Undefined is the honest answer for a session at the project root, and callers
+ * must render nothing rather than a `.` or a repeated name — the slot simply
+ * goes away, which is the point.
+ */
+export function projectSubpath(row: Pick<SessionRow, 'info'>): string | undefined {
+  const root = row.info.project?.root
+  if (root === undefined || !row.info.cwd) return undefined
+  const base = normalizePath(root)
+  const dir = normalizePath(row.info.cwd)
+  if (dir === base) return undefined
+  // A prefix match is not containment: `/a/repo-two` starts with `/a/repo`.
+  if (!dir.startsWith(`${base}/`)) return undefined
+  return dir.slice(base.length + 1) || undefined
+}
+
+/**
  * This session is a job run — the queue created it, and `JobInfo.sessionId`
  * points at it.
  *

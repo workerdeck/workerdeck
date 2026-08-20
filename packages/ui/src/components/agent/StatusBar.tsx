@@ -8,6 +8,7 @@ import { Spinner } from '../ui/Spinner.tsx'
 import { Tip } from '../ui/Tooltip.tsx'
 import { cn } from '../../lib/utils.ts'
 import { formatCost, formatCountdown, formatTokens } from '../../lib/format.ts'
+import { meterColorClass } from '../../lib/status.ts'
 import { STATUS_META } from './status.ts'
 import { useTranscriptVariant } from './transcript-variant.tsx'
 
@@ -63,8 +64,9 @@ function useNow(intervalMs = 30_000): number {
   return now
 }
 
-const utilizationColor = (pct: number) =>
-  pct >= 95 ? 'text-danger' : pct >= 80 ? 'text-warning' : 'text-fg-3'
+/** The shared ramp, aliased for the two call sites below — the thresholds live
+ * in `lib/status.ts` beside the severity they mirror. */
+const utilizationColor = (pct: number) => meterColorClass(pct)
 
 /** The CLI reports category colors as its own theme token names ('inactive',
  * 'promptBorder', ...), not CSS colors — only pass through what CSS can render. */

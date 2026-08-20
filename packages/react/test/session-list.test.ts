@@ -9,6 +9,7 @@ import {
   inScope,
   projectKey,
   projectLabel,
+  projectSubpath,
   projectsOf,
   scopeActive,
   sessionLabel,
@@ -297,6 +298,29 @@ describe('project facet', () => {
     expect(projectLabel(declaredUi)).toBe('WorkerDeck')
     expect(projectLabel(undeclared)).toBe('alpha')
     expect(projectLabel(nowhere)).toBe('No project')
+  })
+
+  it('answers the sub-path inside a project, and nothing at all at its root', () => {
+    // What a row shows *instead of* the name when the list is already grouped by
+    // project: the header has said "WorkerDeck", so the useful fact left is
+    // which part of it.
+    expect(projectSubpath(declaredUi)).toBe('packages/ui')
+    expect(projectSubpath(declaredWeb)).toBe('packages/web')
+    // At the root there is nothing the header has not said — the slot goes away
+    // rather than repeating a name or drawing a '.'.
+    expect(projectSubpath(row({ info: info({ id: 'p3', cwd: '/work/deck', project }) }))).toBeUndefined()
+    // No declared project, no root to subtract.
+    expect(projectSubpath(undeclared)).toBeUndefined()
+    expect(projectSubpath(nowhere)).toBeUndefined()
+  })
+
+  it('does not mistake a sibling directory for a child of the project', () => {
+    // The prefix trap: '/work/deck-two' starts with '/work/deck'. A session
+    // there is not inside this project, and claiming 'two' as its sub-path
+    // would be a path that does not exist.
+    expect(
+      projectSubpath(row({ info: info({ id: 's1', cwd: '/work/deck-two/pkg', project }) })),
+    ).toBeUndefined()
   })
 
   it('offers one filter entry per project, keyed by root and labelled by name', () => {

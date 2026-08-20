@@ -51,15 +51,23 @@ enum UIPreview: String {
 /// this harness is for.
 private struct ProjectsPreview: View {
   private static func session(
-    id: String, title: String, cwd: String, project: ProjectInfo? = nil
+    id: String, title: String, cwd: String, project: ProjectInfo? = nil,
+    status: SessionStatus = .idle, pending: Int = 0, context: Double? = nil,
+    cost: Double? = nil
   ) -> SessionInfo {
     SessionInfo(
-      id: id, status: .idle, cwd: cwd, engine: .claude, model: "claude-opus-5",
-      createdAt: 0, lastSeq: 0, pendingPermissionCount: 0, title: title,
+      id: id, status: status, cwd: cwd, engine: .claude, model: "claude-opus-5",
+      createdAt: 0, lastSeq: 0, pendingPermissionCount: pending, title: title,
+      totalCostUsd: cost,
       // A plausible age: `lastActivityAt` is epoch **ms**, and a fixture that
       // reads "20684d" is a fixture nobody trusts the rest of.
       lastActivityAt: Date().timeIntervalSince1970 * 1000 - 15 * 60 * 1000,
-      project: project)
+      project: project,
+      // The percentage is the only field the ring reads; the tokens are what a
+      // long-press would say, so they are plausible rather than derived.
+      contextUsage: context.map {
+        ContextReading(totalTokens: Int($0 * 2_000), maxTokens: 200_000, percentage: $0)
+      })
   }
 
   /// A red square, so "the bytes arrived" is unmistakable against "they did not".
@@ -126,10 +134,32 @@ private struct ProjectsPreview: View {
           id: "7", title: "Through a symlink", cwd: "/tmp/deck-link/packages/ui",
           project: ProjectInfo(name: "WorkerDeck", root: "/private/tmp/deck", icon: nil))),
       Case(
-        caption: "no .workerdeck.json anywhere above it — the raw cwd, exactly as before",
+        caption: "no .workerdeck.json anywhere above it — the folder name, no path",
         session: Self.session(
           id: "8", title: "Launch preparation",
           cwd: "/Users/you/projects/atomic/services/gtm")),
+      // The three states of the ring, side by side: the ramp is the claim, and
+      // one screenshot of one percentage cannot show a ramp. The last row also
+      // has no reading at all — the case the ring must draw *nothing* for.
+      Case(
+        caption: "context ring: comfortable",
+        session: Self.session(
+          id: "9", title: "Room to work", cwd: "/Users/you/projects/workerdeck",
+          project: wd, context: 34, cost: 0.42)),
+      Case(
+        caption: "context ring: filling up (past 70)",
+        session: Self.session(
+          id: "10", title: "Getting long", cwd: "/Users/you/projects/workerdeck",
+          project: wd, status: .running, context: 78, cost: 3.10)),
+      Case(
+        caption: "context ring: nearly out (past 90), and waiting on a person",
+        session: Self.session(
+          id: "11", title: "Almost full", cwd: "/Users/you/projects/workerdeck",
+          project: wd, status: .awaitingApproval, pending: 2, context: 96, cost: 12.80)),
+      Case(
+        caption: "no reading at all — draws NO ring, never an empty one",
+        session: Self.session(
+          id: "12", title: "Never run", cwd: "/Users/you/projects/workerdeck", project: wd)),
     ]
   }
 

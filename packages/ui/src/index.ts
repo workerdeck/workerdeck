@@ -188,6 +188,7 @@ export {
 } from './components/agent/SessionEmptyState.tsx'
 export { PromptTokenText } from './components/agent/PromptTokenText.tsx'
 export { STATUS_META } from './components/agent/status.ts'
+export { ContextRing } from './components/agent/ContextRing.tsx'
 
 // Utilities
 export { cn } from './lib/utils.ts'

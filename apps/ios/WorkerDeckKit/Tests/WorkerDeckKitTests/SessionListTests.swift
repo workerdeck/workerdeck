@@ -291,6 +291,23 @@ struct SessionListTests {
     #expect(projectLabel(nowhere.info) == "No project")
   }
 
+  @Test func answersTheSubPathInsideAProjectAndNothingAtAllAtItsRoot() {
+    // What a row shows *instead of* the name when the list is already grouped by
+    // project: the header has said "WorkerDeck", so what is left worth saying is
+    // which part of it.
+    #expect(projectSubpath(declaredUi.info) == "packages/ui")
+    #expect(projectSubpath(declaredWeb.info) == "packages/web")
+    // At the root there is nothing the header has not said.
+    #expect(projectSubpath(info(id: "p3", cwd: "/work/deck", project: deckProject)) == nil)
+    #expect(projectSubpath(undeclared.info) == nil)
+    #expect(projectSubpath(nowhere.info) == nil)
+  }
+
+  @Test func doesNotMistakeASiblingDirectoryForAChildOfTheProject() {
+    // The prefix trap: '/work/deck-two' starts with '/work/deck'.
+    #expect(projectSubpath(info(id: "s1", cwd: "/work/deck-two/pkg", project: deckProject)) == nil)
+  }
+
   @Test func offersOneFilterEntryPerProjectKeyedByRootAndLabelledByName() {
     let options = projectsOf([declaredUi, declaredWeb, undeclared, remoteTwin, nowhere])
     // Two cwds of one project collapse to one entry; the remote twin does not,

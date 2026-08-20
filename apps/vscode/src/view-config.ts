@@ -26,6 +26,7 @@ export {
   inScope,
   projectKey,
   projectLabel,
+  projectSubpath,
   projectsOf,
   runningSubagents,
   scopeActive,

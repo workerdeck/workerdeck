@@ -546,6 +546,16 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// gateway: both mean "render the folder basename", which is exactly what
   /// this client drew before the field existed.
   public let project: ProjectInfo?
+  /// The session's latest context-window reading, served on the list so a row
+  /// can show where a session is bloating **without attaching to it** — the same
+  /// number the session screen's ring draws, retained by the runner from the
+  /// last `context_usage` it emitted.
+  ///
+  /// **Absent is not zero.** A promptless session, a parked one from before the
+  /// field existed, or an engine that reports no window has no reading: draw
+  /// nothing, never an empty ring, which claims the context is empty rather than
+  /// unknown. Also absent on an older gateway.
+  public let contextUsage: ContextReading?
 
   public var resolvedEngine: ProfileEngine { engine ?? .claude }
   /// The record to render from: the runner-reported copy when present, else the
@@ -564,7 +574,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     meta: [String: JSONValue]? = nil, title: String? = nil, totalCostUsd: Double? = nil,
     numTurns: Int? = nil, activityCount: Int? = nil, lastActivityAt: Double? = nil,
     subagents: [SubagentInfo]? = nil, scope: [String: String]? = nil,
-    project: ProjectInfo? = nil
+    project: ProjectInfo? = nil, contextUsage: ContextReading? = nil
   ) {
     self.id = id
     self.sdkSessionId = sdkSessionId
@@ -589,6 +599,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.subagents = subagents
     self.scope = scope
     self.project = project
+    self.contextUsage = contextUsage
   }
 }
 

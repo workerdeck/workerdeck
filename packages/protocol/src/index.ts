@@ -454,6 +454,29 @@ export type ContextUsage = {
 }
 
 /**
+ * The context-window reading that rides the **sessions list**, as opposed to the
+ * full {@link ContextUsage} that rides the event stream.
+ *
+ * Three numbers, and the omission is the design: `categories` is a breakdown for
+ * a dialog that has a live session behind it, and this field is on every row of
+ * `GET /sessions`, which a busy client polls at 1.2s. Same attachment-bytes
+ * discipline as {@link SessionInfo.subagents}. `percentage` alone would size a
+ * ring, but the token pair is what lets a row *say* `142k / 200k` on hover or
+ * long-press without a second round trip, and it is two numbers.
+ *
+ * **Absent is a real state and is not zero.** A parked session, one that has
+ * never run a turn, or an engine that reports no window has no reading — render
+ * nothing, never an empty ring, which claims "context is empty" rather than "no
+ * answer". Also absent on an older server.
+ */
+export type ContextReading = {
+  totalTokens: number
+  maxTokens: number
+  /** Used share of the window, 0–100. */
+  percentage: number
+}
+
+/**
  * One rate-limit window snapshot (SDK SDKRateLimitInfo mirror). Emitted only for
  * claude.ai subscription sessions — API-key sessions may never produce one, so
  * clients must render nothing (not 0%) until data arrives.
@@ -1658,6 +1681,23 @@ export type SessionInfo = {
   activityCount?: number
   /** Epoch ms of the most recent emitted event. */
   lastActivityAt?: number
+  /**
+   * The session's latest context-window reading — see {@link ContextReading}.
+   *
+   * The same number the session screen draws, served on the list so a row can
+   * show where a session is bloating **without attaching to it**. That is the
+   * whole reason it is here: context fill is the one session metric you want
+   * across *all* sessions at once, and until now it existed only as an event on
+   * an attached socket.
+   *
+   * Retained by the runner from the last `context_usage` it emitted, so it is
+   * exactly what the transcript last showed — never recomputed on the serve
+   * path, which would be a second answer to a question that already has one.
+   * Absent until the first reading (a promptless session has none), and cleared
+   * by a `conversation_reset` for the same reason the transcript state clears
+   * it: the old window is not this conversation's.
+   */
+  contextUsage?: ContextReading
   /** Opaque scope tags this session was created with — see
    * {@link CreateSessionRequest.scope}. Echoed by the runner, re-stamped by the
    * gateway, and never editable. */
@@ -1671,6 +1711,24 @@ export type SessionInfo = {
    * folder basename", which is exactly today's behaviour.
    */
   project?: ProjectInfo
+}
+
+/**
+ * The list-sized context reading an event carries, or `undefined` for the events
+ * that carry none — the rule behind {@link SessionInfo.contextUsage}.
+ *
+ * Here rather than in each runner for the same reason {@link transcriptActivity}
+ * is: it is one rule both sides have to agree on, and three copies of "which
+ * events move the reading" is three chances to disagree. Runners fold it in
+ * their emit path; **clearing on `conversation_reset` is the caller's half** —
+ * this function answers "what does this event say the reading is", and a reset
+ * says nothing about the window, it retires the conversation the window
+ * described.
+ */
+export function contextReading(body: SessionEventBody): ContextReading | undefined {
+  if (body.type !== 'context_usage') return undefined
+  const { totalTokens, maxTokens, percentage } = body.usage
+  return { totalTokens, maxTokens, percentage }
 }
 
 /**

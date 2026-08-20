@@ -1,4 +1,4 @@
-import type { ContextUsage, ModelOption, RateLimitInfo, SessionStatus } from '@workerdeck/protocol'
+import type { ModelOption, RateLimitInfo, SessionStatus } from '@workerdeck/protocol'
 
 /**
  * How a session's live readings become a status line — the pure half, so every
@@ -174,7 +174,20 @@ export function modelLabel(vitals: ModelReadings | undefined): string {
 }
 
 /** Context percentage as its meter severity — the reading and the colour come
- * from one place so a panel and a status bar never disagree. */
-export function contextSeverity(usage: ContextUsage | undefined): StatusSeverity {
+ * from one place so a panel and a status bar never disagree.
+ *
+ * Takes only the number it reads, so the compact `ContextReading` that rides
+ * the sessions list and the full `ContextUsage` on the event stream are coloured
+ * by one rule rather than two. */
+export function contextSeverity(usage: { percentage: number } | undefined): StatusSeverity {
   return meterSeverity(usage?.percentage)
+}
+
+/** {@link meterSeverity} as a text colour class. Here rather than beside each
+ * meter because the status bar, the context dialog and a sessions-list row all
+ * paint the same reading, and a fourth copy of the thresholds is a fourth
+ * chance for one surface to call 81% orange and another call it grey. */
+export function meterColorClass(pct: number | undefined): string {
+  const severity = meterSeverity(pct)
+  return severity === 'error' ? 'text-danger' : severity === 'warning' ? 'text-warning' : 'text-fg-3'
 }

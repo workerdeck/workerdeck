@@ -10,6 +10,8 @@ import {
 import {
   ENGINE_CAPABILITIES,
   snapshotRetains,
+  contextReading,
+  type ContextReading,
   transcriptActivity,
   type ContentBlock,
   type CreateSessionRequest,
@@ -155,6 +157,13 @@ export class AiSdkRunner implements Runner {
   #events: SessionEvent[] = []
   #subscribers = new SubscriberSet()
   #seq = 0
+  /**
+   * Latest context-window reading, retained from the last `context_usage` this
+   * runner emitted so `GET /sessions` can answer it without an attach — see
+   * `SessionInfo.contextUsage`. Folded in the emit path, so it is by
+   * construction the same number the transcript last drew.
+   */
+  #contextUsage: ContextReading | undefined
   #activityCount = 0
   #status: SessionStatus = 'starting'
   #permissionMode: PermissionMode
@@ -210,7 +219,15 @@ export class AiSdkRunner implements Runner {
     this.#events = [...snapshot.events]
     // Recomputed rather than carried in the snapshot: the log IS the count, and
     // deriving it here means a rehydrated session cannot disagree with itself.
-    this.#activityCount = this.#events.reduce((total, event) => total + transcriptActivity(event), 0)
+    // The context reading is derived from the same walk, under the same rule the
+    // emit path uses — a session that parked with a reading must come back with
+    // it, or every parked row would show an empty ring until the next turn.
+    this.#activityCount = 0
+    for (const event of this.#events) {
+      this.#activityCount += transcriptActivity(event)
+      if (event.type === 'conversation_reset') this.#contextUsage = undefined
+      else this.#contextUsage = contextReading(event) ?? this.#contextUsage
+    }
     this.#messages = [...state.messages]
     for (const call of state.pendingToolCalls) this.#pendingToolCalls.set(call.toolCallId, call)
     // Already handed to a backend before the teardown: re-dispatching would run
@@ -277,6 +294,7 @@ export class AiSdkRunner implements Runner {
       createdAt: this.createdAt,
       lastSeq: this.#seq,
       activityCount: this.#activityCount,
+      contextUsage: this.#contextUsage,
       pendingPermissionCount: 0,
       meta: this.#config.meta,
       scope: this.#config.scope,
@@ -1024,6 +1042,13 @@ export class AiSdkRunner implements Runner {
     this.#lastActivityAt = event.ts
     // Rows, not events: what a client diffs to know how much it missed.
     this.#activityCount += transcriptActivity(body)
+    // The list's copy of the reading the transcript already has. Folded here
+    // rather than at the point it is fetched, so every producer — and any
+    // future one — passes through the same rule.
+    this.#contextUsage = contextReading(body) ?? this.#contextUsage
+    // A reset retires the conversation the window described; the old fill is
+    // not this conversation's, exactly as the transcript state clears it.
+    if (body.type === 'conversation_reset') this.#contextUsage = undefined
     this.#events.push(event)
     this.#subscribers.emit(event)
   }

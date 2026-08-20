@@ -640,12 +640,19 @@ struct SessionRowView: View {
   /// loader has fetched it. Nil draws no picture — the name is already there.
   var projectImage: UIImage?
   /// False when the list is already grouped by project: the section header has
-  /// said the name, so line two goes back to being purely the path. The rule
+  /// said the name, so the slot carries the **sub-path inside the project**
+  /// instead (`projectSubpath`) — the one thing the header cannot say. A session
+  /// at the project root has nothing to add and the slot disappears. The rule
   /// `hostName` follows one facet over.
   var showsProject: Bool = true
 
+  /// Two lines, in the order the dashboard's row uses
+  /// (`packages/ui`'s `SessionBrowser`): what you scan the list by on top, what
+  /// it *is* underneath. The same person reads all three clients, so the
+  /// segments and their order are not this client's to choose — only how they
+  /// are drawn is (a touch-sized row, SF Symbols, `Fmt.ago`).
   var body: some View {
-    VStack(alignment: .leading, spacing: 5) {
+    VStack(alignment: .leading, spacing: 3) {
       HStack(alignment: .firstTextBaseline, spacing: 8) {
         Text(title)
           .font(.body.weight(.medium))
@@ -665,44 +672,38 @@ struct SessionRowView: View {
             .font(.caption2)
             .foregroundStyle(.secondary)
         }
-      }
-      // Line two is *where this session is*, and on the phone that has always
-      // been the whole path — this is the only client that draws it, so the
-      // other two replacing a basename with a project name has no analogue
-      // here. Replacing the path outright would REMOVE information they never
-      // had; prefixing it keeps both, and `WorkerDeck · packages/ui` beats
-      // `…/projects/ai/workerdeck/packages/ui` at this width by some distance.
-      HStack(spacing: 4) {
-        if showsProject, let icon = session.project?.icon {
-          ProjectIconView(icon: icon, image: projectImage)
+        // How full the window is, at a glance and across the whole list — the
+        // question you cannot ask from inside a session. Absent draws nothing:
+        // an empty ring would claim an empty context where there is simply no
+        // reading (see `SessionInfo.contextUsage`).
+        if let context = session.contextUsage {
+          ContextRing(
+            percentage: context.percentage, diameter: 14, lineWidth: 2, showsLabel: false)
+            // The ring sits with the caption text, not with the title's cap
+            // height — baseline alignment would hang a circle off the row.
+            .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
         }
-        Text(location)
+        SessionStatusIcon(status: session.status, pendingCount: session.pendingPermissionCount)
+          .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
+      }
+      // Line two: one truncating run, in one order, so the list reads the same
+      // on a phone as it does in a sidebar. A `Text` concatenation rather than
+      // an `HStack` of pieces, and that is the point: the parts have a priority
+      // order and a single ellipsis honours it, where stack children would each
+      // shrink a little and leave four half-words.
+      HStack(spacing: 0) {
+        if let icon = session.project?.icon, project != nil, showsProject {
+          ProjectIconView(icon: icon, image: projectImage)
+            .padding(.trailing, 3)
+        }
+        Text(details)
           .font(.caption)
           .foregroundStyle(.secondary)
           .lineLimit(1)
-          // Head-truncation is right for a bare path (the tail identifies it)
-          // and wrong for a project line, where the name leads and must survive.
-          .truncationMode(showsProject && session.project != nil ? .tail : .head)
-      }
-      HStack(spacing: 8) {
-        StatusBadge(status: session.status, pendingCount: session.pendingPermissionCount)
-        if let hostName {
-          Label(hostName, systemImage: "server.rack")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-        }
-        if let model = session.model {
-          Text(model)
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-        }
-        if let cost = session.totalCostUsd, cost > 0 {
-          Text(Fmt.cost(cost))
-            .font(.caption2.monospacedDigit())
-            .foregroundStyle(.secondary)
-        }
+          // Tail truncation: everything on this line leads with the fact that
+          // identifies it, and the sub-path form (`packages/ui`) is read from
+          // the front. The old head-truncated raw cwd is gone with the path.
+          .truncationMode(.tail)
       }
     }
     .padding(.vertical, 3)
@@ -713,30 +714,92 @@ struct SessionRowView: View {
     return Fmt.lastComponent(session.cwd)
   }
 
-  /// What line two says: the project and where inside it, else the raw cwd.
-  ///
-  /// The relative half is dropped when the session sits *at* the root, because
-  /// `WorkerDeck · workerdeck` says one thing twice. It is also dropped when the
-  /// cwd is not under the root at all — which is not paranoia: `root` is the
-  /// gateway's **realpath'd** directory while `cwd` is the path as given, so a
-  /// session started through a symlink (`/tmp/x` against `/private/tmp/x`) has a
-  /// perfectly good project and no computable relative path. The name alone is
-  /// the honest answer there; inventing a path would be worse than omitting one.
-  private var location: String {
-    guard showsProject, let project = session.project else { return session.cwd }
-    guard let relative = relativePath(of: session.cwd, under: project.root), !relative.isEmpty
-    else { return project.name }
-    return "\(project.name) · \(relative)"
+  /// The project slot: the declared name, or — under a project group — where in
+  /// the project this session sits. Nil when there is nothing left to say.
+  private var project: String? {
+    showsProject ? projectLabel(session) : projectSubpath(session)
+  }
+
+  /// Line two, joined the way the dashboard joins it: gateway, model, project,
+  /// profile, cost. Nothing empty ever reaches the join, so a missing part
+  /// closes up rather than leaving ` ·  · ` behind.
+  private var details: String {
+    [
+      hostName,
+      // The shared rule, ported into the kit: a model spelled `claude-opus-5`
+      // here and `Opus 5` in the sidebar is the same drift the shared list view
+      // model exists to prevent.
+      friendlyModel(session.model),
+      project,
+      session.profile.map { "@\($0)" },
+      // `TermFmt.cost`, not `Fmt.cost`: the kit's is the port of the web's
+      // `formatCost` ($3.10, and `<$0.01` rather than a fourth decimal), and a
+      // list row is exactly where the same person compares the three clients.
+      // `Fmt.cost` keeps its four decimals where a *single turn* is priced.
+      (session.totalCostUsd ?? 0) > 0 ? TermFmt.cost(session.totalCostUsd) : nil,
+    ]
+    .compactMap { $0 }
+    .joined(separator: " · ")
   }
 }
 
-/// `cwd` expressed inside `root`, or nil when it is not under it. Empty means
-/// they are the same directory.
-private func relativePath(of cwd: String, under root: String) -> String? {
-  let root = root.hasSuffix("/") ? String(root.dropLast()) : root
-  if cwd == root { return "" }
-  guard cwd.hasPrefix(root + "/") else { return nil }
-  return String(cwd.dropFirst(root.count + 1))
+/// The session's state as one glyph, mirroring the dashboard's
+/// `SessionStatusIcon` — same vocabulary, same precedence.
+///
+/// A glyph rather than the labelled `StatusBadge` this row used to carry: a
+/// badge spends a third of a line saying "Idle" for every idle session, and on a
+/// list the state is the thing you scan *past* until it is not idle. Waiting on
+/// a person still wins over everything, because that is the one state that is
+/// about you.
+struct SessionStatusIcon: View {
+  let status: SessionStatus
+  var pendingCount: Int = 0
+
+  var body: some View {
+    icon
+      .font(.caption)
+      .accessibilityLabel(label)
+  }
+
+  @ViewBuilder
+  private var icon: some View {
+    if pendingCount > 0 || status == .awaitingApproval {
+      // The one state that is about the reader, so it is the one that moves.
+      Image(systemName: "bell.badge.fill")
+        .foregroundStyle(.orange)
+        .symbolEffect(.pulse)
+    } else if status == .running || status == .starting {
+      ProgressView()
+        .controlSize(.mini)
+    } else {
+      Image(systemName: symbol)
+        .foregroundStyle(tint)
+    }
+  }
+
+  private var symbol: String {
+    switch status {
+    case .failed: return "exclamationmark.circle.fill"
+    case .closed: return "slash.circle"
+    case .parked: return "pause.circle.fill"
+    default: return "moon.fill"
+    }
+  }
+
+  private var tint: Color {
+    switch status {
+    case .failed: return .red
+    case .parked: return .purple
+    default: return .secondary
+    }
+  }
+
+  private var label: String {
+    if pendingCount > 0, status == .awaitingApproval {
+      return "\(status.label) (\(pendingCount))"
+    }
+    return status.label
+  }
 }
 
 private struct SdkSessionRowView: View {

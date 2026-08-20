@@ -341,6 +341,34 @@ public func projectLabel(_ info: SessionInfo) -> String {
   return dir.isEmpty ? "No project" : dir
 }
 
+/// Where inside its project a session actually sits — the cwd with the project
+/// root taken off the front, or nil when it sits at the root, has no declared
+/// project, or has no cwd at all. Mirrors `projectSubpath` in
+/// `packages/protocol/src/session-list.ts`.
+///
+/// The companion to `projectLabel`, for a list **grouped by project**: the
+/// header has already said the name, so a row repeating it spends its most
+/// valuable line on a fact the reader already has. What the header cannot say is
+/// which *part* of the project a session is in, and that is what tells two
+/// sessions in one repo apart.
+///
+/// Nil at the root is deliberate and callers must draw nothing — not a "."​, not
+/// the name again. Nil is also the honest answer when the cwd is not under the
+/// root at all, which is not paranoia: `root` is the gateway's **realpath'd**
+/// directory while `cwd` is the path as given, so a session started through a
+/// symlink (`/tmp/x` against `/private/tmp/x`) has a perfectly good project and
+/// no computable relative path.
+public func projectSubpath(_ info: SessionInfo) -> String? {
+  guard let root = info.project?.root, !info.cwd.isEmpty else { return nil }
+  let base = normalizePath(root)
+  let dir = normalizePath(info.cwd)
+  if dir == base { return nil }
+  // A prefix match is not containment: '/a/repo-two' starts with '/a/repo'.
+  guard dir.hasPrefix(base + "/") else { return nil }
+  let relative = String(dir.dropFirst(base.count + 1))
+  return relative.isEmpty ? nil : relative
+}
+
 private func matchesSearch(_ row: SessionRow, needle: String) -> Bool {
   if needle.isEmpty { return true }
   return sessionLabel(row.info).lowercased().contains(needle)
