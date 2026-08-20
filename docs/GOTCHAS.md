@@ -1342,6 +1342,29 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   not promise (no actor or sendability audit on the protocol as of the iOS 26.5 SDK). Not
   unit-testable: the delegate lives in the app target and `UN…` types cannot be constructed —
   the gate is the compiler plus one tap on a real notification.
+- **A tapped notification lands on the row it was about, and the seq → row answer has to be
+  recorded as the transcript folds.** The payload's `seq` is the event behind the notification;
+  nothing in the reduced transcript state can place it afterwards, because items are folded,
+  merged and mutated by later events and only a few embed a seq in their id. iOS therefore keeps a
+  landmark table beside the reducer (`TranscriptSeqIndex`), noting the item count either side of
+  each `applyEvent` — **beside**, not inside, because `TranscriptState` is a hand-mirror of the
+  react reducer and a field only one client needs is a field the two copies will disagree about.
+  Two rules fall out of it: the lookup answers with the first item appended *at or after* a seq
+  (an event that appends nothing — a permission request — must still resolve somewhere honest),
+  and a `conversation_reset` invalidates every recorded index, so the table is dropped whenever the
+  item count *shrinks*. The route carries the seq as part of its identity, so a second notification
+  about the same session is a destination SwiftUI treats as new; what makes a repeat tap on the
+  *same* notification re-fire is still `clearRoute()` putting the pending route back to nil.
+
+- **Closing a container must close what it contains, and only this renderer has to say so.**
+  iOS holds expansion *beside* the rows (`TerminalExpansion`) because every frame comes from the
+  height book, so a height the book does not know about is a clipped row; the web holds it in
+  component-local `useState`, where an unmounted child's state dies with it. That difference means
+  the web collapses a chain's sub-items for free and the phone did not — it kept every member's
+  key, so re-opening a run handed back the six expanded results the reader had just collapsed.
+  `apply(_:subtree:)` closes the block's whole key set with a container. The `.call` guard inside
+  it is load-bearing, not defensive: the subtree passed in is the whole **block**, so a single
+  result closing "its" subtree would collapse every sibling in the same run.
 
 ## Build, test & packaging
 

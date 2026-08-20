@@ -125,6 +125,19 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     - `ToolRun.swift` / `ResultPreview.swift` / `TerminalFormat.swift` — the exact strings. In
       this theme **the string is the height**, so every summary, preview and affordance is
       spelled once, here, and never in a view.
+  - `TranscriptSeqIndex.swift` — where each event's rows landed in `items`, so a tapped push
+    notification can open **on** the event it was about instead of at the tail. Deliberately
+    *beside* the reducer, not in it: `TranscriptState` is a hand-mirror of the react reducer, and a
+    field only the phone needs is a field the two copies would disagree about. The caller notes the
+    item count either side of `applyEvent`; the lookup answers with the first item appended at or
+    after a seq, which is what lets an event that appended nothing (a permission request) still
+    resolve. See `_docs/features/push-deeplink-seq.md`.
+  - `ModelName.swift` — `friendlyModel`, a 1:1 port of the rule in
+    `packages/ui/src/lib/format.ts`: `claude-haiku-4-5-20251001` → "Haiku 4.5". A port and it has
+    to stay one — a sessions list is where the same person reads all three clients, and a model
+    spelled `claude-opus-5` on the phone and `Opus 5` in the sidebar is the drift the shared list
+    view model exists to prevent. Version tokens join with dots, code names are kept and
+    capitalised, and an eight-digit snapshot date is dropped (it is a build, not a version).
   - `SessionList.swift` / `Watermarks.swift` — ports of `packages/protocol/src/session-list.ts`
     and `watermarks.ts`, the same way `Transcript.swift` is a port of the react reducer. The
     sessions-list view model (the `attention/working/idle/ended` buckets, the gateway/adapter/

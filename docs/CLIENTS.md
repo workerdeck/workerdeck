@@ -302,6 +302,20 @@ result-preview character budget is **derived from the column count**, since 400 
 gate that keeps the exactness claim honest, reported on screen by the `terminal`/`terminalStress`
 preview variants — a line wider than its planned column is clipped silently, which is worse than
 a wrong height.
+The **row itself** mirrors the dashboard's (`packages/ui`'s `SessionBrowser`) rather than
+inventing a phone shape: two lines, not three — title, unread badge, age, context ring and a
+state *glyph* on top; one truncating run of gateway · model · project · profile · cost
+underneath, in that order. The old third line spent a third of every row on a labelled `Idle`
+badge, which is the state you scan *past*; and the model was printed raw (`claude-opus-5`) where
+the other clients say `Opus 5`, so `friendlyModel` was ported into the kit
+(`ModelName.swift`, tested against the same examples the TS doc comment states) — the same
+person reads all three clients, and a model spelled two ways is the drift the shared view model
+exists to prevent. `ContextRing`/`RadialGauge`/`usageTint` moved out of the session screen into
+`App/Sources/Support/UsageGauges.swift` when the list started drawing them, and the ring takes a
+bare percentage rather than a usage record: the session screen holds a whole `ContextUsage` and a
+row holds the compact `ContextReading`, and the percentage is the one number both agree on. On a
+row it draws **without its inner label** — two digits inside a 14pt ring are unreadable at arm's
+length, and across twenty rows the fill *is* the reading.
 `SessionList.swift` and `Watermarks.swift` are two more such mirrors — protocol's sessions-list
 view model and unread model — so the phone's list is **one list across every configured
 gateway**, gateway as a facet rather than the frame, with search/facets/group/sort, the subset

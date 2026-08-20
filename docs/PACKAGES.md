@@ -149,9 +149,25 @@ approval being the one thing a person has to act on. What makes this worth readi
 it survived: **no existing test built a row with `subagents` at all**, on either platform, so
 the premise had a hole exactly where nothing looked — and on iOS the field had never been
 mirrored, so the phone could not have been right whatever it computed.
+`contextReading(event)` is the newest of the family and the smallest: which events move
+`SessionInfo.contextUsage`, the three-number context-window reading that rides `GET /sessions` so
+a **list row** can show where a session is bloating without attaching to it. Three numbers and
+not the full `ContextUsage`, because the category breakdown belongs to a dialog with a live
+session behind it and this field is on every row of a list polled at 1.2s — the same
+attachment-bytes discipline as `SessionInfo.subagents`. Two halves to the rule and they live in
+different places: this function says what an event claims the reading *is*, and **clearing on
+`conversation_reset` is the runner's half** — a reset says nothing about the window, it retires
+the conversation the window described. Purely additive, so **no `PROTOCOL_VERSION` bump**: an
+older client ignores the field and a newer one already has to treat absent as "no reading", which
+is a real state (a promptless session, a parked record from before the field existed) and is
+never zero. Bumping for an additive field would raise a mismatch banner on every client that had
+done nothing wrong.
 `session-list.ts` is the
 **sessions-list view model** (the `attention/working/idle/ended` buckets, the
-gateway/adapter/state/**project** facets, `filterRows`/`groupRows`/`subsetSummary`/`clearFilters`, and
+gateway/adapter/state/**project** facets, `filterRows`/`groupRows`/`subsetSummary`/`clearFilters`,
+`projectLabel` and its companion `projectSubpath` — what a row shows *instead of* the project
+name when the list is already grouped by project, i.e. where in the project the session sits, and
+nothing at all at the root, and
 the scope-containment rule where a gateway-tagged root scopes only that gateway and an
 untagged one only loopback), and `watermarks.ts` is the **unread model** (monotonic marks
 behind a `WatermarkStore` seam, and `unseenCount`'s rows-not-turns arithmetic). They are
@@ -819,7 +835,12 @@ reading, and the link state has to win the slot. The VS Code extension is the re
 consumer of both. Pure formatters ship from a third entry (`@workerdeck/ui/format`) so a
 non-React host spells `45.2k` and `2h 10m` the same way the panel does, without pulling React
 into an extension-host bundle; `lib/status.ts` rides that entry too — `statusPresentation`
-(connection outranks a stale status), the 80/95 `meterSeverity` thresholds, `tightestWindow`
+(connection outranks a stale status), the 80/95 `meterSeverity` thresholds and `meterColorClass`, its
+one text-colour spelling — the status bar, the context dialog and a sessions-list row all paint
+the same reading, and a per-surface copy of the thresholds is how one of them ends up calling
+81% orange while another calls it grey (`ContextRing` is that reading as a list-sized ring, shared
+so the dashboard's row and the extension's card cannot diverge; **absent draws nothing**, since an
+empty ring claims an empty context where there is simply no answer), `tightestWindow`
 (the fullest window, for a surface with *one* slot) and `usageWindow(limits, lane)` (the
 `session`/`weekly`/`model` split, for one with three — because "what is closest to blocking
 me" and "how much of this session have I spent" are different questions, and the single slot
@@ -835,8 +856,11 @@ cards do, and to the same rules: `projectLabel` in the cwd-basename slot (fallin
 that basename, so an undeclared project is byte-identical to what shipped), the icon inline
 immediately before the name because line two is one truncating mono run, the icon again on a
 project group's header, and the name **suppressed on the row when the list is grouped by it** —
-the slot going back to the basename, which inside a project group is the one thing the header
-cannot say. `projectIcons` is handed in rather than fetched (`useProjectIcons`), for the reason
+the slot carrying `projectSubpath` instead, i.e. *where in the project* this session sits, which
+is the one thing the header cannot say and the only thing telling two sessions in one repo apart.
+A session at the project root has nothing to add and the slot disappears rather than repeating a
+name already on screen. (It used to fall back to the cwd basename, which under a project group
+meant every row still drew a folder name the header had covered.) `projectIcons` is handed in rather than fetched (`useProjectIcons`), for the reason
 `ProjectIcon` states: the wire carries an address and who can fetch it differs per client.
 `SessionList` stays beside it for the plain fixed-set case.
 The file rail reads in the **UI font, never mono** — it is workbench chrome you scan, and the
