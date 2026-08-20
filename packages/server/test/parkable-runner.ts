@@ -138,6 +138,26 @@ export class ParkableRunner implements Runner {
     this.#emit({ type: 'status_changed', status: 'idle' })
   }
 
+  /** A settled tool call in the log — the oversized result a parked session
+   * still has to be able to serve from its snapshot. */
+  toolResult(toolUseId: string, content: string, name = 'Bash'): void {
+    this.#emit({
+      type: 'assistant_message',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: toolUseId, name, input: {} }],
+        model: 'test-model',
+      },
+      parentToolUseId: null,
+      uuid: `t${this.#seq}`,
+    })
+    this.#emit({
+      type: 'user_message',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content }] },
+      parentToolUseId: null,
+    })
+  }
+
   /** Switch the model — one of the write-through triggers, and the one that can
    * fire while the session is anything but idle. */
   changeModel(model: string): void {

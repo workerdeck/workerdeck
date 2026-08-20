@@ -3,7 +3,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
-import type { JobEvent, JobInfo, ProfileInfo, SessionInfo } from '@workerdeck/protocol'
+import {
+  TOOL_RESULT_HEAD_CHARS,
+  type JobEvent,
+  type JobInfo,
+  type ProfileInfo,
+  type SessionEvent,
+  type SessionInfo,
+} from '@workerdeck/protocol'
 import {
   createFileSessionStore,
   createWorkerServer,
@@ -253,6 +260,51 @@ describe('deferred execution: parking and result ingestion', () => {
     expect(await running!.parking.get(session.id)).toBeNull()
     expect((await submitResult(h.base, 'exec-1', { status: 'ok', output: { type: 'json', value: 1 } })).status).toBe(404)
     expect(h.runners).toHaveLength(1)
+  })
+
+  /**
+   * On-demand tool results, against a session whose runner is gone.
+   *
+   * The route resolves a park through its snapshot's own events, and that arm
+   * had never been executed — the truncation suite runs entirely against a live
+   * runner. It is the arm that matters most, too: a park is precisely the
+   * session read days later, and the reason the snapshot keeps its log
+   * untruncated. `ParkableRunner` has no `eventAt`, so live it 501s and parked
+   * it must still answer — which also proves the fallback is the snapshot's and
+   * not the runner's.
+   */
+  it('serves a parked session’s whole tool result from its snapshot', async () => {
+    const h = await startServer()
+    const session = await createSession(h.base)
+    const big = 'x'.repeat(TOOL_RESULT_HEAD_CHARS + 5_000)
+    h.runners[0]!.toolResult('call-1', big)
+    h.runners[0]!.defer('exec-1')
+    await vi.waitFor(async () => {
+      expect((await running!.parking.get(session.id))?.kind).toBe('parked')
+    })
+    expect(running!.registry.get(session.id)).toBeUndefined()
+
+    const record = (await running!.parking.get(session.id)) as {
+      snapshot: { events: SessionEvent[] }
+    }
+    const seq = record.snapshot.events.find(
+      (event) => event.type === 'user_message' && Array.isArray(event.message.content),
+    )!.seq
+
+    const res = await fetch(
+      `${h.base}/sessions/${session.id}/events/${seq}/result?toolUseId=call-1`,
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ seq, toolUseId: 'call-1', content: big, isError: false })
+
+    // The same guards, on the same arm: a seq the caller cached can name a
+    // different call after a rebuild, so the id is verified against the block.
+    expect(
+      (await fetch(`${h.base}/sessions/${session.id}/events/${seq}/result?toolUseId=other`)).status,
+    ).toBe(404)
+    expect(
+      (await fetch(`${h.base}/sessions/${session.id}/events/99999/result?toolUseId=call-1`)).status,
+    ).toBe(404)
   })
 
   it('parks a queued job: the slot frees, and the result resumes and completes it', async () => {
