@@ -1160,6 +1160,8 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   finger that shifts slightly, and a hand-rolled threshold would disagree with every other tappable
   thing on the phone. The tap recognizer also must not recognize simultaneously with a
   `UIPanGestureRecognizer` — only with the text view's own, which is what makes selection work.
+  Both the bug and the fix were **confirmed on a physical device** (2026-08-20); nothing in
+  `apps/ios`'s app target has a test suite, so a thumb is the only thing that can check this.
 ## Web dashboard
 
 - **Overriding a colour token lower in the tree needs its *alias* too.** `theme.css` has two
