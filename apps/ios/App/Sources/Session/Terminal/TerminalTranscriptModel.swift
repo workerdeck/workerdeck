@@ -99,11 +99,23 @@ final class TerminalTranscriptModel {
       fetch?(call.id)
       return
     }
-    let opened = expansion.apply(press)
+    // The row's whole key set goes with the press, so closing a container closes
+    // what it contains — see `TerminalExpansion.close`. Computed here because
+    // this is the only place that holds both the press and the rows it landed
+    // on; it is one block's walk, on a press.
+    let opened = expansion.apply(press, subtree: subtreeKeys(at: row))
     remeasure()
     guard opened else { return }
     revealNonce += 1
     reveal = TranscriptRevealRequest(row: row, nonce: revealNonce)
+  }
+
+  /// Every expansion key inside the row at this index — a container's subtree,
+  /// for the press that closes it. Empty for a recap seam or an out-of-range
+  /// index, both of which open nothing.
+  private func subtreeKeys(at row: Int) -> Set<ExpansionKey> {
+    guard row >= 0, row < rows.count else { return [] }
+    return expansionKeys(of: rows[row])
   }
 
   /// The call behind an id, when its result is still only a head.

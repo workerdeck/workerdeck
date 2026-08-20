@@ -127,28 +127,59 @@ public struct TerminalExpansion: Equatable, Sendable {
   /// that to decide whether the reader needs bringing back to the row's first
   /// line, which is a one-directional courtesy: a row already in view never
   /// moves, and closing one never scrolls.
+  /// - Parameter subtree: every key inside the block this press landed on
+  ///   (`expansionKeys(of:)`). Used only when a **container** closes, and then
+  ///   it closes with it — see ``close(_:subtree:)``. Passing nothing keeps the
+  ///   old behaviour, which is what the audit and the tests that predate this
+  ///   want.
   @discardableResult
-  public mutating func apply(_ press: TermPress) -> Bool {
+  public mutating func apply(_ press: TermPress, subtree: Set<ExpansionKey> = []) -> Bool {
     switch press {
     case .toggle(let key):
       if open.contains(key) {
-        open.remove(key)
-        // Closing forgets that the budget was lifted: re-opening a
-        // hundred-thousand-character result straight into its unclipped form
-        // would undo the layout guard for a reader who has since scrolled a
-        // thousand rows away and forgotten they ever asked. And it forgets a
-        // fetch in flight — the bytes may still land, and are hydrated onto the
-        // item and kept, but this reader is no longer waiting for them.
-        if case .call(let id) = key {
-          full.remove(id)
-          pending.remove(id)
-        }
+        close(key, subtree: subtree)
         return false
       }
       open.insert(key)
       return true
     case .expandFull(let id):
       return full.insert(id).inserted
+    }
+  }
+
+  /// Close a row, and — for a container — everything inside it.
+  ///
+  /// **Collapsing a chain of tool calls collapses the chain.** Without this the
+  /// keys of the rows it hides stay in ``open``, so re-opening the run hands
+  /// back a screen the reader collapsed precisely to be rid of: six results,
+  /// each in full. The web client gets this for free and by accident — its
+  /// expansion is component-local `useState` and dies with the unmounted row —
+  /// and this renderer holds expansion beside the rows on purpose (a height the
+  /// book does not know is a frame the layout gets wrong), so it has to say the
+  /// same thing out loud.
+  ///
+  /// It is the rule already written for a *call's* budget one level down,
+  /// applied to containment: closing forgets. Re-opening is a fresh look at the
+  /// row, not a restoration of a state the reader walked away from.
+  ///
+  /// A `.call` never takes a subtree with it, and that guard is load-bearing
+  /// rather than defensive: the subtree handed in is the whole **block**, so a
+  /// call closing "its" subtree would close every sibling result in the same
+  /// run — one press collapsing five rows nobody touched.
+  private mutating func close(_ key: ExpansionKey, subtree: Set<ExpansionKey>) {
+    var closing: Set<ExpansionKey> = [key]
+    if case .call = key {} else { closing.formUnion(subtree) }
+    open.subtract(closing)
+    // Closing forgets that the budget was lifted: re-opening a
+    // hundred-thousand-character result straight into its unclipped form would
+    // undo the layout guard for a reader who has since scrolled a thousand rows
+    // away and forgotten they ever asked. And it forgets a fetch in flight — the
+    // bytes may still land, and are hydrated onto the item and kept, but this
+    // reader is no longer waiting for them.
+    for closed in closing {
+      guard case .call(let id) = closed else { continue }
+      full.remove(id)
+      pending.remove(id)
     }
   }
 

@@ -372,3 +372,57 @@ extension TerminalExpansionTests {
     #expect(expansion.subset(for: rows[1]).isEmpty)
   }
 }
+
+/// Collapsing a container collapses what it contains.
+///
+/// The rule the web client gets by accident (its expansion is component-local
+/// and dies with the unmounted row) and this renderer has to state, because it
+/// holds expansion beside the rows so the height book can see it.
+@Suite("TerminalExpansion subtree close")
+struct TerminalExpansionSubtreeTests {
+  private let run = ExpansionKey.run("t1")
+  private let members: Set<ExpansionKey> = [.call("t1"), .call("t2"), .call("t3")]
+
+  private var openRun: TerminalExpansion {
+    TerminalExpansion(open: [.run("t1"), .call("t1"), .call("t2")], full: ["t2"], pending: ["t3"])
+  }
+
+  @Test("closing a run closes every result inside it, and forgets their budgets")
+  func closesSubtree() {
+    var expansion = openRun
+    expansion.apply(.toggle(run), subtree: members.union([run]))
+    #expect(expansion.isEmpty)
+  }
+
+  @Test("re-opening the run hands back a collapsed chain, not the screen just dismissed")
+  func reopenIsClean() {
+    var expansion = openRun
+    expansion.apply(.toggle(run), subtree: members.union([run]))
+    expansion.apply(.toggle(run), subtree: members.union([run]))
+    #expect(expansion.isOpen(run))
+    #expect(!expansion.isOpen(.call("t1")))
+    #expect(!expansion.isOpen(.call("t2")))
+    #expect(!expansion.isFull(callId: "t2"))
+    #expect(!expansion.isFetching(callId: "t3"))
+  }
+
+  @Test("closing ONE result closes only that result — never its siblings")
+  func callKeepsItsSiblings() {
+    // The subtree handed in is the whole block, so without the `.call` guard one
+    // press would collapse every other result in the same run.
+    var expansion = openRun
+    expansion.apply(.toggle(.call("t1")), subtree: members.union([run]))
+    #expect(expansion.isOpen(run))
+    #expect(!expansion.isOpen(.call("t1")))
+    #expect(expansion.isOpen(.call("t2")))
+    #expect(expansion.isFull(callId: "t2"))
+  }
+
+  @Test("opening is unchanged — a press that opens takes nothing with it")
+  func openingIsUntouched() {
+    var expansion = TerminalExpansion()
+    let opened = expansion.apply(.toggle(run), subtree: members.union([run]))
+    #expect(opened)
+    #expect(expansion.open == [run])
+  }
+}
