@@ -16,7 +16,7 @@ import Testing
 ///
 /// Opt-in, because it needs a capture:
 ///
-///     node _docs/capture-attach.mjs <host> <sessionId> /tmp/attach-big.jsonl
+///     pnpm smoke:attach <host> <sessionId> --capture /tmp/attach-big.jsonl
 ///     WD_ATTACH_CAPTURE=/tmp/attach-big.jsonl swift test --filter AttachReplayBench
 ///
 /// Without the variable it reports that it was skipped and passes, so the suite
@@ -26,7 +26,7 @@ struct AttachReplayBenchTests {
   @Test("decode + fold over a captured replay")
   func replayCost() throws {
     guard let path = ProcessInfo.processInfo.environment["WD_ATTACH_CAPTURE"] else {
-      print("[bench] skipped — set WD_ATTACH_CAPTURE to a capture from _docs/capture-attach.mjs")
+      print("[bench] skipped — set WD_ATTACH_CAPTURE to a capture from `pnpm smoke:attach --capture`")
       return
     }
     let text = try String(contentsOfFile: path, encoding: .utf8)

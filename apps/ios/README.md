@@ -71,7 +71,10 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
       prediction that can be wrong and no post-mount correction. It costs nothing: the wrap was
       computed to measure the row anyway. `TerminalPlanCache` is what keeps a refold cheap on
       every streamed token, standing in for the web client's `WeakMap` on item identity (a Swift
-      array is a value; there is no identity to hang one on).
+      array is a value; there is no identity to hang one on). `TerminalPlanner.plan` **must stay a
+      pure function of `(row, metrics, expansion)`** — no shared state, no caches, no globals. The
+      cold height build runs it under `DispatchQueue.concurrentPerform` over disjoint row indices,
+      and nothing but this sentence enforces that.
     - `TerminalExpansion.swift` — which blocks are open, as an **input to the planner**. This is
       the one place the port deliberately inverts the web client rather than mirroring it: there,
       expansion is component-local `useState` and an expanded row is mounted and self-measures.
@@ -86,6 +89,20 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
       does nothing reads as the theme being broken rather than the row being empty; and closing a
       result forgets that its character budget was lifted, so re-opening never lands back on the
       unclipped form for a reader who has long since scrolled away.
+
+      **Row keys and expansion keys are two namespaces, and the confusion already cost a bug.** A
+      block's `key` (`run:<id>` / `task:<id>` / `toolCall:<id>` / `recap`) is *row identity* —
+      mirrored with web's `blocks.ts`, and what view diffing, the plan cache and scroll
+      re-anchoring all key on. What *opens* a row is a typed `ExpansionKey` (`.run` / `.task` /
+      `.call`), produced only by `expansionKeys(of:)`. They coincide for two of five block shapes
+      and are never interchangeable. **A key that opens nothing must never be offered**: a run of
+      one is drawn as the call (`TerminalRunBlock.expansionKey` is `Optional`), and a `Task`'s own
+      header has no result of its own (`BlockCall.drawsResult == false`).
+
+      And **anything that plans a row plans it from `expansion.subset(for: row)`** — the same
+      function of the same value the height book used. Handing the whole expansion to one caller
+      and the subset to the other is two derivations of the one claim this renderer cannot afford
+      to get wrong: the lines drawn are as tall as the height reserved.
     - `MarkdownInline.swift` — inline markdown rendered once and shared by the measurer and the
       renderer, so `**bold**` cannot be measured as eight characters and drawn as four. The web
       client strips inline syntax with a regex chain; a second answer to "what does this render
@@ -222,9 +239,13 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
       `Canvas` with arithmetic hit-testing rather than a view per mark, since a dense rail is
       hundreds of clusters repainted per scroll tick; the band is **its own view**, because
       observation is per body and reading the scroll offset beside the clusters would rebuild every
-      one of them per frame of a fling; and the whole thing is a **full-width overlay with only the
-      strip taking touches**, because a peek is wider than the rail and laying it out inside a
-      28-point container puts it off the screen. A scrub goes to a content offset, never to a row —
+      one of them per frame of a fling; and the gesture's own state (`peek`, `dragging`) lives one
+      layer down in `ScrubberTouchLayer`, **never beside the rail build**, because
+      `buildScrubberRail` is O(items + calls) over the whole transcript and any `@State` written
+      from `onChanged` in the same body re-runs it on every touch event — during the exact gesture
+      the rail exists for. (Same rule as the band split, one level up.) And the whole thing is a
+      **full-width overlay with only the strip taking touches**, because a peek is wider than the
+      rail and laying it out inside a 28-point container puts it off the screen. A scrub goes to a content offset, never to a row —
       a rail drag is continuous, and snapping to row boundaries makes a hundred-line answer a dead
       zone. The transcript's wrap width is reduced by the rail for the same reason it is reduced by
       the bleed: the rail is an overlay, and a row wrapped to the full screen has its last column
@@ -417,7 +438,13 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     bridge buys styled tokens *and* mid-message completion at once. Styling goes through
     `textStorage` attributes (the undo stack and selection survive), skips while `markedTextRange`
     is non-nil (IME composition), and only paints *confirmed* tokens — the word still being typed
-    stays plain. Everything else in `App/` remains plain SwiftUI.
+    stays plain. Text styling is a **value** (`DraftStyle`, held on the `Coordinator`), never a
+    mutable static: a static written by `makeUIView`/`updateUIView` is read mid-render by whoever
+    else wants it — the composer's placeholder got the *previous* field's font this way — and a
+    second text field would inherit whatever the last one set. Only genuine constants
+    (`containerInset`) stay static, and a derived value (`swiftUIFont`) *maps* the text style
+    rather than re-spelling what that constant happens to be today.
+    Everything else in `App/` remains plain SwiftUI.
 - `project.yml` — [XcodeGen](https://github.com/yonaskolb/XcodeGen) spec; the `.xcodeproj` is
   generated, not checked in. So are `Info.plist` and `WorkerDeckApp.entitlements` — declare
   capabilities here, because Xcode's "+ Capability" button edits the generated project and is
@@ -432,7 +459,7 @@ cd apps/ios/WorkerDeckKit && swift test
 
 # What an attach actually costs, over a REAL replay — both opt-in, both silent
 # without their inputs, so the suite stays green on a machine with neither.
-node _docs/capture-attach.mjs <host> <sessionId> /tmp/attach.jsonl   # from the repo root
+pnpm smoke:attach <host> <sessionId> --capture /tmp/attach.jsonl    # from the repo root
 WD_ATTACH_CAPTURE=/tmp/attach.jsonl swift test -c release --filter AttachReplayBench
 WD_ATTACH_HOST=<host> WD_ATTACH_SESSION=<id> swift test -c release --filter AttachPipelineBench
 
@@ -465,6 +492,11 @@ Debug build is a number about the build.** The transcript fold alone is ~5.6× s
 (26 ms → 151 ms over a captured 779-event replay, measured 2026-08-19), and every build this
 script has ever pushed was Debug. `--hot` still needs Debug — InjectionNext swaps code the
 optimizer inlined away — so the two refuse each other.
+
+**Build Release once after adding any Debug-only surface.** A property declared `#if DEBUG` on a
+view has to be `#if DEBUG` at its call sites too, and nothing warns you: `UIPreviewHarness` passed
+`onAudit:`/`expandAll:` unguarded and the whole target simply failed to compile the first time
+`-configuration Release` was ever tried.
 
 This is the loop to run while working on the app, so a change can be looked at on the real
 device rather than in a simulator screenshot. It works over Wi-Fi with no cable: CoreDevice
@@ -566,6 +598,12 @@ Two things that don't work and are worth not re-trying: driving the simulator's 
 Events (clicking needs an Accessibility grant a CLI shell doesn't have), and guessing a layout
 bug from pixels — when a SwiftUI layout misbehaves, render the geometry numbers into the view
 and screenshot those.
+
+Which means **every gesture in this app ships unverified by machine.** A preview proves model →
+book → layout → render and can say nothing about finger → recognizer, so taps, drags, long presses
+and the selection grabbers are device checks. A change that only moves pixels is not the same risk
+as one that adds a *recognizer*, which is where this has actually broken: `TerminalRowCell`'s tap
+needed simultaneous recognition beside the text view's own, or every block took two taps to open.
 
 ## Push on the Simulator
 

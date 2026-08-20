@@ -302,7 +302,7 @@ private struct PromptsPreview: View {
       id: "p", tool: "Bash", title: "Run this command?",
       input: .object([
         "command": .string(
-          "node _docs/measure-attach-parts.mjs http://127.0.0.1:8787 01JQ8Z3K4M5N6P7Q8R9S0T1U2V truncate refs | tee _docs/measurements/attach-parts-$(date +%Y%m%d).txt")
+          "pnpm smoke:attach 127.0.0.1:8787 01JQ8Z3K4M5N6P7Q8R9S0T1U2V truncate refs | tee /tmp/attach-parts-$(date +%Y%m%d).txt")
       ]))
   }
 

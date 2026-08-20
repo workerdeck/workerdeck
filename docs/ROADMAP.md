@@ -452,6 +452,17 @@ through phase 3, on-demand tool results and image-part references, and:
    capture before designing. Also owed: a background agent **stopped or killed** mid-flight is the
    one lifecycle path the fix did not exercise. Written up in
    `_docs/features/sub-agent-handling.md` (gitignored; harvest before deleting).
+1. **The terminal renderer's cross-client seams**, all deferred out of the 2026-08-19 structural
+   pass rather than forgotten. In rough order of value: (a) a **language-neutral golden corpus**,
+   which is the only thing that can catch the two ports drifting — the load-bearing *strings* break
+   first, so it should pin `runSummary`/`taskSummary`/`collapsedResult`/`TermFmt` against
+   `tool-run.ts`/`result-preview.ts`/`format.ts`, taking items JSON in and asserting block keys,
+   line counts at fixed metrics, summary strings, red indices, and rail marks and regions out;
+   (b) porting iOS's single `blockCalls(in:expansion:)` walk to the web scrubber, which still
+   derives its failure set in its own segment walk (`scrubber.tsx`); (c) `.subagent` as a
+   *region* rather than a mark, now that regions exist on the phone; and (d) expressing the iOS
+   planner over `blockCalls` too, if a third consumer of that walk ever appears — deliberately not
+   before, since the planner's copy is the one that has to stay pure.
 1. **APNs push for the iOS app — released in 0.7.0, not yet proven on a device.** The forwarder half is in
    (`packages/cli/src/apns/`: hand-rolled HTTP/2 client, device registry at `/apns/devices`,
    in-process hook onto the session notifications above) and so is the app half (entitlement,

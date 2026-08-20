@@ -114,7 +114,8 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   from a bump on purpose, and for the same reason: each is proven against a harness that authored
   every event it feeds — a mock model and a fake runner for parking, the fake `queryFn` for
   sub-agents — so the tests confirm the *fold* and say nothing about the real CLI's stream shape or
-  whether the app boots with a key. See `_docs/VERIFICATION-DEBT.md`; clear it first, then bump.
+  whether the app boots with a key. **That gate is now open: the debt was cleared 2026-08-20** (see
+  the verification paragraph at the end of this section).
   The change is a **minor** (additive, `persistLive` defaults off, and absent `subagents` means
   empty). Protocol stays **7** — `replayRetains` and the `sdk_event` coalesce key are gateway-side
   rules with no wire shape, so a client that has never heard of them is bit-identical after the
@@ -203,7 +204,8 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   dispatch per replayed event — bounded by virtualization — and `onVitals` fires per event with
   it, which in the VS Code webview is a `postMessage` per replayed event. The **cold plan** is
   parallel now (`TerminalHeightBook.lineCounts`, 690ms → 154ms at 16k rows), which was the other
-  half of that wait. Brief for what is left in `_docs/features/ios-terminal-selection.md`. They also touch **no published package**: the phone
+  half of that wait. Brief for what is left — cross-row selection — in
+  `_docs/features/ios-terminal-selection.md`. They also touch **no published package**: the phone
   app is side-loaded from this repo and has no `package.json`, so `version:set` does not reach it
   and a bump neither helps nor hinders it.
 
@@ -223,8 +225,7 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   projection had measured `JSON.stringify(content).length`, counting base64 as text. The mechanism
   is right and worth keeping; what it cut is small, and the 2.1 MB that is really there — parts
   every client ships and then discards, `blockText`/`joinedText` keeping text only — is a separate
-  rule of this same family, written up in `_docs/features/replay-image-parts.md` and now measured
-  four ways: **91% of all tool-result payload across 214 local sessions is base64** (44 MB text vs
+  rule of this same family, and was measured four ways before it was acted on: **91% of all tool-result payload across 214 local sessions is base64** (44 MB text vs
   458 MB), present in **189 of 215**, and **`Read` produces two thirds of it** — an agent looking
   at a PNG, not a browser tool — so it is not a niche. The control session is the argument: same
   order of tool calls, more text, **771 KB of attach against 4,550 KB.** The lesson belongs beside
@@ -245,7 +246,49 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   session claiming to run, on every client at once, permanently, because status is edge-driven with
   no reconciliation. Reproduced by test first, then fixed; see `docs/GOTCHAS.md` §Permissions.
 
-  **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
+  **The verification debt this ledger has twice deferred a bump on was cleared 2026-08-20**, and
+  clearing it changed three claims above rather than merely confirming them.
+
+  The restart is a command now — `pnpm smoke:restart [claude|codex] [noprofile] [swept] [all]`
+  (`smoke/README.md`) — spawning its own gateway on its own port and state dir, because the machine
+  that develops this routinely has one hosting the session doing the verifying. Both engines pass
+  (claude 14/14, codex 11/11), and the check that carries it is a word the model is given *before*
+  the restart and asked for *after*: a session rebuilt rather than resumed attaches cleanly and
+  replays nothing, so nothing else separates the two. **The codex rehydrate had never been run and
+  it works.** Three things the code's comments did not say came out of it, all now in
+  `docs/GOTCHAS.md`: `ANTHROPIC_API_KEY` in a gateway's environment silently kills claude turns (the
+  CLI leaves the subscription, `plan_info` stops, the turn never completes — indistinguishable from
+  a hang); the dormant write is async and **codex emits no `system_init`**, so its first record only
+  lands on the post-turn status change and a kill inside that window loses the row entirely; and a
+  **swept engine store does not 404 as this was documented to do** — the attach succeeds, the
+  transcript is empty and the next turn is silently never answered, which is quieter than an error
+  and worse.
+
+  On-demand tool results were pressed against a real gateway on both renderers and on the phone,
+  and the parked-session arm of `/events/:seq/result` — previously "covered by reading the code" —
+  now has a test that proves it went through the snapshot (`registry.get()` is undefined at fetch
+  time and the fake runner has no `eventAt`). The press exposed the trap worth carrying:
+  **`truncateResults` is replay-only**, so a live row's marker is the renderer's display clip and
+  pressing it touches no network, while a reloaded row's is the wire truncation — identical on
+  screen. A verification pass concluded the feature was broken on the provider engine on exactly
+  that mistake before the network panel corrected it. The **`… fetching N chars` interstitial has
+  now failed to be observed on all three surfaces** because every fetch completes too fast to draw
+  it; whether a state nobody can reach earns its code is a decision nobody has made.
+
+  `apps/embedded` was run end to end with a real key — restart at rest and mid-turn, the session
+  returning **idle** without re-running the interrupted turn — and it was broken before it was
+  verified: the wiki's data had moved onto tRPC at `/trpc` while `vite.config.ts` proxied only
+  `/v1` and `/api`, so Vite answered `index.html` with a **200** and every document query silently
+  parsed HTML as JSON. `pnpm start` was unaffected, so the reference embedding was broken only in
+  the mode anyone reading it would run (`docs/CLIENTS.md`). On iOS the press works and its hit
+  target is generous, but verifying it found a **tap-versus-scroll bug**: `allowableMovement` cannot
+  catch a stationary finger over a moving transcript, since a tap recognizer measures movement in
+  *window* coordinates. Fixed natively in `TerminalRowCell`. And `useClaudeSession`'s attach
+  decisions were extracted into pure `planAttach`/`shouldWriteParting` (`lib/attach-plan.ts`,
+  17 new tests, react 196 → 213), which closes the "no hook render test" gap without putting jsdom
+  into a headless package. **No package's public API changed.**
+
+    **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`
   land *above* `v0.5.0` and a `| tail` reads the newest tags as the oldest. 0.12.0 had a local
   tag nobody had pushed, so npm's latest was still 0.11.0 while this file claimed it shipped. `git log v<latest>..HEAD` is the other half of the same

@@ -579,9 +579,14 @@ shape twice over — its header is `taskFailed` (its **own** result, never a chi
 does, and a failed child marks only once the *run inside it* is also open, because an open task
 still draws its children as a folded run. This is the one rail rule that **reads `expansion`
 rather than measuring the book**: a mark's extent and fraction follow from a height, but its
-*existence* does not. Beside it, `expanded` is a fifth mark and the quietest thing on the rail —
-a **yellow** band in the **left** lane over any block you opened, because opening is something
-*you* did, and it loses every merge so an opened `Task` keeps its green. Yellow because the
+*existence* does not. Beside it, `expanded` is not a mark at all but a **region**: ground painted
+*under* the marks, in the **left** lane, **yellow**, over any block you opened, because opening is
+something *you* did. It needs none of the mark rules — no fractional `RowPosition`, no merge, no
+loudness — because none of them is about a region, and an opened `Task` therefore keeps its green.
+**A region never answers the finger**: it spans hundreds of points, so letting it compete in the
+nearest-cluster arithmetic jumps the reader to the top of a band instead of the prompt they
+pressed. A region is context for what surrounds it, never a destination. (iOS: `ScrubberRegion` and
+`ScrubberRail`, built by `buildScrubberRail` beside `buildScrubberClusters`.) Yellow because the
 opened rows themselves now carry a yellow wash (`--term-open-wash`, `uiOpenWash`), which is the
 theme's **one deliberate reuse of that tone for something other than "waiting on you"**: an open
 block is a state the reader put the transcript into, and the rail and the region should say that
@@ -591,9 +596,11 @@ the rail mark cannot, for the `height.ts` reason below. Nothing is concealed eit
 way — each failure is still red on its own row, and the recap still counts every one.
 **`packages/ui` has the collapsed half only, and cannot have the rest**: its expansion is
 component-local `useState` per row, which is exactly what lets `height.ts` need *no expanded
-branch* (an unmounted row is collapsed by definition). Lifting it to feed the rail would cost
-that invariant, so the two clients share the rule and differ in how much of it they can see —
-stated here rather than discovered. The same fold, one level up: **a `Task` and everything the subagent
+branch* (an unmounted row is collapsed by definition). The capability gap is entailed by **where the state can
+live**, not by an implementation choice: web expansion state exists only while a row is mounted, so
+an expansion-aware web rail could only ever band the rows *currently on screen* — the one place an
+overview rail is useless, since the yellow wash is already visible there. The two clients share the
+rule and differ in how much of it they can see — stated here rather than discovered. The same fold, one level up: **a `Task` and everything the subagent
 produced is one row** (`blocks.ts`'s `TaskBlock`, `TaskRow`, wording in `tool-run.ts`), reading
 `Task(Explore · permission mode parsing) · 7 tools`. A subagent is sixty rows of somebody else's
 working and none of it is what you came back to read — the report is the model's next sentence.
@@ -601,7 +608,13 @@ It is **grouped by `parentToolUseId`, never by adjacency**, because parallel Tas
 the stream; that is what broke the old row-model contract, where a row covered a contiguous
 `[index, index + len)` and now covers a *membership* — read `rowIndexForItem`'s contract before
 touching anything positional, since an absorbed index resolves to its task's row and every jump
-(scrubber mark, recap, bookmark) goes through it. **Always collapsed when unmounted** is
+(scrubber mark, recap, bookmark) goes through it. That is also why **`RunBlock.indices` is
+required, not optional**, as `childIndices`' sibling: a run folded across an absorbed gap has no
+`[index, index + len)` coverage, so a member's ordinal cannot be recovered by arithmetic at read
+time, and only `pushLeaf` ever builds a `RunBlock`, so there is no partial construction to
+tolerate. Walking from the run's start and skipping absorbed indices is sound today, but it
+re-proves at read time what the fold already knew at build time — and ports to Swift as a proof
+rather than as a rule. **Always collapsed when unmounted** is
 load-bearing rather than tidy: `height.ts` sizes the row as one wrapped `taskSummary`, so the
 live signal is *in* the collapsed line (the pulse, a climbing count), never an auto-expansion.
 A childless Task stays a plain call, and an **orphan child** — parent outside the slice, which is

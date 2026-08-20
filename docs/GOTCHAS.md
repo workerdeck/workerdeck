@@ -660,6 +660,22 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   in-memory, so a duplicate delivery after a restart is a 404 rather than `applied: false`, and a
   parked *job*'s queue-side record belongs to the `QueueAdapter` — a durable `SessionStore` under
   the bundled in-memory adapter wakes a session no job is waiting on.
+- **The dormant write is asynchronous, and the two engines do not get one at the same moment.**
+  `#rememberDormant` runs on `system_init` *and* every non-park `status_changed`, so a claude
+  session has a record from its first moments. **Codex emits no `system_init` at all**, so its
+  first record rides the post-turn `status_changed`. Kill the gateway inside that window and the
+  row is not un-resumable — it is **gone**. Verified with `pnpm smoke:restart codex`, which is why
+  that smoke waits for the record on disk rather than racing it.
+- **A swept engine store fails quietly, and more quietly than intended.** Delete the CLI's own
+  transcript behind a dormant record and the attach **succeeds**: the row lists, the socket opens,
+  the transcript comes back **empty** (a dormant record holds no transcript — it backfills from
+  the engine), and the next turn is simply never answered. The record staying is deliberate (the
+  failure may be transient), but nothing anywhere says "this session's engine state is gone", so
+  it reads as a hang. Reproduce with `pnpm smoke:restart claude swept`.
+- **Never put `ANTHROPIC_API_KEY` in a gateway's environment when the profile is meant to run on a
+  subscription.** The CLI takes the key, `plan_info` and `rate_limit` stop arriving, and turns
+  silently never complete — indistinguishable from a hang. This bit `smoke/restart.ts`, which
+  deliberately does *not* pass `--env-file-if-exists=.env` even though its neighbours all do.
 - Bridged tool calls: the server asks the **first attached** client and fails dispatch fast when
   none is attached (which is why autonomous jobs simply never bridge). Results are idempotent by
   `executionId` — a late answer racing a timeout is expected and must not error the client or
@@ -1081,6 +1097,16 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   600ms, so a healthy attach never paints it. The general rule: do not announce a wait too short
   to notice.
 
+- **`truncateResults` is replay-only, and the two "+N chars" markers are indistinguishable on
+  screen.** A result that arrives while you watch is never truncated (`packages/core/src/lib/
+  subscribers.ts` states the rule: the head budget sits above both clients' display budgets, so
+  cutting a result already on screen buys a fetch for nothing). So a live row's marker is the
+  renderer's *display clip* — pressing it lifts the clip locally and touches no network — while a
+  reloaded row's marker is the wire truncation, and only that one fetches. They look the same, and
+  only the wire one's terminal label carries the `— fetch the rest` suffix. **When verifying this
+  feature, attach cold and watch the network panel; reading the transcript proves nothing.** An
+  earlier verification pass concluded the feature was broken on the provider engine on exactly this
+  mistake.
 ## Terminal theme (`transcriptVariant: 'terminal'`)
 
 - **`--term-font-size` and `--term-line` must be whole pixels.** They are the character cell, and a
@@ -1121,6 +1147,19 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   building the scrubber inflated *coverage* rather than accuracy and would have read as
   calculator bugs.
 
+- **iOS: a tap that stopped a scroll is not a press.** `TerminalRowCell` puts a
+  `UITapGestureRecognizer` on the cell, and `allowableMovement` does not cover this on its own — a
+  tap recognizer measures movement in **window** coordinates, so during momentum scrolling the
+  finger is perfectly still while the content slides under it. Zero movement, tap recognizes,
+  whatever drifted under the thumb gets expanded. UIKit solves this for `UIControl`s via
+  `delaysContentTouches`, but a recognizer on a cell sits outside that machinery. The rule is
+  stated in `handleTap` with two signals, and it needs both: the scroll was already
+  dragging/decelerating at **touch-down** (the stop-the-scroll tap — touching kills deceleration,
+  so reading it at tap time is too late), or `contentOffset` moved between touch-down and lift (a
+  drag). `allowableMovement` stays at UIKit's default 10pt: that IS the platform's tolerance for a
+  finger that shifts slightly, and a hand-rolled threshold would disagree with every other tappable
+  thing on the phone. The tap recognizer also must not recognize simultaneously with a
+  `UIPanGestureRecognizer` — only with the text view's own, which is what makes selection work.
 ## Web dashboard
 
 - **Overriding a colour token lower in the tree needs its *alias* too.** `theme.css` has two
@@ -1178,6 +1217,14 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `anchorTo`/`followOnAppend` stay at their defaults so it never becomes a second follow
   implementation, and `shouldAdjustScrollPositionOnItemSizeChange` restates virtual-core's own
   default rules — supplying the callback *replaces* them, so a major bump there needs a re-read.
+  Related, and the reason a re-pin bug is hard to reason about: **a programmatic `scrollTop` write
+  does not escape the bottom lock — only a real input event does.** `use-stick-to-bottom` sets
+  `escapedFromLock` from `handleScroll`'s reading of user *intent*, so a test that "scrolls up" by
+  assigning `scrollTop` leaves the reader still locked and proves nothing about the pin; escape it
+  with a synthetic `WheelEvent`. And the library's resize guard (`state.resizeDifference`) watches
+  the **content**, while the composer shedding lines resizes the **scroller** — a class of size
+  change that guard structurally cannot cover, though it has not been caught breaking the pin in
+  the `packages/ui/dev` harness.
 - **`useFlushSync` looks like dead weight and is not.** It draws a React "flushSync was called
   from inside a lifecycle method" error — corrections fire from `measureElement`'s ref callback,
   inside the commit — which in an embedder's console reads as a WorkerDeck bug. Turning it off

@@ -268,6 +268,13 @@ branch in a reference app is a branch a reader must hold that teaches nothing ab
 The one thing still deferred upstream is an express-free
 `mcpTransport` mount; express stays here purely as a mounting mechanism for `/mcp` and the
 static SPA.
+- **Every prefix the app server owns must be listed in `vite.config.ts`'s dev proxy, and a missing
+  one does not fail loudly.** Vite answers the SPA's `index.html` with a **200**, so the caller gets
+  HTML where it expected JSON and the feature quietly never loads. This happened for real when the
+  wiki's data moved onto tRPC at `/trpc` while the proxy still listed only `/v1` and `/api`: the
+  document rail read "No documents yet" while the agent was demonstrably writing documents, and
+  `wiki__opendoc` opened nothing. `pnpm start` was unaffected (single origin), so the reference
+  embedding was broken only in the mode anyone reading it would run.
 ## `apps/ios`
 
 native iOS remote control (SwiftUI + XcodeGen; invisible to pnpm/turbo — no

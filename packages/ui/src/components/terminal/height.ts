@@ -50,6 +50,12 @@ import { runSummary, taskSummary } from './tool-run.ts'
  *   expansion to shared state here to match would buy one rail feature and cost
  *   this invariant — the central simplification of the whole calculator — so
  *   the two clients share the *rule* and differ in how much of it each can see.
+ *
+ *   And the gap is entailed by **where the state can live**, not by how it is
+ *   plumbed: a paint-only registry would preserve this invariant, but web
+ *   expansion exists only while a row is *mounted*, so the rail it fed could
+ *   only ever band the rows currently on screen — the one place an overview
+ *   rail is useless, because the yellow wash is already visible there.
  *   Said here as well as in the Swift, because this is the file where someone
  *   would go looking to "fix" it.
  * - **Mutation is object replacement.** The transcript reducer never mutates an
