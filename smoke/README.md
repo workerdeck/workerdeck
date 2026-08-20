@@ -10,6 +10,8 @@ Things `pnpm test` deliberately cannot check. Run these by hand.
 | Live MCP | `pnpm smoke:mcp --probe` / `<KEY>=... pnpm smoke:mcp [provider] [model]` | Probe: no. Full: **yes** |
 | Message attachments | `pnpm smoke:media [image\|pdf\|text]` | **Yes — real tokens** |
 | Codex engine | `pnpm smoke:codex --canary` / `pnpm smoke:codex [model]` | Canary: no. Full: **yes — plan/API usage** |
+| Attach bytes | `pnpm smoke:attach <host> <sessionId> [truncate] [refs]` | No |
+| Restart, end to end | `pnpm smoke:restart [claude\|codex] [noprofile] [swept] [all]` | **Yes — two short turns** |
 
 ## `smoke:sandbox` — the untrusted-code boundary
 
@@ -139,3 +141,64 @@ a cache-heavy resume turn (usage is summed from `thread/tokenUsage/updated`), re
 across child processes, interrupt landing cleanly *and* the thread staying resumable after,
 `default` mode's read-only sandbox actually refusing a write, and a `localImage` attachment
 answered correctly.
+
+## `smoke:attach` — what a replay actually costs, on the wire
+
+Attaches to a session that already exists on a running gateway and reports what the replay is
+made of: bytes per event type, and — the split that matters — how much of each `tool_result` is
+**text** versus **non-text parts** (a base64 screenshot, which every client ships and then
+discards).
+
+```sh
+pnpm smoke:attach 127.0.0.1:8787 <sessionId>                  # the baseline
+pnpm smoke:attach 127.0.0.1:8787 <sessionId> truncate refs    # with the replay rules applied
+pnpm smoke:attach 127.0.0.1:8787 <sessionId> --capture /tmp/before.jsonl
+```
+
+**Run this before calling any new replay rule finished.** `truncateResults` shipped on a
+projection of 68% and was worth **0.3%** when it was finally measured: the projection had used
+`JSON.stringify(content).length`, so it counted base64 parts as text. The bytes that were really
+there needed a different rule (`imageRefs`), and that one was measured first — 4,548 KB → 1,275 KB.
+Keeping text and non-text apart is the whole point of the output here.
+
+`--capture <file>` writes the raw frames as JSONL instead of summarising, which is how you show a
+rule changed nothing it should not have:
+
+```sh
+pnpm smoke:attach $HOST $ID --capture /tmp/before.jsonl
+pnpm smoke:attach $HOST $ID refs --capture /tmp/after.jsonl
+diff /tmp/before.jsonl /tmp/after.jsonl     # must be empty on a session with no images
+```
+
+The same capture feeds iOS's `AttachReplayBench` (`apps/ios/README.md`).
+
+## `smoke:restart` — the restart, end to end, against a real engine
+
+`packages/server/test/dormant.test.ts` drives a **fake** engine, so it proves the record survives
+and the routes behave — and cannot prove that a real `claude`/`codex` resume works, which is the
+whole feature. This is that half.
+
+```bash
+pnpm smoke:restart                    # claude
+pnpm smoke:restart codex              # the codex rehydrate (needs `codex login`)
+pnpm smoke:restart claude all         # + both degradation variants
+```
+
+It spawns **its own gateway** on port 8791 with its own state dir and never touches an instance you
+are already running — on this machine the dev gateway usually hosts live sessions, and `ctrl-c` on
+it is indistinguishable from the test until afterwards.
+
+The load-bearing check is the last one: after the restart it asks the model for a word given before
+the restart. A session that was *rebuilt* rather than *resumed* attaches cleanly and replays
+nothing, and only the recalled word tells those two apart.
+
+Two things it found that the code's own comments did not say:
+
+- **`--env-file-if-exists=.env` must NOT be passed here.** It puts `ANTHROPIC_API_KEY` in the
+  gateway's environment, which moves the CLI off the operator's subscription onto a key: `plan_info`
+  and `rate_limit` stop arriving and the turn silently never completes. The other smokes want the
+  env file; this one must not have it.
+- **The dormant write is async, and codex emits no `system_init`.** Claude has a record from the
+  session's first moments; codex's first record rides the post-turn `status_changed`. Kill inside
+  that window and the row is simply *gone* after the restart. The smoke waits for the record and
+  says so, rather than racing it.
