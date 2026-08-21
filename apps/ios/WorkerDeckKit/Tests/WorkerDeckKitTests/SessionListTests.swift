@@ -36,6 +36,50 @@ struct SessionListTests {
       state: sessionState(info), info: info, unseen: unseen)
   }
 
+  // MARK: - What names an agent
+
+  /// The rule that decides **what is pressable** in three clients' lists. It had
+  /// no test and no call site here until the phone's agent lines shipped; the
+  /// dashboard's equivalent is `packages/ui/test/session-steps.test.ts`.
+  @Test("a record names an agent only when it carries a subagent_type")
+  func isAgentRecordNeedsAType() {
+    #expect(isAgentRecord(agent(.running)))
+    // A task the model merely described: there is no agent here to open, so the
+    // line draws inert rather than pushing a takeover of nothing.
+    let described = SubagentInfo(
+      toolUseId: "toolu_2", agentType: nil, description: "check the config", status: .done,
+      startedAt: 1_000, toolCount: 1)
+    #expect(!isAgentRecord(described))
+    // Whitespace is not an identity — trimmed to empty is the same as absent.
+    let blank = SubagentInfo(
+      toolUseId: "toolu_3", agentType: "  ", description: "check the config", status: .done,
+      startedAt: 1_000, toolCount: 1)
+    #expect(!isAgentRecord(blank))
+  }
+
+  /// The label the phone's agent line prints, and the dashboard's `StepRow`
+  /// beside it — one spelling across the clients, including both fallbacks.
+  @Test("a sub-agent's line reads agent · description, and degrades in that order")
+  func subagentLabelSpelling() {
+    #expect(subagentLabel(agent(.running)) == "Explore · find the auth check")
+    #expect(
+      subagentLabel(
+        SubagentInfo(
+          toolUseId: "t", agentType: "Explore", description: nil, status: .done, startedAt: 0,
+          toolCount: 0)) == "Explore")
+    #expect(
+      subagentLabel(
+        SubagentInfo(
+          toolUseId: "t", agentType: nil, description: "find it", status: .done, startedAt: 0,
+          toolCount: 0)) == "find it")
+    // A row with no label reads as a bug, and an engine may send neither field.
+    #expect(
+      subagentLabel(
+        SubagentInfo(
+          toolUseId: "t", agentType: nil, description: nil, status: .done, startedAt: 0,
+          toolCount: 0)) == "Sub-agent")
+  }
+
   // MARK: - sessionState
 
   @Test func promotesAPendingApprovalOverTheRawStatus() {

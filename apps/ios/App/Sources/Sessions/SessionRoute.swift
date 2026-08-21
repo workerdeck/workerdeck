@@ -9,7 +9,12 @@ enum SessionRoute: Hashable {
   ///   came from a tapped notification. Part of the case's identity, so a second
   ///   notification about the same session is a route SwiftUI treats as new —
   ///   which is what re-opens it at the newer row.
-  case session(hostId: UUID, sessionId: String, seq: Int? = nil)
+  /// - Parameter subagent: a `SubagentInfo.toolUseId`, when this route came from
+  ///   an agent line under a session row — the session opens with that agent's
+  ///   takeover already framed. Part of the identity for the same reason `seq`
+  ///   is: tapping a *different* agent of a session already on screen has to
+  ///   read as a new destination, not as the one that is showing.
+  case session(hostId: UUID, sessionId: String, seq: Int? = nil, subagent: String? = nil)
   case create(hostId: UUID, seed: CreateSessionSeed)
 }
 

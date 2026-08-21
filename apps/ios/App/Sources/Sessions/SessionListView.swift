@@ -23,6 +23,10 @@ struct SessionListView: View {
   /// so an editable label inside one fights the tap that opens the session.
   @State private var pendingRename: SessionRow?
   @State private var renameText = ""
+  /// Session ids whose agent lines are showing. Not persisted: a disclosure is
+  /// about the glance you are having, and a list that reopened yesterday's
+  /// twisties would be answering a question nobody asked twice.
+  @State private var expandedAgents: Set<String> = []
 
   /// Restarting identity for the poll loop: any of these changing means the
   /// current loop is polling for the wrong world (or should not run at all).
@@ -107,10 +111,11 @@ struct SessionListView: View {
   @ViewBuilder
   private func destination(_ route: SessionRoute) -> some View {
     switch route {
-    case .session(let hostId, let sessionId, let seq):
+    case .session(let hostId, let sessionId, let seq, let subagent):
       if let context = model?.context(for: hostId) {
         SessionView(
-          sessionId: sessionId, hostId: hostId, client: context.client, focusSeq: seq)
+          sessionId: sessionId, hostId: hostId, client: context.client, focusSeq: seq,
+          openSubagent: subagent)
       } else {
         missingHost
       }
@@ -257,16 +262,26 @@ struct SessionListView: View {
         Section {
           ForEach(group.rows) { row in
             if let route = sessionRoute(for: row) {
-              NavigationLink(value: route) {
-                SessionRowView(
-                  session: row.info,
-                  // Grouped by gateway, the section header already names it.
-                  hostName: showsHostNames(model) && model.config.groupBy != .gateway
-                    ? row.hostName : nil,
-                  unseen: row.unseen,
-                  projectImage: projectImage(for: row, model: model),
-                  // Grouped by project, the section header already names it.
-                  showsProject: model.config.groupBy != .project)
+              // The twisty sits OUTSIDE the link rather than inside the row, and
+              // that placement is the whole answer to why this row used to draw
+              // a count and nothing else: a hand-rolled button *inside* a
+              // `NavigationLink` is the coin toss under a thumb, because the
+              // link takes the row's tap. Two siblings have two frames, and the
+              // gutter is reserved on every row — including the ones with no
+              // agents — so the titles still line up down the list.
+              HStack(spacing: 0) {
+                agentTwisty(for: row)
+                NavigationLink(value: route) {
+                  SessionRowView(
+                    session: row.info,
+                    // Grouped by gateway, the section header already names it.
+                    hostName: showsHostNames(model) && model.config.groupBy != .gateway
+                      ? row.hostName : nil,
+                    unseen: row.unseen,
+                    projectImage: projectImage(for: row, model: model),
+                    // Grouped by project, the section header already names it.
+                    showsProject: model.config.groupBy != .project)
+                }
               }
               // Two different actions wearing one gesture. Closing a *live*
               // session terminates a run someone may be relying on, so it asks
@@ -303,6 +318,9 @@ struct SessionListView: View {
                 } label: {
                   Label("Rename", systemImage: "pencil")
                 }
+              }
+              if expandedAgents.contains(row.info.id) {
+                agentRows(for: row)
               }
             }
           }
@@ -367,6 +385,101 @@ struct SessionListView: View {
 
   private func sessionRoute(for row: SessionRow) -> SessionRoute? {
     UUID(uuidString: row.hostId).map { .session(hostId: $0, sessionId: row.info.id) }
+  }
+
+  // MARK: - Agent lines
+
+  /// The disclosure for a session's sub-agents — a **sibling** of the row's
+  /// `NavigationLink`, never a child of it (see the row for why).
+  ///
+  /// It always occupies its gutter, even for a session with no agents, so the
+  /// column holds down a list of thirty; only the chevron itself appears and
+  /// disappears. The target is the full gutter *and* the row's height, which is
+  /// what `contentShape` buys — a 12pt chevron would otherwise be a 12pt target.
+  @ViewBuilder
+  private func agentTwisty(for row: SessionRow) -> some View {
+    let agents = row.info.subagents ?? []
+    Group {
+      if agents.isEmpty {
+        Color.clear
+      } else {
+        let open = expandedAgents.contains(row.info.id)
+        Button {
+          if open {
+            expandedAgents.remove(row.info.id)
+          } else {
+            expandedAgents.insert(row.info.id)
+          }
+        } label: {
+          Image(systemName: "chevron.right")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .rotationEffect(.degrees(open ? 90 : 0))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+        }
+        // `.plain` because a bordered button inside a list row draws a second
+        // surface; and because the default style would tint the chevron with
+        // the accent colour, which on this row means "an agent is running".
+        .buttonStyle(.plain)
+        .accessibilityLabel(open ? "Hide agents" : "Show agents")
+      }
+    }
+    .frame(width: 26)
+  }
+
+  /// One row per sub-agent, each its own `NavigationLink` into the session with
+  /// that agent already framed.
+  ///
+  /// Rows rather than a stack inside the session row: a full-width list row is a
+  /// real thumb target where a line inside a two-line row is not, and it keeps
+  /// the promise the twisty makes — every target here has its own frame.
+  /// Pressability is `isAgentRecord`, the same rule the dashboard and the
+  /// extension press on, so the three clients cannot disagree about which lines
+  /// name an agent: a plain task is drawn inert.
+  @ViewBuilder
+  private func agentRows(for row: SessionRow) -> some View {
+    ForEach(row.info.subagents ?? []) { agent in
+      let route = UUID(uuidString: row.hostId).map {
+        SessionRoute.session(hostId: $0, sessionId: row.info.id, subagent: agent.toolUseId)
+      }
+      if isAgentRecord(agent), let route {
+        NavigationLink(value: route) {
+          agentLine(agent)
+        }
+        .listRowInsets(EdgeInsets(top: 4, leading: 42, bottom: 4, trailing: 16))
+      } else {
+        agentLine(agent)
+          .listRowInsets(EdgeInsets(top: 4, leading: 42, bottom: 4, trailing: 16))
+      }
+    }
+  }
+
+  /// The line itself: the agent, then its tool count. Green while it runs — the
+  /// terminal theme's working colour, and the same signal the count chip on the
+  /// row above carries in aggregate.
+  @ViewBuilder
+  private func agentLine(_ agent: SubagentInfo) -> some View {
+    let running = agent.status == .running
+    HStack(spacing: 6) {
+      Image(systemName: running ? "circle.dotted" : "checkmark")
+        .font(.caption2)
+        .foregroundStyle(running ? Color.accentColor : .secondary)
+        .frame(width: 12)
+      Text(subagentLabel(agent))
+        .font(.caption)
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .foregroundStyle(running ? Color.accentColor : .secondary)
+      Spacer(minLength: 6)
+      if agent.toolCount > 0 {
+        Text("\(agent.toolCount)")
+          .font(.caption2)
+          .monospacedDigit()
+          .foregroundStyle(.secondary)
+      }
+    }
+    .accessibilityElement(children: .combine)
   }
 
   // MARK: - Resume list
@@ -718,12 +831,14 @@ struct SessionRowView: View {
           // identifies it, and the sub-path form (`packages/ui`) is read from
           // the front. The old head-truncated raw cwd is gone with the path.
           .truncationMode(.tail)
-        // The work under this row, as a count and not a disclosure. The sidebar
-        // gets a twisty (`StepToggle` in `packages/ui`); a phone row cannot,
-        // because the whole row is one `NavigationLink` and a second tap target
-        // inside it is a coin toss under a thumb. The number is the reading
-        // anyway — `2/3` while some are still going, a bare total once they have
-        // settled — and the session it opens is where they can be read.
+        // The work under this row, as a count — `2/3` while some are still
+        // going, a bare total once they have settled, the two spellings
+        // `StepToggle` picks between. The count stays a *reading* and not a
+        // control: the disclosure is the twisty in the gutter, which has its own
+        // frame outside this link. This row used to carry the count alone,
+        // because a second tap target *inside* a `NavigationLink` is a coin toss
+        // under a thumb — that objection was right about nesting and is answered
+        // by not nesting, rather than by refusing the disclosure.
         if subagentCount > 0 {
           Spacer(minLength: 6)
           HStack(spacing: 2) {

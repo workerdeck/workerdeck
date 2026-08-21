@@ -92,9 +92,26 @@ struct SessionView: View {
   /// under the reader minutes after they arrived.
   @State private var focusResolved = false
 
-  init(sessionId: String, hostId: UUID, client: WorkerClient, focusSeq: Int? = nil) {
+  /// The sub-agent takeover: which `Task` call's work the pushed screen is
+  /// showing, or nil for the conversation. The `navigationDestination(item:)`
+  /// binding — set by a `Task` row's press or a resolved route request, cleared
+  /// by the pop.
+  @State private var subagentId: String?
+  /// A takeover asked for by the route (the sessions list's agent line), held
+  /// until the attach replay has landed. The list knows the `toolUseId` from
+  /// `SessionInfo.subagents` while the transcript is still filling in, and a
+  /// frame opened over a half-replayed transcript would answer "not in this
+  /// transcript" about an agent that simply has not arrived — so the request
+  /// waits out the same hold the transcript does. See `resolveTakeover()`.
+  @State private var pendingSubagent: String?
+
+  init(
+    sessionId: String, hostId: UUID, client: WorkerClient, focusSeq: Int? = nil,
+    openSubagent: String? = nil
+  ) {
     self.hostId = hostId
     self.focusSeq = focusSeq
+    _pendingSubagent = State(initialValue: openSubagent)
     _vm = State(initialValue: TranscriptViewModel(sessionId: sessionId, client: client))
   }
 
@@ -126,7 +143,8 @@ struct SessionView: View {
         } else if settings.transcriptVariant.isTerminal {
           TerminalTranscriptView(
             items: vm.state.items, pendingApprovals: vm.state.pendingApprovals,
-            revision: vm.revision, scroll: transcriptScroll, focusItem: focusTarget)
+            revision: vm.revision, scroll: transcriptScroll, focusItem: focusTarget,
+            onOpenSubagent: { openSubagent($0) })
         } else {
           TranscriptListView(items: vm.state.items, revision: vm.revision)
         }
@@ -171,7 +189,35 @@ struct SessionView: View {
         toolImages.fetch = { [vm] seq, toolUseId, part in
           try await vm.loadToolImage(seq: seq, toolUseId: toolUseId, partIndex: part)
         }
-        await vm.run()
+        // The notification claim and the unread truing-up ride the model's
+        // presence transitions, not this view's appear/disappear. This view's
+        // `onDisappear` fires when the takeover is *pushed over it* — the
+        // session is still on screen, wearing its sub-agent's frame — and
+        // releasing there would let the very approval being shown in the
+        // takeover bang the phone. The transitions fire exactly on "came on
+        // screen" / "left the screen", whichever of the two views is doing the
+        // showing. Set before `holdOpen()` takes the first claim.
+        //
+        // Captures pieces, never `self`: the model holds this closure, and a
+        // capture of the view struct carries the model back into it — a cycle
+        // that would leak every visited session's whole reduced state. The
+        // release arm inlines `finalizeSeen` for the same reason.
+        vm.onScreenPresence = { [weak vm, push, unread, hostId] visible in
+          guard let vm else { return }
+          if visible {
+            push.visibleSessionId = vm.sessionId
+          } else {
+            if push.visibleSessionId == vm.sessionId { push.visibleSessionId = nil }
+            guard vm.session != nil else { return }
+            Task { @MainActor in
+              guard let info = await vm.refreshSessionInfo() else { return }
+              unread.mark(
+                host: hostId, sessionId: vm.sessionId, itemCount: vm.state.items.count,
+                activity: info.activityCount, turns: info.numTurns)
+            }
+          }
+        }
+        await vm.holdOpen()
       }
       .onChange(of: scenePhase) { _, phase in
         if phase == .active { vm.reconnectNow() }
@@ -180,15 +226,6 @@ struct SessionView: View {
         // stops moving, after one truing-up of what *was* visible.
         push.visibleSessionId = phase == .active ? vm.sessionId : nil
         if phase != .active { finalizeSeen() }
-      }
-      // Claimed on appear and released on disappear, so notifications for the
-      // session you are watching stay silent and nothing else does.
-      .task {
-        push.visibleSessionId = vm.sessionId
-      }
-      .onDisappear {
-        if push.visibleSessionId == vm.sessionId { push.visibleSessionId = nil }
-        finalizeSeen()
       }
       // The unread watermark, written **only while this session is genuinely on
       // screen** — this view visible and showing it. A mark from anywhere else
@@ -200,6 +237,7 @@ struct SessionView: View {
         // second `.task(id:)` on that key would double the per-event cost of a
         // screen whose replay cost is already the thing being watched.
         resolveFocus()
+        resolveTakeover()
       }
       // The cwd arrives with the session snapshot, which lands after this view
       // does — and changes on a resume into a different directory.
@@ -306,6 +344,55 @@ struct SessionView: View {
       } message: {
         Text("The run is terminated on the server.")
       }
+      // The sub-agent takeover: a push, not a cover, so the way back is the
+      // navigation bar everyone already knows. Deliberately **not a second
+      // attach**: the destination captures this screen's own `vm` and reads the
+      // same reduced state, holding its own screen claim (`holdOpen`) so the
+      // socket outlives the push — this view's `.task` is cancelled about half
+      // a second in, at the end of the push animation.
+      //
+      // The environment values the transcript rows read are re-applied here:
+      // a navigation destination is presented by the enclosing stack, not by
+      // this view's subtree, so the `.environment` writes above it do not
+      // reliably reach the pushed screen.
+      .navigationDestination(item: $subagentId) { taskId in
+        SubagentTakeoverView(taskId: taskId, hostId: hostId, vm: vm)
+          .environment(\.toolResultFetcher, { vm.loadFullResult(toolUseId: $0) })
+          .environment(\.terminalImageLoader, toolImages)
+          .environment(\.attachmentLoader, attachmentLoader)
+          .environment(\.producedImageLoader, producedImages)
+          .environment(\.fileDownloader, downloader)
+          .transcriptPreferences(settings)
+          .fileDownloadPresentation(downloader)
+      }
+  }
+
+  // MARK: - The sub-agent takeover
+
+  /// Raise the takeover from a `Task` row's press.
+  private func openSubagent(_ taskId: String) {
+    // The push happens under whatever the composer was doing; a keyboard held
+    // up across it would cover the frame's tail on arrival.
+    dismissKeyboard()
+    subagentId = taskId
+  }
+
+  /// Open the takeover a route asked for — the sessions list's agent line —
+  /// once the attach replay has landed.
+  ///
+  /// Held rather than pushed immediately: the list speaks `SubagentInfo`, which
+  /// it knows before this screen has replayed a single event, and a frame over
+  /// a half-replayed transcript would honestly-but-wrongly say "not in this
+  /// transcript" about an agent that has not arrived yet. Once the hold lifts
+  /// the takeover opens **whether or not the `Task` call is present** — the
+  /// missing-task state is the takeover's own honest line, never a refused
+  /// navigation, exactly as the web never auto-exits a frame it cannot fill.
+  /// Rides the same per-event task as `resolveFocus()` and settles the same
+  /// way: once asked, never re-asked.
+  private func resolveTakeover() {
+    guard let taskId = pendingSubagent, vm.session != nil, !vm.replaying else { return }
+    pendingSubagent = nil
+    subagentId = taskId
   }
 
   // MARK: - Deep-link focus
@@ -663,47 +750,16 @@ struct SessionView: View {
     }
   }
 
+  /// The branch itself lives in `ApprovalPromptHost`, shared with the sub-agent
+  /// takeover's footer: an approval is session-level however deep the call that
+  /// raised it, so both of the session's surfaces must be able to answer it.
   @ViewBuilder
   private func approvalPrompt(_ request: PermissionRequest) -> some View {
-    let questions = parseUserQuestions(request)
-    // Two renderers, not two code paths through one — the same split the
-    // transcript makes. The terminal prompts are not the Cards prompts restyled:
-    // they answer one question at a time behind a chip strip, which is a
-    // different interaction, and a variant branch inside the Cards views is how
-    // the retired `lines` variant ended up duplicated across fifteen bodies.
-    if settings.transcriptVariant.isTerminal {
-      if questions.isEmpty {
-        TerminalPermissionPromptView(
-          request: request,
-          maxBodyHeight: promptMaxHeight,
-          onAllow: { vm.approve(request.id) },
-          onDeny: { message, interrupt in
-            vm.deny(request.id, message: message, interrupt: interrupt)
-          })
-      } else {
-        TerminalQuestionPromptView(
-          request: request,
-          questions: questions,
-          maxBodyHeight: promptMaxHeight,
-          onAnswer: { input in vm.approve(request.id, updatedInput: input) },
-          onDismiss: { vm.deny(request.id, message: "Question dismissed by user") })
-      }
-    } else if questions.isEmpty {
-      PermissionPromptView(
-        request: request,
-        maxBodyHeight: promptMaxHeight,
-        onAllow: { vm.approve(request.id) },
-        onDeny: { message, interrupt in
-          vm.deny(request.id, message: message, interrupt: interrupt)
-        })
-    } else {
-      QuestionPromptView(
-        request: request,
-        questions: questions,
-        maxBodyHeight: promptMaxHeight,
-        onAnswer: { input in vm.approve(request.id, updatedInput: input) },
-        onDismiss: { vm.deny(request.id, message: "Question dismissed by user") })
-    }
+    ApprovalPromptHost(
+      request: request,
+      isTerminal: settings.transcriptVariant.isTerminal,
+      maxBodyHeight: promptMaxHeight,
+      vm: vm)
   }
 
   /// How tall a prompt's scrolling body may get.

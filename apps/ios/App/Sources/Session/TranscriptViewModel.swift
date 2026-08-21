@@ -123,6 +123,19 @@ final class TranscriptViewModel {
 
   private let client: WorkerClient
   private var handle: SessionHandle?
+  /// Screens currently holding this session open — the session view, plus its
+  /// sub-agent takeover while one is pushed. See `holdOpen()`.
+  @ObservationIgnored private var screenClaims = 0
+  /// The one attach loop, owned here rather than by a view's `.task` — see
+  /// `holdOpen()` for why a view's task cannot own it any more.
+  @ObservationIgnored private var attachTask: Task<Void, Never>?
+  /// Fired on the claim count's 0→1 and 1→0 transitions — "this session came on
+  /// screen" / "this session left the screen". The seam the session view hangs
+  /// the notification-suppression claim and the unread truing-up on, because
+  /// the claim transitions are the only ordering-safe place: during a push or a
+  /// pop both screens' appear/disappear events fire, interleaved, and any
+  /// per-view release races the other view's claim.
+  @ObservationIgnored var onScreenPresence: ((Bool) -> Void)?
   /// Tool results whose rest is in flight — one fetch per row, however many
   /// times it is pressed.
   private var fetchingResults: Set<String> = []
@@ -130,6 +143,49 @@ final class TranscriptViewModel {
   init(sessionId: String, client: WorkerClient) {
     self.sessionId = sessionId
     self.client = client
+  }
+
+  /// Hold the session's one attach open for as long as the calling view is on
+  /// screen. Awaited from a `.task` by **both** the session view and the
+  /// sub-agent takeover pushed over it.
+  ///
+  /// Claim-counted because of a fact that was measured, not assumed: on iOS a
+  /// `NavigationStack` push fires the covered view's `onDisappear` and cancels
+  /// its `.task` about half a second later, at the end of the push animation.
+  /// So `SessionView.task { await vm.run() }` — the old shape — would detach
+  /// the socket under the takeover, freezing exactly the surface that exists
+  /// for watching an agent work, and re-attach with a replay spinner on the way
+  /// back. The two views' appearances overlap in both directions (the incoming
+  /// view's task starts at the transition's start, the outgoing one's dies at
+  /// its end), so the count never touches zero across a push or a pop — and a
+  /// path reset that removes both views really does drain it, which is the one
+  /// case that must detach.
+  ///
+  /// A new first claim awaits the previous loop's teardown before attaching, so
+  /// `run()`'s one-attach guard can never eat a legitimate re-open.
+  func holdOpen() async {
+    screenClaims += 1
+    if screenClaims == 1 {
+      onScreenPresence?(true)
+      let previous = attachTask
+      attachTask = Task { [weak self] in
+        await previous?.value
+        await self?.run()
+      }
+    }
+    defer {
+      screenClaims -= 1
+      if screenClaims == 0 {
+        attachTask?.cancel()
+        attachTask = nil
+        onScreenPresence?(false)
+      }
+    }
+    // Park until the view's `.task` is cancelled; the sleep throws immediately
+    // on cancellation, and the defer above settles the claim on this actor.
+    while !Task.isCancelled {
+      try? await Task.sleep(for: .seconds(3600))
+    }
   }
 
   /// Attach and consume events until the task is cancelled or the stream ends.
