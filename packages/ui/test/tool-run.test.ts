@@ -4,6 +4,7 @@ import {
   foldsTogether,
   runFailed,
   runSummary,
+  taskBrief,
   taskBusy,
   taskFailed,
   taskLabel,
@@ -128,6 +129,37 @@ const said: TranscriptItem = {
   streaming: false,
   parentToolUseId: 'task-1',
 }
+
+describe('taskBrief', () => {
+  it('is the call’s prompt — the one place the engine puts the instruction', () => {
+    // Measured against a live claude session: the Agent SDK sends
+    // {description, subagent_type, run_in_background, prompt} and never emits
+    // the brief as a nested user message, so no `parentToolUseId` item carries
+    // it and only the call does.
+    expect(taskBrief(taskCall({ input: { prompt: 'Find every caller of parseRoute.' } }))).toBe(
+      'Find every caller of parseRoute.',
+    )
+  })
+
+  it('is the fallback for a background agent, whose stream carries no brief at all', () => {
+    // The distinction that decides whether the row is drawn: a foreground Task
+    // forwards its brief as a real nested user item (the reducer stamps the
+    // parent on it), so the frame already has one and the callers skip this. A
+    // background agent forwards nothing — measured on a session with eight —
+    // and those are exactly the runs a takeover gets opened on. `taskBrief`
+    // itself answers the same either way; the guard lives at the call sites.
+    expect(taskBrief(taskCall({ input: { prompt: 'Go.', run_in_background: true } }))).toBe('Go.')
+  })
+
+  it('is absent when the engine has no brief to give, and never borrows the description', () => {
+    // Codex is this case for real: its spawn message is encrypted on the wire.
+    // Falling back to `description` would claim we know the instruction when we
+    // have only the 3–5 word label the header already prints.
+    expect(taskBrief(taskCall({ input: { description: 'find the auth check' } }))).toBeUndefined()
+    expect(taskBrief(taskCall({ input: {} }))).toBeUndefined()
+    expect(taskBrief(taskCall({ input: { prompt: '   ' } }))).toBeUndefined()
+  })
+})
 
 describe('taskLabel', () => {
   it('names the agent and the description, both from the call’s own input', () => {

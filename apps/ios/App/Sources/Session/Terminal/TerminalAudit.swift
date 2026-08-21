@@ -85,15 +85,15 @@
     static func run(
       rows: TerminalRows, typography: TerminalTypography, metrics: TerminalMetrics,
       expansion: TerminalExpansion = TerminalExpansion(), alsoFullyExpanded: Bool = false,
-      tolerance: CGFloat = 0.25
+      tolerance: CGFloat = 0.25, frameParentId: String? = nil
     ) -> Report {
       var report = pass(
         rows: rows, typography: typography, metrics: metrics, expansion: expansion,
-        tolerance: tolerance)
+        tolerance: tolerance, frameParentId: frameParentId)
       guard alsoFullyExpanded else { return report }
       let expanded = pass(
         rows: rows, typography: typography, metrics: metrics,
-        expansion: .everything(in: rows), tolerance: tolerance)
+        expansion: .everything(in: rows), tolerance: tolerance, frameParentId: frameParentId)
       report.linesChecked += expanded.linesChecked
       report.findings += expanded.findings
       report.openCount = expansion.open.count
@@ -120,7 +120,7 @@
     static func measureHeights(
       rows: TerminalRows, typography: TerminalTypography, metrics: TerminalMetrics,
       bleed: CGFloat, expansion: TerminalExpansion = TerminalExpansion(),
-      limit: Int = 400, tolerance: CGFloat = 0.5
+      limit: Int = 400, tolerance: CGFloat = 0.5, frameParentId: String? = nil
     ) -> (checked: Int, capped: Bool, findings: [HeightFinding]) {
       let geometry = TerminalRowGeometry(metrics: metrics, bleed: bleed)
       let probe = TerminalRowCell.BodyTextView(frame: .zero, textContainer: nil)
@@ -128,7 +128,8 @@
       var findings: [HeightFinding] = []
       let count = min(rows.count, limit)
       for index in 0..<count {
-        let lines = TerminalPlanner.plan(rows[index], metrics: metrics, expansion: expansion)
+        let lines = TerminalPlanner.plan(
+          rows[index], metrics: metrics, expansion: expansion, frameParentId: frameParentId)
         guard !lines.isEmpty else { continue }
         probe.attributedText = TerminalTextRun.make(
           lines: lines, typography: typography, geometry: geometry)
@@ -146,13 +147,15 @@
 
     private static func pass(
       rows: TerminalRows, typography: TerminalTypography, metrics: TerminalMetrics,
-      expansion: TerminalExpansion, tolerance: CGFloat
+      expansion: TerminalExpansion, tolerance: CGFloat, frameParentId: String? = nil
     ) -> Report {
       var findings: [Finding] = []
       var linesChecked = 0
 
       for index in 0..<rows.count {
-        for line in TerminalPlanner.plan(rows[index], metrics: metrics, expansion: expansion) {
+        for line in TerminalPlanner.plan(
+          rows[index], metrics: metrics, expansion: expansion, frameParentId: frameParentId)
+        {
           linesChecked += 1
           // Trailing spaces are measured out, not measured in: the wrap model
           // deliberately lets preserved spaces *hang* past the last column

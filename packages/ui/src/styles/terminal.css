@@ -1032,6 +1032,16 @@
   pointer-events: none;
   z-index: 11;
 }
+/* The sub-agent's brief, collapsed: clipped on the same wrapped lines
+   `briefPx` counts, so the height the virtualizer reserved and the height the
+   row draws cannot disagree. The count itself comes from the component
+   (`BRIEF_LINES`), one number rather than one here and one there. */
+.term-brief-clip {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .term-scrubber .term-scrub-ex {
   display: -webkit-box;
   -webkit-line-clamp: 4;

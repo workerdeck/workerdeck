@@ -21,35 +21,55 @@ public enum TerminalPlanner {
   /// memo, no shared formatter or regex, no static `var`. That holds today and
   /// nothing but this sentence pins it; a cache added here would make the
   /// parallel build racy with no test that could see it.
+  /// - Parameter frameParentId: set when these rows are a sub-agent's frame —
+  ///   the takeover — and it is the id everything in them was produced inside.
+  ///   Only the `nested` inset reads it (the port of web `Transcript.tsx`'s
+  ///   `nestedClass`): inside the frame those items *are* the top level, and
+  ///   stepping every row in would draw a rule down the whole surface saying
+  ///   "this happened somewhere else" about the only thing on screen. It flows
+  ///   through the planner rather than being a view concern because `nested`
+  ///   spends cells, so it changes the wrap — and therefore the height.
   public static func plan(
     _ row: TranscriptRow, metrics: TerminalMetrics,
-    expansion: TerminalExpansion = TerminalExpansion()
+    expansion: TerminalExpansion = TerminalExpansion(), frameParentId: String? = nil
   ) -> [TermLine] {
     switch row {
     case .recap(let label):
       return wrapBody(
         "\(TermGlyph.recap) \(label)", metrics: metrics, gutter: "", tone: .faint, columns: 0)
+    case .brief(let id, let text):
+      // The frame's first row is the frame's own top level: never nested, and
+      // `frameParentId` has nothing to say about a row no item produced.
+      return planBrief(
+        id: id, text: text, metrics: metrics, expansion: expansion, nested: false, inOpen: false)
     case .block(let block):
-      return plan(block, metrics: metrics, expansion: expansion)
+      return plan(block, metrics: metrics, expansion: expansion, frameParentId: frameParentId)
     }
   }
 
   public static func plan(
     _ block: TerminalBlock, metrics: TerminalMetrics,
-    expansion: TerminalExpansion = TerminalExpansion(), inOpen: Bool = false
+    expansion: TerminalExpansion = TerminalExpansion(), inOpen: Bool = false,
+    frameParentId: String? = nil
   ) -> [TermLine] {
     switch block {
     case .item(let leaf):
-      return plan(item: leaf.item, metrics: metrics, expansion: expansion, inOpen: inOpen)
+      return plan(
+        item: leaf.item, metrics: metrics, expansion: expansion, inOpen: inOpen,
+        frameParentId: frameParentId)
     case .run(let leaf):
-      return planRun(leaf, metrics: metrics, expansion: expansion, inOpen: inOpen)
+      return planRun(
+        leaf, metrics: metrics, expansion: expansion, inOpen: inOpen,
+        frameParentId: frameParentId)
     case .task(let leaf):
       return planTask(leaf, metrics: metrics, expansion: expansion, inOpen: inOpen)
     }
   }
 
   /// A block that can sit inside a `Task`. Absorption is one level deep, so a
-  /// leaf is all a task's child can be.
+  /// leaf is all a task's child can be. No `frameParentId` here: a task never
+  /// occurs inside a frame (nothing in a frame is top-level, so nothing
+  /// absorbs), and a task's children are nested by definition.
   static func plan(
     leaf: TerminalLeafBlock, metrics: TerminalMetrics, expansion: TerminalExpansion, inOpen: Bool
   ) -> [TermLine] {
@@ -59,6 +79,13 @@ public enum TerminalPlanner {
     case .run(let block):
       return planRun(block, metrics: metrics, expansion: expansion, inOpen: inOpen)
     }
+  }
+
+  /// Is an item drawn stepped in behind the sub-agent rule? Its parent must
+  /// exist — and not be the frame the row is already inside.
+  static func isNested(_ parent: String?, frameParentId: String?) -> Bool {
+    guard let parent else { return false }
+    return parent != frameParentId
   }
 
   // MARK: - Folded rows
@@ -79,7 +106,7 @@ public enum TerminalPlanner {
   /// `rowIndex(forItem:)` all stay exactly as they were.
   static func planRun(
     _ block: TerminalRunBlock, metrics: TerminalMetrics, expansion: TerminalExpansion,
-    inOpen: Bool
+    inOpen: Bool, frameParentId: String? = nil
   ) -> [TermLine] {
     let run = block.run
     // The absence of a key *is* the run-of-one case: `expansionKey` is `nil`
@@ -87,12 +114,14 @@ public enum TerminalPlanner {
     // rule are one thing rather than two that have to be kept in step.
     guard let key = block.expansionKey else {
       return run.first.map {
-        planToolCall($0, metrics: metrics, expansion: expansion, inOpen: inOpen)
+        planToolCall(
+          $0, metrics: metrics, expansion: expansion, inOpen: inOpen,
+          frameParentId: frameParentId)
       } ?? []
     }
     let busy = run.contains(where: callBusy)
     let failed = runFailed(run)
-    let nested = run.first?.parentToolUseId != nil
+    let nested = isNested(run.first?.parentToolUseId, frameParentId: frameParentId)
     let open = expansion.isOpen(key)
     let wash = inOpen || open
 
@@ -105,7 +134,9 @@ public enum TerminalPlanner {
     // No blank between them: `needsBlank` says two tool calls sit flush, and
     // that is exactly what the run is made of.
     for call in run {
-      lines += planToolCall(call, metrics: metrics, expansion: expansion, inOpen: true)
+      lines += planToolCall(
+        call, metrics: metrics, expansion: expansion, inOpen: true,
+        frameParentId: frameParentId)
     }
     return lines
   }
@@ -116,6 +147,13 @@ public enum TerminalPlanner {
   /// tidy: the live signal is *in* the collapsed line — the pulse, and a
   /// climbing tool count — never an auto-expansion that would resize the row
   /// under the reader.
+  ///
+  /// **The press is the takeover, not the toggle** — see
+  /// ``TermPress/openSubagent(taskId:)`` for the divergence from the web
+  /// client (there the row toggles and the takeover is a hover action; a thumb
+  /// gets one target, and it gets the deliberate move). The open state is
+  /// still planned in full: the audit checks both states, and a surface with
+  /// nowhere to push (the preview harness) falls back to the inline toggle.
   static func planTask(
     _ block: TerminalTaskBlock, metrics: TerminalMetrics, expansion: TerminalExpansion,
     inOpen: Bool
@@ -139,8 +177,22 @@ public enum TerminalPlanner {
       taskSummary(block.task, children), metrics: metrics,
       gutter: busy ? TermGlyph.pulseRest : TermGlyph.bullet,
       gutterTone: failed ? .red : (busy ? .mark : .dim),
-      tone: failed ? .red : .green, pulsing: busy, press: .toggle(key), inOpen: wash)
+      tone: failed ? .red : .green, pulsing: busy,
+      press: .openSubagent(taskId: block.task.id), inOpen: wash)
     guard open else { return lines }
+
+    // The brief leads the children for the same reason it leads the frame: the
+    // instruction, then the work (web `TaskRow` draws `BriefRow` first). Flush
+    // under the header, as on the web — and absent entirely when the engine
+    // gave none, which is the codex case: no row, not an empty one.
+    let childHasBrief = taskChildItems(block).contains {
+      if case .user = $0 { return true } else { return false }
+    }
+    if !childHasBrief, let brief = taskBrief(block.task) {
+      lines += planBrief(
+        id: block.task.id, text: brief, metrics: metrics, expansion: expansion, nested: true,
+        inOpen: true)
+    }
 
     // The children step themselves in: every one of them carries a
     // `parentToolUseId`, which is what `nested` is read from, so nothing here
@@ -154,12 +206,73 @@ public enum TerminalPlanner {
     return lines
   }
 
+  /// How many wrapped lines of a sub-agent's brief the collapsed row shows —
+  /// the web's `BRIEF_LINES`, and the same judgement: a brief runs to thousands
+  /// of characters, and an uncapped one buries the work it was asking for under
+  /// its own instructions. Four is enough to recognise the task and short
+  /// enough that the agent's first line stays on screen beside it.
+  ///
+  /// A **line** count, not a character budget — the divergence-from-the-web
+  /// that `ResultPreview.collapsed(_:cols:)` needed does not arise here,
+  /// because both clients already clip the brief on wrapped lines (the web with
+  /// `line-clamp`, cutting on the very lines `briefPx` counts).
+  public static let briefLines = 4
+
+  /// **What the agent was asked** — the sub-agent's brief, clipped to
+  /// ``briefLines`` and pressable for the whole of it. The port of web
+  /// `BriefRow` (`TerminalTranscript.tsx`), drawn in the same two places: the
+  /// takeover frame's first row (`TranscriptRow.brief`) and the head of the
+  /// inline task expansion (``planTask``), with **one** open state between them
+  /// (`ExpansionKey.brief`) where the web has two local `useState`s — this
+  /// renderer's book must know every height, so the state lives beside the rows.
+  ///
+  /// The prompt's own marker in the sub-agent's colour, body dim: it is
+  /// somebody's instruction, one level in, and not the human's turn — which is
+  /// also why `promptRows` never indexes it.
+  ///
+  /// The clip is a slice of the **planner's own wrap**, so the collapsed and
+  /// expanded heights are both exact by construction and the two states share
+  /// every line they both show. Where the web's `line-clamp` fades the fourth
+  /// line, a thumb needs a target that says what it does, so the clip is
+  /// spelled the way a collapsed tool result spells it: a faint `… +N lines`
+  /// carrying the same press. An unclipped brief draws no press at all — a
+  /// target that visibly does nothing teaches the reader the theme is broken.
+  static func planBrief(
+    id: String, text: String, metrics: TerminalMetrics, expansion: TerminalExpansion,
+    nested: Bool, inOpen: Bool
+  ) -> [TermLine] {
+    let extra = nested ? nestedIndentCells * metrics.cell : 0
+    let cols = metrics.columns(gutter: 2, indent: 0, extra: extra)
+    let all = TerminalCells.wrapped(text, cols: cols)
+
+    let key = ExpansionKey.brief(id)
+    let open = expansion.isOpen(key)
+    let wash = inOpen || open
+    let clipped = !open && all.count > briefLines
+    let press: TermPress? = clipped || open ? .toggle(key) : nil
+    let shown = clipped ? Array(all.prefix(briefLines)) : all
+
+    var lines = shown.enumerated().map { offset, line in
+      TermLine(
+        gutter: offset == 0 ? TermGlyph.prompt : "", gutterTone: .dim,
+        text: line.isEmpty ? " " : line, tone: .dim, nested: nested, press: press, inOpen: wash)
+    }
+    if clipped {
+      let hidden = all.count - briefLines
+      lines += wrapBody(
+        "… +\(hidden) line\(hidden == 1 ? "" : "s")", metrics: metrics, gutter: "", tone: .faint,
+        nested: nested, press: press, inOpen: wash)
+    }
+    return lines
+  }
+
   // MARK: - Items
 
   static func plan(
-    item: TranscriptItem, metrics: TerminalMetrics, expansion: TerminalExpansion, inOpen: Bool
+    item: TranscriptItem, metrics: TerminalMetrics, expansion: TerminalExpansion, inOpen: Bool,
+    frameParentId: String? = nil
   ) -> [TermLine] {
-    let nested = parentToolUseId(of: item) != nil
+    let nested = isNested(parentToolUseId(of: item), frameParentId: frameParentId)
 
     switch item {
     case .user(_, let text, let attachments, _):
@@ -190,7 +303,9 @@ public enum TerminalPlanner {
         italic: true, nested: nested, inOpen: inOpen)
 
     case .toolCall(let call):
-      return planToolCall(call, metrics: metrics, expansion: expansion, inOpen: inOpen)
+      return planToolCall(
+        call, metrics: metrics, expansion: expansion, inOpen: inOpen,
+        frameParentId: frameParentId)
 
     case .turnResult(_, let subtype, let isError, let durationMs, let totalCostUsd, let errors):
       // No glyph: a turn ending is not something anyone said.
@@ -230,9 +345,10 @@ public enum TerminalPlanner {
   /// single one. Here the guard bites harder than it does on the web, because
   /// every one of those lines is planned and wrapped before anything is drawn.
   static func planToolCall(
-    _ call: ToolCallItem, metrics: TerminalMetrics, expansion: TerminalExpansion, inOpen: Bool
+    _ call: ToolCallItem, metrics: TerminalMetrics, expansion: TerminalExpansion, inOpen: Bool,
+    frameParentId: String? = nil
   ) -> [TermLine] {
-    let nested = call.parentToolUseId != nil
+    let nested = isNested(call.parentToolUseId, frameParentId: frameParentId)
     let busy = callBusy(call)
     let tone = toolTone(call)
     let openKey = ExpansionKey.call(call.id)

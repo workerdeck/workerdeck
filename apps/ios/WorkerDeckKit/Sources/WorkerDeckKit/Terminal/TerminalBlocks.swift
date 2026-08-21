@@ -138,6 +138,43 @@ public func parentToolUseId(of item: TranscriptItem) -> String? {
   }
 }
 
+/// **The frame membership rule**: the items one sub-agent produced, and nothing
+/// else — what the takeover renders instead of the whole conversation.
+///
+/// The port of `subagentItems` (`packages/ui/src/components/terminal/blocks.ts`),
+/// and one function rather than a filter at each call site for the reason stated
+/// there: this is a rule two renderers have to agree on, and a phone that framed
+/// a sub-agent slightly differently would be a second answer to "what is this
+/// agent doing".
+///
+/// It picks up the brief (a `user` item *with* a parent), the thinking, the
+/// streamed text (stream ids are namespaced per sidechain, so a streaming item
+/// carries the parent like any other), every tool call with its result, and the
+/// final report. It excludes the spawning call itself — that is the frame, not a
+/// row in it — and every other agent's work.
+///
+/// The slice is safe to hand straight to ``terminalBlocks(items:offset:)`` at
+/// offset 0: nothing in it is top-level, so nothing absorbs, and consecutive
+/// calls still fold into runs because the run fold keys on an *equal* parent
+/// rather than on the absence of one.
+public func subagentItems(
+  _ items: [TranscriptItem],
+  parentToolUseId parent: String
+) -> [TranscriptItem] {
+  items.filter { parentToolUseId(of: $0) == parent }
+}
+
+/// The spawning call behind a frame, when the transcript holds it — the one
+/// item ``subagentItems(_:parentToolUseId:)`` deliberately excludes, looked up
+/// by the takeover for the strip and for the brief row the frame opens with.
+/// One function so the two callers cannot disagree about what "the task" is.
+public func subagentTask(_ items: [TranscriptItem], id: String) -> ToolCallItem? {
+  for item in items {
+    if case .toolCall(let call) = item, call.id == id { return call }
+  }
+  return nil
+}
+
 // MARK: - The fold
 
 /// Fold a slice of transcript items into rows.

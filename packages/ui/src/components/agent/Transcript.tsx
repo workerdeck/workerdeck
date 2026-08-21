@@ -27,15 +27,16 @@ import { ToolCallCard } from './ToolCallCard.tsx'
 import { resolveAffordances, type TerminalAffordances } from '../terminal/affordances.tsx'
 import { ToolRunRow, WorkingRow, parentOf, terminalBlocks } from '../terminal/items.tsx'
 import { subagentItems, type ToolCallItem } from '../terminal/blocks.ts'
+import { taskBrief } from '../terminal/tool-run.ts'
 import { taskBusy } from '../terminal/tool-run.ts'
-import { estimateBlockPx } from '../terminal/height.ts'
+import { briefPx, estimateBlockPx } from '../terminal/height.ts'
 import { TerminalScrubber } from '../terminal/scrubber.tsx'
 import { gapBefore, positionInRow, rowIndexForItem, type TranscriptRow } from './transcript-rows.ts'
 import { useHeightEpoch } from './use-height-epoch.ts'
 import { useTranscriptJumps } from './use-transcript-jumps.ts'
 import { Row } from '../terminal/row.tsx'
 import { TerminalSurface } from '../terminal/surface.tsx'
-import { TaskRow, TerminalItemView } from '../terminal/TerminalTranscript.tsx'
+import { BriefRow, TaskRow, TerminalItemView } from '../terminal/TerminalTranscript.tsx'
 import {
   ROW_GAP,
   TranscriptVariantProvider,
@@ -628,6 +629,12 @@ function TranscriptRows({
       if (terminal && epoch) {
         const row = rows[index]
         const gapPx = index > 0 && gapBefore(rows, index) ? epoch.line : 0
+        if (row && 'text' in row && row.key === 'brief')
+          // Collapsed by default and clipped to BRIEF_LINES, so its height is
+          // known before it mounts — the same discipline the task row keeps by
+          // always being collapsed when unmounted. Expanding is local state on
+          // a mounted row, which the virtualizer re-measures.
+          return briefPx(row.text, epoch) + gapPx
         if (row && !('line' in row))
           return estimateBlockPx(row, epoch) + gapPx
         return epoch.line + gapPx // recap: one Row, one line
@@ -861,6 +868,8 @@ function TranscriptRows({
                 terminal={terminal}
               />
             </div>
+          ) : 'text' in row && row.key === 'brief' ? (
+            <BriefRow text={row.text} terminal={terminal} />
           ) : 'line' in row ? (
             <RecapRow line={row.line} since={since} terminal={terminal} />
           ) : (
@@ -936,6 +945,7 @@ function TranscriptRows({
               pendingApprovals={pendingApprovals}
               recapRow={recapRow}
               bookmarks={scrubberMarks ?? []}
+              frameParentId={frameParentId}
               rowIndexFor={(itemIndex) => rowIndexForItem(rows, itemIndex)}
               positionInRow={(itemIndex) => positionInRow(rows, itemIndex)}
               // The public memoized measurements array — `getTotalSize()` just
@@ -1067,13 +1077,21 @@ export interface TranscriptProps {
    * iOS will mirror: everything the agent produced, and not the spawning `Task`
    * call itself, which *is* the frame rather than a row in it.
    *
-   * Four of this component's features are switched off internally whenever it is
-   * set, and the gate lives here rather than at the call site on purpose: every
-   * one of them is keyed to a **full-transcript item index**, so a host that
-   * passed a frame and a catch-up boundary together would not be making a
-   * strange choice, it would be making an incoherent one. Those are the catch-up
-   * boundary and its recap row, the scrubber and its marks, the sticky prompt,
-   * and `reveal`. What stays is everything that makes a long stream readable —
+   * Features are switched off internally whenever it is set, and the gate lives
+   * here rather than at the call site on purpose: each is keyed to a
+   * **full-transcript item index**, so a host that passed a frame and a catch-up
+   * boundary together would not be making a strange choice, it would be making
+   * an incoherent one. Those are the catch-up boundary and its recap row, the
+   * sticky prompt, `reveal`, and the scrubber's **bookmarks** (host indices in
+   * full-transcript space).
+   *
+   * The **scrubber itself stays**, and the distinction is the point: the rail
+   * derives every one of its inputs from the rows it is given, and inside a
+   * frame those are the sub-agent's own — so it marks that agent's prompts,
+   * answers and failures at that agent's offsets. It was originally gated with
+   * the marks, on the reasonable-looking argument that they are one feature;
+   * they are two, and a fifty-tool agent run is exactly where a rail earns its
+   * keep. What stays besides is everything that makes a long stream readable —
    * virtualization, the height epoch, the follow spring, the replay hold.
    */
   frame?: { parentToolUseId: string }
@@ -1151,10 +1169,24 @@ export function Transcript({
     () => (boundary === undefined ? undefined : recapLine(summarizeSince(state, boundary))),
     [state, boundary],
   )
+  // What this agent was asked, when the stream does not already say. A
+  // foreground `Task` forwards its brief as a real nested user message and it is
+  // already the frame's first row; a background agent forwards nothing, and
+  // without this the takeover shows an answer with the question missing. Hence
+  // the guard rather than an unconditional splice — drawn both ways, the reader
+  // would see the same instruction twice.
+  const brief = useMemo(
+    () =>
+      frame && frameTask && !items.some((item) => item.kind === 'user')
+        ? taskBrief(frameTask)
+        : undefined,
+    [frame, frameTask, items],
+  )
   const rows = useMemo<TranscriptRow[]>(() => {
     const fold = (from: number, to: number) =>
       terminalBlocks(items.slice(from, to), from, terminal)
-    if (boundary === undefined || !recap) return fold(0, items.length)
+    const lead: TranscriptRow[] = brief ? [{ key: 'brief' as const, text: brief }] : []
+    if (boundary === undefined || !recap) return [...lead, ...fold(0, items.length)]
     // Each side of the boundary folds separately, so a shell run never spans it:
     // "what happened while you were away" must not hide inside a count that also
     // covers what you have already read.
@@ -1163,7 +1195,7 @@ export function Transcript({
       { key: 'recap' as const, line: recap },
       ...fold(boundary, items.length),
     ]
-  }, [items, boundary, recap, terminal])
+  }, [items, boundary, recap, terminal, brief])
   return (
     <TranscriptVariantProvider value={variant}>
       {/* The replay hold hides by VISIBILITY, never by not mounting. The rows
@@ -1219,8 +1251,14 @@ export function Transcript({
               lineHeight={lineHeight}
               items={items}
               pendingApprovals={state.pendingApprovals}
-              /* All four are full-transcript semantics — see `frame`'s doc. */
-              scrubber={frame ? undefined : scrubber}
+              /* The rail rides the frame's OWN rows, so inside a takeover it
+                 marks the sub-agent's prompts, answers and failures — the thing
+                 a long agent run most needs, and coherent because every input
+                 it takes (`items`, `rowIndexFor`, `offsetOfRow`) is the frame's.
+                 The **bookmarks are not**: those indices are the host's, in
+                 full-transcript space, and painting them here would put marks
+                 at meaningless offsets. See `frame`'s doc for the rest. */
+              scrubber={scrubber}
               scrubberMarks={frame ? undefined : scrubberMarks}
               affordances={affordances}
               fileUrl={fileUrl}

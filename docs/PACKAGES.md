@@ -243,7 +243,12 @@ it back off. Three things were latent behind it and are fixed with it — the re
 singleton was **per session** where concurrent agents need **per agent**
 (`streaming:<parentToolUseId>`), a subagent's brief is a real non-synthetic `user_message` that
 rendered as the human's own `❯` prompt row, and `transcriptActivity` counted every nested row
-into the unread badge. No transport. Tool execution rides the
+into the unread badge. **That brief is a foreground `Task`'s only** — measured 2026-08-21, a
+session with eight *background* agents carried not one `user` item with a parent, so on those runs
+the instruction exists solely in the spawning call's `prompt`. Hence `taskBrief` and the terminal
+theme's synthetic brief row, spliced in **only when the stream carries none** (`packages/ui`'s
+`BriefRow`, `TerminalRows.build(frameTask:)` on iOS): a takeover you can watch without seeing what
+the agent was told is half a transcript, and two spellings of one instruction is worse than one. No transport. Tool execution rides the
 `ToolExecutor` seam (`QuickJsExecutor` in-process, `BrowserBridgeExecutor` to a tab,
 `DeferredExecutor` for work outliving the runner); `createToolContext` builds the
 capability-scoped tool set with the `sandboxed`/`authoritative` trust split, and

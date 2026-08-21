@@ -132,6 +132,30 @@ export function estimateBlockPx(block: TerminalBlock, epoch: HeightEpoch): numbe
   return computed.px
 }
 
+/**
+ * How many lines of a sub-agent's brief the collapsed row shows.
+ *
+ * Four, and the number is a judgement rather than a measurement: a brief runs
+ * to thousands of characters, and an uncapped one buries the work it was asking
+ * for under its own instructions. Four is enough to recognise the task and
+ * short enough that the agent's first line stays on screen beside it.
+ */
+export const BRIEF_LINES = 4
+
+/**
+ * The collapsed brief row's height — the frame's first row, which is synthetic
+ * and so cannot go through {@link estimateBlockPx}.
+ *
+ * Clipped, so it is `min(wrapped, BRIEF_LINES)` lines plus the row the header
+ * occupies. Expanding is local state on a *mounted* row, which the virtualizer
+ * re-measures; what has to be right before it mounts is the collapsed height,
+ * exactly as a task row is always collapsed when unmounted for the same reason.
+ */
+export function briefPx(text: string, m: CellMetrics): number {
+  const cols = Math.max(1, Math.floor(m.width / m.ch + EPS))
+  return (Math.min(textLines(text, cols).lines, BRIEF_LINES) + 1) * m.line
+}
+
 /** Measure the advance of `0` on the live surface. A DOM read — call it from
  * the epoch's measurement pass (an effect / ResizeObserver callback), never
  * from render. The probe is absolutely positioned, so it contributes no layout

@@ -139,6 +139,38 @@ export function taskIdentity(task: ToolCallItem): string {
     : (agent ?? (description ? clip(description) : toolInputPreview(task.input)))
 }
 
+/**
+ * **What this agent was actually asked** — the sub-agent's brief, or undefined
+ * when the engine did not give us one.
+ *
+ * Measured against a live session rather than assumed: the Agent SDK's call
+ * carries `{description, subagent_type, run_in_background, prompt}`, and
+ * `prompt` is the instruction.
+ *
+ * **Whether it also arrives in the stream depends on the agent.** A foreground
+ * `Task` forwards its brief as a real nested `user_message` (that is what
+ * `forwardSubagentText` buys and what the reducer stamps a `parentToolUseId`
+ * on), so `subagentItems` picks it up and the frame already has it. A
+ * **background** agent does not: measured on a session with eight of them,
+ * zero items carried a `parentToolUseId` on a `user` kind. Those runs are
+ * exactly the ones you open a takeover on — an agent working while you read
+ * something else — and their brief was nowhere at all.
+ *
+ * So this is the *fallback*, not the source: the callers splice it in only when
+ * the frame carries no brief of its own, or the same instruction would be drawn
+ * twice.
+ *
+ * `description` is deliberately not a fallback: it is the 3–5 word label the
+ * header already prints, and repeating it as a brief would claim we know the
+ * instruction when we do not. **Codex genuinely has none** — its `spawn_agent`
+ * message is an encrypted blob on the wire — so on that engine this is
+ * undefined and the row is not drawn, rather than drawn empty.
+ */
+export function taskBrief(task: ToolCallItem): string | undefined {
+  const input = task.input as { prompt?: unknown } | null
+  return trimmed(input?.prompt)
+}
+
 const callBusy = (call: ToolCallItem): boolean =>
   call.status === 'running' || call.status === 'pending'
 

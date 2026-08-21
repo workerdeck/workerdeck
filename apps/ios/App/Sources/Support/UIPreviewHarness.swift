@@ -33,6 +33,7 @@ enum UIPreview: String {
   case terminal
   case terminalOpen
   case terminalStress
+  case subagent
   case projects
 
   static var active: UIPreview? {
@@ -243,6 +244,9 @@ private struct TerminalAuditPreview: View {
   /// pass, which is the only thing that can show a planned line and a drawn
   /// line parting company.
   var expandAll = false
+  /// Render one sub-agent's frame instead of the conversation — the takeover's
+  /// transcript, from the same fixture. The id must be a `Task` in `items`.
+  var frame: String? = nil
   @State private var verdict = "auditing…"
 
   var body: some View {
@@ -260,10 +264,11 @@ private struct TerminalAuditPreview: View {
       // ever compiled this file optimized.
       #if DEBUG
         TerminalTranscriptView(
-          items: items, revision: 0, scroll: TranscriptScrollModel(),
+          items: items, revision: 0, scroll: TranscriptScrollModel(), frame: frame,
           onAudit: { verdict = $0.summary }, expandAll: expandAll)
       #else
-        TerminalTranscriptView(items: items, revision: 0, scroll: TranscriptScrollModel())
+        TerminalTranscriptView(
+          items: items, revision: 0, scroll: TranscriptScrollModel(), frame: frame)
       #endif
     }
   }
@@ -413,8 +418,25 @@ struct UIPreviewHarness: View {
       call("c2", "Grep", ["pattern": .string("isLines")], result: "", isError: true),
       call("c3", "Read", ["file_path": .string("/src/height.ts")], result: "740 lines"),
       // A Task whose children interleave with a second Task's — the case an
-      // adjacency rule gets wrong.
-      call("t1", "Task", ["subagent_type": .string("Explore"), "description": .string("map the web theme")], status: .running),
+      // adjacency rule gets wrong. t1 carries a `prompt` long enough to clip,
+      // so the takeover frame and the inline expansion both show the brief
+      // behind its `… +N lines` press; t2 deliberately has none — the codex
+      // case, whose spawn message is encrypted on the wire, and whose frame
+      // must open with no brief row rather than an empty one.
+      call(
+        "t1", "Task",
+        [
+          "subagent_type": .string("Explore"), "description": .string("map the web theme"),
+          "prompt": .string(
+            """
+            Map the web client's terminal theme end to end. Read blocks.ts, height.ts and \
+            transcript-rows.ts, and write down: which strings are load-bearing for heights, \
+            where the fold's membership rule diverges from adjacency, and what the expansion \
+            model assumes about mounted rows. List every file a Swift port would touch, and \
+            flag anything that relies on the browser measuring text — those are the pieces \
+            the phone has to plan instead.
+            """),
+        ], status: .running),
       call("t2", "Task", ["subagent_type": .string("Plan"), "description": .string("size the port")]),
       call("k1", "Glob", ["pattern": .string("**/*.tsx")], parent: "t1", result: "17 files"),
       call("k2", "Read", ["file_path": .string("/plan.md")], parent: "t2", result: "ok"),
@@ -665,6 +687,16 @@ struct UIPreviewHarness: View {
       // children arriving out of order, a diff carrying the engine's own line
       // numbers, and a tool result long enough to hit both preview budgets.
       TerminalAuditPreview(items: Self.terminalItems)
+
+    case .subagent:
+      // The takeover's frame over the same fixture: `t1` is the running
+      // `Explore` agent whose children interleave with `t2`'s. What must be
+      // true on screen: only t1's rows (k1, k3), un-stepped — inside the frame
+      // they are the top level — the rail present and marking the *frame's*
+      // own work (its `frameParentId` is t1, so the level tests pass for
+      // exactly these items), no sticky prompt, and the audit still reading ✔
+      // against the frame's own plan at the rail-narrowed width.
+      TerminalAuditPreview(items: Self.terminalItems, frame: "t1")
 
     case .terminalOpen:
       // The same fixture with every block open. Expansion is the one thing this

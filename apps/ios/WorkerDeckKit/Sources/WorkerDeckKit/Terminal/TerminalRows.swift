@@ -21,24 +21,35 @@ public struct RowPosition: Equatable, Sendable {
   }
 }
 
-/// One drawn row: a folded block, or the catch-up seam spliced between them.
+/// One drawn row: a folded block, the catch-up seam spliced between them, or
+/// the sub-agent brief a frame opens with.
 public enum TranscriptRow: Equatable, Sendable {
   case block(TerminalBlock)
   case recap(label: String)
+  /// **What this agent was asked** — the takeover frame's first row, spliced
+  /// ahead of the fold exactly as the web splices `{ key: 'brief', text }`
+  /// (`transcript-rows.ts`). Synthetic of necessity: the instruction is the
+  /// spawning call's `prompt` and the engine never emits it as an item, so no
+  /// fold can produce this row. It carries `taskBrief`'s output rather than the
+  /// call, so a status mutation on the task (running → settled) does not
+  /// re-key a row whose every drawn line reads only the prompt.
+  case brief(id: String, text: String)
 
   public var key: String {
     switch self {
     case .block(let block): return block.key
     case .recap: return "recap"
+    case .brief(let id, _): return "brief:\(id)"
     }
   }
 
   /// The item a row is *spaced as*. The recap row has none, so it always gets a
-  /// blank line on either side.
+  /// blank line on either side — and the brief row likewise: the instruction is
+  /// not part of the work's own spacing run.
   public var spacingItem: TranscriptItem? {
     switch self {
     case .block(let block): return block.spacingItem
-    case .recap: return nil
+    case .recap, .brief: return nil
     }
   }
 }
@@ -113,17 +124,36 @@ public struct TerminalRows: Equatable, Sendable {
   /// Each side of the boundary folds **separately**, which is what stops a run's
   /// count from spanning "what you already read" — the count under the seam
   /// describes only what is new.
+  /// - Parameter frameTask: the spawning call, when these items are a
+  ///   sub-agent's frame — the takeover. Its brief leads the rows, because a
+  ///   frame without its instruction is half a transcript. **No `prompt`, no
+  ///   row**: codex's spawn message is encrypted on the wire, and an empty
+  ///   brief row would assert we know what we don't. (A frame never carries a
+  ///   recap — `TerminalTranscriptView` constructs its frame model
+  ///   boundary-free — so the brief leads whichever path builds the rows.)
   public static func build(
     items: [TranscriptItem], recapAt boundary: Int? = nil, recapLabel: String = "",
-    fold: Bool = true
+    fold: Bool = true, frameTask: ToolCallItem? = nil
   ) -> TerminalRows {
+    // Only when the agent's own stream carries no brief. A **foreground** Task
+    // forwards one as a real nested user item, which is already the frame's
+    // first row; a **background** agent forwards nothing (measured: eight of
+    // them, not one `user` item with a parent), and those are exactly the runs
+    // a takeover is opened on. Splicing unconditionally would draw one
+    // instruction twice — see `taskBrief`.
+    let streamHasBrief = items.contains { if case .user = $0 { return true } else { return false } }
+    let lead: [TranscriptRow] =
+      streamHasBrief
+      ? []
+      : frameTask.flatMap { task in taskBrief(task).map { [.brief(id: task.id, text: $0)] } } ?? []
     guard let boundary, boundary > 0, boundary < items.count else {
-      return TerminalRows(rows: terminalBlocks(items, fold: fold).map(TranscriptRow.block))
+      return TerminalRows(
+        rows: lead + terminalBlocks(items, fold: fold).map(TranscriptRow.block))
     }
     let before = terminalBlocks(Array(items[..<boundary]), fold: fold).map(TranscriptRow.block)
     let after = terminalBlocks(Array(items[boundary...]), offset: boundary, fold: fold)
       .map(TranscriptRow.block)
-    return TerminalRows(rows: before + [.recap(label: recapLabel)] + after)
+    return TerminalRows(rows: lead + before + [.recap(label: recapLabel)] + after)
   }
 
   public var count: Int { rows.count }

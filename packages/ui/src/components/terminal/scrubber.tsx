@@ -233,6 +233,19 @@ export interface TerminalScrubberProps {
   recapRow?: { rowIndex: number; label: string }
   /** Bookmarked item indices. Paint only — no store, no set affordance. */
   bookmarks: readonly number[]
+  /**
+   * The sub-agent takeover's parent id, when this rail belongs to a frame.
+   *
+   * **It is what "top level" means here.** Three of the rules below mark only
+   * items at the conversation's own level, so that a sub-agent's work is
+   * represented by the one band its `Task` row gets rather than by a second set
+   * of prompts and answers scattered through the rail. Inside a frame that same
+   * test excludes *everything* — every item there has a parent by construction —
+   * and the rail came out empty: mounted, banded, and marking nothing on a
+   * hundred-tool agent. So the level is a parameter, `undefined` at the top and
+   * the frame's id inside one.
+   */
+  frameParentId?: string
   /** Item index → virtual row index (the off-by-a-fold mapping; see
    * `rowIndexForItem` in `agent/Transcript.tsx`). */
   rowIndexFor: (itemIndex: number) => number
@@ -274,6 +287,7 @@ export function buildClusters(
   const {
     items,
     bookmarks,
+    frameParentId,
     recapRow,
     pendingApprovals,
     rowIndexFor,
@@ -300,7 +314,7 @@ export function buildClusters(
   // only `rowIndexFor`.
   const rowOutcome = new Map<number, number>()
   items.forEach((item, index) => {
-    if (item.kind !== 'tool_call' || parentOf(item) !== undefined) return
+    if (item.kind !== 'tool_call' || parentOf(item) !== frameParentId) return
     rowOutcome.set(rowIndexFor(index), index)
   })
   // One right-lane mark per segment, emitted when the segment closes. A segment
@@ -335,7 +349,7 @@ export function buildClusters(
     // is a `user` item too, and it would both paint a "you" mark for something
     // nobody typed and close the segment mid-turn — which mis-anchors the turn
     // mark whenever a task runs between the prompt and the answer.
-    if (item.kind === 'user' && parentOf(item) === undefined) {
+    if (item.kind === 'user' && parentOf(item) === frameParentId) {
       closeSegment()
       marks.push({ kind: 'user', itemIndex: index, rowIndex: rowIndexFor(index) })
     } else if (item.kind === 'turn_result') {
@@ -385,7 +399,18 @@ export function buildClusters(
       rowOutcome.get(rowIndexFor(index)) === index
     ) {
       marks.push({ kind: 'toolFailed', itemIndex: index, rowIndex: rowIndexFor(index) })
-    } else if (item.kind === 'assistant_text' && item.parentToolUseId == null) {
+    } else if (item.kind === 'assistant_text' && parentOf(item) === frameParentId) {
+      if (frameParentId !== undefined) {
+        // **Inside a frame every narration step is its own mark**, where the
+        // conversation gets one per segment. The segment machinery has nothing
+        // to work with here — a sub-agent's stream carries no prompts and no
+        // `turn_result`, so every step would fold into a single mark at the
+        // final report, which is the one place a reader can already get to. An
+        // agent's rail is a list of what it said on the way, and that is what
+        // makes a fifty-step run navigable.
+        marks.push({ kind: 'turn', itemIndex: index, rowIndex: rowIndexFor(index) })
+        return
+      }
       // The live one included, deliberately: a turn in flight has no turn end
       // yet, which left a two-minute answer unrepresented on the rail for the
       // whole two minutes it was the only thing worth navigating to. The mark's

@@ -20,7 +20,8 @@ import {
 } from './items.tsx'
 import { usePulse } from '../agent/pulse.tsx'
 import { Pressable, useRevealOnOpen } from './press.tsx'
-import { taskBusy, taskFailed, taskSummary } from './tool-run.ts'
+import { taskBrief, taskBusy, taskFailed, taskSummary } from './tool-run.ts'
+import { BRIEF_LINES } from './height.ts'
 import { Blank, Row } from './row.tsx'
 import { TerminalSurface } from './surface.tsx'
 
@@ -106,6 +107,48 @@ export function TerminalItemView({
  * they fold among themselves: a subagent's consecutive tool calls are as much
  * an aside inside its frame as they are in the main thread.
  */
+/**
+ * **What the agent was asked** — the sub-agent's brief, clipped to
+ * {@link BRIEF_LINES} and pressable for the whole of it.
+ *
+ * It leads the takeover's frame and the inline task expansion alike, because
+ * both are answering the same question and an answer without its question is
+ * half a transcript. This is the one row here built from something other than
+ * the stream, and it exists for the case the stream does not cover: a
+ * **background** agent forwards no brief, where a foreground `Task` forwards a
+ * real nested user item that renders as an ordinary prompt row. The callers
+ * splice this in only when that row is absent. Codex draws nothing either way —
+ * its spawn message is encrypted on the wire, so there is no brief to give.
+ *
+ * `>` and blue, the prompt's own marker and colour, because that is what this
+ * is: somebody's instruction, one level in. The clip is `line-clamp`, which
+ * cuts on the same wrapped lines `briefPx` counts — one rule, so the reserved
+ * height and the drawn height cannot disagree.
+ */
+export function BriefRow({ text, terminal }: { text: string; terminal?: boolean }) {
+  const [open, setOpen] = useState(false)
+  if (!terminal) {
+    return (
+      <div data-slot='brief' className='px-4 py-2 text-body-sm whitespace-pre-wrap text-fg-2'>
+        {text}
+      </div>
+    )
+  }
+  return (
+    <div data-slot='brief'>
+      <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
+        <Row glyph='>' glyphTone='blue' tone='dim'>
+          <span
+            className={cn('whitespace-pre-wrap', !open && 'term-brief-clip')}
+            style={open ? undefined : { WebkitLineClamp: BRIEF_LINES }}>
+            {text}
+          </span>
+        </Row>
+      </Pressable>
+    </div>
+  )
+}
+
 export function TaskRow({
   block,
   fileUrl,
@@ -121,6 +164,10 @@ export function TaskRow({
   const [open, setOpen] = useState(false)
   const reveal = useRevealOnOpen(open)
   const children = useMemo(() => taskChildItems(block), [block])
+  // Only when the sub-agent's own stream carries no brief — a foreground Task
+  // forwards one as a real user item, and two spellings of one instruction is
+  // worse than none. See `taskBrief`.
+  const brief = children.some((item) => item.kind === 'user') ? undefined : taskBrief(block.task)
   const busy = taskBusy(block.task, children)
   const failed = taskFailed(block.task)
   const pulse = usePulse(busy)
@@ -153,6 +200,9 @@ export function TaskRow({
         // sits on the open block's wash, where that border token is invisible,
         // and its 14px would take every nested marker off the cell grid.
         <div className='term-nested'>
+          {/* The brief leads the children for the same reason it leads the
+              frame: the instruction, then the work. */}
+          {brief ? <BriefRow text={brief} terminal /> : null}
           {block.children.map((leaf, index) => (
             <Fragment key={leaf.key}>
               {index > 0 && blockNeedsBlank(block.children[index - 1]!, leaf) ? <Blank /> : null}

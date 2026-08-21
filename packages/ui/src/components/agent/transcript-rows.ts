@@ -14,7 +14,15 @@ import { needsBlank, type TerminalBlock } from '../terminal/items.tsx'
  * virtualizer sees stable indices, and each row carries the key the item was
  * already React-keyed by — measurements are cached per key, so a row keeps its
  * measured height when the recap splice shifts every index after it. */
-export type TranscriptRow = TerminalBlock | { key: 'recap'; line: string }
+export type TranscriptRow =
+  | TerminalBlock
+  | { key: 'recap'; line: string }
+  /** The sub-agent's brief, spliced in as the takeover frame's first row — what
+   * the agent was asked, before what it did. Synthetic like the recap row and
+   * for the same reason: it is not a transcript item (the engine puts the
+   * instruction in the spawning call's `prompt`, never in the stream), but it
+   * has to be a row so the virtualizer can size and key it. */
+  | { key: 'brief'; text: string }
 
 /** The item a row is spaced *as*. A run stands for the calls it folded, and a
  * task block for the `Task` call it absorbed into — all tool calls, so a run,

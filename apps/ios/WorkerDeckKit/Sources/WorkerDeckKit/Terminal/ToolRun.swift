@@ -139,19 +139,39 @@ public func runSummary(_ items: [ToolCallItem], busy: Bool) -> String {
 /// `Task(Explore · permission mode parsing)` — the agent and what it was asked
 /// for, which is the only part of a subagent worth a row of its own.
 public func taskLabel(_ task: ToolCallItem) -> String {
+  "\(task.name)(\(taskIdentity(task)))"
+}
+
+/// The inner half of ``taskLabel(_:)`` — `Explore · permission mode parsing` —
+/// without the `Task(…)` wrapper.
+///
+/// Split out for the sub-agent takeover's header, which names the agent it is
+/// showing and has no room (or reason) to repeat the tool's own name: the whole
+/// surface *is* that Task. Extracted rather than re-spelled so the header and
+/// the row it was opened from cannot drift, and so both keep matching
+/// ``subagentLabel(_:)``, which reads the same two fields for the sessions list.
+/// The port of `taskIdentity` in `packages/ui/src/components/terminal/tool-run.ts`.
+public func taskIdentity(_ task: ToolCallItem) -> String {
   let description = trimmedNonEmpty(task.input["description"]?.stringValue)
   let agent = trimmedNonEmpty(task.input["subagent_type"]?.stringValue)
-  let inner: String
-  if let agent, let description {
-    inner = "\(agent) · \(TermFmt.clip(description))"
-  } else if let agent {
-    inner = agent
-  } else if let description {
-    inner = TermFmt.clip(description)
-  } else {
-    inner = TermFmt.toolInputPreview(task.input)
-  }
-  return "\(task.name)(\(inner))"
+  if let agent, let description { return "\(agent) · \(TermFmt.clip(description))" }
+  if let agent { return agent }
+  if let description { return TermFmt.clip(description) }
+  return TermFmt.toolInputPreview(task.input)
+}
+
+/// **What this agent was actually asked** — the sub-agent's brief, or `nil` when
+/// the engine did not give us one. The port of `taskBrief`
+/// (`packages/ui/src/components/terminal/tool-run.ts`), where the reasoning is.
+///
+/// The short of it: the Agent SDK puts the instruction in the call's `prompt`
+/// and never as a nested user message, so `subagentItems` cannot pick it up and
+/// no renderer read it — a takeover you could watch without seeing what the
+/// agent was told. `description` is not a fallback (the header already prints
+/// it), and codex has no brief at all: its spawn message is encrypted on the
+/// wire, so there the row is absent rather than empty.
+public func taskBrief(_ task: ToolCallItem) -> String? {
+  trimmedNonEmpty(task.input["prompt"]?.stringValue)
 }
 
 /// The collapsed `Task` row: its label and how many tools the subagent ran.
@@ -175,4 +195,56 @@ private func trimmedNonEmpty(_ text: String?) -> String? {
     return nil
   }
   return trimmed
+}
+
+// MARK: - The takeover strip
+
+/// The one line above a sub-agent takeover: who this is, how it is doing, and
+/// how much it has done — the port of `packages/ui`'s `SubagentStrip.tsx`,
+/// minus the way back (here that is the navigation bar's).
+///
+/// **It claims exactly what the `Task` row it was opened from claims** — the
+/// same `taskBusy` / `taskFailed` / tool count over the same items — and
+/// deliberately *not* `SubagentInfo.status`. Protocol documents those two as
+/// divergent on purpose, but that divergence is transcript-versus-*list* and
+/// this surface **is** the transcript. The disagreement that must not exist
+/// here is between a header and the rows directly beneath it.
+///
+/// The rollup is still allowed one job — naming an agent whose `Task` call is
+/// not in the transcript (`fallbackLabel`, fed from `subagentLabel`) — because
+/// a label is not content.
+///
+/// The status is the theme's own vocabulary: `taskSummary` already says
+/// `working…` and `done` for exactly this state one row over, and a header
+/// that said "running"/"completed" about the same agent would be a second
+/// vocabulary for one fact. No elapsed clock, unlike the web strip: the iOS
+/// reducer mirror stamps no `ts` on tool calls, and the web's own rule for an
+/// absent `ts` is to draw no elapsed rather than count from the epoch.
+public struct SubagentStripLine: Equatable, Sendable {
+  /// `taskIdentity` of the spawning call, or the fallback when the transcript
+  /// does not have it.
+  public var name: String
+  /// `failed` / `working…` / `done` — or nil when there is no `Task` call to
+  /// read. Better silent than confidently wrong about an agent we cannot see.
+  public var status: String?
+  public var busy: Bool
+  public var failed: Bool
+  /// Tool calls in the frame — `0` draws no count, matching the web's strip.
+  public var toolCount: Int
+}
+
+/// Derive the strip from the frame: the spawning call (when the transcript has
+/// it), the frame's items, and the rollup's label for when it does not.
+public func subagentStripLine(
+  task: ToolCallItem?, items: [TranscriptItem], fallbackLabel: String
+) -> SubagentStripLine {
+  let busy = task.map { taskBusy($0, items) } ?? false
+  let failed = task.map(taskFailed) ?? false
+  let tools = items.reduce(into: 0) { total, item in
+    if case .toolCall = item { total += 1 }
+  }
+  let status: String? = task == nil ? nil : (failed ? "failed" : busy ? "working…" : "done")
+  return SubagentStripLine(
+    name: task.map(taskIdentity) ?? fallbackLabel,
+    status: status, busy: busy, failed: failed, toolCount: tools)
 }

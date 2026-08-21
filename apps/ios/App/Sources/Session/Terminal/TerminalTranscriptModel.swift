@@ -35,7 +35,11 @@ final class TerminalTranscriptModel {
   private(set) var reveal: TranscriptRevealRequest?
   private var revealNonce = 0
 
-  private var items: [TranscriptItem] = []
+  /// The items these rows fold — the frame's own list when this model folds a
+  /// takeover. Readable because the scrubber's input must describe the same
+  /// items the fold did: the rail's marks resolve through these rows, and a
+  /// caller's unfolded list would be a second answer to "what is on screen".
+  private(set) var items: [TranscriptItem] = []
 
   /// The catch-up seam: how many rows had already been read when this session
   /// was opened. Fixed at mount — a boundary that moved as new rows arrived
@@ -43,19 +47,33 @@ final class TerminalTranscriptModel {
   private let recapAt: Int?
   private let recapLabel: String
 
+  /// Set when this model folds a sub-agent's frame — the takeover. Constant for
+  /// the model's whole life (a takeover is one agent, remounted per open), which
+  /// is what keeps the plan cache valid: the cache keys on row and expansion
+  /// alone, so a frame id that changed under it would poison every height.
+  private let frameParentId: String?
+
   private var metrics: TerminalMetrics
   private let cache = TerminalPlanCache()
 
-  init(metrics: TerminalMetrics, recapAt: Int? = nil, recapLabel: String = "") {
+  init(
+    metrics: TerminalMetrics, recapAt: Int? = nil, recapLabel: String = "",
+    frameParentId: String? = nil
+  ) {
     self.metrics = metrics
     self.recapAt = recapAt
     self.recapLabel = recapLabel
+    self.frameParentId = frameParentId
     self.book = TerminalHeightBook(rows: TerminalRows(rows: []), metrics: metrics)
   }
 
   /// Refold and re-measure. Cheap by design: a streamed delta changes the last
   /// row, so the cache answers for every row above it.
-  func update(items: [TranscriptItem], metrics: TerminalMetrics) {
+  /// - Parameter frameTask: the spawning call, when this model folds a frame —
+  ///   its brief leads the rows (`TerminalRows.build`). Passed per update
+  ///   rather than held: the call is an item of the *full* transcript, which
+  ///   this model never sees, and only the caller that sliced the frame has it.
+  func update(items: [TranscriptItem], metrics: TerminalMetrics, frameTask: ToolCallItem? = nil) {
     let metricsChanged = metrics != self.metrics
     self.metrics = metrics
     self.items = items
@@ -66,7 +84,7 @@ final class TerminalTranscriptModel {
     resolveFetched()
 
     let rows = TerminalRows.build(
-      items: items, recapAt: recapAt, recapLabel: recapLabel)
+      items: items, recapAt: recapAt, recapLabel: recapLabel, frameTask: frameTask)
     // Nothing to do when neither the content nor the cell moved — this is called
     // from a view update, which fires for reasons that are not either.
     if !metricsChanged && rows == self.rows { return }
@@ -87,7 +105,24 @@ final class TerminalTranscriptModel {
   /// - Parameter fetch: how to ask for the rest of a truncated result. Absent
   ///   outside a live session, and the press then does nothing rather than
   ///   promising text nobody can deliver.
-  func press(_ press: TermPress, row: Int, fetch: ToolResultFetcher? = nil) {
+  /// - Parameter openSubagent: how a `Task` row's press raises the takeover.
+  ///   Absent — the preview harness, or any surface with no navigation stack to
+  ///   push — the press falls back to the inline toggle, so the target never
+  ///   visibly does nothing: the web draws no affordance when it has nowhere to
+  ///   go, and here the press rides the plan, so the fallback is the view
+  ///   layer's version of the same honesty.
+  func press(
+    _ press: TermPress, row: Int, fetch: ToolResultFetcher? = nil,
+    openSubagent: ((String) -> Void)? = nil
+  ) {
+    if case .openSubagent(let taskId) = press {
+      if let openSubagent {
+        openSubagent(taskId)
+      } else {
+        self.press(.toggle(.task(taskId)), row: row, fetch: fetch)
+      }
+      return
+    }
     // "Show everything" on a result the replay delivered as a head is a network
     // round trip, so it does not lift a budget — it enters `pending`, the
     // planner draws a line saying what is in flight, and the text arrives as a
@@ -152,7 +187,9 @@ final class TerminalTranscriptModel {
   }
 
   private func remeasure() {
-    book = TerminalHeightBook(rows: rows, metrics: metrics, cache: cache, expansion: expansion)
+    book = TerminalHeightBook(
+      rows: rows, metrics: metrics, cache: cache, expansion: expansion,
+      frameParentId: frameParentId)
   }
 
   /// The lines a row draws. Planned on demand rather than stored: only the rows
@@ -168,7 +205,8 @@ final class TerminalTranscriptModel {
     // renderer cannot get wrong, so it is now the same function of the same
     // value rather than an argument.
     return TerminalPlanner.plan(
-      rows[index], metrics: metrics, expansion: expansion.subset(for: rows[index]))
+      rows[index], metrics: metrics, expansion: expansion.subset(for: rows[index]),
+      frameParentId: frameParentId)
   }
 
   func gapAbove(_ index: Int) -> Bool { rows.gapBefore(index) }

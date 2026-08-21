@@ -80,6 +80,50 @@ const members = (clusters: ReturnType<typeof buildClusters>) =>
 const kinds = (items: TranscriptItem[], extra?: Partial<TerminalScrubberProps>) =>
   buildClusters(props(items, extra), RAIL).map((c) => `${c.lane}:${c.kind}`)
 
+describe('inside a sub-agent frame', () => {
+  // The takeover renders `subagentItems`, so EVERY item there has a parent. The
+  // rail's three "top level only" tests then excluded all of them and it came
+  // out mounted, banded, and marking nothing on a hundred-tool agent — which is
+  // exactly the run that needs a rail. "Top level" is now the frame's level.
+  const framed = (text: string) => assistant(text, 'task-1')
+  const failedChild = (): TranscriptItem => ({
+    kind: 'tool_call',
+    id: `t${++seq}`,
+    name: 'Bash',
+    input: {},
+    parentToolUseId: 'task-1',
+    status: 'failed',
+  })
+
+  it('marks every narration step, where the conversation marks one per segment', () => {
+    // No prompts and no `turn_result` exist in a sub-agent's stream, so the
+    // segment machinery would fold the lot into a single mark at the final
+    // report — the one place a reader can already reach.
+    const items = [framed('looking'), framed('found it'), framed('done')]
+    // Counted as members, not clusters: three marks this close merge into one
+    // cluster on a 100px rail, which is the rail working, not the rule failing.
+    const marks = members(buildClusters(props(items, { frameParentId: 'task-1' }), RAIL))
+    expect(marks.map((m) => m.kind)).toEqual(['turn', 'turn', 'turn'])
+    expect(marks.map((m) => m.itemIndex)).toEqual([0, 1, 2])
+  })
+
+  it('marks a failure the frame’s own renderer reddens', () => {
+    const items = [framed('trying'), failedChild()]
+    expect(members(buildClusters(props(items, { frameParentId: 'task-1' }), RAIL)).map((m) => m.kind))
+      .toContain('toolFailed')
+  })
+
+  it('still marks nothing of a sub-agent’s in the conversation itself', () => {
+    // The rule this generalisation must not break: at the top level a
+    // sub-agent's steps are represented by its `Task` band, not by a second set
+    // of marks threaded through the rail.
+    expect(kinds([user('go'), framed('looking'), assistant('done'), turn()])).toEqual([
+      'l:user',
+      'r:turn',
+    ])
+  })
+})
+
 describe('railScale', () => {
   it('is rail over content when the content overflows', () => {
     expect(railScale(100, 1000, 500)).toBe(0.1)

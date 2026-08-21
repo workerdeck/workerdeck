@@ -26,14 +26,22 @@ public struct TerminalHeightBook: Sendable {
   /// so the last entry is the total.
   private let offsets: [CGFloat]
 
+  /// - Parameter frameParentId: the sub-agent frame these rows live in, when
+  ///   they are a takeover's. It must reach the book because `nested` spends
+  ///   cells, so suppressing it inside the frame changes the wrap — and the
+  ///   lines drawn must be as tall as the height reserved, which means the book
+  ///   and ``TerminalPlanner`` read the same value. A cache passed here must be
+  ///   private to this frame: the plan cache keys on row and expansion alone.
   public init(
     rows: TerminalRows, metrics: TerminalMetrics, cache: TerminalPlanCache? = nil,
-    expansion: TerminalExpansion = TerminalExpansion()
+    expansion: TerminalExpansion = TerminalExpansion(), frameParentId: String? = nil
   ) {
     self.rows = rows
     self.metrics = metrics
 
-    let lines = Self.lineCounts(rows: rows, metrics: metrics, cache: cache, expansion: expansion)
+    let lines = Self.lineCounts(
+      rows: rows, metrics: metrics, cache: cache, expansion: expansion,
+      frameParentId: frameParentId)
 
     var heights = [CGFloat](repeating: 0, count: rows.count)
     var offsets = [CGFloat](repeating: 0, count: rows.count + 1)
@@ -62,7 +70,7 @@ public struct TerminalHeightBook: Sendable {
   /// parallel; the only reason it was serial is that nothing had measured it.
   private static func lineCounts(
     rows: TerminalRows, metrics: TerminalMetrics, cache: TerminalPlanCache?,
-    expansion: TerminalExpansion
+    expansion: TerminalExpansion, frameParentId: String? = nil
   ) -> [Int] {
     let count = rows.count
     guard count > 0 else { return [] }
@@ -102,13 +110,19 @@ public struct TerminalHeightBook: Sendable {
         DispatchQueue.concurrentPerform(iterations: misses.count) { slot in
           let index = misses[slot]
           sink.value[index] =
-            TerminalPlanner.plan(rows[index], metrics: metrics, expansion: subsets[index]).count
+            TerminalPlanner.plan(
+              rows[index], metrics: metrics, expansion: subsets[index],
+              frameParentId: frameParentId
+            ).count
         }
       }
     } else {
       for index in misses {
         lines[index] =
-          TerminalPlanner.plan(rows[index], metrics: metrics, expansion: subsets[index]).count
+          TerminalPlanner.plan(
+            rows[index], metrics: metrics, expansion: subsets[index],
+            frameParentId: frameParentId
+          ).count
       }
     }
 

@@ -223,6 +223,18 @@ public struct ScrubberInput {
   /// `redItemIndices`. The book is already built with the same value; this is
   /// the one rule that needs to read it rather than measure its effect.
   public var expansion: TerminalExpansion
+  /// The sub-agent takeover's parent id, when this rail belongs to a frame.
+  ///
+  /// **It is what "top level" means here.** Two of the mark rules below mark
+  /// only items at the rail's own level, so that at the top a sub-agent's work
+  /// is represented by the one band its `Task` row gets rather than by a second
+  /// set of prompts and answers threaded through the rail. Inside a frame that
+  /// same test excluded *everything* — every item there has a parent by
+  /// construction — and the rail came out **mounted, banded, and marking
+  /// nothing** on a hundred-tool agent. So the level is a parameter: `nil` at
+  /// the top, the frame's id inside one. The port of web
+  /// `TerminalScrubberProps.frameParentId` (`scrubber.tsx`).
+  public var frameParentId: String?
 
   public init(
     items: [TranscriptItem], rows: TerminalRows, book: TerminalHeightBook,
@@ -232,7 +244,12 @@ public struct ScrubberInput {
     // passed it there and omitted it here would get a rail quietly describing a
     // transcript that is not on screen — marks for a fold nobody is looking at,
     // and none for the one they opened. Required, so the compiler asks.
-    expansion: TerminalExpansion
+    expansion: TerminalExpansion,
+    // **No default, for the expansion's reason.** The rows and the book are
+    // built from the frame's items, and a caller who framed them there and
+    // omitted the level here would get the empty rail back — mounted, banded,
+    // and marking nothing. Required, so the compiler asks.
+    frameParentId: String?
   ) {
     self.items = items
     self.rows = rows
@@ -242,6 +259,7 @@ public struct ScrubberInput {
     self.recap = recap
     self.viewportHeight = viewportHeight
     self.expansion = expansion
+    self.frameParentId = frameParentId
   }
 
   public var totalSize: CGFloat { book.totalHeight }
@@ -298,6 +316,12 @@ public func railScale(railH: CGFloat, totalSize: CGFloat, viewportH: CGFloat) ->
 ///
 /// It reads `expansion` rather than measuring the book because mark *existence*
 /// is not derivable from a height the way a mark's extent and fraction are.
+///
+/// It is also why a frame needs no special case here: the web's `rowOutcome`
+/// map tests "is this call at the rail's level" and had to learn
+/// `frameParentId`, but this walks the rows it was handed — inside a takeover
+/// those are the frame's own fold, so what the frame reddens is already exactly
+/// what it marks.
 public func redItemIndices(rows: TerminalRows, expansion: TerminalExpansion) -> Set<Int> {
   var red: Set<Int> = []
   for row in rows.rows {
@@ -361,7 +385,10 @@ private func scrubberMarks(_ input: ScrubberInput) -> [ScrubberMark] {
   // never by the spawning call's *name*: `Task` is the SDK's convention, not a
   // law (a background agent arrives as `Agent`), and an id that other items
   // demonstrably nest under IS a sub-agent whatever spawned it. The same
-  // membership rule the fold uses, for the same reason.
+  // membership rule the fold uses, for the same reason. Inside a frame this
+  // finds only the frame's own id, which no frame item carries as its own — a
+  // grandchild's parent is a frame *call* and `subagentItems` excludes
+  // grandchildren — so a frame's rail draws no band for itself.
   var subagentParents: Set<String> = []
   for item in input.items {
     if let parent = parentToolUseId(of: item) { subagentParents.insert(parent) }
@@ -384,11 +411,12 @@ private func scrubberMarks(_ input: ScrubberInput) -> [ScrubberMark] {
     }
 
     switch item {
-    // Top-level prompts only, like the answer check below: a subagent's brief is
-    // a `user` item too, and it would both paint a "you" mark for something
-    // nobody typed and close the segment mid-turn — mis-anchoring the response
-    // mark whenever a task runs between the prompt and the answer.
-    case .user where parentToolUseId(of: item) == nil:
+    // Prompts at the rail's own level — `frameParentId`, nil at the top — like
+    // the answer check below: at the top a subagent's brief is a `user` item
+    // too, and it would both paint a "you" mark for something nobody typed and
+    // close the segment mid-turn — mis-anchoring the response mark whenever a
+    // task runs between the prompt and the answer.
+    case .user where parentToolUseId(of: item) == input.frameParentId:
       closeSegment()
       marks.append(
         ScrubberMark(kind: .user, itemIndex: index, rowIndex: input.rows.rowIndex(forItem: index)))
@@ -413,12 +441,26 @@ private func scrubberMarks(_ input: ScrubberInput) -> [ScrubberMark] {
         ScrubberMark(
           kind: .toolFailed, itemIndex: index, rowIndex: input.rows.rowIndex(forItem: index)))
 
-    // The live answer included, deliberately: a turn in flight has no turn end
-    // yet, which left a two-minute answer unrepresented for the whole two
-    // minutes it was the only thing worth navigating to. The mark's height is
-    // its row's, so it grows as the answer does with no extra bookkeeping.
-    case .assistantText(_, _, _, let parent) where parent == nil:
-      segment.response = index
+    case .assistantText(_, _, _, let parent) where parent == input.frameParentId:
+      if input.frameParentId != nil {
+        // **Inside a frame every narration step is its own mark**, where the
+        // conversation gets one per segment. The segment machinery has nothing
+        // to work with here — a sub-agent's stream carries no prompts and no
+        // `turn_result`, so every step would fold into a single mark at the
+        // final report, which is the one place a reader can already get to. An
+        // agent's rail is a list of what it said on the way, and that is what
+        // makes a fifty-step run navigable.
+        marks.append(
+          ScrubberMark(
+            kind: .turn, itemIndex: index, rowIndex: input.rows.rowIndex(forItem: index)))
+      } else {
+        // The live answer included, deliberately: a turn in flight has no turn
+        // end yet, which left a two-minute answer unrepresented for the whole
+        // two minutes it was the only thing worth navigating to. The mark's
+        // height is its row's, so it grows as the answer does with no extra
+        // bookkeeping.
+        segment.response = index
+      }
 
     default:
       break
@@ -490,8 +532,11 @@ private func expandedRegions(_ input: ScrubberInput, scale: CGFloat, railH: CGFl
 {
   var regions: [ScrubberRegion] = []
   for (rowIndex, row) in input.rows.rows.enumerated() {
-    guard case .block(let block) = row else { continue }
-    let keys = expansionKeys(of: block)
+    // The *row* overload, not the block's: the takeover's brief row is
+    // synthetic but it is a thing you can open (`ExpansionKey.brief`), and an
+    // opened brief is opened height the same as any block's. The recap row has
+    // no keys and never bands.
+    let keys = expansionKeys(of: row)
     guard keys.contains(where: input.expansion.isOpen) else { continue }
     let rowH = input.book.height(at: rowIndex)
     let h = max(scrubberMinMark, (rowH * scale).rounded())

@@ -23,6 +23,14 @@ public enum ExpansionKey: Hashable, Sendable {
   case task(String)
   /// One tool call's result.
   case call(String)
+  /// A sub-agent's brief — the spawning call's `prompt`, by the task's id.
+  /// Clipped to ``TerminalPlanner/briefLines`` when closed, the whole
+  /// instruction when open. One key serves both places the brief draws — the
+  /// frame's first row and the inline task expansion — because they are the
+  /// same row about the same task; on the web the twin state is component-local
+  /// `useState` in `BriefRow`, which this renderer cannot afford (a height the
+  /// book does not know is a frame the layout gets wrong).
+  case brief(String)
 }
 
 extension ExpansionKey: CustomStringConvertible {
@@ -33,6 +41,7 @@ extension ExpansionKey: CustomStringConvertible {
     case .run(let id): return "run:\(id)"
     case .task(let id): return "task:\(id)"
     case .call(let id): return "call:\(id)"
+    case .brief(let id): return "brief:\(id)"
     }
   }
 }
@@ -144,6 +153,11 @@ public struct TerminalExpansion: Equatable, Sendable {
       return true
     case .expandFull(let id):
       return full.insert(id).inserted
+    case .openSubagent:
+      // Not an expansion at all: the takeover is a navigation, handled by the
+      // screen that has somewhere to push. Reaching here means a caller fed a
+      // press to the wrong interpreter; opening nothing is the honest no-op.
+      return false
     }
   }
 
@@ -165,10 +179,14 @@ public struct TerminalExpansion: Equatable, Sendable {
   /// A `.call` never takes a subtree with it, and that guard is load-bearing
   /// rather than defensive: the subtree handed in is the whole **block**, so a
   /// call closing "its" subtree would close every sibling result in the same
-  /// run — one press collapsing five rows nobody touched.
+  /// run — one press collapsing five rows nobody touched. A `.brief` is a leaf
+  /// for the same reason: inline, its subtree is the whole task block.
   private mutating func close(_ key: ExpansionKey, subtree: Set<ExpansionKey>) {
     var closing: Set<ExpansionKey> = [key]
-    if case .call = key {} else { closing.formUnion(subtree) }
+    switch key {
+    case .call, .brief: break
+    case .run, .task: closing.formUnion(subtree)
+    }
     open.subtract(closing)
     // Closing forgets that the budget was lifted: re-opening a
     // hundred-thousand-character result straight into its unclipped form would
@@ -194,6 +212,10 @@ public struct TerminalExpansion: Equatable, Sendable {
   public static func everything(in rows: TerminalRows) -> TerminalExpansion {
     var expansion = TerminalExpansion()
     for row in rows.rows {
+      if case .brief(let id, _) = row {
+        expansion.open.insert(.brief(id))
+        continue
+      }
       guard case .block(let block) = row else { continue }
       expansion.open.formUnion(expansionKeys(of: block))
       for drawn in blockCalls(in: block) where drawn.drawsResult {
@@ -219,6 +241,11 @@ public struct TerminalExpansion: Equatable, Sendable {
   /// one finger. Rows that hold none of the open keys keep their cached height.
   public func subset(for row: TranscriptRow) -> TerminalExpansion {
     guard !isEmpty else { return TerminalExpansion() }
+    // The frame's brief row can read exactly one key. Through the subset like
+    // every other, so toggling it re-plans that row and no other.
+    if case .brief(let id, _) = row {
+      return TerminalExpansion(open: open.intersection([.brief(id)]))
+    }
     guard case .block(let block) = row else { return TerminalExpansion() }
     let calls = blockCalls(in: block)
     let ids = Set(calls.lazy.filter(\.drawsResult).map(\.call.id))
@@ -239,6 +266,18 @@ public enum TermPress: Equatable, Sendable {
   case toggle(ExpansionKey)
   /// Lift an already-open result's character budget, by the call's id.
   case expandFull(callId: String)
+  /// Raise the sub-agent takeover: the screen becomes this `Task`'s own work.
+  ///
+  /// **Divergence from the web client, deliberately.** There the takeover is a
+  /// hover *action* (`OpenSubagentAction`, the `⤢` in the row's overlay) and
+  /// the row's press keeps meaning expand/collapse — a pointer can serve two
+  /// intents on one 19px row. A thumb cannot: a second target inside a
+  /// one-line row is a coin toss, so on the phone the `Task` row's one press is
+  /// the deliberate move, and the inline expansion gives way to the surface
+  /// that actually fits sixty rows of somebody else's working. The press rides
+  /// the plan like every other (`planTask` attaches it); what *handles* it is
+  /// the session screen, the only place that has a navigation stack to push.
+  case openSubagent(taskId: String)
 }
 
 // MARK: - One walk of a block
@@ -341,6 +380,7 @@ public func blockCalls(
 public func expansionKeys(of row: TranscriptRow) -> Set<ExpansionKey> {
   switch row {
   case .recap: return []
+  case .brief(let id, _): return [.brief(id)]
   case .block(let block): return expansionKeys(of: block)
   }
 }
@@ -359,6 +399,10 @@ func expansionKeys(of block: TerminalBlock, calls: [BlockCall]) -> Set<Expansion
     if let key = run.expansionKey { keys.insert(key) }
   case .task(let task):
     keys.insert(task.expansionKey)
+    // The inline brief, when the engine gave one — same key as the frame's
+    // first row, and its presence here is what scopes a brief toggle's re-plan
+    // to this one row (`subset(for:)` reads these keys).
+    if taskBrief(task.task) != nil { keys.insert(.brief(task.task.id)) }
     for child in task.children {
       if case .run(let run) = child, let key = run.expansionKey { keys.insert(key) }
     }
