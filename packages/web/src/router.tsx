@@ -45,6 +45,20 @@ const sessionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions/$hostId/$sessionId',
   component: SessionView,
+  /**
+   * `?subagent=<toolUseId>&sn=<n>` — open the session with one sub-agent's work
+   * framed, which is how the sessions list hands a running agent over.
+   *
+   * In the URL rather than in component state so the takeover is addressable:
+   * the sidebar navigates across a route change, and a piece of state on the
+   * far side of that is a piece of state the navigation cannot carry. `sn` is
+   * the nonce the panel needs to treat asking twice as twice — a plain repeat
+   * of the same id is a props-equal no-op.
+   */
+  validateSearch: (search: Record<string, unknown>): { subagent?: string; sn?: number } => ({
+    subagent: typeof search.subagent === 'string' ? search.subagent : undefined,
+    sn: typeof search.sn === 'number' ? search.sn : undefined,
+  }),
 })
 
 /**
@@ -59,6 +73,7 @@ const legacySessionRoute = createRoute({
     throw redirect({
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: IMPLICIT_HOST_ID, sessionId: params.sessionId },
+      search: {},
     })
   },
 })

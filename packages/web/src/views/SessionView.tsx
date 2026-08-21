@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from '@tanstack/react-router'
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { useSessionInfo } from '@workerdeck/react'
 import {
   AlertDialog,
@@ -59,6 +59,10 @@ function SessionViewInner({
   client: WorkerDeckClient
 }) {
   const navigate = useNavigate()
+  // The sub-agent takeover, addressed in the URL — see the route's
+  // `validateSearch`. `sn` is the nonce; without one, clicking the same agent
+  // twice would be a props-equal no-op.
+  const { subagent, sn } = useSearch({ from: '/sessions/$hostId/$sessionId' })
   // The workspace asks for this record too, and the client de-dupes nothing —
   // but it is one small GET per session view, and the alternative is threading
   // the panel's session state back out through a prop nobody else wants.
@@ -145,6 +149,7 @@ function SessionViewInner({
       transcriptVariant={variant}
       transcriptDensity={density}
       transcriptFont={font}
+      openSubagent={subagent ? { toolUseId: subagent, nonce: sn ?? 0 } : undefined}
       // The overview ruler, when the transcript is the terminal one — a session
       // that ran for an hour is a long scroll, and the rail is the only thing
       // that says where in it the answers are. Inert under `cards`.

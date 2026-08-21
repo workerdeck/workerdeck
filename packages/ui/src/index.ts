@@ -195,6 +195,9 @@ export {
   runningSteps,
   sessionSteps,
 } from './components/agent/SessionSteps.tsx'
+// The sub-agent takeover's one line. Exported for hosts that draw their own
+// panel chrome; the panel raises it itself.
+export { SubagentStrip } from './components/agent/SubagentStrip.tsx'
 export { ProjectIcon } from './components/agent/ProjectIcon.tsx'
 export {
   SessionEmptyState,

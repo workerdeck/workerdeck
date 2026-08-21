@@ -43,8 +43,10 @@ export function App({
 }) {
   const [shown, setShown] = useState<Shown | undefined>(undefined)
   /** The sub-agent the sessions list last asked to be shown — see
-   * `wd-reveal-tool-use`. */
-  const [reveal, setReveal] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
+   * `wd-open-subagent`. */
+  const [openSubagent, setOpenSubagent] = useState<
+    { toolUseId: string; nonce: number } | undefined
+  >(undefined)
   // The panel owns the session's one attach, so it owns the only setters there
   // are. The status bar's pickers reach them through here.
   const controls = useRef<SessionControls | undefined>(undefined)
@@ -68,20 +70,26 @@ export function App({
   useEffect(
     () =>
       bridge.onHostMessage((msg) => {
-        if (msg.kind === 'wd-show-session') setShown(msg.session)
+        if (msg.kind === 'wd-show-session') {
+          setShown(msg.session)
+          // Clear the takeover with the session. A request left standing across
+          // a switch would frame one session's Task id against another's items,
+          // and the panel's own nonce effect would not re-fire to correct it.
+          setOpenSubagent(undefined)
+        }
         else if (msg.kind === 'wd-set-model') controls.current?.setModel(msg.model)
         else if (msg.kind === 'wd-set-permission-mode') {
           controls.current?.setPermissionMode(msg.mode)
         } else if (msg.kind === 'wd-focus-composer') {
           focusWanted.current = true
           tryFocus()
-        } else if (msg.kind === 'wd-reveal-tool-use') {
-          // Straight to state, unlike the focus above: `reveal` is a *prop*, so
-          // a request that arrives before the transcript has mounted is still
-          // honoured — the panel reads it on its first render and jumps then.
-          // The host's nonce rides through unchanged, since it is what makes a
+        } else if (msg.kind === 'wd-open-subagent') {
+          // Straight to state, unlike the focus above: `openSubagent` is a
+          // *prop*, so a request that arrives before the transcript has mounted
+          // is still honoured — the panel reads it on its first render. The
+          // host's nonce rides through unchanged, since it is what makes a
           // repeat of the same id a second request rather than a no-op.
-          setReveal({ toolUseId: msg.toolUseId, nonce: msg.nonce })
+          setOpenSubagent({ toolUseId: msg.toolUseId, nonce: msg.nonce })
         }
       }),
     [bridge],
@@ -197,7 +205,7 @@ export function App({
         // Where the sessions list's sub-agent rows land. A sub-agent has no
         // screen of its own — its work is nested inside one `Task` row of this
         // transcript — so opening one means arriving at that row.
-        reveal={reveal}
+        openSubagent={openSubagent}
         // The CLI keeps the prompt in view while the turn runs; a dock is the
         // narrowest surface we have, so it needs that most.
         stickyPrompt

@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
 import type { TerminalAffordances } from './affordances.tsx'
+import { OpenSubagentAction, WithActions } from './affordances.tsx'
 import {
   AssistantRow,
   FileRow,
@@ -108,9 +109,14 @@ export function TerminalItemView({
 export function TaskRow({
   block,
   fileUrl,
+  onOpenSubagent,
 }: {
   block: TaskBlock
   fileUrl?: (path: string) => string
+  /** Take over the panel with this sub-agent's own frame. Absent draws no
+   * affordance at all — the plain renderer has no surface to take over, and an
+   * action that opens nothing is worse than no action. */
+  onOpenSubagent?: (toolUseId: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const reveal = useRevealOnOpen(open)
@@ -119,7 +125,7 @@ export function TaskRow({
   const failed = taskFailed(block.task)
   const pulse = usePulse(busy)
 
-  return (
+  const row = (
     <div ref={reveal} className={open ? 'term-open' : undefined}>
       <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
         {/* A marker, where a folded run of calls gets none: a run is an aside,
@@ -160,6 +166,16 @@ export function TaskRow({
         </div>
       ) : null}
     </div>
+  )
+  // Wrapped only when there is somewhere to go. `WithActions` is a no-op when
+  // affordances are off, but wrapping unconditionally would still put an
+  // "open" glyph on a renderer that cannot honour it.
+  return onOpenSubagent === undefined ? (
+    row
+  ) : (
+    <WithActions actions={<OpenSubagentAction onOpen={() => onOpenSubagent(block.task.id)} />}>
+      {row}
+    </WithActions>
   )
 }
 

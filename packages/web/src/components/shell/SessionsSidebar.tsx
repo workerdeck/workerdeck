@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { filterRows, sessionLabel, type SessionRow } from '@workerdeck/protocol'
 import {
@@ -52,6 +52,7 @@ export function SessionsSidebar() {
     void navigate({
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: primary.id, sessionId: id },
+      search: {},
     })
   }
   const [config, setConfig] = useViewConfig()
@@ -67,6 +68,27 @@ export function SessionsSidebar() {
     void navigate({
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: row.hostId, sessionId: row.info.id },
+      // Cleared explicitly: opening the session plainly must leave any framed
+      // sub-agent behind, and an omitted `search` would inherit the current one.
+      search: {},
+    })
+
+  /**
+   * A sub-agent under a session: open the session with that agent's own work
+   * framed.
+   *
+   * The nonce is a counter and not the id, because pressing the *same* agent
+   * twice has to mean twice — the panel takes this as a request rather than as
+   * a controlled value, so a props-equal repeat would do nothing. Navigating
+   * with it in the URL is what survives the route change; component state on
+   * the far side of a navigation is state the navigation cannot carry.
+   */
+  const subagentNonce = useRef(0)
+  const openSubagent = (row: SessionRow, toolUseId: string) =>
+    void navigate({
+      to: '/sessions/$hostId/$sessionId',
+      params: { hostId: row.hostId, sessionId: row.info.id },
+      search: { subagent: toolUseId, sn: ++subagentNonce.current },
     })
 
   const rename = (row: SessionRow, title: string) => {
@@ -157,6 +179,7 @@ export function SessionsSidebar() {
             projectIcons={projectIcons}
             activeId={activeId}
             onSelect={open}
+            onSelectSubagent={openSubagent}
             onRename={rename}
             onDelete={(row) => {
               void clientFor(row.hostId)

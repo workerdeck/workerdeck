@@ -31,9 +31,9 @@ const FILTER_OPEN_KEY = 'workerdeck.filterOpen.v1'
 
 export type SidebarDelegate = {
   /** A session was chosen — show it in the agent panel. */
-  /** `revealToolUse` set = the click landed on a sub-agent under the session:
-   * select it, then take the panel to that `Task`'s row. */
-  selectSession: (hostId: string, sessionId: string, revealToolUse?: string) => Promise<void>
+  /** `subagentToolUseId` set = the click landed on a sub-agent under the session:
+   * select it, then hand the panel over to that agent's own work. */
+  selectSession: (hostId: string, sessionId: string, subagentToolUseId?: string) => Promise<void>
   /** The active session was deleted out from under the panel. */
   clearPanelIfActive: (sessionId: string) => Promise<void>
   activeSessionId: () => string | undefined
@@ -247,7 +247,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
         this.#pushState()
         return
       case 'wd-select-session':
-        await this.#delegate.selectSession(msg.hostId, msg.sessionId, msg.revealToolUse)
+        await this.#delegate.selectSession(msg.hostId, msg.sessionId, msg.subagentToolUseId)
         return
       case 'wd-stop-session':
         return this.#stopSession(msg.hostId, msg.sessionId)

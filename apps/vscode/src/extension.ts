@@ -226,7 +226,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Show a session in the agent panel. Named, because both the list and the
   // new-session QuickPick end here — a session you just created should be the
   // one on screen.
-  const selectSession = async (hostId: string, sessionId: string, revealToolUse?: string) => {
+  const selectSession = async (hostId: string, sessionId: string, subagentToolUseId?: string) => {
     const host = store.get(hostId)
     if (!host) return
     const info = model.sessionsOf(hostId).find((s) => s.id === sessionId)
@@ -245,8 +245,8 @@ export function activate(context: vscode.ExtensionContext): void {
     // something, and the composer is at the other end of the panel from the row
     // about to be revealed. So the caret stays where it was and the jump is the
     // whole answer.
-    await panel.show({ host, sessionId, cwd: info?.cwd }, { focus: !revealToolUse })
-    if (revealToolUse) panel.revealToolUse(revealToolUse)
+    await panel.show({ host, sessionId, cwd: info?.cwd }, { focus: !subagentToolUseId })
+    if (subagentToolUseId) panel.openSubagent(subagentToolUseId)
   }
   sidebar = new SidebarProvider(context, context.extensionUri, store, model, {
     selectSession,

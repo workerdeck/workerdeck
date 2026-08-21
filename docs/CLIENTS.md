@@ -195,10 +195,23 @@ protocol fact and a disclosure over them is a list affordance, so neither is ext
 The disclosure sits on the *second* line, since the first line's left edge belongs to the name you scan by, doubling as the
 count (`2 of 3 agents`, because "how many are still going" is the live question); expansion is
 row-local React state and unpersisted, and could not be a native twisty regardless, every view
-here being a webview. Pressing a child selects the session and reveals that `Task`'s row
-(`wd-select-session`'s `revealToolUse` → `wd-reveal-tool-use` → `SessionPanel.reveal`) **without
-focusing the composer**: a sub-agent has no screen of its own, so opening one is a reading action
-and the composer is at the other end of the panel.
+here being a webview. Pressing a child selects the session and **hands the panel over to that agent's own work**
+(`wd-select-session`'s `subagentToolUseId` → `wd-open-subagent` → `SessionPanel.openSubagent`),
+still **without focusing the composer** — and now for a stronger reason than before: while a
+sub-agent is framed there *is* no composer. That chain was `revealToolUse` → `wd-reveal-tool-use`
+→ `SessionPanel.reveal` and was repurposed wholesale rather than joined by a second one; revealing
+the row remains the honest fallback meaning for a surface that cannot frame, and `reveal` itself
+survives untouched for other callers. The webview clears its request in the `wd-show-session`
+handler, because a request left standing across a session switch would frame one session's `Task`
+id against another's items.
+**This is the one place the no-header/no-screens rule needed a ruling rather than an application.**
+That rule was written about the sidebar and section views, where pushed screens broke VS Code's
+native titles, `+` placement and back affordances, and the cure was to hand chrome back to the
+editor. The agent panel is a different view and still draws no header: the takeover changes no
+title, builds no navigation stack, and its strip is a line on the transcript's own grid — the same
+category as an expanded `Task` row, taken to the whole scroller, with one boolean way back. The
+strict reading ("never swap what a webview shows") has no implementable alternative here, there
+being no native transcript for the editor to own, so it cannot be what the rule means.
 The cards carry it per session — an **unread badge** of transcript rows since that session was last on
 screen (`src/watermarks.ts`, globalState, written **only while the panel is visible and
 showing it**, and monotonic so a compaction can't resurrect read rows). Rows, from

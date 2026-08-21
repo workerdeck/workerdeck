@@ -26,6 +26,8 @@ import { SessionEmptyState } from './SessionEmptyState.tsx'
 import { ToolCallCard } from './ToolCallCard.tsx'
 import { resolveAffordances, type TerminalAffordances } from '../terminal/affordances.tsx'
 import { ToolRunRow, WorkingRow, parentOf, terminalBlocks } from '../terminal/items.tsx'
+import { subagentItems, type ToolCallItem } from '../terminal/blocks.ts'
+import { taskBusy } from '../terminal/tool-run.ts'
 import { estimateBlockPx } from '../terminal/height.ts'
 import { TerminalScrubber } from '../terminal/scrubber.tsx'
 import { gapBefore, positionInRow, rowIndexForItem, type TranscriptRow } from './transcript-rows.ts'
@@ -300,9 +302,15 @@ function read(boundary: number | undefined, index: number): boolean {
 
 /** Rows produced inside a subagent (`parentToolUseId != null`) are stepped in
  * behind a rule, so a Task's own output reads as belonging to the tool call
- * above it rather than as the main thread carrying on. */
-function nestedClass(item: TranscriptItem): string | undefined {
-  const nested = 'parentToolUseId' in item && item.parentToolUseId != null
+ * above it rather than as the main thread carrying on.
+ *
+ * **Except inside that sub-agent's own frame**, where those same items are the
+ * top level and there is no main thread to be an aside from — stepping every row
+ * in would draw a rule down the whole surface saying "this happened somewhere
+ * else" about the only thing on screen. */
+function nestedClass(item: TranscriptItem, frameParentId?: string): string | undefined {
+  const parent = 'parentToolUseId' in item ? item.parentToolUseId : undefined
+  const nested = parent != null && parent !== frameParentId
   return nested ? 'border-l-2 border-border pl-3' : undefined
 }
 
@@ -430,6 +438,8 @@ function TranscriptRows({
   terminal,
   replaying,
   stickyPrompt,
+  frameParentId,
+  onOpenSubagent,
   gap,
   fontSize,
   lineHeight,
@@ -468,6 +478,11 @@ function TranscriptRows({
   /** Mount the overview-ruler rail (terminal theme only). */
   scrubber?: boolean
   scrubberMarks?: readonly number[]
+  /** Set when these rows are a sub-agent's frame — the id everything here was
+   *  produced inside. Only `nestedClass` needs it: inside the frame those items
+   *  are the top level and must not be stepped in. */
+  frameParentId?: string
+  onOpenSubagent?: (toolUseId: string) => void
   affordances?: TerminalAffordances | boolean
   fileUrl?: (path: string) => string
   attachmentUrl?: (attachmentId: string) => string
@@ -837,7 +852,7 @@ function TranscriptRows({
               <ToolRunRow items={row.run} />
             </div>
           ) : 'item' in row ? (
-            <div className={cn(read(boundary, row.index) && 'opacity-45', nestedClass(row.item))}>
+            <div className={cn(read(boundary, row.index) && 'opacity-45', nestedClass(row.item, frameParentId))}>
               <TranscriptItemView
                 item={row.item}
                 fileUrl={fileUrl}
@@ -854,7 +869,7 @@ function TranscriptRows({
             // is the main thread's, and stepping it in would say a `Task` call
             // happened somewhere else.
             <div className={cn(read(boundary, row.index) && 'opacity-45')}>
-              <TaskRow block={row} fileUrl={fileUrl} />
+              <TaskRow block={row} fileUrl={fileUrl} onOpenSubagent={onOpenSubagent} />
             </div>
           )
         // A prompt row's sticky lane — see the pinned-prompt comment above.
@@ -1044,6 +1059,31 @@ export interface TranscriptProps {
    * would need a live closure at the other end of a postMessage bridge.
    */
   reveal?: { toolUseId: string; nonce: number }
+  /**
+   * Render **only** the work one sub-agent did, rather than the conversation —
+   * the sub-agent takeover's frame.
+   *
+   * Membership is `subagentItems` (`terminal/blocks.ts`), which is also the rule
+   * iOS will mirror: everything the agent produced, and not the spawning `Task`
+   * call itself, which *is* the frame rather than a row in it.
+   *
+   * Four of this component's features are switched off internally whenever it is
+   * set, and the gate lives here rather than at the call site on purpose: every
+   * one of them is keyed to a **full-transcript item index**, so a host that
+   * passed a frame and a catch-up boundary together would not be making a
+   * strange choice, it would be making an incoherent one. Those are the catch-up
+   * boundary and its recap row, the scrubber and its marks, the sticky prompt,
+   * and `reveal`. What stays is everything that makes a long stream readable —
+   * virtualization, the height epoch, the follow spring, the replay hold.
+   */
+  frame?: { parentToolUseId: string }
+  /**
+   * Raise the takeover from a `Task` row. Absent draws no affordance, which is
+   * what the plain renderer and the cards variant get: cards folds nothing, so
+   * it has no task blocks to hang this on, and reaches the takeover from the
+   * sessions list instead.
+   */
+  onOpenSubagent?: (toolUseId: string) => void
   className?: string
 }
 
@@ -1066,9 +1106,30 @@ export function Transcript({
   jumpToRecapRef,
   repinRef,
   reveal,
+  frame,
+  onOpenSubagent,
   className,
 }: TranscriptProps) {
   const terminal = variant === 'terminal'
+  // The frame's own item list, and the single place the takeover's content is
+  // decided. Everything below reads `items` rather than `state.items`, so the
+  // row build, the empty state and the loader all describe the same surface.
+  const items = useMemo(
+    () => (frame ? subagentItems(state.items, frame.parentToolUseId) : state.items),
+    [state.items, frame],
+  )
+  // The spawning call, for the header's claim and to tell "not here yet" from
+  // "not in this transcript" — see the frame placeholder below.
+  const frameTask = useMemo(
+    () =>
+      frame
+        ? state.items.find(
+            (item): item is ToolCallItem =>
+              item.kind === 'tool_call' && item.id === frame.parentToolUseId,
+          )
+        : undefined,
+    [state.items, frame],
+  )
   const gap = ROW_GAP[variant][density]
   const runStartedAt = useRunStart(state.status)
   // A boundary at (or past) the end means nothing is new — no row, no dimming.
@@ -1083,24 +1144,26 @@ export function Transcript({
   // cannot say what you missed. Clamping it would land on `items.length` and
   // read as "nothing is new" — the same outcome, told less truthfully.
   const boundary =
-    catchUp && catchUp.from > 0 && catchUp.from < state.items.length ? catchUp.from : undefined
+    !frame && catchUp && catchUp.from > 0 && catchUp.from < state.items.length
+      ? catchUp.from
+      : undefined
   const recap = useMemo(
     () => (boundary === undefined ? undefined : recapLine(summarizeSince(state, boundary))),
     [state, boundary],
   )
   const rows = useMemo<TranscriptRow[]>(() => {
     const fold = (from: number, to: number) =>
-      terminalBlocks(state.items.slice(from, to), from, terminal)
-    if (boundary === undefined || !recap) return fold(0, state.items.length)
+      terminalBlocks(items.slice(from, to), from, terminal)
+    if (boundary === undefined || !recap) return fold(0, items.length)
     // Each side of the boundary folds separately, so a shell run never spans it:
     // "what happened while you were away" must not hide inside a count that also
     // covers what you have already read.
     return [
       ...fold(0, boundary),
       { key: 'recap' as const, line: recap },
-      ...fold(boundary, state.items.length),
+      ...fold(boundary, items.length),
     ]
-  }, [state.items, boundary, recap, terminal])
+  }, [items, boundary, recap, terminal])
   return (
     <TranscriptVariantProvider value={variant}>
       {/* The replay hold hides by VISIBILITY, never by not mounting. The rows
@@ -1121,38 +1184,56 @@ export function Transcript({
             fontSize={fontSize}
             lineHeight={lineHeight}
             affordances={affordances}>
-          {state.items.length === 0 && state.status !== 'starting' ? (
+          {frame ? (
+            // The frame's own empty states, and they are two different facts.
+            // A task that is present with nothing under it yet is simply an
+            // agent that has not spoken — the loader below says so. A task the
+            // transcript does not have is either still replaying (say nothing,
+            // the hold is up) or genuinely absent: a `/clear` retired the
+            // conversation it lived in, or the id was never this session's.
+            // **Never auto-exit on that** — navigating out from under a reader
+            // is worse than one honest line they can leave when they choose.
+            frameTask === undefined && !replaying ? (
+              <div className={cn(terminal ? 'term-row text-fg-4' : 'p-4 text-body-sm text-fg-4')}>
+                This sub-agent's work is not in this transcript.
+              </div>
+            ) : null
+          ) : items.length === 0 && state.status !== 'starting' ? (
             <SessionEmptyState
               cwd={state.cwd}
               hasCommands={!!state.commands?.length}
               hasSkills={!!state.skills?.some((s) => s.enabled)}
               canBrowseFiles={canBrowseFiles}
             />
-          ) : (
+          ) : null}
+          {frame && frameTask === undefined && !replaying ? null : (
             <TranscriptRows
               rows={rows}
               boundary={boundary}
               since={catchUp?.since}
               terminal={terminal}
               replaying={replaying}
-              stickyPrompt={stickyPrompt}
+              stickyPrompt={!frame && stickyPrompt}
               gap={gap}
               fontSize={fontSize}
               lineHeight={lineHeight}
-              items={state.items}
+              items={items}
               pendingApprovals={state.pendingApprovals}
-              scrubber={scrubber}
-              scrubberMarks={scrubberMarks}
+              /* All four are full-transcript semantics — see `frame`'s doc. */
+              scrubber={frame ? undefined : scrubber}
+              scrubberMarks={frame ? undefined : scrubberMarks}
               affordances={affordances}
               fileUrl={fileUrl}
               attachmentUrl={attachmentUrl}
               hostImage={hostImage}
               jumpToRecapRef={jumpToRecapRef}
               repinRef={repinRef}
-              reveal={reveal}
+              reveal={frame ? undefined : reveal}
+              frameParentId={frame?.parentToolUseId}
+              onOpenSubagent={frame ? undefined : onOpenSubagent}
             />
           )}
-          {showLoader(state) ? (
+          {(frame ? frameTask !== undefined && taskBusy(frameTask, items) : showLoader(state)) ? (
             terminal ? (
               // The CLI's own working line, and it is a *row of the transcript*
               // rather than a spinner floating over it — one blank line down,

@@ -60,6 +60,20 @@ export type TranscriptItem =
       input: unknown
       parentToolUseId: string | null
       /**
+       * When the model called it — the event's own `ts`, so it is replay-stable
+       * rather than a receive time (the mistake `rateLimitsUpdatedAt` makes on
+       * iOS). Optional because it is stamped at creation only: an item
+       * reconstructed by an older path has none, and absent must read as "no
+       * elapsed" rather than as the epoch.
+       *
+       * Added for the sub-agent takeover's header, which is the one surface that
+       * has to say how long an agent has been going: `SubagentInfo.startedAt`
+       * cannot answer it, being frozen at attach for anything spawned later.
+       * Immutable after creation, which is what makes it safe for iOS's
+       * `Equatable` row-plan cache key to mirror later.
+       */
+      ts?: number
+      /**
        * - `running` — the model called it; execution has not been reported
        * - `pending` — dispatched to an executor (bridged to this client, queued)
        * - `deferred` — parked beyond this turn; may outlive the session's liveness
@@ -631,6 +645,7 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
             input: toolUse.input,
             parentToolUseId: event.parentToolUseId,
             status: 'running',
+            ts: event.ts,
           })
         }
       })

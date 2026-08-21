@@ -89,6 +89,40 @@ export function WithActions({
  * else is on, and reads as a button borrowed from another application. The tick
  * replaces the glyph in place, so the confirmation costs no width either.
  */
+/**
+ * Open a sub-agent's own surface, as a character.
+ *
+ * A row **action** and not the row's press, because the press already means
+ * expand/collapse and that is the cheaper, more common intent — a reader
+ * glancing at what an agent did wants the four rows inline, not a new screen.
+ * Taking over the panel is the deliberate move, so it gets the deliberate
+ * target. Same zero-layout contract as `CopyAction`: it lives in the hover
+ * actions overlay, so a collapsed Task row is exactly as tall with it as
+ * without, which is what keeps the height book honest.
+ */
+export function OpenSubagentAction({
+  onOpen,
+  label = 'Open sub-agent',
+}: {
+  onOpen: () => void
+  label?: string
+}) {
+  return (
+    <button
+      type='button'
+      className='term-action'
+      title={label}
+      aria-label={label}
+      onClick={(event) => {
+        // The row underneath expands; opening is not expanding.
+        event.stopPropagation()
+        onOpen()
+      }}>
+      ⤢
+    </button>
+  )
+}
+
 export function CopyAction({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false)
   return (

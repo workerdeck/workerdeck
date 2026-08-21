@@ -41,6 +41,8 @@ export interface SessionWorkspaceProps {
   scrubberMarks?: SessionPanelProps['scrubberMarks']
   /** The last prompt pinned above the transcript — see `SessionPanel`. */
   stickyPrompt?: SessionPanelProps['stickyPrompt']
+  /** Take the panel body over with one sub-agent's work — see `SessionPanel`. */
+  openSubagent?: SessionPanelProps['openSubagent']
   /** Which end of the panel the status bar sits at — see `SessionPanel`. */
   statusPlacement?: SessionPanelProps['statusPlacement']
   controlsSurface?: SessionPanelProps['controlsSurface']
@@ -103,6 +105,7 @@ export function SessionWorkspace({
   scrubber,
   scrubberMarks,
   stickyPrompt,
+  openSubagent,
   statusPlacement,
   controlsSurface,
   unseen,
@@ -307,6 +310,7 @@ export function SessionWorkspace({
           scrubber={scrubber}
           scrubberMarks={scrubberMarks}
           stickyPrompt={stickyPrompt}
+          openSubagent={openSubagent}
           controlsSurface={controlsSurface}
           statusPlacement={statusPlacement}
           unseen={unseen}

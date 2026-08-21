@@ -117,14 +117,26 @@ const trimmed = (value: unknown): string | undefined =>
  * emptier than a plain tool row's.
  */
 export function taskLabel(task: ToolCallItem): string {
+  return `${task.name}(${taskIdentity(task)})`
+}
+
+/**
+ * The inner half of {@link taskLabel} — `Explore · find the auth check` — without
+ * the `Task(…)` wrapper.
+ *
+ * Split out for the sub-agent takeover's header, which names the agent it is
+ * showing and has no room (or reason) to repeat the tool's own name: the whole
+ * surface *is* that Task. Extracted rather than re-spelled so the header and the
+ * row it was opened from cannot drift, and so both keep matching protocol's
+ * `subagentLabel`, which reads the same two input fields for the sessions list.
+ */
+export function taskIdentity(task: ToolCallItem): string {
   const input = task.input as { description?: unknown; subagent_type?: unknown } | null
   const description = trimmed(input?.description)
   const agent = trimmed(input?.subagent_type)
-  const inner =
-    agent && description
-      ? `${agent} · ${clip(description)}`
-      : (agent ?? (description ? clip(description) : toolInputPreview(task.input)))
-  return `${task.name}(${inner})`
+  return agent && description
+    ? `${agent} · ${clip(description)}`
+    : (agent ?? (description ? clip(description) : toolInputPreview(task.input)))
 }
 
 const callBusy = (call: ToolCallItem): boolean =>

@@ -157,7 +157,7 @@ export type HostToPanel =
        * Sent *after* `wd-show-session` when the pick also changed session: an id
        * only means something once the panel is on the right transcript.
        */
-      kind: 'wd-reveal-tool-use'
+      kind: 'wd-open-subagent'
       toolUseId: string
       nonce: number
     }
@@ -172,12 +172,17 @@ export type SidebarToHost =
       sessionId: string
       /**
        * Set when the click landed on a *sub-agent* under the session rather than
-       * the session itself: select as normal, then take the panel to that
-       * `Task`'s row. A sub-agent is not a session and cannot be opened as one —
-       * its work lives nested inside one row of this session's transcript, so
-       * "open it" can only honestly mean "show me that row".
+       * the session itself: select as normal, then hand the panel over to that
+       * agent's own work.
+       *
+       * It used to mean "scroll to that `Task`'s row", on the argument that a
+       * sub-agent is not a session and so cannot be opened as one. That is still
+       * true and is no longer the whole story: the panel now has a **frame** for
+       * one agent — its rows, its own header, no composer — which is a screen
+       * without being a session. Revealing the row remains the honest fallback
+       * for a surface that cannot frame.
        */
-      revealToolUse?: string
+      subagentToolUseId?: string
     }
   | {
       /** Interrupt. Executed host-side over a transient attach. */

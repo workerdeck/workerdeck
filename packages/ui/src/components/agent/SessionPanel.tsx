@@ -12,6 +12,7 @@ import {
   PROTOCOL_VERSION,
   mergeUsage,
   orderUsageWindows,
+  subagentLabel,
   usageInfos,
   type ModelOption,
   type PermissionMode,
@@ -54,6 +55,8 @@ import {
   type PermissionModeChoice,
 } from './PermissionModeSelect.tsx'
 import { PermissionPrompt } from './PermissionPrompt.tsx'
+import { SubagentStrip } from './SubagentStrip.tsx'
+import { subagentItems, type ToolCallItem } from '../terminal/blocks.ts'
 import { QuestionPrompt, parseUserQuestions } from './QuestionPrompt.tsx'
 import { TerminalPermissionPrompt } from '../terminal/PermissionPrompt.tsx'
 import { TerminalQuestionPrompt } from '../terminal/QuestionPrompt.tsx'
@@ -237,6 +240,25 @@ export interface SessionPanelProps {
    * attach to find out where it is.
    */
   reveal?: { toolUseId: string; nonce: number }
+  /**
+   * Open a **sub-agent takeover**: the panel body becomes that agent's own work,
+   * with a way back. Bump `nonce` to ask again for the same one.
+   *
+   * A *request*, not a controlled value — the panel owns which agent is open,
+   * exactly as it owns `panel`. Dismissal has to work with zero host wiring
+   * (Back and Escape are the panel's own affordances), and the two hosts in
+   * scope reach this across a postMessage bridge where a controlled prop would
+   * need a live closure at the far end. Same shape and same reason as
+   * {@link SessionPanelProps.reveal}.
+   *
+   * Hosts must clear their request on a session switch: a stale one replayed at
+   * remount would open a frame the new transcript cannot answer.
+   *
+   * Claude-only in practice, and gated by data rather than by a flag — codex and
+   * provider sessions have no `parentToolUseId`, so they grow no task blocks and
+   * no sub-agent rows, and nothing can raise this.
+   */
+  openSubagent?: { toolUseId: string; nonce: number }
   /**
    * Terminal theme only: hold the prompt of the turn you are reading at the top
    * of the transcript, as the Claude Code CLI does. The **real row** is pinned
@@ -452,6 +474,7 @@ export function SessionPanel({
   scrubber = false,
   scrubberMarks,
   reveal,
+  openSubagent,
   stickyPrompt = false,
   controlsSurface = 'internal',
   onControls,
@@ -475,6 +498,29 @@ export function SessionPanel({
   // is not an error channel.
   const [protocolError, setProtocolError] = useState<string | undefined>(undefined)
   const [panel, setPanel] = useState<Panel | undefined>()
+  /**
+   * The sub-agent takeover: which `Task` call the body is currently showing, or
+   * undefined for the conversation.
+   *
+   * Deliberately **not** a `Panel` member. Those route outward under
+   * `panelSurface: 'external'` so a host can draw them natively — and a host
+   * cannot draw this one: it is a transcript, and the transcript is in here. It
+   * is a mode of the conversation surface, not a screen over it.
+   */
+  const [subagentId, setSubagentId] = useState<string | undefined>(undefined)
+  /**
+   * Where to land on the way back — the row of the Task you entered from,
+   * asked for through the ordinary reveal seam.
+   *
+   * The alternative was keeping the main transcript mounted-but-hidden to
+   * preserve its scroll offset, which costs two live virtualizers and an
+   * absolute-position layout on a panel whose height just changed (the composer
+   * came back). Re-revealing is both cheaper and more honest: you return to the
+   * row you left from rather than to wherever you happened to be scrolled.
+   */
+  const [returnReveal, setReturnReveal] = useState<
+    { toolUseId: string; nonce: number } | undefined
+  >(undefined)
   const {
     state,
     connection,
@@ -495,6 +541,53 @@ export function SessionPanel({
   // Callers are told to remount on a session switch, but a changed prop must not leave
   // the previous session's failure on screen.
   useEffect(() => setProtocolError(undefined), [sessionId])
+  // Belt to the remount contract, for the same reason: a takeover left standing
+  // across a switch would frame one session's Task id against another's items.
+  useEffect(() => {
+    setSubagentId(undefined)
+    setReturnReveal(undefined)
+  }, [sessionId])
+
+  // The host asking. Keyed on the nonce, so asking twice for the same agent
+  // works — and so a request that arrives while another frame is open swaps it
+  // in place rather than being ignored.
+  const openSubagentNonce = openSubagent?.nonce
+  const openSubagentId = openSubagent?.toolUseId
+  useEffect(() => {
+    if (openSubagentId === undefined) return
+    setSubagentId(openSubagentId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSubagentNonce])
+
+  // A *reveal* asked for while framed means the reader wants the conversation:
+  // latest intent wins. Leaving the frame up and scrolling something invisible
+  // underneath it would be the worst of both.
+  const revealNonce = reveal?.nonce
+  useEffect(() => {
+    if (revealNonce === undefined) return
+    setSubagentId(undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealNonce])
+
+  const leaveSubagent = useCallback(() => {
+    setSubagentId((current) => {
+      if (current !== undefined) setReturnReveal({ toolUseId: current, nonce: Date.now() })
+      return undefined
+    })
+  }, [])
+
+  // Escape leaves the frame — the keyboard half of Back. `defaultPrevented`
+  // keeps a dialog's own Escape (and the composer's) ahead of it: this is the
+  // outermost thing Escape can mean here, so it goes last.
+  useEffect(() => {
+    if (subagentId === undefined) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      leaveSubagent()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [subagentId, leaveSubagent])
 
   // Catch-up is entered once, from the watermark the embedder handed over, and
   // left when dismissed or when the user sends anything (they are plainly
@@ -535,6 +628,29 @@ export function SessionPanel({
   // which for them never comes.
   useToolCallHost(handle, toolHost === false ? { enabled: false } : toolHost)
   const terminal = transcriptVariant === 'terminal'
+
+  // What the strip reads. The frame's items and its spawning call both come from
+  // the transcript, which is the only complete source: `SessionInfo.subagents`
+  // keeps eight settled records and is explicitly not a session's Task history.
+  const subagentFrameItems = useMemo(
+    () => (subagentId === undefined ? [] : subagentItems(state.items, subagentId)),
+    [state.items, subagentId],
+  )
+  const subagentTask = useMemo(
+    () =>
+      subagentId === undefined
+        ? undefined
+        : state.items.find(
+            (item): item is ToolCallItem => item.kind === 'tool_call' && item.id === subagentId,
+          ),
+    [state.items, subagentId],
+  )
+  // The one thing the rollup is allowed to do: name an agent whose `Task` call
+  // the transcript does not have. A label is not content.
+  const subagentFallbackLabel = useMemo(() => {
+    const record = state.session?.subagents?.find((sub) => sub.toolUseId === subagentId)
+    return record ? subagentLabel(record) : 'Sub-agent'
+  }, [state.session, subagentId])
   const capabilities = state.capabilities
 
   // Plan usage as the *gateway* knows it, merged over this session's own
@@ -850,7 +966,27 @@ export function SessionPanel({
             {protocolError}
           </Notice>
         ) : null}
+        {/* The takeover's one line: who is on screen, and the way back. Above
+            the transcript because it is a frame around it, not a row in it —
+            and because Back must be reachable without scrolling a stream that
+            is still growing. */}
+        {subagentId !== undefined ? (
+          <SubagentStrip
+            task={subagentTask}
+            items={subagentFrameItems}
+            label={subagentFallbackLabel}
+            onBack={leaveSubagent}
+            terminal={terminal}
+            fontSize={terminalMetrics?.fontSize}
+            lineHeight={terminalMetrics?.lineHeight}
+          />
+        ) : null}
         <Transcript
+          /* A remount, so the frame opens pinned to its own bottom with a fresh
+             virtualizer and height epoch — which is the right landing for both
+             cases: the live tail of a running agent, and the final report of a
+             settled one. */
+          key={subagentId ?? 'session'}
           state={state}
           fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
           attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
@@ -870,7 +1006,11 @@ export function SessionPanel({
               ? { from: catchUp.itemCount, since: catchUp.since }
               : undefined
           }
-          reveal={reveal}
+          /* On the way back, land on the Task you came from — see `returnReveal`.
+             The host's own reveal still wins when it is the newer intent. */
+          reveal={returnReveal ?? reveal}
+          frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
+          onOpenSubagent={setSubagentId}
           jumpToRecapRef={jumpToRecap}
           repinRef={repinTranscript}
         />
@@ -879,7 +1019,7 @@ export function SessionPanel({
             itself opens pinned to the newest row. Held with the transcript
             while the replay lands — its count is `state.items.length`, which
             during the replay is a number visibly climbing toward its answer. */}
-        {catchUp && newCount > 0 && !replaying ? (
+        {catchUp && newCount > 0 && !replaying && subagentId === undefined ? (
           <div className='px-3 pb-1'>
             <div
               data-slot='catch-up'
@@ -957,7 +1097,17 @@ export function SessionPanel({
             </PromptSurface>
           </div>
         ) : null}
-        {readOnly ? null : (
+        {/* No composer while a sub-agent is framed: you cannot talk to one, and a
+            live-looking input that silently addresses its *parent* is worse than
+            no input at all. Its interrupt goes with it — Back is one press away,
+            and a second interrupt control would be a second thing that stops
+            something the reader is not looking at.
+
+            The approval prompts above deliberately do NOT go with it. A
+            sub-agent's own tool calls raise session-level permission requests,
+            so hiding them here would let the takeover deadlock the very agent it
+            is showing until the reader happened to press Back. */}
+        {readOnly || subagentId !== undefined ? null : (
         <Composer
           ref={composerRef}
           onSend={handleSend}

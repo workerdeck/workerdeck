@@ -112,7 +112,7 @@ export function SessionCard({
   selected: boolean
   onSelect: () => void
   /** Open the session *at* one of its sub-agents — see `wd-select-session`'s
-   * `revealToolUse`. */
+   * `subagentToolUseId`. */
   onSelectSubagent: (toolUseId: string) => void
   onRename: (title: string) => void
   /** Open the card's overflow menu. Native, host-side — see `onMenu` below. */

@@ -223,12 +223,12 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
                       sessionId: row.info.id,
                     })
                   }
-                  onSelectSubagent={(revealToolUse) =>
+                  onSelectSubagent={(subagentToolUseId) =>
                     bridge.post({
                       kind: 'wd-select-session',
                       hostId: row.hostId,
                       sessionId: row.info.id,
-                      revealToolUse,
+                      subagentToolUseId,
                     })
                   }
                   onRename={(title) =>

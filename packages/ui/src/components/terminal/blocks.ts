@@ -67,6 +67,34 @@ export function parentOf(item: TranscriptItem): string | undefined {
   return parent ?? undefined
 }
 
+/**
+ * **The frame membership rule**: the items a sub-agent produced, and nothing
+ * else — what the takeover renders instead of the whole conversation.
+ *
+ * One exported function rather than a `filter` at each call site, because this
+ * is a rule two renderers have to agree on: iOS mirrors the terminal model out
+ * of this module, and a phone that framed a sub-agent slightly differently would
+ * be a second answer to "what is this agent doing".
+ *
+ * It picks up the brief (a `user` item *with* a parent), the thinking, the
+ * streamed text (deltas are namespaced per sidechain, so `streaming:<parentId>`
+ * carries the parent like any other item), every tool call with its result, and
+ * the final report. It excludes the spawning `Task` call itself — that is the
+ * frame, not a row in it — and every other agent's work.
+ *
+ * The slice is safe to hand straight to {@link terminalBlocks} at offset 0:
+ * nothing in it is top-level, so nothing absorbs, and consecutive calls still
+ * fold into runs because {@link foldsTogether} keys on an *equal* parent rather
+ * than on absence of one. Row indices are internally consistent because the rows
+ * and the `items` they came from are the same array.
+ */
+export function subagentItems(
+  items: readonly TranscriptItem[],
+  parentToolUseId: string,
+): TranscriptItem[] {
+  return items.filter((item) => parentOf(item) === parentToolUseId)
+}
+
 /** Is this a row the transcript folds into a run? Any tool call is — see
  * `tool-run.ts` for why this is no longer shell-only. */
 export function isRunCall(item: TranscriptItem): item is ToolCallItem {

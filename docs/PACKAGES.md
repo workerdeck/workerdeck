@@ -861,6 +861,30 @@ then title, unread badge, age, context ring; line two is the engine's mark and m
 over), then project · gateway · profile · cost, then the sub-agent disclosure. Both lines share
 one 14px `Gutter`, because the state glyph is 14px and the mark 12px and two pixels is invisible
 as a measurement and obvious as a misalignment.
+A session row's sub-agent, pressed, hands the **panel body over to that agent**:
+`SessionPanel.openSubagent` (a nonce-keyed *request*, same shape and same reason as `reveal` — the
+panel owns which agent is open, so Back and Escape need no host wiring) puts `Transcript` into a
+`frame`, which renders `subagentItems` instead of the conversation. That rule lives in
+`terminal/blocks.ts` beside the absorption rule it extends, as one exported function, because it
+is what iOS will mirror: everything the agent produced, and **not** the spawning `Task` call,
+which *is* the frame rather than a row in it. The slice folds runs but absorbs nothing, and its
+indices are internally consistent because the rows and the items are the same array at offset 0.
+Four features switch off inside a frame and the gate is **in `Transcript`, not at the call site**:
+catch-up + its recap row, the scrubber + marks, the sticky prompt, and `reveal` — every one is
+keyed to a full-transcript item index, so passing a frame and a boundary together would not be a
+strange choice but an incoherent one.
+Three decisions are worth keeping: the **composer goes and the approval prompts stay** — you
+cannot talk to a sub-agent, but its own tool calls raise session-level permission requests, so
+hiding those would let the takeover deadlock the very agent it is showing. The strip claims
+exactly what the `TaskRow` beneath it claims (`taskBusy`/`taskFailed`/`taskIdentity`), never
+`SubagentInfo.status`: protocol's documented divergence there is transcript-versus-*list*, and
+this surface **is** the transcript, so the disagreement that must not exist is header-versus-rows.
+And the takeover is deliberately **not** a `SessionSurfacePanel` member — those route outward
+under `panelSurface: 'external'` so a host can draw them natively, and no host can draw this one,
+the transcript being in here. Back re-reveals the Task you came from rather than restoring a
+scroll offset, so you return to the row you left from; the entry point is a hover **action** on
+the Task row (`OpenSubagentAction`), not its press, because the press already means expand and
+that is the cheaper, commoner intent.
 `SessionSteps.tsx` holds that disclosure — `sessionSteps`, `StepToggle`, `StepRow` — lifted out
 of the VS Code webview, which is exactly why this list had none of it: a session's sub-agents are
 a protocol fact and a disclosure over them is a list affordance, so neither was ever

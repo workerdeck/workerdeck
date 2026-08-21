@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { TranscriptItem } from '@workerdeck/react'
 import { blockNeedsBlank, terminalBlocks } from '../src/components/terminal/items.tsx'
+import { subagentItems } from '../src/components/terminal/blocks.ts'
 
 /**
  * Which rows exist. This is part of what the terminal theme *is* — the
@@ -262,5 +263,82 @@ describe('terminalBlocks · task absorption', () => {
     const blocks = terminalBlocks(items)
     expect(shape(blocks)).toEqual(['task(1)', 'run(1)'])
     expect(blocks[1]!.index).toBe(2)
+  })
+})
+
+/**
+ * The frame membership rule — what a sub-agent takeover shows.
+ *
+ * Worth its own suite because it is the one rule the takeover *is*: get it
+ * wrong in one direction and the frame leaks another agent's work into this
+ * one's, in the other and an agent looks like it did nothing.
+ */
+describe('subagentItems', () => {
+  it('takes everything the agent produced, and nothing else', () => {
+    const items = [
+      user('do the thing'),
+      task('T1', { subagent_type: 'Explore', description: 'find the auth check' }),
+      user('find the auth check', 'T1'),
+      text('looking', 'T1'),
+      tool('Grep', 'T1'),
+      tool('Bash'),
+      text('here it is', 'T1'),
+      text('all done'),
+    ]
+    expect(subagentItems(items, 'T1').map((i) => i.kind)).toEqual([
+      // The brief, the thinking-aloud, the tool call and the final report.
+      'user',
+      'assistant_text',
+      'tool_call',
+      'assistant_text',
+    ])
+  })
+
+  it('excludes the spawning Task call itself — that is the frame, not a row in it', () => {
+    const items = [task('T1'), tool('Grep', 'T1')]
+    const framed = subagentItems(items, 'T1')
+    expect(framed.some((i) => i.id === 'T1')).toBe(false)
+    expect(framed).toHaveLength(1)
+  })
+
+  it('keeps two parallel agents apart', () => {
+    const items = [
+      task('T1'),
+      task('T2'),
+      tool('Grep', 'T1'),
+      tool('Bash', 'T2'),
+      tool('Read', 'T1'),
+    ]
+    const names = (parent: string) =>
+      subagentItems(items, parent).map((i) => (i.kind === 'tool_call' ? i.name : i.kind))
+    expect(names('T1')).toEqual(['Grep', 'Read'])
+    expect(names('T2')).toEqual(['Bash'])
+  })
+
+  it('is empty for a top-level id and for one nobody spawned', () => {
+    const items = [user('hi'), tool('Bash')]
+    expect(subagentItems(items, 'nope')).toEqual([])
+  })
+
+  /**
+   * The slice is handed straight to `terminalBlocks` at offset 0. Nothing in it
+   * is top-level, so nothing absorbs — but consecutive calls must still fold,
+   * because `foldsTogether` keys on an *equal* parent rather than on absence of
+   * one. A frame that stopped folding would be a different transcript from the
+   * one the same rows draw when the Task row is expanded inline.
+   */
+  it('folds runs inside the frame, and absorbs nothing', () => {
+    const items = [
+      task('T1'),
+      user('go', 'T1'),
+      tool('Grep', 'T1'),
+      tool('Read', 'T1'),
+      text('done', 'T1'),
+    ]
+    expect(shape(terminalBlocks(subagentItems(items, 'T1'), 0, true))).toEqual([
+      'user',
+      'run(2)',
+      'assistant_text',
+    ])
   })
 })

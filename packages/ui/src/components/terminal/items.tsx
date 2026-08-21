@@ -442,7 +442,7 @@ export function FileRow({
 }
 
 /** A once-a-second clock, running only while `on`. */
-function useTicker(on: boolean): number {
+export function useTicker(on: boolean): number {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!on) return
