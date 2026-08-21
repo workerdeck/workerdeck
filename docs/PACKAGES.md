@@ -885,6 +885,17 @@ the transcript being in here. Back re-reveals the Task you came from rather than
 scroll offset, so you return to the row you left from; the entry point is a hover **action** on
 the Task row (`OpenSubagentAction`), not its press, because the press already means expand and
 that is the cheaper, commoner intent.
+Not every line under a session is pressable. The tracker opens a record for every spawner call
+*and* for any nested event whose parent it has not seen, so the list holds two things wearing one
+shape: an **agent**, which carries a `subagent_type` and has work worth a surface, and a **task**,
+which carries only a description and has no agent behind it. `isAgentRecord` (protocol, mirrored in
+`SessionList.swift`) is the split, and it lives there because it decides two things no two clients
+may disagree about — what is pressable, and what wears the sub-agent colour. An agent row is
+**green** and opens the takeover; a task row is muted, is a `div` rather than a disabled-looking
+button, and stops the click rather than letting it fall through to the session underneath. The
+green is not a new rule: it is the transcript's (`TaskRow` bodies are green, the marker carries the
+beat), so a list that spent blue on "running" would be saying something different from the
+transcript about the same agent. Failure still outranks it — an alarm is not a category.
 `SessionSteps.tsx` holds that disclosure — `sessionSteps`, `StepToggle`, `StepRow` — lifted out
 of the VS Code webview, which is exactly why this list had none of it: a session's sub-agents are
 a protocol fact and a disclosure over them is a list affordance, so neither was ever

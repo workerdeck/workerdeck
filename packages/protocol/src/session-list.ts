@@ -74,6 +74,26 @@ export function runningSubagents(info: SessionInfo): SubagentInfo[] {
  * then to a generic word: a row with no label at all reads as a rendering bug,
  * and an engine is free to send neither field.
  */
+/**
+ * Does this record name an **agent**, as opposed to a task the model merely
+ * described?
+ *
+ * The tracker opens a record for every spawner call and for any nested event
+ * whose parent it has not seen, so the list holds two different things wearing
+ * one shape. One carries a `subagent_type` — a delegated agent with an identity
+ * (`Explore`), whose own work is worth a surface of its own. The other carries
+ * only a description, and there is no agent there to open: a row that offered a
+ * screen and then showed a frame with nothing in it would be worse than a row
+ * that offered nothing.
+ *
+ * Here rather than in a client because it decides two things a list must not
+ * disagree about across surfaces — what is pressable, and what wears the
+ * sub-agent colour.
+ */
+export function isAgentRecord(sub: SubagentInfo): boolean {
+  return (sub.agentType?.trim() ?? '') !== ''
+}
+
 export function subagentLabel(sub: SubagentInfo): string {
   const agent = sub.agentType?.trim()
   const description = sub.description?.trim()

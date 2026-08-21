@@ -3,7 +3,7 @@ import type { TranscriptItem } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
 import { formatDuration } from '../../lib/format.ts'
 import { Button } from '../ui/Button.tsx'
-import { Row } from '../terminal/row.tsx'
+import { Ink, Row } from '../terminal/row.tsx'
 import { TerminalSurface } from '../terminal/surface.tsx'
 import { taskBusy, taskFailed, taskIdentity } from '../terminal/tool-run.ts'
 import type { ToolCallItem } from '../terminal/blocks.ts'
@@ -64,11 +64,18 @@ export function SubagentStrip({
   const elapsed = startedAt === undefined ? undefined : formatDuration(now - startedAt)
 
   const name = task ? taskIdentity(task) : label
-  const detail = [
-    tools > 0 ? `${tools} tool${tools === 1 ? '' : 's'}` : undefined,
-    elapsed,
-    failed ? 'failed' : undefined,
-  ]
+  /**
+   * Running or finished, in the theme's own words rather than new ones:
+   * `taskSummary` already says `working…` and `done` for exactly this state one
+   * row over, and a header that said "running"/"completed" about the same agent
+   * would be a second vocabulary for one fact. The trailing ellipsis is the
+   * theme's in-flight signal; the pulse beside it is the beat.
+   *
+   * Unknown when the transcript has no `Task` call to read — better silent than
+   * confidently wrong about an agent we cannot see.
+   */
+  const status = !task ? undefined : failed ? 'failed' : busy ? `${pulse} working…` : 'done'
+  const detail = [tools > 0 ? `${tools} tool${tools === 1 ? '' : 's'}` : undefined, elapsed]
     .filter(Boolean)
     .join(' · ')
 
@@ -84,11 +91,18 @@ export function SubagentStrip({
           onClick={onBack}
           aria-label='Back to the session'
           className='block w-full cursor-pointer text-left'>
-          <Row
-            glyph={busy ? pulse : '←'}
-            glyphTone={failed ? 'red' : busy ? 'mark' : 'dim'}
-            tone={failed ? 'red' : 'green'}>
-            {detail ? `${name} · ${detail}` : name}
+          {/* The arrow is in the gutter unconditionally. It used to give way to
+              the pulse while the agent worked, which put the way *out* of the
+              frame on a timer — the one control here should not come and go.
+              The beat moved into the status instead. `indent` because this is a
+              frame around the rows rather than one of them, and a marker flush
+              against the panel edge reads as a clipped row. */}
+          <Row glyph='←' glyphTone='dim' indent={1} tone={failed ? 'red' : 'green'}>
+            {name}
+            {status ? (
+              <Ink tone={failed ? 'red' : busy ? 'mark' : 'dim'}> · {status}</Ink>
+            ) : null}
+            {detail ? <Ink tone='faint'> · {detail}</Ink> : null}
           </Row>
         </button>
       </TerminalSurface>
@@ -105,6 +119,15 @@ export function SubagentStrip({
         className={cn('min-w-0 flex-1 truncate text-body-sm', failed ? 'text-danger' : 'text-fg-2')}>
         {name}
       </span>
+      {status ? (
+        <span
+          className={cn(
+            'shrink-0 text-label',
+            failed ? 'text-danger' : busy ? 'text-accent' : 'text-fg-3',
+          )}>
+          {status}
+        </span>
+      ) : null}
       {detail ? <span className='shrink-0 text-label text-fg-4'>{detail}</span> : null}
     </div>
   )

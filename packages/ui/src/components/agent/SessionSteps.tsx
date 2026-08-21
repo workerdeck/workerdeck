@@ -1,5 +1,13 @@
-import { ArrowRight, Check, ChevronDown, ChevronRight, CircleAlert, PauseCircle } from 'lucide-react'
-import { subagentLabel } from '@workerdeck/protocol'
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  CircleAlert,
+  Dot,
+  PauseCircle,
+} from 'lucide-react'
+import { isAgentRecord, subagentLabel } from '@workerdeck/protocol'
 import type { SessionInfo, SubagentInfo } from '@workerdeck/protocol'
 import { Spinner } from '../ui/Spinner.tsx'
 import { cn } from '../../lib/utils.ts'
@@ -32,6 +40,18 @@ export type Step = {
   label: string
   /** What one of these is called, for the disclosure's count. */
   noun: string
+  /**
+   * An **agent** has an identity and work of its own, so it is pressable and
+   * wears the sub-agent colour. A **task** is something the model described with
+   * no agent behind it (`isAgentRecord`), so it is inert: there is no frame to
+   * open, and a row that offered one would show an empty screen.
+   *
+   * Two values and not a boolean because the checklist source this shape was
+   * drawn for (see above) produces the second kind natively — a to-do is a task
+   * in exactly this sense, and it will slot in here rather than widening
+   * anything.
+   */
+  kind: 'agent' | 'task'
   state: 'done' | 'running' | 'pending' | 'failed'
   /** A trailing reading — a sub-agent's tool count. Absent draws nothing. */
   detail?: string
@@ -50,6 +70,7 @@ export function sessionSteps(
     key: sub.toolUseId,
     label: subagentLabel(sub),
     noun: 'agent',
+    kind: isAgentRecord(sub) ? ('agent' as const) : ('task' as const),
     state: stepState(sub.status),
     detail: sub.toolCount > 0 ? String(sub.toolCount) : undefined,
     title: `${subagentLabel(sub)} · ${sub.toolCount} tool${sub.toolCount === 1 ? '' : 's'}`,
@@ -132,9 +153,12 @@ export function StepToggle({
 }
 
 /**
- * One step under its session. Pressing it opens the session *at* that `Task`'s
- * row — a sub-agent is not a session and has no screen of its own, so that is
- * the only honest meaning of opening one.
+ * One step under its session. Pressing an **agent** hands the panel over to that
+ * agent's own work — it is not a session and never becomes one, but it does now
+ * have a surface (`SessionPanel.openSubagent`). A host that cannot frame one
+ * falls back to revealing its `Task` row, which was this row's only meaning
+ * before the takeover existed. A **task** is not pressable at all; see
+ * {@link Step.kind}.
  *
  * Divided from the row's header and from each other by a rule rather than by
  * indentation: these are a list *inside* the row, and at 11px an indent is not
@@ -142,6 +166,40 @@ export function StepToggle({
  * filled with, selected or not, without needing a colour per state.
  */
 export function StepRow({ step, onSelect }: { step: Step; onSelect: () => void }) {
+  const agent = step.kind === 'agent'
+  // Body colour by *kind*, state carried by the icon — the rule the transcript's
+  // own `TaskRow` already follows, where the body is green and the marker holds
+  // the beat. Green means sub-agent across this product (it is the one hue
+  // nothing else on a session surface claims), so a list that spent blue on
+  // "running" here would be saying something different from the transcript
+  // about the same agent. Failure still outranks it: an alarm is not a category.
+  const body = step.state === 'failed' ? 'text-danger' : agent ? 'text-success' : 'text-fg-4'
+  const content = (
+    <>
+      <StepIcon state={step.state} kind={step.kind} />
+      <span className='min-w-0 flex-1 truncate'>{step.label}</span>
+      {/* The progress reading while it works, and what it cost when it is done.
+          Zero draws nothing: `0 tools` beside a thinking agent reads as a stall,
+          which is the same call `taskSummary` makes one surface over. */}
+      {step.detail ? <span className='shrink-0 tabular-nums text-fg-4'>{step.detail}</span> : null}
+      {agent ? <ArrowRight className='size-3 shrink-0 opacity-60' /> : null}
+    </>
+  )
+  const shape =
+    'flex w-full items-center gap-2 border-t border-black/25 py-1 pl-3 pr-2 text-left text-label outline-none'
+
+  // A task is not a button, in the markup and not merely in the styling: there
+  // is nothing to press, and a disabled-looking button still announces itself as
+  // one. It stops the click all the same — the whole session row is pressable
+  // underneath, so falling through would open the session from a row that says
+  // it does nothing.
+  if (!agent) {
+    return (
+      <div title={step.title} onClick={(e) => e.stopPropagation()} className={cn(shape, body)}>
+        {content}
+      </div>
+    )
+  }
   return (
     <button
       type='button'
@@ -150,29 +208,18 @@ export function StepRow({ step, onSelect }: { step: Step; onSelect: () => void }
         e.stopPropagation()
         onSelect()
       }}
-      className={cn(
-        'flex w-full items-center gap-2 border-t border-black/25 py-1 pl-3 pr-2 text-left text-label outline-none',
-        'hover:bg-surface-hover',
-        step.state === 'running'
-          ? 'text-info'
-          : step.state === 'failed'
-            ? 'text-danger'
-            : step.state === 'pending'
-              ? 'text-fg-4'
-              : 'text-fg-2',
-      )}>
-      <StepIcon state={step.state} />
-      <span className='min-w-0 flex-1 truncate'>{step.label}</span>
-      {/* The progress reading while it works, and what it cost when it is done.
-          Zero draws nothing: `0 tools` beside a thinking agent reads as a stall,
-          which is the same call `taskSummary` makes one surface over. */}
-      {step.detail ? <span className='shrink-0 tabular-nums text-fg-4'>{step.detail}</span> : null}
-      <ArrowRight className='size-3 shrink-0 opacity-60' />
+      className={cn(shape, 'hover:bg-surface-hover', body)}>
+      {content}
     </button>
   )
 }
 
-function StepIcon({ state }: { state: Step['state'] }) {
+function StepIcon({ state, kind }: { state: Step['state']; kind: Step['kind'] }) {
+  // A task that is neither running nor failed gets a neutral dot rather than a
+  // tick: `done` is a claim about work, and nothing here did any.
+  if (kind === 'task' && state !== 'running' && state !== 'failed') {
+    return <Dot className='size-3 shrink-0' />
+  }
   switch (state) {
     case 'running':
       return <Spinner className='size-3 shrink-0' />

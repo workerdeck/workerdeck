@@ -352,10 +352,12 @@ interface SessionRowItemProps {
   onSelect?: (row: SessionRow) => void
   onDelete?: (row: SessionRow) => void
   onRename?: (row: SessionRow, title: string) => void
-  /** Open the session *at* one of its sub-agents. Optional, and its absence is
-   * not a missing feature: a sub-agent has no screen of its own, so a host that
-   * cannot scroll its transcript to a `Task` row has nothing more to offer than
-   * opening the session — which is what the fallback does. */
+  /** Open one of a session's sub-agents — which now means handing the session
+   * panel over to that agent's own work (`SessionPanel.openSubagent`), and meant
+   * "scroll to its `Task` row" before that surface existed. Both are honest; a
+   * host picks what it can draw. Optional, and its absence is not a missing
+   * feature: without it a step just opens the session, which is all a host with
+   * neither can offer. Only *agent* steps ever call it — see `Step.kind`. */
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
 }
 

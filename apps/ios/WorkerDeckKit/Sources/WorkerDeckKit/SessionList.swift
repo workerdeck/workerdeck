@@ -86,6 +86,24 @@ public func subagentLabel(_ sub: SubagentInfo) -> String {
   return "Sub-agent"
 }
 
+/// Does this record name an **agent**, as opposed to a task the model merely
+/// described? A 1:1 mirror of protocol's `isAgentRecord`.
+///
+/// The tracker opens a record for every spawner call and for any nested event
+/// whose parent it has not seen, so the list holds two different things wearing
+/// one shape. One carries a `subagent_type` — a delegated agent with an identity
+/// (`Explore`), whose own work is worth a surface of its own. The other carries
+/// only a description, and there is no agent there to open.
+///
+/// Shared rather than re-derived because it decides two things no two clients
+/// may disagree about: what is pressable, and what wears the sub-agent colour.
+public func isAgentRecord(_ sub: SubagentInfo) -> Bool {
+  guard let agent = sub.agentType?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+    return false
+  }
+  return !agent.isEmpty
+}
+
 // MARK: - View config
 
 /// The facets a session can be grouped or sorted by.
