@@ -13,7 +13,7 @@ import {
   vendorMarkClass,
   vendorTextClass,
 } from '@workerdeck/ui'
-import { projectLabel, projectSubpath, sessionLabel } from '../../src/view-config.ts'
+import { projectLabel, projectSubpath, sessionLabel, sessionState } from '../../src/view-config.ts'
 
 /**
  * One session in the sidebar list — an inset rounded **card**, two lines and an
@@ -125,8 +125,15 @@ export function SessionCard({
   // this extension is a webview, so there is no tree to hang one on.
   const [expanded, setExpanded] = useState(false)
   const steps = sessionSteps(info, onSelectSubagent)
-  const running = info.status === 'running' || info.status === 'starting'
-  const needsHuman = info.pendingPermissionCount > 0 || info.status === 'awaiting_approval'
+  // protocol's derived state, not the raw status — `sessionState` folds in the
+  // arm this card cannot see for itself: a *background* sub-agent outlives its
+  // turn by design, so the turn ends, `status` rests at `idle`, and the agent
+  // keeps working. Off the raw status this card drew a moon **and dimmed the
+  // title** of a session filed under the "Working" header — settled twice over,
+  // on a row that was not.
+  const state = sessionState(info)
+  const running = state === 'working'
+  const needsHuman = state === 'attention'
   const live = running || needsHuman
   const age = info.lastActivityAt ?? info.createdAt
   // protocol's own spelling, so the row, the group header this row sits under

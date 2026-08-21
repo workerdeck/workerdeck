@@ -662,7 +662,7 @@ struct SessionRowView: View {
         // The gutter: a fixed cell rather than a bare glyph, so the status above
         // and the engine mark below start at the same x however wide either
         // draws — and so the two text columns agree.
-        SessionStatusIcon(status: session.status, pendingCount: session.pendingPermissionCount)
+        SessionStatusIcon(session: session)
           .frame(width: 14)
           .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
         Text(title)
@@ -817,9 +817,22 @@ struct SessionRowView: View {
 /// list the state is the thing you scan *past* until it is not idle. Waiting on
 /// a person still wins over everything, because that is the one state that is
 /// about you.
+///
+/// **It takes the whole `SessionInfo` and asks `sessionState`, rather than a bare
+/// status**, and the old signature is why: given only `(status, pendingCount)` it
+/// was *unable* to be right. `sessionState` folds in the arm no glyph can see for
+/// itself — a **background** sub-agent outlives its turn by design, so the turn
+/// ends, `status` comes to rest at `.idle`, and the agent keeps working. Off the
+/// raw status this drew a moon on a row filed under the "Working" header.
+///
+/// The terminal symbols still come off `session.status`, because `.ended`
+/// collapses failed and closed into one bucket and those are worth telling apart.
 struct SessionStatusIcon: View {
-  let status: SessionStatus
-  var pendingCount: Int = 0
+  let session: SessionInfo
+
+  private var status: SessionStatus { session.status }
+  private var pendingCount: Int { session.pendingPermissionCount }
+  private var state: SessionState { sessionState(session) }
 
   var body: some View {
     icon
@@ -829,12 +842,12 @@ struct SessionStatusIcon: View {
 
   @ViewBuilder
   private var icon: some View {
-    if pendingCount > 0 || status == .awaitingApproval {
+    if state == .attention {
       // The one state that is about the reader, so it is the one that moves.
       Image(systemName: "bell.badge.fill")
         .foregroundStyle(.orange)
         .symbolEffect(.pulse)
-    } else if status == .running || status == .starting {
+    } else if state == .working {
       ProgressView()
         .controlSize(.mini)
     } else {
@@ -863,6 +876,12 @@ struct SessionStatusIcon: View {
   private var label: String {
     if pendingCount > 0, status == .awaitingApproval {
       return "\(status.label) (\(pendingCount))"
+    }
+    // A background agent working past its turn is the case the status cannot
+    // name: "Idle" would be a lie to a screen reader too, not just to the eye.
+    let running = runningSubagents(session).count
+    if state == .working, status != .running, status != .starting, running > 0 {
+      return "Working — \(running) sub-agent\(running == 1 ? "" : "s")"
     }
     return status.label
   }

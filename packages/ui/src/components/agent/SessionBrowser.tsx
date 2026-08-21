@@ -566,17 +566,28 @@ function Gutter({ children }: { children: ReactNode }) {
 }
 
 /**
- * State as one glyph on the right edge — a ringing bell when it wants a human, a
- * spinner while it works, a moon when it is only sleeping. Replaces the text
- * badge: in a sidebar the word costs more room than it earns, and the states
- * that matter are the two you can recognise without reading.
+ * State as one glyph — a ringing bell when it wants a human, a spinner while it
+ * works, a moon when it is only sleeping. Replaces the text badge: in a sidebar
+ * the word costs more room than it earns, and the states that matter are the two
+ * you can recognise without reading.
+ *
+ * **It reads `row.state`, not `info.status`, and that distinction is the whole
+ * point of the row model.** `sessionState` already folds in the arm this glyph
+ * cannot see for itself: a *background* sub-agent outlives its turn by design, so
+ * the turn ends, `status` comes to rest at `idle`, and the agent keeps working.
+ * Reading the raw status drew a **moon on a row filed under the "Working"
+ * header** — the list contradicting itself on one line, which is exactly what a
+ * derived view model exists to prevent. The value was in scope and unread.
+ *
+ * The terminal statuses still come off `info.status`, because `ended` collapses
+ * `failed` and `closed` into one bucket and those are worth telling apart here.
  */
 export function SessionStatusIcon({ row }: { row: SessionRow }) {
   const { info } = row
-  if (info.pendingPermissionCount > 0 || info.status === 'awaiting_approval') {
+  if (row.state === 'attention') {
     return <BellRing className='size-3.5 shrink-0 animate-pulse text-warning' />
   }
-  if (info.status === 'running' || info.status === 'starting') {
+  if (row.state === 'working') {
     return <Spinner className='size-3.5 shrink-0 text-info' />
   }
   switch (info.status) {
