@@ -1162,6 +1162,47 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `UIPanGestureRecognizer` — only with the text view's own, which is what makes selection work.
   Both the bug and the fix were **confirmed on a physical device** (2026-08-20); nothing in
   `apps/ios`'s app target has a test suite, so a thumb is the only thing that can check this.
+
+- **Green means sub-agent in the transcript, and it is spent twice.** A settled *mutating* tool is
+  already green on the **gutter glyph** (`items.tsx`, `TerminalPlanner.toolTone`), so sub-agent
+  green went on the Task's **body** instead — the two channels stay apart, and a green dot keeps
+  meaning "wrote to the workspace" rather than becoming ambiguous. Four things constrain any change
+  here. **Strings are heights**: the summary strings in `tool-run.ts` / `height.ts` /
+  `ToolRun.swift` / `TerminalPlan.swift` are rendered verbatim because they are what the height
+  calculator wraps, so a colour change is safe only while it changes **no characters** — no `↳`, no
+  badge, no prefix, and any `<Ink>` split must concatenate byte-identically. **iOS has one tone per
+  line**: `TermLine` carries a single `tone` and `TerminalRowCell` applies it over the whole range,
+  clobbering per-range foregrounds in `line.attributed` (only `.font` is merged), so "green label,
+  dim tail" needs a `TerminalTextRun.make` change and whole-line green is what shipped. **A merged
+  run destroys the label**: consecutive same-parent calls fold into a `RunBlock` whose text is
+  `runSummary`, with no `Agent(...)` left to colour — accepted deliberately, because a Task folds
+  into a run *only when childless*, and one that did real work becomes a `TaskBlock` that is never
+  folded. **The spawner set is already spelled three times** (`SPAWNER_NAMES`, `tool-icon.ts`,
+  `JSONValue+Display.swift`); a name-keyed colour rule would be the fourth, which is why the rule
+  keys off block shape instead. Note those are different rules with different edges: a `TaskBlock`
+  forms for *any* top-level call with children, not for a name.
+
+- **iOS: a selectable `UITextView` eats the first tap, and `cancelsTouchesInView` does not save
+  you.** `BodyTextView` is `isSelectable = true`, which installs the text view's *own* single-tap
+  recognizer. The press recognizer lives on the cell's `contentView` — a **superview** — and UIKit
+  resolves that conflict in the inner view's favour, so the first tap was spent making the text
+  view first responder and never reached `handleTap`. That is the whole of the long-standing
+  "I always need to tap an expandable row twice" report. `cancelsTouchesInView = false` is the
+  obvious fix and is the wrong one: it governs whether touches are cancelled *in the view*, not
+  which recognizer wins. The fix is `tap.delegate = self` with `shouldRecognizeSimultaneouslyWith`
+  → `true`, so the press runs *beside* the text view's recognizers.
+  **And that breaks a guard, which is the part worth remembering**: `handleTap` refuses a press
+  while a selection stands in the row (collapsing the block would take the selection with it), but
+  running simultaneously the text view may have **already cleared** the selection by the time the
+  handler fires — so the guard reads zero and presses anyway. The selection length is therefore
+  snapshotted at **touch-down** in `gestureRecognizer(_:shouldReceive:)`, and both readings must be
+  zero. Any future simultaneous recognizer inherits this hazard: state a guard reads at handler
+  time may already have been mutated by the recognizer it now runs beside.
+
+- **iOS: gestures are the one surface no agent can test.** The simulator will not accept synthetic
+  touches from an agent shell, and the app target has no test host, so every tap/press/selection
+  rule above is verified by a human thumb or not at all. Budget for that rather than discovering it
+  at the end of a gesture change.
 ## Web dashboard
 
 - **Overriding a colour token lower in the tree needs its *alias* too.** `theme.css` has two

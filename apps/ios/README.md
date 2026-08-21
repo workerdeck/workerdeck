@@ -131,7 +131,8 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     field only the phone needs is a field the two copies would disagree about. The caller notes the
     item count either side of `applyEvent`; the lookup answers with the first item appended at or
     after a seq, which is what lets an event that appended nothing (a permission request) still
-    resolve. See `_docs/features/push-deeplink-seq.md`.
+    resolve. The two permanent limits — the cards renderer ignores `seq`, and a `seq` older than
+    retention lands at the top of what remains — are in `docs/CLIENTS.md`.
   - `ModelName.swift` — `friendlyModel`, a 1:1 port of the rule in
     `packages/ui/src/lib/format.ts`: `claude-haiku-4-5-20251001` → "Haiku 4.5". A port and it has
     to stay one — a sessions list is where the same person reads all three clients, and a model

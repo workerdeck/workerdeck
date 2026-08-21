@@ -437,6 +437,15 @@ through phase 3, on-demand tool results and image-part references, and:
   Symbols and validated twice, against the catalog at authoring time and `UIImage(systemName:)`
   at runtime. This repo now carries its own `.workerdeck.json`, which is what turned a tested
   feature into an observed one: nothing had ever resolved a real file or served a real byte.
+- **One session row across all three clients**, on the VS Code sidebar card's design — the
+  dashboard row had been the reference for a pass and was the wrong one. `sessionSteps` /
+  `StepToggle` / `StepRow` and the `--vendor-*` colours moved out of the webview into
+  `packages/ui`, which is precisely why the dashboard had had none of them; the dashboard row was
+  rebuilt on them with state leading a shared gutter; and iOS gained the two pieces it had never
+  had — `engineMark` in the kit, and the vendor marks as real vector assets generated from the
+  web's own path table, SwiftUI having no path-data parser. Details in `docs/PACKAGES.md`
+  (`SessionBrowser`, `SessionSteps`) and `docs/CLIENTS.md`. **Not visually checked on any of the
+  three** — see `_docs/VERIFICATION-DEBT.md`.
 
 ## Next
 
@@ -562,6 +571,22 @@ boundary, and scope is defense in depth behind it. See `docs/ARCHITECTURE.md` §
   OpenAI's terms restrict headless/gateway use of ChatGPT-subscription codex auth the way
   Anthropic's restrict claude.ai logins is unresolved — the posture mirrors the Anthropic one
   (surface honestly, never circumvent) until answered.
+- **A `model` facet, and what a model group would be keyed by.** The sessions list groups by
+  gateway, adapter, state and project; a fourth facet was asked for ambiguously ("colour the model
+  unless grouped by model") and deliberately not built, on the reading that it was
+  symmetry-of-writing. If it is ever wanted, the keying decision is the whole of it and
+  `projectKey`'s doc has the argument ready-made: **a name is not a key.** `claude-opus-5[1m]` and
+  `claude-opus-5` are the same model with different windows; `gpt-5.6-luna` and `gpt-5.6` are not.
+  Key by the wire id with the `[…]` variant stripped (what `friendlyModel` already does first) and
+  label with `friendlyModel`, or key by the friendly name and accept that two ids collapse. Decide
+  it once, in protocol, or the facet and the row will disagree about what "same model" means.
+- **Three vendors have a mark and no colour.** Gemini, DeepSeek and Moonshot fall through to muted
+  on web and phone alike. Adding one is two declarations in `theme.css`, a map entry beside
+  `EngineIcon`, and one `case` in iOS's `VendorPalette` — in that order.
+- **The dashboard cannot reveal a `Task` row.** VS Code deep-links into the transcript
+  (`revealToolUse` → `SessionPanel.reveal`); the web has no such plumbing, so a sub-agent step
+  there opens the session and stops. `SessionBrowser`'s `onSelectSubagent` is optional for exactly
+  this reason. A `packages/react` / `packages/web` job, not a row job.
 - **Returning `@ai-sdk` providers as bespoke adapters.** New union members (a versioned protocol
   event) or per-profile capability overrides under `'provider'` — the record supports both, so
   the choice stays deferred without penalty.

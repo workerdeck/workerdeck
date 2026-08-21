@@ -313,6 +313,32 @@ result-preview character budget is **derived from the column count**, since 400 
 gate that keeps the exactness claim honest, reported on screen by the `terminal`/`terminalStress`
 preview variants — a line wider than its planned column is clipped silently, which is worse than
 a wrong height.
+**A phone has no hover, so a wash *is* the affordance**: `TerminalPalette.uiPressable`, drawn by
+`BackdropView` behind any line that carries a press **and wears nothing else** — no band, not
+`inOpen`. That carve-out is the design, not an optimisation: a tool call's preview rows are
+pressable too, but they already sit in the output band, and a second wash on top would read as
+"two targets" when the block is one. So what gets marked is the summary line — the folded run, the
+task, the tool header. Strength is **0.028/0.024, deliberately below** the open wash (0.05/0.04)
+and the bands (0.04/0.05), because a transcript is mostly pressable and at band strength every
+second row would be washed and the rows carrying real meaning would stop standing out. If it ever
+reads as noise the next move is to mark **fewer rows, not to lighten it further** — the honest
+alternative is marking only blocks that fold something and leaving a plain tool call bare.
+Hit targets are the standing tension: a one-line block is `metrics.line` tall, ~19pt at the
+phone's 12pt cell against Apple's 44pt, and the grid forbids the obvious fix (a row is a whole
+number of lines, and a taller row is a different transcript). What is there is free — `handleTap`
+**clamps** the line index instead of bounds-checking it, so the blank line `gapAbove` puts above a
+block, dead space belonging to nobody, becomes part of the row it separates and roughly doubles
+the target for exactly the rows hardest to hit. It is a partial answer by construction: two
+adjacent blocks with no gap between them get nothing. None of this is portable to `packages/ui`
+and should not be — a pointer is exact and a thumb is not, and `press.tsx`'s rules (refuse a press
+that travelled, refuse one with a selection standing) are the pointer's version of the same care.
+A **deep link lands on the row that triggered it** rather than at the tail: `TranscriptSeqIndex`
+(see `docs/GOTCHAS.md`) maps the push payload's `seq` to the first item appended at or after it,
+and `resolveFocus()` is asked **once**, when the attach's stated seq is reached. Two limits are
+permanent rather than debt. The **cards renderer ignores `seq`** — `TranscriptListView` has no row
+model to land on, so a deep link there opens at the tail as it always has; deliberate, the
+terminal theme being the default. And a **`seq` older than retention** lands on the top of what
+remains, which is the closest the transcript can get, untested against a real retention cut.
 The **row itself** mirrors the dashboard's (`packages/ui`'s `SessionBrowser`) rather than
 inventing a phone shape: two lines, not three — a state *glyph*, title, unread badge, age and
 context ring on top; the engine's mark then one truncating run of model · project · gateway ·
