@@ -376,7 +376,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "node esbuild.mjs && vite build",
-    "dev": "node esbuild.mjs --watch & vite build --watch",
+    "dev": "concurrently -n ext,webview -c cyan,magenta \"node esbuild.mjs --watch\" \"vite build --watch\"",
     "typecheck": "tsgo -p tsconfig.json && tsgo -p tsconfig.webview.json",
     "package": "pnpm build && vsce package --no-dependencies -o workerdeck.vsix",
     "dev:host": "node scripts/dev-host.mjs",
@@ -396,6 +396,7 @@
     "@workerdeck/protocol": "workspace:*",
     "@workerdeck/react": "workspace:*",
     "@workerdeck/ui": "workspace:*",
+    "concurrently": "^9.1.2",
     "esbuild": "^0.25.0",
     "lucide-react": "^1.21.0",
     "react": "^19.2.0",

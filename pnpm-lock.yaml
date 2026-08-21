@@ -260,6 +260,9 @@ importers:
       '@workerdeck/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.2.4
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12

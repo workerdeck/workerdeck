@@ -22,6 +22,15 @@ prebuilt `dist/` — production React, not development. It runs on 8788 with sta
 replacing it, so the two can be compared without stopping either. The difference is not
 academic: measured on one 976-row session at a pinned width, dev and prod share a p50 but dev's
 p95 is ~2× prod's (~21ms vs ~11ms) — all of it dev-mode React in the tail.
+**A `dev` script that runs two watchers must run them under one supervisor, never `a & b`.**
+`apps/vscode` used `node esbuild.mjs --watch & vite build --watch`: the `&` backgrounds the first
+watcher *inside* the `sh -c`, so when turbo (or the terminal) went away the shell and the vite half
+died and esbuild was reparented to init. It leaked exactly one orphaned watcher — each still
+holding an `esbuild --service` child — per `pnpm dev` run, and four had accumulated over three days
+before anyone noticed. Both multi-watcher packages now use `concurrently`, which forwards the
+signal to its children; the check is one line: start `pnpm dev`, kill the `pnpm` pid, then
+`ps -eo pid,ppid,command | grep esbuild` and expect nothing.
+
 In-package imports use explicit `.ts` extensions. Releases go through **pnpm only** —
 `npm publish` would ship `workspace:*` verbatim; see the packaging section of `docs/GOTCHAS.md`
 before touching versioning or the publish workflow.
