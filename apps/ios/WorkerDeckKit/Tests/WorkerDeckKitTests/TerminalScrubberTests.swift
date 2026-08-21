@@ -42,14 +42,17 @@ struct TerminalScrubberTests {
   private func input(
     _ items: [TranscriptItem], approvals: [PermissionRequest] = [], bookmarks: [Int] = [],
     recap: ScrubberRecap? = nil, viewport: CGFloat = 400,
-    expansion: TerminalExpansion = TerminalExpansion()
+    expansion: TerminalExpansion = TerminalExpansion(),
+    frameParentId: String? = nil, frameTask: ToolCallItem? = nil
   ) -> ScrubberInput {
-    let rows = TerminalRows.build(items: items)
+    let rows = TerminalRows.build(items: items, frameTask: frameTask)
     return ScrubberInput(
       items: items, rows: rows,
-      book: TerminalHeightBook(rows: rows, metrics: metrics, expansion: expansion),
+      book: TerminalHeightBook(
+        rows: rows, metrics: metrics, expansion: expansion, frameParentId: frameParentId),
       pendingApprovals: approvals,
-      bookmarks: bookmarks, recap: recap, viewportHeight: viewport, expansion: expansion)
+      bookmarks: bookmarks, recap: recap, viewportHeight: viewport, expansion: expansion,
+      frameParentId: frameParentId)
   }
 
   private func kinds(_ clusters: [ScrubberCluster]) -> [ScrubberMarkKind] {
@@ -670,5 +673,98 @@ extension TerminalScrubberTests {
     #expect(left[0].kind == .user)
     // ...and the dispatch is still in it, one press away.
     #expect(left[0].marks.contains { $0.mark.kind == .subagent })
+  }
+}
+
+// MARK: - Inside a sub-agent frame
+
+extension TerminalScrubberTests {
+  /// The takeover renders `subagentItems`, so EVERY item there has a parent.
+  /// The rail's "top level only" tests then excluded all of them and it came
+  /// out mounted, banded, and marking nothing on a hundred-tool agent — which
+  /// is exactly the run that needs a rail. "Top level" is now the frame's level
+  /// (`ScrubberInput.frameParentId`), mirroring web `scrubber.test.ts`'s
+  /// `inside a sub-agent frame` cases — plus the brief-row interaction, which
+  /// is this client's own: the frame's rows open on a synthetic row no item
+  /// maps to, and every mark must land past it.
+  private func spawningTask(_ id: String) -> ToolCallItem {
+    ToolCallItem(
+      id: id, name: "Task",
+      input: .object([
+        "subagent_type": .string("Explore"), "description": .string("dig in"),
+        "prompt": .string("Find the tests and read them."),
+      ]),
+      parentToolUseId: nil, status: .running, result: nil)
+  }
+
+  @Test("a frame marks every narration step, where the conversation marks one per segment")
+  func frameMarksEveryStep() {
+    // No prompts and no `turn_result` exist in a sub-agent's stream, so the
+    // segment machinery would fold the lot into a single mark at the final
+    // report — the one place a reader can already reach.
+    let items = [
+      say("s1", "looking", parent: "T1"),
+      say("s2", "found it", parent: "T1"),
+      say("s3", "done", parent: "T1"),
+    ]
+    let scrub = input(items, frameParentId: "T1", frameTask: spawningTask("T1"))
+    let marks = buildScrubberClusters(scrub, railH: 300).flatMap { $0.marks }.map(\.mark)
+    #expect(marks.map(\.kind) == [.turn, .turn, .turn])
+    #expect(marks.map(\.itemIndex) == [0, 1, 2])
+    // The brief row leads the frame's rows and no item maps to it — the same
+    // mechanism that keeps marks off the recap seam (a row with no index), so
+    // every mark's row lands past it, at the offsets the book keeps for the
+    // shifted rows.
+    #expect(scrub.rows.rows.first == .brief(id: "T1", text: "Find the tests and read them."))
+    #expect(marks.map(\.rowIndex) == [1, 2, 3])
+  }
+
+  @Test("a frame marks a failure its own renderer reddens")
+  func frameMarksItsOwnFailure() {
+    // No level test guards this one — `redItemIndices` reads the frame's own
+    // fold — but it is the second thing the web pins and the claim is the
+    // rail's whole rule: red in the transcript, red on the rail.
+    let items = [
+      say("s1", "trying", parent: "T1"),
+      call("c1", parent: "T1", status: .failed),
+    ]
+    let clusters = buildScrubberClusters(
+      input(items, frameParentId: "T1", frameTask: spawningTask("T1")), railH: 300)
+    #expect(kinds(clusters).contains(.toolFailed))
+  }
+
+  @Test("the conversation still marks nothing of a sub-agent's own steps")
+  func topLevelStillExcludesFrameSteps() {
+    // The regression guard on the generalisation: at the top level a
+    // sub-agent's steps are represented by its `Task` band, never by a second
+    // set of marks threaded through the rail.
+    let items = [
+      user("u1", "go"),
+      say("s1", "looking", parent: "T1"),
+      say("a1", "done"),
+      turn("t1"),
+    ]
+    let marks = buildScrubberClusters(input(items), railH: 300)
+      .flatMap { $0.marks }.map(\.mark)
+    #expect(marks.map(\.kind).sorted { $0.rawValue < $1.rawValue } == [.turn, .user])
+    #expect(!marks.contains { $0.itemIndex == 1 })
+  }
+
+  @Test("an opened brief row bands like any block you opened")
+  func openedBriefBands() {
+    // The brief row is synthetic — no fold produces it — but opening it is
+    // still opened height, and the region walk reads row-level keys so it is
+    // not invisible to the rail. Closed, nothing bands.
+    let items = [say("s1", "looking", parent: "T1")]
+    let open = TerminalExpansion(open: [.brief("T1")])
+    let banded = buildScrubberRail(
+      input(items, expansion: open, frameParentId: "T1", frameTask: spawningTask("T1")),
+      railH: 300)
+    #expect(banded.regions.count == 1)
+    #expect(banded.regions.first?.rowIndex == 0)
+    #expect(banded.regions.first?.lane == .left)
+    let shut = buildScrubberRail(
+      input(items, frameParentId: "T1", frameTask: spawningTask("T1")), railH: 300)
+    #expect(shut.regions.isEmpty)
   }
 }
