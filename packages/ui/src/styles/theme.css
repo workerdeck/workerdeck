@@ -51,6 +51,37 @@
   --fg-4: #a1a1a1;
   --fg-disabled: #c9c9c9;
 
+  /* ---------- Vendor ----------
+   * The engine's own colour, worn by its mark and (where the brand allows) by
+   * the model name beside it in a sessions list. Nowhere else.
+   *
+   * This is the one place a brand colour is allowed in the product, and it earns
+   * it by doing a job nothing else on the row does: the list already spends blue
+   * on running, amber on waiting, red on failed and muted on idle, so none of
+   * those can also say *whose engine this is* — and the mark alone is a 12px
+   * silhouette.
+   *
+   * Two values per vendor, because that glyph has to hold against both grounds:
+   * the dark-ground value is lifted and the light-ground one darkened.
+   *
+   * **OpenAI's is monochrome, and that is their rule rather than our taste**:
+   * their guidelines forbid adding colour to the mark, so it is pure white on
+   * dark and a near-black on light — both sanctioned, and the only kind of pair
+   * legible on both grounds. A green was tried first and is wrong, however well
+   * it reads. Near-black rather than `#000` because pure black would sit *harder*
+   * than the session title above it, so the mark would out-weigh the name it is
+   * labelling.
+   *
+   * That makes the two vendors asymmetric, which is the honest outcome: coral is
+   * Anthropic's brand and monochrome is OpenAI's, so a rule that gave both an
+   * accent would misrepresent one of them. It also means OpenAI's token is at
+   * full contrast, which is why only the **mark** wears it — see
+   * `vendorTextClass` in `EngineIcon.tsx`.
+   *
+   * A third vendor is two declarations here and one map entry there. */
+  --vendor-claude: #b3573a;
+  --vendor-openai: #373737;
+
   /* ---------- Accent ----------
    * VS Code blue (`#0078d4`) — the product's primary. It is the *same* hue in
    * both themes rather than the inverse of the canvas: a primary that flips
@@ -121,6 +152,10 @@
   --fg-3: #8f8f8f;
   --fg-4: #6e6e6e;
   --fg-disabled: #454545;
+
+  /* ---------- Vendor ---------- (see the light block for the whole argument) */
+  --vendor-claude: #cc7c5e;
+  --vendor-openai: #ffffff;
 
   /* ---------- Accent ----------
    * The same blue as light. `--accent` stays `#0078d4` because it is a *fill*
@@ -274,6 +309,13 @@
   --color-danger-bg: var(--danger-bg);
   --color-info: var(--info);
   --color-info-bg: var(--info-bg);
+
+  /* Vendor colours as real utilities (`text-vendor-claude`), not hand-written
+     classes: `cn`'s tailwind-merge only knows to *replace* a colour it can parse,
+     and `EngineIcon` ships its own `text-fg-3` that the vendor class has to win
+     against rather than merely follow in source order. */
+  --color-vendor-claude: var(--vendor-claude);
+  --color-vendor-openai: var(--vendor-openai);
 
   /* Stock-name bridge → utilities (bg-primary / text-muted-foreground / ...). */
   --color-primary: var(--primary);

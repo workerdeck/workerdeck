@@ -651,9 +651,20 @@ struct SessionRowView: View {
   /// it *is* underneath. The same person reads all three clients, so the
   /// segments and their order are not this client's to choose — only how they
   /// are drawn is (a touch-sized row, SF Symbols, `Fmt.ago`).
+  ///
+  /// State leads both lines, in a gutter the engine's mark lands in underneath.
+  /// It used to trail, and a trailing glyph has no fixed x — it sits wherever
+  /// the age and the ring leave it, so a list of thirty gives the eye nothing to
+  /// run down. Leading, every row's state stacks into one strip.
   var body: some View {
     VStack(alignment: .leading, spacing: 3) {
       HStack(alignment: .firstTextBaseline, spacing: 8) {
+        // The gutter: a fixed cell rather than a bare glyph, so the status above
+        // and the engine mark below start at the same x however wide either
+        // draws — and so the two text columns agree.
+        SessionStatusIcon(status: session.status, pendingCount: session.pendingPermissionCount)
+          .frame(width: 14)
+          .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
         Text(title)
           .font(.body.weight(.medium))
           .lineLimit(1)
@@ -683,8 +694,6 @@ struct SessionRowView: View {
             // height — baseline alignment would hang a circle off the row.
             .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
         }
-        SessionStatusIcon(status: session.status, pendingCount: session.pendingPermissionCount)
-          .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
       }
       // Line two: one truncating run, in one order, so the list reads the same
       // on a phone as it does in a sidebar. A `Text` concatenation rather than
@@ -692,21 +701,60 @@ struct SessionRowView: View {
       // order and a single ellipsis honours it, where stack children would each
       // shrink a little and leave four half-words.
       HStack(spacing: 0) {
+        // The engine's mark, in the vendor's colour, under the status glyph and
+        // in the same 14pt cell. Absent engines draw nothing — the cell keeps
+        // the column, so a mark-less row still lines up with its neighbours.
+        EngineIconView(engine: session.engine?.rawValue ?? "claude", model: session.model)
+          .frame(width: 14)
+          .padding(.trailing, 8)
         if let icon = session.project?.icon, project != nil, showsProject {
           ProjectIconView(icon: icon, image: projectImage)
             .padding(.trailing, 3)
         }
-        Text(details)
+        detailsText
           .font(.caption)
-          .foregroundStyle(.secondary)
           .lineLimit(1)
           // Tail truncation: everything on this line leads with the fact that
           // identifies it, and the sub-path form (`packages/ui`) is read from
           // the front. The old head-truncated raw cwd is gone with the path.
           .truncationMode(.tail)
+        // The work under this row, as a count and not a disclosure. The sidebar
+        // gets a twisty (`StepToggle` in `packages/ui`); a phone row cannot,
+        // because the whole row is one `NavigationLink` and a second tap target
+        // inside it is a coin toss under a thumb. The number is the reading
+        // anyway — `2/3` while some are still going, a bare total once they have
+        // settled — and the session it opens is where they can be read.
+        if subagentCount > 0 {
+          Spacer(minLength: 6)
+          HStack(spacing: 2) {
+            Image(systemName: "person.2.fill").imageScale(.small)
+            Text(subagentLabelText).monospacedDigit()
+          }
+          .font(.caption2)
+          .foregroundStyle(runningSubagentCount > 0 ? Color.accentColor : .secondary)
+          .accessibilityLabel(subagentAccessibilityLabel)
+        }
       }
     }
     .padding(.vertical, 3)
+  }
+
+  private var subagentCount: Int { session.subagents?.count ?? 0 }
+  private var runningSubagentCount: Int { runningSubagents(session).count }
+
+  /// `2/3` while some are still going, `3` once they have all settled — the same
+  /// two spellings `StepToggle` picks between, and for the same reason: "how
+  /// many are still working" is the live question, and a bare total answers it
+  /// wrong the moment one finishes.
+  private var subagentLabelText: String {
+    let running = runningSubagentCount
+    return running > 0 && running < subagentCount ? "\(running)/\(subagentCount)" : "\(subagentCount)"
+  }
+
+  private var subagentAccessibilityLabel: String {
+    let running = runningSubagentCount
+    if running > 0 && running < subagentCount { return "\(running) of \(subagentCount) agents running" }
+    return "\(subagentCount) agent\(subagentCount == 1 ? "" : "s")"
   }
 
   private var title: String {
@@ -720,17 +768,21 @@ struct SessionRowView: View {
     showsProject ? projectLabel(session) : projectSubpath(session)
   }
 
-  /// Line two, joined the way the dashboard joins it: gateway, model, project,
+  /// Line two, joined the way the dashboard joins it: model, project, gateway,
   /// profile, cost. Nothing empty ever reaches the join, so a missing part
   /// closes up rather than leaving ` ·  · ` behind.
-  private var details: String {
-    [
-      hostName,
-      // The shared rule, ported into the kit: a model spelled `claude-opus-5`
-      // here and `Opus 5` in the sidebar is the same drift the shared list view
-      // model exists to prevent.
-      friendlyModel(session.model),
+  ///
+  /// A `Text` concatenation rather than a `String`, because the model wears the
+  /// vendor's colour and the rest does not — and one `Text` built from two is
+  /// still one truncating run, which a stack of two would not be.
+  private var detailsText: Text {
+    // The shared rule, ported into the kit: a model spelled `claude-opus-5` here
+    // and `Opus 5` in the sidebar is the same drift the shared list view model
+    // exists to prevent.
+    let model = friendlyModel(session.model)
+    let rest = [
       project,
+      hostName,
       session.profile.map { "@\($0)" },
       // `TermFmt.cost`, not `Fmt.cost`: the kit's is the port of the web's
       // `formatCost` ($3.10, and `<$0.01` rather than a fourth decimal), and a
@@ -740,6 +792,20 @@ struct SessionRowView: View {
     ]
     .compactMap { $0 }
     .joined(separator: " · ")
+
+    guard let model else { return Text(rest).foregroundStyle(.secondary) }
+    let head = Text(model).foregroundStyle(modelTint)
+    return rest.isEmpty ? head : head + Text(" · " + rest).foregroundStyle(.secondary)
+  }
+
+  /// The model name's colour: the vendor's, but only where the vendor's own
+  /// guidance allows it past the mark — see `EngineMark.tintsName`, and the note
+  /// there on what a full-contrast name does to the title above it.
+  private var modelTint: Color {
+    guard let mark = engineMark(engine: session.engine?.rawValue ?? "claude", model: session.model),
+      mark.tintsName
+    else { return .secondary }
+    return VendorPalette.color(mark)
   }
 }
 

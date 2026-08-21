@@ -180,7 +180,21 @@ export {
 export { SessionStatusIcon } from './components/agent/SessionBrowser.tsx'
 // Lifted out of the VS Code sidebar once the dashboard grew a collapsed rail
 // that needs the same glyph — two copies of a trademark set is one too many.
-export { EngineIcon, engineMark } from './components/agent/EngineIcon.tsx'
+export {
+  EngineIcon,
+  engineMark,
+  vendorMarkClass,
+  vendorTextClass,
+} from './components/agent/EngineIcon.tsx'
+// Lifted out of the sidebar for the same reason: the work under a row is a
+// protocol fact, so every list annotates it with one component.
+export {
+  type Step,
+  StepRow,
+  StepToggle,
+  runningSteps,
+  sessionSteps,
+} from './components/agent/SessionSteps.tsx'
 export { ProjectIcon } from './components/agent/ProjectIcon.tsx'
 export {
   SessionEmptyState,

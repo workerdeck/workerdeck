@@ -135,12 +135,15 @@ tells you which row to read — an idle row's title dims with it, since spending
 twelve of them is what made the one that is working hard to find. And **selection is the card's
 own fill** rather than a gutter bar, the card being an inset shape with air around it, which
 leaves the left edge to the glyph. Line two is the engine's mark and model in the **vendor's own
-colour**, then the **project** and age muted — the project having replaced the cwd basename in
+colour**, then the **project** and gateway muted — the project having replaced the cwd basename in
 that slot, because the folder was only ever a proxy for the question the project name answers
 (`projectLabel` falls back to exactly that basename, so an undeclared project is byte-identical
 to what shipped). Its icon rides *inside* the same truncating span rather than holding a slot of
 its own: the parts have a priority order and one ellipsis honours it, where flex children each
-shrink a little and leave four half-words. Grouping by project **suppresses it on the row** and
+shrink a little and leave four half-words. The **age moved up to line one**, where the spec puts
+it and where the other two clients already had it: line two is now a run of *identity* — engine,
+model, project, gateway — and the age was the one part of it that kept changing while you read.
+Grouping by project **suppresses it on the row** and
 hands the slot back to the basename — `ui`, `server`, `web` under one WorkerDeck heading, which
 is the one thing the header cannot say — exactly the rule `hostName` already followed one facet
 over, and the answer to "what about the subdirectory". Icon bytes come from the host
@@ -155,15 +158,20 @@ sits against Anthropic's mark and names the vendor. It is carried by the **mark 
 together** — neither alone identifies a vendor at 13px — which is why the class goes *on* the
 `EngineIcon`: it draws `fill="currentColor"` and carries its own `text-fg-3`, so a colour
 inherited from a wrapper loses to the svg's own class, and the mark sat muted beside a coral
-model from the day the cards shipped. **One token per vendor** (`--wd-vendor-claude`,
-`--wd-vendor-openai`, two values each for the two grounds), which reverses the original "gated to
-Claude alone". The two vendors are **asymmetric, and that is the brands' doing rather than ours**:
+model from the day the cards shipped. **One token per vendor** (`--vendor-claude`,
+`--vendor-openai`, two values each for the two grounds), which reverses the original "gated to
+Claude alone". Those tokens and the two maps that read them now live in **`packages/ui`**
+(`theme.css`, `vendorMarkClass`/`vendorTextClass` beside `EngineIcon`) rather than in this
+webview's stylesheet, since all three clients wear them; they are registered as real Tailwind
+colours, not hand-written classes, because `cn`'s tailwind-merge only *replaces* a colour it can
+parse and the vendor class has to win against `EngineIcon`'s own `text-fg-3` rather than merely
+follow it in source order. The two vendors are **asymmetric, and that is the brands' doing rather than ours**:
 coral is Anthropic's accent, while OpenAI's guidelines forbid adding colour to the mark at all, so
 theirs is monochrome: **`#fff` on dark, `#373737` on light** — both sanctioned by that guidance,
 and the only kind of pair legible on both grounds (the light value is their near-black rather than
 `#000`, which also keeps a 12px mark from sitting harder than the `#1f1f1f` title above it) (a green was tried first and is simply wrong, however well it
 reads). That full contrast also decides **how far the colour reaches**: Anthropic's covers the mark
-*and* the model name, OpenAI's covers the **mark only** (`VENDOR_MARK`/`VENDOR_TEXT`), because a
+*and* the model name, OpenAI's covers the **mark only** (`vendorMarkClass`/`vendorTextClass`), because a
 pure-white 11px model name is brighter than the session title above it and inverts the card's
 hierarchy to repeat something the mark has already said — which is also the most literal reading
 of "don't add any colors". Both lines also share **one 14px icon gutter** (`Gutter`), because the
@@ -180,8 +188,11 @@ because every state worth checking is otherwise rare or expensive to produce on 
 fidelity risk is named in the file (it hand-supplies the `--vscode-*` variables, so a token it
 forgets looks fine there and wrong in the editor), and `.vscodeignore` allows `dist/` only, so
 none of it ships.
-A session row **expands** to its sub-agents (`SessionInfo.subagents`) — disclosure on the
-*second* line, since the first line's left edge belongs to the name you scan by, doubling as the
+A session row **expands** to its sub-agents (`SessionInfo.subagents`) — `sessionSteps`,
+`StepToggle` and `StepRow`, which live in **`packages/ui`** (`SessionSteps.tsx`) rather than in
+this webview, that being exactly why the dashboard had none of them; a session's sub-agents are a
+protocol fact and a disclosure over them is a list affordance, so neither is extension-specific.
+The disclosure sits on the *second* line, since the first line's left edge belongs to the name you scan by, doubling as the
 count (`2 of 3 agents`, because "how many are still going" is the live question); expansion is
 row-local React state and unpersisted, and could not be a native twisty regardless, every view
 here being a webview. Pressing a child selects the session and reveals that `Task`'s row
@@ -303,9 +314,22 @@ gate that keeps the exactness claim honest, reported on screen by the `terminal`
 preview variants — a line wider than its planned column is clipped silently, which is worse than
 a wrong height.
 The **row itself** mirrors the dashboard's (`packages/ui`'s `SessionBrowser`) rather than
-inventing a phone shape: two lines, not three — title, unread badge, age, context ring and a
-state *glyph* on top; one truncating run of gateway · model · project · profile · cost
-underneath, in that order. The old third line spent a third of every row on a labelled `Idle`
+inventing a phone shape: two lines, not three — a state *glyph*, title, unread badge, age and
+context ring on top; the engine's mark then one truncating run of model · project · gateway ·
+profile · cost underneath, in that order. **State leads both lines**, in a 14pt cell the engine
+mark lands in underneath — it used to trail, and a trailing glyph has no fixed x, so a list of
+thirty gave the eye nothing to run down. The mark itself needed two new pieces the app had
+neither of: `engineMark` ported into the kit (`EngineMark.swift`, tested at its edges, because a
+row that drew OpenAI's mark beside a name the sidebar spells as Gemini's is worse than drawing no
+mark), and **real vector assets**, since SwiftUI has no path-data parser — generated into the
+catalog from the very table the web draws inline by `apps/ios/scripts/gen-engine-marks.mjs`, as
+template images so `VendorPalette` (the `--vendor-*` hex pairs, ported the way `TerminalPalette`
+ports `terminal.css`) tints them. An unrecognised engine draws **nothing at all** rather than the
+web's placeholder dot: a dot earns its keep in a sidebar where two text columns share a gutter,
+and is a smudge in front of a phone row. Sub-agents are a **count, not a disclosure**
+(`2/3` while some run, a bare total once settled — the two spellings `StepToggle` picks between):
+the whole row is one `NavigationLink`, so a second tap target inside it is a coin toss under a
+thumb, and the session it opens is where the agents can actually be read. The old third line spent a third of every row on a labelled `Idle`
 badge, which is the state you scan *past*; and the model was printed raw (`claude-opus-5`) where
 the other clients say `Opus 5`, so `friendlyModel` was ported into the kit
 (`ModelName.swift`, tested against the same examples the TS doc comment states) — the same

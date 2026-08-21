@@ -1,20 +1,19 @@
-import type { SessionInfo, SubagentInfo } from '@workerdeck/protocol'
+import type { SessionInfo } from '@workerdeck/protocol'
 import { Spinner, formatRelativeTime, friendlyModel, cn } from '@workerdeck/ui'
-import {
-  ArrowRight,
-  BellRing,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  CircleAlert,
-  CircleSlash,
-  MoreHorizontal,
-  Moon,
-  PauseCircle,
-} from 'lucide-react'
+import { BellRing, CircleAlert, CircleSlash, MoreHorizontal, Moon, PauseCircle } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { ContextRing, EngineIcon, ProjectIcon, engineMark } from '@workerdeck/ui'
-import { projectLabel, projectSubpath, sessionLabel, subagentLabel } from '../../src/view-config.ts'
+import {
+  ContextRing,
+  EngineIcon,
+  ProjectIcon,
+  StepRow,
+  StepToggle,
+  runningSteps,
+  sessionSteps,
+  vendorMarkClass,
+  vendorTextClass,
+} from '@workerdeck/ui'
+import { projectLabel, projectSubpath, sessionLabel } from '../../src/view-config.ts'
 
 /**
  * One session in the sidebar list — an inset rounded **card**, two lines and an
@@ -80,29 +79,6 @@ function Gutter({ children }: { children: React.ReactNode }) {
   return <span className='flex w-3.5 shrink-0 items-center justify-center'>{children}</span>
 }
 
-/**
- * Which engines wear their vendor's colour, and **how far it reaches**.
- *
- * `MARK` is the glyph, `TEXT` is the model name beside it. They are the same
- * for Anthropic and deliberately not for OpenAI, because the two brands are
- * different in kind rather than in hue: coral is an accent, and OpenAI's
- * guidelines forbid adding colour to the mark at all, so theirs is pure
- * white/black. At full contrast that is fine on a 12px glyph and wrong on an
- * 11px label — a pure-white model name is *brighter than the session title
- * above it*, which inverts the card's whole hierarchy to say something the mark
- * has already said. So OpenAI's name keeps the muted line it always had, which
- * is also the most literal possible reading of "don't add any colors".
- *
- * Anything absent falls through to muted on both counts.
- */
-const VENDOR_MARK: Record<string, string> = {
-  claude: 'text-vendor-claude',
-  codex: 'text-vendor-openai',
-}
-const VENDOR_TEXT: Record<string, string> = {
-  claude: 'text-vendor-claude',
-}
-
 export function SessionCard({
   info,
   hostName,
@@ -161,11 +137,10 @@ export function SessionCard({
   // The model id as a person says it — `claude-opus-5[1m]` is a wire value, and
   // a sidebar line has no room to spend on a context-window suffix.
   const model = friendlyModel(info.model)
-  // The vendor's own colour (see `--wd-vendor-*` in `styles.css`). How far it
-  // reaches past the mark is per vendor — see `VENDOR_MARK`/`VENDOR_TEXT`.
-  const mark = engineMark(engine, info.model) ?? ''
-  const vendorMark = VENDOR_MARK[mark] ?? 'text-fg-3'
-  const vendor = VENDOR_TEXT[mark] ?? 'text-fg-3'
+  // The vendor's own colour (`--vendor-*`, now `packages/ui`'s tokens). How far
+  // it reaches past the mark is per vendor — see `vendorTextClass`.
+  const vendorMark = vendorMarkClass(engine, info.model)
+  const vendor = vendorTextClass(engine, info.model)
   // Only the `image` arm needs bytes, and only once the host has fetched them;
   // until then (and for a glyph) this is undefined and draws nothing.
   const iconSrc =
@@ -236,6 +211,12 @@ export function SessionCard({
               {unseen}
             </span>
           ) : null}
+          {/* How long since it moved. It used to ride the end of line two, and
+              it moved up because line two is now a run of *identity* — engine,
+              model, project, gateway — and an age at the end of that run is the
+              one part of it that keeps changing while you read. Up here it sits
+              beside the reading it belongs with. */}
+          <span className='shrink-0 text-fg-4'>{formatRelativeTime(age)}</span>
           {/* How full the window is, at a glance and across the whole list —
               the question you cannot ask from inside one session. The same
               component the dashboard's row draws, so the thresholds cannot
@@ -252,14 +233,13 @@ export function SessionCard({
             <EngineIcon engine={engine} model={info.model} className={vendorMark} />
           </Gutter>
           {/* One truncating span, not a flex of pieces: the parts have a
-              priority order (model, then gateway, then project, then age) and
-              a single ellipsis honours it for free, where flex children would
-              each shrink a little and leave four half-words. The icon rides
-              inside it as an inline element for the same reason — it clips with
-              the text it labels instead of holding a slot the text has lost. */}
+              priority order (model, then project, then gateway) and a single
+              ellipsis honours it for free, where flex children would each shrink
+              a little and leave three half-words. The icon rides inside it as an
+              inline element for the same reason — it clips with the text it
+              labels instead of holding a slot the text has lost. */}
           <span className='min-w-0 flex-1 truncate text-fg-4'>
             <span className={vendor}>{model}</span>
-            {hostName ? ` · ${hostName}` : ''}
             {/* Conditional as a whole — separator, icon and name together. A
                 session at its project's root has no sub-path to show under a
                 project group, and an empty slot would leave ` ·  · ` behind. */}
@@ -277,7 +257,7 @@ export function SessionCard({
                 {project}
               </>
             )}
-            {` · ${formatRelativeTime(age)}`}
+            {hostName ? ` · ${hostName}` : ''}
           </span>
           {/* The disclosure lives here, not in front of the title: line one's
               left edge belongs to the state glyph and the name. It doubles as
@@ -286,7 +266,7 @@ export function SessionCard({
           {steps.length > 0 ? (
             <StepToggle
               expanded={expanded}
-              running={steps.filter((s) => s.state === 'running').length}
+              running={runningSteps(steps)}
               total={steps.length}
               noun={steps[0]!.noun}
               onToggle={() => setExpanded((open) => !open)}
@@ -303,173 +283,6 @@ export function SessionCard({
         : null}
     </div>
   )
-}
-
-/**
- * A line of work under a session, and the one row shape two sources render
- * through.
- *
- * Today the only source is `SessionInfo.subagents`. The other — the CLI's own
- * **task checklist**, the to-do list it keeps for the current turn — is what the
- * design was drawn from, and it is not built: nothing on the wire carries it yet
- * (see `_docs/features/sub-agent-handling.md`, second thread, which opens with
- * "check a capture" rather than "design a surface"). When it arrives it is a
- * *source*, not a second row component: checklist when the session has one, its
- * sub-agents otherwise.
- *
- * That is also why `state` has a `pending` arm no sub-agent can produce. A
- * sub-agent record exists only once dispatched, so it is never queued; a to-do
- * is queued for most of its life, and dropping the state would mean widening the
- * union later — the shape is cheaper to state now than to retrofit.
- */
-type Step = {
-  key: string
-  label: string
-  /** What one of these is called, for the disclosure's count. */
-  noun: string
-  state: 'done' | 'running' | 'pending' | 'failed'
-  /** A trailing reading — a sub-agent's tool count. Absent draws nothing. */
-  detail?: string
-  title: string
-  onSelect: () => void
-}
-
-function sessionSteps(info: SessionInfo, onSelectSubagent: (toolUseId: string) => void): Step[] {
-  // The label is protocol's `subagentLabel`, not a spelling of its own: the
-  // dashboard and the phone render the same rows from the same records, and two
-  // spellings would be two different answers to "which agent is this".
-  return (info.subagents ?? []).map((sub) => ({
-    key: sub.toolUseId,
-    label: subagentLabel(sub),
-    noun: 'agent',
-    state: stepState(sub.status),
-    detail: sub.toolCount > 0 ? String(sub.toolCount) : undefined,
-    title: `${subagentLabel(sub)} · ${sub.toolCount} tool${sub.toolCount === 1 ? '' : 's'}`,
-    onSelect: () => onSelectSubagent(sub.toolUseId),
-  }))
-}
-
-function stepState(status: SubagentInfo['status']): Step['state'] {
-  switch (status) {
-    case 'running':
-      return 'running'
-    case 'failed':
-      return 'failed'
-    default:
-      return 'done'
-  }
-}
-
-/**
- * The disclosure, which is also the reading: `3 agents` — or `2 of 3 agents`
- * while some have settled, because "how many are still going" is the live
- * question and a bare total answers it wrong the moment one finishes.
- *
- * Sub-agents are an annotation on a working row rather than a state of their
- * own (see `runningSubagents` in protocol's `session-list.ts`), so this never
- * competes with the row's status glyph: that still says what the *session* is
- * doing.
- */
-function StepToggle({
-  expanded,
-  running,
-  total,
-  noun,
-  onToggle,
-}: {
-  expanded: boolean
-  running: number
-  total: number
-  noun: string
-  onToggle: () => void
-}) {
-  // Two spellings of one count. The **words** are the honest reading and go in
-  // the tooltip and to a screen reader; the line itself gets the digits, because
-  // this sits on the second line of a 280px card next to the folder and the age,
-  // and `1 of 6 agents` truncated the folder name away to say something the row
-  // could say in three characters.
-  const label = running > 0 && running < total ? `${running}/${total}` : String(total)
-  const words =
-    running > 0 && running < total
-      ? `${running} of ${total} ${noun}s running`
-      : `${total} ${noun}${total === 1 ? '' : 's'}`
-  const Chevron = expanded ? ChevronDown : ChevronRight
-  return (
-    <button
-      type='button'
-      aria-expanded={expanded}
-      aria-label={`${expanded ? 'Hide' : 'Show'} ${words}`}
-      title={`${expanded ? 'Hide' : 'Show'} ${words}`}
-      onClick={(e) => {
-        // The whole card is a button and this one does not mean "select" — the
-        // same guard `CardMenu` needs, and the reason a drag-select inside the
-        // row does not toggle it.
-        e.stopPropagation()
-        onToggle()
-      }}
-      className={cn(
-        'flex shrink-0 items-center gap-0.5 rounded px-0.5 outline-none',
-        'hover:bg-surface-hover hover:text-fg-2',
-        running > 0 ? 'text-info' : 'text-fg-4',
-      )}>
-      <Chevron className='size-3' />
-      <span className='tabular-nums'>{label}</span>
-    </button>
-  )
-}
-
-/**
- * One step under its session. Pressing it opens the session *at* that `Task`'s
- * row — a sub-agent is not a session and has no screen of its own, so that is
- * the only honest meaning of opening one.
- *
- * Divided from the card's header and from each other by a rule rather than by
- * indentation: these are a list *inside* the card, and at 11px an indent is not
- * enough to say so. The rule is black at 25% so it darkens whatever the card is
- * filled with, selected or not, without needing a colour per state.
- */
-function StepRow({ step, onSelect }: { step: Step; onSelect: () => void }) {
-  return (
-    <button
-      type='button'
-      title={step.title}
-      onClick={(e) => {
-        e.stopPropagation()
-        onSelect()
-      }}
-      className={cn(
-        'flex w-full items-center gap-2 border-t border-black/25 py-1 pl-3 pr-2 text-left text-label outline-none',
-        'hover:bg-(--vscode-list-hoverBackground,var(--surface-hover))',
-        step.state === 'running'
-          ? 'text-info'
-          : step.state === 'failed'
-            ? 'text-danger'
-            : step.state === 'pending'
-              ? 'text-fg-4'
-              : 'text-fg-2',
-      )}>
-      <StepIcon state={step.state} />
-      <span className='min-w-0 flex-1 truncate'>{step.label}</span>
-      {/* The progress reading while it works, and what it cost when it is done.
-          Zero draws nothing: `0 tools` beside a thinking agent reads as a stall,
-          which is the same call `taskSummary` makes one surface over. */}
-      {step.detail ? <span className='shrink-0 tabular-nums text-fg-4'>{step.detail}</span> : null}
-      <ArrowRight className='size-3 shrink-0 opacity-60' />
-    </button>
-  )
-}
-
-function StepIcon({ state }: { state: Step['state'] }) {
-  switch (state) {
-    case 'running':
-      return <Spinner className='size-3 shrink-0' />
-    case 'failed':
-      return <CircleAlert className='size-3 shrink-0' />
-    case 'pending':
-      return <PauseCircle className='size-3 shrink-0' />
-    default:
-      return <Check className='size-3 shrink-0' />
-  }
 }
 
 /**

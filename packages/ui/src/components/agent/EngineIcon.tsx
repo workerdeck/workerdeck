@@ -63,6 +63,46 @@ export function engineMark(engine: string, model?: string): string | undefined {
   return undefined
 }
 
+/**
+ * Which engines wear their vendor's colour, and **how far it reaches**.
+ *
+ * `MARK` is the glyph, `TEXT` is the model name beside it. They are the same for
+ * Anthropic and deliberately not for OpenAI, because the two brands differ in
+ * kind rather than in hue: coral is an accent, and OpenAI's guidelines forbid
+ * adding colour to the mark at all, so theirs is pure white/black. At full
+ * contrast that is right on a 12px glyph and wrong on an 11px label — a
+ * pure-white model name is *brighter than the session title above it*, which
+ * inverts the row's whole hierarchy to say something the mark has already said.
+ * So OpenAI's name keeps the muted line it always had, which is also the most
+ * literal reading of "don't add any colors".
+ *
+ * Anything absent falls through to muted on both counts.
+ */
+const VENDOR_MARK: Record<string, string> = {
+  claude: 'text-vendor-claude',
+  codex: 'text-vendor-openai',
+}
+const VENDOR_TEXT: Record<string, string> = {
+  claude: 'text-vendor-claude',
+}
+
+/** The colour a session's engine mark wears. Pass it to `EngineIcon`'s
+ *  `className` rather than to a parent: the svg carries its own `text-fg-3`,
+ *  and only a class on the element itself is merged over it. */
+export function vendorMarkClass(engine: string, model?: string): string {
+  return VENDOR_MARK[engineMark(engine, model) ?? ''] ?? 'text-fg-3'
+}
+
+/** The colour the model *name* wears beside that mark — muted unless the vendor
+ *  is one whose accent survives at label size. See `VENDOR_TEXT`.
+ *
+ *  The fallback is `text-fg-3` rather than the metadata line's own `text-fg-4`,
+ *  so an unbranded model still sits one step above the project and gateway
+ *  beside it — the order the spec lists them in, held without a colour. */
+export function vendorTextClass(engine: string, model?: string): string {
+  return VENDOR_TEXT[engineMark(engine, model) ?? ''] ?? 'text-fg-3'
+}
+
 export function EngineIcon({
   engine,
   model,

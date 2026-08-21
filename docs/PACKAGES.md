@@ -851,7 +851,23 @@ and the lenient `[1m]`-stripping `currentModel`/`modelLabel` — typed structura
 `SessionVitals` rather than importing it, so the React-free entry stays React-free.
 `SessionBrowser` is the styled sessions list built on protocol's view model — search, facets,
 grouping, the subset line, unread badges, inline rename — for a host that wants the
-dashboard's look without reimplementing the rules. It draws **projects** the way the extension's
+dashboard's look without reimplementing the rules. Its row is the **VS Code sidebar card's
+design**, which is where all three clients now sit: state glyph leading (this *reverses* the
+row's own "state last" comment, and knowingly — a trailing glyph has no fixed x, so it lands
+wherever the age and the ring leave it, and a list of thirty gives the eye nothing to run down),
+then title, unread badge, age, context ring; line two is the engine's mark and model in the
+**vendor's own colour** (`vendorMarkClass`/`vendorTextClass`, `--vendor-*`; the class goes *on*
+`EngineIcon`, which ships its own `text-fg-3` that only a class on the element itself merges
+over), then project · gateway · profile · cost, then the sub-agent disclosure. Both lines share
+one 14px `Gutter`, because the state glyph is 14px and the mark 12px and two pixels is invisible
+as a measurement and obvious as a misalignment.
+`SessionSteps.tsx` holds that disclosure — `sessionSteps`, `StepToggle`, `StepRow` — lifted out
+of the VS Code webview, which is exactly why this list had none of it: a session's sub-agents are
+a protocol fact and a disclosure over them is a list affordance, so neither was ever
+extension-specific. `onSelectSubagent` is **optional**, and its absence is not a missing feature:
+a sub-agent has no screen of its own, so a host that cannot scroll a transcript to a `Task` row
+has nothing more to offer than opening the session, which is what the fallback does.
+It draws **projects** the way the extension's
 cards do, and to the same rules: `projectLabel` in the cwd-basename slot (falling back to exactly
 that basename, so an undeclared project is byte-identical to what shipped), the icon inline
 immediately before the name because line two is one truncating mono run, the icon again on a
