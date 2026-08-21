@@ -115,6 +115,43 @@ export type AppServerImageGenerationItem = {
 }
 /** The model *looked at* an image on disk (`path`, host-absolute). */
 export type AppServerImageViewItem = { id: string; type: 'imageView'; path: string }
+/**
+ * A sub-agent lifecycle edge, on the thread that OWNS the agent. The spawn
+ * signal (verified live against 0.146.0, `_docs/codex-subagent-trace-fixed.jsonl`):
+ * `kind: 'started'` announces a new agent, and `id` is the `call_id` of the
+ * model's own `spawn_agent` function call — a genuine tool-use id, which is what
+ * lets the runner hang the whole sidechain off it. There is **no 'completed'
+ * kind**: an agent's end travels as its own thread's `turn/completed`.
+ */
+export type AppServerSubAgentActivityItem = {
+  id: string
+  type: 'subAgentActivity'
+  /** 'started' | 'interacted' | 'interrupted' — open, and 'completed' does not exist. */
+  kind: string
+  /** The thread the agent runs in — the key every later notification carries. */
+  agentThreadId: string
+  /** The agent's address, e.g. '/root/date_one'; the basename is its name. */
+  agentPath?: string | null
+}
+/**
+ * The model's collab-agent tool surface (`spawnAgent | sendInput | resumeAgent |
+ * wait | closeAgent`). Decoration, not the design's load-bearing signal: on the
+ * wire only `wait` has been observed, with every rich field empty — the spawn
+ * truth is {@link AppServerSubAgentActivityItem} (same trace as above).
+ */
+export type AppServerCollabAgentToolCallItem = {
+  id: string
+  type: 'collabAgentToolCall'
+  tool: string
+  /** 'inProgress' | 'completed' | 'failed' | 'declined' — open. */
+  status: string
+  senderThreadId?: string | null
+  receiverThreadIds?: string[] | null
+  prompt?: string | null
+  model?: string | null
+  reasoningEffort?: string | null
+  agentsStates?: Record<string, unknown> | null
+}
 /** The user's own message, echoed back as an item — dropped (the runner
  * already emitted its `user_message`). */
 export type AppServerUserMessageItem = { id: string; type: 'userMessage'; content?: unknown }
@@ -132,13 +169,18 @@ export type AppServerItem =
   | AppServerImageGenerationItem
   | AppServerImageViewItem
   | AppServerUserMessageItem
+  | AppServerSubAgentActivityItem
+  | AppServerCollabAgentToolCallItem
 
-/** The `Turn` object of `turn/started` / `turn/completed`. */
+/** The `Turn` object of `turn/started` / `turn/completed`. On a completed turn
+ * `items` is a summary page whose final `agentMessage` is the turn's answer —
+ * for a sub-agent's thread, that is the agent's report. */
 export type AppServerTurn = {
   id: string
   /** 'inProgress' | 'completed' | 'failed' | 'interrupted' — open. */
   status: string
   error?: { message: string } | null
+  items?: AppServerItem[]
 }
 
 /**

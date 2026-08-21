@@ -406,6 +406,30 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   *deliver* the bytes rather than name them — a protocol addition, not yet designed.)
   The item's `result` is an undocumented free-form string and is length-capped before it reaches
   the event log — assume a long one is an encoded image, and base64 never goes on the wire.
+- **A sub-agent is a SEPARATE THREAD on the same connection, and `threadId` is the only thing
+  that says so.** Codex's multi-agent surface is live in ordinary sessions *today* — we never send
+  `multiAgentMode`, but the operator's config enables it and codex's default posture is
+  `explicitRequestOnly`, so a user who asks for sub-agents gets them. A spawned agent announces
+  itself as a `subAgentActivity` item on the root thread (`{id, kind, agentThreadId, agentPath}`;
+  `kind` is `started|interacted|interrupted` — **there is no `completed`**, the child thread's
+  `turn/completed` is the finish), and thereafter its items, its deltas, its token usage and its
+  own turn lifecycle all arrive on the **same JSON-RPC connection**, distinguished only by the
+  `threadId` every notification carries. Two consequences, and the first shipped as a bug:
+  **(a) thread-scoped notifications must be read off the root thread only.** `turn/started`,
+  `turn/completed` and `thread/tokenUsage/updated` are per-thread facts. A child's `turn/completed`
+  arrives while the root turn is still running — measured, ~14 s early — and taking it ended the
+  session's turn, published the *sub-agent's* last line as the turn result, and silently dropped
+  the root's real answer (every later item fell outside a turn). `THREAD_SCOPED_NOTIFICATIONS` in
+  `runner.ts` is that gate; the regression test scripts the exact sequence.
+  **(b) items and deltas are deliberately NOT filtered** — a sub-agent's work belongs in the
+  transcript. Un-attributed it reads as one agent contradicting itself, which is why attribution
+  by `threadId` is the feature this gate makes possible rather than a separate idea.
+- **`WORKERDECK_CODEX_TRACE=<file>` dumps the raw inbound app-server traffic** (notifications and
+  server→client requests, JSONL, appended). It is off unless set, and it deliberately skips
+  `account/*` and `login*` — the one place this protocol can carry a masked credential fragment,
+  which nothing of ours writes to disk. Reach for it whenever a question is about *what the child
+  actually sent*: the whole sub-agent finding above came out of one traced turn, after a wire
+  capture of the same session had been read three ways and still hidden the child threads.
 - **The app-server has no slash-command surface at all** — no command-listing RPC exists, and
   codex's own `/model`, `/approvals` etc. are TUI-local. `slashCommands: false` is correct and a
   composer must hide the `/` popover rather than offer an empty one. (`skills/list` does exist,

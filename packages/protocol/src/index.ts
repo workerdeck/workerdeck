@@ -1444,18 +1444,16 @@ export type CreateSessionRequest = {
  * persisted separately, and it therefore rides the REST list, the WS attach
  * snapshot and parking snapshots for free.
  *
- * **Only the claude engine produces it, and for two different reasons.** For the
- * provider engine an empty list is the truth: the AI SDK has no multi-agent
- * primitive and no tool that runs a nested agent loop, so `parentToolUseId: null`
- * on every event is honest. For **codex it is a gap**, not the truth — the
- * app-server protocol has carried a whole multi-agent surface since 0.146.0
- * (`collabAgentToolCall`, `subAgentActivity`), which this repo neither maps nor
- * opts into, so its sub-agents are invisible rather than absent. Its nesting
- * handle is a *thread* id rather than a tool-use id, so wiring it up is not
- * simply a matter of populating this field — see
- * `_docs/features/codex-multi-agent.md`. The earlier version of this comment
- * asserted codex had no sidechains; that was true of the exec era and has not
- * been true for a while.
+ * **The claude and codex engines both produce it; the provider engine's absence
+ * is the truth.** The AI SDK has no multi-agent primitive and no tool that runs
+ * a nested agent loop, so `parentToolUseId: null` on every provider event is
+ * honest. Codex's spawn signal is the `subAgentActivity` item, whose own `id` is
+ * the model's `spawn_agent` call id — a genuine tool-use id — so `toolUseId`
+ * keeps its documented meaning there: the codex runner authors the anchor
+ * `tool_use` itself and keys every event of the agent's *thread* to it
+ * (`engines/codex/subagents.ts`). The earlier version of this comment asserted
+ * codex had no sidechains; that was true of the exec era and has not been true
+ * for a while.
  *
  * It is deliberately **not** the input to `taskSummary`. That string is spelled
  * from the absorbed transcript items and must stay that way, so a transcript

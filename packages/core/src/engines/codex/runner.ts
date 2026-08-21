@@ -32,7 +32,9 @@ import { parseUnifiedDiff } from '../../lib/patch.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { JsonRpcError } from './jsonrpc.ts'
+import { CodexAgentTracker, type CodexAgent } from './subagents.ts'
 import type {
+  AppServerCollabAgentToolCallItem,
   AppServerCommandApprovalParams,
   AppServerConnection,
   AppServerConnectFn,
@@ -111,6 +113,17 @@ const GRANULAR_NEVER = {
     skill_approval: false,
   },
 }
+/**
+ * Notifications whose meaning is scoped to ONE thread, and which are therefore
+ * only ever read off the session's own. Everything else (items, deltas) is
+ * accepted from any thread on the connection — see `#handleNotification`.
+ */
+const THREAD_SCOPED_NOTIFICATIONS = new Set([
+  'turn/started',
+  'turn/completed',
+  'thread/tokenUsage/updated',
+])
+
 const APPROVAL_POLICY_BY_MODE: Partial<Record<PermissionMode, object>> = {
   default: GRANULAR_ASK,
   acceptEdits: GRANULAR_ASK,
@@ -127,6 +140,56 @@ const DEFAULT_APPROVAL_TIMEOUT_MS = 300_000
  * host filesystem, an inline preview) off it.
  */
 export const CODEX_IMAGE_TOOL = 'CodexImageGeneration'
+
+/**
+ * Tool name for a spawned agent's anchor `tool_use` — the claude engine's
+ * `Task` in this engine's vocabulary. Codex never sends such a call: the model's
+ * `spawn_agent` surfaces only as the `subAgentActivity` marker item, so the
+ * runner authors the call itself, because everything downstream is built on a
+ * top-level `tool_use` existing — `terminalBlocks` absorbs a sidechain into the
+ * call whose id its events carry as `parentToolUseId`, the takeover frames by
+ * it, and `taskIdentity` labels it from the input's `subagent_type`. Not a new
+ * wire idea, just a row: the same shape every other codex tool card uses.
+ */
+export const CODEX_AGENT_TOOL = 'CodexAgent'
+
+/** Tool name for the model's collab-agent calls (`wait`, `sendInput`, …), the
+ * `tool` field carried in the input. One name for the whole open axis rather
+ * than a name per verb, so a future verb renders instead of vanishing. */
+export const CODEX_COLLAB_TOOL = 'CodexCollab'
+
+/** An agent's name is its path's basename: '/root/date_one' → 'date_one'. */
+function agentName(agentPath: string | null | undefined): string | undefined {
+  if (typeof agentPath !== 'string') return undefined
+  const name = agentPath.split('/').filter(Boolean).at(-1)
+  return name || undefined
+}
+
+/** The collab card's input: the verb always, the rich fields only when codex
+ * actually filled them (measured against 0.146.0 they arrive empty — the card
+ * must not render five null columns to say 'wait'). */
+function collabInput(item: AppServerCollabAgentToolCallItem): Record<string, unknown> {
+  return {
+    tool: item.tool,
+    ...(item.receiverThreadIds?.length ? { receiverThreadIds: item.receiverThreadIds } : {}),
+    ...(item.prompt ? { prompt: item.prompt } : {}),
+    ...(item.model ? { model: item.model } : {}),
+  }
+}
+
+/** A completed turn's answer, from its summary `items` page — the last
+ * `agentMessage` text. For a sub-agent's thread this is the agent's report,
+ * which is exactly what belongs in the anchor's `tool_result`. */
+function turnReport(turn: AppServerTurn): string | undefined {
+  const items = Array.isArray(turn.items) ? turn.items : []
+  for (let index = items.length - 1; index >= 0; index--) {
+    const item = items[index]
+    if (item?.type === 'agentMessage' && typeof item.text === 'string' && item.text) {
+      return item.text
+    }
+  }
+  return undefined
+}
 
 /** Longest `result` worth putting in a tool card. The field is free-form and
  * undocumented; anything past this is assumed to be an encoded image rather
@@ -742,6 +805,12 @@ export class CodexRunner implements Runner {
    * `mcpServerStatus/list` does not carry a status field at all, so without
    * this every server would read as "configured" and never as up or down. */
   #mcpStatus = new Map<string, { status: string; error?: string; failureReason?: string }>()
+  /** The spawned agents, keyed by their thread ids — the attribution table
+   * behind `parentToolUseId` and the rollup behind `info().subagents`. Runner-
+   * level, not per-turn: an agent's thread outlives the root turn that spawned
+   * it, and only the child process dying (or the session closing) ends them
+   * all — see the module doc in `subagents.ts`. */
+  #agents = new CodexAgentTracker()
 
   constructor(config: CodexRunnerConfig, id: string = randomUUID()) {
     const mode = config.permissionMode ?? 'default'
@@ -816,6 +885,7 @@ export class CodexRunner implements Runner {
       totalCostUsd: this.#totalCostUsd,
       numTurns: this.#numTurns || undefined,
       lastActivityAt: this.#lastActivityAt,
+      subagents: this.#agents.list(),
     }
   }
 
@@ -1068,6 +1138,7 @@ export class CodexRunner implements Runner {
     }
     this.#connection?.close()
     this.#connection = undefined
+    this.#agents.sweep()
     this.#activeTurn?.reject(new Error('session closed'))
     if (this.#imageDir) {
       try {
@@ -1125,6 +1196,8 @@ export class CodexRunner implements Runner {
         for (const [id, pending] of this.#approvals) {
           this.#settleApproval(id, pending, { behavior: 'deny', message }, 'policy')
         }
+        // Spawned agents lived in that process; their reports can never come.
+        this.#agents.sweep()
         // A child dying mid-turn fails that turn (with the exit diagnostic);
         // idle, there is nothing to settle and the next turn respawns.
         this.#activeTurn?.reject(new Error(message))
@@ -1516,14 +1589,102 @@ export class CodexRunner implements Runner {
 
   #handleNotification(method: string, params: unknown): void {
     if (this.#closed) return
+    // A sub-agent runs in its OWN thread, and its notifications arrive on this
+    // same connection carrying that thread's id. Turn lifecycle and token usage
+    // are per-thread facts and must not be read off a child's: measured against
+    // 0.146.0, a spawned agent's `turn/completed` arrives while the root turn is
+    // still running, and taking it ended the session's turn early — reporting
+    // the sub-agent's last line as the session's result and dropping everything
+    // the root said afterwards (`_docs/codex-subagent-trace.jsonl`). Items and
+    // deltas are deliberately NOT filtered here: a sub-agent's work belongs in
+    // the transcript, attributed to its agent by `#agentFor`. A child thread's
+    // turn lifecycle still means something — to the AGENT, not the session:
+    // its `turn/completed` is the agent's completion signal (there is no
+    // 'completed' kind on `subAgentActivity`), and a fresh `turn/started` on a
+    // settled agent's thread means it is working again.
+    if (THREAD_SCOPED_NOTIFICATIONS.has(method) && !this.#isRootThread(params)) {
+      if (method === 'turn/completed') this.#settleAgentTurn(params)
+      else if (method === 'turn/started') {
+        const threadId = this.#threadIdOf(params)
+        const record = threadId ? this.#agents.get(threadId) : undefined
+        if (record && record.status !== 'running') this.#agents.revive(record)
+      }
+      return
+    }
     // The app-server surface is wide (mcpServer/*, account/*, thread
     // housekeeping…) — everything unmapped is deliberately dropped.
     this.#notifications[method]?.(params)
   }
 
+  /** Whether a notification is about the session's own thread. A notification
+   * with no `threadId` counts as the root's: every thread-scoped method the
+   * schema defines carries one, so an absent id means an older or narrower
+   * shape, not a sub-agent. */
+  #isRootThread(params: unknown): boolean {
+    const threadId = this.#threadIdOf(params)
+    if (threadId === undefined) return true
+    return threadId === this.#sdkSessionId
+  }
+
+  #threadIdOf(params: unknown): string | undefined {
+    const threadId = (params as { threadId?: unknown })?.threadId
+    return typeof threadId === 'string' ? threadId : undefined
+  }
+
+  /**
+   * The agent behind a notification's `threadId` — the attribution every item
+   * and delta handler asks before emitting, so two agents streaming
+   * concurrently into this one connection come apart again by the id each
+   * frame carries, never by any mutable "current agent".
+   *
+   * A non-root thread with no record still gets one: a thread emitting items on
+   * this connection *is* an agent, whatever announced it (codex runs threads of
+   * its own for review/compact, and a `subAgentActivity` could in principle be
+   * missed) — the claude tracker's nested-event fallback, on a stronger signal.
+   * The minted record is label-less and its anchor is authored here, because an
+   * attributed event whose parent id matches no top-level `tool_use` would
+   * render inline rather than as a frame; a late `started` edge fills the name
+   * in. Root-thread traffic — and, defensively, the pre-thread shapes with no
+   * id at all — stays unattributed (`undefined`).
+   */
+  #agentFor(params: unknown): CodexAgent | undefined {
+    const threadId = this.#threadIdOf(params)
+    if (threadId === undefined || threadId === this.#sdkSessionId) return undefined
+    const known = this.#agents.get(threadId)
+    if (known) return known
+    const nonce = this.#activeTurn?.nonce ?? 'codex'
+    const record = this.#agents.open(threadId, `${nonce}:agent:${threadId}`, undefined, Date.now())
+    record.anchored = true
+    this.#emitToolUse(record.toolUseId, CODEX_AGENT_TOOL, { agentThreadId: threadId })
+    return record
+  }
+
+  /**
+   * A child thread's `turn/completed` is that AGENT's completion — the one
+   * codex sends (`subAgentActivity` has no 'completed' kind, verified live).
+   * The verdict is the turn's own status, and the report is the completed
+   * turn's final message, delivered as the anchor's `tool_result` so the row
+   * settles exactly the way a claude `Task`'s does. Deliberately not gated on
+   * `#activeTurn`: an agent finishing between root turns still finished.
+   */
+  #settleAgentTurn(params: unknown): void {
+    const threadId = this.#threadIdOf(params)
+    const record = threadId ? this.#agents.get(threadId) : undefined
+    if (!record || record.status !== 'running') return
+    const turn = (params as { turn?: AppServerTurn })?.turn
+    const status = turn?.status === 'completed' ? 'done' : 'failed'
+    this.#agents.settle(record, status)
+    const report =
+      (turn ? turnReport(turn) : undefined) ??
+      turn?.error?.message ??
+      (status === 'done' ? '' : (turn?.status ?? 'failed'))
+    this.#emitToolResult(record.toolUseId, report, status === 'failed')
+  }
+
   /** Reasoning deltas arrive on two methods that differ only in which section
    * counter they advance; the section key carries the method so the two streams
-   * never share a boundary. Section boundaries (a new summary/content entry)
+   * never share a boundary (and item ids are per-thread, so two agents' streams
+   * never share one either). Section boundaries (a new summary/content entry)
    * render as paragraph breaks — the completed item joins sections with '\n\n'. */
   #reasoningDelta(method: string): (params: unknown) => void {
     return (params) => {
@@ -1541,7 +1702,10 @@ export class CodexRunner implements Runner {
       const previous = active.sectionIndex.get(key)
       active.sectionIndex.set(key, index)
       const separator = previous !== undefined && index > previous ? '\n\n' : ''
-      this.#emitDelta({ type: 'thinking_delta', thinking: separator + payload.delta })
+      this.#emitDelta(
+        { type: 'thinking_delta', thinking: separator + payload.delta },
+        this.#agentFor(params)?.toolUseId ?? null,
+      )
     }
   }
 
@@ -1550,7 +1714,7 @@ export class CodexRunner implements Runner {
     const active = this.#activeTurn
     if (!active) return
     const item = (params as { item?: AppServerItem })?.item
-    if (item) this.#handleItemProgress(item, active)
+    if (item) this.#handleItemProgress(item, active, this.#agentFor(params))
   }
 
   /** The notification dispatch table — every method the child emits that this
@@ -1569,7 +1733,11 @@ export class CodexRunner implements Runner {
     'turn/completed': (params) => {
       const active = this.#activeTurn
       const turn = (params as { turn?: AppServerTurn })?.turn
-      if (active && turn) active.resolve(turn)
+      if (!active || !turn) return
+      // Defence in depth behind the root-thread gate: a turn that is not the
+      // one being awaited never ends it.
+      if (active.turnId && turn.id && turn.id !== active.turnId) return
+      active.resolve(turn)
     },
     'item/started': this.#itemProgress,
     'item/updated': this.#itemProgress,
@@ -1577,13 +1745,16 @@ export class CodexRunner implements Runner {
       const active = this.#activeTurn
       if (!active) return
       const item = (params as { item?: AppServerItem })?.item
-      if (item) this.#handleItemCompleted(item, active)
+      if (item) this.#handleItemCompleted(item, active, this.#agentFor(params))
     },
     'item/agentMessage/delta': (params) => {
       if (!this.#activeTurn) return
       const delta = (params as { delta?: string })?.delta
       if (typeof delta === 'string' && delta) {
-        this.#emitDelta({ type: 'text_delta', text: delta })
+        // Two agents stream concurrently into this one connection, tokens
+        // interleaved — each frame's own `threadId` is what pulls them apart,
+        // so attribution rides the frame rather than any notion of "current".
+        this.#emitDelta({ type: 'text_delta', text: delta }, this.#agentFor(params)?.toolUseId ?? null)
       }
     },
     'item/reasoning/textDelta': this.#reasoningDelta('item/reasoning/textDelta'),
@@ -1839,24 +2010,41 @@ export class CodexRunner implements Runner {
   // -------------------------------------------------------------------------
 
   /** Tool calls surface as tool_use when they start; text and reasoning stream
-   * natively via the delta notifications. */
-  #handleItemProgress(item: AppServerItem, active: ActiveTurn): void {
+   * natively via the delta notifications. `agent` is the sub-agent whose thread
+   * the item arrived on — undefined for the session's own. */
+  #handleItemProgress(item: AppServerItem, active: ActiveTurn, agent?: CodexAgent): void {
     const id = `${active.nonce}:${item.id}`
+    // The spawn marker is processed on sight rather than on completion, so the
+    // agent's record exists before its thread's first delta can arrive — the
+    // handler is idempotent (observed on the wire, started and completed carry
+    // the same snapshot in the same batch, but that timing is not a contract).
+    if (item.type === 'subAgentActivity') {
+      this.#itemCompleted.subAgentActivity(item, active, id, agent)
+      return
+    }
     if (item.type === 'commandExecution' && !active.toolUseEmitted.has(id)) {
       active.toolUseEmitted.add(id)
-      this.#emitToolUse(id, 'CodexCommand', { command: item.command })
+      this.#emitToolUse(id, 'CodexCommand', { command: item.command }, agent)
       return
     }
     if (item.type === 'mcpToolCall' && !active.toolUseEmitted.has(id)) {
       active.toolUseEmitted.add(id)
-      this.#emitToolUse(id, `mcp__${item.server}__${item.tool}`, item.arguments)
+      this.#emitToolUse(id, `mcp__${item.server}__${item.tool}`, item.arguments, agent)
+      return
+    }
+    // A `wait` on spawned agents takes as long as the agents do — the card
+    // exists while it blocks, like a command's, rather than appearing only
+    // once every agent has answered.
+    if (item.type === 'collabAgentToolCall' && !active.toolUseEmitted.has(id)) {
+      active.toolUseEmitted.add(id)
+      this.#emitToolUse(id, CODEX_COLLAB_TOOL, collabInput(item), agent)
       return
     }
     // Generating a picture takes seconds — the card exists while it runs, like
     // a command's does, rather than appearing only once it is finished.
     if (item.type === 'imageGeneration' && !active.toolUseEmitted.has(id)) {
       active.toolUseEmitted.add(id)
-      this.#emitToolUse(id, CODEX_IMAGE_TOOL, imageGenerationInput(item))
+      this.#emitToolUse(id, CODEX_IMAGE_TOOL, imageGenerationInput(item), agent)
       // Rare but real: a progress item can already carry `savedPath`. Announce
       // it here too — `#emitFileProduced` dedupes by path, so the completed
       // item's second report costs nothing.
@@ -1864,13 +2052,13 @@ export class CodexRunner implements Runner {
     }
   }
 
-  #handleItemCompleted(item: AppServerItem, active: ActiveTurn): void {
+  #handleItemCompleted(item: AppServerItem, active: ActiveTurn, agent?: CodexAgent): void {
     const id = `${active.nonce}:${item.id}`
     const handler = this.#itemCompleted[item.type] as
-      | ((item: AppServerItem, active: ActiveTurn, id: string) => void)
+      | ((item: AppServerItem, active: ActiveTurn, id: string, agent?: CodexAgent) => void)
       | undefined
     if (handler) {
-      handler(item, active, id)
+      handler(item, active, id, agent)
       return
     }
     // An item type the union does not model yet: passed through as an sdk_event
@@ -1892,28 +2080,44 @@ export class CodexRunner implements Runner {
       item: Extract<AppServerItem, { type: K }>,
       active: ActiveTurn,
       id: string,
+      agent?: CodexAgent,
     ) => void
   } = {
-    // The echo of our own turn/start input — already in the log.
-    userMessage: () => {},
-    agentMessage: (item, active, id) => {
-      const text = typeof item.text === 'string' ? item.text : ''
-      this.#emitAssistant(id, [{ type: 'text', text }])
-      active.finalText = text
+    // On the session's own thread, the echo of our turn/start input — already
+    // in the log. On an agent's thread it would be the agent's brief; none has
+    // been observed on the wire (the prompt travels in the spawn call, not as
+    // an item), but if one ever arrives it is the frame's opening row, exactly
+    // where a claude sidechain puts its brief.
+    userMessage: (item, active, _id, agent) => {
+      if (!agent) return
+      const text = historyUserText(item)
+      if (!text) return
+      this.#emit({
+        type: 'user_message',
+        message: { role: 'user', content: text },
+        parentToolUseId: agent.toolUseId,
+        uuid: `${active.nonce}:${item.id}`,
+      })
     },
-    reasoning: (item, _active, id) => {
+    agentMessage: (item, active, id, agent) => {
+      const text = typeof item.text === 'string' ? item.text : ''
+      this.#emitAssistant(id, [{ type: 'text', text }], agent?.toolUseId ?? null)
+      // An agent's prose is its own report, never the session's final line.
+      if (!agent) active.finalText = text
+    },
+    reasoning: (item, _active, id, agent) => {
       // `summary` is what streamed (the default config); raw `content` only
       // exists when the operator's config enables it. Joined the way the
       // deltas rendered: sections as paragraphs.
       const summary = Array.isArray(item.summary) ? item.summary.filter(Boolean) : []
       const content = Array.isArray(item.content) ? item.content.filter(Boolean) : []
       const thinking = (summary.length > 0 ? summary : content).join('\n\n')
-      if (thinking) this.#emitAssistant(id, [{ type: 'thinking', thinking }])
+      if (thinking) this.#emitAssistant(id, [{ type: 'thinking', thinking }], agent?.toolUseId ?? null)
     },
-    commandExecution: (item, active, id) => {
+    commandExecution: (item, active, id, agent) => {
       if (!active.toolUseEmitted.has(id)) {
         active.toolUseEmitted.add(id)
-        this.#emitToolUse(id, 'CodexCommand', { command: item.command })
+        this.#emitToolUse(id, 'CodexCommand', { command: item.command }, agent)
       }
       const exitCode = item.exitCode ?? undefined
       const failed =
@@ -1923,14 +2127,14 @@ export class CodexRunner implements Runner {
       const output =
         (item.aggregatedOutput ?? '') +
         (exitCode !== undefined && exitCode !== 0 ? `\n(exit code ${exitCode})` : '')
-      this.#emitToolResult(id, output, failed)
+      this.#emitToolResult(id, output, failed, undefined, agent?.toolUseId ?? null)
     },
-    fileChange: (item, _active, id) => {
+    fileChange: (item, _active, id, agent) => {
       // The completed item: by the time it lands the patch applied, failed,
       // or was declined (a pending proposal rides the approval channel, not
       // this item). v2's `kind` is an object (`{type: 'update', …}`), mapped
       // defensively.
-      this.#emitToolUse(id, 'CodexFileChange', { changes: item.changes })
+      this.#emitToolUse(id, 'CodexFileChange', { changes: item.changes }, agent)
       const lines = item.changes.map((change) => {
         const kind = typeof change.kind === 'string' ? change.kind : change.kind?.type
         return `${kind ?? 'change'}: ${change.path}`
@@ -1945,12 +2149,13 @@ export class CodexRunner implements Runner {
         lines.join('\n') || item.status,
         item.status === 'failed' || item.status === 'declined',
         only?.diff ? parseUnifiedDiff(only.diff, only.path) : undefined,
+        agent?.toolUseId ?? null,
       )
     },
-    mcpToolCall: (item, active, id) => {
+    mcpToolCall: (item, active, id, agent) => {
       if (!active.toolUseEmitted.has(id)) {
         active.toolUseEmitted.add(id)
-        this.#emitToolUse(id, `mcp__${item.server}__${item.tool}`, item.arguments)
+        this.#emitToolUse(id, `mcp__${item.server}__${item.tool}`, item.arguments, agent)
       }
       const isError = (item.error !== undefined && item.error !== null) || item.status === 'failed'
       this.#emitToolResult(
@@ -1958,19 +2163,21 @@ export class CodexRunner implements Runner {
         item.error?.message ??
           (item.result === undefined || item.result === null ? '' : JSON.stringify(item.result)),
         isError,
+        undefined,
+        agent?.toolUseId ?? null,
       )
     },
-    webSearch: (item, _active, id) => {
-      this.#emitToolUse(id, 'CodexWebSearch', { query: item.query })
-      this.#emitToolResult(id, '', false)
+    webSearch: (item, _active, id, agent) => {
+      this.#emitToolUse(id, 'CodexWebSearch', { query: item.query }, agent)
+      this.#emitToolResult(id, '', false, undefined, agent?.toolUseId ?? null)
     },
-    imageGeneration: (item, active, id) => {
+    imageGeneration: (item, active, id, agent) => {
       // Re-emitted, not guarded by `toolUseEmitted`: `savedPath` only exists
       // now, and the reducer upserts a tool_use by id — so this replaces the
       // in-progress card's input with the finished one. The result event
       // follows immediately, which is what settles the status again.
       active.toolUseEmitted.add(id)
-      this.#emitToolUse(id, CODEX_IMAGE_TOOL, imageGenerationInput(item))
+      this.#emitToolUse(id, CODEX_IMAGE_TOOL, imageGenerationInput(item), agent)
       // The path IS the deliverable — the bytes live on the host and no event
       // may carry them. `file_produced` is what makes those bytes reachable
       // anyway: the gateway serves a path its own runner reported, with no
@@ -1980,11 +2187,100 @@ export class CodexRunner implements Runner {
         item.savedPath ? `Saved to ${item.savedPath}` : 'No saved path reported',
         ...(shortResult(item.result) ? [item.result] : []),
       ]
-      this.#emitToolResult(id, lines.join('\n'), item.status === 'failed')
+      this.#emitToolResult(id, lines.join('\n'), item.status === 'failed', undefined, agent?.toolUseId ?? null)
     },
-    imageView: (item, _active, id) => {
-      this.#emitToolUse(id, 'CodexImageView', { path: item.path })
-      this.#emitToolResult(id, item.path, false)
+    imageView: (item, _active, id, agent) => {
+      this.#emitToolUse(id, 'CodexImageView', { path: item.path }, agent)
+      this.#emitToolResult(id, item.path, false, undefined, agent?.toolUseId ?? null)
+    },
+    subAgentActivity: (item, _active, id, agent) => {
+      // The spawn signal — and the whole reason the takeover works on codex.
+      // `kind: 'started'` announces an agent (verified live against 0.146.0:
+      // the model's `spawn_agent` never produces a collab item, this is the
+      // only birth certificate), its `id` is the model's own spawn call id,
+      // and `agentThreadId` is the key every one of the agent's later
+      // notifications carries. The anchor `tool_use` authored here is what
+      // gives the sidechain a row: `terminalBlocks` absorbs by parent id into
+      // a top-level call, so without it the attributed events would render
+      // inline and there would be nothing to press. `agent` — the SPAWNING
+      // thread's record — is normally undefined (the root spawns); a
+      // grandchild spawn arriving on a child thread nests one level and
+      // counts as that child's tool call, exactly like any other.
+      if (this.#replayingHistory) {
+        // A resumed thread's history is the root's items only: the agents'
+        // work, and their outcomes, are in THEIR threads' rollouts, which the
+        // backfill does not read. So the replayed row closes with a neutral
+        // notice instead of dangling as running-forever, and the rollup stays
+        // silent rather than invent verdicts for agents a dead process ran —
+        // the one claim history cannot back is that they failed.
+        if (item.kind !== 'started') return
+        this.#emitToolUse(
+          id,
+          CODEX_AGENT_TOOL,
+          {
+            ...(agentName(item.agentPath) ? { subagent_type: agentName(item.agentPath) } : {}),
+            agentThreadId: item.agentThreadId,
+            ...(item.agentPath ? { agentPath: item.agentPath } : {}),
+          },
+          agent,
+        )
+        this.#emitToolResult(
+          id,
+          "(ran in its own thread — its work is not part of this thread's stored history)",
+          false,
+          undefined,
+          agent?.toolUseId ?? null,
+        )
+        return
+      }
+      const record =
+        this.#agents.get(item.agentThreadId) ??
+        this.#agents.open(item.agentThreadId, id, undefined, Date.now())
+      const name = agentName(item.agentPath)
+      // Fill-in, and re-anchor when the name arrives late: the reducer upserts
+      // a tool_use by id, so re-emitting the anchor relabels the row a
+      // fallback record opened nameless.
+      const relabel = record.agentType === undefined && name !== undefined
+      if (relabel) record.agentType = name
+      if (!record.anchored || relabel) {
+        record.anchored = true
+        this.#emitToolUse(
+          record.toolUseId,
+          CODEX_AGENT_TOOL,
+          {
+            ...(record.agentType ? { subagent_type: record.agentType } : {}),
+            agentThreadId: item.agentThreadId,
+            ...(item.agentPath ? { agentPath: item.agentPath } : {}),
+          },
+          agent,
+        )
+      }
+      // 'interrupted': cut off before its report — which is the one thing
+      // 'done' could have claimed. Anything else that is not the birth edge
+      // ('interacted': the root sent it more work) means the agent is working
+      // again, so a settled verdict no longer describes it.
+      if (item.kind === 'interrupted') {
+        if (record.status === 'running') {
+          this.#agents.settle(record, 'failed')
+          this.#emitToolResult(record.toolUseId, 'interrupted', true)
+        }
+        return
+      }
+      if (item.kind !== 'started' && record.status !== 'running') this.#agents.revive(record)
+    },
+    collabAgentToolCall: (item, active, id, agent) => {
+      // The model's collab tool surface, mapped as an ordinary tool card —
+      // and deliberately nothing more: on the wire it is decoration (only
+      // `wait` has been observed, every rich field empty), so no tracker
+      // state hangs off it. The card matters for one honest reason: a `wait`
+      // blocks the root visibly for as long as its agents run.
+      if (!active.toolUseEmitted.has(id)) {
+        active.toolUseEmitted.add(id)
+        this.#emitToolUse(id, CODEX_COLLAB_TOOL, collabInput(item), agent)
+      }
+      if (item.status === 'inProgress') return
+      const failed = item.status === 'failed' || item.status === 'declined'
+      this.#emitToolResult(id, failed ? item.status : '', failed, undefined, agent?.toolUseId ?? null)
     },
   }
 
@@ -1993,26 +2289,44 @@ export class CodexRunner implements Runner {
   // render their existing cards unchanged)
   // -------------------------------------------------------------------------
 
-  #emitDelta(delta: { type: 'text_delta'; text: string } | { type: 'thinking_delta'; thinking: string }): void {
+  // `parent` on the four emitters below is the owning agent's anchor id — the
+  // protocol's sidechain key, resolved per-notification from the frame's own
+  // `threadId` (`#agentFor`). Null is the session's own thread, and the
+  // reducer's contract makes the distinction cheap to honor: it keys its
+  // streaming buffers `streaming:<parentToolUseId>`, so two agents' interleaved
+  // deltas accumulate apart as long as every frame says whose it is.
+
+  #emitDelta(
+    delta: { type: 'text_delta'; text: string } | { type: 'thinking_delta'; thinking: string },
+    parent: string | null,
+  ): void {
     if (this.#config.includePartialMessages === false) return
     this.#emit({
       type: 'stream_delta',
       event: { type: 'content_block_delta', delta },
-      parentToolUseId: null,
+      parentToolUseId: parent,
       uuid: randomUUID(),
     })
   }
 
-  #emitAssistant(uuid: string, content: ContentBlock[]): void {
+  #emitAssistant(uuid: string, content: ContentBlock[], parent: string | null): void {
     this.#emit({
       type: 'assistant_message',
       message: { role: 'assistant', content, model: this.#model ?? this.#resolvedModel },
-      parentToolUseId: null,
+      parentToolUseId: parent,
       uuid,
     })
   }
 
-  #emitToolUse(id: string, name: string, input: unknown): void {
+  /** `agent` (rather than a bare parent id) because a nested call is also the
+   * agent's progress reading: `SubagentInfo.toolCount` ticks here, once per
+   * card — the `counted` set is what keeps an upserted re-emission (the
+   * finished imageGeneration input) from counting one picture twice. */
+  #emitToolUse(id: string, name: string, input: unknown, agent?: CodexAgent): void {
+    if (agent && !agent.counted.has(id)) {
+      agent.counted.add(id)
+      agent.toolCount += 1
+    }
     this.#emit({
       type: 'assistant_message',
       message: {
@@ -2020,7 +2334,7 @@ export class CodexRunner implements Runner {
         content: [{ type: 'tool_use', id, name, input }],
         model: this.#model ?? this.#resolvedModel,
       },
-      parentToolUseId: null,
+      parentToolUseId: agent?.toolUseId ?? null,
       uuid: `${id}-use`,
     })
   }
@@ -2030,6 +2344,7 @@ export class CodexRunner implements Runner {
     content: string,
     isError: boolean,
     patch?: FilePatch,
+    parent: string | null = null,
   ): void {
     this.#emit({
       type: 'user_message',
@@ -2039,7 +2354,7 @@ export class CodexRunner implements Runner {
           { type: 'tool_result', tool_use_id: toolUseId, content, is_error: isError || undefined },
         ],
       },
-      parentToolUseId: null,
+      parentToolUseId: parent,
       synthetic: true,
       patch,
       uuid: `${toolUseId}-result`,

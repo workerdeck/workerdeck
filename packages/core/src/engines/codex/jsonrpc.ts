@@ -1,4 +1,11 @@
+import { appendFileSync } from 'node:fs'
 import type { Readable, Writable } from 'node:stream'
+
+/**
+ * Set to a file path to append every inbound app-server notification and
+ * server→client request as JSONL. Off unless set; see `docs/GOTCHAS.md` §codex.
+ */
+export const CODEX_TRACE_ENV = 'WORKERDECK_CODEX_TRACE'
 
 /**
  * A JSON-RPC error response from the peer, or one we return to it. `code`
@@ -38,12 +45,15 @@ export class JsonRpcStdioConnection {
   #buffer = ''
   #closed = false
   #notificationHandler: ((method: string, params: unknown) => void) | undefined
+  /** Where {@link CODEX_TRACE_ENV} pointed, or undefined — read once. */
+  #trace: string | undefined
   #requestHandler:
     | ((method: string, params: unknown, id: string | number) => Promise<unknown>)
     | undefined
 
   constructor(options: { input: Readable; output: Writable }) {
     this.#output = options.output
+    this.#trace = process.env[CODEX_TRACE_ENV] || undefined
     options.input.on('data', (chunk: Buffer | string) => this.#feed(String(chunk)))
     // Stream errors surface via the process wrapper's exit handling; swallowing
     // here just prevents an unhandled 'error' crash between the two.
@@ -106,7 +116,29 @@ export class JsonRpcStdioConnection {
       } catch {
         continue // never let one garbled line kill the session
       }
+      this.#traceLine(message)
       this.#dispatch(message)
+    }
+  }
+
+  /**
+   * Append one inbound message to the trace file, when the operator asked for
+   * one. **Notifications and server→client requests only** — a response body is
+   * not needed to answer the questions this exists for, and `account/*` results
+   * are the one place app-server traffic can carry a masked credential
+   * fragment, which nothing of ours writes to disk (see the auth red lines).
+   * Best-effort and synchronous: a debug sink that loses lines proves nothing,
+   * and a debug sink that throws must not take the session with it.
+   */
+  #traceLine(message: Record<string, unknown>): void {
+    if (!this.#trace) return
+    const method = message.method
+    if (typeof method !== 'string') return
+    if (method.startsWith('account/') || method.startsWith('login')) return
+    try {
+      appendFileSync(this.#trace, JSON.stringify(message) + '\n')
+    } catch {
+      // Unwritable path, full disk: tracing is never worth failing a session.
     }
   }
 

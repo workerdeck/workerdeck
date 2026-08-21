@@ -321,10 +321,13 @@ async function threadItemUnionCanary(): Promise<void> {
   ])
   // What `AppServerItem` in `engines/codex/types.ts` actually models. Everything
   // else falls through `#handleItemCompleted` into an `sdk_event` and draws
-  // nothing. See `_docs/features/codex-multi-agent.md` for the two that matter.
+  // nothing. The multi-agent pair is mapped as of the sub-agent attribution
+  // work (`engines/codex/subagents.ts`): `subAgentActivity` is the spawn
+  // signal the whole design keys off, `collabAgentToolCall` a plain tool card.
   const MAPPED = new Set([
     'agentMessage', 'reasoning', 'commandExecution', 'fileChange', 'mcpToolCall',
     'webSearch', 'imageGeneration', 'imageView', 'userMessage',
+    'subAgentActivity', 'collabAgentToolCall',
   ])
 
   const out = mkdtempSync(join(tmpdir(), 'wd-codex-schema-'))
