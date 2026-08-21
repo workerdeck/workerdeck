@@ -37,7 +37,7 @@
  * spawn options, handshake, or event mapping requires a run.
  */
 import { execFile } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -283,6 +283,89 @@ async function canaries(): Promise<void> {
       connection.close()
       rmSync(gateCwd, { recursive: true, force: true })
     }
+  }
+
+  await threadItemUnionCanary()
+}
+
+/**
+ * The `ThreadItem` union, pinned.
+ *
+ * This is the drift alarm the canaries were missing, and its absence has already
+ * cost us twice: `imageGeneration` went unnoticed until someone saw a blank row,
+ * and `collabAgentToolCall` / `subAgentActivity` — codex's entire multi-agent
+ * surface — have been arriving as invisible `sdk_event`s since 0.146.0 without
+ * anyone knowing they existed. An unmapped item is not merely unstyled, it is
+ * gone from the transcript (`docs/GOTCHAS.md` §codex), so "we render everything
+ * codex can say" is a claim only a pin can keep honest.
+ *
+ * Free, and free for a good reason: `generate-json-schema` is a local dump out of
+ * the binary we already ship — no network, no auth, no tokens — so this belongs
+ * in the canary set rather than the paid run.
+ *
+ * **A new variant is a FAIL and an unmapped one is a warning**, which is the
+ * honest split: the first means the protocol moved under us, the second is a
+ * standing decision recorded below. Mapping every variant is not the goal —
+ * knowing about each one is.
+ */
+async function threadItemUnionCanary(): Promise<void> {
+  if (!codexBin) return
+  // Every variant present in 0.146.0. Adding to this list is the deliberate act
+  // of saying "we have looked at this one".
+  const KNOWN = new Set([
+    'userMessage', 'hookPrompt', 'agentMessage', 'plan', 'reasoning',
+    'commandExecution', 'fileChange', 'mcpToolCall', 'dynamicToolCall',
+    'collabAgentToolCall', 'subAgentActivity', 'webSearch', 'imageView',
+    'sleep', 'imageGeneration', 'enteredReviewMode', 'exitedReviewMode',
+    'contextCompaction',
+  ])
+  // What `AppServerItem` in `engines/codex/types.ts` actually models. Everything
+  // else falls through `#handleItemCompleted` into an `sdk_event` and draws
+  // nothing. See `_docs/features/codex-multi-agent.md` for the two that matter.
+  const MAPPED = new Set([
+    'agentMessage', 'reasoning', 'commandExecution', 'fileChange', 'mcpToolCall',
+    'webSearch', 'imageGeneration', 'imageView', 'userMessage',
+  ])
+
+  const out = mkdtempSync(join(tmpdir(), 'wd-codex-schema-'))
+  try {
+    await execFileP(codexBin, ['app-server', 'generate-json-schema', '--out', out], {
+      timeout: 60_000,
+    })
+    const schema = JSON.parse(
+      readFileSync(join(out, 'codex_app_server_protocol.v2.schemas.json'), 'utf8'),
+    ) as { definitions?: Record<string, unknown>; $defs?: Record<string, unknown> }
+    const item = (schema.definitions ?? schema.$defs ?? {})['ThreadItem'] as
+      | { oneOf?: { properties?: { type?: { const?: string; enum?: string[] } } }[] }
+      | undefined
+    const variants = (item?.oneOf ?? [])
+      .map((arm) => arm.properties?.type?.const ?? arm.properties?.type?.enum?.[0])
+      .filter((name): name is string => typeof name === 'string')
+
+    if (variants.length === 0) {
+      fail('ThreadItem union', 'could not read the union out of the v2 schema — shape changed')
+      return
+    }
+    const added = variants.filter((name) => !KNOWN.has(name))
+    if (added.length > 0) {
+      fail(
+        'ThreadItem union',
+        `NEW variant(s) since 0.146.0: ${added.join(', ')} — each is currently invisible in the ` +
+          'transcript (an sdk_event that draws nothing). Map it in `engines/codex/types.ts` + ' +
+          "`#itemCompleted`, or add it to this canary's KNOWN set to say it was considered",
+      )
+      return
+    }
+    const unmapped = variants.filter((name) => !MAPPED.has(name))
+    pass(
+      'ThreadItem union',
+      `${variants.length} variants, none new` +
+        (unmapped.length > 0 ? ` · ${unmapped.length} unmapped: ${unmapped.join(', ')}` : ''),
+    )
+  } catch (error) {
+    fail('ThreadItem union', `generate-json-schema failed: ${(error as Error).message}`)
+  } finally {
+    rmSync(out, { recursive: true, force: true })
   }
 }
 

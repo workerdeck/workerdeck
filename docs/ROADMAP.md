@@ -571,6 +571,16 @@ boundary, and scope is defense in depth behind it. See `docs/ARCHITECTURE.md` §
   OpenAI's terms restrict headless/gateway use of ChatGPT-subscription codex auth the way
   Anthropic's restrict claude.ai logins is unresolved — the posture mirrors the Anthropic one
   (surface honestly, never circumvent) until answered.
+- **Codex's sub-agents, which we have never mapped.** Not a gap in codex — a gap in us: the
+  app-server has carried `collabAgentToolCall` and `subAgentActivity` since 0.146.0 and this repo
+  models neither, so they arrive as invisible `sdk_event`s. Its nesting handle is a **thread id**,
+  not a tool-use id, so `SubagentInfo.toolUseId` does not fit and the id decision has to come
+  before any tracker. Two independent gates keep it quiet today — we never send `multiAgentMode`,
+  and the operator's own `config.toml` gates it besides (which is theirs, not ours, to set). The
+  cheap first move needs no opt-in at all: `subAgentActivity`'s sources include `review` and
+  `compact`, which codex does on its own, so mapping the item may show it is already live. Brief
+  in `_docs/features/codex-multi-agent.md`; the union is now pinned by
+  `pnpm smoke:codex --canary`.
 - **A `model` facet, and what a model group would be keyed by.** The sessions list groups by
   gateway, adapter, state and project; a fourth facet was asked for ambiguously ("colour the model
   unless grouped by model") and deliberately not built, on the reading that it was

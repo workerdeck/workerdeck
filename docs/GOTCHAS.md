@@ -383,6 +383,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `imageGeneration` and `imageView` are ordinary item variants. When codex adds one, the item
   union is the thing to extend; `codex app-server generate-json-schema --out <dir>` (or
   `generate-ts`) dumps the authoritative list, which is how these were found.
+  **`pnpm smoke:codex --canary` now pins that union**, and it exists because "we noticed" was not
+  a strategy: the alarm fails on a variant that is *new* since 0.146.0 and warns on one that is
+  merely unmapped, and it is free (a local dump out of the binary we ship, no network or auth). It
+  currently reports **9 of 18 unmapped** — including `collabAgentToolCall` and `subAgentActivity`,
+  i.e. codex's entire multi-agent surface, which has been arriving invisibly ever since we
+  upgraded. So the standing claim to be careful with is not "codex has no sub-agents" but "we have
+  never mapped them"; the brief is `_docs/features/codex-multi-agent.md`.
 - **A generated image is a host path, never bytes.** `imageGeneration.savedPath` is absolute on
   the host — by default under `$CODEX_HOME/generated_images/`, or in the workspace when the model
   was told the asset belongs to the project. The runner puts it in the tool card's *input* (a
