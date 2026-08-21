@@ -437,6 +437,36 @@ through phase 3, on-demand tool results and image-part references, and:
   Symbols and validated twice, against the catalog at authoring time and `UIImage(systemName:)`
   at runtime. This repo now carries its own `.workerdeck.json`, which is what turned a tested
   feature into an observed one: nothing had ever resolved a real file or served a real byte.
+- **Codex's sub-agents, made visible — and a live bug found under them.** The repo believed
+  codex had no sidechains. It has had them since the pinned 0.146.0, and they arrive **in
+  ordinary sessions today**: we never send `multiAgentMode`, but the operator's config enables it
+  and codex's default posture is `explicitRequestOnly`, so a user who asks gets them. A spawned
+  agent runs in its own thread on the same connection and `threadId` is the only thing that says
+  so — which is now how every item and delta is attributed, per frame rather than off a mutable
+  "current agent", since two agents stream at once. `subAgentActivity.id` turned out to *be* the
+  model's own `spawn_agent` call id, so `SubagentInfo.toolUseId` kept its meaning and no client
+  changed. The bug: `turn/completed` was not scoped to the session's thread, so a child's arrived
+  ~14 s early, published the **sub-agent's** last line as the turn result and dropped the root's
+  real answer. Reproduced deliberately with the new `WORKERDECK_CODEX_TRACE` sink, which dumps the
+  raw inbound traffic and is what made any of it findable — a wire capture of the same session had
+  been read three ways and still hid the child threads.
+- **The sub-agent takeover on iOS, and agent lines you can press.** The phone reaches the same
+  surface the dashboard and the extension got, by a navigation push — which reshaped it: **a push
+  cancels the covered view's `.task`**, so the obvious shape would have detached the socket
+  underneath the takeover, freezing the one screen built for watching an agent work. The attach's
+  lifetime is a claim count instead. The sessions row reverses its own "a count, not a disclosure"
+  decision *narrowly*: the objection was about a second target inside one `NavigationLink`, so the
+  twisty is a sibling and each agent is its own full-width row. A takeover asked for before its
+  Task exists is held until the replay hold lifts, so the phone never frames a mid-replay
+  transcript — the one risk the web still carries.
+- **A sub-agent's brief, and the rail inside the frame.** Both came from using the takeover. You
+  could watch an agent and never see what it was asked: a *background* agent forwards no brief
+  (measured — eight of them, not one `user` item with a parent), so it is spliced from the
+  spawning call's `prompt` when the stream carries none, clipped to four wrapped lines. And the
+  scrubber had been gated off with three features that genuinely are full-transcript; ungating it
+  gave **zero marks** on a 114-tool agent, because the mark rules test "is this top level" and
+  inside a frame nothing is. Now the level is a parameter and every narration step marks: same
+  agent, 16 marks.
 - **One session row across all three clients**, on the VS Code sidebar card's design — the
   dashboard row had been the reference for a pass and was the wrong one. `sessionSteps` /
   `StepToggle` / `StepRow` and the `--vendor-*` colours moved out of the webview into

@@ -260,6 +260,27 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   `../` resolved into `apps/packages/` and the build died. A plain JSON import cannot care where
   the chunk lands.
 
+  **0.18.0** — sub-agents, on the engine that was thought not to have them and on the client that
+  could not show them. A **minor**, additive throughout, and deliberately **no `PROTOCOL_VERSION`
+  bump** — nothing new goes on the wire, `SubagentInfo.toolUseId` keeps its documented meaning, and
+  `isAgentRecord` is a shared rule rather than a field. Three tracks:
+  **codex sub-agent attribution** (`engines/codex/subagents.ts`, the `threadId` gate,
+  `WORKERDECK_CODEX_TRACE`), which also fixed a **live bug**: a child thread's `turn/completed`
+  ended the session's turn early, published the sub-agent's last line as the result and dropped the
+  root's real answer — reproduced against 0.146.0 and re-verified on a real two-agent turn.
+  **The iOS takeover plus pressable agent lines**, whose shape was decided by a SwiftUI fact worth
+  restating: a navigation push cancels the covered view's `.task`, so the attach lives on a claim
+  count rather than in one view. **The brief and the frame's rail**, both of which came from using
+  the takeover rather than from a plan: an agent you can watch but whose instructions you cannot
+  see, and a rail that was gated off with three features it did not belong to (ungated it drew zero
+  marks, because "top level" is not what a frame means).
+  Verified as far as this machine can: `pnpm lint`/`typecheck`/`test` (938 across the JS packages),
+  `swift test` 391, a Debug **and** Release simulator build, the takeover exercised live on the
+  dashboard against real running codex agents, and the app installed on a physical phone. What is
+  **not** verified is in `_docs/VERIFICATION-DEBT.md` item 5 and is all touch: nobody has put a
+  thumb on the phone's twisty, an approval raised *inside* a takeover has never been answered, and
+  the claim-count attach has only been measured on a simulator probe.
+
   **The verification debt this ledger has twice deferred a bump on was cleared 2026-08-20**, and
   clearing it changed three claims above rather than merely confirming them.
 

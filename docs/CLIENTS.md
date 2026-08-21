@@ -365,10 +365,66 @@ catalog from the very table the web draws inline by `apps/ios/scripts/gen-engine
 template images so `VendorPalette` (the `--vendor-*` hex pairs, ported the way `TerminalPalette`
 ports `terminal.css`) tints them. An unrecognised engine draws **nothing at all** rather than the
 web's placeholder dot: a dot earns its keep in a sidebar where two text columns share a gutter,
-and is a smudge in front of a phone row. Sub-agents are a **count, not a disclosure**
-(`2/3` while some run, a bare total once settled — the two spellings `StepToggle` picks between):
-the whole row is one `NavigationLink`, so a second tap target inside it is a coin toss under a
-thumb, and the session it opens is where the agents can actually be read. The old third line spent a third of every row on a labelled `Idle`
+and is a smudge in front of a phone row. **The sub-agent takeover** is a real navigation push (`navigationDestination(item:)`), and the
+one thing that shaped it is a SwiftUI fact worth stating on its own: **a push cancels the covered
+view's `.task`**. Measured with a probe app on the simulator (iOS 26.5) — `onDisappear` fires at
+the start of the push and the covered `.task` is cancelled ~0.5 s later, at the *end* of the
+animation. macOS does not do this, which is probably where the opposite assumption came from. The
+obvious shape — "push a destination that reads the already-attached state, the socket lives in
+`SessionView`'s `.task`" — would therefore have **detached the socket underneath the takeover**,
+freezing the one surface built for watching an agent work, and replayed with a spinner on the way
+back. So the attach's lifetime moved into the view model as a **claim count**
+(`TranscriptViewModel.holdOpen()`): both views await it, the socket lives while any claim stands,
+and because the two appearances overlap in both directions the count never reaches zero across a
+push or a pop. Two things that used to hang off `onDisappear` ride the claim transitions instead
+— notification suppression and the unread truing-up — since under a push `onDisappear` now fires
+*mid-session*, and the approval shown inside the takeover would otherwise ring the phone about
+itself. There is never a second attach and never a second reducer.
+The frame itself is the web's rule, ported: membership is the kit's `subagentItems`, and the
+component owns the same three gates `Transcript.tsx` owns — recap, sticky prompt, and deep-link
+focus — because every one of them is keyed to a *full-transcript* index. **The scrubber stays**,
+riding the frame's own items and fold with the kit's `ScrubberInput.frameParentId` deciding what
+"top level" means (web `scrubber.tsx`, same rule: without it a frame's rail mounted, banded, and
+marked nothing), and inside a frame every narration step marks on its own where the conversation
+gets one mark per segment; only host bookmarks — full-transcript indices — would have to stay
+out, and this client passes none anywhere yet. The
+composer goes and **the approvals stay** (`ApprovalPromptHost`, shared with the session screen), for
+the reason `docs/PACKAGES.md` records: a sub-agent's tool calls raise session-level permission
+requests, so hiding them deadlocks the agent you are watching. Entry from the transcript is
+`TermPress.openSubagent`, attached to the Task header — **a deliberate divergence**: the web keeps
+the toggle on the press and puts the takeover in a hover action, and a thumb has no hover, so the
+one target goes to the deliberate move and inline task expansion gives way. `frameParentId` threads
+planner → height book → plan cache → audit rather than staying cosmetic, because suppressing the
+nested step inside a frame changes the wrap and therefore the height, and the book and the drawn
+plan must read the same value. A takeover asked for *before its Task exists* (the list knows the
+`toolUseId` from the rollup while the transcript is still replaying) is **held until the replay
+hold lifts** and only then resolved — so the phone never frames a mid-replay transcript, which is
+the risk `_docs/VERIFICATION-DEBT.md` records as unpaid on the web.
+**A sub-agent's brief leads its frame** — what the agent was asked, then what it did. The
+instruction is never in the stream (the engine puts it in the spawning call's `prompt`), so both
+renderers splice it in as a synthetic first row, and it leads the inline task expansion as well as
+the takeover. **The clip is a shared rule and one constant per client with the same value**: four
+*wrapped* lines, since the web's `line-clamp` already cuts on wrapped lines and so the
+char-vs-column divergence `ResultPreview` needed does not arise here. Two divergences that do, both
+forced by the model this renderer runs on: the affordance is **explicit** (`… +N lines` under the
+four, where the web fades the fourth) because a thumb needs a target that says what it does, and an
+*unclipped* brief carries no press at all; and the open state is `ExpansionKey.brief(taskId)` rather
+than component-local, because the height book must know every height — the frame row and the inline
+twin therefore share one state. Codex draws no brief row at all, enforced where the row is built
+rather than where it is drawn: its spawn message is encrypted on the wire, and there is nothing to
+show.
+Sub-agents are a count **and** a disclosure — but the two are different targets.
+The count is a reading on line two (`2/3` while some run, a bare total once settled — the two
+spellings `StepToggle` picks between); the twisty is a **sibling of the `NavigationLink`, in a
+gutter reserved on every row** so the titles still line up. That placement is the whole design.
+The row used to draw the count alone on the argument that a second tap target inside one
+`NavigationLink` is a coin toss under a thumb — right about *nesting*, and answered by not
+nesting rather than by refusing the disclosure, because "which agent" is a question the list can
+answer and the alternative is opening the session to find out. Expanded, each agent is its **own
+full-width row**, which is a real thumb target where a line inside a two-line row is not, and it
+pushes `SessionRoute.session(…, subagent:)` — the session with that agent already framed, the
+phone's spelling of the dashboard's `?subagent=`. Pressability is `isAgentRecord` (a plain task
+draws inert), so the three clients cannot disagree about which lines name an agent. The old third line spent a third of every row on a labelled `Idle`
 badge, which is the state you scan *past*; and the model was printed raw (`claude-opus-5`) where
 the other clients say `Opus 5`, so `friendlyModel` was ported into the kit
 (`ModelName.swift`, tested against the same examples the TS doc comment states) — the same
