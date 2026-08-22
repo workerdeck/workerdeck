@@ -15,7 +15,15 @@ import type { ModelCatalog } from '../adapter.ts'
  *     const c=JSON.parse(d.slice(s,i));
  *     for(const m of c.models) console.log(m.slug, m.display_name,
  *       m.visibility, m.supported_reasoning_levels.map(l=>l.effort).join(","))'\
- *     "$(node -p 'require.resolve("@openai/codex-darwin-arm64/package.json").replace("package.json","vendor/aarch64-apple-darwin/bin/codex")')"
+ *     "$(node -p 'const{createRequire}=require("module");
+ *       const w=require.resolve("@openai/codex/package.json");
+ *       createRequire(w).resolve("@openai/codex-darwin-arm64/package.json")
+ *         .replace("package.json","vendor/aarch64-apple-darwin/bin/codex")')"
+ *
+ * The two-hop resolve is NOT optional: under pnpm's strict layout the platform
+ * package is a dependency of `@openai/codex`, so it resolves only from that
+ * wrapper's location, never from the repo root. Resolving it directly throws
+ * MODULE_NOT_FOUND — the same two hops `resolveBundledCodexExecutable` makes.
  *
  * Mapping decisions:
  * - the internal `codex-auto-review` row is dropped (the codex analogue of
@@ -28,7 +36,7 @@ import type { ModelCatalog } from '../adapter.ts'
  */
 export const CODEX_CATALOG: ModelCatalog = {
   provenance:
-    'embedded model presets of @openai/codex@0.146.0 (darwin-arm64 binary), extracted 2026-08-05',
+    'embedded model presets of @openai/codex@0.149.0 (darwin-arm64 binary), extracted 2026-08-22',
   models: [
     {
       value: 'gpt-5.6-sol',
