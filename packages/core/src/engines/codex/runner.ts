@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   ENGINE_CAPABILITIES,
@@ -33,6 +33,7 @@ import type { PermissionDecision, Runner, SessionEventListener } from '../../run
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { JsonRpcError } from './jsonrpc.ts'
 import { CodexAgentTracker, type CodexAgent } from './subagents.ts'
+import { untrustedProjectNotice } from './trust.ts'
 import type {
   AppServerCollabAgentToolCallItem,
   AppServerCommandApprovalParams,
@@ -67,10 +68,13 @@ import type {
  * the OS sandbox and — with the ask policy below — escalates to a real
  * question), `acceptEdits` → workspace-write (in-workspace writes sail
  * through, the acceptEdits grant), `bypassPermissions` → danger-full-access.
+ * `auto` rides the SAME sandbox as acceptEdits — it is not a wider grant, it
+ * only moves *who answers* the approvals (see {@link APPROVALS_REVIEWER_BY_MODE}).
  */
 const THREAD_SANDBOX_BY_MODE: Partial<Record<PermissionMode, string>> = {
   default: 'read-only',
   acceptEdits: 'workspace-write',
+  auto: 'workspace-write',
   bypassPermissions: 'danger-full-access',
 }
 
@@ -78,6 +82,7 @@ const THREAD_SANDBOX_BY_MODE: Partial<Record<PermissionMode, string>> = {
 const TURN_SANDBOX_BY_MODE: Partial<Record<PermissionMode, { type: string }>> = {
   default: { type: 'readOnly' },
   acceptEdits: { type: 'workspaceWrite' },
+  auto: { type: 'workspaceWrite' },
   bypassPermissions: { type: 'dangerFullAccess' },
 }
 
@@ -127,7 +132,35 @@ const THREAD_SCOPED_NOTIFICATIONS = new Set([
 const APPROVAL_POLICY_BY_MODE: Partial<Record<PermissionMode, object>> = {
   default: GRANULAR_ASK,
   acceptEdits: GRANULAR_ASK,
+  // `auto` still ASKS — the flags are what produce an approval request at all.
+  // Without them there would be nothing for the reviewer below to answer.
+  auto: GRANULAR_ASK,
   bypassPermissions: GRANULAR_NEVER,
+}
+
+/**
+ * The THIRD approval axis — *who reviews*, independent of the sandbox axis and
+ * the ask axis above. Codex's `approvalsReviewer` (thread/start and turn/start,
+ * present since 0.146.0) routes every approval request either to the user
+ * (`'user'`, codex's own default) or to `'auto_review'`: a prompted subagent
+ * that gathers context and applies a risk framework before allowing or denying.
+ * That is codex's "Approve for me" preset, and our `auto` mode is exactly it.
+ *
+ * Sent explicitly for EVERY mode rather than omitted for the default — a thread
+ * inherits `approvalsReviewer` across turns ("this turn and subsequent turns"),
+ * so leaving it unset would let a stale reviewer from an earlier turn survive a
+ * mode switch back to a user-reviewed mode. Stating it every time makes the
+ * mode the single source of truth.
+ *
+ * NOTE the asymmetry with the Claude engine's `auto`: that classifier is
+ * operator-configurable (`autoMode.environment`, allow/soft_deny/hard_deny);
+ * this reviewer has no configuration surface at all.
+ */
+const APPROVALS_REVIEWER_BY_MODE: Partial<Record<PermissionMode, string>> = {
+  default: 'user',
+  acceptEdits: 'user',
+  auto: 'auto_review',
+  bypassPermissions: 'user',
 }
 
 /** Fallback timeout for a pending approval nobody answers — the SessionRunner
@@ -909,6 +942,7 @@ export class CodexRunner implements Runner {
   start(): Promise<void> {
     if (this.#started) return this.#turnChain
     this.#started = true
+    this.#warnUntrustedProject()
     if (this.#config.resume && this.#config.backfillHistory !== false) {
       // First link of the turn chain: connect, thread/resume, and replay the
       // thread's prior turns as `replay: true` events before any queued turn
@@ -928,6 +962,38 @@ export class CodexRunner implements Runner {
     // which is the one place codex's own TUI has them and we did not.
     if (!this.#config.prompt && !this.#config.resume) void this.#probeSkills()
     return this.#turnChain
+  }
+
+  /**
+   * One-time transcript notice for the codex trust gap: a `default`-mode
+   * session (read-only sandbox) on an untrusted cwd has its
+   * `.codex/config.toml` — MCP servers included — silently ignored, and the
+   * app-server surface has no trust prompt to say so (the TUI's prompt is
+   * where the entry normally gets written). `acceptEdits`/`bypassPermissions`
+   * sessions are exempt because their `thread/start` (workspace-write /
+   * danger-full-access sandbox) writes the trust entry itself and loads the
+   * config — measured against 0.146.0 and 0.149.0; a notice there would be
+   * false. Emitted as `session_error`, which both clients render as an inline
+   * notice while the session keeps running (the backfill-history precedent),
+   * so nothing new rides the wire. Every degrade path is silence: a false
+   * warning on a trusted project is worse than a missed one.
+   */
+  #warnUntrustedProject(): void {
+    if (this.#permissionMode !== 'default') return
+    try {
+      const env = this.#childEnv()
+      // Mirror the child's own home resolution: the profile pin already won
+      // inside #childEnv, then the session env's CODEX_HOME, then ~/.codex
+      // under the env's HOME (codex reads $HOME, not the process owner's).
+      const pin = env.CODEX_HOME
+      if (pin !== undefined && pin.length === 0) return
+      const codexHome = pin ?? join(env.HOME ?? homedir(), '.codex')
+      const message = untrustedProjectNotice({ cwd: this.#cwd, codexHome })
+      if (message) this.#emit({ type: 'session_error', message })
+    } catch {
+      // Silence, deliberately — a failed probe must neither warn nor break
+      // the start.
+    }
   }
 
   /**
@@ -1237,6 +1303,7 @@ export class CodexRunner implements Runner {
         cwd: this.#cwd,
         approvalPolicy: APPROVAL_POLICY_BY_MODE[this.#permissionMode],
         sandbox: THREAD_SANDBOX_BY_MODE[this.#permissionMode],
+        approvalsReviewer: APPROVALS_REVIEWER_BY_MODE[this.#permissionMode],
       }
       if (this.#model) options.model = this.#model
       const resuming = this.#sdkSessionId !== undefined
@@ -1539,6 +1606,7 @@ export class CodexRunner implements Runner {
         cwd: this.#cwd,
         approvalPolicy: APPROVAL_POLICY_BY_MODE[this.#permissionMode],
         sandboxPolicy: TURN_SANDBOX_BY_MODE[this.#permissionMode],
+        approvalsReviewer: APPROVALS_REVIEWER_BY_MODE[this.#permissionMode],
       }
       // Overrides persist "for this turn and subsequent turns", so name the
       // model/effort explicitly every turn — the resolved default when no

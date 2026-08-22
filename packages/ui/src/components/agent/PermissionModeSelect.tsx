@@ -60,7 +60,11 @@ export const PERMISSION_MODES: PermissionModeMeta[] = [
     value: 'auto',
     label: 'Auto',
     shortLabel: 'Auto',
-    description: 'Claude handles permission decisions',
+    // Engine-neutral on purpose: on claude this is the operator-configurable
+    // auto-mode classifier, on codex it is `approvalsReviewer: 'auto_review'`,
+    // a fixed OpenAI-prompted subagent. Both "something other than you decides";
+    // naming Claude here reads as a bug on a codex session.
+    description: 'The agent handles permission decisions',
     icon: Zap,
   },
   {

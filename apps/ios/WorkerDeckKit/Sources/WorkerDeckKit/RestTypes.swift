@@ -148,7 +148,11 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     // sandbox refused ("command failed; retry without sandbox?") — render the
     // request's own title/description rather than composing "wants to use X".
     interactiveApprovals: true,
-    permissionModes: [.default, .acceptEdits, .bypassPermissions],
+    // `.auto` is codex's own "Approve for me" — workspace-write plus
+    // `approvalsReviewer: "auto_review"`, routing approvals to codex's
+    // risk-assessing subagent rather than to the user. Unlike the claude
+    // engine's auto mode, that reviewer has no operator config surface.
+    permissionModes: [.default, .acceptEdits, .bypassPermissions, .auto],
     defaultPermissionMode: .default,
     // A resume replays the thread's history as `replay: true` events, and
     // `GET /sdk-sessions?profile=` lists CODEX_HOME's threads — both true

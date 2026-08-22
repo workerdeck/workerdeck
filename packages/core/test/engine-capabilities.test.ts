@@ -48,10 +48,12 @@ describe('ENGINE_CAPABILITIES invariants', () => {
     }
   })
 
-  it('declares the codex trio and nothing else', () => {
+  it('declares the codex quartet and nothing else', () => {
+    // 'auto' is codex's own "Approve for me": the acceptEdits sandbox with
+    // `approvalsReviewer: 'auto_review'`. plan/dontAsk remain claude-only.
     for (const mode of ALL_MODES) {
       expect(supportsPermissionMode('codex', mode)).toBe(
-        (['default', 'acceptEdits', 'bypassPermissions'] as PermissionMode[]).includes(mode),
+        (['default', 'acceptEdits', 'bypassPermissions', 'auto'] as PermissionMode[]).includes(mode),
       )
     }
   })

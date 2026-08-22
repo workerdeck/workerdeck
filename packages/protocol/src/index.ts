@@ -1015,9 +1015,19 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     // 'default' = read-only sandbox + ask (a blocked action becomes a real
     // question instead of a silent refusal); acceptEdits = workspace-write +
     // ask (in-workspace writes sail through, escalations still ask); bypass =
-    // full access, asking nothing. plan/dontAsk/auto name CLI workflows codex
-    // cannot deliver.
-    permissionModes: ['default', 'acceptEdits', 'bypassPermissions'],
+    // full access, asking nothing. plan/dontAsk name CLI workflows codex cannot
+    // deliver.
+    // 'auto' is codex's own "Approve for me": workspace-write + ask, with
+    // `approvalsReviewer: 'auto_review'` on thread/turn start routing every
+    // approval to codex's risk-assessing subagent instead of to the user. It is
+    // a THIRD axis (who reviews), independent of the sandbox and ask axes — see
+    // the tables in the codex runner.
+    // NOTE the semantic gap a client should not paper over: the Claude engine's
+    // 'auto' classifier is operator-configurable (`autoMode.environment`,
+    // allow/soft_deny/hard_deny); codex's reviewer is a fixed, OpenAI-prompted
+    // subagent with NO configuration surface. Same mode name, different
+    // tunability — say so wherever the mode is explained.
+    permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'auto'],
     defaultPermissionMode: 'default',
     resume: true,
     // A resume replays the thread's prior turns from `thread/resume`'s

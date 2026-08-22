@@ -33,6 +33,38 @@ Whatever you render, read the capability record rather than the engine name —
 `TranscriptState.capabilities` is always populated, and it is what makes one component correct for
 all three.
 
+### Codex only: project trust gates `.codex/config.toml`
+
+If a repo carries its own `.codex/config.toml` — MCP servers, a model pin — codex reads it **only
+when that project is trusted**, meaning `$CODEX_HOME/config.toml` (usually `~/.codex/config.toml`)
+holds an entry like:
+
+```toml
+[projects."/abs/path/to/your/repo"]
+trust_level = "trusted"
+```
+
+The interactive codex CLI asks you the first time you run it somewhere ("do you trust this
+folder?") and writes that entry for you. The `app-server` surface WorkerDeck drives cannot ask.
+
+What happens next depends on the permission mode, because the gate is tied to the sandbox:
+
+| Mode | Codex sandbox | Untrusted project |
+|---|---|---|
+| Manual (`default`) | `read-only` | `.codex/config.toml` is **ignored**; WorkerDeck says so in the transcript |
+| Accept edits, Auto | `workspace-write` | codex **writes the trust entry itself**, then loads the config |
+| Bypass | `danger-full-access` | same — trusted on start |
+
+So the silent case is exactly the safest mode. In Manual, WorkerDeck detects it and posts a notice
+rather than leaving you to wonder where your MCP server went; the fix is to run `codex` once in
+that directory and accept the prompt, or add the entry by hand. WorkerDeck never writes it for
+you — the same reason it never touches your codex credentials.
+
+Trust resolves per directory layer, from the cwd up to and including the nearest one containing
+`.git`. In the ordinary case — a `.codex/config.toml` at your repo root, trust on that root — a
+session started in any subdirectory is covered. Note that switching a running session to a wider
+mode does not retroactively load the config; start a new session instead.
+
 ## Which executor?
 
 Only for the provider engine, and only for tools typed `sandboxed` (`eval_script`, plus any host

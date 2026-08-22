@@ -77,7 +77,7 @@ extension PermissionMode {
     // The CLI's own definition, and the opposite of bypass: it never prompts,
     // and anything not already permitted is denied rather than allowed.
     case .dontAsk: return "Never ask — deny anything not pre-approved"
-    case .auto: return "Claude handles permission decisions"
+    case .auto: return "The agent handles permission decisions"
     }
   }
 

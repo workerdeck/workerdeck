@@ -434,6 +434,45 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   codex's own `/model`, `/approvals` etc. are TUI-local. `slashCommands: false` is correct and a
   composer must hide the `/` popover rather than offer an empty one. (`skills/list` does exist,
   so surfacing *skills* is a real possibility — a feature, not a repair.)
+- **A project's `.codex/config.toml` is only read if that project is TRUSTED — and in a read-only
+  sandbox codex cannot ask, so it silently reads nothing.** Codex gates project config on a
+  `[projects."/abs/path"] trust_level = "trusted"` entry in `$CODEX_HOME/config.toml`. The vanilla
+  TUI prompts ("do you trust this folder?") and writes it; `codex app-server` has no prompt. So a
+  session on a project nobody has opened in a terminal ignores its `.codex/config.toml` entirely —
+  MCP servers, model pins, all of it — with no error and no log line. Measured 2026-08-22, 0.149.0
+  and the bundled 0.146.0 identically: flipping only the trust entry moves `codex mcp list` from 0
+  project servers to 1.
+  **The gate is SANDBOX-SCOPED, which is the part that misleads.** Only `read-only` — WorkerDeck's
+  `default` mode — leaves the project untrusted. A `thread/start` under `workspace-write` or
+  `danger-full-access` (`acceptEdits`, `auto`, `bypassPermissions`) **writes `trust_level =
+  "trusted"` into the operator's own config.toml** and then loads the project config. Verified by
+  driving app-server against a throwaway CODEX_HOME: read-only left the file untouched,
+  workspace-write appended the entry. Two consequences: a notice in the wider modes would be
+  *false* (hence the `default`-only gate in `#warnUntrustedProject`), and **codex writes trust
+  entries on our behalf there even though WorkerDeck itself never does**. A mid-session widen does
+  NOT heal an already-started thread — a `turn/start` carrying a `workspaceWrite` policy on a
+  read-only thread loaded nothing and wrote nothing.
+  **Discovery and trust are per-layer, and neither is "walk up forever".** The layer chain is the
+  cwd and its ancestors **up to and including the nearest directory containing `.git`** (dir or
+  file); with no git anywhere, the cwd alone. Every layer's `.codex/config.toml` is loaded. Trust
+  is decided per layer: an exact entry for that layer's canonical path wins (an explicit
+  `"untrusted"` beats inherited trust), otherwise it inherits **only from the chain's git root's**
+  entry. So a trusted mid-chain directory does not trust its children, a nested repo is not
+  covered by the outer repo's entry, and a linked worktree inherits from its *main* repository
+  (via the `.git` file's `gitdir:`). `trust_level` accepts exactly `trusted`/`untrusted` —
+  anything else fails codex's bootstrap outright.
+  **Canonicalize both sides.** On macOS `/tmp` symlinks to `/private/tmp`, and codex canonicalizes
+  the cwd before matching; a hand-rolled comparison against a non-canonical entry reports a
+  trusted project as untrusted. This fooled the original diagnosis.
+  Three things that are NOT the gate, each of which looked like it: the codex version, whether the
+  directory is a git repo (it shapes the layer chain, it does not gate), and spawn cwd —
+  `process.ts` deliberately passes none, and that is correct, because codex resolves project
+  config from the *thread's* cwd.
+  `engines/codex/trust.ts` implements the match and emits the notice as a `session_error` at
+  session start; its parser refuses anything it cannot read with certainty (multi-line strings,
+  inline-table `projects`, array-of-tables, conflicting duplicates) because **a false notice is
+  worse than a missed one**. We deliberately never write the trust entry ourselves — granting
+  codex a privilege on the operator's behalf sits against the codex auth red lines in `CLAUDE.md`.
 
 ## Engine adapters & capability records
 
