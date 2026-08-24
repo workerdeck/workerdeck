@@ -1,7 +1,7 @@
 {
   "name": "workerdeck-vscode",
   "displayName": "WorkerDeck",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "description": "Watch, steer, and approve WorkerDeck agent sessions from VS Code: sessions in the bottom panel, gateways in the sidebar, remote projects as a virtual workspace.",
   "publisher": "workerdeck",
   "private": true,

@@ -323,6 +323,36 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   17 new tests, react 196 → 213), which closes the "no hook render test" gap without putting jsdom
   into a headless package. **No package's public API changed.**
 
+  **0.19.0** — the codex permission surface, made honest. A **minor** for `auto`, additive
+  throughout, protocol stays **7**. Two features and one fix that only looks small.
+  **"Approve for me"** (`auto`) is codex's own risk-assessing reviewer, wired as a permission mode
+  rather than a wider grant: it rides the *same* workspace-write sandbox as `acceptEdits` and only
+  moves who answers the approval, from the user to codex's `approvals_reviewer` subagent. It ships
+  beside a related honesty fix — a session in `default` (read-only) leaves the project untrusted,
+  so codex silently ignores the project's own `.codex/config.toml`, and WorkerDeck now says so in
+  the transcript instead of letting an MCP server vanish without explanation. `@openai/codex` is
+  pinned to **0.149.0**.
+
+  The fix is the one to read: **`turn/start`'s object-form sandbox policy is serde-defaulted field
+  by field**, so the bare `{type: 'workspaceWrite'}` the runner had been sending reset
+  `networkAccess` to false and `writableRoots` to empty **on every turn**, overriding the
+  operator's `[sandbox_workspace_write]` with no error and no notice. An operator who configured
+  `network_access = true` exactly as codex documents still got `Could not resolve host` on
+  anything that touched the network — which is how it presented, as "codex permissions are
+  broken". Measured against 0.149.0: bare object → `curl: (6) Could not resolve host`, fully
+  stated → `200`, omitted → `200`. Omitting is not the fix (restating the policy each turn is what
+  makes a between-turns mode switch take effect), so the runner reads `config/read { cwd }` once
+  per child — it resolves project config layers for that directory — and echoes the block back
+  verbatim, falling back to the bare shape if the read fails. `read-only` is untouched: the
+  setting is scoped to workspace-write and a read-only sandbox has no network either way, measured
+  both ways. A **free** canary pins the block's four fields, because losing them degrades to the
+  bare shape and the clobber returns with no other symptom. Worth stating as a rule: **any field
+  added to that object inherits this trap.**
+
+  Nothing here sets network policy. Network is codex's third axis — off by default in
+  workspace-write, opened by no approval policy — and it stays the operator's `config.toml` to
+  set, the same posture as credentials. What changed is that WorkerDeck stopped overwriting it.
+
     **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`
   land *above* `v0.5.0` and a `| tail` reads the newest tags as the oldest. 0.12.0 had a local
