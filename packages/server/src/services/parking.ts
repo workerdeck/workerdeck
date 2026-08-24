@@ -107,6 +107,17 @@ export class SessionParkManager {
    * one thing a runner doesn't carry on its public surface. */
   #configs = new Map<string, SessionRunnerConfig>()
   /**
+   * Sessions this process has written a dormant record for. Its only job is to
+   * tell "the engine has not named its session *yet*" apart from "the engine
+   * had named it and no longer has one" (a `conversation_reset` on an engine
+   * whose fresh id is not known until its next turn) — the first is the normal
+   * startup window and must cost no store write, the second must delete a
+   * record that has gone stale. It is accurate for exactly the sessions that
+   * matter: a woken session's runner is rebuilt with `resume` set, so it names
+   * its engine session immediately and re-enters the set on its first save.
+   */
+  #remembered = new Set<string>()
+  /**
    * In-flight store work per session, so operations on one record run in order.
    *
    * Load-bearing with any store whose writes are real I/O. `#park` must evict the
@@ -217,6 +228,27 @@ export class SessionParkManager {
           // its session there is nothing to come back to.
           void this.#rememberDormant(runner)
           return
+        case 'conversation_reset':
+          // Two engines, two records, and a clear invalidates whichever one this
+          // session has.
+          //
+          // The dormant record (claude, codex) names the conversation that was
+          // just cleared, and no `status_changed` follows a clear to correct it —
+          // so a restart in this window would wake the session straight back into
+          // the transcript the user threw away. `#rememberDormant` handles both
+          // halves: an engine that adopted a fresh engine session id in the same
+          // breath re-saves under the new one, one that has none yet has nothing
+          // to come back to and the stale record is deleted.
+          //
+          // The live record (the provider engine) CARRIES the transcript rather
+          // than pointing at it, and `#persistLive` is otherwise driven by
+          // `turn_result` — which a clear does not produce. Without this the
+          // on-disk snapshot keeps the pre-clear messages until the next turn
+          // ends, which is the same hazard on the one engine `#rememberDormant`
+          // deliberately no-ops for.
+          void this.#rememberDormant(runner)
+          void this.#persistLive(runner)
+          return
         case 'session_closed':
           // Not during shutdown. The registry closes every runner on the way
           // down and the reason it gives is the same 'server' a DELETE produces,
@@ -318,6 +350,7 @@ export class SessionParkManager {
     clearTimeout(this.#detachTimers.get(sessionId))
     this.#detachTimers.delete(sessionId)
     this.#configs.delete(sessionId)
+    this.#remembered.delete(sessionId)
     for (const [executionId, owner] of this.#owners) {
       if (owner === sessionId) this.#forget(executionId)
     }
@@ -353,13 +386,26 @@ export class SessionParkManager {
   async #rememberDormant(runner: Runner): Promise<void> {
     if (this.#closed) return
     const info = runner.info()
-    const sdkSessionId = info.sdkSessionId
-    if (sdkSessionId === undefined) return
     const capabilities = info.capabilities ?? ENGINE_CAPABILITIES[info.engine ?? 'claude']
     if (!capabilities.resume) return
     const config = this.#configs.get(runner.id)
     if (!config) return
     if (this.#options.registry.get(runner.id) !== runner) return
+    const sdkSessionId = info.sdkSessionId
+    if (sdkSessionId === undefined) {
+      // Checked LAST on purpose. The other three guards are what keep this from
+      // touching a record that isn't ours to touch — most of all the ownership
+      // one, since `#park` evicts before it saves and a parked record must
+      // survive a late event from the runner it replaced.
+      //
+      // Nothing to come back to. Before the engine has ever named its session
+      // that is just the normal startup window and there is no record to
+      // remove; after a `conversation_reset` it means the record we wrote names
+      // a conversation that has been cleared. `#remembered` separates the two,
+      // so the ordinary case costs no store write.
+      if (this.#remembered.has(runner.id)) await this.#forgetDormant(runner.id)
+      return
+    }
     const record: DormantSessionRecord = {
       kind: 'dormant',
       id: runner.id,
@@ -379,11 +425,40 @@ export class SessionParkManager {
       savedAt: Date.now(),
     }
     try {
+      // Marked BEFORE the write, not after. The flag's job is "a record for this
+      // session may exist on disk", and a save that is merely *queued* already
+      // makes that true — a `conversation_reset` arriving mid-write would
+      // otherwise see `false`, skip the forget, and let the stale record land
+      // behind it. Over-claiming costs one delete of a key that isn't there;
+      // under-claiming costs the bug this whole arm exists to fix.
+      this.#remembered.add(runner.id)
       await this.#queue(runner.id, () => this.#options.store.save(record))
     } catch (error) {
       // Losing this costs the session its way back after a restart, and nothing
       // else — the live session is untouched.
       this.#options.onError?.(error, { sessionId: runner.id, phase: 'remember' })
+    }
+  }
+
+  /**
+   * Drop a dormant record that has stopped being true, leaving the live session
+   * alone — the narrow counterpart to {@link ParkingService.discard}, which also
+   * forgets the config and the session's executions and would therefore make a
+   * clear cost the session its ability to go dormant ever again.
+   *
+   * Only ever called behind {@link ParkingService.#rememberDormant}'s guards,
+   * which is what keeps it off a parked record: a park evicts the runner from
+   * the registry before it saves, and the ownership guard turns a late event
+   * from an evicted runner into a no-op.
+   */
+  async #forgetDormant(sessionId: string): Promise<void> {
+    this.#remembered.delete(sessionId)
+    try {
+      await this.#queue(sessionId, () => this.#options.store.delete(sessionId))
+    } catch (error) {
+      // Same posture as a failed save: the live session is untouched, and the
+      // worst case is the stale record we were trying to remove.
+      this.#options.onError?.(error, { sessionId, phase: 'remember' })
     }
   }
 

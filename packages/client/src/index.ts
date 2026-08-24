@@ -218,6 +218,18 @@ export class SessionHandle {
     this.#sendFrame({ type: 'interrupt' })
   }
 
+  /**
+   * Reset the conversation in place: same session, empty context. The server
+   * answers with a `conversation_reset` event.
+   *
+   * Gate the affordance on `EngineCapabilities.clearContext` (absent = false)
+   * rather than calling this blindly — an engine or a server that cannot do it
+   * answers with an error frame, which is the wrong way for a user to find out.
+   */
+  clearContext(): void {
+    this.#sendFrame({ type: 'clear_context' })
+  }
+
   setPermissionMode(mode: PermissionMode): void {
     this.#sendFrame({ type: 'set_permission_mode', mode })
   }

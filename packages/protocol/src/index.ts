@@ -775,6 +775,22 @@ export type SessionCommand =
       interrupt?: boolean
     }
   | { type: 'interrupt' }
+  /**
+   * Reset the conversation in place — same session id, same watermarks, same
+   * row in the list, empty context. The server answers with a
+   * `conversation_reset` event, whose replay rules are what stop a later attach
+   * from resurrecting the cleared transcript.
+   *
+   * Send only where {@link EngineCapabilities.clearContext} says so: a server
+   * that predates this command rejects it as unknown, and an engine that cannot
+   * do it errors rather than quietly doing nothing.
+   *
+   * Sent while a turn is running, it **queues** behind that turn rather than
+   * cutting it short — a clear is not an interrupt, and one that landed in the
+   * middle of the turn it was clearing would be neither. Interrupt first if the
+   * intent was to stop the work as well as forget it.
+   */
+  | { type: 'clear_context' }
   | { type: 'set_permission_mode'; mode: PermissionMode }
   /** Switch the model for subsequent responses; omit `model` for the default. */
   | { type: 'set_model'; model?: string }
@@ -931,6 +947,22 @@ export type EngineCapabilities = {
   sessionMcpServers: boolean
   /** capabilities events carry slash commands (composer popover). */
   slashCommands: boolean
+  /**
+   * The `clear_context` command works — the engine can reset the conversation
+   * *in place*, keeping the session id, its watermarks and its place in the
+   * list, and announce it with {@link SessionEventBody} `conversation_reset`.
+   *
+   * Separate from {@link EngineCapabilities.slashCommands} because the two
+   * answer different questions and only one engine has both: Claude reaches a
+   * clear through the `/clear` its CLI already lists, codex has no command
+   * surface at all and needs the explicit operation, and a client that gated
+   * the control on `slashCommands` would offer it exactly where it was already
+   * offered and hide it where it is the only route.
+   *
+   * Absent = false, so an older gateway hides the control rather than
+   * presenting one that 501s.
+   */
+  clearContext?: boolean
   /** `skills` events can occur — the engine can enumerate its skills. False:
    * hide the skills panel entirely rather than showing an empty one. Orthogonal
    * to `slashCommands`: an engine can have skills and no commands (codex), or
@@ -986,6 +1018,10 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     mcpServerActions: true,
     sessionMcpServers: true,
     slashCommands: true,
+    // The route exists here too, and deliberately: it sends the `/clear` the
+    // CLI already honors, so the control and the command are one behaviour
+    // rather than two that can drift. The reset still arrives *from the SDK*.
+    clearContext: true,
     // The CLI reports skill NAMES on `system_init` and nothing more — no
     // descriptions, no scope, no suggested prompt. That is not enough to fill a
     // picker honestly, and the SDK exposes no listing call, so the panel stays
@@ -1063,6 +1099,13 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     // own `/model`, `/approvals` etc. are TUI-local and never reach this
     // transport. This is settled, not pending.
     slashCommands: false,
+    // A clear has no RPC either — `thread/compact/start` summarises rather than
+    // empties, and `thread/fork` makes a second thread. So the codex analog is
+    // a **fresh thread on the same session**, which the runner starts itself.
+    // The old thread is not deleted: it stays in CODEX_HOME and stays resumable
+    // from the sessions list, which is a feature and worth saying out loud,
+    // because "clear" reads as "gone".
+    clearContext: true,
     // …but `skills/list` does exist, and `skills/changed` says when to re-read
     // it. What comes back is metadata rich enough to render (description,
     // scope, and codex's own `defaultPrompt`) — see {@link SkillInfo} for why
@@ -1099,6 +1142,9 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     mcpServerActions: false,
     sessionMcpServers: false,
     slashCommands: false,
+    // The transcript this engine reasons over is an in-process message array,
+    // so clearing it is the whole operation — no engine round trip at all.
+    clearContext: true,
     skillsList: false,
     settingSources: false,
     budgets: false,

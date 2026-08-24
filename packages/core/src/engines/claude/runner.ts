@@ -336,6 +336,31 @@ export class SessionRunner implements Runner {
     await this.#query?.interrupt()
   }
 
+  /**
+   * Reset the conversation by sending the `/clear` the CLI already honors.
+   *
+   * Deliberately not a second mechanism: this engine's reset arrives *from the
+   * SDK*, and `normalizeSdkMessage` turns the CLI's report of it into the
+   * `conversation_reset` event (adopting the new conversation id and re-polling
+   * context usage on the way through). Reimplementing the clear here would give
+   * one engine two ways to reach the same state, and only one of them would get
+   * the id adoption right. So the command and the composer's `/clear` are one
+   * behaviour, and this method is the thin end of it.
+   *
+   * The one place it differs from the other two engines: this resolves when the
+   * `/clear` has been **handed to the CLI**, not when the reset has happened —
+   * the CLI queues its own streamed input, so waiting is its job, and there is
+   * no chain here to ride. The observable contract is the same (a clear sent
+   * mid-turn queues rather than cutting the turn short); only the moment the
+   * promise settles is weaker, and no caller depends on it.
+   */
+  async clearContext(): Promise<void> {
+    if (this.#status === 'closed' || this.#status === 'failed') {
+      throw new Error('session is closed')
+    }
+    this.sendMessage('/clear')
+  }
+
   async setPermissionMode(mode: PermissionMode): Promise<void> {
     await this.#query?.setPermissionMode(mode)
     this.#permissionMode = mode

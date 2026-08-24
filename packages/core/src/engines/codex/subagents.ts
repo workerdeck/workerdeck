@@ -109,6 +109,27 @@ export class CodexAgentTracker {
     }
   }
 
+  /**
+   * The conversation these agents belonged to is gone (a `conversation_reset`).
+   *
+   * Deliberately NOT {@link CodexAgentTracker.sweep}: that settles the running
+   * ones as failed and keeps the rows, which is right when the *process* dies —
+   * the transcript still holds the anchor `tool_use` each row points at, and a
+   * row that vanished would leave that card unexplained. A clear is the other
+   * way round. The anchors go with the transcript, so a surviving row would
+   * publish a `toolUseId` that resolves to nothing — and clients key a
+   * pressable, enterable agent line off exactly that id.
+   */
+  forget(): void {
+    this.#byThread.clear()
+  }
+
+  /** The thread ids currently tracked — what a clear remembers so a still-running
+   * agent's later traffic can be dropped rather than re-anchored. */
+  threadIds(): string[] {
+    return Array.from(this.#byThread.keys())
+  }
+
   /** The rollup as `SessionInfo.subagents` serves it — spawn order, fresh
    * objects, and `undefined` when there is nothing to say (absent and empty
    * mean the same thing to a client, and bytes on a polled list are paid for). */

@@ -310,6 +310,56 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   render nothing rather than 0%), and its `categories` is always empty because codex publishes no
   breakdown — `contextUsage: true` with an empty breakdown is a valid combination, so clients must
   not draw an empty "Breakdown" section (iOS's `ContextSheet` hides it).
+  **And the window codex reports is a PRICING policy, not the model's size** — which is why a
+  1M-class model reads ~258k, why that reading is nonetheless correct, and why it is the
+  *operator's* to change. Measured 2026-08-24 against 0.149.0 on `gpt-5.6-terra`, whose published
+  API limits are **1,050,000 context / 922,000 max input / 128,000 max output**:
+
+      default (nothing set)          -> modelContextWindow 258400
+      model_context_window = 500000  -> modelContextWindow 475000
+      model_context_window = 900000  -> modelContextWindow 828400
+
+  The catalog compiled into the binary says terra is `"context_window": 272000,
+  "max_context_window": 872000`, and `ModelInfo` carries an `effective_context_window_percent`.
+  The three readings pin the formula exactly:
+
+      reported = min(model_context_window ?? context_window, max_context_window) x 0.95
+
+  So **272000 is not a capability, it is the price tier**: OpenAI's own docs say prompts over
+  272K input tokens are billed at 2x input / 1.5x output *for the whole request*, and codex's
+  default sits on that boundary. The 5% is a reserve. The practical consequences:
+  - The meter is honest — it reports the window codex has actually budgeted for the thread, which
+    is what decides when auto-compaction fires. It is not the model's ceiling and was never
+    claiming to be.
+  - An operator who wants the big window sets `model_context_window` in their own
+    `~/.codex/config.toml` (up to 872000 → 828400 reported; codex clamps to `max_context_window`,
+    which is itself below OpenAI's stated 922,000 max input). That is a real cost/quota decision,
+    not a display setting, which is exactly why it belongs to them — same posture as
+    `network_access`, and the same red line: **WorkerDeck never writes it.** Carry the caveat with
+    the advice: openai/codex #16068 (closed as a duplicate of #16033) reports that setting it
+    **breaks auto-compaction permanently** after the first overflow — `fill_to_context_window()`
+    writes a near-zero delta into `last_token_usage.total_tokens` and the check never fires again.
+    Reported against 0.116/0.117, unverified by us on 0.149.0. So the honest phrasing is "raise it
+    and watch for compaction failing", not "raise it".
+  - **The cap moves between releases**, so a reading from a past session is not evidence against a
+    reading today: openai/codex #32806 documents Sol going 372000/353400 → 272000/258400, and
+    #30875 reports 5.5 oscillating between the two. Nothing to do about it; just do not treat a
+    remembered number as a contradiction.
+  - **"But I reached 800k tokens" is the `total`-vs-`last` trap wearing a different hat.** The TUI
+    prints `Token usage: total=…` (thread-cumulative) *beside* a `% context left` readout
+    (occupancy). A long session passes 800k cumulative without occupancy ever leaving the window,
+    because **auto-compaction keeps resetting it** — which is how "I just kept going naturally"
+    happens. Note what that implies for us: codex's `contextCompaction` is one of the ThreadItem
+    variants we do **not** map, so on a WorkerDeck surface that summarisation is completely
+    invisible and the ring simply drops for no stated reason. Brief:
+    `_docs/features/codex-compaction-invisible.md`.
+  - **Never hardcode a window in our catalog to "correct" this.** A table in this repo that
+    disagrees with the binary is the exact failure mode the engine catalogs exist to avoid — and
+    here it would also be wrong for every operator who had set the override.
+
+  Still unverified: whether the reported window can *move* mid-thread. Nothing observed does this,
+  but if it ever did, the meter's denominator would change between turns — the occupancy rule
+  (newest `last.totalTokens` against the newest window) already handles it, and nothing pins it.
 - **Rate-limit windows are positional there and named here, so they are named by their measured
   duration.** `account/rateLimits/updated` reports `primary`/`secondary` with a
   `windowDurationMins`, while `RateLimitInfo.rateLimitType` is a *name* clients already act on —
@@ -454,6 +504,64 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   codex's own `/model`, `/approvals` etc. are TUI-local. `slashCommands: false` is correct and a
   composer must hide the `/` popover rather than offer an empty one. (`skills/list` does exist,
   so surfacing *skills* is a real possibility — a feature, not a repair.)
+- **A clear is a FRESH THREAD on the same session, because codex has no reset RPC.** The near
+  neighbours are all something else: `thread/compact/start` summarises and continues,
+  `thread/fork` makes a second thread, `thread/goal/clear` is unrelated. So `clearContext()` drops
+  `#sdkSessionId`, sets `#threadLoaded = false` and lets `#ensureThread()` do `thread/start`
+  instead of `thread/resume` — the dead-child path minus the resume. Four things ride with it, and
+  each was a bug waiting to happen:
+  **(a) It rides the TURN CHAIN, and that is the whole safety argument.** The chain is what
+  serialises everything that touches `#ensureThread` — every `#runTurn`, *and the resume
+  backfill, which is a chain link and is NOT a turn*. A guard on `#activeTurn` looks equivalent
+  and is not: websocket frames are not serialised with each other, so a `clear_context` arriving
+  mid-backfill passed that guard, issued a concurrent `thread/start`, and then — depending on who
+  won — either had the resume re-adopt the old thread id and replay the cleared conversation at
+  seqs *above* the reset, or silently lost the backfill. Two `thread/start`s in flight is the
+  other shape of it: whichever resolves last owns `#sdkSessionId`, `#isRootThread` then misroutes
+  the running turn's `turn/completed` to the agent path, and the turn never settles — a wedged
+  chain, with `interrupt()` hanging on it. So: one entry point, on the chain, for both callers.
+  **A corollary: it must NOT wipe `#queue`.** By the time the clear link runs, every message
+  queued before it has already run; whatever is left was typed *after* and belongs to the new
+  conversation. Wiping it swallowed exactly those, silently.
+  **(b) The new thread id is adopted BEFORE `conversation_reset` is emitted** whenever a child is
+  already up (an eager `thread/start`; it costs no tokens and no model call). This mirrors the
+  Claude engine, whose reset adopts the SDK's `new_conversation_id` immediately for exactly the
+  same reason — a dormant record written in between must name the fresh conversation, not the
+  cleared one. The fallible step goes first and **rolls back**: a failed `thread/start` restores
+  the old id, because half-clear (id dropped, transcript intact, no reset emitted) is the worst
+  outcome of the three.
+  **(c) With no live child there is no id to adopt**, and the session sits with *no*
+  `sdkSessionId` until its next turn. The parking service treats that as "nothing to come back
+  to" and **deletes** the stale dormant record (`#forgetDormant`, narrower than `discard`, which
+  would also drop the config and end the session's ability to go dormant ever again). Without
+  this, a restart in that window wakes the session into the transcript the user just threw away.
+  **(d) The context reading is retired, and cannot be re-polled.** Claude re-polls after a reset;
+  codex's only source is `thread/tokenUsage/updated`, which arrives *during* a turn. So there is
+  no reading at all until the next turn runs, and the protocol's standing rule applies — render
+  nothing, never 0%. `#emit`'s `conversation_reset` arm already did this.
+  **(e) Sub-agents are `forget()`-ten, not `sweep()`-ed — and remembered.** Sweep settles the
+  running ones as failed and *keeps the rows*, which is right when the process dies (the anchor
+  `tool_use` cards are still in the transcript). A clear is the other way round: the anchors go
+  with the transcript, so a surviving row would publish a `toolUseId` that resolves to nothing —
+  and both clients key a pressable, enterable agent line off exactly that id. But an agent
+  **outlives the root turn that spawned it by design**, and a clear neither interrupts it nor
+  drops the child, so its traffic keeps arriving on the same connection: `#agentFor` would find no
+  record and *mint a fresh anchor*, streaming the cleared conversation's agent work into the new
+  one. Hence `#clearedThreads` — their ids are remembered for the session's life and their
+  notifications dropped. Pending approvals go the same way: a card whose anchor was just cleared
+  can never be answered against anything the user can now see.
+- **`/clear` typed into a codex composer is intercepted by the runner**, and that is deliberate
+  duplication of the capability route, not a shortcut around it. `slashCommands: false` meant the
+  string went to the model as an ordinary prompt and got an ordinary answer — it did not error,
+  which is worse than erroring, because it looked like it might have worked. The intercept is
+  narrow on purpose (the bare word after trimming, and no attachments; `explain what /clear does`
+  is a prompt) and it is the **same call the command makes** — one entry point, deliberately, for
+  the reason in (a). A clear sent while a turn is running **queues** behind it rather than cutting
+  it short: a clear is not an interrupt, and one that landed in the middle of the turn it was
+  clearing would be neither.
+- **The cleared thread is not deleted and should not be.** It stays in CODEX_HOME and stays
+  resumable from `GET /sdk-sessions`. Worth saying out loud in any UI copy, because "clear" reads
+  as "gone".
 - **A project's `.codex/config.toml` is only read if that project is TRUSTED — and in a read-only
   sandbox codex cannot ask, so it silently reads nothing.** Codex gates project config on a
   `[projects."/abs/path"] trust_level = "trusted"` entry in `$CODEX_HOME/config.toml`. The vanilla

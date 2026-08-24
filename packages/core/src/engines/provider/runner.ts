@@ -165,6 +165,15 @@ export class AiSdkRunner implements Runner {
    */
   #contextUsage: ContextReading | undefined
   #activityCount = 0
+  /**
+   * Seq of the latest `conversation_reset` event, 0 when none. The log itself is
+   * never truncated — it still carries the state-bearing events (`capabilities`,
+   * `system_init`, …) a fresh attacher depends on and which are not re-emitted —
+   * but `subscribe()` skips transcript *content* strictly below this mark, so a
+   * replay does not resurrect a cleared conversation. A later reset supersedes
+   * an earlier one by overwriting it.
+   */
+  #resetSeq = 0
   #status: SessionStatus = 'starting'
   #permissionMode: PermissionMode
   #messages: ModelMessage[] = []
@@ -225,8 +234,13 @@ export class AiSdkRunner implements Runner {
     this.#activityCount = 0
     for (const event of this.#events) {
       this.#activityCount += transcriptActivity(event)
-      if (event.type === 'conversation_reset') this.#contextUsage = undefined
-      else this.#contextUsage = contextReading(event) ?? this.#contextUsage
+      if (event.type === 'conversation_reset') {
+        // Recomputed for the same reason as the count: the log IS the mark, and
+        // a rehydrated session that forgot where its last reset was would
+        // replay the cleared conversation to the first client that attached.
+        this.#resetSeq = event.seq
+        this.#contextUsage = undefined
+      } else this.#contextUsage = contextReading(event) ?? this.#contextUsage
     }
     this.#messages = [...state.messages]
     for (const call of state.pendingToolCalls) this.#pendingToolCalls.set(call.toolCallId, call)
@@ -549,6 +563,45 @@ export class AiSdkRunner implements Runner {
     return result.text
   }
 
+  /**
+   * Reset the conversation: drop the message array the next turn would have
+   * been built from. There is no engine round trip — this runner *is* where the
+   * transcript lives, so clearing it is the whole operation.
+   *
+   * Two things ride along, both already written elsewhere and both load-bearing
+   * here. `#emit`'s `conversation_reset` arm retires `#contextUsage` (the
+   * reading described a conversation that no longer exists), and the same arm
+   * in `restore` keeps a parked session that comes back after a clear from
+   * resurrecting it. Pending tool calls are NOT swept: a parked call is work a
+   * backend still owes an answer for, and a clear is not an interrupt — the
+   * refusal below is what keeps the two apart.
+   */
+  async clearContext(): Promise<void> {
+    if (this.#status === 'closed' || this.#status === 'failed') {
+      throw new Error('session is closed')
+    }
+    // Rides the turn chain, like every other thing that touches `#messages`, so
+    // a clear requested mid-turn queues behind that turn instead of racing it.
+    // A failed clear must not poison the chain.
+    const run = this.#turnChain.then(() => {
+      if (this.#closed) throw new Error('session is closed')
+      // Parked external work is the one thing waiting cannot resolve: a bridged
+      // call's result is owed by a client that may answer in two days, and the
+      // messages it will be spliced into are exactly what a clear would drop.
+      // Interrupt first — that path fails the calls and finishes the turn.
+      if (this.#pendingToolCalls.size > 0) {
+        throw new Error('cannot clear context while tool calls are outstanding')
+      }
+      this.#messages = []
+      this.#emit({ type: 'conversation_reset' })
+    })
+    this.#turnChain = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    await run
+  }
+
   async interrupt(): Promise<void> {
     if (this.#abort) {
       this.#abort.abort()
@@ -631,7 +684,7 @@ export class AiSdkRunner implements Runner {
     afterSeq = 0,
     options?: SubscribeOptions,
   ): () => void {
-    return this.#subscribers.subscribe(this.#events, listener, afterSeq, options)
+    return this.#subscribers.subscribe(this.#events, listener, afterSeq, options, this.#resetSeq)
   }
 
   #scheduleTurn(): void {
@@ -1048,7 +1101,12 @@ export class AiSdkRunner implements Runner {
     this.#contextUsage = contextReading(body) ?? this.#contextUsage
     // A reset retires the conversation the window described; the old fill is
     // not this conversation's, exactly as the transcript state clears it.
-    if (body.type === 'conversation_reset') this.#contextUsage = undefined
+    if (body.type === 'conversation_reset') {
+      this.#resetSeq = event.seq
+      // A reset retires the conversation the window described; the old fill is
+      // not this conversation's, exactly as the transcript state clears it.
+      this.#contextUsage = undefined
+    }
     this.#events.push(event)
     this.#subscribers.emit(event)
   }

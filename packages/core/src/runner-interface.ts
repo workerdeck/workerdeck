@@ -140,6 +140,26 @@ export interface Runner {
   /** Resolve a pending permission request. Returns false if the id is unknown (e.g. timed out). */
   resolvePermission(requestId: string, decision: PermissionDecision): boolean
   interrupt(): Promise<void>
+  /**
+   * Reset the conversation in place: the session keeps its id, its watermarks
+   * and its place in the list, and the engine starts over with an empty
+   * context. Announced with a `conversation_reset` event, whose replay rules
+   * (see `transcriptContent` in `@workerdeck/protocol`) are what stop an
+   * attaching client from resurrecting the cleared rows.
+   *
+   * Optional, like every member added after `Runner` became public API: an
+   * out-of-tree runner that declines it declines the `clear_context` command
+   * with it, which is exactly what `EngineCapabilities.clearContext: false`
+   * tells clients to expect.
+   *
+   * **Queues behind in-flight work rather than racing it** — resolving when the
+   * clear has actually happened, not when it was accepted. A clear that landed
+   * in the middle of the turn it was clearing would be neither, and the engines
+   * differ in how they wait (claude hands `/clear` to a CLI that queues its own
+   * streamed input; codex and the provider put it on their turn chain), so the
+   * one thing callers may rely on is the resolution, not the mechanism.
+   */
+  clearContext?(): Promise<void>
   setPermissionMode(mode: PermissionMode): Promise<void>
   /** Switch the model for subsequent responses; undefined = back to the default. */
   setModel(model?: string): Promise<void>

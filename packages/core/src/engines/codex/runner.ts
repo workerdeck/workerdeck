@@ -812,6 +812,15 @@ export class CodexRunner implements Runner {
    */
   #contextUsage: ContextReading | undefined
   #activityCount = 0
+  /**
+   * Seq of the latest `conversation_reset` event, 0 when none. The log itself is
+   * never truncated — it still carries the state-bearing events (`capabilities`,
+   * `system_init`, …) a fresh attacher depends on and which are not re-emitted —
+   * but `subscribe()` skips transcript *content* strictly below this mark, so a
+   * replay does not resurrect a cleared conversation. A later reset supersedes
+   * an earlier one by overwriting it.
+   */
+  #resetSeq = 0
   #status: SessionStatus = 'starting'
   #sdkSessionId: string | undefined
   #model: string | undefined
@@ -874,6 +883,15 @@ export class CodexRunner implements Runner {
    * it, and only the child process dying (or the session closing) ends them
    * all — see the module doc in `subagents.ts`. */
   #agents = new CodexAgentTracker()
+  /** Threads that belonged to a conversation this session has cleared — the
+   * agents that were still running when it happened. Their notifications keep
+   * arriving on the same connection (a clear does not interrupt them and does
+   * not drop the child), and without this {@link CodexRunner.#agentFor} would
+   * mint them a fresh anchor and stream the cleared conversation's agent work
+   * into the new one. Never pruned: it is a handful of uuids for the session's
+   * life, and a late report from a long-dead agent is exactly what it exists to
+   * catch. */
+  #clearedThreads = new Set<string>()
 
   constructor(config: CodexRunnerConfig, id: string = randomUUID()) {
     const mode = config.permissionMode ?? 'default'
@@ -1086,6 +1104,35 @@ export class CodexRunner implements Runner {
 
   sendMessage(text: string, attachments?: readonly AttachmentInput[]): void {
     if (this.#closed) throw new Error('session is closed')
+    // `/clear` typed into a codex session, intercepted rather than sent.
+    //
+    // This engine declares `slashCommands: false` because the app-server has no
+    // command surface at all — so before this, the string went to the model as
+    // an ordinary prompt and got an ordinary answer. It did not error, which is
+    // worse than erroring: it looked like it might have worked. Everyone who
+    // has used the other engine will type it, so it does the thing they meant.
+    //
+    // Deliberately narrow: the bare word, no attachments. `/clear` with a file
+    // attached, or any sentence containing it, is a prompt — this must never
+    // silently steal a message someone meant to send.
+    //
+    // `clearContext()` is the same call the route makes, and it queues behind
+    // in-flight work rather than racing it — so a `/clear` typed mid-turn waits
+    // for that turn and lands with nothing in flight. Fire-and-forget with the
+    // failure surfaced as a `session_error`, because `sendMessage` is void by
+    // contract and a clear that could not happen must not be silent. No
+    // `user_message` echo: the reset would clear it in the same breath.
+    if (text.trim() === '/clear' && !attachments?.length) {
+      void this.clearContext().catch((error: unknown) => {
+        this.#emit({
+          type: 'session_error',
+          message: `could not clear the conversation: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        })
+      })
+      return
+    }
     const input = this.#buildInput(text, attachments ?? [])
     const echo = () =>
       this.#emit({
@@ -1166,6 +1213,112 @@ export class CodexRunner implements Runner {
     }
     await this.#interruptTurn()
     await this.#turnChain
+  }
+
+  /**
+   * Reset the conversation: a **fresh thread on the same session**.
+   *
+   * Codex has no clear/reset RPC — `thread/compact/start` summarises and
+   * continues, `thread/fork` makes a second thread, and neither is "same
+   * session, empty context". So the analog is to stop resuming the old thread
+   * and start a new one, which is the path a dead child already takes minus the
+   * resume. The old thread is NOT deleted: it stays in CODEX_HOME and stays
+   * resumable from `GET /sdk-sessions`.
+   *
+   * Two things it does on the way through, both mirroring the Claude engine's
+   * SDK-driven reset (`engines/claude/runner.ts`):
+   *
+   * 1. **The new thread id is adopted before `conversation_reset` is emitted**,
+   *    whenever a child is already up — the eager `thread/start` costs no
+   *    tokens and no model call, and it is what keeps the dormant record from
+   *    ever naming the conversation that was just cleared. With no child there
+   *    is nothing to start against and the id is simply dropped; the parking
+   *    service treats a resumable session with no engine session id as one with
+   *    nothing to come back to, and forgets the stale record.
+   * 2. **The context reading is retired**, in `#emit`'s `conversation_reset`
+   *    arm. Codex cannot re-poll it the way Claude does — the only source is
+   *    `thread/tokenUsage/updated`, which arrives *during* a turn — so there is
+   *    no reading at all until the next turn runs, and the protocol's rule
+   *    applies: render nothing rather than a stale ring or a 0%.
+   *
+   * The turn counter stays monotonic across this, on purpose (it is an unread
+   * cursor, not an item count), and so does `activityCount` — `#emit` owns both.
+   */
+  async clearContext(): Promise<void> {
+    if (this.#closed) throw new Error('session is closed')
+    // Rides the TURN CHAIN, exactly like the intercepted `/clear`, and that is
+    // the whole safety argument. The chain is what serialises everything that
+    // touches `#ensureThread` — every `#runTurn`, and the resume backfill,
+    // which is the chain's first link and is NOT a turn (so a guard on
+    // `#activeTurn` would have let a clear run straight through the middle of a
+    // history replay, re-adopting the old thread id and replaying the cleared
+    // conversation ABOVE the reset). Websocket frames are not serialised with
+    // each other, so the route can and does arrive at any moment.
+    //
+    // The chain must not be poisoned by a failed clear: the caller gets the
+    // rejection, the chain keeps its own settled link.
+    const run = this.#turnChain.then(() => this.#clearNow())
+    this.#turnChain = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    await run
+  }
+
+  /** The clear itself, only ever called as a turn-chain link. */
+  async #clearNow(): Promise<void> {
+    if (this.#closed) throw new Error('session is closed')
+    // Deliberately NOT wiping `#queue`. Everything queued before the clear was
+    // requested has already run — its `#runTurn` links sit ahead of this one on
+    // the chain — so whatever is left was pushed *after* the clear and belongs
+    // to the new conversation. Wiping it dropped exactly those messages, and
+    // silently: the echo appeared, the reset cleared it, and no turn ever ran.
+    //
+    // Order matters below. The fallible step happens FIRST among the things
+    // that can fail, and the state that cannot be rolled back is only dropped
+    // once it has succeeded — a failed `thread/start` must leave the session
+    // exactly as it was, still resuming the old thread, rather than half-clear
+    // with no `conversation_reset` to say so.
+    const previousThread = this.#sdkSessionId
+    this.#sdkSessionId = undefined
+    this.#threadLoaded = false
+    if (this.#connection) {
+      try {
+        // `#ensureThread` sees no thread id and no loaded thread, so this is a
+        // `thread/start`, not a `thread/resume`.
+        await this.#ensureThread()
+      } catch (error) {
+        this.#sdkSessionId = previousThread
+        this.#threadLoaded = false
+        throw error
+      }
+    }
+    // The agents belong to the thread being left behind. `forget`, not the
+    // dead-child path's `sweep`: their anchor tool cards go with the transcript,
+    // so a row settled-but-kept would name a `toolUseId` that no longer resolves
+    // to anything a client can open.
+    //
+    // They are also, possibly, still RUNNING — an agent outlives the root turn
+    // that spawned it by design, and a clear neither interrupts them nor drops
+    // the child. So their thread ids are remembered: `#agentFor` drops their
+    // traffic instead of minting a fresh anchor for it, which is what would
+    // otherwise stream the cleared conversation's agent work into the new one.
+    for (const agent of this.#agents.threadIds()) this.#clearedThreads.add(agent)
+    this.#agents.forget()
+    // An approval raised by one of those agents between root turns is a card
+    // whose anchor was just cleared; it can never be answered against anything
+    // the user can now see.
+    for (const [id, pending] of this.#approvals) {
+      this.#settleApproval(
+        id,
+        pending,
+        { behavior: 'deny', message: 'the conversation was cleared' },
+        'policy',
+      )
+    }
+    // Nothing stashed here can survive the thread it was read from.
+    this.#resumedHistory = undefined
+    this.#emit({ type: 'conversation_reset', sdkSessionId: this.#sdkSessionId })
   }
 
   /** Address the in-flight turn only (no approval sweep) — also the follow-up
@@ -1259,7 +1412,7 @@ export class CodexRunner implements Runner {
     afterSeq = 0,
     options?: SubscribeOptions,
   ): () => void {
-    return this.#subscribers.subscribe(this.#events, listener, afterSeq, options)
+    return this.#subscribers.subscribe(this.#events, listener, afterSeq, options, this.#resetSeq)
   }
 
   #scheduleTurn(): void {
@@ -1797,6 +1950,10 @@ export class CodexRunner implements Runner {
     if (threadId === undefined || threadId === this.#sdkSessionId) return undefined
     const known = this.#agents.get(threadId)
     if (known) return known
+    // An agent from a conversation that has been cleared. Its work belonged to
+    // a transcript that no longer exists, so it is dropped rather than minted
+    // an anchor in the conversation that replaced it.
+    if (this.#clearedThreads.has(threadId)) return undefined
     const nonce = this.#activeTurn?.nonce ?? 'codex'
     const record = this.#agents.open(threadId, `${nonce}:agent:${threadId}`, undefined, Date.now())
     record.anchored = true
@@ -2642,7 +2799,12 @@ export class CodexRunner implements Runner {
     this.#contextUsage = contextReading(body) ?? this.#contextUsage
     // A reset retires the conversation the window described; the old fill is
     // not this conversation's, exactly as the transcript state clears it.
-    if (body.type === 'conversation_reset') this.#contextUsage = undefined
+    if (body.type === 'conversation_reset') {
+      this.#resetSeq = event.seq
+      // A reset retires the conversation the window described; the old fill is
+      // not this conversation's, exactly as the transcript state clears it.
+      this.#contextUsage = undefined
+    }
     this.#events.push(event)
     this.#subscribers.emit(event)
   }

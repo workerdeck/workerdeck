@@ -55,8 +55,12 @@ export function staleReplaySeqs(events: readonly SessionEvent[], afterSeq: numbe
  * 1. `afterSeq` — the caller already holds everything at or below it.
  * 2. `resetSeq` — transcript *content* strictly below the latest
  *    `conversation_reset` is skipped, so a re-attach cannot resurrect a cleared
- *    conversation while state events still replay. Claude's alone; the other
- *    engines pass 0.
+ *    conversation while state events still replay. **Every engine that can emit
+ *    a reset must track it and pass it** — this was Claude's alone only for as
+ *    long as Claude's was the only engine that could produce the event, and the
+ *    failure when a runner forgets is quiet: the end state is right for a
+ *    current reducer, so nothing looks broken while every attach re-sends the
+ *    whole cleared conversation for the process's lifetime.
  * 3. `coalesceReplay` — last-write-wins state readings superseded later in the
  *    same replay (`staleReplaySeqs`), plus everything `replayRetains` says the
  *    reducer reads and discards. Opt-in, and only sound for a consumer whose

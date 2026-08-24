@@ -162,6 +162,23 @@ older client ignores the field and a newer one already has to treat absent as "n
 is a real state (a promptless session, a parked record from before the field existed) and is
 never zero. Bumping for an additive field would raise a mismatch banner on every client that had
 done nothing wrong.
+`EngineCapabilities.clearContext` and the `clear_context` command are the same argument applied
+one level up, and they are the precedent to copy for the next capability-gated *operation*. A new
+optional capability field plus a new `SessionCommand` variant is additive at **7**: an older
+client never sends the command (the field is absent, and absent means false by construction, so
+the control is hidden rather than broken), and an older gateway that somehow receives it answers
+with its existing unknown-command error rather than doing something surprising. The three
+engines each reach the same state by a different route — claude sends the `/clear` its CLI
+already lists, codex starts a fresh thread, the provider drops an in-process message array — and
+that is exactly why the capability record names the *power* and not the mechanism.
+**And any engine that can emit `conversation_reset` must track its seq and pass it to
+`subscribe`** (`#resetSeq` → `replaySlice`'s rule 2). This was Claude's alone for exactly as long
+as Claude's was the only engine that could produce the event, and codex and the provider shipped
+the event without the mark — a failure that is invisible from the outside, because the end state
+is correct for a current reducer while every attach re-sends the whole cleared conversation for
+the process's lifetime. The provider's `restore` recomputes it from the log for the same reason it
+recomputes `activityCount`: a rehydrated session that forgot where its last reset was would replay
+the cleared conversation to the first client that attached.
 `session-list.ts` is the
 **sessions-list view model** (the `attention/working/idle/ended` buckets, the
 gateway/adapter/state/**project** facets, `filterRows`/`groupRows`/`subsetSummary`/`clearFilters`,

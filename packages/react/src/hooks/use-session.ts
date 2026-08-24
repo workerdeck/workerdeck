@@ -194,6 +194,13 @@ export type UseClaudeSessionResult = {
    * `interrupt` also stops the turn ("deny & stop"). */
   deny: (requestId: string, message?: string, interrupt?: boolean) => void
   interrupt: () => void
+  /**
+   * Reset the conversation in place: same session, empty transcript. Gate the
+   * affordance on `session.capabilities?.clearContext` — an engine or a gateway
+   * that cannot do it answers with an error, which is the wrong way for a user
+   * to find out.
+   */
+  clearContext: () => void
   setPermissionMode: (mode: PermissionMode) => void
   setModel: (model?: string) => void
   closeSession: () => void
@@ -430,6 +437,7 @@ export function useClaudeSession(
       deny: (requestId, message, interrupt) =>
         handleRef.current?.deny(requestId, message, interrupt),
       interrupt: () => handleRef.current?.interrupt(),
+      clearContext: () => handleRef.current?.clearContext(),
       setPermissionMode: (mode) => handleRef.current?.setPermissionMode(mode),
       setModel: (model) => handleRef.current?.setModel(model),
       closeSession: () => handleRef.current?.closeSession(),

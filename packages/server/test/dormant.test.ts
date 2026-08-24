@@ -105,6 +105,14 @@ class ResumableRunner implements Runner {
     return false
   }
   async interrupt(): Promise<void> {}
+  /** A conversation reset, in both the shapes real engines produce it: one that
+   * names the fresh engine session in the same breath (claude, and codex when
+   * its child is already up), and one that has no id to name until its next
+   * turn (codex with no live child). */
+  async clearContext(adopt?: string): Promise<void> {
+    this.#sdkSessionId = adopt
+    this.#emit({ type: 'conversation_reset', sdkSessionId: adopt })
+  }
   async setPermissionMode(): Promise<void> {}
   async setModel(): Promise<void> {}
   fail(): void {}
@@ -371,5 +379,48 @@ describe('sessions that survive a restart', () => {
 
     const third = await startGateway(createFileSessionStore({ dir }))
     expect((await list(third.base)).map((row) => row.id)).toEqual([session.id])
+  })
+
+  it('forgets the dormant record when a clear leaves nothing to come back to', async () => {
+    // The record names the conversation that was just cleared, and no
+    // `status_changed` follows a clear to correct it — so a restart in this
+    // window would wake the session straight back into the transcript the user
+    // threw away. Codex is the engine that gets here: its fresh thread id is not
+    // known until the next turn's `thread/start`, so with no live child there is
+    // nothing to re-save under.
+    const store = await stateDir().then((dir) => createFileSessionStore({ dir }))
+    const gateway = await startGateway(store)
+    const session = await create(gateway.base)
+    await vi.waitFor(async () => {
+      expect((await store.get(session.id))?.kind).toBe('dormant')
+    })
+
+    await gateway.built[0]!.clearContext()
+
+    await vi.waitFor(async () => {
+      expect(await store.get(session.id)).toBeNull()
+    })
+    // The live session is untouched — this is narrower than `discard`, which
+    // would also drop the config and cost the session its ability to go dormant
+    // again for the rest of its life.
+    expect((await list(gateway.base)).map((row) => row.id)).toEqual([session.id])
+  })
+
+  it('re-saves under the new engine session when a clear adopts one', async () => {
+    const store = await stateDir().then((dir) => createFileSessionStore({ dir }))
+    const gateway = await startGateway(store)
+    const session = await create(gateway.base)
+    await vi.waitFor(async () => {
+      expect((await store.get(session.id))?.kind).toBe('dormant')
+    })
+
+    await gateway.built[0]!.clearContext('engine-session-2')
+
+    await vi.waitFor(async () => {
+      const record = await store.get(session.id)
+      expect(record && record.kind === 'dormant' ? record.sdkSessionId : undefined).toBe(
+        'engine-session-2',
+      )
+    })
   })
 })

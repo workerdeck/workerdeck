@@ -114,6 +114,20 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
     case 'interrupt':
       await runner.interrupt()
       return
+    case 'clear_context':
+      // Optional on `Runner`, like every member added after it became public
+      // API. An engine that declines it declines the command with it, which is
+      // exactly what `EngineCapabilities.clearContext` told the client to
+      // expect — so the error names the engine rather than being a bare throw.
+      // It reaches the client as a `protocol_error` frame like every other
+      // command failure here; there is no HTTP route for this.
+      if (!runner.clearContext) {
+        throw new Error(
+          `the ${runner.info().engine ?? 'claude'} engine cannot clear a conversation`,
+        )
+      }
+      await runner.clearContext()
+      return
     case 'set_permission_mode':
       if (frame.mode === 'bypassPermissions' && ctx.options.disableBypassPermissions) {
         throw new Error('bypassPermissions is disabled on this server (disableBypassPermissions)')

@@ -63,6 +63,7 @@ ws.onmessage = ({ data }) => {
 | `file_delivered` | The agent handed over a file from its scratch filesystem (`deliver_file`); download it under `GET /sessions/:id/files/<path>`. |
 | `file_produced` | The **engine** wrote a file on the *host* filesystem and reported the path — codex's `image_gen` saving a PNG is the case that motivated it. The host-filesystem sibling of `file_delivered`. Carries an opaque `fileId`, the absolute `path` as the engine reported it, and a media type where the runner could determine one; fetch it at `GET /sessions/:id/produced/:fileId`. This event **is** the allowlist for that route — nothing else can add a path to it. |
 | `sdk_event` | Forward-compatible passthrough for any SDK message this protocol version doesn't model first-class (task progress, compaction boundaries, auth status, …). |
+| `conversation_reset` | The conversation was cleared in place — same session id, same watermarks, empty context — carrying the engine session id the fresh conversation runs under when the engine reported one. Its replay rules are load-bearing: a re-attach skips transcript *content* strictly below the latest reset while every state-bearing event still replays, so a client cannot resurrect a cleared conversation but also does not come back with no model list and no cwd. `activityCount` stays monotonic across it on purpose — it is an unread cursor, not an item count. |
 | `session_error` / `session_closed` | Terminal errors and closure (`reason: 'client' | 'server' | 'error'`). |
 
 ## Commands (client → server)
@@ -70,9 +71,18 @@ ws.onmessage = ({ data }) => {
 `SessionCommand` variants: `user_message` (`text`, plus optional `attachmentIds` naming files
 uploaded ahead of it), `permission_decision` (`requestId`,
 `behavior: 'allow' | 'deny'`, allow-only `updatedInput`, deny-only `message`/`interrupt`),
-`interrupt`, `set_permission_mode`, `set_model` (omit `model` for the default), `close`, and the
-two answers to a bridged tool call — `tool_call_result` / `tool_call_error`, each carrying the
-`executionId` it is answering.
+`interrupt`, `set_permission_mode`, `set_model` (omit `model` for the default),
+`clear_context`, `close`, and the two answers to a bridged tool call — `tool_call_result` /
+`tool_call_error`, each carrying the `executionId` it is answering.
+
+`clear_context` resets the conversation in place and is answered with a `conversation_reset`
+event. Send it only where `EngineCapabilities.clearContext` says so (absent = false, so an older
+gateway hides the control rather than offering one that errors). Sent while a turn is running it
+**queues** behind that turn rather than cutting it short — a clear is not an interrupt; interrupt
+first if the intent was to stop the work as well as forget it. Each engine reaches the same state
+its own way: Claude sends the `/clear` its CLI already lists, codex starts a fresh thread (the old
+one is *not* deleted — it stays resumable from the sessions picker), and the provider engine drops
+its in-process message array.
 
 WebSocket framing: the server sends `attached` (protocol version + `SessionInfo` snapshot +
 `replayingFrom`), then `event` frames, with `protocol_error` for bad input; the client sends
