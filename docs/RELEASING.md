@@ -353,6 +353,17 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   workspace-write, opened by no approval policy — and it stays the operator's `config.toml` to
   set, the same posture as credentials. What changed is that WorkerDeck stopped overwriting it.
 
+  **Unreleased on master (as of 2026-08-24)** — `bd4e83d`, the in-place conversation clear:
+  `EngineCapabilities.clearContext` + the `clear_context` command, implemented on all three
+  engines, plus the `resetSeq` replay fix for codex/provider and the provider's missing
+  write-through. Additive; protocol stays **7**; it is a **minor** when it goes out. Deliberately
+  **not** released with the session that built it, for two reasons worth honouring rather than
+  forgetting: it has never run against the real codex binary (`_docs/VERIFICATION-DEBT.md` item 9
+  has the two-turn run), and no client has a Clear control yet — the capability is declared and
+  nothing renders it. The user-visible complaint it was built for *is* already fixed, because
+  typing `/clear` now works on codex, so there is no pressure to ship it half-verified. Pay the
+  debt, add the control, then bump.
+
     **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`
   land *above* `v0.5.0` and a `| tail` reads the newest tags as the oldest. 0.12.0 had a local
