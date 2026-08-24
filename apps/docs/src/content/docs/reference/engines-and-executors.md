@@ -65,6 +65,26 @@ Trust resolves per directory layer, from the cwd up to and including the nearest
 session started in any subdirectory is covered. Note that switching a running session to a wider
 mode does not retroactively load the config; start a new session instead.
 
+### Network access
+
+Codex's sandbox has a third axis that neither the permission mode nor the approval policy
+controls: in `workspace-write`, **outbound network is off by default**. A command that needs it
+does not raise an approval request — it just fails, typically with `Could not resolve host`,
+because a DNS failure is not a sandbox denial.
+
+WorkerDeck does not decide this for you. Turn it on the way codex documents, in your
+`~/.codex/config.toml` (or a project `.codex/config.toml`, subject to the trust rules above):
+
+```toml
+[sandbox_workspace_write]
+network_access = true
+```
+
+WorkerDeck reads your effective setting for the session's directory and restates it on every
+turn, so a session honours exactly what you configured — including `writable_roots`. Manual mode
+is unaffected: the setting is scoped to workspace-write, and a read-only sandbox has no network
+either way.
+
 ## Which executor?
 
 Only for the provider engine, and only for tools typed `sandboxed` (`eval_script`, plus any host

@@ -273,6 +273,53 @@ async function canaries(): Promise<void> {
             'composer\'s skill completion are both dead until the runner is updated',
         )
       }
+
+      // 7. `config/read` — the source the runner restates on every turn/start.
+      //    turn/start's object-form sandbox policy is serde-defaulted FIELD BY
+      //    FIELD, so `{type:'workspaceWrite'}` bare silently resets the
+      //    operator's `[sandbox_workspace_write]` — network_access back to
+      //    false, writable_roots back to empty — every turn. Measured against
+      //    0.149.0 with `network_access = true`: bare → `curl: (6) Could not
+      //    resolve host`, fully stated → `200`. We cannot fix that by omitting
+      //    the policy (restating it is what makes a between-turns mode switch
+      //    take effect), so the runner reads it here instead. Free: a local
+      //    config resolve, no model call. If this ever stops reporting the
+      //    block, the runner falls back to the bare shape and the operator's
+      //    network_access is silently gone again.
+      try {
+        const read = (await connection.request('config/read', { cwd: gateCwd })) as {
+          config?: { sandbox_workspace_write?: Record<string, unknown> | null } | null
+        }
+        const block = read?.config?.sandbox_workspace_write
+        if (block === undefined) {
+          fail(
+            'config/read sandbox_workspace_write',
+            'no `config.sandbox_workspace_write` key — the runner can no longer restate the ' +
+              "operator's network_access/writable_roots and will clobber them on every turn",
+          )
+        } else if (block === null) {
+          // Nothing configured in this scratch home: a legitimate answer, and
+          // the key's presence is the contract, not its value.
+          pass('config/read sandbox_workspace_write', 'key present, null (nothing configured)')
+        } else {
+          const keys = ['writable_roots', 'network_access', 'exclude_tmpdir_env_var', 'exclude_slash_tmp']
+          const missing = keys.filter((k) => !(k in block))
+          if (missing.length) {
+            fail(
+              'config/read sandbox_workspace_write',
+              `block is missing ${missing.join(', ')} — the restated policy would default them`,
+            )
+          } else {
+            pass('config/read sandbox_workspace_write', `all four fields present`)
+          }
+        }
+      } catch (error) {
+        fail(
+          'config/read sandbox_workspace_write',
+          `config/read rejected: ${(error as Error).message} — the runner degrades to the bare ` +
+            "policy shape, which resets the operator's workspace-write settings every turn",
+        )
+      }
     } catch (error) {
       fail(
         'experimentalApi gate',

@@ -362,6 +362,7 @@ describe('CodexRunner', () => {
     // must not delay the turn — which is why it lands before it, not instead.
     expect(peer.requests.map((r) => r.method)).toEqual([
       'initialize',
+      'config/read',
       'thread/start',
       'skills/list',
       'turn/start',
@@ -370,13 +371,14 @@ describe('CodexRunner', () => {
     // experimentalApi is unconditional — granular approval policies are
     // rejected without it, and there is no non-experimental fallback.
     expect(peer.requests[0]!.params).toMatchObject({ capabilities: { experimentalApi: true } })
-    expect(peer.requests[1]!.params).toMatchObject({
+    expect(peer.requests[1]!.params).toEqual({ cwd: '/tmp/project' })
+    expect(peer.requests[2]!.params).toMatchObject({
       cwd: '/tmp/project',
       approvalPolicy: GRANULAR_ASK,
       sandbox: 'workspace-write',
       model: 'gpt-5.6-sol',
     })
-    expect(peer.requests[3]!.params).toMatchObject({
+    expect(peer.requests[4]!.params).toMatchObject({
       threadId: 'thread-1',
       input: [{ type: 'text', text: 'go' }],
       cwd: '/tmp/project',
@@ -555,6 +557,100 @@ describe('CodexRunner', () => {
     expect(produced[0]!.fileId).toMatch(/^[0-9a-f]{32}$/)
     // A generation with no savedPath announces nothing — there is no file.
     expect(produced.length).toBe(1)
+  })
+
+  it("restates the operator's [sandbox_workspace_write] on every turn instead of clobbering it", async () => {
+    // turn/start's object-form sandbox policy is serde-defaulted FIELD BY
+    // FIELD, so `{type:'workspaceWrite'}` bare means networkAccess:false and
+    // writableRoots:[] no matter what the operator configured — and we cannot
+    // simply stop sending it, because restating it is what makes a
+    // between-turns mode switch take effect. Measured against 0.149.0 with
+    // `network_access = true` set: bare → `curl: (6) Could not resolve host`,
+    // fully stated → `200`. So the policy is read from config/read (which
+    // resolves project layers for THIS cwd) and echoed back verbatim.
+    const peer = scriptedPeer()
+    peer.respond('config/read', () => ({
+      config: {
+        sandbox_workspace_write: {
+          writable_roots: ['/tmp/extra'],
+          network_access: true,
+          exclude_tmpdir_env_var: false,
+          exclude_slash_tmp: true,
+        },
+      },
+    }))
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({
+      cwd: '/tmp/project',
+      prompt: 'go',
+      permissionMode: 'acceptEdits',
+      connectFn: peer.connectFn,
+    })
+    collect(runner)
+    await runner.start()
+    expect(peer.requests.find((r) => r.method === 'config/read')?.params).toEqual({
+      cwd: '/tmp/project',
+    })
+    expect(peer.requests.find((r) => r.method === 'turn/start')?.params).toMatchObject({
+      sandboxPolicy: {
+        type: 'workspaceWrite',
+        writableRoots: ['/tmp/extra'],
+        networkAccess: true,
+        excludeTmpdirEnvVar: false,
+        excludeSlashTmp: true,
+      },
+    })
+  })
+
+  it('leaves read-only alone — network_access is scoped to workspace-write', async () => {
+    // The setting's name is the whole story: a read-only sandbox has no
+    // network either way (measured against 0.149.0, both with the policy
+    // stated and with it omitted), so `default` mode must not inherit the
+    // workspace-write block and quietly claim a grant it does not have.
+    const peer = scriptedPeer()
+    peer.respond('config/read', () => ({
+      config: { sandbox_workspace_write: { writable_roots: [], network_access: true } },
+    }))
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({
+      cwd: '/tmp/project',
+      prompt: 'go',
+      permissionMode: 'default',
+      connectFn: peer.connectFn,
+    })
+    collect(runner)
+    await runner.start()
+    expect(peer.requests.find((r) => r.method === 'turn/start')?.params).toMatchObject({
+      sandboxPolicy: { type: 'readOnly' },
+    })
+  })
+
+  it('falls back to the bare policy shape when config/read is unavailable', async () => {
+    // An older binary must not fail the session over a config probe — it just
+    // gets codex's own defaults, which is exactly what shipped before.
+    const peer = scriptedPeer()
+    peer.respond('config/read', () => {
+      throw new JsonRpcError(-32601, 'unknown variant `config/read`')
+    })
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({
+      cwd: '/tmp/project',
+      prompt: 'go',
+      permissionMode: 'acceptEdits',
+      connectFn: peer.connectFn,
+    })
+    const events = collect(runner)
+    await runner.start()
+    expect(peer.requests.find((r) => r.method === 'turn/start')?.params).toMatchObject({
+      sandboxPolicy: { type: 'workspaceWrite' },
+    })
+    expect(events.some((e) => e.type === 'session_error')).toBe(false)
   })
 
   it('lists skills over skills/list, and re-lists when the watcher says they changed', async () => {
@@ -859,7 +955,7 @@ describe('CodexRunner', () => {
     })
     const events = collect(runner)
     await runner.start()
-    expect(peer.requests[1]).toMatchObject({
+    expect(peer.requests[2]).toMatchObject({
       method: 'thread/resume',
       params: { threadId: 'prior-thread' },
       connection: 1,
@@ -1750,6 +1846,7 @@ describe('CodexRunner resume backfill', () => {
     // History was one page and complete: no thread/read, no turn ran, no notice.
     expect(peer.requests.map((r) => r.method)).toEqual([
       'initialize',
+      'config/read',
       'thread/resume',
       'skills/list',
     ])
@@ -1856,11 +1953,12 @@ describe('CodexRunner resume backfill', () => {
 
     expect(peer.requests.map((r) => r.method)).toEqual([
       'initialize',
+      'config/read',
       'thread/resume',
       'skills/list',
       'thread/read',
     ])
-    expect(peer.requests[3]).toMatchObject({
+    expect(peer.requests[4]).toMatchObject({
       params: { threadId: 'thread-1', includeTurns: true },
     })
     const users = ofType(events, 'user_message').filter((e) => !e.synthetic)

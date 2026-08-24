@@ -64,7 +64,13 @@ switching on the engine name:
   in the request itself: a codex command approval is usually an *escalation after the sandbox
   already refused the command* — the request's title is codex's own "command failed; retry
   without sandbox?", and approving re-runs the command unsandboxed. In `default` mode a blocked
-  action asks instead of silently failing; `bypassPermissions` asks nothing.
+  action asks instead of silently failing; `bypassPermissions` asks nothing. **Network is a separate axis**
+  and no approval policy opens it: outbound access is off by default inside codex's
+  `workspace-write` sandbox, so a command that needs the network fails (`Could not resolve host`)
+  rather than asking. Turn it on where codex reads it, in your own `config.toml`
+  (`[sandbox_workspace_write] network_access = true`); WorkerDeck restates your effective
+  settings on every turn and never substitutes its own. See
+  [engines and executors](/reference/engines-and-executors/#network-access).
 - The claude and codex engines ship a **model catalog** with each release, served as
   `ProfileInfo.models` from the first request — a real picker on a cold server, with per-model
   reasoning efforts where the engine takes them. Provider engines have no equivalent of a pinned

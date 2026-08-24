@@ -131,7 +131,10 @@ A **profile** is what a session runs as, and it picks the engine.
   token streaming and interactive approvals. Its ask channels map onto the same permission
   surface, with one difference carried honestly in the request itself: a codex command approval
   is usually an *escalation after its sandbox already refused the command*, not a gate before
-  execution, and approving re-runs it unsandboxed.
+  execution, and approving re-runs it unsandboxed. Network is codex's third axis, not an approval
+  question: outbound access is off by default in `workspace-write`, so a `git push` fails rather
+  than asking. WorkerDeck honours — and never overwrites — your
+  `[sandbox_workspace_write]` settings.
 - **Any provider** the [AI SDK](https://ai-sdk.dev) supports, through a host hook — no CLI
   process. This engine trades ambient authority for a sandbox: no shell, no host filesystem,
   capability-scoped tools, and untrusted code confined to a QuickJS guest that can run in the

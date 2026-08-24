@@ -78,12 +78,40 @@ const THREAD_SANDBOX_BY_MODE: Partial<Record<PermissionMode, string>> = {
   bypassPermissions: 'danger-full-access',
 }
 
-/** turn/start's sandboxPolicy axis (object form — same policy, second shape). */
+/**
+ * turn/start's sandboxPolicy axis (object form — same policy, second shape).
+ *
+ * The `workspaceWrite` entries here are a SHAPE, not the whole policy: every
+ * unstated field of that variant is serde-defaulted by the app-server, so
+ * sending it bare silently overrides the operator's `[sandbox_workspace_write]`
+ * — `network_access` back to false, `writable_roots` back to empty — on every
+ * turn. {@link CodexRunner.#turnSandboxPolicy} restates those fields from
+ * `config/read`; nothing else may send this map's `workspaceWrite` entries
+ * directly.
+ */
 const TURN_SANDBOX_BY_MODE: Partial<Record<PermissionMode, { type: string }>> = {
   default: { type: 'readOnly' },
   acceptEdits: { type: 'workspaceWrite' },
   auto: { type: 'workspaceWrite' },
   bypassPermissions: { type: 'dangerFullAccess' },
+}
+
+/**
+ * `[sandbox_workspace_write]` as codex resolves it FOR THIS CWD (project
+ * layers included), read once per child from `config/read` and restated on
+ * every `turn/start` — see {@link CodexRunner.#readWorkspaceWrite}.
+ *
+ * Note the axis this represents: network access is **not** an approval
+ * question, it is a property of the workspace-write sandbox, off by default,
+ * and no approval policy turns it on. WorkerDeck sets it nowhere — the
+ * operator's `config.toml` is the only source, exactly as codex documents.
+ * All this type does is stop us from clobbering their answer.
+ */
+type CodexWorkspaceWrite = {
+  writableRoots: string[]
+  networkAccess: boolean
+  excludeTmpdirEnvVar: boolean
+  excludeSlashTmp: boolean
 }
 
 /**
@@ -800,6 +828,8 @@ export class CodexRunner implements Runner {
   #turnChain: Promise<void> = Promise.resolve()
   #activeTurn: ActiveTurn | undefined
   #connection: AppServerConnection | undefined
+  /** Per-child, from `config/read`; undefined = read failed, send the bare shape. */
+  #workspaceWrite: CodexWorkspaceWrite | undefined
   #threadLoaded = false
   #numTurns = 0
   #totalCostUsd: number | undefined
@@ -1237,6 +1267,52 @@ export class CodexRunner implements Runner {
   }
 
   /**
+   * Read `[sandbox_workspace_write]` as codex resolves it for this session's
+   * cwd, once per child, so {@link CodexRunner.#turnSandboxPolicy} can restate
+   * it verbatim.
+   *
+   * Why this exists at all: `turn/start`'s object-form sandbox policy is
+   * serde-defaulted field by field, so `{type: 'workspaceWrite'}` bare means
+   * `networkAccess: false, writableRoots: []` NO MATTER what the operator
+   * configured — and we must keep sending the object every turn, because
+   * restating it is what makes a between-turns permission-mode switch take
+   * effect. Measured against 0.149.0 with `network_access = true` set: the
+   * bare object produced `curl: (6) Could not resolve host`, the fully-stated
+   * object and an omitted policy both produced `200`. `read-only` is not
+   * affected — the setting is scoped to workspace-write, as its name says, and
+   * a read-only sandbox has no network either way.
+   *
+   * A failure here is not fatal: `#workspaceWrite` stays undefined and we send
+   * the bare shape, which is exactly the behaviour that shipped before.
+   */
+  async #readWorkspaceWrite(connection: AppServerConnection): Promise<void> {
+    this.#workspaceWrite = undefined
+    try {
+      const result = (await connection.request('config/read', { cwd: this.#cwd })) as {
+        config?: { sandbox_workspace_write?: Record<string, unknown> | null } | null
+      }
+      const block = result?.config?.sandbox_workspace_write
+      if (!block) return
+      const roots = block.writable_roots
+      this.#workspaceWrite = {
+        writableRoots: Array.isArray(roots) ? roots.filter((r): r is string => typeof r === 'string') : [],
+        networkAccess: block.network_access === true,
+        excludeTmpdirEnvVar: block.exclude_tmpdir_env_var === true,
+        excludeSlashTmp: block.exclude_slash_tmp === true,
+      }
+    } catch {
+      // Older binary, or no readable config layer — the bare shape it is.
+    }
+  }
+
+  /** The mode's turn-level sandbox policy, with the operator's workspace-write settings intact. */
+  #turnSandboxPolicy(): { type: string } | undefined {
+    const policy = TURN_SANDBOX_BY_MODE[this.#permissionMode]
+    if (policy?.type !== 'workspaceWrite' || !this.#workspaceWrite) return policy
+    return { type: 'workspaceWrite', ...this.#workspaceWrite }
+  }
+
+  /**
    * The session's live connection with its thread loaded, (re)building both as
    * needed: spawn + `initialize`/`initialized` on a fresh child, then
    * `thread/start` (new) or `thread/resume` (a create-request `resume`, or a
@@ -1297,6 +1373,7 @@ export class CodexRunner implements Runner {
         throw error
       }
       connection.notify('initialized')
+      await this.#readWorkspaceWrite(connection)
     }
     if (!this.#threadLoaded) {
       const options: Record<string, unknown> = {
@@ -1605,7 +1682,7 @@ export class CodexRunner implements Runner {
         input: turn.input,
         cwd: this.#cwd,
         approvalPolicy: APPROVAL_POLICY_BY_MODE[this.#permissionMode],
-        sandboxPolicy: TURN_SANDBOX_BY_MODE[this.#permissionMode],
+        sandboxPolicy: this.#turnSandboxPolicy(),
         approvalsReviewer: APPROVALS_REVIEWER_BY_MODE[this.#permissionMode],
       }
       // Overrides persist "for this turn and subsequent turns", so name the

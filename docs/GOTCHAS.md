@@ -336,6 +336,26 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   Each policy is stated twice on the wire — `thread/start` takes `sandbox` (string) +
   `approvalPolicy`, `turn/start` takes `sandboxPolicy` (object) + `approvalPolicy` — keep all
   four in lockstep.
+- **Network access is NOT an approval question, and `turn/start`'s object-form sandbox policy
+  will silently take it away.** Codex has three independent axes, not two: sandbox mode, approval
+  policy, and — inside workspace-write only — `network_access`, which is **off by default** and
+  which no approval policy turns on. So a `git push` under `acceptEdits` does not raise a
+  question; it fails with `Could not resolve host`, because a DNS failure is not a sandbox denial
+  and there is nothing to escalate. The operator's `[sandbox_workspace_write] network_access =
+  true` in `config.toml` is the only supported answer (per-host allow/deny via the managed
+  network proxy is codex's newer, finer one; WorkerDeck does not wire its approval decisions
+  yet). WorkerDeck sets none of this — but it must not *unset* it either, and that is the trap:
+  `turn/start`'s `sandboxPolicy` object is serde-defaulted **field by field**, so sending
+  `{type: 'workspaceWrite'}` bare resets `networkAccess` to false and `writableRoots` to empty on
+  every single turn, overriding config.toml with no error and no notice. Measured against 0.149.0
+  with `network_access = true` set: bare object → `curl: (6) Could not resolve host`, fully-stated
+  object → `200`, policy omitted → `200`. Omitting it is not the fix (restating the policy each
+  turn is what makes a between-turns permission-mode switch take effect), so the runner reads
+  `config/read { cwd }` — which resolves project layers for that cwd — once per child and echoes
+  the block back verbatim. `read-only` is deliberately untouched: the setting is scoped to
+  workspace-write, as its name says, and a read-only sandbox has no network either way (measured
+  both ways). A free canary in `smoke:codex` pins the `config/read` block's four fields; if it
+  ever stops reporting them the runner degrades to the bare shape and the clobber is back.
 - **Model/effort overrides persist "for this turn and subsequent turns"**, so the runner names
   the model and effort explicitly on every `turn/start`, remembering the resolved defaults from
   the `thread/start` response — that is the only way `setModel(undefined)` can mean "back to the
