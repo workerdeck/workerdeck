@@ -1,6 +1,6 @@
 {
   "name": "@workerdeck/ui",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "type": "module",
   "description": "Styled agent-control component library for WorkerDeck: session panel, transcript with streaming, tool-call cards, permission prompts, session list, composer. Tailwind v4 + Base UI + cva. Pairs with the headless @workerdeck/react layer.",
   "license": "MIT",

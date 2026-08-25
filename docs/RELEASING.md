@@ -353,15 +353,17 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   workspace-write, opened by no approval policy — and it stays the operator's `config.toml` to
   set, the same posture as credentials. What changed is that WorkerDeck stopped overwriting it.
 
-  **Unreleased on master (as of 2026-08-24)** — `bd4e83d`, the in-place conversation clear:
-  `EngineCapabilities.clearContext` + the `clear_context` command, implemented on all three
-  engines, plus the `resetSeq` replay fix for codex/provider and the provider's missing
-  write-through. Additive; protocol stays **7**; it is a **minor** when it goes out. Deliberately
-  **not** released with the session that built it, for two reasons worth honouring rather than
-  forgetting: it had never run against the real codex binary, and no client had a Clear control —
-  the capability was declared and nothing rendered it.
+  **0.20.0** — the in-place conversation clear. A **minor**, additive throughout, protocol stays
+  **7**. `EngineCapabilities.clearContext` + the `clear_context` command on all three engines
+  (claude sends the `/clear` its CLI already honors, codex starts a fresh thread, the provider
+  drops its message array), plus the `resetSeq` replay fix for codex/provider and the provider's
+  missing write-through. `/clear` typed into a codex composer is intercepted rather than sent to
+  the model as a prompt, which is the user-visible complaint it was built for.
 
-  **Both gates were paid 2026-08-26** (`5bdd421`, `ff25046`), so this is ready to bump:
+  **It sat unreleased on master for two days on purpose** (`bd4e83d`, 2026-08-24), because it had
+  never run against the real codex binary and no client had a Clear control — a declared
+  capability nothing rendered. Both gates were paid 2026-08-26 (`5bdd421`, `ff25046`, `2058880`)
+  before the bump, and that order is the point:
 
   - the live run is now two commands rather than a ritual — `pnpm smoke:codex --clear` (two tiny
     turns) and `pnpm smoke:restart codex clear` (free) — and both are green. The one thing they
@@ -372,8 +374,14 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
     Delete, and the dashboard session row's eraser. Both gate on the capability record and both
     borrow a socket for one frame (a clear is a session command, not a REST route). The web one
     was driven for real — transcript emptied, the reading went absent rather than 0%; the VS Code
-    one has not been pressed (`_docs/VERIFICATION-DEBT.md` item 10). iOS still has none, which
-    does not block the bump.
+    one has not been pressed (`_docs/VERIFICATION-DEBT.md` item 10). iOS still has none, and that
+    is the only piece of this feature left.
+
+  One consequence is worth stating rather than discovering: clearing a codex session **whose child
+  is dead** deletes the dormant record that was its way back, so the session does not survive a
+  restart at all. That is the designed trade — losing an emptied conversation beats waking into one
+  that was deliberately discarded — and `pnpm smoke:restart codex clear` is what makes it a stated
+  one.
 
     **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`

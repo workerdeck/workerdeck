@@ -1,6 +1,6 @@
 {
   "name": "@workerdeck/core",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "type": "module",
   "description": "The WorkerDeck session runner: drives Claude Code, OpenAI Codex and any AI SDK provider behind one Runner interface with a push-based input queue, promotes canUseTool calls into pending approvals, normalizes SDKMessages into wire-protocol events, and keeps a seq-numbered event log for attach/replay. Pure library, no transport.",
   "license": "MIT",
