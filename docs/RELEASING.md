@@ -358,11 +358,20 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   engines, plus the `resetSeq` replay fix for codex/provider and the provider's missing
   write-through. Additive; protocol stays **7**; it is a **minor** when it goes out. Deliberately
   **not** released with the session that built it, for two reasons worth honouring rather than
-  forgetting: it has never run against the real codex binary (`_docs/VERIFICATION-DEBT.md` item 9
-  has the two-turn run), and no client has a Clear control yet — the capability is declared and
-  nothing renders it. The user-visible complaint it was built for *is* already fixed, because
-  typing `/clear` now works on codex, so there is no pressure to ship it half-verified. Pay the
-  debt, add the control, then bump.
+  forgetting: it had never run against the real codex binary, and no client had a Clear control —
+  the capability was declared and nothing rendered it.
+
+  **Both gates were paid 2026-08-26** (`5bdd421`, `ff25046`), so this is ready to bump:
+
+  - the live run is now two commands rather than a ritual — `pnpm smoke:codex --clear` (two tiny
+    turns) and `pnpm smoke:restart codex clear` (free) — and both are green. The one thing they
+    changed rather than confirmed: **the context reading cannot witness a clear** (a fresh codex
+    thread reads ~14k tokens before anyone types), so the proof is a codeword the model must fail
+    to recall. `docs/GOTCHAS.md` §codex has it.
+  - the control is the VS Code session card's QuickPick, beside Stop and Delete, gated on the
+    capability record. **It has not been pressed by a human yet** (`_docs/VERIFICATION-DEBT.md`),
+    and the web and iOS still have none — neither blocks the bump, since the capability now has a
+    renderer and typing `/clear` works everywhere.
 
     **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`
