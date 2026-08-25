@@ -46,6 +46,8 @@ import type { PermissionRequest, SessionEvent } from '@workerdeck/protocol'
 
 const MODEL = process.argv.find((a) => !a.startsWith('-') && a.includes('gpt')) ?? 'gpt-5.6-luna'
 const CANARY_ONLY = process.argv.includes('--canary')
+/** Just the clear scenario (VERIFICATION-DEBT item 9) — two turns, not six. */
+const CLEAR_ONLY = process.argv.includes('--clear')
 
 const execFileP = promisify(execFile)
 let failures = 0
@@ -92,6 +94,22 @@ function makeRunner(
 
 const turnResults = (events: SessionEvent[]) =>
   events.filter((e): e is Extract<SessionEvent, { type: 'turn_result' }> => e.type === 'turn_result')
+
+/** Poll until `pred` holds; throws with `what` in the message on timeout. */
+async function waitFor(pred: () => boolean, timeoutMs: number, what: string): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    if (pred()) return
+    if (Date.now() > deadline) throw new Error(`timed out after ${timeoutMs / 1000}s waiting for ${what}`)
+    await new Promise((r) => setTimeout(r, 250))
+  }
+}
+
+const userTexts = (events: SessionEvent[]) =>
+  events
+    .filter((e): e is Extract<SessionEvent, { type: 'user_message' }> => e.type === 'user_message')
+    .map((e) => JSON.stringify(e.message.content))
+    .join('\n')
 
 /**
  * One throwaway app-server turn through the real runner; returns the terminal
@@ -431,6 +449,159 @@ async function detectAuth(): Promise<string | null> {
   }
 }
 
+/**
+ * The clear, against the real binary — VERIFICATION-DEBT item 9. Split out so
+ * `pnpm smoke:codex --clear` can pay for these two turns alone.
+ */
+async function clearScenario(cwd: string): Promise<void> {
+  // A timeout in here used to leave the codex children running, which kept the
+  // process alive long past the failure it was trying to report.
+  const open: CodexRunner[] = []
+  try {
+    await runClearScenario(cwd, open)
+  } finally {
+    for (const runner of open) runner.close()
+  }
+}
+
+async function runClearScenario(cwd: string, open: CodexRunner[]): Promise<void> {
+  // The scripted peer can prove the runner's bookkeeping and nothing about
+  // the only thing that matters: that a fresh `thread/start` actually yields
+  // an EMPTY model context. Only a codeword the model cannot produce by
+  // chance can tell "the context was cleared" apart from "the transcript was
+  // hidden", so that is what this asks for. Two tiny turns.
+  //
+  // The two RESUMES at the end are free — a promptless resume backfills the
+  // thread's history and runs no turn — which is what makes "the old thread
+  // is not deleted" cheap to assert rather than merely documented.
+  const CODEWORD = 'ORRERY-4417'
+  const clearRun = makeRunner(cwd, {})
+  open.push(clearRun.runner)
+  const started = Date.now()
+  // The post-clear turn hung once (2026-08-24) and the run had nothing to say
+  // about why, so the timeline is always available behind an env var rather
+  // than reconstructed after the fact. Pair it with `WORKERDECK_CODEX_TRACE`
+  // for the inbound wire.
+  if (process.env.WD_SMOKE_DEBUG) {
+    clearRun.runner.subscribe((e) =>
+      console.log(
+        `        \u001b[2m[${String(Date.now() - started).padStart(6)}ms] ${e.type}` +
+          `${e.type === 'status_changed' ? ` → ${e.status}` : ''}\u001b[0m`,
+      ),
+    )
+  }
+  void clearRun.runner.start()
+  clearRun.runner.sendMessage(`Remember the codeword ${CODEWORD}. Reply with just: ok`)
+  await waitFor(() => turnResults(clearRun.events).length >= 1, 120_000, 'the pre-clear turn')
+  const clearedThread = clearRun.runner.sdkSessionId
+  const readingBefore = clearRun.runner.info().contextUsage
+  if (!clearedThread) throw new Error('no thread id after the pre-clear turn')
+
+  // The literal `/clear` a user types, not the route — deliberately the same
+  // call, so this exercises both entry points at once.
+  clearRun.runner.sendMessage('/clear')
+  await waitFor(
+    () => clearRun.events.some((e) => e.type === 'conversation_reset'),
+    60_000,
+    'conversation_reset',
+  )
+  const newThread = clearRun.runner.sdkSessionId
+  if (newThread && newThread !== clearedThread) {
+    // The LAST octet, not the first: codex thread ids are time-ordered, so two
+    // threads started a minute apart share a long prefix and `slice(0, 8)`
+    // renders a genuine change as no change at all.
+    pass('clear starts a new thread', `…${clearedThread.slice(-8)} → …${newThread.slice(-8)}`)
+  } else {
+    fail(
+      'clear starts a new thread',
+      newThread ? 'the thread id did not change — this was a resume, not a start' : 'no new thread id',
+    )
+  }
+  if (clearRun.runner.info().contextUsage === undefined) {
+    pass('the reading is retired', 'contextUsage is absent, so the ring goes blank rather than 0%')
+  } else {
+    fail(
+      'the reading is retired',
+      `contextUsage survived the reset: ${JSON.stringify(clearRun.runner.info().contextUsage)}`,
+    )
+  }
+
+  clearRun.runner.sendMessage(
+    'What codeword did I ask you to remember? Reply with just the codeword, ' +
+      'or the single word none if I never gave you one.',
+  )
+  await waitFor(() => turnResults(clearRun.events).length >= 2, 120_000, 'the post-clear turn')
+  const afterClear = turnResults(clearRun.events)[1]
+  const recalled = afterClear?.result?.includes(CODEWORD) ?? false
+  if (afterClear?.subtype === 'success' && !recalled) {
+    pass('the model context is really empty', `it answered ${JSON.stringify(afterClear.result?.trim().slice(0, 40))}`)
+  } else {
+    fail(
+      'the model context is really empty',
+      recalled
+        ? `the codeword survived the clear — the thread was NOT reset: ${JSON.stringify(afterClear?.result?.trim())}`
+        : `turn did not complete: ${afterClear?.errors?.join('; ') ?? 'no result'}`,
+    )
+  }
+  const readingAfter = clearRun.runner.info().contextUsage
+  // **The reading cannot prove a clear, and this is the run that showed why.**
+  // A fresh codex thread already reads ~14k tokens before anyone types: the
+  // system prompt, the tool schemas and the skill list are the floor of the
+  // window. Two tiny turns therefore both read ≈ the baseline, and "small
+  // rather than continuing the first" is indistinguishable from noise at that
+  // scale (measured 2026-08-24: 13909 → 14028, a fresh thread reading HIGHER
+  // than the one it replaced, purely because the second prompt is longer).
+  // So this reports the pair, and only fails on growth big enough to mean the
+  // conversation actually carried over. The codeword above is the proof.
+  if (readingBefore && readingAfter) {
+    const growth = (readingAfter.totalTokens - readingBefore.totalTokens) / readingBefore.totalTokens
+    console.log(
+      `        \u001b[2m— window: ${readingBefore.totalTokens} → ${readingAfter.totalTokens} tokens ` +
+        `(both ≈ the fresh-thread baseline; the reading is a floor, not a witness)\u001b[0m`,
+    )
+    if (growth <= 0.2) {
+      pass('the window did not carry over', `${Math.round(growth * 100)}% change across the clear`)
+    } else {
+      fail(
+        'the window did not carry over',
+        `${readingBefore.totalTokens} → ${readingAfter.totalTokens} tokens — the cleared conversation is still being sent`,
+      )
+    }
+  } else {
+    fail('the window did not carry over', 'one of the two turns produced no reading at all')
+  }
+  clearRun.runner.close()
+
+  // Both threads, resumed. Free: a promptless resume backfills history and
+  // runs no turn.
+  if (newThread) {
+    const resumedNew = makeRunner(cwd, { resume: newThread })
+    open.push(resumedNew.runner)
+    await resumedNew.runner.start()
+    const history = userTexts(resumedNew.events)
+    if (!history.includes(CODEWORD) && history.includes('What codeword did I ask you')) {
+      pass('the new thread is resumable, and clean', 'its history starts after the clear')
+    } else {
+      fail(
+        'the new thread is resumable, and clean',
+        history.includes(CODEWORD)
+          ? 'the cleared conversation came back on resume'
+          : 'the post-clear turn was not in the backfill',
+      )
+    }
+    resumedNew.runner.close()
+  }
+  const resumedOld = makeRunner(cwd, { resume: clearedThread })
+  open.push(resumedOld.runner)
+  await resumedOld.runner.start()
+  if (userTexts(resumedOld.events).includes(CODEWORD)) {
+    pass('the cleared thread is NOT deleted', 'it is still in CODEX_HOME and still resumable')
+  } else {
+    fail('the cleared thread is NOT deleted', 'resuming the pre-clear thread replayed no history')
+  }
+  resumedOld.runner.close()
+}
+
 async function paid(): Promise<void> {
   const auth = await detectAuth()
   if (!auth) {
@@ -445,6 +616,10 @@ async function paid(): Promise<void> {
   const cwd = mkdtempSync(join(tmpdir(), 'codex-smoke-cwd-'))
 
   try {
+    if (CLEAR_ONLY) {
+      await clearScenario(cwd)
+      return
+    }
     // Turn 1: a real command execution, mapped through CodexRunner.
     const { runner, events } = makeRunner(cwd, {
       prompt: 'Run the shell command `echo codex-smoke-ok` and tell me its exact output.',
@@ -703,6 +878,8 @@ async function paid(): Promise<void> {
       )
     }
     vision.runner.close()
+
+    await clearScenario(cwd)
   } finally {
     rmSync(cwd, { recursive: true, force: true })
   }

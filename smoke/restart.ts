@@ -5,6 +5,7 @@
  *   pnpm smoke:restart codex            # the codex rehydrate
  *   pnpm smoke:restart claude noprofile # + a profile deleted between restarts
  *   pnpm smoke:restart claude swept     # + the swept engine store (claude only)
+ *   pnpm smoke:restart codex clear      # + a clear with no live child (codex only)
  *   pnpm smoke:restart claude all
  *
  * **This exists because `packages/server/test/dormant.test.ts` proves the wrong
@@ -320,6 +321,9 @@ async function main(): Promise<void> {
   // the gateway eventually drops the row), so the profile variant — which needs
   // a live record to assert "the row stays" — runs first. Discovered by running
   // them the other way round and watching step 6 fail for step 5's reasons.
+  // Before the two destructive variants: this one needs the session's dormant
+  // record to be real and current, and both of those leave it otherwise.
+  if (wants('clear')) await clearNoChild(id)
   if (wants('noprofile')) await deletedProfile(id)
   if (wants('swept')) await sweptStore(id)
 
@@ -340,7 +344,7 @@ async function main(): Promise<void> {
  * temp dir this run created, so nothing outside it is ever touched.
  */
 async function sweptStore(id: string): Promise<void> {
-  step('6. A swept engine store')
+  step('7. A swept engine store')
   if (engine !== 'claude') {
     console.log('  [2m— skipped: only wired for claude[0m')
     return
@@ -388,10 +392,129 @@ async function sweptStore(id: string): Promise<void> {
   )
 }
 
+/**
+ * A clear with **no live child**, across a restart — VERIFICATION-DEBT item 9's
+ * negative case, and the one path with no eager `thread/start` to save it.
+ *
+ * Everywhere else a clear happens the child is up, so `#clearNow` starts a
+ * fresh thread in the same breath and the dormant record is rewritten to name
+ * it. With the child dead there is nothing to start against: the engine session
+ * id is simply dropped, and the record that still names the CLEARED
+ * conversation has to be deleted (`ParkingService.#forgetDormant`) or the next
+ * restart wakes the session straight back into the transcript the user threw
+ * away.
+ *
+ * So the assertion is about the record on disk and what survives the restart —
+ * not about a turn. **Costs no model tokens.**
+ *
+ * Note what "not resurrected" costs, because it is a real product consequence
+ * and not a bug: for codex the dormant record IS the session's way back, so a
+ * session cleared while dormant does not come back at all. That is the designed
+ * trade (see the `#rememberDormant` comment) — losing an empty conversation
+ * beats waking into one that was deliberately discarded.
+ */
+async function clearNoChild(id: string): Promise<void> {
+  step('5. A clear with no live child, across a restart')
+  if (engine !== 'codex') {
+    console.log('  \u001b[2m— skipped: only codex can be cleared with its child dead ' +
+      "(claude's reset comes back from the CLI, which needs one)\u001b[0m")
+    return
+  }
+  const recordPath = () => {
+    const dir = join(stateDir, 'parked')
+    const names = existsSync(dir) ? readdirSync(dir) : []
+    const name = names.find((n) => n.startsWith(id) && n.endsWith('.json'))
+    return name ? join(dir, name) : undefined
+  }
+  if (!recordPath()) {
+    bad('a dormant record to invalidate', 'none on disk — nothing for the clear to get wrong')
+    return
+  }
+  ok('a dormant record exists, naming the conversation about to be cleared')
+
+  // The app-server child is spawned by the gateway process itself, so its
+  // parent pid is the one this script started. `pgrep -f codex` would also
+  // match whatever the operator is running in their own terminal — this is a
+  // smoke that must never touch a session it did not create.
+  const kids = await new Promise<string>((resolve) => {
+    const ps = spawn('pgrep', ['-P', String(child?.pid ?? 0)], { stdio: ['ignore', 'pipe', 'ignore'] })
+    let out = ''
+    ps.stdout.on('data', (d) => (out += String(d)))
+    ps.on('close', () => resolve(out))
+  })
+  const pids = kids.split('\n').map((l) => l.trim()).filter(Boolean)
+  for (const pid of pids) process.kill(Number(pid), 'SIGKILL')
+  if (pids.length > 0) ok('the codex child killed', `pid ${pids.join(', ')}`)
+  else bad('the codex child killed', 'the gateway had no child process to kill')
+  await sleep(1_000)
+
+  const reset = await clearOverWs(id)
+  if (reset) ok('the clear landed with no child', 'conversation_reset emitted')
+  else bad('the clear landed with no child', 'no conversation_reset within 20s')
+
+  // Give the (asynchronous, queued) store delete a moment to land.
+  await sleep(1_500)
+  if (!recordPath()) ok('the stale dormant record is gone', 'it named the cleared conversation')
+  else bad('the stale dormant record is gone', 'it survived, still naming the cleared thread')
+
+  await stopGateway()
+  await startGateway()
+  const listed = await api<{ sessions: SessionInfo[] }>('/sessions')
+  const row = listed.sessions.find((s) => s.id === id)
+  if (!row) {
+    ok(
+      'the cleared session is NOT resurrected',
+      'the row is gone — for codex the dormant record is the way back, and the clear removed it',
+    )
+    return
+  }
+  console.log(`  \u001b[2m— the row came back (status ${row.status}); checking it came back empty\u001b[0m`)
+  const after = await attach(id, undefined, 8_000)
+  const priorPrompt = after.events.some(
+    (e) => e.type === 'user_message' && JSON.stringify(e.message.content).includes('Remember the word'),
+  )
+  if (priorPrompt) bad('the cleared session is NOT resurrected', 'the pre-clear conversation replayed')
+  else ok('the cleared session is NOT resurrected', 'it came back with none of the cleared history')
+}
+
+/**
+ * Type `/clear` into a session and wait for the reset. Not `attach()`: a clear
+ * produces no `turn_result`, so that helper would sit on its timeout and report
+ * the wait as the result.
+ *
+ * The typed string rather than the `clear_context` command on purpose — both
+ * entry points are the same call in the runner, and this is the one a user has
+ * today (no client ships a Clear control yet).
+ */
+async function clearOverWs(id: string): Promise<boolean> {
+  const ws = new WebSocket(`ws://127.0.0.1:${PORT}/v1/sessions/${id}/ws?afterSeq=0`)
+  let sawReset = false
+  const done = new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 20_000)
+    ws.on('error', () => resolve())
+    ws.on('message', (data) => {
+      const frame = JSON.parse(String(data)) as ServerFrame
+      if (frame.type !== 'event' || frame.event.type !== 'conversation_reset') return
+      sawReset = true
+      clearTimeout(timer)
+      resolve()
+    })
+  })
+  await new Promise<void>((resolve, reject) => {
+    ws.once('open', () => resolve())
+    ws.once('error', reject)
+  })
+  await sleep(1_500) // let the replay drain
+  ws.send(JSON.stringify({ type: 'user_message', text: '/clear' }))
+  await done
+  ws.close()
+  return sawReset
+}
+
 /** A profile deleted between restarts: `buildRunner` throws `unknown profile`,
  * the row stays and the attach fails. No model tokens. */
 async function deletedProfile(id: string): Promise<void> {
-  step('5. A profile deleted between restarts')
+  step('6. A profile deleted between restarts')
   await stopGateway()
   writeConfig([engine === 'claude' ? 'codex' : 'claude'])
   ok(`config rewritten without the '${engine}' profile`)

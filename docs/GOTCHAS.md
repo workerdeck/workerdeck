@@ -535,6 +535,11 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   to" and **deletes** the stale dormant record (`#forgetDormant`, narrower than `discard`, which
   would also drop the config and end the session's ability to go dormant ever again). Without
   this, a restart in that window wakes the session into the transcript the user just threw away.
+  **Know what that costs**, because it is the designed trade and not a bug: for codex the dormant
+  record *is* the session's way back, so a session cleared while its child is dead does not come
+  back after a restart at all — the row is simply gone. Losing an emptied conversation beats
+  waking into one that was deliberately discarded. Verified live 2026-08-24
+  (`pnpm smoke:restart codex clear`).
   **(d) The context reading is retired, and cannot be re-polled.** Claude re-polls after a reset;
   codex's only source is `thread/tokenUsage/updated`, which arrives *during* a turn. So there is
   no reading at all until the next turn runs, and the protocol's standing rule applies — render
@@ -561,7 +566,17 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   clearing would be neither.
 - **The cleared thread is not deleted and should not be.** It stays in CODEX_HOME and stays
   resumable from `GET /sdk-sessions`. Worth saying out loud in any UI copy, because "clear" reads
-  as "gone".
+  as "gone". Verified live 2026-08-24: resuming the pre-clear thread replays its whole
+  history, and resuming the post-clear one replays only what came after.
+- **The context reading cannot witness a clear — only a codeword can.** A fresh codex thread
+  already reads **~14k tokens before anyone types**: the system prompt, the tool schemas and the
+  skill list are the floor of the window, not a conversation. So two small turns either side of a
+  clear both read ≈ that floor, and "the reading got smaller" is indistinguishable from noise —
+  measured 2026-08-24, the post-clear turn read **higher** than the pre-clear one (13909 → 14028,
+  purely because the second prompt was longer). The only honest proof that the *model's* context
+  was reset is asking it for something it was told before the clear and watching it fail;
+  `pnpm smoke:codex --clear` does exactly that, and the reading is reported rather than asserted.
+  The same floor is why a codex ring never starts near empty.
 - **A project's `.codex/config.toml` is only read if that project is TRUSTED — and in a read-only
   sandbox codex cannot ask, so it silently reads nothing.** Codex gates project config on a
   `[projects."/abs/path"] trust_level = "trusted"` entry in `$CODEX_HOME/config.toml`. The vanilla

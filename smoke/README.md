@@ -9,10 +9,10 @@ Things `pnpm test` deliberately cannot check. Run these by hand.
 | Full SDK-client stack | `<KEY>=... pnpm smoke:sdk [provider] [model]` | **Yes — real tokens** |
 | Live MCP | `pnpm smoke:mcp --probe` / `<KEY>=... pnpm smoke:mcp [provider] [model]` | Probe: no. Full: **yes** |
 | Message attachments | `pnpm smoke:media [image\|pdf\|text]` | **Yes — real tokens** |
-| Codex engine | `pnpm smoke:codex --canary` / `pnpm smoke:codex [model]` | Canary: no. Full: **yes — plan/API usage** |
+| Codex engine | `pnpm smoke:codex --canary` / `--clear` / `pnpm smoke:codex [model]` | Canary: no. Clear: **two tiny turns**. Full: **yes — plan/API usage** |
 | Attach bytes | `pnpm smoke:attach <host> <sessionId> [truncate] [refs]` | No |
 | APNs push | `pnpm smoke:push <host> [sessionId]` | No — but it rings a real phone |
-| Restart, end to end | `pnpm smoke:restart [claude\|codex] [noprofile] [swept] [all]` | **Yes — two short turns** |
+| Restart, end to end | `pnpm smoke:restart [claude\|codex] [clear] [noprofile] [swept] [all]` | **Yes — two short turns** |
 
 ## `smoke:sandbox` — the untrusted-code boundary
 
@@ -120,6 +120,7 @@ what the permission smoke is to Claude.
 pnpm smoke:codex --canary       # FREE (network only): the auth-drift canaries
 pnpm smoke:codex                # full run — needs codex auth, costs plan/API usage
 pnpm smoke:codex gpt-5.6-sol    # full run on a specific model (default gpt-5.6-luna)
+pnpm smoke:codex --clear        # JUST the clear scenario — two tiny turns
 ```
 
 The free canaries pin the verified auth matrix with fake keys against a scratch `CODEX_HOME`,
@@ -140,8 +141,27 @@ arriving and agreeing with the final message (the reason this transport exists),
 execution mapped to `CodexCommand` with its output and exit code, the usage-relation asserts on
 a cache-heavy resume turn (usage is summed from `thread/tokenUsage/updated`), resume continuity
 across child processes, interrupt landing cleanly *and* the thread staying resumable after,
-`default` mode's read-only sandbox actually refusing a write, and a `localImage` attachment
-answered correctly.
+`default` mode's read-only sandbox actually refusing a write, a `localImage` attachment
+answered correctly, and **the clear** (`--clear` runs this alone, for two tiny turns).
+
+The clear scenario is the one place where the *assertions* needed rethinking after the first live
+run, and the reason is worth knowing before adding to it: **the context reading cannot witness a
+clear.** A fresh codex thread reads ~14k tokens before anyone types (system prompt + tool schemas
++ skills), so two small turns either side of a clear both read ≈ that floor — the measured pair
+was 13909 → 14028, the *cleared* thread reading higher. So the run asks for a codeword given
+before the clear and requires the model to fail to produce it; the window is printed, not
+asserted. The two resumes at the end are free (a promptless resume backfills history and runs no
+turn), which is what makes "the old thread is still there, the new one is clean" cheap to prove.
+
+`WD_SMOKE_DEBUG=1` prints a timestamped event timeline for the clear scenario; pair it with
+`WORKERDECK_CODEX_TRACE=<file>` for the inbound wire, where a second `thread/started` is the
+clear's `thread/start` (the trace records inbound traffic only, so the outbound request itself is
+not in it — the new thread id is the evidence).
+
+**A timed-out paid run is not automatically a failure.** Two turns in this file have hung past
+their 90–120s waits on a first attempt and passed on an immediate re-run (2026-08-24, twice) —
+the app-server reconnects through 401s and transport fallbacks on its way to a turn. Re-run
+before diagnosing.
 
 ## `smoke:attach` — what a replay actually costs, on the wire
 
@@ -207,7 +227,8 @@ whole feature. This is that half.
 ```bash
 pnpm smoke:restart                    # claude
 pnpm smoke:restart codex              # the codex rehydrate (needs `codex login`)
-pnpm smoke:restart claude all         # + both degradation variants
+pnpm smoke:restart claude all         # + every variant
+pnpm smoke:restart codex clear        # + a clear with no live child (codex only)
 ```
 
 It spawns **its own gateway** on port 8791 with its own state dir and never touches an instance you
@@ -228,3 +249,12 @@ Two things it found that the code's own comments did not say:
   session's first moments; codex's first record rides the post-turn `status_changed`. Kill inside
   that window and the row is simply *gone* after the restart. The smoke waits for the record and
   says so, rather than racing it.
+
+The `clear` variant (codex only) is the negative case of the clear feature and **costs no model
+tokens**: it kills the gateway's app-server child (by pid, never `pgrep -f codex` — this smoke
+must not touch a session it did not create), types `/clear` into the childless session, and
+checks that the dormant record naming the cleared conversation is deleted from the state dir. It
+then restarts and asserts the session is not resurrected into what it threw away. Expect the row
+to be **gone** afterwards: for codex the dormant record is the way back, so clearing while the
+child is dead ends the session. That is the designed trade, and this run is what makes it a
+stated one.
