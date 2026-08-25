@@ -4,6 +4,7 @@ import {
   BellRing,
   CircleAlert,
   CircleSlash,
+  Eraser,
   Layers,
   Moon,
   PauseCircle,
@@ -82,6 +83,18 @@ export interface SessionBrowserProps {
    * double-click would have already left the page.
    */
   onRename?: (row: SessionRow, title: string) => void
+  /**
+   * Clear the conversation in place, from the row's eraser. Same session, empty
+   * context — **not** a delete: the engine keeps the old conversation and it
+   * stays resumable, which is why the row's copy never says "deleted".
+   *
+   * Rendered only where the session's own capability record allows it
+   * (`capabilities.clearContext`, absent = false), so a row that cannot be
+   * cleared has no eraser rather than one that errors. Omit the prop to have
+   * none at all — a host with no way to send a session command has nothing to
+   * hang it on (this is a WS command, not a REST route).
+   */
+  onClearContext?: (row: SessionRow) => void
   /** Open a session *at* one of its sub-agents, when the host can scroll a
    * transcript to a `Task` row. Absent, the sub-agent list still expands and a
    * step just opens its session — see `SessionRowItemProps`. */
@@ -144,6 +157,7 @@ export function SessionBrowser({
   onSelect,
   onDelete,
   onRename,
+  onClearContext,
   onSelectSubagent,
   emptyState,
   showControls = true,
@@ -314,6 +328,7 @@ export function SessionBrowser({
                   onSelect={onSelect}
                   onDelete={onDelete}
                   onRename={onRename}
+                  onClearContext={onClearContext}
                   onSelectSubagent={onSelectSubagent}
                 />
               ))}
@@ -352,6 +367,9 @@ interface SessionRowItemProps {
   onSelect?: (row: SessionRow) => void
   onDelete?: (row: SessionRow) => void
   onRename?: (row: SessionRow, title: string) => void
+  /** See `SessionBrowserProps.onClearContext` — gated on the row's own
+   * capability record, not on the engine name. */
+  onClearContext?: (row: SessionRow) => void
   /** Open one of a session's sub-agents — which now means handing the session
    * panel over to that agent's own work (`SessionPanel.openSubagent`), and meant
    * "scroll to its `Task` row" before that surface existed. Both are honest; a
@@ -370,6 +388,7 @@ function SessionRowItem({
   onSelect,
   onDelete,
   onRename,
+  onClearContext,
   onSelectSubagent,
 }: SessionRowItemProps) {
   const { info } = row
@@ -534,6 +553,20 @@ function SessionRowItem({
               setEditing(true)
             }}>
             <Pencil className='size-3 text-fg-3' />
+          </Button>
+        ) : null}
+        {onClearContext && info.capabilities?.clearContext ? (
+          <Button
+            variant='ghost'
+            size='icon-sm'
+            aria-label='Clear context'
+            title='Clear the conversation — the session keeps running and the old conversation stays resumable'
+            className='size-5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100'
+            onClick={(e) => {
+              e.stopPropagation()
+              onClearContext(row)
+            }}>
+            <Eraser className='size-3 text-fg-3' />
           </Button>
         ) : null}
         {onDelete ? (

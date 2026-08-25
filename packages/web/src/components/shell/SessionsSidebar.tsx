@@ -181,6 +181,34 @@ export function SessionsSidebar() {
             onSelect={open}
             onSelectSubagent={openSubagent}
             onRename={rename}
+            onClearContext={(row) => {
+              const client = clientFor(row.hostId)
+              if (!client) return
+              // A clear is a session COMMAND, not a REST route, so a list that
+              // holds only REST clients has to borrow a socket for one frame —
+              // the same shape the VS Code card's menu uses. `reconnect: false`
+              // matters: this handle must not become a second permanent
+              // subscriber to a session the panel may already be attached to.
+              const handle = client.attach(row.info.id, { reconnect: false })
+              const done = setTimeout(() => {
+                handle.detach()
+                toast.error('Clear failed — the gateway did not answer')
+              }, 5_000)
+              handle.on('attached', () => {
+                handle.clearContext()
+                // Let the frame flush before the socket goes. The reset itself
+                // arrives at whoever is watching the session as a
+                // `conversation_reset`; this toast is only about the request.
+                setTimeout(() => {
+                  clearTimeout(done)
+                  handle.detach()
+                  // Never "deleted": the engine keeps the conversation and it
+                  // stays in the resume picker.
+                  toast.success('Context cleared — the previous conversation stays resumable')
+                  void refresh()
+                }, 150)
+              })
+            }}
             onDelete={(row) => {
               void clientFor(row.hostId)
                 ?.deleteSession(row.info.id)

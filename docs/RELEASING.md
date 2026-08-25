@@ -368,10 +368,12 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
     changed rather than confirmed: **the context reading cannot witness a clear** (a fresh codex
     thread reads ~14k tokens before anyone types), so the proof is a codeword the model must fail
     to recall. `docs/GOTCHAS.md` §codex has it.
-  - the control is the VS Code session card's QuickPick, beside Stop and Delete, gated on the
-    capability record. **It has not been pressed by a human yet** (`_docs/VERIFICATION-DEBT.md`),
-    and the web and iOS still have none — neither blocks the bump, since the capability now has a
-    renderer and typing `/clear` works everywhere.
+  - the control landed on **two** clients: the VS Code session card's QuickPick beside Stop and
+    Delete, and the dashboard session row's eraser. Both gate on the capability record and both
+    borrow a socket for one frame (a clear is a session command, not a REST route). The web one
+    was driven for real — transcript emptied, the reading went absent rather than 0%; the VS Code
+    one has not been pressed (`_docs/VERIFICATION-DEBT.md` item 10). iOS still has none, which
+    does not block the bump.
 
     **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
   and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`

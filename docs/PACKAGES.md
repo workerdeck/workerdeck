@@ -883,6 +883,13 @@ then title, unread badge, age, context ring; line two is the engine's mark and m
 over), then project · gateway · profile · cost, then the sub-agent disclosure. Both lines share
 one 14px `Gutter`, because the state glyph is 14px and the mark 12px and two pixels is invisible
 as a measurement and obvious as a misalignment.
+The row's hover affordances are pencil / **eraser** / trash, and the eraser is the one with two
+gates rather than one: the host must pass `onClearContext` *and* the row's own
+`capabilities.clearContext` must say so, because a clear is a **session command over a socket**,
+not a REST call — a list holding only REST clients has to borrow a handle for one frame (see
+`packages/web`'s sidebar, and the VS Code card's menu, which do exactly the same thing). Its copy
+never says "deleted": the engine keeps the old conversation and it stays resumable.
+
 A session row's sub-agent, pressed, hands the **panel body over to that agent**:
 `SessionPanel.openSubagent` (a nonce-keyed *request*, same shape and same reason as `reveal` — the
 panel owns which agent is open, so Back and Escape need no host wiring) puts `Transcript` into a
