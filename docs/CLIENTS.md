@@ -180,7 +180,12 @@ state glyph is 14px and the vendor mark 12px: as plain flex children each line's
 misalignment. The two hover actions became one
 always-visible `⋯` opening a **native QuickPick**, decided host-side off the polled model — a
 popover anchored in a 280px view would be clipped by the view's own bounds, and a card that went
-stale between the poll and the press must not offer Stop for a finished session. The disclosure
+stale between the poll and the press must not offer Stop for a finished session. That QuickPick
+is also where **Clear context** lives — the first Clear control on any client — gated on
+`SessionInfo.capabilities.clearContext` (absent = false, so an older gateway simply does not offer
+it), sent as a session command over a transient attach exactly like Stop, and confirmed with copy
+that never says "deleted": the session keeps running, the conversation starts fresh, and the old
+one stays resumable from the resume picker. The disclosure
 reads `1/6` rather than `1 of 6 agents`, the words having truncated the folder name away to say
 what three characters say, with the sentence kept for the tooltip and the screen reader.
 `dev/preview.html` + `pnpm dev:preview` renders the cards in a browser against canned data,

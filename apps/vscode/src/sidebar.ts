@@ -282,6 +282,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
         run: () => this.#stopSession(hostId, sessionId),
       })
     }
+    // On the capability record, never on the engine name — the same rule the
+    // panel's `⋯` menu follows. Absent means false, and a gateway too old to
+    // know the command says nothing, so the entry is simply not offered.
+    if (info.capabilities?.clearContext) {
+      items.push({
+        label: '$(clear-all) Clear context',
+        detail: 'Start a fresh conversation — the old one stays resumable',
+        run: () => this.#clearSession(hostId, sessionId),
+      })
+    }
     items.push({
       label: '$(trash) Delete',
       detail: 'Remove the session from the gateway',
@@ -313,6 +323,57 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
       handle.on('attached', () => {
         handle.interrupt()
         // Give the frame a beat to flush before tearing the socket down.
+        setTimeout(() => {
+          clearTimeout(timer)
+          handle.detach()
+          resolve()
+        }, 150)
+      })
+    })
+    await this.#model.refresh()
+  }
+
+  /**
+   * Clear the conversation, over the same transient attach `#stopSession` uses.
+   *
+   * Confirmed first, because "clear" reads as "gone" — so the prompt says what
+   * actually happens: the engine starts a fresh conversation and the old one is
+   * NOT deleted (claude keeps its transcript, codex leaves the thread in
+   * CODEX_HOME), so it stays resumable from the resume picker.
+   *
+   * Not a `POST`: the clear is a session command on the socket, so this is the
+   * interrupt's shape rather than the delete's. The reset comes back as a
+   * `conversation_reset` event to every attached client, including the agent
+   * panel if it happens to be open on this session — which is why this does not
+   * refresh the transcript itself.
+   */
+  async #clearSession(hostId: string, sessionId: string): Promise<void> {
+    const host = this.#store.get(hostId)
+    const info = this.#model.sessionsOf(hostId).find((s) => s.id === sessionId)
+    const confirmed = await vscode.window.showWarningMessage(
+      `Clear the conversation in "${info?.title ?? sessionId.slice(0, 8)}"?`,
+      {
+        modal: true,
+        detail:
+          'The session keeps running and starts a fresh conversation. The old one is not ' +
+          'deleted — it stays resumable from "Resume a previous session".',
+      },
+      'Clear context',
+    )
+    if (confirmed !== 'Clear context') return
+    const client = host && (await clientFor(this.#store, host))
+    if (!client) return
+    await new Promise<void>((resolve) => {
+      const handle = client.attach(sessionId, { reconnect: false })
+      const timer = setTimeout(() => {
+        handle.detach()
+        resolve()
+      }, 4000)
+      handle.on('attached', () => {
+        handle.clearContext()
+        // Same beat the interrupt takes: the frame has to flush before the
+        // socket goes, and a clear that never reached the gateway would be
+        // indistinguishable from one that did.
         setTimeout(() => {
           clearTimeout(timer)
           handle.detach()
