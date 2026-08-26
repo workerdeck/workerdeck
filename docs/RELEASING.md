@@ -388,6 +388,38 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   land *above* `v0.5.0` and a `| tail` reads the newest tags as the oldest. 0.12.0 had a local
   tag nobody had pushed, so npm's latest was still 0.11.0 while this file claimed it shipped. `git log v<latest>..HEAD` is the other half of the same
   habit — 0.9.0 sat on master for 15 commits *after* it had shipped.
+  **0.21.0** — **one session card for every client.** The Figma session-list design, implemented by
+  collapsing the two hand-kept drawings of a session into `SessionItem`: the dashboard's
+  `SessionRowItem` and the extension's `SessionCard` agreed on the model (`SessionRow`,
+  `sessionSteps`, `sessionState`) and disagreed on every measurement, so the two lists read as two
+  products. Both are wrappers now — ~660 lines of duplicated markup gone, the extension's card 380
+  → 95 — and what stays host-shaped is what should: a native QuickPick and double-click rename
+  there, three hover actions here, both through one `actions` slot.
+
+  Selection became **two selections at two grains**, with the blue always on the finer: a selected
+  session fills blue, a selected sub-agent takes the blue and drops its card to
+  `--row-selected-weak` (VS Code's `list.inactiveSelectionBackground`). And the panel now *reports*
+  what it has framed (`onSubagentChange` → `?subagent=` / `wd-subagent-open`) instead of hosts
+  inferring it from their own requests, which was wrong within one click: a Task row pressed inside
+  the transcript opens a frame nobody asked for, and Back/Escape/reveal leave one.
+
+  **Agents and tasks are finally different things.** A task has no agent behind it, so framing its
+  tool-use id selected no items and drew an *empty agent view*; a press on one now opens the session
+  and travels to its row (`?reveal=`/`rn`, `wd-reveal-tool-use`). `sessionSteps` hands the caller
+  the kind and sorts agents above tasks. **Storybook** is `packages/ui`'s component catalog from
+  here (dev-only, unpublished; `dev/` stays the terminal renderer's measurement harness).
+
+  Four bugs surfaced on the way and are worth remembering as classes: cards were `w-full` **plus**
+  `mx-1` — 100% + 8px, an overflow by construction that grew a horizontal scrollbar, so the list
+  owns the inset now and never the card; selection matched on `sessionId` alone, lighting the wrong
+  card whenever two gateways issued the same id (invisible with one attached); `friendlyModel`
+  returning `undefined` left a separator hanging off nothing, so the metadata run is assembled from
+  *present parts* with separators drawn between them; and the extension's dev fixture used `name:`
+  where `isAgentRecord` reads `agentType:`, so its preview had been rendering tasks, not agents, for
+  as long as it had existed. Protocol stays **7** — nothing on the gateway wire changed. **iOS is
+  the piece left**: the new card and the sub-agent/sub-task navigation both stop at the two web
+  clients.
+
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
