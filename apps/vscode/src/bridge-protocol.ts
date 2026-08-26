@@ -52,7 +52,22 @@ export type SidebarState = {
   hosts: WireHost[]
   /** Keyed by host id; present only for connected hosts. */
   sessions: Record<string, SessionInfo[]>
-  selected?: { hostId: string; sessionId: string }
+  /**
+   * What the agent panel is showing. `subagentToolUseId` is the *finer* half of
+   * it — which of that session's sub-agents has taken the panel body over — and
+   * the sessions list draws the two at different weights: the session's card
+   * goes blue when the session itself is what you are looking at, and grey when
+   * what you are looking at is one agent inside it (`SessionItem`'s
+   * `activeStepKey`).
+   *
+   * **It is reported by the panel, not decided here.** The host can ask for a
+   * sub-agent (`wd-open-subagent`) but it is not the only way in — a Task row
+   * pressed inside the transcript opens one too, and Back, Escape and a reveal
+   * all leave one — so a value the host inferred from its own requests would be
+   * wrong within one click. `wd-subagent-open` is the panel telling us what it
+   * actually has on screen; this field is where that lands.
+   */
+  selected?: { hostId: string; sessionId: string; subagentToolUseId?: string }
   /** Absent when no folder is open — the scope filter is then inert. */
   scope?: WorkspaceScope
   /**
@@ -111,6 +126,20 @@ export type PanelToHost =
       kind: 'wd-open-panel'
       panel: SessionSurfacePanel
     }
+  | {
+      /**
+       * SessionPanel's `onSubagentChange`: which sub-agent the panel now has
+       * framed, or `undefined` for the session's own conversation.
+       *
+       * The **counterpart** to `wd-open-subagent`, and deliberately not its
+       * echo: this is a *statement*, that one is a *request*, and the panel
+       * enters and leaves frames the host never asked for. It carries no nonce
+       * for exactly that reason — a state that arrives twice is the same state,
+       * where a request that arrives twice is two requests.
+       */
+      kind: 'wd-subagent-open'
+      toolUseId?: string
+    }
 
 /** Host → agent panel webview. */
 export type HostToPanel =
@@ -161,6 +190,21 @@ export type HostToPanel =
       toolUseId: string
       nonce: number
     }
+  | {
+      /**
+       * Travel to a tool call without framing anything — where a **task** press
+       * in the sessions list lands, as opposed to `wd-open-subagent`'s takeover.
+       * Drives `SessionPanel.reveal`, and carries its own nonce for the same
+       * reason: asking for the same row twice is two requests.
+       *
+       * This is the arm the sub-agent takeover was once built on top of, before
+       * it grew a frame of its own. It comes back because the two destinations
+       * turned out to be genuinely different, not two spellings of one.
+       */
+      kind: 'wd-reveal-tool-use'
+      toolUseId: string
+      nonce: number
+    }
 
 /** Sidebar webview → host. */
 export type SidebarToHost =
@@ -183,6 +227,19 @@ export type SidebarToHost =
        * for a surface that cannot frame.
        */
       subagentToolUseId?: string
+      /**
+       * Set when the click landed on a **task** rather than an agent: select the
+       * session as normal, then travel to the row where that work was started
+       * and finished.
+       *
+       * A sibling of `subagentToolUseId`, not a flag on it, because the two go
+       * to different panel APIs — `openSubagent` takes the body over, `reveal`
+       * stays on the conversation and scrolls. Conflating them is how a task
+       * came to be framed as an agent, which selects no items at all and drew an
+       * **empty agent view**. A task has no agent behind it; it is a reference,
+       * and following it is the only honest thing to do with one.
+       */
+      revealToolUseId?: string
     }
   | {
       /** Interrupt. Executed host-side over a transient attach. */

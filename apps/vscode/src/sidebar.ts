@@ -33,7 +33,15 @@ export type SidebarDelegate = {
   /** A session was chosen — show it in the agent panel. */
   /** `subagentToolUseId` set = the click landed on a sub-agent under the session:
    * select it, then hand the panel over to that agent's own work. */
-  selectSession: (hostId: string, sessionId: string, subagentToolUseId?: string) => Promise<void>
+  /** `subagentToolUseId` frames one agent's work; `revealToolUseId` stays on
+   * the conversation and travels to a row. At most one is ever set — see
+   * `wd-select-session`. */
+  selectSession: (
+    hostId: string,
+    sessionId: string,
+    subagentToolUseId?: string,
+    revealToolUseId?: string,
+  ) => Promise<void>
   /** The active session was deleted out from under the panel. */
   clearPanelIfActive: (sessionId: string) => Promise<void>
   activeSessionId: () => string | undefined
@@ -247,7 +255,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
         this.#pushState()
         return
       case 'wd-select-session':
-        await this.#delegate.selectSession(msg.hostId, msg.sessionId, msg.subagentToolUseId)
+        await this.#delegate.selectSession(
+          msg.hostId,
+          msg.sessionId,
+          msg.subagentToolUseId,
+          msg.revealToolUseId,
+        )
         return
       case 'wd-stop-session':
         return this.#stopSession(msg.hostId, msg.sessionId)

@@ -128,21 +128,24 @@ spending real money on six parallel agents — counted in the same pass over the
 rows, hidden entirely at zero, and coloured on the **foreground** (`charts.blue`) because VS Code
 ignores every background but the two alarm ones. Either badge keeps the poll watcher alive:
 gating it on `unread` alone left someone who turned unread off watching a frozen count.
-The list is drawn as **inset rounded cards** (the Figma sidebar design), and it reverses two
-rules the row's own comments once stated, deliberately. The **state glyph leads the title**: the
-earlier rule optimised for reading one row, this one for scanning twenty, and the glyph is what
-tells you which row to read — an idle row's title dims with it, since spending full contrast on
-twelve of them is what made the one that is working hard to find. And **selection is the card's
-own fill** rather than a gutter bar, the card being an inset shape with air around it, which
-leaves the left edge to the glyph. Line two is the engine's mark and model in the **vendor's own
-colour**, then the **project** and gateway muted — the project having replaced the cwd basename in
-that slot, because the folder was only ever a proxy for the question the project name answers
-(`projectLabel` falls back to exactly that basename, so an undeclared project is byte-identical
-to what shipped). Its icon rides *inside* the same truncating span rather than holding a slot of
-its own: the parts have a priority order and one ellipsis honours it, where flex children each
-shrink a little and leave four half-words. The **age moved up to line one**, where the spec puts
-it and where the other two clients already had it: line two is now a run of *identity* — engine,
-model, project, gateway — and the age was the one part of it that kept changing while you read.
+The list is drawn as **inset rounded cards** (the Figma sidebar design) — and the card itself is
+now `packages/ui`'s **`SessionItem`**, which is why `SessionCard.tsx` is ~95 lines of props where
+it used to be ~380 of hand-kept markup. The card was born here (the dashboard had no sub-agent
+rows, no context ring and no vendor colour until they were lifted out of this webview) and for a
+while the two lists were two copies of one design, agreeing on the model and disagreeing on every
+measurement. Its prop is the whole **`row: SessionRow`** now, not `info` + `unseen` + `hostName` —
+the view model the shared card reads — plus `showProject`/`showGateway`; `SidebarApp` passes the
+row it already had, and `dev-preview` builds one.
+The card keeps the two rules this design reversed, deliberately. The **state glyph leads the
+title**: the earlier rule optimised for reading one row, this one for scanning twenty, and the
+glyph is what tells you which row to read. And **selection is the card's own fill** rather than a
+gutter bar, the card being an inset shape with air around it, which leaves the left edge to the
+glyph. Line two is the engine's mark and model in the **vendor's own colour**, then the **project**
+and gateway muted — the project having replaced the cwd basename in that slot, because the folder
+was only ever a proxy for the question the project name answers (`projectLabel` falls back to
+exactly that basename, so an undeclared project is byte-identical to what shipped) — and it closes
+with the **age**, the one part of that identity run that keeps changing while you read it. Line
+one's own tail is the pair that changes while you *look*: the unread badge and the context ring.
 Grouping by project **suppresses it on the row** and
 hands the slot back to the basename — `ui`, `server`, `web` under one WorkerDeck heading, which
 is the one thing the header cannot say — exactly the rule `hostName` already followed one facet
@@ -174,18 +177,27 @@ reads). That full contrast also decides **how far the colour reaches**: Anthropi
 *and* the model name, OpenAI's covers the **mark only** (`vendorMarkClass`/`vendorTextClass`), because a
 pure-white 11px model name is brighter than the session title above it and inverts the card's
 hierarchy to repeat something the mark has already said — which is also the most literal reading
-of "don't add any colors". Both lines also share **one 14px icon gutter** (`Gutter`), because the
-state glyph is 14px and the vendor mark 12px: as plain flex children each line's text started at
-`icon + gap`, 20px against 18px, and two pixels is invisible as a measurement and obvious as a
-misalignment. The two hover actions became one
-always-visible `⋯` opening a **native QuickPick**, decided host-side off the polled model — a
+of "don't add any colors". Both lines also share **one 16px icon gutter** (`SessionItem`'s
+`Gutter`), because the two glyphs are different sizes: as plain flex children each line's text
+started at `icon + gap` and two pixels is invisible as a measurement and obvious as a
+misalignment.
+What is left extension-shaped after the card moved out is exactly **two** things, and they are the
+two `SessionItem` takes as props. First, **the overflow is a native menu**: the two hover actions
+became one always-visible `⋯` in the card's `actions` slot (`CardMenu`, which posts
+`wd-session-menu`) opening a **QuickPick**, decided host-side off the polled model — a
 popover anchored in a 280px view would be clipped by the view's own bounds, and a card that went
 stale between the poll and the press must not offer Stop for a finished session. That QuickPick
 is also where **Clear context** lives — the first Clear control on any client — gated on
 `SessionInfo.capabilities.clearContext` (absent = false, so an older gateway simply does not offer
 it), sent as a session command over a transient attach exactly like Stop, and confirmed with copy
 that never says "deleted": the session keeps running, the conversation starts fresh, and the old
-one stays resumable from the resume picker. The disclosure
+one stays resumable from the resume picker. Second, **rename is a double-click on the title** —
+`SessionItem`'s default `renameOn`, and the editor's own feel — where the dashboard, spending its
+row hover on three actions instead, drives the same editor from a pencil (`renameOn='external'`).
+The colours are not this file's business either: `styles.css` repoints `--row-hover` and
+`--row-selected` at `list.hoverBackground` / `list.activeSelectionBackground` and
+`--badge`/`--badge-fg` at VS Code's own badge pair, so the shared card wears the user's theme
+without a `--vscode-*` variable being named in the component. The disclosure
 reads `1/6` rather than `1 of 6 agents`, the words having truncated the folder name away to say
 what three characters say, with the sentence kept for the tooltip and the screen reader.
 `dev/preview.html` + `pnpm dev:preview` renders the cards in a browser against canned data,
@@ -206,8 +218,31 @@ still **without focusing the composer** — and now for a stronger reason than b
 sub-agent is framed there *is* no composer. That chain was `revealToolUse` → `wd-reveal-tool-use`
 → `SessionPanel.reveal` and was repurposed wholesale rather than joined by a second one; revealing
 the row remains the honest fallback meaning for a surface that cannot frame, and `reveal` itself
-survives untouched for other callers. The webview clears its request in the `wd-show-session`
-handler, because a request left standing across a session switch would frame one session's `Task`
+survives untouched for other callers. A **task** takes the other road: `wd-select-session`'s `revealToolUseId` → `panel.reveal` →
+**`wd-reveal-tool-use`** → `SessionPanel.reveal`, which stays on the conversation and travels to the
+row where that work was started and finished. A sibling field and a separate arm, not a flag,
+because the two go to different panel APIs — and conflating them is exactly how a task came to be
+framed as an agent, selecting no items and drawing an **empty agent view**. The two request queues
+in `panel.ts` clear each other, so at most one is ever pending and the flush order in `#pushActive`
+is a non-question. Neither focuses the composer: both are requests to *read*.
+The panel reports back what it actually has framed — `SessionPanel`'s `onSubagentChange` →
+**`wd-subagent-open`** → `SessionsModel.setSelectedSubagent` → `SidebarState.selected
+.subagentToolUseId` → the card's `activeStepKey`, which draws the **secondary selection**: the
+framed agent's row goes blue and its session's card drops to grey. A *statement*, not the echo of
+`wd-open-subagent`, and the two are deliberately separate arms: the panel enters frames the host
+never asked for (a `Task` row pressed inside the transcript) and leaves them three ways, so a value
+inferred from our own requests would be wrong within one click. `setSelectedSubagent` is a setter of
+its own rather than another `setSelected`, because the two facts have different owners and
+lifetimes — the selected session is this window's and survives a reload via `ACTIVE_SESSION_KEY`,
+the frame belongs to the panel and dies with it, which is also why the restore path deliberately
+seeds no `subagentToolUseId`. `wd-ready` clears it: a fresh webview has no frame by construction,
+and since the panel reports *changes* and is silent on mount, a panel disposed while framed and
+reloaded would otherwise never contradict the value the host still held. The sidebar matches
+`selected` on **host and session**, not on session alone — ids come from the engines, so two
+gateways can issue the same one, and an id-only test lit the wrong card in exactly the
+multi-gateway case this window exists to make legible. The webview clears its request in the
+`wd-show-session` handler, because a request left standing across a session switch would frame one
+session's `Task`
 id against another's items.
 **This is the one place the no-header/no-screens rule needed a ruling rather than an application.**
 That rule was written about the sidebar and section views, where pushed screens broke VS Code's
@@ -240,8 +275,8 @@ is per-engine, so another profile's ids mean nothing here — gated on the capab
 `listSessions`, and a pick is the same create call with `resume` set and no first prompt (the
 engine replays the thread; a prompt on top would be an unasked-for turn). A session rename is a gateway edit
 (`PATCH /sessions/:id` → `meta.title`), never a local override, so every client sees the
-same name; it is reached by double-clicking the title, with Stop and Delete as hover icons
-on the card's second line and state the first line's last item. `src/dev-reload.ts` is development-mode only: a webview rebuild
+same name; it is reached by double-clicking the title, everything else the card can do being
+in the `⋯` QuickPick. `src/dev-reload.ts` is development-mode only: a webview rebuild
 re-renders the webviews in place, an extension-host rebuild reloads the window (VS Code
 cannot swap extension code in a live host).
 ## `apps/embedded`

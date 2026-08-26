@@ -31,6 +31,29 @@ before anyone noticed. Both multi-watcher packages now use `concurrently`, which
 signal to its children; the check is one line: start `pnpm dev`, kill the `pnpm` pid, then
 `ps -eo pid,ppid,command | grep esbuild` and expect nothing.
 
+**`packages/ui` has two browser harnesses and they answer different questions.** `pnpm storybook`
+(port 6006, `storybook:build` for a static copy) is the **component catalog**: does every state of
+a component look right, in both themes, at the width it ships at. `packages/ui/dev/` (`pnpm dev`,
+port 5193) is unchanged and stays the **measurement** harness for the terminal renderer — the
+character-cell overlay, the height audit, the perf sweep — which are questions about one running
+surface, not about a component's states, and which `dev/` could only have answered for components
+by growing a second app inside itself. `.storybook/main.ts` resolves the `@workerdeck/source`
+condition like every other dev entry, so there is no build step between an edit and the story;
+`.storybook/preview.tsx` puts **theme** (dark/light, set on `document.documentElement.dataset.theme`
+because half the tokens are declared on `:root` and would not follow a scoped wrapper) and
+**surface** (sidebar/editor/panel, since a card's fills were picked against the sidebar and
+reviewing one on the page's default ground is reviewing it against a colour it never ships on) in
+the toolbar as globals rather than as story args. Stories live in `stories/` and are framed at
+**310px** — the auxiliary bar's width, and near enough every sidebar's — because what truncates
+first is a list card's whole difficulty and a card reviewed at 900px was never asked its hardest
+question. Both harnesses are dev-only and **unpublished**: `files` is `build` + `src`, and
+`storybook-static/` is gitignored. `tsconfig.json`'s `include` covers `stories/**` and
+`.storybook/**`, so a broken story fails `pnpm typecheck` rather than only at 6006. The
+`Sessions/SessionItem` stories carry the **selection model** in full — one story per fill (nothing,
+session, sub-agent, and a task key that must change nothing), plus `Selection · interactive`, which
+is wired to real state and prints what a host would have received, because three fills and two
+grains is a thing to click through rather than to read a table about.
+
 In-package imports use explicit `.ts` extensions. Releases go through **pnpm only** —
 `npm publish` would ship `workspace:*` verbatim; see the packaging section of `docs/GOTCHAS.md`
 before touching versioning or the publish workflow.

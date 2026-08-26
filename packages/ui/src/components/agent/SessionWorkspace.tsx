@@ -43,6 +43,13 @@ export interface SessionWorkspaceProps {
   stickyPrompt?: SessionPanelProps['stickyPrompt']
   /** Take the panel body over with one sub-agent's work — see `SessionPanel`. */
   openSubagent?: SessionPanelProps['openSubagent']
+  /** Travel to a row in the conversation without framing anything — where a
+   * **task** press lands, as opposed to `openSubagent`'s takeover. See
+   * `SessionPanel`. */
+  reveal?: SessionPanelProps['reveal']
+  /** The outward half of `openSubagent`: which sub-agent the panel now has
+   * framed, or `undefined` for the conversation — see `SessionPanel`. */
+  onSubagentChange?: SessionPanelProps['onSubagentChange']
   /** Which end of the panel the status bar sits at — see `SessionPanel`. */
   statusPlacement?: SessionPanelProps['statusPlacement']
   controlsSurface?: SessionPanelProps['controlsSurface']
@@ -106,6 +113,8 @@ export function SessionWorkspace({
   scrubberMarks,
   stickyPrompt,
   openSubagent,
+  reveal,
+  onSubagentChange,
   statusPlacement,
   controlsSurface,
   unseen,
@@ -311,6 +320,8 @@ export function SessionWorkspace({
           scrubberMarks={scrubberMarks}
           stickyPrompt={stickyPrompt}
           openSubagent={openSubagent}
+          reveal={reveal}
+          onSubagentChange={onSubagentChange}
           controlsSurface={controlsSurface}
           statusPlacement={statusPlacement}
           unseen={unseen}

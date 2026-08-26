@@ -59,23 +59,46 @@ export type Step = {
   onSelect: () => void
 }
 
+/**
+ * The steps under one session, **agents first**.
+ *
+ * The two kinds do different things when pressed and are worth different
+ * amounts of attention: an agent has work of its own to go and read, a task is a
+ * marker in a transcript. Interleaved in dispatch order they read as one
+ * undifferentiated list, and the rows you can actually open are scattered
+ * through it. Grouped, the openable ones are a block at the top and the markers
+ * are a tail you can skip.
+ *
+ * Stable **within** each group, deliberately: dispatch order is the only order
+ * these records have that means anything (it is the order the work was started
+ * in), so the sort partitions and never reorders inside a partition.
+ *
+ * `onSelect` is handed the **kind** as well as the id, because the two kinds go
+ * to different places — see `SessionItem`, which is what routes them. Passing
+ * only the id is what let a task be opened as if it were an agent, and a framed
+ * task id matches no items, so the panel drew an **empty agent view**.
+ */
 export function sessionSteps(
   info: SessionInfo,
-  onSelectSubagent: (toolUseId: string) => void,
+  onSelect: (toolUseId: string, kind: Step['kind']) => void,
 ): Step[] {
   // The label is protocol's `subagentLabel`, not a spelling of its own: the
   // dashboard and the phone render the same rows from the same records, and two
   // spellings would be two different answers to "which agent is this".
-  return (info.subagents ?? []).map((sub) => ({
-    key: sub.toolUseId,
-    label: subagentLabel(sub),
-    noun: 'agent',
-    kind: isAgentRecord(sub) ? ('agent' as const) : ('task' as const),
-    state: stepState(sub.status),
-    detail: sub.toolCount > 0 ? String(sub.toolCount) : undefined,
-    title: `${subagentLabel(sub)} · ${sub.toolCount} tool${sub.toolCount === 1 ? '' : 's'}`,
-    onSelect: () => onSelectSubagent(sub.toolUseId),
-  }))
+  const steps = (info.subagents ?? []).map((sub) => {
+    const kind = isAgentRecord(sub) ? ('agent' as const) : ('task' as const)
+    return {
+      key: sub.toolUseId,
+      label: subagentLabel(sub),
+      noun: 'agent',
+      kind,
+      state: stepState(sub.status),
+      detail: sub.toolCount > 0 ? String(sub.toolCount) : undefined,
+      title: `${subagentLabel(sub)} · ${sub.toolCount} tool${sub.toolCount === 1 ? '' : 's'}`,
+      onSelect: () => onSelect(sub.toolUseId, kind),
+    }
+  })
+  return [...steps.filter((s) => s.kind === 'agent'), ...steps.filter((s) => s.kind === 'task')]
 }
 
 function stepState(status: SubagentInfo['status']): Step['state'] {
@@ -142,8 +165,8 @@ export function StepToggle({
         onToggle()
       }}
       className={cn(
-        'flex shrink-0 items-center gap-0.5 rounded px-0.5 outline-none',
-        'hover:bg-surface-hover hover:text-fg-2',
+        'flex shrink-0 items-center gap-0.5 rounded-[4px] py-0.5 pr-1 pl-0.5 outline-none',
+        'text-[0.75rem] leading-3 hover:bg-row-hover hover:text-fg-2',
         running > 0 ? 'text-info' : 'text-fg-4',
       )}>
       <Chevron className='size-3' />
@@ -153,20 +176,58 @@ export function StepToggle({
 }
 
 /**
- * One step under its session. Pressing an **agent** hands the panel over to that
- * agent's own work — it is not a session and never becomes one, but it does now
- * have a surface (`SessionPanel.openSubagent`). A host that cannot frame one
- * falls back to revealing its `Task` row, which was this row's only meaning
- * before the takeover existed. A **task** is not pressable at all; see
- * {@link Step.kind}.
+ * One step under its session — **pressable, all of them**, and what a press
+ * means is what tells the two kinds apart.
  *
- * Divided from the row's header and from each other by a rule rather than by
- * indentation: these are a list *inside* the row, and at 11px an indent is not
- * enough to say so. The rule is black at 25% so it darkens whatever the row is
- * filled with, selected or not, without needing a colour per state.
+ * Pressing an **agent** hands the panel over to that agent's own work
+ * (`SessionPanel.openSubagent`): it is not a session and never becomes one, but
+ * it has a surface, so it can be the selected thing. Pressing a **task** selects
+ * the *session* and travels to that task's marker inside it — a task is a
+ * reference to a place in a transcript, not a thing with a screen, so it can be
+ * followed but never held.
+ *
+ * That is a reversal, and a deliberate one. A task used to be inert markup on
+ * the argument that "a disabled-looking button still announces itself as one" —
+ * correct about the markup, wrong about the premise, because there *was* always
+ * somewhere to go and the row simply swallowed the click on its way there. A row
+ * that looks like a list item, sits in a list, and does nothing when pressed is
+ * the worse lie. So every step answers the pointer and every step answers a
+ * press; only what the press does differs.
+ *
+ * Divided from the card's header by **indentation and its own hit shape**, not
+ * by a rule. The rules came first, on the argument that at 11px an indent is not
+ * enough to say "list inside a row" — and they were right about the reading and
+ * wrong about the cost: a stack of hairlines across every open card turned the
+ * list into a ledger, and a rule cannot answer a pointer. A step that lights up
+ * under the cursor and fills when it is the one on screen says *list* far more
+ * plainly than a line between two of them, and it says it while doing the job
+ * the rule could not.
+ *
+ * **Only an agent can wear the selection**, and `active` is guarded on that here
+ * rather than trusted from the caller: a host that hands back a task's key is
+ * describing where it navigated, not what it selected, and the row must not
+ * paint itself blue for it.
+ *
+ * The hover is `--row-active` — **alpha, not a flat fill** — because this row
+ * has to answer the pointer on three different grounds: a transparent card, a
+ * blue one (its session is selected), and a grey one (a sibling agent is). A
+ * flat value tuned for any of those is wrong on the other two; a tint darkens or
+ * lifts whatever it lands on. It is the one place in the list where the alpha
+ * token earns its keep.
  */
-export function StepRow({ step, onSelect }: { step: Step; onSelect: () => void }) {
+export function StepRow({
+  step,
+  active = false,
+  onSelect,
+}: {
+  step: Step
+  /** The panel is showing this step's own work. Ignored for tasks, which cannot
+   * be the selected thing — see above. */
+  active?: boolean
+  onSelect: () => void
+}) {
   const agent = step.kind === 'agent'
+  const selected = active && agent
   // Body colour by *kind*, state carried by the icon — the rule the transcript's
   // own `TaskRow` already follows, where the body is green and the marker holds
   // the beat. Green means sub-agent across this product (it is the one hue
@@ -174,42 +235,32 @@ export function StepRow({ step, onSelect }: { step: Step; onSelect: () => void }
   // "running" here would be saying something different from the transcript
   // about the same agent. Failure still outranks it: an alarm is not a category.
   const body = step.state === 'failed' ? 'text-danger' : agent ? 'text-success' : 'text-fg-4'
-  const content = (
-    <>
+  return (
+    <button
+      type='button'
+      title={step.title}
+      aria-current={selected || undefined}
+      onClick={(e) => {
+        // The whole card is pressable underneath and means "open the session".
+        // This row has its own answer — for an agent a different destination,
+        // for a task the same one plus a place to land — so it must not also
+        // fire the card's.
+        e.stopPropagation()
+        onSelect()
+      }}
+      className={cn(
+        'flex w-full items-center gap-1.5 rounded-[4px] py-1 pr-2.5 pl-3.5',
+        'text-left text-micro outline-none',
+        selected ? 'bg-row-selected' : 'hover:bg-row-active',
+        body,
+      )}>
       <StepIcon state={step.state} kind={step.kind} />
       <span className='min-w-0 flex-1 truncate'>{step.label}</span>
       {/* The progress reading while it works, and what it cost when it is done.
           Zero draws nothing: `0 tools` beside a thinking agent reads as a stall,
           which is the same call `taskSummary` makes one surface over. */}
       {step.detail ? <span className='shrink-0 tabular-nums text-fg-4'>{step.detail}</span> : null}
-      {agent ? <ArrowRight className='size-3 shrink-0 opacity-60' /> : null}
-    </>
-  )
-  const shape =
-    'flex w-full items-center gap-2 border-t border-black/25 py-1 pl-3 pr-2 text-left text-label outline-none'
-
-  // A task is not a button, in the markup and not merely in the styling: there
-  // is nothing to press, and a disabled-looking button still announces itself as
-  // one. It stops the click all the same — the whole session row is pressable
-  // underneath, so falling through would open the session from a row that says
-  // it does nothing.
-  if (!agent) {
-    return (
-      <div title={step.title} onClick={(e) => e.stopPropagation()} className={cn(shape, body)}>
-        {content}
-      </div>
-    )
-  }
-  return (
-    <button
-      type='button'
-      title={step.title}
-      onClick={(e) => {
-        e.stopPropagation()
-        onSelect()
-      }}
-      className={cn(shape, 'hover:bg-surface-hover', body)}>
-      {content}
+      {agent ? <ArrowRight className='size-3.5 shrink-0 text-fg-4' /> : null}
     </button>
   )
 }
@@ -218,16 +269,16 @@ function StepIcon({ state, kind }: { state: Step['state']; kind: Step['kind'] })
   // A task that is neither running nor failed gets a neutral dot rather than a
   // tick: `done` is a claim about work, and nothing here did any.
   if (kind === 'task' && state !== 'running' && state !== 'failed') {
-    return <Dot className='size-3 shrink-0' />
+    return <Dot className='size-[11px] shrink-0' />
   }
   switch (state) {
     case 'running':
-      return <Spinner className='size-3 shrink-0' />
+      return <Spinner className='size-[11px] shrink-0' />
     case 'failed':
-      return <CircleAlert className='size-3 shrink-0' />
+      return <CircleAlert className='size-[11px] shrink-0' />
     case 'pending':
-      return <PauseCircle className='size-3 shrink-0' />
+      return <PauseCircle className='size-[11px] shrink-0' />
     default:
-      return <Check className='size-3 shrink-0' />
+      return <Check className='size-[11px] shrink-0' />
   }
 }

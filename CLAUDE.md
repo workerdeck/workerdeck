@@ -34,7 +34,7 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
 | `packages/server` | HTTP + WS gateway, session registry, profiles, parking/dormancy, scope enforcement, host-filesystem routes. |
 | `packages/client` | REST + WS client on platform `fetch`/`WebSocket`. Zero runtime deps. |
 | `packages/react` | Headless: `useClaudeSession`, the pure transcript reducer, the replay hold, the companion hooks. |
-| `packages/ui` | Styled layer: `SessionPanel`, `SessionWorkspace`, the **terminal transcript theme**, the scrubber. Ships source styles. |
+| `packages/ui` | Styled layer: `SessionPanel`, `SessionWorkspace`, `SessionItem` (the session card, one drawing for every client), the **terminal transcript theme**, the scrubber. Ships source styles; Storybook is its component catalog. |
 | `packages/web` | The dashboard. Four sections and a dialog. Prebuilt static, zero runtime deps. |
 | `packages/cli` | Published unscoped as **`workerdeck`**. Gateway + dashboard on one port. Hosts the only push credential (APNs). |
 | `apps/vscode` | The VS Code extension. No webview draws its own header; no view has screens. |

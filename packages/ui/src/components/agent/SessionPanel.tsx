@@ -251,14 +251,51 @@ export interface SessionPanelProps {
    * need a live closure at the far end. Same shape and same reason as
    * {@link SessionPanelProps.reveal}.
    *
-   * Hosts must clear their request on a session switch: a stale one replayed at
-   * remount would open a frame the new transcript cannot answer.
+   * **Withdrawing the request closes the frame.** The prop going away without a
+   * remount is itself a request — "the conversation, plainly" — and it leaves
+   * through the same path Back takes, so the reader lands on the Task row they
+   * came from. It has to mean that, because a host that keeps its request in
+   * route state (the dashboard's `?subagent=`) has exactly one way to say it:
+   * clear the search — which is what the sidebar's plain session click already
+   * navigated with, and what the browser's Back button re-arrives on. Before
+   * this, both were silently ignored and the frame outlived the address that
+   * claimed it was gone. Still not a controlled value: the panel enters and
+   * leaves frames on its own and *reports* through
+   * {@link SessionPanelProps.onSubagentChange}; only a **change** of the prop
+   * is a request.
+   *
+   * Hosts must still clear their request on a session switch: a stale one
+   * replayed at remount would open a frame the new transcript cannot answer.
    *
    * Claude-only in practice, and gated by data rather than by a flag — codex and
    * provider sessions have no `parentToolUseId`, so they grow no task blocks and
    * no sub-agent rows, and nothing can raise this.
    */
   openSubagent?: { toolUseId: string; nonce: number }
+  /**
+   * Which sub-agent the panel now has framed, or `undefined` for the session's
+   * own conversation — the outward half of
+   * {@link SessionPanelProps.openSubagent}, and a *statement* where that one is
+   * a *request*. Deliberately not an echo: the panel enters frames the host
+   * never asked for (a Task row pressed in the transcript) and leaves them on
+   * its own (Back, Escape, a reveal), so a host that tracked only its own
+   * requests would be wrong within one click. No nonce, for the same reason —
+   * a state that arrives twice is the same state, where a request that arrives
+   * twice is two requests.
+   *
+   * Never fired for a fresh mount's initial `undefined`, and never fired from
+   * an unmount. The first would be a lie with consequences: the seeding effect
+   * consumes `openSubagent` in the same commit, so for one commit the state is
+   * `undefined` even though a frame is about to open, and a host folding
+   * reports into route state would clear the very `?subagent=` request the
+   * panel is in the middle of honouring. The second lets a panel keyed away on
+   * a session switch stomp what the host already believes about the next one.
+   * See the notify effect for the mechanics.
+   *
+   * What the sessions list's secondary selection feeds on: the row of the agent
+   * on screen takes the blue and its session's card steps back to grey.
+   */
+  onSubagentChange?: (toolUseId: string | undefined) => void
   /**
    * Terminal theme only: hold the prompt of the turn you are reading at the top
    * of the transcript, as the Claude Code CLI does. The **real row** is pinned
@@ -475,6 +512,7 @@ export function SessionPanel({
   scrubberMarks,
   reveal,
   openSubagent,
+  onSubagentChange,
   stickyPrompt = false,
   controlsSurface = 'internal',
   onControls,
@@ -548,14 +586,35 @@ export function SessionPanel({
     setReturnReveal(undefined)
   }, [sessionId])
 
-  // The host asking. Keyed on the nonce, so asking twice for the same agent
-  // works — and so a request that arrives while another frame is open swaps it
-  // in place rather than being ignored.
+  // Every way out of the frame that carries no destination of its own — Back,
+  // Escape, a withdrawn request — funnels through here, so they all land the
+  // reader on the Task row they entered from. A reveal is the one exit that
+  // doesn't: it brought its own destination.
+  const leaveSubagent = useCallback(() => {
+    setSubagentId((current) => {
+      if (current !== undefined) setReturnReveal({ toolUseId: current, nonce: Date.now() })
+      return undefined
+    })
+  }, [])
+
+  // The host asking — or withdrawing the ask. Keyed on the nonce, so asking
+  // twice for the same agent works — and so a request that arrives while
+  // another frame is open swaps it in place rather than being ignored.
+  //
+  // A withdrawn request (the prop going away without a remount) CLOSES the
+  // frame — see the prop's docblock for why a host keeping its request in
+  // route state needs that to be true. Two non-cases are worth naming because
+  // they look like hazards and are not: on a fresh mount with no request this
+  // fires once and `leaveSubagent` finds nothing framed, so first render
+  // cannot wipe anything; and a host *echoing* the panel's own report back
+  // (the dashboard folding `onSubagentChange` into `?subagent=`) re-arrives
+  // with the nonce unchanged, so this effect never re-runs for it — the echo
+  // is inert by construction, not by a same-value bail-out.
   const openSubagentNonce = openSubagent?.nonce
   const openSubagentId = openSubagent?.toolUseId
   useEffect(() => {
-    if (openSubagentId === undefined) return
-    setSubagentId(openSubagentId)
+    if (openSubagentId === undefined) leaveSubagent()
+    else setSubagentId(openSubagentId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openSubagentNonce])
 
@@ -569,13 +628,6 @@ export function SessionPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealNonce])
 
-  const leaveSubagent = useCallback(() => {
-    setSubagentId((current) => {
-      if (current !== undefined) setReturnReveal({ toolUseId: current, nonce: Date.now() })
-      return undefined
-    })
-  }, [])
-
   // Escape leaves the frame — the keyboard half of Back. `defaultPrevented`
   // keeps a dialog's own Escape (and the composer's) ahead of it: this is the
   // outermost thing Escape can mean here, so it goes last.
@@ -588,6 +640,32 @@ export function SessionPanel({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [subagentId, leaveSubagent])
+
+  // The report out — see the prop's docblock for what it claims. Fired off the
+  // STATE rather than from each exit path, because the state is the only place
+  // all four ways out and both ways in already meet; a notification hung on
+  // the affordances would go stale the first time someone added a fifth.
+  //
+  // The ref pair is the mount guard, and it is load-bearing. On a deep-linked
+  // mount, `subagentId` is `undefined` for the whole first commit — the
+  // seeding effect above runs in that same commit and its setState lands in
+  // the next one — so a naive `useEffect(..., [subagentId])` reports
+  // `undefined` first, the host clears the `?subagent=` it was asked with,
+  // and the withdrawal closes the frame the reader just requested. The ref
+  // starts at `undefined`, so the first commit is silent by construction —
+  // not by effect ordering, which is why this works wherever it sits relative
+  // to the seeding effect (and under StrictMode's double mount). No cleanup
+  // report on unmount, deliberately: hosts key this panel by session, and a
+  // departing panel announcing "nothing framed" would stomp whatever the host
+  // already holds for the next one.
+  const onSubagentChangeRef = useRef(onSubagentChange)
+  onSubagentChangeRef.current = onSubagentChange
+  const reportedSubagentId = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (reportedSubagentId.current === subagentId) return
+    reportedSubagentId.current = subagentId
+    onSubagentChangeRef.current?.(subagentId)
+  }, [subagentId])
 
   // Catch-up is entered once, from the watermark the embedder handed over, and
   // left when dismissed or when the user sends anything (they are plainly

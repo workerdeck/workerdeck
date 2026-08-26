@@ -54,10 +54,22 @@ const sessionRoute = createRoute({
    * far side of that is a piece of state the navigation cannot carry. `sn` is
    * the nonce the panel needs to treat asking twice as twice — a plain repeat
    * of the same id is a props-equal no-op.
+   *
+   * `?reveal=<toolUseId>&rn=<n>` is the **other** destination a step can have,
+   * and it is a separate pair rather than a flag on the first because the two
+   * mean different things to the panel: `subagent` takes the body over with one
+   * agent's work, `reveal` stays on the conversation and travels to a row in it.
+   * A **task** has no agent behind it, so framing its tool-use id selected no
+   * items and drew an empty agent view; a task is a reference, and this is what
+   * following one looks like. `rn` is its own nonce for the same reason `sn` is.
    */
-  validateSearch: (search: Record<string, unknown>): { subagent?: string; sn?: number } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { subagent?: string; sn?: number; reveal?: string; rn?: number } => ({
     subagent: typeof search.subagent === 'string' ? search.subagent : undefined,
     sn: typeof search.sn === 'number' ? search.sn : undefined,
+    reveal: typeof search.reveal === 'string' ? search.reveal : undefined,
+    rn: typeof search.rn === 'number' ? search.rn : undefined,
   }),
 })
 

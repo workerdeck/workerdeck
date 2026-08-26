@@ -189,6 +189,10 @@ export function activate(context: vscode.ExtensionContext): void {
       pushSections()
       pushStatusBar()
     },
+    // What the panel now has framed. Straight through to the model — the
+    // sessions list is the only consumer, and it is a *statement* about the
+    // panel rather than a decision this file gets to make.
+    subagent: (toolUseId) => model.setSelectedSubagent(toolUseId),
     unseen: (hostId, sessionId) => {
       const mark = watermarks.get(hostId, sessionId)
       return mark ? { itemCount: mark.itemCount, since: mark.seenAt } : undefined
@@ -226,7 +230,12 @@ export function activate(context: vscode.ExtensionContext): void {
   // Show a session in the agent panel. Named, because both the list and the
   // new-session QuickPick end here — a session you just created should be the
   // one on screen.
-  const selectSession = async (hostId: string, sessionId: string, subagentToolUseId?: string) => {
+  const selectSession = async (
+    hostId: string,
+    sessionId: string,
+    subagentToolUseId?: string,
+    revealToolUseId?: string,
+  ) => {
     const host = store.get(hostId)
     if (!host) return
     const info = model.sessionsOf(hostId).find((s) => s.id === sessionId)
@@ -234,7 +243,13 @@ export function activate(context: vscode.ExtensionContext): void {
     // on screen doesn't remount the panel, so nothing would ever re-send them
     // — Context and Usage would sit empty until the next event moved one.
     if (!panel.isShowing(hostId, sessionId)) vitals = undefined
-    model.setSelected({ hostId, sessionId })
+    // Seeded with the pick so the card answers the click in the same frame. The
+    // panel will report the same value back a beat later (`wd-subagent-open`),
+    // and `setSelectedSubagent` no-ops on an unchanged one — but a *session*
+    // click has to clear the previous session's frame here rather than wait for
+    // that round trip, or the outgoing card keeps its grey until the panel has
+    // finished remounting.
+    model.setSelected({ hostId, sessionId, subagentToolUseId })
     // `cwd` rides along because it is what resolves a Cmd-clicked relative path,
     // and it is host-side state the model has no snapshot of at activation.
     void context.workspaceState.update(ACTIVE_SESSION_KEY, { hostId, sessionId, cwd: info?.cwd })
@@ -245,8 +260,15 @@ export function activate(context: vscode.ExtensionContext): void {
     // something, and the composer is at the other end of the panel from the row
     // about to be revealed. So the caret stays where it was and the jump is the
     // whole answer.
-    await panel.show({ host, sessionId, cwd: info?.cwd }, { focus: !subagentToolUseId })
+    await panel.show(
+      { host, sessionId, cwd: info?.cwd },
+      { focus: !subagentToolUseId && !revealToolUseId },
+    )
     if (subagentToolUseId) panel.openSubagent(subagentToolUseId)
+    // A **task**: no agent to hand the body over to, so travel to the row where
+    // that work was started and finished. Framing it instead selected no items
+    // and drew an empty agent view.
+    else if (revealToolUseId) panel.reveal(revealToolUseId)
   }
   sidebar = new SidebarProvider(context, context.extensionUri, store, model, {
     selectSession,
@@ -306,6 +328,9 @@ export function activate(context: vscode.ExtensionContext): void {
     // A gateway removed since the reload leaves nothing to restore — drop the
     // record rather than retrying it every activation.
     if (host) {
+      // No `subagentToolUseId`: a frame belongs to the panel and dies with it,
+      // and `ACTIVE_SESSION_KEY` deliberately never held one. A reload restores
+      // the session's own conversation, which is what the panel restores too.
       model.setSelected({ hostId: remembered.hostId, sessionId: remembered.sessionId })
       panel.restoreActive({ host, sessionId: remembered.sessionId, cwd: remembered.cwd })
     } else {

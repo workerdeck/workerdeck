@@ -25,6 +25,16 @@ export type PanelDelegate = {
   openPanel: (panel: SessionSurfacePanel) => Promise<void>
   /** Live vitals for the shown session — relayed to the sidebar's sections. */
   vitals: (vitals: SessionVitals) => void
+  /**
+   * Which sub-agent the panel now has framed, or `undefined` for the session's
+   * own conversation. The sessions list draws it as a secondary selection.
+   *
+   * Reported rather than inferred: `openSubagent` below is not the only way into
+   * a frame (a Task row pressed inside the transcript opens one) and not the
+   * only way out (Back, Escape, a reveal), so a host that tracked only its own
+   * requests would be wrong within one click.
+   */
+  subagent: (toolUseId: string | undefined) => void
   /** What had been seen of this session last time it was on screen, for the
    * panel's catch-up. The store lives in `activate`; the panel only carries it
    * across the bridge. */
@@ -62,6 +72,9 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
   /** A takeover asked for before the webview could take it — see `openSubagent`. */
   #subagentPending: string | undefined
   #subagentNonce = 0
+  /** A row asked for before the webview could take it — see `reveal`. */
+  #revealPending: string | undefined
+  #revealNonce = 0
   #active: ActiveSession | undefined
   #transports: WebviewTransportHost | undefined
 
@@ -200,8 +213,11 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     })
     if (focus) this.#post({ kind: 'wd-focus-composer' })
     // After the session, for the same reason the focus is: an id only means
-    // something once the panel is on the transcript that contains it.
+    // something once the panel is on the transcript that contains it. Order
+    // between these two does not matter, and that is enforced rather than
+    // assumed — each queue clears the other, so at most one is ever pending.
     this.#flushSubagent()
+    this.#flushReveal()
   }
 
   /**
@@ -213,7 +229,36 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
    */
   openSubagent(toolUseId: string): void {
     this.#subagentPending = toolUseId
+    // The mirror of the rule in `reveal` — see there.
+    this.#revealPending = undefined
     this.#flushSubagent()
+  }
+
+  /**
+   * Travel to a tool call in the conversation — the **task** picked in the
+   * sessions list. Queued exactly like `openSubagent` and for the same reason: a
+   * panel opening for the first time has not said `wd-ready` yet.
+   *
+   * Not `openSubagent` with a different name. A task has no agent behind it, so
+   * framing its tool-use id selects no items and the panel draws an empty agent
+   * view — which is what it did until this existed.
+   */
+  reveal(toolUseId: string): void {
+    this.#revealPending = toolUseId
+    // One click picks ONE destination, and a reveal is the panel's own way out
+    // of a frame — so a takeover still queued here is a stale intent that would
+    // land after this one and undo it. Dropping it is what makes the flush order
+    // in `#pushActive` a non-question.
+    this.#subagentPending = undefined
+    this.#flushReveal()
+  }
+
+  #flushReveal(): void {
+    if (!this.#view || !this.#ready) return
+    const toolUseId = this.#revealPending
+    if (!toolUseId) return
+    this.#revealPending = undefined
+    this.#post({ kind: 'wd-reveal-tool-use', toolUseId, nonce: ++this.#revealNonce })
   }
 
   #flushSubagent(): void {
@@ -235,6 +280,18 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     switch (msg.kind) {
       case 'wd-ready':
         this.#ready = true
+        // A fresh webview has no frame open, by construction — `SessionPanel`
+        // mounts on the session's own conversation. Saying so here is what
+        // stops a **stale grey card**: the panel reports frame *changes*, and
+        // deliberately does not report on mount (an unprompted `undefined` at
+        // mount time is what wiped the dashboard's `?subagent=` before it could
+        // be read), so a webview that was disposed while framed and then
+        // reloaded would never contradict the value the host still held.
+        //
+        // Safe ahead of `#pushActive`/`#flushSubagent` below: a frame queued for
+        // this panel is re-posted straight after and reported back as soon as it
+        // opens, so the clear can only ever be corrected forward.
+        this.#delegate.subagent(undefined)
         this.#pushActive()
         return
       case 'wd-open-path':
@@ -244,6 +301,9 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
         return
       case 'wd-open-panel':
         await this.#delegate.openPanel(msg.panel)
+        return
+      case 'wd-subagent-open':
+        this.#delegate.subagent(msg.toolUseId)
         return
     }
   }

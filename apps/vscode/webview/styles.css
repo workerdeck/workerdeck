@@ -84,6 +84,19 @@ html[data-font='editor'] {
   --accent-hover: var(--vscode-textLink-activeForeground, #4daafc);
   --accent-fg: var(--vscode-button-foreground, #ffffff);
   --accent-bg: var(--vscode-list-activeSelectionBackground, #04395e);
+  /* A list row's three fills, at the theme's own list colours. The session card
+     draws its selection as a fill (`--row-selected`) rather than a gutter bar,
+     so this is the one mapping that decides whether a selected session looks
+     like a selected row in the explorer beside it. `--row-active` is the *other*
+     lists' selected tint and stays the ui's alpha, which lands correctly on
+     whatever the theme paints behind it. */
+  --row-hover: var(--vscode-list-hoverBackground, #2a2d2e);
+  --row-selected: var(--vscode-list-activeSelectionBackground, #04395e);
+  --row-selected-weak: var(--vscode-list-inactiveSelectionBackground, #37373d);
+  /* A count that is not an alert — VS Code's own badge, which every theme tunes
+     to sit quietly. The unread badge stays on `--accent`. */
+  --badge: var(--vscode-badge-background, #616161);
+  --badge-fg: var(--vscode-badge-foreground, #cccccc);
   /* Focus is VS Code's own focus colour, not the ui's foreground-derived ring —
      a white outline in an editor theme reads as a selection, not as focus. */
   --ring: var(--vscode-focusBorder, #0078d4);

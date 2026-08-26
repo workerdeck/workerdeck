@@ -871,19 +871,77 @@ answered only the first, so a weekly window at 71% permanently hid a five-hour o
 models get their own bucket is the plan's business),
 and the lenient `[1m]`-stripping `currentModel`/`modelLabel` — typed structurally against
 `SessionVitals` rather than importing it, so the React-free entry stays React-free.
-`SessionBrowser` is the styled sessions list built on protocol's view model — search, facets,
-grouping, the subset line, unread badges, inline rename — for a host that wants the
-dashboard's look without reimplementing the rules. Its row is the **VS Code sidebar card's
-design**, which is where all three clients now sit: state glyph leading (this *reverses* the
-row's own "state last" comment, and knowingly — a trailing glyph has no fixed x, so it lands
-wherever the age and the ring leave it, and a list of thirty gives the eye nothing to run down),
-then title, unread badge, age, context ring; line two is the engine's mark and model in the
-**vendor's own colour** (`vendorMarkClass`/`vendorTextClass`, `--vendor-*`; the class goes *on*
-`EngineIcon`, which ships its own `text-fg-3` that only a class on the element itself merges
-over), then project · gateway · profile · cost, then the sub-agent disclosure. Both lines share
-one 14px `Gutter`, because the state glyph is 14px and the mark 12px and two pixels is invisible
-as a measurement and obvious as a misalignment.
-The row's hover affordances are pencil / **eraser** / trash, and the eraser is the one with two
+`SessionItem` is **the session card, and the only drawing of it in the product**. The dashboard's
+`SessionBrowser` and the VS Code sidebar both render it; before it existed they rendered two
+hand-kept copies that agreed on the model (`SessionRow`, `sessionSteps`, `sessionState`) and
+disagreed on every measurement — different gutters, type sizes and selection — so the two lists
+read as two products. One component, two thin hosts, is what keeps them one. iOS mirrors this
+file's geometry rather than either copy. A 4px-padded, 4px-rounded card whose whole surface is the
+hit target, holding two 20px lines: **line one is state and identity** — the status glyph leads
+(this *reverses* the old row's "state last" rule, and knowingly: a trailing glyph has no fixed x,
+so a list of thirty gives the eye nothing to run down), then the title, then the two readings that
+change while you are looking at them, the unread badge and the `ContextRing`. **Line two is
+identity and cost** — the engine's mark and model in the **vendor's own colour**
+(`vendorMarkClass`/`vendorTextClass`, `--vendor-*`; the class goes *on* `EngineIcon`, which ships
+its own `text-fg-3` that only a class on the element itself merges over), then a `·`-joined run of
+project / gateway / profile / cost, then the age, then the sub-agent disclosure and the host's
+`actions` slot. Both lines hang their glyph in **one 16px `Gutter`**, because the two glyphs are
+different sizes and as plain flex children the text columns start at different x — two pixels,
+invisible as a measurement and obvious as a misalignment; the terminal gutter's argument at card
+scale. Cells within a line are **6px** apart where the two lines are **4px**: a horizontal gap
+separates a glyph from the words it labels and 4px read as one smudge at 13px, where a vertical
+gap separates lines that their own leading has already parted. That run is **one truncating span
+and the age is not in it** — the parts have a priority order and a single ellipsis honours it for
+free, but at the end of the run the age was the first thing the ellipsis ate, which is backwards:
+`4m ago` answers "is this still moving" in three characters and `4m …` answers nothing, while a
+truncated project name still says which repo. The flex slack goes **after** the age, not into the
+run, or a card with no disclosure leaves a hole between a project and its own timestamp. A
+**zero cost contributes nothing**
+rather than `formatCost`'s em-dash: a dash is right in a details panel where an empty cell looks
+broken, and wrong in a run competing for the width the project name needs.
+The card is **`w-full` and the list owns the inset** — `px-1` on the group column, never margins on
+the card. `w-full` plus `mx-1` is `100% + 8px`, an overflow by construction: the dashboard's cards
+ran past the sidebar's right edge and the column grew a horizontal scrollbar. Padding on the
+container cannot do that whatever the card's own width rule turns out to be, which is why it is the
+rule rather than the fix. (The extension was never affected — its scroll container has always been
+`p-1` with no margins on the card.) The metadata run is assembled as a **list of present parts**
+with the separator drawn *between* them, not as a template with a `·` attached to each: every part
+is genuinely optional, and an attached separator outlives its part — `friendlyModel(undefined)` is
+`undefined`, so a session with no model recorded yet opened its line with a `· ` hanging off
+nothing.
+
+**Selection is the card's own fill**, not the accent bar `rowShapeClass` draws: the card is an
+inset shape with air around it, so filling it is unambiguous where a fill on a full-bleed row is
+not, and it leaves the left edge to the state glyph. There are **two selections at two grains** —
+which session is open (`active`) and which of its sub-agents is (`activeStepKey`, reached from
+`SessionBrowser` as `activeSubagentId`) — and three fills between them: nothing selected is
+transparent, the session selected is `--row-selected` (blue), and *one of its sub-agents* selected
+puts the blue on that step and drops the card to `--row-selected-weak` (grey). **The blue always
+marks the finest thing selected**, because opening an agent selects its session too: both claims
+are true at once, the blue can only carry one, and blue-on-blue said nothing. The grey is VS
+Code's `list.inactiveSelectionBackground`, which is the same idea one surface over. `holdsOpenAgent`
+matches `activeStepKey` against the card's *own* steps rather than trusting truthiness — every card
+in the list is handed the same key, and a bare check turned all of them grey at once. A filled card
+does **not** also answer hover; its steps still do, on `--row-active`, whose alpha is what lets one
+hover read correctly against all three grounds. The **unread badge takes its colour from the state,
+not the count**: `--accent` while the session is working or wants a human, the neutral `--badge`
+once it has settled, because a list where every finished session still shouted in blue is a list
+where the blue stopped meaning anything. `--row-selected`, `--row-selected-weak` and
+`--badge`/`--badge-fg` are new in `theme.css` for this, beside the flattened `--row-hover` and the
+11px `--text-micro`; the extension repoints the three fills and the badge pair at `--vscode-list-*`
+/ `--vscode-badge-*`. `SessionStatusIcon` (16px) lives in its own module beside
+the card for the same reason the card does — the extension's list draws it too — and `SessionBrowser`
+re-exports it only so the package's public surface does not shift under a host importing it from
+there. `expanded`/`editing` are uncontrolled by default and `renameOn` chooses the trigger:
+`doubleClick` is the editor feel (the extension's), `external` hands it to a host affordance.
+`SessionBrowser` is the styled sessions list *around* the card built on protocol's view model —
+search, facets, grouping, the subset line — for a host that wants the dashboard's look without
+reimplementing the rules; its `SessionRowItem` is a thin wrapper that passes `renameOn='external'`
+and fills the `actions` slot.
+Its hover affordances are pencil / **eraser** / trash (`RowAction`, hover-revealed, each stopping
+the click so an action cannot also select), which is the opposite of the extension's single
+always-on overflow glyph and the right call for each: there are three of them here and a sidebar
+card has room for one. The eraser is the one with two
 gates rather than one: the host must pass `onClearContext` *and* the row's own
 `capabilities.clearContext` must say so, because a clear is a **session command over a socket**,
 not a REST call — a list holding only REST clients has to borrow a handle for one frame (see
@@ -891,13 +949,27 @@ not a REST call — a list holding only REST clients has to borrow a handle for 
 never says "deleted": the engine keeps the old conversation and it stays resumable.
 
 A session row's sub-agent, pressed, hands the **panel body over to that agent**:
-`SessionPanel.openSubagent` (a nonce-keyed *request*, same shape and same reason as `reveal` — the
-panel owns which agent is open, so Back and Escape need no host wiring) puts `Transcript` into a
-`frame`, which renders `subagentItems` instead of the conversation. That rule lives in
+`SessionPanel.openSubagent` (a nonce-keyed *request*, same shape and same reason as `reveal`) puts
+`Transcript` into a `frame`, which renders `subagentItems` instead of the conversation. That rule lives in
 `terminal/blocks.ts` beside the absorption rule it extends, as one exported function, because it
 is what iOS will mirror: everything the agent produced, and **not** the spawning `Task` call,
 which *is* the frame rather than a row in it. The slice folds runs but absorbs nothing, and its
 indices are internally consistent because the rows and the items are the same array at offset 0.
+
+The panel **owns** which agent is framed, and now **says so**: `onSubagentChange` reports the
+state, where `openSubagent` asks for one. Two directions, not an echo — the panel enters frames
+nobody asked for (a `Task` row pressed inside the transcript) and leaves them three ways (Back,
+Escape, a `reveal`), so a host that tracked only its own requests was wrong within one click. The
+report carries no nonce, because a state that arrives twice is the same state where a request that
+arrives twice is two requests. Three things make the round trip terminate rather than oscillate: a
+host that already agrees does not act on a report, the panel never reports an unchanged value, and
+an echo preserves the request's nonce so the nonce-keyed entry effect **cannot** re-fire for it —
+inert by construction rather than by a same-value bail-out. It is also silent on mount, by
+construction rather than by effect ordering: `subagentId` is `undefined` for the whole first commit
+and the dedupe ref starts there, so a deep link cannot be wiped by the panel reporting "nothing
+framed" before it has read the request. Withdrawing `openSubagent` without a remount now **closes**
+the frame — the dashboard's "open the session plainly" path had claimed that behaviour in a comment
+for a while and was silently dead, the entry effect having early-returned on an absent id.
 Four features switch off inside a frame and the gate is **in `Transcript`, not at the call site**:
 catch-up + its recap row, the scrubber + marks, the sticky prompt, and `reveal` — every one is
 keyed to a full-transcript item index, so passing a frame and a boundary together would not be a
@@ -928,9 +1000,35 @@ transcript about the same agent. Failure still outranks it — an alarm is not a
 `SessionSteps.tsx` holds that disclosure — `sessionSteps`, `StepToggle`, `StepRow` — lifted out
 of the VS Code webview, which is exactly why this list had none of it: a session's sub-agents are
 a protocol fact and a disclosure over them is a list affordance, so neither was ever
-extension-specific. `onSelectSubagent` is **optional**, and its absence is not a missing feature:
-a sub-agent has no screen of its own, so a host that cannot scroll a transcript to a `Task` row
-has nothing more to offer than opening the session, which is what the fallback does.
+extension-specific. A step is divided from the card's header by **indentation and its own rounded
+hit shape**, not by a rule. The rules came first, on the argument that at 11px (`text-micro`) an
+indent is not enough to say "list inside a row" — right about the reading and wrong about the
+cost: a stack of hairlines across every open card turned the list into a ledger, and a rule cannot
+answer a pointer. A step that lights on `--row-active` and fills when it is the one on screen says
+*list* more plainly than a line between two of them.
+
+**Every step is pressable, and what a press means is what tells the two kinds apart.** Pressing an
+**agent** hands the panel over to that agent's own work, so an agent can be the selected thing and
+`StepRow`'s `active` gives it `--row-selected`. Pressing a **task** selects the *session* and
+travels to that task's marker inside it — a task is a reference to a place in a transcript, not a
+thing with a screen, so it can be followed but never held, and `active` is guarded on `kind` here
+rather than trusted from the caller: a host handing back a task's key is describing where it
+navigated, not what it selected.
+
+Those are **two seams, not one**, and the split is load-bearing: `sessionSteps`' callback is handed
+the **kind** alongside the id, and `SessionItem` routes an agent to `onSelectSubagent` and a task to
+`onRevealStep`. One callback for both is how a task came to be opened as though it were an agent —
+`subagentItems` matched nothing under a tool-use id with no agent behind it, so the panel drew an
+**empty agent view**. Both fall back to plainly opening the session, which is all a host that can do
+neither has to offer and is still better than a destination that renders empty. `sessionSteps` also
+puts **agents above tasks**, stable within each group: the rows you can open become a block at the
+top and the markers a tail you can skip, while dispatch order — the only order these records carry
+that means anything — survives inside each partition. That guard is a reversal of the older rule that a task was inert
+markup ("a disabled-looking button still announces itself as one") — correct about the markup,
+wrong about the premise, since there was always somewhere to go and the row merely swallowed the
+click on its way there. `onSelectSubagent` is **optional**, and its absence is not a missing
+feature: a sub-agent has no screen of its own, so a host that cannot scroll a transcript to a
+`Task` row has nothing more to offer than opening the session, which is what the fallback does.
 It draws **projects** the way the extension's
 cards do, and to the same rules: `projectLabel` in the cwd-basename slot (falling back to exactly
 that basename, so an undeclared project is byte-identical to what shipped), the icon inline
@@ -995,7 +1093,7 @@ detail bar, the workspace's tab strip and file rail, the panel and the terminal 
 ground are the same grey. A detail pane on a different ground from the list it was opened from
 reads as a second window inside the first. A token repoint rather than restyled components,
 and it deliberately leaves alone everything that separates itself by *contrast* —
-`--bg-elevated` (dialogs), `--bg-code`, the `row-hover` alpha, every border. It has to set
+`--bg-elevated` (dialogs), `--bg-code`, the row fills, every border. It has to set
 **`--surface` as well as `--bg-surface`**, and that is the trap: `bg-surface` maps to
 `--color-surface: var(--surface)`, and `--surface: var(--bg-surface)` is declared on `:root`, so
 it computes there once and the resolved colour inherits down — redefining only `--bg-surface`
@@ -1013,13 +1111,18 @@ Selection is an accent bar in the gutter instead, run flush to the sidebar
 edge (squared left corners) with `ml-0` handing the border the 4px the margin
 was holding, so text does not shift sideways as a row becomes the selected
 one. The shape is `ui`'s
-`rowShapeClass`, which `SessionBrowser` draws its own rows with — one spelling,
-so the sessions list cannot drift from the three sidebars beside it. The fill
-is the `row-hover` token and it is **alpha, not a flat colour**: a row sits on
-whatever its host paints, so a value tuned for one ground is invisible on
-another. That is not hypothetical — `bg-surface-hover` on the dark sidebar
-resolved to #141414 against #131313, one step of 255, and the hover state
-simply did not exist. The scroll container carries **no side padding**, so the
+`rowShapeClass`, and it is these **three** sidebars' — the sessions list left it
+for `SessionItem`'s filled card when the design unified the two clients, and
+`--row-active`, the tint under the accent bar, stays **alpha** for exactly that
+reason: it lands on whatever the host paints behind it. The hover fill is
+`--row-hover`, and it is now **flat** (VS Code's `list.hoverBackground`), where
+it used to be alpha for the same host-agnostic argument. The design draws one
+hover, so this is one colour; the hazard the alpha was guarding is real and has
+a name — `bg-surface-hover` on the dark sidebar resolved to #141414 against
+#131313, one step of 255, and the hover state simply did not exist — and the
+guard against it now is that both flat values are picked against the sidebar
+fills we actually ship (`--sidebar`), and that the extension repoints them at
+`--vscode-list-*` rather than inheriting. The scroll container carries **no side padding**, so the
 bar reaches the sidebar's edge; everything that is not a row (the filter bar,
 the subset line, group labels, empty states) pads itself. No leading glyph — an icon in front of the title pushes the one
 thing you are reading off the left edge, so an engine mark goes on the

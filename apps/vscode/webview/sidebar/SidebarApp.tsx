@@ -1,6 +1,6 @@
 import { FolderOpen, Layers, Plug, SearchX } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import type { SessionInfo } from '@workerdeck/protocol'
+import type { SessionInfo, SessionRow } from '@workerdeck/protocol'
 import type { SidebarState } from '../../src/bridge-protocol.ts'
 import type { AppHostMessage, Bridge } from '../bridge.ts'
 import { ProjectIcon } from '@workerdeck/ui'
@@ -105,6 +105,20 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const connected = hosts.filter((h) => h.probe === 'connected')
   const scoping = scopeActive(config, scope)
   const subset = subsetSummary(config, scope, filtered.length, rows.length)
+  /**
+   * `state.selected` if it names *this* row, otherwise undefined.
+   *
+   * Matched on **host and session**, not on session alone. Two gateways can
+   * hand out the same session id — the ids come from the engines, not from us —
+   * and the list is flat across every connected gateway, so an id-only test
+   * lights the wrong card in the one situation this window exists to make
+   * legible. The old `state?.selected?.sessionId === row.info.id` had that bug
+   * and it was invisible with one gateway attached, which is how it survived.
+   */
+  const selectedIs = (row: SessionRow) =>
+    state?.selected?.hostId === row.hostId && state.selected.sessionId === row.info.id
+      ? state.selected
+      : undefined
 
   return (
     <div className='flex h-screen flex-col text-body-sm'>
@@ -208,14 +222,16 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
               {group.rows.map((row) => (
                 <SessionCard
                   key={row.info.id}
-                  info={row.info}
+                  row={row}
                   showProject={config.groupBy !== 'project'}
+                  showGateway={config.groupBy !== 'gateway' && hosts.length > 1}
                   projectIcons={projectIcons}
-                  unseen={row.unseen}
-                  hostName={
-                    config.groupBy !== 'gateway' && hosts.length > 1 ? row.hostName : undefined
-                  }
-                  selected={state?.selected?.sessionId === row.info.id}
+                  selected={selectedIs(row) !== undefined}
+                  /* Only THIS card's frame. `selected` is one object for the
+                     whole list, so reading its `subagentToolUseId` unguarded
+                     would hand every card the same key and turn all of them
+                     grey the moment any one agent opened. */
+                  activeSubagentId={selectedIs(row)?.subagentToolUseId}
                   onSelect={() =>
                     bridge.post({
                       kind: 'wd-select-session',
@@ -229,6 +245,14 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
                       hostId: row.hostId,
                       sessionId: row.info.id,
                       subagentToolUseId,
+                    })
+                  }
+                  onRevealStep={(revealToolUseId) =>
+                    bridge.post({
+                      kind: 'wd-select-session',
+                      hostId: row.hostId,
+                      sessionId: row.info.id,
+                      revealToolUseId,
                     })
                   }
                   onRename={(title) =>

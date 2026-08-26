@@ -177,7 +177,11 @@ export {
   rowShapeClass,
   type SessionBrowserProps,
 } from './components/agent/SessionBrowser.tsx'
-export { SessionStatusIcon } from './components/agent/SessionBrowser.tsx'
+// The session card itself — one component, every client. `SessionBrowser` is the
+// dashboard's list *around* it; a host that wants only the card (the VS Code
+// sidebar does, because the filtering chrome above it is native) takes this.
+export { SessionItem, type SessionItemProps } from './components/agent/SessionItem.tsx'
+export { SessionStatusIcon } from './components/agent/SessionStatusIcon.tsx'
 // Lifted out of the VS Code sidebar once the dashboard grew a collapsed rail
 // that needs the same glyph — two copies of a trademark set is one too many.
 export {

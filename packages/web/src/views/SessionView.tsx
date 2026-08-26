@@ -62,7 +62,7 @@ function SessionViewInner({
   // The sub-agent takeover, addressed in the URL — see the route's
   // `validateSearch`. `sn` is the nonce; without one, clicking the same agent
   // twice would be a props-equal no-op.
-  const { subagent, sn } = useSearch({ from: '/sessions/$hostId/$sessionId' })
+  const { subagent, sn, reveal, rn } = useSearch({ from: '/sessions/$hostId/$sessionId' })
   // The workspace asks for this record too, and the client de-dupes nothing —
   // but it is one small GET per session view, and the alternative is threading
   // the panel's session state back out through a prop nobody else wants.
@@ -150,6 +150,46 @@ function SessionViewInner({
       transcriptDensity={density}
       transcriptFont={font}
       openSubagent={subagent ? { toolUseId: subagent, nonce: sn ?? 0 } : undefined}
+      // Travel to a row without framing anything — where a **task** press
+      // lands. Its own nonce, so asking for the same row twice scrolls twice;
+      // and `reveal` beats a standing frame inside the panel (latest intent
+      // wins), which is exactly right here: the press said "show me where this
+      // happened", and a frame left up over it would be showing something else.
+      reveal={reveal ? { toolUseId: reveal, nonce: rn ?? 0 } : undefined}
+      // The panel's report of what it has framed, folded back into the same
+      // search param the request travels in — the URL stays the one truth about
+      // what is on screen (the sidebar's secondary selection reads it, a copied
+      // link reproduces it, and Back/Forward drive the frame through the
+      // withdrawal semantics of `openSubagent`). Three rules keep the
+      // round-trip from becoming a loop:
+      //
+      //  - **No-op on match.** The commonest report is the echo of our own
+      //    request — the panel consuming the `?subagent=` we just navigated
+      //    with — and navigating again for it would start the URL → panel →
+      //    URL cycle with nothing to say.
+      //  - **`sn` rides through unchanged** when the panel entered a frame the
+      //    URL didn't ask for (a Task row pressed in the transcript). The
+      //    panel's request effect keys on the nonce, so an unchanged one makes
+      //    our write inert on arrival; a fresh nonce here would re-request the
+      //    very frame we are merely describing, and a fresh one per report is
+      //    the loop.
+      //  - **`replace`, never push.** A report is bookkeeping about state
+      //    already on screen, not travel: pushes stay reserved for deliberate
+      //    navigations (the sidebar's clicks), so Escape doesn't mint a
+      //    history entry per press and Back undoes navigations, not
+      //    keystrokes. The one Back-visible consequence: a frame entered from
+      //    inside the transcript leaves no entry of its own, so Back from it
+      //    exits the page rather than the frame — the strip's Back and Escape
+      //    are the frame's own way out.
+      onSubagentChange={(toolUseId) => {
+        if (toolUseId === subagent) return
+        void navigate({
+          to: '/sessions/$hostId/$sessionId',
+          params: { hostId, sessionId },
+          search: toolUseId === undefined ? {} : (prev) => ({ subagent: toolUseId, sn: prev.sn }),
+          replace: true,
+        })
+      }}
       // The overview ruler, when the transcript is the terminal one — a session
       // that ran for an hour is a long scroll, and the rail is the only thing
       // that says where in it the answers are. Inert under `cards`.

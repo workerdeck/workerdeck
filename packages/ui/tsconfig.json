@@ -17,6 +17,17 @@
     "noEmit": true,
     "types": []
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "dev/**/*.ts", "dev/**/*.tsx", "tsdown.config.ts", "vite.config.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "dev/**/*.ts",
+    "dev/**/*.tsx",
+    "stories/**/*.ts",
+    "stories/**/*.tsx",
+    ".storybook/**/*.ts",
+    ".storybook/**/*.tsx",
+    "tsdown.config.ts",
+    "vite.config.ts"
+  ],
   "exclude": ["node_modules", "build"]
 }

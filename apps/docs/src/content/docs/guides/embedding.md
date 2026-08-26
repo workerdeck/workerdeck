@@ -124,6 +124,14 @@ rename. Use it when you want the dashboard's list without reimplementing the rul
 being the point, since a client that filtered differently would announce work it is hiding.
 `SessionList` stays beside it for the plain fixed-set case.
 
+`SessionItem` is the **card itself** — one session, two lines, its sub-agents under them — and it
+is exported separately because a host with its own filtering chrome wants the row without the list
+around it. That is exactly what the VS Code sidebar does: native controls above, `SessionItem`
+below. It takes the selection at both grains (`active` for the session, `activeStepKey` for a
+sub-agent it has framed), and routes a press on a **sub-agent** to `onSelectSubagent` and a press on
+a **task** to `onRevealStep` — different destinations, because a task has no agent behind it and
+framing one shows an empty screen.
+
 ## Tailwind v4 wiring for @workerdeck/ui
 
 The package ships **source styles + source classnames** — your app's Tailwind build compiles

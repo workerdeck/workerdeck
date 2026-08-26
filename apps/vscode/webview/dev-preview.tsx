@@ -20,6 +20,7 @@
  */
 import { createRoot } from 'react-dom/client'
 import './styles.css'
+import { sessionState } from '@workerdeck/protocol'
 import { SessionCard } from './sidebar/SessionCard.tsx'
 
 const base = {
@@ -32,13 +33,20 @@ const base = {
 
 const mk = (o: Record<string, unknown>) => ({ ...(base as object), ...o }) as never
 
+/**
+ * `agentType`, not `name` — that is what `isAgentRecord` reads, and the two are
+ * not interchangeable. With `name` these records were all **tasks**: muted, no
+ * arrow, unselectable, which is the opposite of what this fixture is for. The
+ * last one keeps no `agentType` on purpose, so the preview carries one real task
+ * beside the agents and the difference is visible rather than asserted.
+ */
 const agents = [
-  { toolUseId: 'a', name: 'Explore', description: 'Fix base-url and re-run', status: 'done', toolCount: 4 },
-  { toolUseId: 'b', name: 'Explore', description: 'Send measurement in debug', status: 'done', toolCount: 7 },
-  { toolUseId: 'c', name: 'general-purpose', description: 'Build app for simulator to verify', status: 'done', toolCount: 12 },
-  { toolUseId: 'd', name: 'general-purpose', description: 'Check build result', status: 'done', toolCount: 2 },
-  { toolUseId: 'e', name: 'fable', description: 'Deploy release build to phone', status: 'running', toolCount: 3 },
-  { toolUseId: 'f', name: 'Explore', description: 'Fix release build and redeploy', status: 'failed', toolCount: 1 },
+  { toolUseId: 'a', agentType: 'Explore', description: 'Fix base-url and re-run', status: 'done', toolCount: 4 },
+  { toolUseId: 'b', agentType: 'Explore', description: 'Send measurement in debug', status: 'done', toolCount: 7 },
+  { toolUseId: 'c', agentType: 'general-purpose', description: 'Build app for simulator to verify', status: 'done', toolCount: 12 },
+  { toolUseId: 'd', agentType: 'general-purpose', description: 'Check build result', status: 'done', toolCount: 2 },
+  { toolUseId: 'e', agentType: 'fable', description: 'Deploy release build to phone', status: 'running', toolCount: 3 },
+  { toolUseId: 'f', description: 'Fix release build and redeploy', status: 'done', toolCount: 1 },
 ]
 
 /**
@@ -85,12 +93,24 @@ createRoot(document.getElementById('root')!).render(
       {rows.map((r: never, i) => (
         <SessionCard
           key={i}
-          info={r}
+          row={{
+            hostId: 'local',
+            hostName: 'local',
+            local: true,
+            adapter: 'claude',
+            state: sessionState(r),
+            info: r,
+            unseen: unseen[(r as { id: string }).id] ?? 0,
+          }}
           projectIcons={projectIcons}
-          unseen={unseen[(r as { id: string }).id] ?? 0}
           selected={i === 0}
+          /* The secondary selection: card grey, that agent's row blue. It is the
+             state with two claims on screen at once, so it is the one worth
+             having a fixture for. */
+          activeSubagentId={i === 0 ? 'a' : undefined}
           onSelect={() => {}}
           onSelectSubagent={() => {}}
+          onRevealStep={() => {}}
           onRename={() => {}}
           onMenu={() => {}}
         />

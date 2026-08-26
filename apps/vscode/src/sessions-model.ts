@@ -40,7 +40,7 @@ export class SessionsModel implements vscode.Disposable {
   readonly #onDidChange = new vscode.EventEmitter<void>()
   readonly onDidChange = this.#onDidChange.event
   readonly #snapshots = new Map<string, HostSnapshot>()
-  #selected: { hostId: string; sessionId: string } | undefined
+  #selected: SidebarState['selected']
   #timer: NodeJS.Timeout | undefined
   /** The interval the running timer was started with, so a change can restart it. */
   #timerMs: number | undefined
@@ -64,8 +64,30 @@ export class SessionsModel implements vscode.Disposable {
     this.#folders = vscode.workspace.onDidChangeWorkspaceFolders(() => this.#onDidChange.fire())
   }
 
-  setSelected(selected: { hostId: string; sessionId: string } | undefined): void {
+  setSelected(selected: SidebarState['selected']): void {
     this.#selected = selected
+    this.#onDidChange.fire()
+  }
+
+  /**
+   * Which sub-agent the panel has framed, reported by the panel itself.
+   *
+   * A **separate setter** rather than another `setSelected` call, because the
+   * two facts have different owners and different lifetimes: which session is
+   * selected is this window's decision and survives a reload
+   * (`ACTIVE_SESSION_KEY`), while which agent is framed belongs to the panel and
+   * dies with it. Folding them into one call meant every panel report had to
+   * restate the session, and a report that raced a session switch would have
+   * restated the *old* one.
+   *
+   * A report with no session selected is dropped rather than stored: there is
+   * nothing for it to qualify, and holding it would mean the next session
+   * selected inherited a frame it never opened.
+   */
+  setSelectedSubagent(toolUseId: string | undefined): void {
+    if (!this.#selected) return
+    if (this.#selected.subagentToolUseId === toolUseId) return
+    this.#selected = { ...this.#selected, subagentToolUseId: toolUseId }
     this.#onDidChange.fire()
   }
 

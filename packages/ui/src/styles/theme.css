@@ -30,14 +30,48 @@
   --bg-code: #f5f5f5;
   --bg-elevated: #ffffffcc;
 
-  /* A list row's hover and selected fills. **Alpha, not a flat colour**, because
-     a row sits on whatever its host paints — `bg-sidebar` in the dashboard,
-     `--vscode-sideBar-background` in the extension — and a flat value tuned for
-     one of those is invisible on the others. `--bg-surface-hover` was exactly
-     that mistake: on the dark sidebar (#131313) it lands on #141414, one step
-     of 255 away, so the hover state did not exist. */
-  --row-hover: rgb(0 0 0 / 0.05);
+  /* A list row's fills.
+
+     `--row-hover` is the **flat** value the design specifies (VS Code's
+     `list.hoverBackground`), not the alpha it used to be. The alpha existed to
+     survive an unknown host surface, and it bought that at the cost of a hover
+     that read differently on every one of them; the design draws one hover, so
+     this is one colour. The hazard the alpha was guarding against is real and
+     has a name — `--bg-surface-hover` on the dark sidebar landed one step of
+     255 from the sidebar itself, so the state did not exist — and the guard
+     against it now is that both flat values are picked against the sidebar
+     fills we actually ship (`--sidebar`), and that the extension repoints all
+     three at `--vscode-list-*` rather than inheriting them.
+
+     `--row-active` stays alpha on purpose: it is the *other three* sidebars'
+     selected fill, and those still wear the accent-bar shape `rowShapeClass`
+     draws, where the fill is a tint under a bar and not the selection itself.
+
+     `--row-selected` is new and is the session list's own: a filled card, the
+     shape the design gives selection there. Light is a tint carrying dark text;
+     dark is VS Code's `list.activeSelectionBackground` carrying light text.
+
+     `--row-selected-weak` is the **secondary** selection — "this card holds what
+     you are looking at, but the thing you are looking at is one row inside it".
+     It exists because a session card and its sub-agents are two selections at
+     two grains, and the blue can only mean one of them: when a sub-agent is
+     open, the blue belongs to that step and the card drops to this. It is VS
+     Code's `list.inactiveSelectionBackground`, which is the same idea one
+     surface over — selected, but not the thing with focus. Distinct from
+     `--row-hover` on purpose: a card that answered the pointer and a card
+     holding the open agent are different claims, and a list that painted them
+     the same colour would be lying about one of them. */
+  --row-hover: #e8e8e8;
   --row-active: rgb(0 0 0 / 0.08);
+  --row-selected: #cfe4f7;
+  --row-selected-weak: #e4e6f1;
+
+  /* A count badge that is NOT an alert. The unread badge wears `--accent`
+     because unread is a call to look; a plain count (how many sub-agents, how
+     many tasks) wears this, because a blue pill that means nothing urgent
+     spends the accent on noise. VS Code's `badge.background`. */
+  --badge: #c4c4c4;
+  --badge-fg: #333333;
 
   /* ---------- Borders ---------- */
   --border: #ebebeb;
@@ -138,8 +172,17 @@
   --bg-code: #141414;
   --bg-elevated: #0a0a0acc;
 
-  --row-hover: rgb(255 255 255 / 0.06);
+  /* See the light block for the whole argument. These two are VS Code's own
+     `list.hoverBackground` / `list.activeSelectionBackground`, which is what the
+     design was drawn against. */
+  --row-hover: #2a2d2e;
   --row-active: rgb(255 255 255 / 0.10);
+  --row-selected: #04395e;
+  --row-selected-weak: #37373d;
+
+  /* See the light block. */
+  --badge: #616161;
+  --badge-fg: #cccccc;
 
   /* ---------- Borders ---------- */
   --border: #1f1f1f;
@@ -291,6 +334,10 @@
   --color-surface-hover: var(--bg-surface-hover);
   --color-row-hover: var(--row-hover);
   --color-row-active: var(--row-active);
+  --color-row-selected: var(--row-selected);
+  --color-row-selected-weak: var(--row-selected-weak);
+  --color-badge: var(--badge);
+  --color-badge-fg: var(--badge-fg);
   /* Named code-bg (not code) so it can't shadow the --text-code font-size token:
      with a --color-code defined, `text-code` would resolve to the color namespace
      and paint text in the code *background* color — invisible in both themes. */
@@ -358,6 +405,14 @@
   --text-label: 0.75rem;
   --text-label--line-height: 1rem;
   --text-label--letter-spacing: 0.02em;
+  /* 11px. The step rows under a session card, and nothing else yet — a size
+     below `label` exists so a list *inside* a row can be visibly subordinate to
+     it without dropping to a weight nobody can read. Tracking goes NEGATIVE
+     here where `label` goes positive: `label` is a small-caps-ish UI word that
+     wants air, this is a sentence-shaped run that wants to hold together. */
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 0.875rem;
+  --text-micro--letter-spacing: -0.005em;
   --text-code: 0.84375rem;
   --text-code--line-height: 1.375rem;
 

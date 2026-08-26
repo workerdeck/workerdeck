@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { useNavigate, useRouterState } from '@tanstack/react-router'
+import { useNavigate, useRouterState, useSearch } from '@tanstack/react-router'
 import { filterRows, sessionLabel, type SessionRow } from '@workerdeck/protocol'
 import {
   Button,
@@ -34,6 +34,13 @@ export function SessionsSidebar() {
   const activeId = useRouterState({
     select: (s) => (s.location.pathname.match(/^\/sessions\/[^/]+\/(.+)$/)?.[1] ?? undefined),
   })
+  // The finer selection — which sub-agent is on screen — read from the URL, not
+  // from a second channel out of the panel: `SessionView` folds the panel's
+  // `onSubagentChange` report into `?subagent=`, so the address is already the
+  // one truth and a second wire could only disagree with it. `strict: false`
+  // because this sidebar lives in the shell, above the route that declares the
+  // param; off the session route it is simply absent and nothing highlights.
+  const activeSubagentId = useSearch({ strict: false }).subagent
   const { snapshots, refresh } = useSessions()
   const rows = useSessionRows(snapshots)
   // Project icon bytes, per gateway — `clientFor` is module scope and stable,
@@ -89,6 +96,25 @@ export function SessionsSidebar() {
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: row.hostId, sessionId: row.info.id },
       search: { subagent: toolUseId, sn: ++subagentNonce.current },
+    })
+
+  /**
+   * A **task** under a session: open the session and travel to the row where
+   * that work was started and finished. Not a takeover — a task has no agent
+   * behind it, so there is nothing to frame, and framing its tool-use id anyway
+   * selected no items and drew an **empty agent view**. A task is a reference;
+   * this is what following one looks like.
+   *
+   * `search` is written whole, so this also drops any `subagent` standing in the
+   * URL — following a marker means leaving the frame, and the panel's withdrawal
+   * closes it as the navigation lands.
+   */
+  const revealNonce = useRef(0)
+  const revealStep = (row: SessionRow, toolUseId: string) =>
+    void navigate({
+      to: '/sessions/$hostId/$sessionId',
+      params: { hostId: row.hostId, sessionId: row.info.id },
+      search: { reveal: toolUseId, rn: ++revealNonce.current },
     })
 
   const rename = (row: SessionRow, title: string) => {
@@ -178,8 +204,10 @@ export function SessionsSidebar() {
             showControls={filtersOpen}
             projectIcons={projectIcons}
             activeId={activeId}
+            activeSubagentId={activeSubagentId}
             onSelect={open}
             onSelectSubagent={openSubagent}
+            onRevealStep={revealStep}
             onRename={rename}
             onClearContext={(row) => {
               const client = clientFor(row.hostId)

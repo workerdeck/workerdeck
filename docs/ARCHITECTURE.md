@@ -224,9 +224,11 @@ boundary: anything a client needs must be expressible as protocol events and com
   opted into.
 - **`packages/ui`** — the styled layer: shadcn-style primitives (`src/components/ui`) and agent
   components (`src/components/agent`: SessionPanel, Transcript, ToolCallCard, PermissionPrompt,
-  QuestionPrompt, Composer, SessionList, SessionBrowser, StatusBar, ModelSelect;
-  `SessionBrowser` is the sessions list with search, facets, grouping, the subset line, unread
-  badges and inline rename, rendering protocol's view model rather than a second copy of it).
+  QuestionPrompt, Composer, SessionList, SessionItem, SessionBrowser, StatusBar, ModelSelect;
+  `SessionItem` is the session **card** and the only drawing of it in the product — the dashboard's
+  list and the VS Code sidebar are two thin hosts over it, where they used to be two hand-kept
+  copies of one design — and `SessionBrowser` is the list *around* it: search, facets, grouping,
+  the subset line, rendering protocol's view model rather than a second copy of it).
   `src/components/terminal/` is the **terminal theme** (`transcriptVariant: 'terminal'`) — a
   renderer, not a set of branches: it draws every row itself on a character grid (`ch` columns,
   whole multiples of `--term-line`), with computed-not-estimated row heights (`height.ts`

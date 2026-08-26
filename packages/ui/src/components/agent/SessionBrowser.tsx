@@ -1,19 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import {
-  BellRing,
-  CircleAlert,
-  CircleSlash,
-  Eraser,
-  Layers,
-  Moon,
-  PauseCircle,
-  Pencil,
-  Search,
-  SearchX,
-  Trash2,
-  X,
-} from 'lucide-react'
+import { Eraser, Layers, Pencil, Search, SearchX, Trash2, X } from 'lucide-react'
 import {
   STATE_LABELS,
   STATE_ORDER,
@@ -22,10 +9,7 @@ import {
   filterRows,
   groupRows,
   hasFacetFilter,
-  projectLabel,
-  projectSubpath,
   projectsOf,
-  sessionLabel,
   subsetSummary,
 } from '@workerdeck/protocol'
 import type {
@@ -40,13 +24,14 @@ import { Button } from '../ui/Button.tsx'
 import { Empty } from '../ui/Empty.tsx'
 import { Input } from '../ui/Input.tsx'
 import { Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from '../ui/Select.tsx'
-import { Spinner } from '../ui/Spinner.tsx'
-import { ContextRing } from './ContextRing.tsx'
-import { EngineIcon, vendorMarkClass, vendorTextClass } from './EngineIcon.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
-import { StepRow, StepToggle, runningSteps, sessionSteps } from './SessionSteps.tsx'
+import { SessionItem } from './SessionItem.tsx'
 import { cn } from '../../lib/utils.ts'
-import { formatCost, formatRelativeTime, friendlyModel } from '../../lib/format.ts'
+
+// The state glyph moved to its own module when the card did — the extension's
+// list draws it too, and this file re-exports it only so the package's public
+// surface does not shift under a host that imports it from here.
+export { SessionStatusIcon } from './SessionStatusIcon.tsx'
 
 /**
  * A sessions list with the affordances a list of thirty needs: search, facets,
@@ -71,6 +56,13 @@ export interface SessionBrowserProps {
    * phone — makes the scope filter genuinely inert rather than empty. */
   scope?: WorkspaceScope
   activeId?: string
+  /**
+   * Which sub-agent the host currently has open, by tool-use id — the *finer*
+   * of the two selections. The card holding it drops to the secondary grey and
+   * that step takes the blue; see `SessionItem`. A host with no sub-agent
+   * surface leaves it undefined and nothing changes.
+   */
+  activeSubagentId?: string
   onSelect?: (row: SessionRow) => void
   onDelete?: (row: SessionRow) => void
   /**
@@ -99,6 +91,11 @@ export interface SessionBrowserProps {
    * transcript to a `Task` row. Absent, the sub-agent list still expands and a
    * step just opens its session — see `SessionRowItemProps`. */
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
+  /** Open a session and travel to one of its **tasks** — see
+   * `SessionItem.onRevealStep`. A task has no agent behind it, so it is a place
+   * to go rather than a thing to open, and framing it as an agent drew an empty
+   * view. */
+  onRevealStep?: (row: SessionRow, toolUseId: string) => void
   /** Rendered when nothing at all exists (as opposed to nothing matching). */
   emptyState?: React.ReactNode
   /**
@@ -154,11 +151,13 @@ export function SessionBrowser({
   onConfigChange,
   scope,
   activeId,
+  activeSubagentId,
   onSelect,
   onDelete,
   onRename,
   onClearContext,
   onSelectSubagent,
+  onRevealStep,
   emptyState,
   showControls = true,
   projectIcons,
@@ -299,11 +298,18 @@ export function SessionBrowser({
           <Empty icon={<Layers />} title='Nothing here' description='No session to show.' />
         )
       ) : (
-        <div className='flex flex-col gap-4'>
+        /* The list's own 4px inset, as **padding on the list** rather than
+           margins on the cards. `SessionItem` is `w-full` — it fills the slot it
+           is given, which is what lets a host size it — and `w-full` plus
+           `mx-1` is `100% + 8px`: an overflow by construction, which is exactly
+           what it did. The cards ran past the sidebar's right edge and the
+           column grew a horizontal scrollbar. Padding here cannot do that,
+           whatever the card's own width rule turns out to be. */
+        <div className='flex flex-col gap-4 px-1'>
           {groups.map((group) => (
             <div key={group.key} className='flex flex-col gap-1'>
               {config.groupBy !== 'none' && group.label ? (
-                <div className='flex items-center gap-2 px-3 text-label font-medium text-fg-4'>
+                <div className='flex items-center gap-2 px-2 text-label font-medium text-fg-4'>
                   {/* Only the project facet has a mark of its own, and a group
                       IS one project root, so the first row is a fair source. */}
                   {config.groupBy === 'project' ? (
@@ -322,6 +328,7 @@ export function SessionBrowser({
                   key={`${row.hostId}:${row.info.id}`}
                   row={row}
                   active={row.info.id === activeId}
+                  activeSubagentId={activeSubagentId}
                   showGateway={gateways.length > 1 && config.groupBy !== 'gateway'}
                   showProject={config.groupBy !== 'project'}
                   projectIcons={projectIcons}
@@ -330,6 +337,7 @@ export function SessionBrowser({
                   onRename={onRename}
                   onClearContext={onClearContext}
                   onSelectSubagent={onSelectSubagent}
+                  onRevealStep={onRevealStep}
                 />
               ))}
             </div>
@@ -354,6 +362,8 @@ function iconSrcOf(
 interface SessionRowItemProps {
   row: SessionRow
   active?: boolean
+  /** See `SessionBrowserProps.activeSubagentId`. */
+  activeSubagentId?: string
   showGateway?: boolean
   /** False when the list is already grouped by project — the header has said the
    * name, so the row must not spend its metadata line repeating it. What takes
@@ -377,11 +387,14 @@ interface SessionRowItemProps {
    * feature: without it a step just opens the session, which is all a host with
    * neither can offer. Only *agent* steps ever call it — see `Step.kind`. */
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
+  /** See `SessionBrowserProps.onRevealStep`. */
+  onRevealStep?: (row: SessionRow, toolUseId: string) => void
 }
 
 function SessionRowItem({
   row,
   active,
+  activeSubagentId,
   showGateway,
   showProject = true,
   projectIcons,
@@ -390,291 +403,98 @@ function SessionRowItem({
   onRename,
   onClearContext,
   onSelectSubagent,
+  onRevealStep,
 }: SessionRowItemProps) {
   const { info } = row
+  // The rename affordance here is a pencil, not the card's own double-click:
+  // the dashboard already spends the row's hover on two other actions, and a
+  // gesture that only one of the three responds to is a gesture nobody finds.
+  // So the trigger is `external` and this owns the flag.
   const [editing, setEditing] = useState(false)
-  // Expansion is the row's own state and deliberately not persisted: a list that
-  // reopened yesterday's work on every reload would be showing a settled tail
-  // nobody asked for.
-  const [expanded, setExpanded] = useState(false)
-
-  // What it is and what it has spent, in one line — the same set the extension
-  // shows, joined the same way, so the two lists read as one product.
-  // protocol's own spelling, so this row, the group header above it and the
-  // project facet cannot disagree about what a project is called. Under a
-  // project group it is the sub-path instead — see `showProject` — and a session
-  // at the root contributes nothing at all rather than a name already on screen.
-  const project = showProject ? projectLabel(row) : projectSubpath(row)
-  const projectIcon = showProject ? info.project?.icon : undefined
-  const engine = info.engine ?? 'claude'
-  // Everything after the model. The model itself is drawn separately because it
-  // is the one segment that wears a colour — see `vendorTextClass` — and a
-  // coloured run inside a joined string would have to be spliced back out.
-  const details = [
-    project,
-    showGateway ? row.hostName : undefined,
-    info.profile ? `@${info.profile}` : undefined,
-    formatCost(info.totalCostUsd),
-  ].filter(Boolean)
-  const steps = sessionSteps(info, (toolUseId) =>
-    onSelectSubagent ? onSelectSubagent(row, toolUseId) : onSelect?.(row),
-  )
-  // Where the icon goes: immediately before the project's own name, wherever
-  // that landed in the joined line. Split rather than interleaved as nodes,
-  // because everything here is one truncating mono run and a flex of pieces
-  // would each shrink a little and leave several half-words.
-  const cut = project === undefined ? -1 : details.indexOf(project)
 
   return (
-    <div
-      data-slot='session-row'
-      data-active={active || undefined}
-      // Selection lives on the whole row, not on the two text buttons inside
-      // it: the age, the unread badge and the state glyph sit outside them, and
-      // a row where a third of the surface silently does nothing is a row that
-      // feels broken. The buttons stay — they are what makes the row reachable
-      // by keyboard — but their activation now reaches this handler by
-      // bubbling, so there is one code path and no double-fire. Anything that
-      // is its own action (rename, close, the name editor) stops the event.
-      onClick={() => !editing && onSelect?.(row)}
-      className={cn(
-        'group flex cursor-pointer flex-col gap-0.5 text-left transition-colors',
-        rowShapeClass(active === true),
-      )}>
-      {/* Line one: how it is doing, then what you scan the list by, then how
-          long since it moved.
-
-          State leads. It used to sit last, on the argument that the title is
-          what you read and the state is what you glance at — but a glance wants
-          a *column*, and a trailing glyph has no fixed x: it lands wherever the
-          age and the ring leave it. Leading, every row's state stacks into one
-          scannable strip, and the mark on line two lands under it in the same
-          gutter. This is the VS Code sidebar's shape, and all three clients are
-          on it now. */}
-      <div className='flex items-center gap-1.5'>
-        <Gutter>
-          <SessionStatusIcon row={row} />
-        </Gutter>
-        {/* The editor replaces the link rather than sitting inside it — an
-            input nested in a button is invalid, and disabling the button to
-            protect the edit disables the field with it. */}
-        {editing && onRename ? (
-          <NameEditor
-            initial={info.title ?? ''}
-            onCommit={(title) => {
-              setEditing(false)
-              onRename(row, title)
-            }}
-            onCancel={() => setEditing(false)}
-          />
-        ) : (
-          <button
-            type='button'
-            className={cn(
-              'min-w-0 flex-1 truncate text-left text-body-sm outline-none',
-              active ? 'font-medium text-fg-1' : 'text-fg-2',
-            )}>
-            {sessionLabel(info)}
-          </button>
-        )}
-        {row.unseen > 0 ? (
-          // Transcript rows since this session was last on screen — the same
-          // unit the VS Code badge counts, because turns undercount badly.
-          <span
-            title={`${row.unseen} new`}
-            className='shrink-0 rounded-full bg-accent px-1.5 text-label text-accent-fg'>
-            {row.unseen}
-          </span>
-        ) : null}
-        <span className='shrink-0 text-label text-fg-4'>
-          {formatRelativeTime(info.lastActivityAt ?? info.createdAt)}
-        </span>
-        <ContextRing usage={info.contextUsage} />
-      </div>
-
-      {/* Line two: what it is — the engine's mark and its model in the vendor's
-          own colour, then where it runs — with the actions at the far right,
-          away from the title you are actually reading. */}
-      <div className='flex items-center gap-1 text-label text-fg-4'>
-        <Gutter>
-          {/* The colour goes on the icon, not on this cell: the svg ships its
-              own `text-fg-3` and only a class on the element itself merges over
-              it. */}
-          <EngineIcon
-            engine={engine}
-            model={info.model}
-            className={vendorMarkClass(engine, info.model)}
-          />
-        </Gutter>
-        <button
-          type='button'
-          tabIndex={-1}
-          className='min-w-0 flex-1 truncate text-left font-mono outline-none'>
-          <span className={vendorTextClass(engine, info.model)}>
-            {/* The model id as a person says it — `claude-opus-5[1m]` is a wire
-                value, and a list line has no room for a context-window suffix. */}
-            {friendlyModel(info.model)}
-          </span>
-          {details.length > 0 ? ' · ' : ''}
-          {cut < 0 ? (
-            details.join(' · ')
-          ) : (
-            <>
-              {details.slice(0, cut).map((part) => `${part} · `)}
-              <ProjectIcon
-                icon={projectIcon}
-                src={iconSrcOf(row, projectIcons)}
-                name={project}
-                /* Nudged onto the text baseline: a 12px glyph box against an
-                   11px line sits a hair proud without it. */
-                className='mr-1 align-[-0.2em]'
-              />
-              {details.slice(cut).join(' · ')}
-            </>
-          )}
-        </button>
-        {steps.length > 0 ? (
-          <StepToggle
-            expanded={expanded}
-            running={runningSteps(steps)}
-            total={steps.length}
-            noun={steps[0]!.noun}
-            onToggle={() => setExpanded((v) => !v)}
-          />
-        ) : null}
-        {onRename && !editing ? (
-          <Button
-            variant='ghost'
-            size='icon-sm'
-            aria-label='Rename session'
-            className='size-5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100'
-            onClick={(e) => {
-              e.stopPropagation()
-              setEditing(true)
-            }}>
-            <Pencil className='size-3 text-fg-3' />
-          </Button>
-        ) : null}
-        {onClearContext && info.capabilities?.clearContext ? (
-          <Button
-            variant='ghost'
-            size='icon-sm'
-            aria-label='Clear context'
-            title='Clear the conversation — the session keeps running and the old conversation stays resumable'
-            className='size-5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100'
-            onClick={(e) => {
-              e.stopPropagation()
-              onClearContext(row)
-            }}>
-            <Eraser className='size-3 text-fg-3' />
-          </Button>
-        ) : null}
-        {onDelete ? (
-          <Button
-            variant='ghost'
-            size='icon-sm'
-            aria-label='Close session'
-            className='size-5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100'
-            onClick={(e) => {
-              e.stopPropagation()
-              onDelete(row)
-            }}>
-            <Trash2 className='size-3 text-fg-3' />
-          </Button>
-        ) : null}
-      </div>
-      {expanded ? steps.map((step) => <StepRow key={step.key} step={step} onSelect={step.onSelect} />) : null}
-    </div>
-  )
-}
-
-/**
- * The one 14px cell both lines hang their glyph in.
- *
- * A shared column rather than a leading character: the state and the engine mark
- * are different widths and a bare glyph would let the two text columns start at
- * different x. Centring inside a fixed cell is what makes them agree —
- * `packages/ui`'s terminal-gutter argument at row scale.
- */
-function Gutter({ children }: { children: ReactNode }) {
-  return <span className='flex w-3.5 shrink-0 items-center justify-center'>{children}</span>
-}
-
-/**
- * State as one glyph — a ringing bell when it wants a human, a spinner while it
- * works, a moon when it is only sleeping. Replaces the text badge: in a sidebar
- * the word costs more room than it earns, and the states that matter are the two
- * you can recognise without reading.
- *
- * **It reads `row.state`, not `info.status`, and that distinction is the whole
- * point of the row model.** `sessionState` already folds in the arm this glyph
- * cannot see for itself: a *background* sub-agent outlives its turn by design, so
- * the turn ends, `status` comes to rest at `idle`, and the agent keeps working.
- * Reading the raw status drew a **moon on a row filed under the "Working"
- * header** — the list contradicting itself on one line, which is exactly what a
- * derived view model exists to prevent. The value was in scope and unread.
- *
- * The terminal statuses still come off `info.status`, because `ended` collapses
- * `failed` and `closed` into one bucket and those are worth telling apart here.
- */
-export function SessionStatusIcon({ row }: { row: SessionRow }) {
-  const { info } = row
-  if (row.state === 'attention') {
-    return <BellRing className='size-3.5 shrink-0 animate-pulse text-warning' />
-  }
-  if (row.state === 'working') {
-    return <Spinner className='size-3.5 shrink-0 text-info' />
-  }
-  switch (info.status) {
-    case 'failed':
-      return <CircleAlert className='size-3.5 shrink-0 text-danger' />
-    case 'closed':
-      return <CircleSlash className='size-3.5 shrink-0 text-fg-4' />
-    case 'parked':
-      return <PauseCircle className='size-3.5 shrink-0 text-fg-3' />
-    default:
-      return <Moon className='size-3.5 shrink-0 text-fg-4' />
-  }
-}
-
-/**
- * Inline rename. Enter commits, Escape cancels, blur commits — but only a blur
- * that is still inside this document: switching windows must not silently commit,
- * nor kill the editor in the frame it opened.
- */
-function NameEditor({
-  initial,
-  onCommit,
-  onCancel,
-}: {
-  initial: string
-  onCommit: (title: string) => void
-  onCancel: () => void
-}) {
-  const [value, setValue] = useState(initial)
-  const ref = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    ref.current?.select()
-  }, [])
-  return (
-    <input
-      ref={ref}
-      value={value}
-      autoFocus
-      aria-label='Session name'
-      // The row is a button; a click in here must not select the session.
-      onClick={(e) => e.stopPropagation()}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={() => (document.hasFocus() ? onCommit(value.trim()) : undefined)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') onCommit(value.trim())
-        else if (e.key === 'Escape') onCancel()
-        e.stopPropagation()
-      }}
-      className='-my-0.5 min-w-0 flex-1 rounded-sm border border-ring bg-bg px-1 py-0.5 text-body-sm font-medium text-fg-1 outline-none'
+    <SessionItem
+      row={row}
+      active={active === true}
+      activeStepKey={activeSubagentId}
+      showGateway={showGateway}
+      showProject={showProject}
+      projectIcons={projectIcons}
+      onSelect={() => onSelect?.(row)}
+      onSelectSubagent={onSelectSubagent ? (id) => onSelectSubagent(row, id) : undefined}
+      onRevealStep={onRevealStep ? (id) => onRevealStep(row, id) : undefined}
+      onRename={onRename ? (title) => onRename(row, title) : undefined}
+      renameOn='external'
+      editing={editing}
+      onEditingChange={setEditing}
+      actions={
+        <>
+          {onRename && !editing ? (
+            <RowAction
+              label='Rename session'
+              onClick={() => setEditing(true)}>
+              <Pencil className='size-3 text-fg-3' />
+            </RowAction>
+          ) : null}
+          {/* Gated on the row's own capability record, not on the engine name —
+              an engine that grows the ability gets the button with no change
+              here, and one that loses it stops offering a control that fails. */}
+          {onClearContext && info.capabilities?.clearContext ? (
+            <RowAction
+              label='Clear context'
+              title='Clear the conversation — the session keeps running and the old conversation stays resumable'
+              onClick={() => onClearContext(row)}>
+              <Eraser className='size-3 text-fg-3' />
+            </RowAction>
+          ) : null}
+          {onDelete ? (
+            <RowAction label='Close session' onClick={() => onDelete(row)}>
+              <Trash2 className='size-3 text-fg-3' />
+            </RowAction>
+          ) : null}
+        </>
+      }
     />
   )
 }
+
+/**
+ * One of the dashboard's hover actions.
+ *
+ * Hover-revealed rather than always on, which is the opposite of the
+ * extension's single overflow glyph and the right call for each: there are
+ * three of them here and a sidebar card has room for one, so the extension
+ * spends that room on a menu and this spends the row's hover on the actions
+ * themselves. Both stop the click — the whole card is pressable underneath, and
+ * an action that also selected the session would do two things per press.
+ */
+function RowAction({
+  label,
+  title,
+  onClick,
+  children,
+}: {
+  label: string
+  title?: string
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <Button
+      variant='ghost'
+      size='icon-sm'
+      aria-label={label}
+      title={title ?? label}
+      className='size-5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100'
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick()
+      }}>
+      {children}
+    </Button>
+  )
+}
+
 
 /** A multi-select facet. Empty = no filter, which is why the trigger reads the
  * facet's name rather than "All": nothing is being excluded. */

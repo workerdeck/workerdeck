@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+@import '../src/styles/theme.css';
+
+@source '../src';
+@source '../stories';
+@source '../node_modules/streamdown/dist';
+
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/600.css';
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+}
