@@ -26,11 +26,12 @@
       "types": "./build/format.d.mts",
       "default": "./build/format.mjs"
     },
-    "./theme.css": "./src/styles/theme.css"
+    "./theme.css": "./src/styles/theme.css",
+    "./scoped.css": "./build/scoped.css"
   },
   "scripts": {
     "clean": "rimraf build",
-    "build": "tsdown",
+    "build": "tsdown && node scripts/build-scoped-css.mjs",
     "prepack": "pnpm clean && pnpm build",
     "typecheck": "tsgo -p tsconfig.json && tsgo -p tsconfig.test.json",
     "test": "vitest run",
@@ -66,12 +67,15 @@
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@storybook/react-vite": "^9.1.20",
+    "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/vite": "^4.3.1",
     "@types/node": "^22.10.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react-swc": "^3.9.0",
     "monaco-editor": "^0.56.0",
+    "postcss": "^8.5.26",
+    "postcss-selector-parser": "^7.1.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "rimraf": "^6.1.3",

@@ -2,6 +2,7 @@ import { type FunctionComponent } from 'react'
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { X } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
+import { PortalScope } from './PortalScope.tsx'
 
 export const Dialog = DialogPrimitive.Root
 export const DialogTrigger = DialogPrimitive.Trigger
@@ -18,29 +19,31 @@ export const DialogContent: FunctionComponent<
   DialogPrimitive.Popup.Props & { size?: 'sm' | 'md' | 'lg' }
 > = ({ className, children, size = 'md', ...props }) => (
   <DialogPrimitive.Portal>
-    <DialogPrimitive.Backdrop
-      className={cn(
-        'fixed inset-0 z-70 bg-black/40 backdrop-blur-[1px]',
-        'transition-opacity duration-(--motion-base)',
-        'data-starting-style:opacity-0 data-ending-style:opacity-0',
-      )}
-    />
-    <DialogPrimitive.Popup
-      data-slot='dialog-content'
-      className={cn(
-        'fixed top-1/2 left-1/2 z-70 flex max-h-[min(42rem,calc(100dvh-3rem))] -translate-x-1/2 -translate-y-1/2 flex-col',
-        size === 'sm' && 'w-[min(24rem,calc(100vw-2rem))]',
-        size === 'md' && 'w-[min(32rem,calc(100vw-2rem))]',
-        size === 'lg' && 'w-[min(46rem,calc(100vw-2rem))]',
-        'rounded-lg border border-border bg-surface shadow-(--shadow-lg) outline-none',
-        'transition-[opacity,transform] duration-(--motion-base)',
-        'data-starting-style:scale-95 data-starting-style:opacity-0',
-        'data-ending-style:scale-95 data-ending-style:opacity-0',
-        className,
-      )}
-      {...props}>
-      {children}
-    </DialogPrimitive.Popup>
+    <PortalScope>
+      <DialogPrimitive.Backdrop
+        className={cn(
+          'fixed inset-0 z-70 bg-black/40 backdrop-blur-[1px]',
+          'transition-opacity duration-(--motion-base)',
+          'data-starting-style:opacity-0 data-ending-style:opacity-0',
+        )}
+      />
+      <DialogPrimitive.Popup
+        data-slot='dialog-content'
+        className={cn(
+          'fixed top-1/2 left-1/2 z-70 flex max-h-[min(42rem,calc(100dvh-3rem))] -translate-x-1/2 -translate-y-1/2 flex-col',
+          size === 'sm' && 'w-[min(24rem,calc(100vw-2rem))]',
+          size === 'md' && 'w-[min(32rem,calc(100vw-2rem))]',
+          size === 'lg' && 'w-[min(46rem,calc(100vw-2rem))]',
+          'rounded-lg border border-border bg-surface shadow-(--shadow-lg) outline-none',
+          'transition-[opacity,transform] duration-(--motion-base)',
+          'data-starting-style:scale-95 data-starting-style:opacity-0',
+          'data-ending-style:scale-95 data-ending-style:opacity-0',
+          className,
+        )}
+        {...props}>
+        {children}
+      </DialogPrimitive.Popup>
+    </PortalScope>
   </DialogPrimitive.Portal>
 )
 

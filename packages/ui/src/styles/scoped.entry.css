@@ -1,0 +1,16 @@
+/*
+ * Build entry for the SCOPED stylesheet (`@workerdeck/ui/scoped.css`) — see
+ * `scripts/build-scoped-css.mjs`, which compiles this with the Tailwind CLI and
+ * then rewrites every selector under `.wd-root`. Not shipped as-is and not an
+ * export: embedders import the compiled `scoped.css` artifact.
+ *
+ * `source(none)` + explicit `@source`: the utilities compiled here are exactly
+ * the ones this package's own components (and streamdown, whose markdown
+ * renderer ships Tailwind-classed markup) use — hermetic, independent of any
+ * host app's Tailwind build.
+ */
+@import 'tailwindcss' source(none);
+@source '../components';
+@source '../lib';
+@source '../../node_modules/streamdown/dist';
+@import './theme.css';

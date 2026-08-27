@@ -167,7 +167,66 @@ them. Three steps:
    `@fontsource/jetbrains-mono/{400,500,600}.css` to get the real faces.
 
 Caveats: token names are unprefixed (`--bg`, `--accent`, `--primary`, …) and `theme.css` styles
-`body`/focus rings — embedding into an app with its own conflicting design system may need
-scoping. Dark mode is driven only by `[data-theme='dark']` on the root element (the Tailwind
-`dark:` variant is remapped to it); `prefers-color-scheme` is not consulted at CSS level. Every
-component takes `className` and carries `data-slot` attributes for targeted overrides.
+`body`/focus rings — this wiring is for an app that hands its whole page to WorkerDeck's design
+system. **If your app has its own Tailwind build or design system, do not use it — use
+[`scoped.css`](#embedding-into-an-app-with-its-own-design-system-scopedcss) below instead.** Dark
+mode is driven only by `[data-theme='dark']` on the root element (the Tailwind `dark:` variant is
+remapped to it); `prefers-color-scheme` is not consulted at CSS level. Every component takes
+`className` and carries `data-slot` attributes for targeted overrides.
+
+## Embedding into an app with its own design system: scoped.css
+
+`theme.css` cannot coexist with a host design system: its raw tokens (`--bg`, `--accent`,
+`--radius-md`, …) collide with any app that names tokens the obvious way, and — worse — Tailwind's
+`@theme` is global, so both sides map the *same utility names* to *different semantics*
+(`bg-accent`, `text-code`, `font-sans`, `rounded-md`). Whichever theme the bundler emits last
+silently restyles the other side. No import order fixes that.
+
+For this case the package ships a second, **self-contained** stylesheet:
+`@workerdeck/ui/scoped.css`. It is prebuilt from this package's own sources against its own
+theme (streamdown included), with every rule — preflight, tokens, utilities, the terminal theme —
+rewritten to live under a `.wd-root` scope class. Your app's Tailwind build is not involved and
+must stay uninvolved.
+
+```tsx
+import '@workerdeck/ui/scoped.css'
+
+<div className='wd-root' style={{ height: '100%' }}>
+  <SessionPanel session={session} … />
+</div>
+```
+
+That is the whole integration:
+
+- **Import `scoped.css` once**, anywhere in your app's entry. It touches nothing outside
+  `.wd-root` — no `body`, no `:root`, no `*`, no focus rings, no `svg.lucide` sizing outside the
+  wrapper.
+- **Wrap the WorkerDeck subtree in one element with the `wd-root` class.** Design tokens and the
+  panel's canvas (background, font, text color) land on this element; give it a size (the panel
+  is `h-full`).
+- **Theme follows your app automatically.** The scoped tokens key off `data-theme='light'|'dark'`
+  on *any ancestor* — your existing theme switcher on `<html>` drives the panel with zero extra
+  wiring. No attribute anywhere means light. You can also pin one panel independently:
+  `<div className='wd-root' data-theme='dark'>`.
+- **Popups are handled.** Menus, dialogs, selects and tooltips portal to `document.body`; each
+  re-establishes the scope itself (a `display: contents` element carrying `wd-root`), so they are
+  fully styled and follow the theme without a portal-container prop.
+
+What **not** to do — each of these re-creates the collision `scoped.css` exists to prevent:
+
+- do not *also* import `@workerdeck/ui/theme.css`;
+- do not `@source` this package (or streamdown) into your own Tailwind build;
+- do not merge WorkerDeck's `@theme` variables into your theme.
+
+Fonts: same as step 3 above — the scoped tokens reference Inter and JetBrains Mono by family
+name with safe fallbacks, so if your app already loads those faces the panel simply uses them;
+`scoped.css` itself declares no `@font-face` and fetches nothing.
+
+Known sharp edge: a host stylesheet can still reach *into* the panel with rules of the shape
+"element/attribute selector, unlayered or `!important`" (e.g. an unlayered global `a { color: … }`
+beats any layered rule of ours). Tailwind-built hosts are safe in practice — their styles live in
+layers and their utilities lose to the scoped ones on specificity inside `.wd-root` — but if you
+have unlayered global element styles, expect to see them in the panel too.
+
+`theme.css` remains the right choice when WorkerDeck *is* the app's design system (the dashboard,
+`apps/embedded`): it is the same tokens without the scope, and your build owns utility generation.

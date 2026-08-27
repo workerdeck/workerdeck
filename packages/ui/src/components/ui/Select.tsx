@@ -2,6 +2,7 @@ import { type FunctionComponent } from 'react'
 import { Select as SelectPrimitive } from '@base-ui/react/select'
 import { Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
+import { PortalScope } from './PortalScope.tsx'
 
 export const Select = SelectPrimitive.Root
 export const SelectValue = SelectPrimitive.Value
@@ -40,22 +41,24 @@ export const SelectContent: FunctionComponent<
   ...props
 }) => (
   <SelectPrimitive.Portal>
-    <SelectPrimitive.Positioner
-      align={align}
-      alignItemWithTrigger={alignItemWithTrigger}
-      side={side}
-      sideOffset={sideOffset}
-      className='isolate z-80 outline-none'>
-      <SelectPrimitive.Popup
-        data-slot='select-content'
-        className={cn(
-          'max-h-[min(24rem,var(--available-height))] min-w-[var(--anchor-width)] overflow-y-auto',
-          'rounded-md border border-border bg-surface p-1 text-fg-1 shadow-(--shadow-lg) outline-none',
-          className,
-        )}
-        {...props}
-      />
-    </SelectPrimitive.Positioner>
+    <PortalScope>
+      <SelectPrimitive.Positioner
+        align={align}
+        alignItemWithTrigger={alignItemWithTrigger}
+        side={side}
+        sideOffset={sideOffset}
+        className='isolate z-80 outline-none'>
+        <SelectPrimitive.Popup
+          data-slot='select-content'
+          className={cn(
+            'max-h-[min(24rem,var(--available-height))] min-w-[var(--anchor-width)] overflow-y-auto',
+            'rounded-md border border-border bg-surface p-1 text-fg-1 shadow-(--shadow-lg) outline-none',
+            className,
+          )}
+          {...props}
+        />
+      </SelectPrimitive.Positioner>
+    </PortalScope>
   </SelectPrimitive.Portal>
 )
 
