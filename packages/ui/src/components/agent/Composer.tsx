@@ -444,7 +444,7 @@ export function Composer({
   const errorRow = attachments?.error ? (
     <div
       className={cn(
-        'mx-auto mt-1 flex w-full max-w-[var(--wd-content-max-w,48rem)] items-center gap-2 text-label text-danger',
+        'mx-auto mt-1 flex w-full max-w-[var(--wd-transcript-max-width)] items-center gap-2 text-label text-danger',
       )}>
       <TriangleAlert className='size-3 shrink-0' />
       <span className='min-w-0 flex-1'>{attachments.error}</span>
@@ -530,11 +530,11 @@ export function Composer({
   }
 
   return (
-    <div data-slot='composer' className={cn('px-3 pb-3', className)}>
+    <div data-slot='composer' className={cn('px-[var(--wd-composer-padding)] pb-[var(--wd-composer-padding)]', className)}>
       <div
         {...dropHandlers}
         className={cn(
-          'mx-auto w-full max-w-[var(--wd-content-max-w,48rem)] overflow-hidden border border-border bg-bg',
+          'mx-auto w-full max-w-[var(--wd-transcript-max-width)] overflow-hidden border border-border bg-bg',
           'transition-colors rounded-lg shadow-(--shadow-xs)',
           'focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30',
           dragging && 'border-ring ring-2 ring-ring/30',
@@ -545,11 +545,11 @@ export function Composer({
           <AttachmentStrip attachments={attachments} />
         ) : null}
         {inline ? (
-          // One row until the message needs more: the field grows into the space
-          // rather than the frame reserving it, and the buttons stay bottom-
-          // aligned as it does. 4px of padding and gap all round against 24px
-          // buttons and a 24px line box (20px of text, 2px either side) — on a
-          // single line everything centres without anything being nudged.
+          // One row until the message needs more: the field grows and the
+          // buttons stay bottom-aligned as it does (`items-end`). On a single
+          // line, the 28px buttons and the 20px line-height text need matching
+          // vertical padding so their visual centres land on the same line:
+          // 4px above + 4px below the 20px text = 28px, the button height.
           <div className='flex items-end gap-1 p-1'>
             {attach}
             <PromptArea
@@ -564,7 +564,7 @@ export function Composer({
               minHeight={20}
               maxHeight={192}
               aria-label='Message the agent'
-              className='min-w-0 flex-1 py-0.5 text-body-sm text-text'
+              className='min-w-0 flex-1 py-1 text-body-sm text-text'
               onImagePaste={(file) => attachments?.add([file])}
             />
             {submitButton}
@@ -583,7 +583,7 @@ export function Composer({
               minHeight={28}
               maxHeight={192}
               aria-label='Message the agent'
-              className='px-3 pt-2.5 pb-1 text-body-sm text-text'
+              className='px-3 pt-2.5 pb-0 text-body-sm text-text'
               onImagePaste={(file) => attachments?.add([file])}
             />
             <div className='flex items-center justify-between gap-2 px-2 pb-2'>

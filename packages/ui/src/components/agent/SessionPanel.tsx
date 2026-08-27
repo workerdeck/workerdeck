@@ -98,7 +98,7 @@ function PromptSurface({
 }) {
   if (!terminal) {
     return (
-      <div className='mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] flex-col gap-2'>
+      <div className='mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] flex-col gap-2'>
         {children}
       </div>
     )
@@ -410,6 +410,12 @@ export interface SessionPanelProps {
    * the client cannot see.
    */
   cacheTranscript?: boolean
+  /**
+   * Replaces the default empty state when the transcript has no messages. Pass
+   * your product's own onboarding content instead of WorkerDeck's generic
+   * "`>_` Tell the agent what to do." placeholder.
+   */
+  emptyState?: ReactNode
   className?: string
 }
 
@@ -483,6 +489,9 @@ export type SessionVitals = {
    * as its "seen" watermark while the panel is actually on screen, and compares
    * against later to know what is new. */
   itemCount: number
+  /** Session-cumulative cost in USD. The internal status bar renders this via
+   * `formatCost`; an external host needs it to reproduce that reading. */
+  totalCostUsd: number
 }
 
 /**
@@ -521,6 +530,7 @@ export function SessionPanel({
   readOnly = false,
   toolHost,
   cacheTranscript,
+  emptyState,
   className,
 }: SessionPanelProps) {
   const external = panelSurface === 'external'
@@ -786,6 +796,7 @@ export function SessionPanel({
       contextUsage: state.contextUsage,
       rateLimits,
       itemCount: state.items.length,
+      totalCostUsd: state.totalCostUsd,
     })
   }, [
     state.status,
@@ -800,6 +811,7 @@ export function SessionPanel({
     state.contextUsage,
     rateLimits,
     state.items.length,
+    state.totalCostUsd,
   ])
 
   // The commands back in. One stable object reading through refs, so an
@@ -1089,6 +1101,7 @@ export function SessionPanel({
           reveal={returnReveal ?? reveal}
           frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
           onOpenSubagent={setSubagentId}
+          emptyState={emptyState}
           jumpToRecapRef={jumpToRecap}
           repinRef={repinTranscript}
         />
@@ -1101,7 +1114,7 @@ export function SessionPanel({
           <div className='px-3 pb-1'>
             <div
               data-slot='catch-up'
-              className='mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] items-center gap-2 text-label text-fg-3'>
+              className='mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] items-center gap-2 text-label text-fg-3'>
               <span
                 aria-hidden
                 className={cn('select-none', terminal ? 'text-fg-3' : 'text-accent')}>
@@ -1370,7 +1383,7 @@ function Notice({
       <div
         role='alert'
         className={cn(
-          'mx-auto flex w-full max-w-[var(--wd-content-max-w,48rem)] items-start gap-2 rounded-md border px-3 py-2 text-body-sm',
+          'mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] items-start gap-2 rounded-md border px-3 py-2 text-body-sm',
           level === 'error'
             ? 'border-danger/40 bg-danger-bg text-danger'
             : 'border-warning/40 bg-warning-bg text-warning',

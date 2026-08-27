@@ -7,9 +7,9 @@
 @source '../../../packages/ui/node_modules/streamdown/dist';
 
 /* The agent sidebar is narrow, so the panel's centering column would waste half
- * of it. `--wd-content-max-w` is the ui package's seam for exactly this. */
+ * of it. `--wd-transcript-max-width` is the ui package's seam for exactly this. */
 :root {
-  --wd-content-max-w: 100%;
+  --wd-transcript-max-width: 100%;
 }
 
 html,

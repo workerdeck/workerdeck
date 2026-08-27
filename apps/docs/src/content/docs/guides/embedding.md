@@ -230,3 +230,9 @@ have unlayered global element styles, expect to see them in the panel too.
 
 `theme.css` remains the right choice when WorkerDeck *is* the app's design system (the dashboard,
 `apps/embedded`): it is the same tokens without the scope, and your build owns utility generation.
+
+## Customizing the look
+
+Both wiring paths give you the same theming levers — CSS token overrides, `className` props,
+`data-slot` selectors, and source imports via the `@workerdeck/source` condition. The full
+reference is in [Theming & styling](/workerdeck/docs/guides/theming/).

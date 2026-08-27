@@ -27,12 +27,14 @@ export interface TerminalPermissionPromptProps {
   /** `message` is fed back to the agent, which can then try something else;
    * `interrupt` also stops the turn. */
   onDeny: (requestId: string, message?: string, interrupt?: boolean) => void
+  className?: string
 }
 
 export function TerminalPermissionPrompt({
   request,
   onApprove,
   onDeny,
+  className,
 }: TerminalPermissionPromptProps) {
   const [focused, setFocused] = useState(0)
   const [denying, setDenying] = useState(false)
@@ -75,6 +77,7 @@ export function TerminalPermissionPrompt({
   return (
     <div
       data-slot='permission-prompt'
+      className={className}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault()

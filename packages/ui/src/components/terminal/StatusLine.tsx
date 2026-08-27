@@ -38,6 +38,7 @@ const SEVERITY_TONE: Record<StatusSeverity, Tone> = {
 }
 
 export interface TerminalStatusLineProps {
+  className?: string
   state: TranscriptState
   /** Plan windows to read from, when they should not be the session's own — the
    * gateway's per-profile state merged over this transcript's. See
@@ -75,6 +76,7 @@ function Reading({
 }
 
 export function TerminalStatusLine({
+  className,
   state,
   rateLimits,
   connection,
@@ -147,7 +149,7 @@ export function TerminalStatusLine({
   }
 
   return (
-    <Row data-slot='status-line' tone='dim'>
+    <Row data-slot='status-line' tone='dim' className={className}>
       {parts.map((part, index) => (
         <span key={index}>
           {index > 0 ? <Ink tone='faint'> · </Ink> : null}

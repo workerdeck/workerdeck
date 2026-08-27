@@ -102,7 +102,7 @@ html[data-font='editor'] {
   --ring: var(--vscode-focusBorder, #0078d4);
 
   /* Edge-to-edge content: a bottom dock has no width to spare on centering. */
-  --wd-content-max-w: 100%;
+  --wd-transcript-max-width: 100%;
 }
 
 /* Vertical space is the scarce resource in a bottom dock. */

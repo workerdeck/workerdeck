@@ -595,7 +595,7 @@
 [data-terminal] .term-composer-body {
   margin-inline: auto;
   width: 100%;
-  max-width: var(--wd-content-max-w, 48rem);
+  max-width: var(--wd-transcript-max-width);
   padding-inline: var(--term-bleed, 0px);
   /* Air on each side of the prompt, and a plain pixel value rather than a
      fraction of `--term-line`: this is chrome between two rules, not a

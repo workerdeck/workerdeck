@@ -7,6 +7,7 @@ export interface ContextDialogProps {
   usage?: ContextUsage
   open: boolean
   onOpenChange: (open: boolean) => void
+  className?: string
 }
 
 /** The CLI reports category colors as its own theme token names ('inactive',
@@ -23,10 +24,10 @@ const usageTint = (pct: number) => (pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-wa
  * are different questions asked at different moments, so they are different
  * screens rather than one "details" list you scroll past two answers to reach.
  */
-export function ContextDialog({ usage, open, onOpenChange }: ContextDialogProps) {
+export function ContextDialog({ usage, open, onOpenChange, className }: ContextDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className={className}>
         <DialogHeader title='Context' description={usage?.model} />
         <DialogBody>
           {!usage ? (

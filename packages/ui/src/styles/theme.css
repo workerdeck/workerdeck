@@ -267,6 +267,12 @@
   --motion-base: 150ms;
   --motion-slow: 220ms;
 
+  /* ---------- Geometry (embedder-overridable layout knobs) ---------- */
+  --wd-status-bar-height: 38px;
+  --wd-composer-padding: 12px;
+  --wd-transcript-row-gap: 0px;
+  --wd-transcript-max-width: 48rem;
+
   /* Stock-name bridge → raw custom properties (shadcn idiom compatibility). */
   --primary: var(--accent);
   --primary-foreground: var(--accent-fg);

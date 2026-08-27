@@ -211,7 +211,7 @@ export function StatusBar({
         // One explicit height, shared with the docked composer above it (see
         // `Composer.tsx`) — the two strips along the foot of the panel read as
         // one piece of chrome, and a pixel of drift between them shows.
-        'flex h-[38px] items-baseline gap-2 border-border bg-surface p-1.5',
+        'flex h-[var(--wd-status-bar-height)] items-baseline gap-2 border-border bg-surface p-1.5',
         // The rule goes between the bar and the content, so which edge it sits
         // on follows the placement — except under the terminal theme at the
         // foot, where the composer directly above already closes itself with a

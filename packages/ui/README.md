@@ -127,9 +127,10 @@ lose by forgetting a second mount isn't one.
   scoping — file an issue with your case.
 - Dark mode is driven **only** by `[data-theme='dark']` on the root element (the Tailwind
   `dark:` variant is remapped to it); `prefers-color-scheme` is not consulted at CSS level.
-- The session surface centers its content at `--wd-content-max-w` (default `48rem`).
+- The session surface centers its content at `--wd-transcript-max-width` (default `48rem`).
   Embedders in narrow docks (a VS Code bottom panel, a drawer) set it to `100%` for
-  edge-to-edge content. Every component also carries `data-slot` attributes for targeted
+  edge-to-edge content. Other geometry tokens: `--wd-status-bar-height`, `--wd-composer-padding`,
+  `--wd-transcript-row-gap`. Every component also carries `data-slot` attributes for targeted
   overrides — e.g. `[data-slot='composer-hint']` is the "Enter to send" line, which a host
   whose vertical space is precious can `display: none`.
 - `SessionPanel` can hand its dialog surfaces to the embedder: `panelSurface: 'external'`

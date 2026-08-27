@@ -11,9 +11,10 @@ export interface SessionListItemProps {
   active?: boolean
   onSelect?: (id: string) => void
   onDelete?: (id: string) => void
+  className?: string
 }
 
-export function SessionListItem({ session, active, onSelect, onDelete }: SessionListItemProps) {
+export function SessionListItem({ session, active, onSelect, onDelete, className }: SessionListItemProps) {
   const meta = STATUS_META[session.status]
   return (
     <div
@@ -22,6 +23,7 @@ export function SessionListItem({ session, active, onSelect, onDelete }: Session
       className={cn(
         'group flex w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-2 text-left transition-colors',
         active ? 'border-border bg-surface' : 'hover:bg-surface-hover',
+        className,
       )}>
       <button
         type='button'

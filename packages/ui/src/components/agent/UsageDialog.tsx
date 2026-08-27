@@ -26,6 +26,7 @@ export interface UsageDialogProps {
   updatedAt?: number
   open: boolean
   onOpenChange: (open: boolean) => void
+  className?: string
 }
 
 /**
@@ -40,11 +41,12 @@ export function UsageDialog({
   updatedAt,
   open,
   onOpenChange,
+  className,
 }: UsageDialogProps) {
   const now = useMinuteClock(open)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className={className}>
         <DialogHeader
           title='Usage'
           description={engine === 'claude' ? 'Claude Code' : engine}

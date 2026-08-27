@@ -1102,6 +1102,12 @@ export interface TranscriptProps {
    * sessions list instead.
    */
   onOpenSubagent?: (toolUseId: string) => void
+  /**
+   * Replaces the default empty state when the transcript has no items. Pass a
+   * `ReactNode` to show your product's own onboarding instead of WorkerDeck's
+   * generic "`>_` Tell the agent what to do." placeholder.
+   */
+  emptyState?: ReactNode
   className?: string
 }
 
@@ -1126,6 +1132,7 @@ export function Transcript({
   reveal,
   frame,
   onOpenSubagent,
+  emptyState,
   className,
 }: TranscriptProps) {
   const terminal = variant === 'terminal'
@@ -1231,12 +1238,16 @@ export function Transcript({
               </div>
             ) : null
           ) : items.length === 0 && state.status !== 'starting' ? (
-            <SessionEmptyState
-              cwd={state.cwd}
-              hasCommands={!!state.commands?.length}
-              hasSkills={!!state.skills?.some((s) => s.enabled)}
-              canBrowseFiles={canBrowseFiles}
-            />
+            emptyState !== undefined ? (
+              emptyState
+            ) : (
+              <SessionEmptyState
+                cwd={state.cwd}
+                hasCommands={!!state.commands?.length}
+                hasSkills={!!state.skills?.some((s) => s.enabled)}
+                canBrowseFiles={canBrowseFiles}
+              />
+            )
           ) : null}
           {frame && frameTask === undefined && !replaying ? null : (
             <TranscriptRows
@@ -1316,7 +1327,7 @@ export function Transcript({
             className='wd-hold-appear visible pointer-events-none absolute inset-0 overflow-hidden'>
             <div
               className={cn(
-                'mx-auto w-full max-w-[var(--wd-content-max-w,48rem)]',
+                'mx-auto w-full max-w-[var(--wd-transcript-max-width)]',
                 !terminal && 'px-4 py-4',
               )}>
               {terminal ? (

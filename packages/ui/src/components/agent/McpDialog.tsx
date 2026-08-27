@@ -24,6 +24,7 @@ export interface McpDialogProps {
    * that 501 are worse than buttons that aren't there.
    */
   canManageServers?: boolean
+  className?: string
 }
 
 /** The engine's status vocabulary is open — anything unrecognised renders
@@ -54,6 +55,7 @@ export function McpDialog({
   open,
   onOpenChange,
   canManageServers = true,
+  className,
 }: McpDialogProps) {
   const [servers, setServers] = useState<McpServerStatusInfo[] | undefined>()
   const [error, setError] = useState<string | undefined>()
@@ -103,7 +105,7 @@ export function McpDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className={className}>
         <DialogHeader
           title={title}
           description={

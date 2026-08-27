@@ -40,12 +40,14 @@ export interface TerminalQuestionPromptProps {
   onAnswer: (requestId: string, updatedInput: Record<string, unknown>) => void
   /** Deny the tool — the model proceeds without an answer. */
   onDismiss: (requestId: string, message?: string) => void
+  className?: string
 }
 
 export function TerminalQuestionPrompt({
   request,
   onAnswer,
   onDismiss,
+  className,
 }: TerminalQuestionPromptProps) {
   const questions = parseUserQuestions(request.input)
   const [selections, setSelections] = useState<Selection[]>(() => questions.map(() => EMPTY))
@@ -97,6 +99,7 @@ export function TerminalQuestionPrompt({
   return (
     <div
       data-slot='question-prompt'
+      className={className}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault()

@@ -12,6 +12,7 @@ export interface SkillsDialogProps {
   /** Insert a skill's opening message into the composer, if the host offers
    * that. Omit and the dialog is read-only. */
   onUse?: (skill: SkillInfo) => void
+  className?: string
 }
 
 /** Where the skill came from. The engine's set is open, so an unrecognised
@@ -36,7 +37,7 @@ const SCOPE_LABEL: Record<string, string> = {
  * Fed from the session's `skills` event rather than a REST route, because that
  * is the channel the engine refreshes on its own when a skill changes on disk.
  */
-export function SkillsDialog({ skills, open, onOpenChange, onUse }: SkillsDialogProps) {
+export function SkillsDialog({ skills, open, onOpenChange, onUse, className }: SkillsDialogProps) {
   const [selected, setSelected] = useState<string | undefined>()
   const skill = skills?.find((s) => s.name === selected)
 
@@ -47,7 +48,7 @@ export function SkillsDialog({ skills, open, onOpenChange, onUse }: SkillsDialog
         if (!next) setSelected(undefined)
         onOpenChange(next)
       }}>
-      <DialogContent>
+      <DialogContent className={className}>
         <DialogHeader
           title={skill ? (skill.displayName ?? skill.name) : 'Skills'}
           description={
