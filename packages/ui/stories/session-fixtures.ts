@@ -16,9 +16,10 @@ const MINUTE = 60_000
  * Three sub-agents, one per state the step row draws.
  *
  * `agentType` is what makes these *agents* rather than tasks (`isAgentRecord`),
- * and the distinction is not cosmetic: an agent is pressable and wears the
- * sub-agent colour, a task is inert and muted. A fixture without it silently
- * exercises the wrong half of the component.
+ * and the distinction is not cosmetic: both press, but an agent wears the
+ * sub-agent colour and opens its own frame, where a task is muted, can never be
+ * the selected thing, and travels to its row in the transcript instead. A
+ * fixture without it silently exercises the wrong half of the component.
  */
 export const AGENTS: SubagentInfo[] = [
   { toolUseId: 'a', agentType: 'Explore', description: 'Fix base-url and re-run', status: 'done', toolCount: 4 },

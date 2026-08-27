@@ -62,6 +62,31 @@ enum VendorPalette {
   }
 }
 
+/// The list's own hex pairs — the tokens `theme.css` declares that no system
+/// colour is a fair stand-in for.
+///
+/// Here rather than in `TerminalPalette` because these are **list** colours, not
+/// terminal tones: they land on session cards and their steps, and a renderer's
+/// palette is the wrong home for something the list draws whichever renderer is
+/// selected. Same construction as `VendorPalette` above, and for the same
+/// reason: hex pairs, not semantic roles, so the trait swap is spelled out.
+enum ListPalette {
+  /// `--badge` / `--badge-fg` — a count that is **not** an alert.
+  ///
+  /// The unread capsule wears the tint while the session is live, because
+  /// unread is then a call to look. On a settled session the same number is a
+  /// *record*: the turn is over, nothing more is arriving, there is nothing to
+  /// answer. A list where every finished session still shouted in the accent is
+  /// a list where the accent stopped meaning anything — which is the whole
+  /// reason the design draws two. VS Code's `badge.background`.
+  static var badge: Color { dyn(dark: 0x61_61_61, light: 0xC4_C4_C4) }
+  static var badgeForeground: Color { dyn(dark: 0xCC_CC_CC, light: 0x33_33_33) }
+
+  private static func dyn(dark: UInt32, light: UInt32) -> Color {
+    Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(hex: dark) : UIColor(hex: light) })
+  }
+}
+
 private extension UIColor {
   convenience init(hex: UInt32) {
     self.init(

@@ -221,6 +221,40 @@ struct SubagentFrameTests {
     #expect(line.status == nil)
     #expect(!line.busy && !line.failed)
   }
+
+  // MARK: - The sub-task reveal
+
+  /// The other half of the agent/task split. A **task** step names a tool call
+  /// with no agent behind it, so it has no frame to open — the press opens the
+  /// session and travels to that call's own row instead. This is the first hop
+  /// of that journey, and the reason it answers in **item** space: rows are
+  /// refolded on every revision and every rotation, items are not.
+  @Test("toolCallItemIndex finds a call's own position, whatever nests it")
+  func revealFindsTheCall() {
+    let items: [TranscriptItem] = [
+      .user(id: "u1", text: "go"),
+      .toolCall(task("T1")),
+      .toolCall(call("c1", parent: "T1")),
+      .toolCall(call("c2")),
+    ]
+    // The spawning call itself, which `subagentItems` deliberately excludes —
+    // a task reveal wants exactly the row that frame refuses to contain.
+    #expect(toolCallItemIndex(items, id: "T1") == 1)
+    // A nested call is findable too: this is "where is this id", not "where is
+    // this top-level id".
+    #expect(toolCallItemIndex(items, id: "c1") == 2)
+    #expect(toolCallItemIndex(items, id: "c2") == 3)
+  }
+
+  /// An id the transcript does not hold answers nil rather than zero, which is
+  /// what lets the caller keep waiting out the replay instead of scrolling the
+  /// reader to the top of a transcript that has not finished arriving.
+  @Test("an absent id is nil, not the first row")
+  func revealMissesHonestly() {
+    let items: [TranscriptItem] = [.user(id: "u1", text: "go"), .toolCall(call("c1"))]
+    #expect(toolCallItemIndex(items, id: "nope") == nil)
+    #expect(toolCallItemIndex([], id: "c1") == nil)
+  }
 }
 
 extension ToolCallItem {

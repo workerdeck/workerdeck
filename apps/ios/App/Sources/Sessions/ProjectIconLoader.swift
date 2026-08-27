@@ -108,11 +108,38 @@ final class ProjectIconLoader {
             self?.failed.insert(hash)
             return
           }
-          self?.images[hash] = image
+          // Stored **display-ready**, scaled once here rather than per render.
+          // The row draws this glyph inline inside a `Text` run (see
+          // `SessionRowView.projectIconText`), and a `Text(Image(uiImage:))`
+          // renders at the image's own point size — there is no `.frame` to
+          // constrain it, because it is a character in a line rather than a
+          // view in a stack. A checked-in logo is whatever the repo committed,
+          // so an unresized one would set a 512pt line. Once per fetch, keyed
+          // by the same hash the picture is cached under.
+          self?.images[hash] = image.fittedToProjectGlyphBox()
         } catch {
           self?.failed.insert(hash)
         }
       }
+    }
+  }
+}
+
+extension UIImage {
+  /// Aspect-fit into the 16pt box the project glyph occupies on a session row —
+  /// the same box as the engine mark one column over.
+  ///
+  /// Aspect-**fit**, never fill: a declared icon is whatever the repo checked
+  /// in, and a squashed logo reads worse than a letterboxed one. The renderer's
+  /// scale comes from the trait environment, so this is a point-size resize and
+  /// stays sharp on a 3x screen.
+  func fittedToProjectGlyphBox(_ box: CGFloat = 16) -> UIImage {
+    let ratio = min(box / size.width, box / size.height)
+    // Never scale *up*: a 12pt favicon blown to 16 is a blurry 12pt favicon.
+    guard ratio < 1 else { return self }
+    let target = CGSize(width: size.width * ratio, height: size.height * ratio)
+    return UIGraphicsImageRenderer(size: target).image { _ in
+      draw(in: CGRect(origin: .zero, size: target))
     }
   }
 }

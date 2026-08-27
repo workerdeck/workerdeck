@@ -14,7 +14,17 @@ enum SessionRoute: Hashable {
   ///   takeover already framed. Part of the identity for the same reason `seq`
   ///   is: tapping a *different* agent of a session already on screen has to
   ///   read as a new destination, not as the one that is showing.
-  case session(hostId: UUID, sessionId: String, seq: Int? = nil, subagent: String? = nil)
+  /// - Parameter reveal: a `tool_use` id, when this route came from a **task**
+  ///   line under a session row — the session opens on that tool call's own
+  ///   row. The sibling of `subagent` and never set with it: the two kinds of
+  ///   step go to two destinations, which is the whole distinction. A task has
+  ///   no agent behind it, so framing its id selects no items and draws an
+  ///   empty agent view; that was the bug on the web, and the fix was giving
+  ///   the kinds different destinations rather than teaching the frame to cope.
+  ///   Part of the identity for the same reason the other two are.
+  case session(
+    hostId: UUID, sessionId: String, seq: Int? = nil, subagent: String? = nil,
+    reveal: String? = nil)
   case create(hostId: UUID, seed: CreateSessionSeed)
 }
 

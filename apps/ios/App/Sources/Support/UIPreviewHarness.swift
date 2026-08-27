@@ -34,6 +34,7 @@ enum UIPreview: String {
   case terminalOpen
   case terminalStress
   case subagent
+  case steps
   case projects
 
   static var active: UIPreview? {
@@ -71,12 +72,22 @@ private struct ProjectsPreview: View {
       })
   }
 
-  /// A red square, so "the bytes arrived" is unmistakable against "they did not".
+  /// A coloured square, so "the bytes arrived" is unmistakable against "they
+  /// did not".
+  ///
+  /// Deliberately drawn **oversized and then put through the row's own
+  /// `fittedToProjectGlyphBox()`** — the same call `ProjectIconLoader` makes on
+  /// the way in. This fixture stands in for the loader, so it has to honour the
+  /// loader's contract: the row draws this glyph *inside* a `Text` run, where
+  /// there is no `.frame` to constrain a picture, so whatever arrives is what
+  /// gets drawn. A fixture that quietly handed over a pre-sized image would
+  /// prove nothing about the real path and hide the one way it can go wrong.
   private static var pngBytes: UIImage? {
-    UIGraphicsImageRenderer(size: .init(width: 32, height: 32)).image { ctx in
+    UIGraphicsImageRenderer(size: .init(width: 128, height: 128)).image { ctx in
       UIColor.systemIndigo.setFill()
-      ctx.fill(CGRect(x: 0, y: 0, width: 32, height: 32))
+      ctx.fill(CGRect(x: 0, y: 0, width: 128, height: 128))
     }
+    .fittedToProjectGlyphBox()
   }
 
   private struct Case: Identifiable {
@@ -185,6 +196,62 @@ private struct ProjectsPreview: View {
 /// *alignment* one: `\u{276F}`, `+` and `\u{2715}` occupy the same cell, and the typed line
 /// must start on the same column whichever of them is standing. A screenshot of
 /// one state cannot show that; a column of them can.
+/// Every step-row rule on one screen — see `UIPREVIEW=steps` in the switch below.
+private struct StepsPreview: View {
+  private static func sub(
+    _ id: String, agent: String?, description: String?, status: SubagentStatus,
+    tools: Int
+  ) -> SubagentInfo {
+    SubagentInfo(
+      toolUseId: id, agentType: agent, description: description, status: status,
+      startedAt: 0, toolCount: tools)
+  }
+
+  /// Deliberately interleaved on the wire: the fixture only proves the sort if
+  /// the input is out of order. Dispatch order here is task, agent, task,
+  /// agent, agent, task — and the screen must read agents first, each group
+  /// still in the order it arrived.
+  private static var session: SessionInfo {
+    SessionInfo(
+      id: "s1", status: .running, cwd: "/Users/you/projects/workerdeck", engine: .claude,
+      createdAt: 0, lastSeq: 0, pendingPermissionCount: 0, title: "Mixed steps",
+      lastActivityAt: Date().timeIntervalSince1970 * 1000 - 60_000,
+      subagents: [
+        sub("t1", agent: nil, description: "rewrite the height budget", status: .done, tools: 0),
+        sub("a1", agent: "Explore", description: "map the web theme", status: .running, tools: 7),
+        sub("t2", agent: nil, description: "check a capture", status: .running, tools: 0),
+        sub("a2", agent: "Plan", description: "size the port", status: .failed, tools: 2),
+        // No description: the label falls back to the bare type.
+        sub("a3", agent: "general-purpose", description: nil, status: .done, tools: 0),
+        sub("t3", agent: nil, description: "and a task that failed", status: .failed, tools: 0),
+      ])
+  }
+
+  var body: some View {
+    let steps = sessionSteps(Self.session)
+    List {
+      Section {
+        ForEach(steps) { step in
+          SessionStepRow(step: step)
+            .listRowInsets(EdgeInsets(top: 4, leading: 42, bottom: 4, trailing: 16))
+        }
+      } header: {
+        Text(
+          "\(stepCountWords(running: runningSteps(steps), total: steps.count)) · agents first"
+        )
+      } footer: {
+        Text(
+          """
+          Expected, top to bottom: Explore (green, spinner, 7) · Plan (RED, alarm, 2) · \
+          general-purpose (green, tick, no count) — then the tasks, grey: a neutral DOT for \
+          the settled one, a spinner for the running one, a RED alarm for the failed one. \
+          No task shows a checkmark and no task shows an arrow.
+          """)
+      }
+    }
+  }
+}
+
 private struct ComposerPreview: View {
   private struct Row: View {
     let caption: String
@@ -653,6 +720,17 @@ struct UIPreviewHarness: View {
       // what must be true on screen is that the action row is visible in every
       // one of them, which is the entire bug.
       PromptsPreview()
+
+    case .steps:
+      // The step rows under a session card, which the list only ever shows a
+      // couple of at a time and never all four states at once. This is the
+      // phone's answer to the dashboard's selection stories: the claim is not
+      // "does this look right" but **"does each rule fire"** — agents above
+      // tasks whatever order they arrived in, a failed agent drawing an alarm
+      // rather than a checkmark, a task's neutral dot where an agent gets a
+      // tick, green for the kind and red for the failure that outranks it, and
+      // a zero tool count drawing nothing at all.
+      StepsPreview()
 
     case .projects:
       // Every shape line two can take, because each one is a different rule and

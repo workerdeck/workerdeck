@@ -111,11 +111,11 @@ struct SessionListView: View {
   @ViewBuilder
   private func destination(_ route: SessionRoute) -> some View {
     switch route {
-    case .session(let hostId, let sessionId, let seq, let subagent):
+    case .session(let hostId, let sessionId, let seq, let subagent, let reveal):
       if let context = model?.context(for: hostId) {
         SessionView(
           sessionId: sessionId, hostId: hostId, client: context.client, focusSeq: seq,
-          openSubagent: subagent)
+          openSubagent: subagent, revealToolUseId: reveal)
       } else {
         missingHost
       }
@@ -262,15 +262,22 @@ struct SessionListView: View {
         Section {
           ForEach(group.rows) { row in
             if let route = sessionRoute(for: row) {
-              // The twisty sits OUTSIDE the link rather than inside the row, and
-              // that placement is the whole answer to why this row used to draw
-              // a count and nothing else: a hand-rolled button *inside* a
-              // `NavigationLink` is the coin toss under a thumb, because the
-              // link takes the row's tap. Two siblings have two frames, and the
-              // gutter is reserved on every row — including the ones with no
-              // agents — so the titles still line up down the list.
+              // The disclosure sits OUTSIDE the link, and that placement is the
+              // whole answer to why this row once drew a count and nothing
+              // else: a hand-rolled button *inside* a `NavigationLink` is the
+              // coin toss under a thumb, because the link takes the row's tap.
+              // Two siblings have two frames.
+              //
+              // It is the **count itself**, on the trailing edge, the way the
+              // frame draws it — not a chevron in a reserved left gutter. The
+              // gutter version put a 26pt column in front of every row in the
+              // list, including the many with no agents at all, to hold a
+              // control most of them never showed; and it asked the reader to
+              // find the disclosure somewhere other than on the thing being
+              // disclosed. The count was already the reading, so it is now also
+              // the control, and the chevron rides with it saying which way it
+              // will go.
               HStack(spacing: 0) {
-                agentTwisty(for: row)
                 NavigationLink(value: route) {
                   SessionRowView(
                     session: row.info,
@@ -282,6 +289,7 @@ struct SessionListView: View {
                     // Grouped by project, the section header already names it.
                     showsProject: model.config.groupBy != .project)
                 }
+                stepToggle(for: row)
               }
               // Two different actions wearing one gesture. Closing a *live*
               // session terminates a run someone may be relying on, so it asks
@@ -320,7 +328,7 @@ struct SessionListView: View {
                 }
               }
               if expandedAgents.contains(row.info.id) {
-                agentRows(for: row)
+                stepRows(for: row)
               }
             }
           }
@@ -387,99 +395,99 @@ struct SessionListView: View {
     UUID(uuidString: row.hostId).map { .session(hostId: $0, sessionId: row.info.id) }
   }
 
-  // MARK: - Agent lines
+  // MARK: - Step lines
 
-  /// The disclosure for a session's sub-agents — a **sibling** of the row's
-  /// `NavigationLink`, never a child of it (see the row for why).
+  /// The disclosure for a session's steps: the **count itself**, on the row's
+  /// trailing edge — the frame's `ListDropdown`, and a sibling of the
+  /// `NavigationLink` rather than a child of it (see the row for why).
   ///
-  /// It always occupies its gutter, even for a session with no agents, so the
-  /// column holds down a list of thirty; only the chevron itself appears and
-  /// disappears. The target is the full gutter *and* the row's height, which is
-  /// what `contentShape` buys — a 12pt chevron would otherwise be a 12pt target.
+  /// Chevron then count, and the count is the reading it always was: `2/3`
+  /// while some are still going, a bare total once they have settled. Live, it
+  /// wears the accent — on this row that means "an agent is running", which is
+  /// the one thing about a settled-looking row that is worth interrupting for.
+  ///
+  /// **Drawn only when there is something to disclose.** The old left-gutter
+  /// twisty reserved its column on every row in the list so the titles would
+  /// line up; a trailing control has nothing to line up with, so a session with
+  /// no agents simply has no disclosure and the row runs full width. That is
+  /// the reserved 26pt column back, on every row that never had an agent.
+  ///
+  /// The target is padded well past the glyphs: this is a two-line row and the
+  /// button takes its full height, which is what turns a 12pt chevron into a
+  /// real thumb target without a `contentShape` on an invisible gutter.
   @ViewBuilder
-  private func agentTwisty(for row: SessionRow) -> some View {
-    let agents = row.info.subagents ?? []
-    Group {
-      if agents.isEmpty {
-        Color.clear
-      } else {
-        let open = expandedAgents.contains(row.info.id)
-        Button {
-          if open {
-            expandedAgents.remove(row.info.id)
-          } else {
-            expandedAgents.insert(row.info.id)
-          }
-        } label: {
-          Image(systemName: "chevron.right")
+  private func stepToggle(for row: SessionRow) -> some View {
+    let steps = sessionSteps(row.info)
+    if !steps.isEmpty {
+      let open = expandedAgents.contains(row.info.id)
+      let running = runningSteps(steps)
+      Button {
+        if open {
+          expandedAgents.remove(row.info.id)
+        } else {
+          expandedAgents.insert(row.info.id)
+        }
+      } label: {
+        HStack(spacing: 2) {
+          Image(systemName: open ? "chevron.down" : "chevron.right")
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .rotationEffect(.degrees(open ? 90 : 0))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
+          Text(stepCountLabel(running: running, total: steps.count))
+            .font(.caption)
+            .monospacedDigit()
         }
-        // `.plain` because a bordered button inside a list row draws a second
-        // surface; and because the default style would tint the chevron with
-        // the accent colour, which on this row means "an agent is running".
-        .buttonStyle(.plain)
-        .accessibilityLabel(open ? "Hide agents" : "Show agents")
+        .foregroundStyle(running > 0 ? Color.accentColor : .secondary)
+        .padding(.leading, 10)
+        .padding(.trailing, 4)
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
       }
+      // `.plain` because a bordered button inside a list row draws a second
+      // surface, and because the default style would tint the chevron with the
+      // accent colour on a row where the accent has a meaning of its own.
+      .buttonStyle(.plain)
+      .accessibilityLabel(
+        (open ? "Hide " : "Show ")
+          + stepCountWords(running: running, total: steps.count))
     }
-    .frame(width: 26)
   }
 
-  /// One row per sub-agent, each its own `NavigationLink` into the session with
-  /// that agent already framed.
+  /// One row per step, **agents first** and **all of them pressable** — the
+  /// order and the kind both come from the kit's `sessionSteps`, which is the
+  /// same derivation the dashboard and the extension draw from.
   ///
-  /// Rows rather than a stack inside the session row: a full-width list row is a
-  /// real thumb target where a line inside a two-line row is not, and it keeps
-  /// the promise the twisty makes — every target here has its own frame.
-  /// Pressability is `isAgentRecord`, the same rule the dashboard and the
-  /// extension press on, so the three clients cannot disagree about which lines
-  /// name an agent: a plain task is drawn inert.
+  /// Rows rather than a stack inside the session row: a full-width list row is
+  /// a real thumb target where a line inside a two-line row is not, and it
+  /// keeps the promise the disclosure makes — every target here has its own
+  /// frame.
+  ///
+  /// **What a press means is what tells the two kinds apart**, and that is the
+  /// whole of it. An *agent* has work of its own, so it opens that agent's
+  /// takeover. A *task* is a reference to a place in this transcript, so it
+  /// opens the session and travels to that tool call's row (`reveal:`). A task
+  /// used to be drawn inert here, on the argument that there was nowhere to
+  /// send it — but there always was, and a row that looks like a list item,
+  /// sits in a list, and does nothing under a thumb is the worse lie. Both are
+  /// `NavigationLink`s to the same case with different payloads, so this is one
+  /// row shape with one destination type, not a variant branch inside a row.
   @ViewBuilder
-  private func agentRows(for row: SessionRow) -> some View {
-    ForEach(row.info.subagents ?? []) { agent in
-      let route = UUID(uuidString: row.hostId).map {
-        SessionRoute.session(hostId: $0, sessionId: row.info.id, subagent: agent.toolUseId)
+  private func stepRows(for row: SessionRow) -> some View {
+    ForEach(sessionSteps(row.info)) { step in
+      let route = UUID(uuidString: row.hostId).map { host in
+        step.kind == .agent
+          ? SessionRoute.session(hostId: host, sessionId: row.info.id, subagent: step.key)
+          : SessionRoute.session(hostId: host, sessionId: row.info.id, reveal: step.key)
       }
-      if isAgentRecord(agent), let route {
-        NavigationLink(value: route) {
-          agentLine(agent)
+      Group {
+        if let route {
+          NavigationLink(value: route) { SessionStepRow(step: step) }
+        } else {
+          // No gateway id to route to — a shape this list has never actually
+          // produced, but the row still draws rather than vanishing.
+          SessionStepRow(step: step)
         }
-        .listRowInsets(EdgeInsets(top: 4, leading: 42, bottom: 4, trailing: 16))
-      } else {
-        agentLine(agent)
-          .listRowInsets(EdgeInsets(top: 4, leading: 42, bottom: 4, trailing: 16))
       }
+      .listRowInsets(EdgeInsets(top: 4, leading: 40, bottom: 4, trailing: 16))
     }
-  }
-
-  /// The line itself: the agent, then its tool count. Green while it runs — the
-  /// terminal theme's working colour, and the same signal the count chip on the
-  /// row above carries in aggregate.
-  @ViewBuilder
-  private func agentLine(_ agent: SubagentInfo) -> some View {
-    let running = agent.status == .running
-    HStack(spacing: 6) {
-      Image(systemName: running ? "circle.dotted" : "checkmark")
-        .font(.caption2)
-        .foregroundStyle(running ? Color.accentColor : .secondary)
-        .frame(width: 12)
-      Text(subagentLabel(agent))
-        .font(.caption)
-        .lineLimit(1)
-        .truncationMode(.tail)
-        .foregroundStyle(running ? Color.accentColor : .secondary)
-      Spacer(minLength: 6)
-      if agent.toolCount > 0 {
-        Text("\(agent.toolCount)")
-          .font(.caption2)
-          .monospacedDigit()
-          .foregroundStyle(.secondary)
-      }
-    }
-    .accessibilityElement(children: .combine)
   }
 
   // MARK: - Resume list
@@ -751,6 +759,13 @@ struct SessionRowView: View {
   var unseen: Int = 0
   /// Resolved bytes for an `image` project icon, if this project has one and the
   /// loader has fetched it. Nil draws no picture — the name is already there.
+  ///
+  /// **Must already be glyph-boxed** (`UIImage.fittedToProjectGlyphBox()`, which
+  /// `ProjectIconLoader` applies on the way in). This is drawn as a character
+  /// inside a `Text` run, and a `Text` has no `.frame` to constrain a picture
+  /// with — an unresized logo sets the line height to whatever the repo checked
+  /// in. The size cannot be enforced here without paying a resize per row per
+  /// poll, so it is a contract, stated here and honoured by both callers.
   var projectImage: UIImage?
   /// False when the list is already grouped by project: the section header has
   /// said the name, so the slot carries the **sub-path inside the project**
@@ -776,25 +791,25 @@ struct SessionRowView: View {
         // and the engine mark below start at the same x however wide either
         // draws — and so the two text columns agree.
         SessionStatusIcon(session: session)
-          .frame(width: 14)
+          .frame(width: 16)
           .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
         Text(title)
           .font(.body.weight(.medium))
           .lineLimit(1)
         Spacer(minLength: 0)
         if unseen > 0 {
+          // **The colour is the state's, not the count's** — see
+          // `ListPalette.badge`. Live: the tint, because unread is a call to
+          // look. Settled: the neutral badge, because the same number is then
+          // only a record of what you missed.
+          let live = sessionState(session) == .working || sessionState(session) == .attention
           Text("\(unseen)")
             .font(.caption2.weight(.semibold).monospacedDigit())
-            .foregroundStyle(.white)
+            .foregroundStyle(live ? Color.white : ListPalette.badgeForeground)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(Capsule().fill(.tint))
+            .background(Capsule().fill(live ? AnyShapeStyle(.tint) : AnyShapeStyle(ListPalette.badge)))
             .accessibilityLabel("\(unseen) new rows")
-        }
-        if let activity = session.lastActivityAt {
-          Text(Fmt.ago(epochMs: activity))
-            .font(.caption2)
-            .foregroundStyle(.secondary)
         }
         // How full the window is, at a glance and across the whole list — the
         // question you cannot ask from inside a session. Absent draws nothing:
@@ -815,15 +830,26 @@ struct SessionRowView: View {
       // shrink a little and leave four half-words.
       HStack(spacing: 0) {
         // The engine's mark, in the vendor's colour, under the status glyph and
-        // in the same 14pt cell. Absent engines draw nothing — the cell keeps
-        // the column, so a mark-less row still lines up with its neighbours.
-        EngineIconView(engine: session.engine?.rawValue ?? "claude", model: session.model)
-          .frame(width: 14)
-          .padding(.trailing, 8)
-        if let icon = session.project?.icon, project != nil, showsProject {
-          ProjectIconView(icon: icon, image: projectImage)
-            .padding(.trailing, 3)
-        }
+        // in the same cell. Absent engines draw nothing — the cell keeps the
+        // column, so a mark-less row still lines up with its neighbours.
+        //
+        // **16, not 11.** The mark used to be drawn at the view's own 11pt
+        // default inside a 14pt cell, which is the *same bug* the Figma frame
+        // had and revised out: transparent inner padding leaving the glyph too
+        // small for the text it labels. This is one of the two places the
+        // design's pixels are taken literally rather than translated into
+        // Dynamic Type — a glyph cell is a column, and a column that breathes
+        // with the text size stops being one.
+        EngineIconView(
+          engine: session.engine?.rawValue ?? "claude", model: session.model, size: 16
+        )
+        .frame(width: 16)
+        .padding(.trailing, 8)
+        // The project glyph is NOT here. It rides *inside* the run below,
+        // immediately before the name it labels — see `projectIconText`. Held
+        // out here it sat between the engine mark and the model, which is
+        // nothing's icon: the reading was `✳ 🗇 Opus 5 · WorkerDeck`, a picture
+        // of the project introducing a model.
         detailsText
           .font(.caption)
           .lineLimit(1)
@@ -831,45 +857,27 @@ struct SessionRowView: View {
           // identifies it, and the sub-path form (`packages/ui`) is read from
           // the front. The old head-truncated raw cwd is gone with the path.
           .truncationMode(.tail)
-        // The work under this row, as a count — `2/3` while some are still
-        // going, a bare total once they have settled, the two spellings
-        // `StepToggle` picks between. The count stays a *reading* and not a
-        // control: the disclosure is the twisty in the gutter, which has its own
-        // frame outside this link. This row used to carry the count alone,
-        // because a second tap target *inside* a `NavigationLink` is a coin toss
-        // under a thumb — that objection was right about nesting and is answered
-        // by not nesting, rather than by refusing the disclosure.
-        if subagentCount > 0 {
-          Spacer(minLength: 6)
-          HStack(spacing: 2) {
-            Image(systemName: "person.2.fill").imageScale(.small)
-            Text(subagentLabelText).monospacedDigit()
-          }
-          .font(.caption2)
-          .foregroundStyle(runningSubagentCount > 0 ? Color.accentColor : .secondary)
-          .accessibilityLabel(subagentAccessibilityLabel)
+        // **The age is not in the run**, and it is on this line rather than
+        // beside the title — both the way the dashboard draws it, and the way
+        // the frame does. At the end of the run it was the first thing an
+        // ellipsis ate, which is backwards: `4m` is two characters answering
+        // "is this still moving", where a truncated project name still says
+        // which repo. Its own atom, and the run yields to it.
+        if let activity = session.lastActivityAt {
+          Text(" · " + Fmt.ago(epochMs: activity))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .layoutPriority(1)
         }
+        // The step count is NOT here. It is the disclosure, and it lives on the
+        // trailing edge as a sibling of this row's link — see `stepToggle`. A
+        // reading and a control saying the same number twice, a few points
+        // apart, is two answers to one question.
+        Spacer(minLength: 6)
       }
     }
     .padding(.vertical, 3)
-  }
-
-  private var subagentCount: Int { session.subagents?.count ?? 0 }
-  private var runningSubagentCount: Int { runningSubagents(session).count }
-
-  /// `2/3` while some are still going, `3` once they have all settled — the same
-  /// two spellings `StepToggle` picks between, and for the same reason: "how
-  /// many are still working" is the live question, and a bare total answers it
-  /// wrong the moment one finishes.
-  private var subagentLabelText: String {
-    let running = runningSubagentCount
-    return running > 0 && running < subagentCount ? "\(running)/\(subagentCount)" : "\(subagentCount)"
-  }
-
-  private var subagentAccessibilityLabel: String {
-    let running = runningSubagentCount
-    if running > 0 && running < subagentCount { return "\(running) of \(subagentCount) agents running" }
-    return "\(subagentCount) agent\(subagentCount == 1 ? "" : "s")"
   }
 
   private var title: String {
@@ -894,9 +902,18 @@ struct SessionRowView: View {
     // The shared rule, ported into the kit: a model spelled `claude-opus-5` here
     // and `Opus 5` in the sidebar is the same drift the shared list view model
     // exists to prevent.
-    let model = friendlyModel(session.model)
-    let rest = [
-      project,
+    var parts: [Text] = []
+    // The model as a person says it — `claude-opus-5[1m]` is a wire value, and
+    // a card line has no room for a context-window suffix.
+    if let model = friendlyModel(session.model) {
+      parts.append(Text(model).foregroundStyle(modelTint))
+    }
+    if let project {
+      // Glyph then name, as one part: they are one reading, so they clip
+      // together rather than the picture holding a slot its text already lost.
+      parts.append((projectIconText ?? Text("")) + Text(project).foregroundStyle(.secondary))
+    }
+    for extra in [
       hostName,
       session.profile.map { "@\($0)" },
       // `TermFmt.cost`, not `Fmt.cost`: the kit's is the port of the web's
@@ -904,13 +921,43 @@ struct SessionRowView: View {
       // list row is exactly where the same person compares the three clients.
       // `Fmt.cost` keeps its four decimals where a *single turn* is priced.
       (session.totalCostUsd ?? 0) > 0 ? TermFmt.cost(session.totalCostUsd) : nil,
-    ]
-    .compactMap { $0 }
-    .joined(separator: " · ")
+    ].compactMap({ $0 }) {
+      parts.append(Text(extra).foregroundStyle(.secondary))
+    }
+    // Separators live BETWEEN parts and are never attached to one. Attached, a
+    // part that turned out absent left its separator behind — which is what a
+    // session with no model recorded yet did: the line opened with a `· `
+    // hanging off nothing.
+    return parts.enumerated().reduce(Text("")) { joined, part in
+      part.offset == 0 ? joined + part.element : joined + Text(" · ") + part.element
+    }
+  }
 
-    guard let model else { return Text(rest).foregroundStyle(.secondary) }
-    let head = Text(model).foregroundStyle(modelTint)
-    return rest.isEmpty ? head : head + Text(" · " + rest).foregroundStyle(.secondary)
+  /// The project's own glyph, as a **character in the identity run** rather than
+  /// a view beside it — which is the whole reason it is a `Text` and not a
+  /// `View`. Inline, it truncates with the name it labels; held out as its own
+  /// cell it kept a slot on a line the name had already been squeezed off.
+  ///
+  /// A trailing hair space rather than a stack gap, for the same reason: a gap
+  /// belongs to a layout, and there is no layout here — this is typography.
+  ///
+  /// Nil when there is nothing to draw, and **nil is not a placeholder**: an
+  /// image whose bytes have not landed (or that Apple cannot decode — see
+  /// `ProjectIconLoader` on SVG) contributes nothing, because the project's
+  /// name is already right there and a box that becomes a picture a beat later
+  /// is more movement than the picture is worth.
+  private var projectIconText: Text? {
+    guard showsProject, let icon = session.project?.icon else { return nil }
+    switch icon {
+    case .glyph(let name):
+      return Text(Image(systemName: projectSymbol(forLucideName: name)))
+        .foregroundStyle(.secondary) + Text("\u{2005}")
+    case .image:
+      // Already scaled to the 16pt box at fetch time: a `Text` has no `.frame`
+      // to constrain a picture with. See `ProjectIconLoader`.
+      guard let projectImage else { return nil }
+      return Text(Image(uiImage: projectImage)) + Text("\u{2005}")
+    }
   }
 
   /// The model name's colour: the vendor's, but only where the vendor's own
@@ -1027,5 +1074,87 @@ private struct SdkSessionRowView: View {
       .foregroundStyle(.secondary)
     }
     .padding(.vertical, 3)
+  }
+}
+
+/// One step under its session row: the state marker, the label, then its tool
+/// count.
+///
+/// Its own view rather than a method on the list for the reason `SessionRowView`
+/// is: it is the thing a UI preview has to be able to draw on its own (see
+/// `UIPREVIEW=steps`, which is this app's answer to the dashboard's selection
+/// stories), and a private `@ViewBuilder` cannot be handed to one.
+///
+/// **One row shape, both kinds.** What a press means is the list's business —
+/// an agent opens its own takeover, a task opens the session and travels to
+/// that call's row — and it is expressed as two payloads on one `SessionRoute`
+/// case, never as a variant branch inside here. That rule is why the deleted
+/// `lines` renderer took fifteen view bodies with it.
+///
+/// **No trailing arrow**, where the web's `StepRow` draws one on agents. There,
+/// the arrow says "this one opens something" and is the only thing that could;
+/// here every step is a `NavigationLink` and the platform draws its own
+/// disclosure chevron on all of them, which is the truth — both kinds push now.
+/// A hand-drawn arrow on agents only would be a second, quieter chevron
+/// disagreeing with the real one two points to its right.
+///
+/// Body colour by **kind**, the beat carried by the marker — the rule the
+/// transcript's own Task row already follows (`TerminalPlanner`: `failed ? .red
+/// : .green`). Green means sub-agent across this product, so a list that spent
+/// the accent on "running" here would be saying something different from the
+/// transcript about the same agent. Failure still outranks kind: an alarm is not
+/// a category.
+struct SessionStepRow: View {
+  let step: Step
+
+  private var body_: Color {
+    if step.state == .failed { return TerminalPalette.color(.red) }
+    return step.kind == .agent ? TerminalPalette.color(.green) : .secondary
+  }
+
+  var body: some View {
+    HStack(spacing: 6) {
+      icon
+        .font(.caption2)
+        .foregroundStyle(body_)
+        // 16pt, matching the header rows' glyph cells: the design's own fix was
+        // removing the icons' inner padding, and a marker in a 12pt cell is the
+        // same bug one line down.
+        .frame(width: 16)
+      Text(step.label)
+        .font(.caption)
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .foregroundStyle(body_)
+      Spacer(minLength: 6)
+      // Zero draws nothing: `0` beside a thinking agent reads as a stall.
+      if let detail = step.detail {
+        Text(detail)
+          .font(.caption2)
+          .monospacedDigit()
+          .foregroundStyle(.secondary)
+      }
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(step.title)
+  }
+
+  /// A task that is neither running nor failed gets a neutral dot rather than a
+  /// tick: `done` is a claim about work, and nothing here did any. `pending` has
+  /// no sub-agent that can produce it and is drawn anyway — the checklist source
+  /// this shape was built for is queued for most of its life, and an unhandled
+  /// arm is exactly how a failed agent came to draw a checkmark.
+  @ViewBuilder
+  private var icon: some View {
+    if step.kind == .task, step.state != .running, step.state != .failed {
+      Image(systemName: "circle.fill").font(.system(size: 5))
+    } else {
+      switch step.state {
+      case .running: Image(systemName: "circle.dotted")
+      case .failed: Image(systemName: "exclamationmark.circle")
+      case .pending: Image(systemName: "pause.circle")
+      case .done: Image(systemName: "checkmark")
+      }
+    }
   }
 }

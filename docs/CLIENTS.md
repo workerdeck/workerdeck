@@ -453,18 +453,43 @@ than component-local, because the height book must know every height — the fra
 twin therefore share one state. Codex draws no brief row at all, enforced where the row is built
 rather than where it is drawn: its spawn message is encrypted on the wire, and there is nothing to
 show.
-Sub-agents are a count **and** a disclosure — but the two are different targets.
-The count is a reading on line two (`2/3` while some run, a bare total once settled — the two
-spellings `StepToggle` picks between); the twisty is a **sibling of the `NavigationLink`, in a
-gutter reserved on every row** so the titles still line up. That placement is the whole design.
-The row used to draw the count alone on the argument that a second tap target inside one
-`NavigationLink` is a coin toss under a thumb — right about *nesting*, and answered by not
-nesting rather than by refusing the disclosure, because "which agent" is a question the list can
-answer and the alternative is opening the session to find out. Expanded, each agent is its **own
+Sub-agents are a count **and** a disclosure, and they are the **same target**: the count on the
+row's trailing edge *is* the control, with a chevron beside it saying which way it will go —
+the frame's `ListDropdown`, drawn where the frame draws it. It reads `2/3` while some are still
+running and a bare total once they have settled (the two spellings `StepToggle` picks between),
+and it wears the accent while anything is live.
+
+It is a **sibling of the `NavigationLink`, never a child**, and that part is not negotiable: a
+hand-rolled button inside a link is a coin toss under a thumb, because the link takes the row's
+tap. The row used to draw the count alone for exactly that reason — right about *nesting*, and
+answered by not nesting rather than by refusing the disclosure, because "which agent" is a
+question the list can answer and the alternative is opening the session to find out.
+
+An earlier pass put the disclosure in a **reserved left gutter** instead, 26pt on every row so
+the titles would line up. That is gone: it spent a column in front of the entire list to hold a
+control most rows never showed, and it asked the reader to find the disclosure somewhere other
+than on the thing being disclosed. A trailing control has nothing to line up with, so a session
+with no agents simply has no disclosure and its row runs full width. Expanded, each agent is its **own
 full-width row**, which is a real thumb target where a line inside a two-line row is not, and it
 pushes `SessionRoute.session(…, subagent:)` — the session with that agent already framed, the
-phone's spelling of the dashboard's `?subagent=`. Pressability is `isAgentRecord` (a plain task
-draws inert), so the three clients cannot disagree about which lines name an agent. The old third line spent a third of every row on a labelled `Idle`
+phone's spelling of the dashboard's `?subagent=`. The rows come from the kit's `sessionSteps`
+(`SessionSteps.swift`, the port of `packages/ui`'s `SessionSteps.tsx`): **agents sort above
+tasks**, and `isAgentRecord` decides the *destination* rather than whether there is one. Every
+step presses; an agent pushes its takeover, a task pushes `SessionRoute.session(…, reveal:)` —
+the session, landed on that tool call's own row (`toolCallItemIndex` → the same focus request a
+tapped notification rides, and so **terminal-renderer only**, since the cards renderer has no row
+model to land on). A task used to draw inert here on the argument that there was nowhere to send
+it; there always was, and the equivalent bug on the web was the opposite mistake — framing a
+task's id, which selects no items and drew an **empty agent view**. Both kinds are one row shape
+(`SessionStepRow`) with two route payloads, never a variant branch inside the row.
+
+**The phone draws no list selection**, deliberately: the dashboard paints a card blue and moves
+the blue down to a step when a sub-agent is framed, but that needs list and panel on screen
+together, and a `NavigationStack` push means the list is gone. So `--row-selected`,
+`--row-selected-weak`, `--row-hover` and `--row-active` have no expression here.
+`--badge`/`--badge-fg` do (`ListPalette`, beside `VendorPalette`): an unread count wears the tint
+while its session is live and drops to the neutral badge once it settles, because the same number
+on a finished session is a record rather than a call to look. The old third line spent a third of every row on a labelled `Idle`
 badge, which is the state you scan *past*; and the model was printed raw (`claude-opus-5`) where
 the other clients say `Opus 5`, so `friendlyModel` was ported into the kit
 (`ModelName.swift`, tested against the same examples the TS doc comment states) — the same

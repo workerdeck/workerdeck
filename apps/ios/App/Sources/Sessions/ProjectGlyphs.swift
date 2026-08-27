@@ -175,13 +175,21 @@ struct ProjectIconView: View {
   let icon: ProjectIcon
   /// Resolved bytes for the `image` arm. Nil while unfetched or undecodable.
   var image: UIImage?
+  /// The box, both arms. **16 by default**, matching the engine mark's cell one
+  /// column over: the design's own revision was to remove the icons' inner
+  /// padding so the glyph fills its cell, and a project icon drawn smaller than
+  /// the mark beside it re-creates exactly the gap that revision closed.
+  /// `packages/ui`'s `ProjectIcon` defaults to 12, but that default is tuned for
+  /// group headers, which is not this row.
+  var size: CGFloat = 16
 
   var body: some View {
     switch icon {
     case .glyph(let name):
       Image(systemName: projectSymbol(forLucideName: name))
-        .font(.caption)
+        .font(.system(size: size * 0.8))
         .foregroundStyle(.secondary)
+        .frame(width: size)
     case .image:
       if let image {
         Image(uiImage: image)
@@ -189,7 +197,7 @@ struct ProjectIconView: View {
           // A declared icon is whatever aspect the repo checked in, and a
           // squashed logo reads worse than a letterboxed one.
           .aspectRatio(contentMode: .fit)
-          .frame(width: 13, height: 13)
+          .frame(width: size, height: size)
           // It is decoration beside a name, not a control.
           .accessibilityHidden(true)
       }

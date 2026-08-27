@@ -177,6 +177,32 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     last snapshot don't come back as unread. Renaming is a leading swipe or a context menu →
     `PATCH /sessions/:id`, a gateway edit rather than a local override, so the name reaches the
     dashboard and the extension too (and an empty one restores the derived title).
+
+    **The steps under a row** — the session's sub-agents, and one day the CLI's own task
+    checklist — come from the kit's `sessionSteps` (`SessionSteps.swift`), the port of
+    `packages/ui`'s `SessionSteps.tsx`. Agents sort above tasks, and **the kind is what routes
+    the press**: an *agent* has work of its own, so it pushes that agent's takeover; a *task* is
+    a reference to a place in the transcript, so it opens the session and travels to that tool
+    call's row (`SessionRoute.session(reveal:)` → `SessionView.resolveReveal()` →
+    `toolCallItemIndex` → the focus request the deep link already rides). Conflating the two is
+    the bug the dashboard shipped and fixed in 0.21.0: framing a task's tool-use id selects no
+    items, so the frame drew an empty screen. This list drew tasks *inert* instead, which is the
+    same wrong premise with a quieter symptom. Both kinds are one row shape
+    (`SessionStepRow`) with two route payloads — never a variant branch inside the row.
+
+    **This list draws no selection, and that is a decision rather than an omission.** The
+    dashboard paints two selections at two grains (a card blue, and the blue moving down to a
+    step when one of its sub-agents is framed) because its panel sits *beside* the list and both
+    are on screen at once. The phone pushes: while a session is open its list is not visible, so
+    there is no selected row to paint and nothing to paint it against. `--row-selected`,
+    `--row-selected-weak`, `--row-hover` and `--row-active` therefore have no expression here,
+    and inventing an `onSubagentChange`-style report back from the session screen would be
+    symmetry with a container this app does not have. If marking "where you just were" on a
+    back-swipe ever proves useful in the hand, the honest source is `path.last` — not a new
+    report. `--badge`/`--badge-fg` **are** mirrored (`ListPalette`, beside `VendorPalette`),
+    independently of any of this: an unread count wears the tint while its session is live and
+    drops to the neutral badge once it settles, because on a finished session the same number is
+    a record rather than a call to look.
   - `App/Sources/Session/Terminal/` — the terminal transcript's *rendering* half, over the rules
     in the kit's `Terminal/`. It is a **renderer, not a set of branches**: it draws every row
     itself, and nothing under the cards path asks which variant it is in. (That is the lesson of
@@ -601,6 +627,11 @@ xcrun simctl io booted screenshot /tmp/usage.png
 `composer` renders the docked composer in each of its gutter states, stacked — an alignment claim
 needs to be seen as a column, not as five separate screenshots.
 
+`steps` renders the step rows that hang under a session card — every state and both kinds at
+once, which the real list will never show you. It is this app's answer to the dashboard's
+selection stories, and its fixture is deliberately out of dispatch order so the agents-above-tasks
+sort has something to prove. The footer states the expected reading, top to bottom.
+
 `terminal` renders the terminal transcript over a fixture built to exercise the row model rather
 than to look plausible — a folded run, two `Task`s whose children interleave, a diff carrying the
 engine's own line numbers, and a result long enough to hit both preview budgets. It reports the
@@ -663,6 +694,11 @@ mobile). When `packages/protocol` changes:
 2. Mirror the type change in `ProtocolTypes.swift`/`RestTypes.swift` and update
    `WorkerProtocol.version`.
 3. If transcript semantics changed, port the `transcript.ts` diff into `Transcript.swift`.
+
+`isJobRun` **is** mirrored (`SessionList.swift`) even though this app has no jobs surface to
+filter against — its own doc names "the extension, the phone" as the clients that should list job
+runs among their sessions, so nothing here filters on it. Mirrored so that the day a jobs surface
+arrives, that is a decision already made rather than one rediscovered.
 
 Not yet mirrored (later phases): the job-queue REST/WS surface, profile create/update/delete,
 browser-bridge tool hosting (the app answers `tool_call_request` with a polite refusal).

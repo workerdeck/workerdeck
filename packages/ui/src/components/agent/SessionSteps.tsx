@@ -41,10 +41,16 @@ export type Step = {
   /** What one of these is called, for the disclosure's count. */
   noun: string
   /**
-   * An **agent** has an identity and work of its own, so it is pressable and
-   * wears the sub-agent colour. A **task** is something the model described with
-   * no agent behind it (`isAgentRecord`), so it is inert: there is no frame to
-   * open, and a row that offered one would show an empty screen.
+   * Both kinds press. The kind decides **where the press goes**, which is the
+   * whole of the distinction.
+   *
+   * An **agent** has an identity and work of its own, so it wears the sub-agent
+   * colour and opens that agent's own frame. A **task** is something the model
+   * described with no agent behind it (`isAgentRecord`), so there is no frame:
+   * framing its id selects no items and draws an empty screen. What it has
+   * instead is a *place* — the spawning call's row in the transcript — so it is
+   * muted, never selected, and travels there. See `StepRow` for why an inert
+   * row was the worse answer.
    *
    * Two values and not a boolean because the checklist source this shape was
    * drawn for (see above) produces the second kind natively — a to-do is a task

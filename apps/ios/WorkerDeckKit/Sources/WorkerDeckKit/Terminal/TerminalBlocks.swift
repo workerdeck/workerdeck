@@ -175,6 +175,30 @@ public func subagentTask(_ items: [TranscriptItem], id: String) -> ToolCallItem?
   return nil
 }
 
+/// **Where** a tool call sits in the transcript — the other half of the seam a
+/// sub-*task* press rides.
+///
+/// A task step names a `tool_use` id with no agent behind it, so there is no
+/// frame to open: the press opens the session and travels to that call's own
+/// row. That journey is `toolUseId → item index → row index → scrollToRow`, and
+/// this is the first hop. The rest is already built —
+/// `TerminalTranscriptModel.rowIndex(forItem:)` converts, and the focus request
+/// the push-notification deep link uses does the scrolling.
+///
+/// Item space, not row space, for the same reason `TranscriptSeqIndex` answers
+/// in item space: rows are refolded on every revision and on every rotation,
+/// items are not.
+///
+/// A linear scan like ``subagentTask(_:id:)`` beside it, and for the same
+/// reason: this is answered once per press, not once per frame, and an index
+/// maintained across every mutation is bookkeeping bought for a keystroke.
+public func toolCallItemIndex(_ items: [TranscriptItem], id: String) -> Int? {
+  items.firstIndex { item in
+    if case .toolCall(let call) = item { return call.id == id }
+    return false
+  }
+}
+
 // MARK: - The fold
 
 /// Fold a slice of transcript items into rows.

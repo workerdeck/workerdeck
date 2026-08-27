@@ -33,6 +33,13 @@ struct SessionView: View {
   /// The event a tapped notification was about, when this screen was opened by
   /// one. Resolved to a row once the replay has landed — see `focusTarget`.
   private let focusSeq: Int?
+  /// The `tool_use` id a **task** step under the sessions-list row named, when
+  /// this screen was opened by one. Resolved to a row the same way `focusSeq`
+  /// is, and for the same reason it is held rather than acted on immediately:
+  /// the list knows the id before this screen has replayed an event, and an
+  /// item lookup over a half-replayed transcript answers "not here" about a
+  /// call that simply has not arrived. See `resolveReveal()`.
+  private let revealToolUseId: String?
 
   @State private var vm: TranscriptViewModel
   @State private var draft = ""
@@ -91,6 +98,8 @@ struct SessionView: View {
   /// every later event is how a deep link turns into a transcript that jumps
   /// under the reader minutes after they arrived.
   @State private var focusResolved = false
+  /// The reveal's equivalent, settling for the same reasons — see `resolveReveal()`.
+  @State private var revealResolved = false
 
   /// The sub-agent takeover: which `Task` call's work the pushed screen is
   /// showing, or nil for the conversation. The `navigationDestination(item:)`
@@ -107,10 +116,11 @@ struct SessionView: View {
 
   init(
     sessionId: String, hostId: UUID, client: WorkerClient, focusSeq: Int? = nil,
-    openSubagent: String? = nil
+    openSubagent: String? = nil, revealToolUseId: String? = nil
   ) {
     self.hostId = hostId
     self.focusSeq = focusSeq
+    self.revealToolUseId = revealToolUseId
     _pendingSubagent = State(initialValue: openSubagent)
     _vm = State(initialValue: TranscriptViewModel(sessionId: sessionId, client: client))
   }
@@ -237,6 +247,7 @@ struct SessionView: View {
         // second `.task(id:)` on that key would double the per-event cost of a
         // screen whose replay cost is already the thing being watched.
         resolveFocus()
+        resolveReveal()
         resolveTakeover()
       }
       // The cwd arrives with the session snapshot, which lands after this view
@@ -419,6 +430,43 @@ struct SessionView: View {
     // `armReplayHold`), and a transcript that is still filling in has not
     // answered the question, it has merely been shown early.
     if vm.state.lastSeq >= info.lastSeq { focusResolved = true }
+  }
+
+  // MARK: - Sub-task reveal
+
+  /// Turn a **task** step's `tool_use` id into the transcript row to open on.
+  ///
+  /// This is the other half of the agent/task split. An agent step pushes the
+  /// takeover (`resolveTakeover()`); a task has no agent behind it and so no
+  /// frame — framing its id would select no items and draw an empty screen.
+  /// What a task *does* have is a place: the spawning call's own row, sitting
+  /// in this session's transcript. So the press opens the session and travels
+  /// there, which is exactly the journey a tapped notification already makes.
+  /// It rides that machinery rather than a second one:
+  /// `toolCallItemIndex` → `focusTarget` → the view's own item→row fold.
+  ///
+  /// `focusSeq` and `revealToolUseId` both write `focusTarget` and are never
+  /// both set — a route comes from a notification or from a step, not both —
+  /// and each settles once, so neither can drag the reader after they arrive.
+  ///
+  /// **Terminal renderer only**, deliberately and out loud: the cards renderer
+  /// has no row model to land on, so a reveal there opens at the tail exactly
+  /// as a deep link always has. Said here rather than left to no-op silently,
+  /// because "the press did nothing" and "the press did the honest thing this
+  /// renderer can do" look identical from the outside.
+  private func resolveReveal() {
+    guard let revealToolUseId, !revealResolved, let info = vm.session, !vm.replaying else { return }
+    if let item = toolCallItemIndex(vm.state.items, id: revealToolUseId) {
+      revealResolved = true
+      // The item index is the nonce: this resolves once per screen, and a
+      // second press of the same step is a new route and so a new screen.
+      focusTarget = .init(item: item, nonce: item)
+      return
+    }
+    // Not there *yet*. Give up only once the attach's stated seq has been
+    // reached — the same settling `resolveFocus()` does, and for the same
+    // reason: a transcript still filling in has not answered the question.
+    if vm.state.lastSeq >= info.lastSeq { revealResolved = true }
   }
 
   // MARK: - Unread watermark

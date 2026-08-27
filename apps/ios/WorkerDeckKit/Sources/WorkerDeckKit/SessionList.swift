@@ -387,6 +387,21 @@ public func projectSubpath(_ info: SessionInfo) -> String? {
   return relative.isEmpty ? nil : relative
 }
 
+/// This session is a job run — the queue created it, and `JobInfo.sessionId`
+/// points at it. A 1:1 mirror of protocol's `isJobRun`.
+///
+/// A job run is an ordinary registry session in every other respect, which is
+/// what makes it worth spelling once: a client that renders jobs on their own
+/// surface should not list them again among the sessions, and a client with no
+/// jobs surface — **the extension, this app** — should, or they would be
+/// invisible. The phone has no jobs surface, so nothing here filters on it; it
+/// is mirrored so that the day one appears, "should the list show these" is a
+/// decision already made rather than one rediscovered. The queue stamps
+/// `meta.jobId`; nothing else may write that key.
+public func isJobRun(_ info: SessionInfo) -> Bool {
+  info.meta?["jobId"]?.stringValue != nil
+}
+
 private func matchesSearch(_ row: SessionRow, needle: String) -> Bool {
   if needle.isEmpty { return true }
   return sessionLabel(row.info).lowercased().contains(needle)
