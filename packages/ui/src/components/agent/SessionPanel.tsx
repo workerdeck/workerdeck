@@ -297,10 +297,10 @@ export interface SessionPanelProps {
    */
   onSubagentChange?: (toolUseId: string | undefined) => void
   /**
-   * Terminal theme only: hold the prompt of the turn you are reading at the top
-   * of the transcript, as the Claude Code CLI does. The **real row** is pinned
-   * rather than a copy drawn above it, so it lines up with the rows beneath by
-   * construction — see `TranscriptRows`.
+   * Hold the prompt of the turn you are reading at the top of the transcript.
+   * Works in both variants: the terminal clips to one line (as the CLI does),
+   * cards shows a frosted bar. The **real row** is pinned rather than a copy
+   * drawn above it, so it lines up with the rows beneath by construction.
    */
   stickyPrompt?: boolean
   /**

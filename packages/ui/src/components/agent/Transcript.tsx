@@ -31,6 +31,7 @@ import { taskBrief } from '../terminal/tool-run.ts'
 import { taskBusy } from '../terminal/tool-run.ts'
 import { briefPx, estimateBlockPx } from '../terminal/height.ts'
 import { TerminalScrubber } from '../terminal/scrubber.tsx'
+import { Scrubber } from './Scrubber.tsx'
 import { gapBefore, positionInRow, rowIndexForItem, type TranscriptRow } from './transcript-rows.ts'
 import { useHeightEpoch } from './use-height-epoch.ts'
 import { useTranscriptJumps } from './use-transcript-jumps.ts'
@@ -337,6 +338,7 @@ function StickyPromptLane({
   top,
   height,
   gapClass,
+  terminal,
   scrollRoot,
   index,
   measureRef,
@@ -345,6 +347,7 @@ function StickyPromptLane({
   top: number
   height: number
   gapClass?: string | false
+  terminal: boolean
   scrollRoot: HTMLElement | null
   index: number
   measureRef: (element: HTMLDivElement | null) => void
@@ -389,7 +392,7 @@ function StickyPromptLane({
         ref={sentinelRef}
         aria-hidden
         className='absolute left-0 w-px'
-        style={{ top: gapClass ? 'var(--term-line)' : 0, height: 1 }}
+        style={{ top: gapClass ? (terminal ? 'var(--term-line)' : '1rem') : 0, height: 1 }}
       />
       <div ref={measureRef} data-index={index} className={gapClass || undefined}>
         {content}
@@ -525,7 +528,7 @@ function TranscriptRows({
     enabled: false,
     promptRows: [],
   })
-  pinRef.current = { enabled: terminal && stickyPrompt, promptRows }
+  pinRef.current = { enabled: stickyPrompt, promptRows }
   useEffect(() => {
     setScrollElement(stick.scrollRef.current)
   }, [stick.scrollRef])
@@ -897,7 +900,6 @@ function TranscriptRows({
         // Same predicate as `promptRows` above — the lane and the forced range
         // must agree on which rows are prompts.
         if (
-          terminal &&
           stickyPrompt &&
           'item' in row &&
           row.item.kind === 'user' &&
@@ -914,6 +916,7 @@ function TranscriptRows({
               top={virtualRow.start}
               height={Math.max(laneEnd - virtualRow.start, 0)}
               gapClass={gapClass}
+              terminal={terminal}
               scrollRoot={scrollElement}
               index={virtualRow.index}
               measureRef={virtualizer.measureElement}
@@ -938,31 +941,38 @@ function TranscriptRows({
           — the virtualizer's offsets, the epoch, the row list, the jump — is
           this component's. The portal target is the Conversation root
           (`relative`), the same containing block the scroll button uses. */}
-      {terminal && scrubber && scrollElement?.parentElement
+      {scrubber && scrollElement?.parentElement
         ? createPortal(
-            <TerminalScrubber
-              items={items}
-              pendingApprovals={pendingApprovals}
-              recapRow={recapRow}
-              bookmarks={scrubberMarks ?? []}
-              frameParentId={frameParentId}
-              rowIndexFor={(itemIndex) => rowIndexForItem(rows, itemIndex)}
-              positionInRow={(itemIndex) => positionInRow(rows, itemIndex)}
-              // The public memoized measurements array — `getTotalSize()` just
-              // above refreshed it, and with the calculator feeding
-              // `estimateSize` these starts are honest for unmounted rows too.
-              offsetOfRow={(rowIndex) => virtualizer.measurementsCache[rowIndex]?.start ?? 0}
-              sizeOfRow={(rowIndex) => virtualizer.measurementsCache[rowIndex]?.size ?? 0}
-              totalSize={virtualizer.getTotalSize()}
-              scrollOffset={virtualizer.scrollOffset ?? 0}
-              viewportH={virtualizer.scrollRect?.height ?? 0}
-              // To the top: a mark is where you start reading, not the middle of
-              // what you want to see.
-              onJumpToRow={(rowIndex) => jumpToRow(rowIndex, 'start')}
-              interactive={scrubInteractive}
-              fontSize={fontSize}
-              lineHeight={lineHeight}
-            />,
+            terminal ? (
+              <TerminalScrubber
+                items={items}
+                pendingApprovals={pendingApprovals}
+                recapRow={recapRow}
+                bookmarks={scrubberMarks ?? []}
+                frameParentId={frameParentId}
+                rowIndexFor={(itemIndex) => rowIndexForItem(rows, itemIndex)}
+                positionInRow={(itemIndex) => positionInRow(rows, itemIndex)}
+                offsetOfRow={(rowIndex) => virtualizer.measurementsCache[rowIndex]?.start ?? 0}
+                sizeOfRow={(rowIndex) => virtualizer.measurementsCache[rowIndex]?.size ?? 0}
+                totalSize={virtualizer.getTotalSize()}
+                scrollOffset={virtualizer.scrollOffset ?? 0}
+                viewportH={virtualizer.scrollRect?.height ?? 0}
+                onJumpToRow={(rowIndex) => jumpToRow(rowIndex, 'start')}
+                interactive={scrubInteractive}
+                fontSize={fontSize}
+                lineHeight={lineHeight}
+              />
+            ) : (
+              <Scrubber
+                items={items}
+                pendingApprovals={pendingApprovals}
+                recapItemIndex={recapIndex >= 0 ? boundary : undefined}
+                bookmarks={scrubberMarks}
+                frameParentId={frameParentId}
+                interactive={scrubInteractive}
+                onJumpToItem={(itemIndex) => jumpToRow(rowIndexForItem(rows, itemIndex), 'start')}
+              />
+            ),
             scrollElement.parentElement,
           )
         : null}
@@ -1004,17 +1014,21 @@ export interface TranscriptProps {
   /** Terminal theme only: the pointer affordances a real terminal cannot offer.
    * `false` for none. See {@link TerminalAffordances}. */
   affordances?: TerminalAffordances | boolean
-  /** Terminal theme only: hold the prompt of the turn being read at the top of
-   * the scroller. The *real* row is pinned, not a copy — see `TranscriptRows`. */
+  /** Hold the prompt of the turn being read at the top of the scroller. Works
+   * in both variants: the terminal clips to one line, cards shows a frosted
+   * bar. The *real* row is pinned, not a copy — see `TranscriptRows`. */
   stickyPrompt?: boolean
   /**
-   * Terminal theme only: mount the overview-ruler scrubber — a 2ch rail of
-   * marks (your prompts, each turn's response and result as one mark, errors,
-   * the pending approval, the catch-up boundary) that replaces the native
-   * scrollbar. Ignored under `cards`: the rail's positions ride the height
-   * calculator, which has no claim there. With `affordances={false}` the rail
-   * degrades to passive paint — no drag, peek or click — and the native
-   * scrollbar stays. See {@link TerminalScrubber}.
+   * Mount the overview scrubber — a 12px rail of marks (your prompts, each
+   * turn's response and result as one mark, errors, the pending approval, the
+   * catch-up boundary) over the scroller's right edge. Two rails behind one
+   * prop: under `terminal` it is the pixel-exact ruler that replaces the
+   * native scrollbar (positions ride the height calculator; drag scrubs), and
+   * under `cards` it is the **proportional annotation rail** — positioned by
+   * `itemIndex / items.length`, because proportional text gives the
+   * calculator no claim there — where the native scrollbar stays and the rail
+   * only peeks and jumps. With `affordances={false}` either rail degrades to
+   * passive paint — no drag, peek or click.
    */
   scrubber?: boolean
   /**

@@ -151,6 +151,10 @@
   --shine: #dcdcdc;
   --frame-shadow: var(--shadow-xs);
 
+  /* The overview rail's bookmark magenta — the app palette has no magenta,
+     and every other colour on the rail is already spoken for. */
+  --wd-scrub-bookmark: #8b3a8b;
+
   /* ---------- aliases (bridge for the @theme utilities) ---------- */
   --surface: var(--bg-surface);
   --sidebar: #f4f4f4;
@@ -233,6 +237,9 @@
   --frame-shadow:
     0 4px 24px rgba(0, 0, 0, 0.55),
     0 2px 6px rgba(0, 0, 0, 0.45);
+
+  /* See the light block — lifted for the dark ground. */
+  --wd-scrub-bookmark: #c586c0;
 
   /* ---------- aliases ---------- */
   --surface: var(--bg-surface);
@@ -616,4 +623,129 @@
   .prompt-area-editor {
     transition: none !important;
   }
+}
+
+/* ── Sticky prompt (cards variant) ─────────────────────────────────────────
+ * The same mechanism as the terminal theme's pinned prompt — a lane spanning
+ * the turn, a one-line head pinned with `position: sticky`, an observer
+ * toggling `data-stuck` — but styled for the cards surface: a frosted bar
+ * with a `❯` glyph and one clipped line of text, sitting over the content
+ * column. Terminal's own rules are scoped to `[data-terminal]`, so these
+ * catch every transcript that IS NOT terminal — i.e. cards. */
+[data-slot='transcript-rows'] > [data-sticky-lane]:not([data-terminal] *) {
+  z-index: 3;
+  pointer-events: none;
+}
+
+[data-sticky-lane]:not([data-terminal] *) > [data-sticky-headlane] {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+[data-sticky-lane]:not([data-terminal] *) [data-sticky-head] {
+  position: sticky;
+  top: 0;
+  max-width: var(--wd-transcript-max-width);
+  margin-inline: auto;
+  height: 2.25rem;
+  overflow: hidden;
+  background: var(--bg, transparent);
+  user-select: none;
+  visibility: hidden;
+  /* Frosted glass effect when stuck */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+[data-sticky-lane]:not([data-terminal] *) [data-sticky-head][data-stuck] {
+  visibility: visible;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Overview scrubber (cards variant) ──────────────────────────────────────
+ *
+ * The proportional rail (`components/agent/Scrubber.tsx`): same geometry as the
+ * terminal rail — 12px, two 6px lanes plus full width — and the same palette
+ * mapped onto the app tokens. It is an annotation rail, never a scrollbar: the
+ * container takes no pointer events, so the native scrollbar keeps working
+ * straight through the paint. */
+.wd-scrubber {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 12px;
+  z-index: 10;
+  pointer-events: none;
+}
+.wd-scrubber .wd-scrub-mark {
+  position: absolute;
+  min-height: 2px;
+}
+.wd-scrubber[data-interactive] .wd-scrub-mark {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.wd-scrubber[data-interactive] .wd-scrub-mark:hover {
+  outline: 1px solid color-mix(in srgb, var(--fg-1) 40%, transparent);
+}
+.wd-scrubber .wd-scrub-mark[data-lane='l'] { left: 0; width: 6px; }
+.wd-scrubber .wd-scrub-mark[data-lane='r'] { left: 6px; width: 6px; }
+.wd-scrubber .wd-scrub-mark[data-lane='f'] { left: 0; width: 12px; }
+.wd-scrubber .wd-scrub-mark[data-kind='user'] { background: var(--accent); }
+.wd-scrubber .wd-scrub-mark[data-kind='subagent'] { background: var(--success); }
+.wd-scrubber .wd-scrub-mark[data-kind='turn'] { background: var(--fg-3); }
+.wd-scrubber .wd-scrub-mark[data-kind='turnFailed'] { background: var(--danger); }
+.wd-scrubber .wd-scrub-mark[data-kind='error'] { background: var(--danger); }
+.wd-scrubber .wd-scrub-mark[data-kind='toolFailed'] {
+  background: color-mix(in srgb, var(--danger) 55%, transparent);
+}
+.wd-scrubber .wd-scrub-mark[data-kind='bookmark'] { background: var(--wd-scrub-bookmark); }
+.wd-scrubber .wd-scrub-mark[data-kind='approval'] {
+  background: var(--warning);
+  animation: wd-scrub-pulse 1.2s infinite;
+}
+.wd-scrubber .wd-scrub-mark[data-kind='recap'] {
+  background: repeating-linear-gradient(to right, var(--fg-4) 0 3px, transparent 3px 6px)
+    left center / 100% 1px no-repeat;
+}
+@keyframes wd-scrub-pulse {
+  50% { opacity: 0.3; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wd-scrubber .wd-scrub-mark[data-kind='approval'] {
+    animation: none;
+  }
+}
+
+.wd-scrubber .wd-scrub-peek {
+  position: absolute;
+  right: calc(100% + 6px);
+  width: 320px;
+  max-width: 60vw;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md, 6px);
+  background: var(--bg);
+  box-shadow: var(--shadow-md);
+  font-family: var(--cw-font-sans);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fg-1);
+  pointer-events: none;
+  z-index: 11;
+}
+.wd-scrubber .wd-scrub-peek [data-tone='muted'] { color: var(--fg-3); }
+.wd-scrubber .wd-scrub-peek [data-tone='danger'] { color: var(--danger); }
+.wd-scrubber .wd-scrub-ex {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
