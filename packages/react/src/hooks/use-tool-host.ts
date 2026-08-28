@@ -33,7 +33,16 @@ export function useToolCallHost(
       // Delegate every option through the ref, so a caller passing inline
       // objects/closures (the common case) doesn't resubscribe each render.
       get tools() {
-        return optionsRef.current.tools
+        // Merge explicit `tools` with the names from `clientTools` so the host
+        // accepts calls for both sandbox-executed and client-handled tools.
+        const base = optionsRef.current.tools
+        const client = optionsRef.current.clientTools
+        if (!client) return base
+        const clientNames = Object.keys(client)
+        return base ? [...new Set([...base, ...clientNames])] : clientNames
+      },
+      get clientTools() {
+        return optionsRef.current.clientTools
       },
       get timeoutMs() {
         return optionsRef.current.timeoutMs

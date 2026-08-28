@@ -262,10 +262,10 @@ export function StatusBar({
           </span>
         </Slot>
       ) : null}
-      {controls}
+      {controls ? <span className='self-center'>{controls}</span> : null}
       <span className='flex-1' />
       <span className='font-mono text-label text-fg-3'>{formatCost(state.totalCostUsd)}</span>
-      {actions}
+      {actions ? <span className='self-center'>{actions}</span> : null}
     </div>
   )
 }

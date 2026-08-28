@@ -443,8 +443,14 @@ reason, and only on a definite `false` — unprobed stays allowed). `createProvi
 opts)` is the 80% case of `createEngineRunner`: it forwards `restore`, adopts `id`, seeds the
 VFS only when not restoring, and disposes via `onClose` — the four obligations that are
 invisible in the hook's types and fail only at runtime. Its `executor` is **required**
-(`ToolExecutor` or `'browser'`): defaulting it would make `@jitl/quickjs-*` a server dependency
-and would silently answer an architectural question the embedder should be asked.
+(`ToolExecutor`, `'browser'`, or a **per-call function** `(call) => ToolExecutor | 'browser'`):
+defaulting it would make `@jitl/quickjs-*` a server dependency and would silently answer an
+architectural question the embedder should be asked. The per-call form lets one session route
+`eval_script` to the in-process sandbox while a custom tool goes to the browser.
+`shouldApprove` gates tool dispatch behind user approval: the runner emits
+`permission_requested`, parks, and waits for `resolvePermission`. Bypass modes skip it.
+`clientTools` on `SessionPanel` (or `toolHost.clientTools`) is the client half of a
+client-registered tool — the server declares the schema, the client handles the call.
 ## `packages/client`
 
 REST + WS client on platform `fetch`/`WebSocket`; zero runtime deps. Owns

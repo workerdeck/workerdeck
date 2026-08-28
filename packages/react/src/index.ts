@@ -35,7 +35,7 @@ export type { OpenFile, OpenFilesAction, OpenFilesState } from './lib/open-files
 export { useToolCallHost } from './hooks/use-tool-host.ts'
 export type { UseToolCallHostOptions } from './hooks/use-tool-host.ts'
 export { createToolCallHost } from './lib/tool-host.ts'
-export type { ToolCallHostOptions, ToolHostExecution, ToolHostRunner } from './lib/tool-host.ts'
+export type { ClientToolHandler, ClientToolResult, ToolCallHostOptions, ToolHostExecution, ToolHostRunner } from './lib/tool-host.ts'
 export {
   applyEvent,
   hydrateToolResult,

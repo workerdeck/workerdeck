@@ -15,7 +15,7 @@ import {
   type HostToolDefinition,
   type ToolContextOptions,
 } from './tools.ts'
-import type { ToolExecutor } from '../../executors/tool-executor.ts'
+import type { ToolExecutionCall, ToolExecutionProfile, ToolExecutor } from '../../executors/tool-executor.ts'
 import { createWebFetch, type WebFetchFn, type WebFetchOptions } from './web-fetch.ts'
 
 export type EngineSessionOptions = {
@@ -33,10 +33,23 @@ export type EngineSessionOptions = {
    * Executor for sandboxed tools. Return the browser bridge when a client is
    * attached and the server sandbox otherwise; the seam makes them
    * interchangeable, so this is the only place the choice is made.
+   *
+   * A function accepting a {@link ToolExecutionCall} selects **per call**:
+   * `eval_script` may run on the in-process sandbox while a custom tool goes
+   * to the browser, with no coupling between them.
    */
-  selectExecutor: () => ToolExecutor
-  /** Which backend `selectExecutor` returned, for the execution_* events. */
-  backend?: 'server' | 'browser' | 'managed' | 'remote'
+  selectExecutor: (() => ToolExecutor) | ((call: ToolExecutionCall) => ToolExecutor)
+  /**
+   * Which backend `selectExecutor` returned, for the `execution_dispatched`
+   * events. A function returns the backend per call — pair it with a per-call
+   * `selectExecutor` so the event matches the executor that actually ran.
+   *
+   * When `selectExecutor` is per-call and `backend` is static, every call is
+   * reported under one label. When omitted, falls back to `'server'`.
+   */
+  backend?:
+    | 'server' | 'browser' | 'managed' | 'remote'
+    | ((call: ToolExecutionCall) => 'server' | 'browser' | 'managed' | 'remote')
   /** Backends for the granted capabilities. Omitted ones are simply not granted. */
   capabilities?: {
     search?: ToolContextOptions['search']
@@ -92,6 +105,19 @@ export type EngineSessionOptions = {
   instructions?: string
   executionLimits?: { timeoutMs?: number; memoryLimitBytes?: number }
   /**
+   * Gate tool execution behind user approval. When this returns `true` for a
+   * given call and the session's permission mode is `'default'`, the runner
+   * emits `permission_requested` and waits for the user to approve or deny
+   * before dispatching. Bypass modes skip the check entirely.
+   *
+   * By default nothing requires approval — tools dispatch as soon as the model
+   * calls them, which is the right call for trusted pipelines and the pre-§7
+   * behavior.
+   */
+  shouldApprove?: (call: { toolName: string; input: unknown }) => boolean
+  /** Timeout for permission prompts (ms). Default 120 000. */
+  approvalTimeoutMs?: number
+  /**
    * Initial scratch-filesystem contents for a **new** session, and the safe way
    * to seed one: it is ignored outright when `config.restore` is set, because a
    * rehydrated session brings back the files its parked turn already wrote and
@@ -140,7 +166,24 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
   // rather than at each call site.
   const vfs =
     options.config.vfs ?? createVfs(options.config.restore ? options.config.restore.vfs : options.seedVfs)
-  const executor = options.selectExecutor()
+  // Per-call executors: wrap the selector into a routing ToolExecutor so the
+  // runner gets one interface. The selector's arity tells us which form it is:
+  // 0-arg = the original "select once" call, 1-arg = per-call routing.
+  const isPerCall = options.selectExecutor.length > 0
+  const executor: ToolExecutor = isPerCall
+    ? {
+        describe(call: ToolExecutionCall): ToolExecutionProfile {
+          const target = (options.selectExecutor as (call: ToolExecutionCall) => ToolExecutor)(call)
+          const backend =
+            typeof options.backend === 'function' ? options.backend(call) : options.backend
+          return { ...target.describe?.(call), ...(backend ? { backend } : {}) }
+        },
+        dispatch(call: ToolExecutionCall) {
+          const target = (options.selectExecutor as (call: ToolExecutionCall) => ToolExecutor)(call)
+          return target.dispatch(call)
+        },
+      }
+    : (options.selectExecutor as () => ToolExecutor)()
   // Narrowing only: the gateway has already refused a request naming a capability
   // its profile doesn't grant, so the request value wins when present.
   const granted = options.config.capabilities ?? options.profile?.session?.capabilities
@@ -195,8 +238,10 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
     vfs,
     executor,
     executableTools: context.sandboxedToolNames,
-    executionBackend: options.backend ?? 'server',
+    executionBackend: typeof options.backend === 'function' ? undefined : (options.backend ?? 'server'),
     executionLimits: options.executionLimits,
+    shouldApprove: options.shouldApprove,
+    approvalTimeoutMs: options.approvalTimeoutMs,
     // Only the servers this profile was granted: the /mcp screen must not
     // report a connection the session cannot actually reach.
     reportMcpServers: options.mcp

@@ -437,6 +437,28 @@ export interface SessionPanelProps {
    */
   onLinkClick?: (href: string) => boolean | void
   /**
+   * Client-side tool handlers. Each key is a tool name the model can call; the
+   * handler receives the model's input and returns a result. The tool's
+   * **schema** must be registered server-side (via `tools` on
+   * `ProviderRunnerOptions`), but the handler runs here — right where the data
+   * the tool needs lives.
+   *
+   * Shorthand for `toolHost.clientTools`; when both are set, this wins for
+   * overlapping names.
+   *
+   * ```tsx
+   * <SessionPanel
+   *   clientTools={{
+   *     app_navigate: async (input) => {
+   *       router.push((input as { path: string }).path)
+   *       return { value: 'navigated' }
+   *     },
+   *   }}
+   * />
+   * ```
+   */
+  clientTools?: Record<string, import('@workerdeck/react').ClientToolHandler>
+  /**
    * Base font size in **whole pixels**. Drives the overall scale of everything
    * the panel draws — prompt, output, markdown, status bar — in both variants.
    *
@@ -563,6 +585,7 @@ export function SessionPanel({
   unseen,
   readOnly = false,
   toolHost,
+  clientTools,
   cacheTranscript,
   emptyState,
   onLinkClick,
@@ -760,7 +783,14 @@ export function SessionPanel({
   // SAME handle the panel attached with — the bridge asks the first attached
   // client. Free for Claude sessions: the guest loads lazily on the first call,
   // which for them never comes.
-  useToolCallHost(handle, toolHost === false ? { enabled: false } : toolHost)
+  useToolCallHost(
+    handle,
+    toolHost === false
+      ? { enabled: false }
+      : clientTools
+        ? { ...toolHost, clientTools: { ...toolHost?.clientTools, ...clientTools } }
+        : toolHost,
+  )
   const terminal = transcriptVariant === 'terminal'
 
   // What the strip reads. The frame's items and its spawning call both come from

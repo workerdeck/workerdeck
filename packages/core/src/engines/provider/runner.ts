@@ -16,6 +16,7 @@ import {
   type ContentBlock,
   type CreateSessionRequest,
   type McpServerStatusInfo,
+  type PermissionDecisionSource,
   type PermissionMode,
   type PermissionRequest,
   type SessionEvent,
@@ -72,6 +73,18 @@ export type AiSdkRunnerConfig = Omit<CreateSessionRequest, 'cwd'> & {
   executionLimits?: { timeoutMs?: number; memoryLimitBytes?: number }
   /** Which backend the executor represents, for `execution_dispatched` events. */
   executionBackend?: ToolExecutionBackend
+  /**
+   * Decide per call whether the user must approve a tool execution before it
+   * dispatches. When the session's permission mode is `'default'` and this
+   * callback returns `true`, the runner emits `permission_requested`, parks,
+   * and waits for {@link AiSdkRunner.resolvePermission}. Modes
+   * `'bypassPermissions'` and `'dontAsk'` skip the check entirely.
+   *
+   * Unset = every tool dispatches immediately (the pre-§7 behavior).
+   */
+  shouldApprove?: (call: { toolName: string; input: unknown }) => boolean
+  /** Timeout for permission prompts, in ms. Default 120 000 (2 min). */
+  approvalTimeoutMs?: number
   /** Swap models mid-session (`set_model`). Unset = setModel() is rejected. */
   resolveModel?: (modelId: string | undefined) => LanguageModel
   /**
@@ -197,6 +210,13 @@ export class AiSdkRunner implements Runner {
   /** Model alias as requested (not the resolved provider id) — what set_model was
    * given, so a rehydrated session can re-resolve the same choice. */
   #modelAlias: string | undefined
+  /** Permission prompts awaiting a client decision. Keyed by request id. */
+  #pendingApprovals = new Map<string, {
+    request: PermissionRequest
+    /** The tool call this approval gates — dispatched on allow, failed on deny. */
+    toolCallId: string
+    timer: ReturnType<typeof setTimeout>
+  }>()
 
   constructor(config: AiSdkRunnerConfig, id: string = randomUUID()) {
     const mode = config.permissionMode ?? 'default'
@@ -283,7 +303,7 @@ export class AiSdkRunner implements Runner {
   }
 
   get pendingApprovals(): PermissionRequest[] {
-    return []
+    return [...this.#pendingApprovals.values()].map((a) => a.request)
   }
 
   /** The session's scratch filesystem (see Runner.vfs) — the server's file
@@ -302,14 +322,16 @@ export class AiSdkRunner implements Runner {
       cwd: this.#config.cwd ?? '',
       profile: this.#config.profile,
       engine: 'provider',
-      capabilities: ENGINE_CAPABILITIES.provider,
+      capabilities: this.#config.shouldApprove
+        ? { ...ENGINE_CAPABILITIES.provider, interactiveApprovals: true }
+        : ENGINE_CAPABILITIES.provider,
       model: this.#modelId(),
       permissionMode: this.#permissionMode,
       createdAt: this.createdAt,
       lastSeq: this.#seq,
       activityCount: this.#activityCount,
       contextUsage: this.#contextUsage,
-      pendingPermissionCount: 0,
+      pendingPermissionCount: this.#pendingApprovals.size,
       meta: this.#config.meta,
       scope: this.#config.scope,
       title: this.#title(),
@@ -531,8 +553,45 @@ export class AiSdkRunner implements Runner {
     return true
   }
 
-  resolvePermission(_requestId: string, _decision: PermissionDecision): boolean {
-    return false
+  resolvePermission(requestId: string, decision: PermissionDecision): boolean {
+    const approval = this.#pendingApprovals.get(requestId)
+    if (!approval) return false
+    clearTimeout(approval.timer)
+    this.#pendingApprovals.delete(requestId)
+    const source: PermissionDecisionSource = 'client'
+    if (decision.behavior === 'allow') {
+      this.#emit({
+        type: 'permission_resolved',
+        requestId,
+        behavior: 'allow',
+        resolvedBy: source,
+      })
+      // The call was held back from dispatch — now dispatch it.
+      this.#dispatchSingle(approval.toolCallId)
+    } else {
+      const message = decision.message ?? 'Permission denied by user'
+      this.#emit({
+        type: 'permission_resolved',
+        requestId,
+        behavior: 'deny',
+        resolvedBy: source,
+        message,
+      })
+      // Feed a denial result to the model so the turn can adapt.
+      this.#applyExecutionResult(approval.toolCallId, {
+        status: 'failed',
+        reason: 'permission_denied',
+        error: message,
+      })
+      if (decision.interrupt) {
+        void this.interrupt()
+      }
+    }
+    // If no more approvals are pending, update status.
+    if (this.#pendingApprovals.size === 0 && this.#pendingToolCalls.size === 0) {
+      // All approvals resolved and all tool calls settled — the turn continues.
+    }
+    return true
   }
 
   /** Emit `file_delivered` — the deliver_file tool's hand-over event (wired by
@@ -663,6 +722,8 @@ export class AiSdkRunner implements Runner {
     this.#abort?.abort()
     this.#pendingToolCalls.clear()
     this.#dispatched.clear()
+    for (const { timer } of this.#pendingApprovals.values()) clearTimeout(timer)
+    this.#pendingApprovals.clear()
     this.#emit({ type: 'session_closed', reason })
     this.#setStatus('closed')
     try {
@@ -703,64 +764,117 @@ export class AiSdkRunner implements Runner {
     return true
   }
 
-  /** Hand every parked call the executor owns to it. */
+  /** Hand every parked call the executor owns to it, gating on approval when
+   * the permission mode requires it. */
   #dispatchPending(): void {
     const executor = this.#config.executor
     if (!executor) return
     const executable = this.#config.executableTools
+    const needsApproval = this.#permissionMode === 'default' && this.#config.shouldApprove
     const inFlight: Array<Promise<unknown>> = []
     let anyDeferred = false
+    let anyAwaiting = false
     // Snapshot first: applying a result mutates the map we are iterating.
     for (const call of Array.from(this.#pendingToolCalls.values())) {
       if (executable && !executable.includes(call.toolName)) continue
       if (this.#dispatched.has(call.toolCallId)) continue
-      this.#dispatched.add(call.toolCallId)
-      const toolCall: ToolExecutionCall = {
-        executionId: call.toolCallId,
-        sessionId: this.id,
-        tool: call.toolName,
-        input: call.input,
-        vfs: this.#config.vfs,
-        limits: this.#config.executionLimits,
-        signal: this.#abort?.signal,
-      }
-      // Per call, not per executor: a routing executor may keep one tool in
-      // process and defer another, and only the deferred one may park us.
-      const profile = executor.describe?.(toolCall) ?? {}
-      call.deferred = profile.deferred === true ? true : undefined
-      call.expiresAt = profile.timeoutMs === undefined ? undefined : Date.now() + profile.timeoutMs
-      anyDeferred ||= call.deferred === true
-      this.#emit({
-        type: 'execution_dispatched',
-        executionId: call.toolCallId,
-        toolName: call.toolName,
-        backend: profile.backend ?? this.#config.executionBackend ?? 'server',
-        deferred: call.deferred,
-        expiresAt: call.expiresAt,
-      })
-      inFlight.push(
-        executor
-          .dispatch(toolCall)
-          .then((dispatch) => {
-            // 'pending' means the result arrives later via settleExecution().
-            if (dispatch.status === 'settled') {
-              this.#applyExecutionResult(call.toolCallId, dispatch.result)
-            }
+      // Permission gate: park the call and prompt the user.
+      if (needsApproval && needsApproval({ toolName: call.toolName, input: call.input as Record<string, unknown> })) {
+        // Don't double-prompt: if this call is already awaiting approval, skip.
+        if ([...this.#pendingApprovals.values()].some((a) => a.toolCallId === call.toolCallId)) {
+          anyAwaiting = true
+          continue
+        }
+        const requestId = randomUUID()
+        const timeoutMs = this.#config.approvalTimeoutMs ?? 120_000
+        const request: PermissionRequest = {
+          id: requestId,
+          toolName: call.toolName,
+          input: call.input as Record<string, unknown>,
+          toolUseId: call.toolCallId,
+          title: `Agent wants to run ${call.toolName}`,
+          displayName: call.toolName,
+          expiresAt: Date.now() + timeoutMs,
+        }
+        const timer = setTimeout(() => {
+          if (!this.#pendingApprovals.has(requestId)) return
+          this.resolvePermission(requestId, {
+            behavior: 'deny',
+            message: 'Approval timed out',
           })
-          .catch((error: unknown) => {
-            this.#applyExecutionResult(call.toolCallId, {
-              status: 'failed',
-              reason: 'dispatch_error',
-              error: error instanceof Error ? error.message : String(error),
-            })
-          }),
-      )
+        }, timeoutMs)
+        this.#pendingApprovals.set(requestId, { request, toolCallId: call.toolCallId, timer })
+        this.#emit({ type: 'permission_requested', request })
+        anyAwaiting = true
+        continue
+      }
+      this.#dispatched.add(call.toolCallId)
+      const dispatched = this.#dispatchCall(executor, call)
+      anyDeferred ||= dispatched.deferred
+      inFlight.push(dispatched.promise)
     }
+    if (anyAwaiting) this.#setStatus('awaiting_approval')
     // Announce the park only once every dispatch of this batch has been handed
     // over: a host that parks on the first announcement would snapshot a session
     // whose remaining calls are still being dispatched — and dispatch them into a
     // runner it had already discarded.
     if (anyDeferred) void Promise.allSettled(inFlight).then(() => this.#announceParked())
+  }
+
+  /** Dispatch a single tool call that was held behind an approval gate. */
+  #dispatchSingle(toolCallId: string): void {
+    const executor = this.#config.executor
+    if (!executor) return
+    const call = this.#pendingToolCalls.get(toolCallId)
+    if (!call || this.#dispatched.has(toolCallId)) return
+    this.#dispatched.add(toolCallId)
+    const dispatched = this.#dispatchCall(executor, call)
+    if (dispatched.deferred) void dispatched.promise.then(() => this.#announceParked())
+  }
+
+  /** The actual dispatch + event emission for one tool call. */
+  #dispatchCall(
+    executor: ToolExecutor,
+    call: PendingToolCall,
+  ): { deferred: boolean; promise: Promise<void> } {
+    const toolCall: ToolExecutionCall = {
+      executionId: call.toolCallId,
+      sessionId: this.id,
+      tool: call.toolName,
+      input: call.input,
+      vfs: this.#config.vfs,
+      limits: this.#config.executionLimits,
+      signal: this.#abort?.signal,
+    }
+    // Per call, not per executor: a routing executor may keep one tool in
+    // process and defer another, and only the deferred one may park us.
+    const profile = executor.describe?.(toolCall) ?? {}
+    call.deferred = profile.deferred === true ? true : undefined
+    call.expiresAt = profile.timeoutMs === undefined ? undefined : Date.now() + profile.timeoutMs
+    this.#emit({
+      type: 'execution_dispatched',
+      executionId: call.toolCallId,
+      toolName: call.toolName,
+      backend: profile.backend ?? this.#config.executionBackend ?? 'server',
+      deferred: call.deferred,
+      expiresAt: call.expiresAt,
+    })
+    const promise = executor
+      .dispatch(toolCall)
+      .then((dispatch) => {
+        // 'pending' means the result arrives later via settleExecution().
+        if (dispatch.status === 'settled') {
+          this.#applyExecutionResult(call.toolCallId, dispatch.result)
+        }
+      })
+      .catch((error: unknown) => {
+        this.#applyExecutionResult(call.toolCallId, {
+          status: 'failed',
+          reason: 'dispatch_error',
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    return { deferred: call.deferred === true, promise }
   }
 
   /**

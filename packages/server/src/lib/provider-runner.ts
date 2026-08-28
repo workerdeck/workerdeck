@@ -5,6 +5,7 @@ import {
   type LanguageModel,
   type McpConnection,
   type Runner,
+  type ToolExecutionCall,
   type ToolExecutor,
   type ToolSet,
 } from '@workerdeck/core'
@@ -30,8 +31,11 @@ export type ProviderRunnerOptions = {
    *   when the data is *there* (a document the user is editing) and it should
    *   not travel to the gateway at all. Note the trade: it hands an executor to
    *   the party being sandboxed against, so its results are untrusted input.
+   * - a **function** — selects per call, so `eval_script` can run in-process
+   *   while a custom tool goes to the browser. The function receives the
+   *   {@link ToolExecutionCall} and returns an executor or `'browser'`.
    */
-  executor: ToolExecutor | 'browser'
+  executor: ToolExecutor | 'browser' | ((call: ToolExecutionCall) => ToolExecutor | 'browser')
   /** Capability backends — the same shape {@link createEngineSession} takes.
    * Wiring one only offers it; the profile and request decide the grant. */
   capabilities?: EngineSessionOptions['capabilities']
@@ -50,6 +54,13 @@ export type ProviderRunnerOptions = {
   /** Scratch-filesystem seed for a new session. Ignored on a rehydration, so a
    * parked turn's files are never overwritten. */
   seedVfs?: Record<string, string>
+  /**
+   * Gate tool execution behind user approval. See
+   * {@link EngineSessionOptions.shouldApprove} — this is a straight pass-through.
+   */
+  shouldApprove?: (call: { toolName: string; input: unknown }) => boolean
+  /** Timeout for permission prompts (ms). Default 120 000. */
+  approvalTimeoutMs?: number
   /** Release per-session resources: the MCP connection, an issued token, a
    * watcher. Runs on close **and on park** — parking releases the same things. */
   onClose?: () => void | Promise<void>
@@ -88,10 +99,27 @@ export async function createProviderRunner(
     typeof options.model === 'function' ? options.model(modelId) : options.model
   // The runner's id does not exist at assembly time, so a bridged executor has
   // to be resolved per call from the call's own sessionId.
-  const executor: ToolExecutor =
-    options.executor === 'browser'
-      ? { dispatch: (call) => bridge.executorFor(call.sessionId).dispatch(call) }
-      : options.executor
+  const resolveBridged = (): ToolExecutor => ({
+    dispatch: (call) => bridge.executorFor(call.sessionId).dispatch(call),
+  })
+  const resolveExecutor = (raw: ToolExecutor | 'browser'): ToolExecutor =>
+    raw === 'browser' ? resolveBridged() : raw
+
+  // Per-call executor: wrap into a per-call selectExecutor + backend so the
+  // routing decision happens at dispatch time, not at session creation.
+  const isPerCall = typeof options.executor === 'function'
+  const selectExecutor: EngineSessionOptions['selectExecutor'] = isPerCall
+    ? (call: ToolExecutionCall) =>
+        resolveExecutor((options.executor as (call: ToolExecutionCall) => ToolExecutor | 'browser')(call))
+    : () => resolveExecutor(options.executor as ToolExecutor | 'browser')
+  const backend: EngineSessionOptions['backend'] = isPerCall
+    ? (call: ToolExecutionCall) => {
+        const raw = (options.executor as (call: ToolExecutionCall) => ToolExecutor | 'browser')(call)
+        return raw === 'browser' ? 'browser' : 'server'
+      }
+    : options.executor === 'browser'
+      ? 'browser'
+      : 'server'
 
   return createEngineSession({
     config: {
@@ -107,14 +135,16 @@ export async function createProviderRunner(
     id,
     profile,
     resolveModel: (_profile, c) => resolveModel(c.model),
-    selectExecutor: () => executor,
-    backend: options.executor === 'browser' ? 'browser' : 'server',
+    selectExecutor,
+    backend,
     capabilities: options.capabilities,
     tools: options.tools,
     mcp: options.mcp,
     mcpTools: options.mcpTools,
     instructions: options.instructions,
     executionLimits: options.executionLimits,
+    shouldApprove: options.shouldApprove,
+    approvalTimeoutMs: options.approvalTimeoutMs,
     seedVfs: options.seedVfs,
   })
 }

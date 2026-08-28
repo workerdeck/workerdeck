@@ -20,11 +20,48 @@ export type ToolHostRunner = (request: {
   signal: AbortSignal
 }) => Promise<RunScriptResult>
 
+/**
+ * Result a client tool handler returns. Return a plain value and it is sent as
+ * JSON; return an object with `error` to fail the call with a reason the agent
+ * can adapt to.
+ */
+export type ClientToolResult =
+  | { value: unknown }
+  | { error: string; reason?: string }
+
+/**
+ * Handler for a client-registered tool. Receives the model's validated input
+ * and returns a result — or throws, which is treated as a host error.
+ */
+export type ClientToolHandler = (
+  input: unknown,
+  context: { executionId: string; signal: AbortSignal },
+) => ClientToolResult | Promise<ClientToolResult>
+
 export type ToolCallHostOptions = {
   /** Tools this client will execute. Anything else is refused, so a server can
    * never talk this tab into running something it didn't opt into.
    * Default: `['eval_script']`. */
   tools?: string[]
+  /**
+   * Client-side tool handlers, keyed by tool name. When a `tool_call_request`
+   * arrives for a name in this map, the handler is called instead of the
+   * sandbox. The tool must also appear in {@link tools} (it is added
+   * automatically when `clientTools` is set).
+   *
+   * This is the client half of the round trip — the server half is registering
+   * the tool's schema (via `tools` on `ProviderRunnerOptions` or
+   * `EngineSessionOptions`). Together they let an embedder define a tool the
+   * model can call and the client handles:
+   *
+   * ```ts
+   * // Server: register the schema
+   * tools: { app_navigate: { trust: 'sandboxed', tool: tool({ ... }) } }
+   * // Client: handle the call
+   * <SessionPanel clientTools={{ app_navigate: (input) => ({ value: 'ok' }) }} />
+   * ```
+   */
+  clientTools?: Record<string, ClientToolHandler>
   /** Guest wall-clock limit, unless the request asks for less. Default 5000. */
   timeoutMs?: number
   /** Guest allocator cap, unless the request asks for less. Default 64 MiB. */
@@ -79,8 +116,56 @@ export function createToolCallHost(
     })
   }
 
+  const runClientTool = async (
+    frame: ToolCallRequestFrame,
+    handler: ClientToolHandler,
+  ): Promise<void> => {
+    const startedAt = Date.now()
+    const controller = new AbortController()
+    inFlight.set(frame.executionId, controller)
+    track({ executionId: frame.executionId, toolName: frame.toolName, status: 'running', startedAt })
+
+    try {
+      const result = await handler(frame.input, {
+        executionId: frame.executionId,
+        signal: controller.signal,
+      })
+      if (disposed || !inFlight.has(frame.executionId)) return
+      if ('error' in result) {
+        handle.sendToolCallError(frame.executionId, result.reason ?? 'client_error', result.error)
+        track({
+          executionId: frame.executionId,
+          toolName: frame.toolName,
+          status: 'failed',
+          reason: result.reason ?? 'client_error',
+          startedAt,
+          endedAt: Date.now(),
+        })
+      } else {
+        handle.sendToolCallResult(frame.executionId, { type: 'json', value: result.value })
+        track({
+          executionId: frame.executionId,
+          toolName: frame.toolName,
+          status: 'settled',
+          startedAt,
+          endedAt: Date.now(),
+        })
+      }
+    } catch (error) {
+      if (disposed || !inFlight.has(frame.executionId)) return
+      refuse(frame, 'host_error', error instanceof Error ? error.message : String(error), startedAt)
+    } finally {
+      inFlight.delete(frame.executionId)
+    }
+  }
+
   const run = async (frame: ToolCallRequestFrame): Promise<void> => {
     const startedAt = Date.now()
+    // Client tool handlers take priority: they are purpose-built for the tool.
+    const clientHandler = options.clientTools?.[frame.toolName]
+    if (clientHandler) {
+      return runClientTool(frame, clientHandler)
+    }
     const allowed = options.tools ?? ['eval_script']
     if (!allowed.includes(frame.toolName)) {
       refuse(frame, 'unsupported_tool', `this client does not execute '${frame.toolName}'`, startedAt)
@@ -149,7 +234,7 @@ export function createToolCallHost(
       }
     } catch (error) {
       if (disposed || !inFlight.has(frame.executionId)) return
-      // Engine load failures land here — tell the server so the agent can adapt
+      // Engine load failures land here �� tell the server so the agent can adapt
       // instead of waiting out the deadline.
       refuse(frame, 'host_error', error instanceof Error ? error.message : String(error), startedAt)
     } finally {
