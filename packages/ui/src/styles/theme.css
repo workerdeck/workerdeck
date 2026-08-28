@@ -648,34 +648,57 @@
   top: 0;
   max-width: var(--wd-transcript-max-width);
   margin-inline: auto;
-  /* One visible line of the message card: the card's own top padding (8px)
-     + one line of text (24px line-height) + the inter-row gap that the row
-     carries as top padding. The gap parks above the viewport via negative
-     top — same trick as terminal.css. */
-  height: calc(var(--wd-sticky-head-gap, 0px) + 2rem);
   overflow: hidden;
-  background: var(--bg, transparent);
   user-select: none;
   visibility: hidden;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
-/* The gap classes: the head is taller by the gap and pins negative so the
-   padding parks above the viewport edge and the text starts at zero. */
+/* When the gap class pushes the row down, the head is taller and pins
+   negative so the padding parks above the viewport edge. */
 [data-sticky-lane]:not([data-terminal] *) [data-sticky-head].pt-4 {
-  --wd-sticky-head-gap: 1rem;
   top: -1rem;
 }
 [data-sticky-lane]:not([data-terminal] *) [data-sticky-head].pt-2 {
-  --wd-sticky-head-gap: 0.5rem;
   top: -0.5rem;
 }
 
+/* ── Stuck state: a compact dark bar with one truncated line ────────── */
 [data-sticky-lane]:not([data-terminal] *) [data-sticky-head][data-stuck] {
   visibility: visible;
-  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  /* Override the message card: flatten to a single-line bar. */
+  height: 1.75rem;
+  display: flex;
+  align-items: center;
+  padding-inline: 1rem;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
+}
+/* Hide the message structure (bubble, flex column, gaps) and show
+   only the text content as a single truncated line. */
+[data-sticky-lane]:not([data-terminal] *) [data-sticky-head][data-stuck] > * {
+  display: contents;
+}
+[data-sticky-lane]:not([data-terminal] *) [data-sticky-head][data-stuck] [data-slot='message'] {
+  display: contents;
+}
+[data-sticky-lane]:not([data-terminal] *) [data-sticky-head][data-stuck] [data-slot='message-content'] {
+  display: block;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  font-size: var(--text-body-sm);
+  line-height: 1.75rem;
+  color: var(--fg-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Hide everything inside message-content except the raw text
+   (images, attachments, markdown blocks). */
+[data-sticky-lane]:not([data-terminal] *) [data-sticky-head][data-stuck] [data-slot='message-content'] > :not(:first-child) {
+  display: none;
 }
 
 /* ── Overview scrubber (cards variant) ──────────────────────────────────────
