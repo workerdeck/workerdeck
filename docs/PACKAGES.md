@@ -757,14 +757,23 @@ top of the scroller, the CLI's own affordance — one line and not the row, beca
 twenty-line prompt pinned whole covers the very answer being read. The pin is the browser's:
 each prompt renders inside a **lane** (`StickyPromptLane`, an absolutely positioned strip
 spanning its turn, positioned with `top` — `position: sticky` resolves at layout time and a
-transform is paint-only) led by a one-line `sticky` **head**: the same row rendered again,
-height-clipped, flow footprint cancelled, laid exactly over the real row's first line — a
-duplicate, but the earlier rejection was of a *separate header* with its own padding and
-gutter; this copy is the same component in the same column and aligns by construction. It is
-`visibility: hidden` until a sentinel `IntersectionObserver` marks it stuck (an overlay visible
-in flow swallows the first line's selection highlight), pointer-transparent and `aria-hidden`
-throughout — the real row owns interaction — and the compositor does pin and push-off, so no
-per-scroll JS (a JS-written pin trails the compositor and wobbles). The active prompt's lane is
+transform is paint-only) led by a one-line `sticky` **head** riding out of flow in its own
+full-lane strip (sticky confinement clamps the *margin* box, so the older footprint-cancelling
+negative margin let the head overshoot the lane's end — two pinned prompts during the handoff).
+The head's content is the variant's own: the terminal renders the row again, height-clipped to
+one line — exact under a monospace grid, aligned with the real row by construction — while
+cards renders the prompt as **plain text** that theme.css draws as a ~28px frosted bar, because
+a proportional message card clipped by height is a sliced bubble and un-styling one from CSS is
+a specificity war (the rejected first draft); the bar carries no gap class and inherits the
+content column's edges from the lane, so the 1st and the Nth prompt share one geometry. The
+head is `visibility: hidden` until a 1px sentinel at its engage threshold marks it stuck (an
+overlay visible in flow swallows the first line's selection highlight), pointer-transparent and
+`aria-hidden` throughout — the real row owns interaction. The stuck flag rides a **passive
+scroll listener**, not an `IntersectionObserver`: IO is edge-triggered, and an instant jump
+(the open-at-bottom pin, `jumpToRow`, a reveal) teleports the sentinel across the viewport
+between two observations — ratio 0 → 0, no threshold crossed, no entry queued — stranding the
+flag in whichever state the jump left it. Pin and push-off stay the compositor's (a JS-written
+pin trails it and wobbles); only the bar's visibility rides the listener. The active prompt's lane is
 kept mounted far above the window — exactly when it is working — through the virtualizer's
 `rangeExtractor`, whose forced index is computed *inside* the callback from the live offset
 (a render-fed ref is one scroll event stale). One measurement invariant nearby: the height

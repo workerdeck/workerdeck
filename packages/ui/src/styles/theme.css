@@ -626,82 +626,64 @@
 }
 
 /* ── Sticky prompt (cards variant) ─────────────────────────────────────────
- * The same mechanism as the terminal theme's pinned prompt — a lane spanning
- * the turn, a one-line head pinned with `position: sticky`, an observer
- * toggling `data-stuck` — but styled for the cards surface: a frosted bar
- * with a `❯` glyph and one clipped line of text, sitting over the content
- * column. Terminal's own rules are scoped to `[data-terminal]`, so these
- * catch every transcript that IS NOT terminal — i.e. cards. */
-[data-slot='transcript-rows'] > [data-sticky-lane]:not([data-terminal] *) {
+ *
+ * The same lane/head/sentinel mechanism as the terminal theme's pinned prompt
+ * (terminal.css scopes its rules under `[data-terminal]`; these key on the
+ * lane's own `data-sticky-lane='cards'` value) — but the head's CONTENT is
+ * different in kind, and that is the whole design. The terminal head is the
+ * row rendered again, clipped to one line — exact, because that theme is a
+ * monospace grid. A proportional message card clipped by height is a sliced
+ * bubble, so the cards head never renders the Message component at all:
+ * `StickyPromptLane` (Transcript.tsx) hands it the prompt as one run of plain
+ * text, and these rules only draw a bar. Nothing to flatten, nothing to
+ * un-style, nothing to `!important` over.
+ *
+ * Alignment is by construction, not restatement: the lane sits inside
+ * ConversationContent's centred, padded column (`max-w` + `mx-auto` + `px-4`)
+ * and spans it edge to edge, so the bar's text starts on the same left edge
+ * as the response paragraphs and the ellipsis lands on the column's right
+ * edge — no max-width or inline padding repeated here. The bar carries no
+ * gap class either (the measured row keeps it): it is not an overlay of the
+ * row's first line, so it has no in-flow y to match, and the 1st prompt (no
+ * gap) and every later one (pt-4/pt-2) share these rules unchanged. */
+[data-slot='transcript-rows'] > [data-sticky-lane='cards'] {
   z-index: 3;
   pointer-events: none;
 }
 
-[data-sticky-lane]:not([data-terminal] *) > [data-sticky-headlane] {
+/* The head's own strip: the full lane, out of flow — see terminal.css for why
+   sticky confinement wants the border box, not a cancelled margin box. */
+[data-sticky-lane='cards'] > [data-sticky-headlane] {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
 
-[data-sticky-lane]:not([data-terminal] *) [data-sticky-head] {
+/* The bar: ~28px, one line centred by its own line-height, truncated at the
+   column's right edge, on a frosted ground so the rows passing beneath read
+   as beneath. Hidden until actually stuck (`data-stuck`, set by the lane's
+   sentinel observer): unstuck it sits at the lane's top, over the real
+   bubble. */
+[data-sticky-lane='cards'] > [data-sticky-headlane] > [data-sticky-head] {
   position: sticky;
   top: 0;
-  max-width: var(--wd-transcript-max-width);
-  margin-inline: auto;
-  overflow: hidden;
-  user-select: none;
-  visibility: hidden;
-}
-
-/* When the gap class pushes the row down, the head is taller and pins
-   negative so the padding parks above the viewport edge. */
-[data-sticky-lane]:not([data-terminal] *) [data-sticky-head].pt-4 {
-  top: -1rem;
-}
-[data-sticky-lane]:not([data-terminal] *) [data-sticky-head].pt-2 {
-  top: -0.5rem;
-}
-
-/* ── Stuck state: a compact dark bar with one truncated line ────────── */
-[data-sticky-lane]:not([data-terminal] *) [data-sticky-head][data-stuck] {
-  visibility: visible;
-  /* Reset the negative top the gap classes set — the gap is only for the
-     in-flow overlay; once stuck, the bar sits flush at the viewport edge. */
-  top: 0;
-  /* Override the message card: flatten to a single-line bar. */
   height: 1.75rem;
-  display: flex;
-  align-items: center;
-  padding-inline: 1rem;
+  line-height: 1.75rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--text-body-sm);
+  color: var(--fg-2);
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
+  user-select: none;
+  visibility: hidden;
 }
-/* Hide the message structure (bubble, flex column, gaps) and show
-   only the text content as a single truncated line. */
-[data-sticky-lane]:not([data-terminal] *) [data-sticky-head][data-stuck] > * {
-  display: contents;
-}
-[data-sticky-lane]:not([data-terminal] *) [data-sticky-head][data-stuck] [data-slot='message'] {
-  display: contents;
-}
-[data-sticky-lane]:not([data-terminal] *) [data-sticky-head][data-stuck] [data-slot='message-content'] {
-  display: block;
-  padding: 0;
-  background: none;
-  border-radius: 0;
-  font-size: var(--text-body-sm);
-  line-height: 1.75rem;
-  color: var(--fg-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* Hide everything inside message-content except the raw text
-   (images, attachments, markdown blocks). */
-[data-sticky-lane]:not([data-terminal] *) [data-sticky-head][data-stuck] [data-slot='message-content'] > :not(:first-child) {
-  display: none;
+
+[data-sticky-lane='cards'] > [data-sticky-headlane] > [data-sticky-head][data-stuck] {
+  visibility: visible;
 }
 
 /* ── Overview scrubber (cards variant) ──────────────────────────────────────

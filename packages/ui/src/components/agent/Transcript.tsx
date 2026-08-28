@@ -321,61 +321,106 @@ function nestedClass(item: TranscriptItem, frameParentId?: string): string | und
 // here because this file is where consumers have always found them.
 export { rowIndexForItem, type TranscriptRow } from './transcript-rows.ts'
 
+/** The cards head's one line: the prompt as a plain run of text. Deliberately
+ * not the Message component — a proportional card clipped by height is a
+ * sliced bubble, and un-styling one from CSS is a fight (see theme.css's
+ * sticky-prompt block for the other half of this decision). Prompt syntax
+ * stays literal — a 28px bar is a reminder of what was asked, not a rendering
+ * surface — and newlines collapse under the bar's `nowrap`. Attachment-only
+ * prompts fall back to the attachments' names so the bar is never blank. */
+function promptHeadText(item: Extract<TranscriptItem, { kind: 'user' }>): string {
+  return item.text || (item.attachments ?? []).map((attachment) => attachment.name).join(', ')
+}
+
 /**
  * A prompt row's sticky lane — the strip spanning its turn, leading with the
  * one-line pinned **head** (see the pinned-prompt comment in
  * {@link TranscriptRows}).
  *
+ * The head's content is the variant's: the terminal passes the row again
+ * (clipping it to one line is exact under a monospace grid), cards passes the
+ * prompt as plain text for theme.css to draw as a compact bar. Only the
+ * terminal head carries the row's gap class — its stuck geometry parks that
+ * padding above the viewport edge so the visible line docks at zero
+ * (terminal.css); the cards bar never aligns with the row in flow, so the gap
+ * stays off it entirely and the 1st prompt and the Nth share one geometry.
+ *
  * The head starts `visibility: hidden` and shows only while actually stuck —
  * an overlay that is visible in flow would sit on the real row's first line
  * and swallow its selection highlight, which reads as "the first line cannot
  * be selected". CSS cannot ask "am I stuck?", so a 1px sentinel at the head's
- * engage threshold (the line's own y) feeds an IntersectionObserver: sentinel
- * above the scrollport top → stuck. Transition-only callbacks — this adds no
- * per-scroll work, and the pin itself is still the compositor's.
+ * engage threshold (the line's own y) answers it: sentinel above the
+ * scrollport top → stuck, read by a passive scroll listener. It was an
+ * IntersectionObserver once, for the "no per-scroll work" purity — and that
+ * was a real bug: IO is edge-triggered, and an *instant* jump (the open-at-
+ * bottom pin, `jumpToRow`, a reveal) teleports the sentinel from below the
+ * viewport to above it between two observations — ratio 0 → 0, no threshold
+ * crossed, `isIntersecting` unchanged — so no entry is ever queued and the
+ * flag strands, in whichever direction the jump left it (observed: a session
+ * opened at the bottom, its prompt bar missing; the stale-true twin paints a
+ * bar over the real bubble). The flag needs level-triggered truth. The cost
+ * is two rect reads per scroll event per mounted lane — layout is clean
+ * during scrolling, and the pin itself is still the compositor's; only the
+ * bar's visibility rides the listener.
  */
 function StickyPromptLane({
   top,
   height,
   gapClass,
+  gapPx,
   terminal,
   scrollRoot,
   index,
   measureRef,
+  head,
   content,
 }: {
   top: number
   height: number
   gapClass?: string | false
+  /** The gap's size in px (`ROW_GAP[...].px`) — the cards sentinel offset,
+   * where the terminal uses `--term-line` (exact against its own cell where a
+   * px constant would drift). */
+  gapPx: number
   terminal: boolean
   scrollRoot: HTMLElement | null
   index: number
   measureRef: (element: HTMLDivElement | null) => void
+  /** What the pinned head shows — see the component comment. */
+  head: ReactNode
   content: ReactNode
 }) {
   const headRef = useRef<HTMLDivElement | null>(null)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
+  // `top`/`height`/`gapClass` are deps because they move the sentinel without
+  // any scroll: a measurement refinement re-positions the lane under a still
+  // scroller, and only a fresh evaluation notices. Scroll covers the rest —
+  // including programmatic jumps, which fire a scroll event like any other
+  // write of `scrollTop`.
   useEffect(() => {
-    const head = headRef.current
+    const headElement = headRef.current
     const sentinel = sentinelRef.current
-    if (!head || !sentinel || !scrollRoot) return
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry) return
-        // Above the scrollport, not merely out of it — a lane still below the
-        // viewport has its sentinel non-intersecting too.
-        const stuck =
-          !entry.isIntersecting &&
-          entry.boundingClientRect.top < (entry.rootBounds?.top ?? 0)
-        head.toggleAttribute('data-stuck', stuck)
-      },
-      { root: scrollRoot },
-    )
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [scrollRoot])
+    if (!headElement || !sentinel || !scrollRoot) return
+    const evaluate = () => {
+      // Strictly above the scrollport's top edge — at exact equality the real
+      // row's first line is itself flush with the top, and the head must not
+      // cover it.
+      const stuck =
+        sentinel.getBoundingClientRect().top < scrollRoot.getBoundingClientRect().top
+      headElement.toggleAttribute('data-stuck', stuck)
+    }
+    evaluate()
+    scrollRoot.addEventListener('scroll', evaluate, { passive: true })
+    return () => scrollRoot.removeEventListener('scroll', evaluate)
+  }, [scrollRoot, top, height, gapClass])
   return (
-    <div data-sticky-lane='' className='absolute inset-x-0' style={{ top, height }}>
+    // The attribute VALUE is the styling seam: terminal.css matches the bare
+    // attribute under its `[data-terminal]` scope, theme.css keys the cards
+    // bar on `[data-sticky-lane='cards']` — no `:not()` acrobatics either side.
+    <div
+      data-sticky-lane={terminal ? 'terminal' : 'cards'}
+      className='absolute inset-x-0'
+      style={{ top, height }}>
       {/* The head rides in its own absolutely positioned sub-lane rather than
           in flow with a cancelled footprint: sticky confinement clamps the
           *margin* box, and a negative bottom margin shrinks that box to zero
@@ -384,15 +429,15 @@ function StickyPromptLane({
           Out of flow, the border box is what gets clamped, and the push-off
           lands exactly at the lane's bottom edge. */}
       <div data-sticky-headlane='' aria-hidden>
-        <div ref={headRef} data-sticky-head='' className={gapClass || undefined}>
-          {content}
+        <div ref={headRef} data-sticky-head='' className={(terminal && gapClass) || undefined}>
+          {head}
         </div>
       </div>
       <div
         ref={sentinelRef}
         aria-hidden
         className='absolute left-0 w-px'
-        style={{ top: gapClass ? (terminal ? 'var(--term-line)' : '1rem') : 0, height: 1 }}
+        style={{ top: gapClass ? (terminal ? 'var(--term-line)' : gapPx) : 0, height: 1 }}
       />
       <div ref={measureRef} data-index={index} className={gapClass || undefined}>
         {content}
@@ -885,13 +930,15 @@ function TranscriptRows({
             </div>
           )
         // A prompt row's sticky lane — see the pinned-prompt comment above.
-        // The lane is sized to the turn; the sticky **head** (one clipped
-        // line, the same content again) comes first with its flow footprint
-        // cancelled, and the *measured* element is the real row after it, so
-        // the virtualizer's heights are untouched by either. Both carry the
-        // gap class: the row because the gap is part of its measured height,
-        // the head so its one visible line sits on the same y while in flow —
-        // the pin parks that padding above the viewport edge when stuck.
+        // The lane is sized to the turn; the sticky **head** comes first, out
+        // of flow, and the *measured* element is the real row after it, so
+        // the virtualizer's heights are untouched by either. Under terminal
+        // the head is the same content again clipped to one line, and carries
+        // the row's gap class so its visible line sits on the same y while in
+        // flow (the pin parks that padding above the viewport edge when
+        // stuck). Under cards the head is the prompt as plain text — theme.css
+        // draws it as a compact bar — and carries no gap class: it is never
+        // an in-flow overlay of the row, so it has no y to match.
         // Positioned with `top`, NOT the translate every other row gets:
         // `position: sticky` is resolved at layout time and a transform is
         // paint-only, so under a translate the head would stick against the
@@ -916,10 +963,12 @@ function TranscriptRows({
               top={virtualRow.start}
               height={Math.max(laneEnd - virtualRow.start, 0)}
               gapClass={gapClass}
+              gapPx={gap.px}
               terminal={terminal}
               scrollRoot={scrollElement}
               index={virtualRow.index}
               measureRef={virtualizer.measureElement}
+              head={terminal ? content : promptHeadText(row.item)}
               content={content}
             />
           )
