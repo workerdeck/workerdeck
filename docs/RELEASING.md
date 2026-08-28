@@ -420,6 +420,22 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   the piece left**: the new card and the sub-agent/sub-task navigation both stop at the two web
   clients.
 
+  **0.22.0** — `fontSize` prop on SessionPanel/SessionWorkspace driving both variants,
+  `--wd-font-size` CSS custom property, em-based Streamdown overrides, `onLinkClick` prop,
+  `wd-open-url` bridge message, web dashboard font-size setting, VS Code `workerdeck.fontSize`
+  with `editor.fontSize` fallback. Plus the `AgentView.stories.tsx` comprehensive Storybook
+  story.
+
+  **0.23.0** — **the provider-engine consumer requests.** Per-call executor selection (§1):
+  `selectExecutor`, `backend`, and `ProviderRunnerOptions.executor` accept per-call function
+  forms so different tools route to different backends within one session. Client-side tool
+  registration (§2): `clientTools` prop on `SessionPanel`, `ClientToolHandler`/`ClientToolResult`
+  types in `@workerdeck/react` — the server declares the schema, the client runs the handler.
+  Interactive approvals (§7): `shouldApprove` callback gates sandboxed tool dispatch behind
+  `permission_requested`/`permission_resolved` when the session runs in `default` mode; the
+  existing `PermissionPrompt` UI renders automatically. StatusBar baseline fix (§3):
+  `self-center` on icon-only slots. Protocol stays **7**.
+
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
