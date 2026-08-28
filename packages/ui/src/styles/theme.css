@@ -665,6 +665,9 @@
 /* ── Stuck state: a compact dark bar with one truncated line ────────── */
 [data-sticky-lane]:not([data-terminal] *) [data-sticky-head][data-stuck] {
   visibility: visible;
+  /* Reset the negative top the gap classes set — the gap is only for the
+     in-flow overlay; once stuck, the bar sits flush at the viewport edge. */
+  top: 0;
   /* Override the message card: flatten to a single-line bar. */
   height: 1.75rem;
   display: flex;
