@@ -13,9 +13,11 @@ import {
 } from '@workerdeck/ui'
 import { ThemeToggle } from './shell/ThemeToggle.tsx'
 import {
+  getFontSize,
   getTranscriptDensity,
   getTranscriptFont,
   getTranscriptVariant,
+  setFontSize,
   setTranscriptDensity,
   setTranscriptFont,
   setTranscriptVariant,
@@ -137,6 +139,23 @@ export function SettingsDialog({
                   read={getTranscriptVariant}
                   write={setTranscriptVariant}
                   onChange={setVariant}
+                />
+              </div>
+              <div className='flex items-center justify-between'>
+                <span className='text-body-sm text-fg-2'>Font size</span>
+                <PrefSelect<string>
+                  label='Font size'
+                  options={[
+                    { value: '', label: 'Default' },
+                    { value: '11', label: '11 px' },
+                    { value: '12', label: '12 px' },
+                    { value: '13', label: '13 px' },
+                    { value: '14', label: '14 px' },
+                    { value: '15', label: '15 px' },
+                    { value: '16', label: '16 px' },
+                  ]}
+                  read={() => String(getFontSize() ?? '')}
+                  write={(v) => setFontSize(v ? Number(v) : undefined)}
                 />
               </div>
               {variant === 'cards' ? (

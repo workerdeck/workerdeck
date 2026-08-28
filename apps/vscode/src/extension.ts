@@ -349,6 +349,7 @@ export function activate(context: vscode.ExtensionContext): void {
       // Both are baked into the panel's HTML for the first paint, so changing
       // either means re-rendering it — the same re-render the dev reloader does.
       if (
+        e.affectsConfiguration('workerdeck.fontSize') ||
         e.affectsConfiguration('workerdeck.fontFamily') ||
         e.affectsConfiguration('workerdeck.transcriptDensity') ||
         e.affectsConfiguration('workerdeck.transcriptVariant') ||

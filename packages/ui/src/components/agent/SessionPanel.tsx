@@ -416,6 +416,40 @@ export interface SessionPanelProps {
    * "`>_` Tell the agent what to do." placeholder.
    */
   emptyState?: ReactNode
+  /**
+   * Called when a link in the transcript is clicked. The embedder decides what
+   * happens: navigate in-app, open a browser tab, show a confirmation, or
+   * suppress.
+   *
+   * Return `true` (or a truthy value) to indicate the click was handled — the
+   * default action (`window.open(href, '_blank')`) is suppressed. Return
+   * `false` / `undefined` / nothing to let the browser open the link normally.
+   *
+   * Absent means "browser default" — links open in a new tab as Streamdown's
+   * `target="_blank"` intends. VS Code's webview overrides this through its own
+   * native handler (the "allow once / add to allowlist" dialog) and does not
+   * need this prop.
+   *
+   * **Typical embedder patterns:**
+   * - Relative URLs → in-app navigation, no confirmation
+   * - External URLs → confirmation dialog, or open unconditionally
+   * - Suppress all links → `() => true`
+   */
+  onLinkClick?: (href: string) => boolean | void
+  /**
+   * Base font size in **whole pixels**. Drives the overall scale of everything
+   * the panel draws — prompt, output, markdown, status bar — in both variants.
+   *
+   * Under the terminal theme it sets `--term-font-size` and derives
+   * `--term-line` at the CLI's own 13 : 18 ratio (unless {@link terminalMetrics}
+   * overrides those individually). Under cards it sets the panel root's
+   * `font-size`, which scales every `rem`/`em`-based token the type scale uses.
+   *
+   * Absent means "platform default": 13 px for the terminal theme, the
+   * inherited body size for cards. That is the right choice for a host that has
+   * no preference — the panel reads at the size the rest of the app does.
+   */
+  fontSize?: number
   className?: string
 }
 
@@ -531,8 +565,20 @@ export function SessionPanel({
   toolHost,
   cacheTranscript,
   emptyState,
+  onLinkClick,
+  fontSize,
   className,
 }: SessionPanelProps) {
+  // ── Font size resolution ──────────────────────────────────────────────
+  // `fontSize` is the panel-wide knob; `terminalMetrics` is the terminal-
+  // specific override that predates it. The two compose: `fontSize` provides
+  // the default the terminal derives from (13 : 18 ratio), and individual
+  // terminalMetrics fields can still override each axis.
+  const effectiveTermFontSize = terminalMetrics?.fontSize ?? fontSize
+  const effectiveTermLineHeight =
+    terminalMetrics?.lineHeight ??
+    (fontSize !== undefined ? Math.round(fontSize * (18 / 13)) : undefined)
+
   const external = panelSurface === 'external'
   const statusExternal = statusSurface === 'external'
   // Both non-internal surfaces take the pickers out of the composer, which is
@@ -1012,6 +1058,31 @@ export function SessionPanel({
     />
   )
 
+  // ── Link click handler ────────────────────────────────────────────────
+  // When onLinkClick is provided, intercept <a> clicks on the panel root so
+  // the embedder controls navigation. Capture phase so it fires before any
+  // default handling. Only installed when the prop is present — a host that
+  // does not provide it (VS Code, the dashboard) gets the browser / webview
+  // default, which is the right thing in both cases.
+  const panelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!onLinkClick) return
+    const el = panelRef.current
+    if (!el) return
+    const handler = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement)?.closest?.('a[href]') as HTMLAnchorElement | null
+      if (!anchor) return
+      const href = anchor.getAttribute('href')
+      if (!href) return
+      if (onLinkClick(href)) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+    el.addEventListener('click', handler, true)
+    return () => el.removeEventListener('click', handler, true)
+  }, [onLinkClick])
+
   // Dead-space clicks land in the composer. Anything the user actually aimed at
   // — a control, a link, the end of a drag-selection — keeps its own meaning;
   // this only claims what was left over.
@@ -1036,13 +1107,15 @@ export function SessionPanel({
       <ToolResultFetchProvider value={loadFullResult}>
       <ToolResultImageProvider value={resultImages}>
       <div
+        ref={panelRef}
         data-slot='session-panel'
         // The typeface is a cascade fact, not a React one — one attribute here,
         // and the `[data-agent-font]` rule in theme.css does the rest. Nothing
         // outside this subtree can pick it up.
         data-agent-font={transcriptFont}
         onClick={handleClick}
-        className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}>
+        className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}
+        style={fontSize !== undefined ? { '--wd-font-size': `${Math.round(fontSize)}px` } as React.CSSProperties : undefined}>
         {headerTakesActions ? header({ actions: menu }) : header}
         {statusPlacement === 'top' ? statusBar : null}
         {protocolMismatch !== undefined ? (
@@ -1067,8 +1140,8 @@ export function SessionPanel({
             label={subagentFallbackLabel}
             onBack={leaveSubagent}
             terminal={terminal}
-            fontSize={terminalMetrics?.fontSize}
-            lineHeight={terminalMetrics?.lineHeight}
+            fontSize={effectiveTermFontSize}
+            lineHeight={effectiveTermLineHeight}
           />
         ) : null}
         <Transcript
@@ -1084,8 +1157,8 @@ export function SessionPanel({
           hostImage={hostImage}
           variant={transcriptVariant}
           density={transcriptDensity}
-          fontSize={terminalMetrics?.fontSize}
-          lineHeight={terminalMetrics?.lineHeight}
+          fontSize={effectiveTermFontSize}
+          lineHeight={effectiveTermLineHeight}
           affordances={affordances}
           stickyPrompt={stickyPrompt}
           scrubber={scrubber}
@@ -1147,7 +1220,7 @@ export function SessionPanel({
             session is actually driven. */}
         {!readOnly && capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
           <div className={cn(terminal ? 'pb-2' : 'px-3 pb-2')}>
-            <PromptSurface terminal={terminal} metrics={terminalMetrics} affordances={affordances}>
+            <PromptSurface terminal={terminal} metrics={{ fontSize: effectiveTermFontSize, lineHeight: effectiveTermLineHeight }} affordances={affordances}>
               {state.pendingApprovals.map((request) => {
                 const isQuestion =
                   request.toolName === 'AskUserQuestion' &&
@@ -1215,8 +1288,8 @@ export function SessionPanel({
           }
           layout={controlsExternal ? 'inline' : 'stacked'}
           toolbar={controlsExternal ? undefined : sessionControls}
-          fontSize={terminalMetrics?.fontSize}
-          lineHeight={terminalMetrics?.lineHeight}
+          fontSize={effectiveTermFontSize}
+          lineHeight={effectiveTermLineHeight}
           affordances={affordances}
         />
         )}

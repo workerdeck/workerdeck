@@ -303,11 +303,17 @@
           "default": "comfortable",
           "description": "Vertical spacing between messages in the WorkerDeck agent panel's Cards style. The Terminal style has one line height by definition and ignores this."
         },
+        "workerdeck.fontSize": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Font size for the agent panel in pixels — drives the overall scale of everything the panel draws (prompt, output, markdown, status bar) in both Cards and Terminal styles. 0 follows `editor.fontSize`. Rounded to whole pixels."
+        },
         "workerdeck.terminal.fontSize": {
           "type": "number",
           "default": 0,
           "minimum": 0,
-          "description": "Font size for the agent panel's Terminal style, in pixels. 0 follows `editor.fontSize`, so the panel draws at the size the editor and the integrated terminal do. Rounded to whole pixels: a fractional cell puts every other row on a half-pixel."
+          "description": "Font size for the agent panel's Terminal style, in pixels. 0 follows `workerdeck.fontSize`, then `editor.fontSize`. Rounded to whole pixels: a fractional cell puts every other row on a half-pixel."
         },
         "workerdeck.terminal.lineHeight": {
           "type": "number",

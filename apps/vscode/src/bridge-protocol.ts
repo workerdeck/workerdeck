@@ -115,6 +115,7 @@ export type PanelToHost =
   | TransportToHost
   | { kind: 'wd-ready' }
   | { kind: 'wd-open-path'; path: string; line?: number }
+  | { kind: 'wd-open-url'; url: string }
   | {
       /** SessionPanel's onVitals, relayed onward to the sidebar's scoped panels. */
       kind: 'wd-vitals'

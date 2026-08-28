@@ -24,6 +24,10 @@ const terminalMetrics = {
   lineHeight: Number(root.dataset.lineHeight) || undefined,
 }
 const affordances = root.dataset.affordances !== 'off'
+// The panel-wide base font size, resolved host-side against the editor's own
+// font size. Drives both variants — terminal (as the default cell size) and
+// cards (as the panel root's font-size).
+const panelFontSize = Number(root.dataset.panelFontSize) || undefined
 
 createRoot(root).render(
   <StrictMode>
@@ -33,6 +37,7 @@ createRoot(root).render(
       variant={variant}
       terminalMetrics={terminalMetrics}
       affordances={affordances}
+      fontSize={panelFontSize}
     />
   </StrictMode>,
 )

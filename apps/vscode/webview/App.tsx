@@ -27,6 +27,7 @@ export function App({
   variant,
   terminalMetrics,
   affordances,
+  fontSize,
 }: {
   bridge: Bridge
   /** From `workerdeck.transcriptDensity`, stamped on `#root` so the first paint
@@ -40,6 +41,9 @@ export function App({
   terminalMetrics: TerminalMetrics
   /** From `workerdeck.terminal.affordances`. */
   affordances: boolean
+  /** From `workerdeck.fontSize`, resolved against `editor.fontSize`. Drives the
+   * panel-wide scale for both variants. */
+  fontSize?: number
 }) {
   const [shown, setShown] = useState<Shown | undefined>(undefined)
   /** The sub-agent the sessions list last asked to be shown — see
@@ -119,12 +123,13 @@ export function App({
   )
 
   useEffect(() => {
-    // Cmd/Ctrl+click on something that looks like a path → ask the extension
-    // host to open it (real file for loopback gateways, workerdeck:// for
-    // remote ones; a relative path is resolved against the session cwd there,
-    // which is the only side that knows it). Capture phase, so it wins over
-    // text selection.
+    // Capture phase, so it wins over text selection.
     const onClick = (e: MouseEvent) => {
+      // ── Cmd/Ctrl+click on file paths ────────────────────────────────
+      // Text that looks like a path → ask the extension host to open it
+      // (real file for loopback gateways, workerdeck:// for remote ones;
+      // a relative path is resolved against the session cwd there, which
+      // is the only side that knows it).
       if (!e.metaKey && !e.ctrlKey) return
       const match = matchPath((e.target as HTMLElement | null)?.textContent)
       if (!match) return
@@ -208,6 +213,7 @@ export function App({
         // the whole claim.
         terminalMetrics={terminalMetrics}
         affordances={affordances}
+        fontSize={fontSize}
         // The overview ruler, in the dock that most needs it: this panel is
         // narrow and tall, so a long run scrolls further here than anywhere
         // else, and VS Code's own ruler is the thing beside it that this is

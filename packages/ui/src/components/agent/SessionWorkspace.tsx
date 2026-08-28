@@ -53,6 +53,10 @@ export interface SessionWorkspaceProps {
   /** Which end of the panel the status bar sits at — see `SessionPanel`. */
   statusPlacement?: SessionPanelProps['statusPlacement']
   controlsSurface?: SessionPanelProps['controlsSurface']
+  /** Base font size in whole pixels — see `SessionPanel.fontSize`. */
+  fontSize?: SessionPanelProps['fontSize']
+  /** Link click handler — see `SessionPanel.onLinkClick`. */
+  onLinkClick?: SessionPanelProps['onLinkClick']
   unseen?: SessionPanelProps['unseen']
   /** Viewer mode — no composer, no approval prompts. Forwarded verbatim to
    * {@link SessionPanel}; the file tree and editor are unaffected, since reading
@@ -117,6 +121,8 @@ export function SessionWorkspace({
   onSubagentChange,
   statusPlacement,
   controlsSurface,
+  fontSize,
+  onLinkClick,
   unseen,
   readOnly,
   onVitals,
@@ -323,6 +329,8 @@ export function SessionWorkspace({
           reveal={reveal}
           onSubagentChange={onSubagentChange}
           controlsSurface={controlsSurface}
+          fontSize={fontSize}
+          onLinkClick={onLinkClick}
           statusPlacement={statusPlacement}
           unseen={unseen}
           readOnly={readOnly}

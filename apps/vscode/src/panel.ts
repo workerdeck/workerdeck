@@ -6,6 +6,7 @@ import { apiUrl, isLoopbackHost } from './hosts.ts'
 import { clientFor } from './gateway.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import {
+  panelFontSize,
   terminalAffordances,
   terminalMetrics,
   transcriptDensity,
@@ -114,6 +115,7 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
       'data-variant': transcriptVariant(),
       // The cell for the same reason as the density: it decides every row's
       // height, and learning it one tick late reflows the whole transcript.
+      'data-panel-font-size': String(panelFontSize()),
       'data-font-size': String(cell.fontSize),
       'data-line-height': String(cell.lineHeight),
       'data-affordances': terminalAffordances() ? 'on' : 'off',
@@ -296,6 +298,8 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
         return
       case 'wd-open-path':
         return openTranscriptPath(this.#active, msg.path, msg.line)
+      case 'wd-open-url':
+        return void vscode.env.openExternal(vscode.Uri.parse(msg.url))
       case 'wd-vitals':
         this.#delegate.vitals(msg.vitals)
         return

@@ -93,3 +93,24 @@ export function getTranscriptFont(): TranscriptFont {
 export function setTranscriptFont(font: TranscriptFont): void {
   localStorage.setItem(FONT_KEY, font)
 }
+
+/**
+ * Base font size for the agent panel — drives the overall scale of everything
+ * the panel draws in both variants.
+ *
+ * `undefined` means platform default (13 px terminal, inherited body for cards).
+ * Persisted as a plain integer; non-numbers are treated as absent.
+ */
+const FONT_SIZE_KEY = 'workerdeck.font-size'
+
+export function getFontSize(): number | undefined {
+  const raw = localStorage.getItem(FONT_SIZE_KEY)
+  if (raw === null) return undefined
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 8 && n <= 24 ? Math.round(n) : undefined
+}
+
+export function setFontSize(size: number | undefined): void {
+  if (size === undefined) localStorage.removeItem(FONT_SIZE_KEY)
+  else localStorage.setItem(FONT_SIZE_KEY, String(Math.round(size)))
+}

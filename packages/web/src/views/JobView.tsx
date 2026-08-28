@@ -18,7 +18,7 @@ import { JOB_STATUS_META } from '@/components/shell/JobsSidebar.tsx'
 import { client } from '@/lib/client.ts'
 import { primaryHost } from '@/lib/hosts.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
-import { getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
+import { getFontSize, getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
 import { useJobs } from '@/hooks/useJobs.ts'
 import { useSessions } from '@/hooks/useSessions.ts'
 
@@ -67,6 +67,7 @@ export function JobView() {
   const [density] = useState(getTranscriptDensity)
   const [variant] = useState(getTranscriptVariant)
   const [font] = useState(getTranscriptFont)
+  const [panelFontSize] = useState(getFontSize)
   // Read once: the workspace owns the live value from here, and re-seeding it
   // mid-view would yank the splitter out from under a drag.
   const [rail] = useState(getRail)
@@ -103,6 +104,7 @@ export function JobView() {
       transcriptVariant={variant}
       transcriptDensity={density}
       transcriptFont={font}
+      fontSize={panelFontSize}
       // A finished job is *only* read — which is exactly the case the rail is
       // for, and `readOnly` takes nothing away from it (it removes the composer,
       // not the ability to find your way around).

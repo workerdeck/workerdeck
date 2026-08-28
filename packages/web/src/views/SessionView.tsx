@@ -17,7 +17,7 @@ import { SessionWorkspace } from '@workerdeck/ui/workspace'
 import { Trash2 } from 'lucide-react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import { clientFor, useHosts } from '@/lib/hosts.ts'
-import { getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
+import { getFontSize, getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
 import { useMarkSeen, unseenSince } from '@/hooks/useUnseen.ts'
 import { nudgeSessions, useSessions } from '@/hooks/useSessions.ts'
@@ -75,6 +75,7 @@ function SessionViewInner({
   const [density] = useState(getTranscriptDensity)
   const [variant] = useState(getTranscriptVariant)
   const [font] = useState(getTranscriptFont)
+  const [panelFontSize] = useState(getFontSize)
   // Read once: the workspace owns the live value from here, and re-seeding it
   // mid-session would yank the splitter out from under a drag.
   const [rail] = useState(getRail)
@@ -149,6 +150,7 @@ function SessionViewInner({
       transcriptVariant={variant}
       transcriptDensity={density}
       transcriptFont={font}
+      fontSize={panelFontSize}
       openSubagent={subagent ? { toolUseId: subagent, nonce: sn ?? 0 } : undefined}
       // Travel to a row without framing anything — where a **task** press
       // lands. Its own nonce, so asking for the same row twice scrolls twice;

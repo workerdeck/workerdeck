@@ -89,11 +89,26 @@ export function transcriptVariant(): 'terminal' | 'cards' {
  * geometry rules in `@workerdeck/ui`'s `terminal.css`); rounding is not a
  * nicety.
  */
+/**
+ * The panel-wide base font size, in whole pixels.
+ *
+ * Priority: `workerdeck.fontSize` → `editor.fontSize` → 13. This is the single
+ * knob that drives BOTH the cards variant (through the panel root's `font-size`)
+ * and the terminal variant (as the default for the character cell, unless
+ * `workerdeck.terminal.fontSize` overrides it). `0` means "follow the editor".
+ */
+export function panelFontSize(): number {
+  const wd = vscode.workspace.getConfiguration('workerdeck')
+  const editor = vscode.workspace.getConfiguration('editor')
+  return Math.round(wd.get<number>('fontSize') || editor.get<number>('fontSize') || 13)
+}
+
 export function terminalMetrics(): { fontSize: number; lineHeight: number } {
   const wd = vscode.workspace.getConfiguration('workerdeck')
   const editor = vscode.workspace.getConfiguration('editor')
+  // Terminal-specific → panel-wide → editor → 13.
   const fontSize =
-    wd.get<number>('terminal.fontSize') || editor.get<number>('fontSize') || 13
+    wd.get<number>('terminal.fontSize') || panelFontSize()
   const configured = wd.get<number>('terminal.lineHeight') || editor.get<number>('lineHeight') || 0
   // VS Code's own rule, and its own automatic ratio.
   const lineHeight = configured === 0 ? fontSize * 1.5 : configured < 8 ? configured * fontSize : configured

@@ -485,6 +485,59 @@
   }
 }
 
+/* ── Panel font size & Streamdown overrides ──────────────────────────────
+ *
+ * OUTSIDE `@layer base` so these beat Tailwind utility classes in the cascade
+ * (utilities live in a layer; unlayered rules always win over layered ones).
+ *
+ * `--wd-font-size` is set on the session panel root by the `fontSize` prop.
+ * When present it drives all text in the cards variant — body text, headings,
+ * code, tables — through one value. When absent the fallback `var(--text-body-sm)`
+ * resolves to the same `0.8125rem` the utility class used to set.
+ *
+ * Streamdown ships `rem`-based heading sizes (text-3xl … text-sm) that resolve
+ * against the document root and ignore the panel's local font-size. The `em`-based
+ * overrides below scale with `--wd-font-size`. The specificity confines this to
+ * cards-mode assistant output; the terminal theme renders headings as weight-only
+ * (no size change) through its own components and is unaffected.
+ *
+ * The heading scale mirrors Streamdown's hierarchy but at a tighter range — its
+ * 30 → 14 px span (h1 → h6) sits inside a 13px body, so the ratio is condensed:
+ * h1 at 1.5em, descending to h6 at 1em.
+ */
+[data-slot='message-content'] {
+  font-size: var(--wd-font-size, var(--text-body-sm));
+  line-height: 1.6;
+}
+[data-slot='message-content'] h1 { font-size: 1.5em; line-height: 1.35; margin-top: 1.5em; }
+[data-slot='message-content'] h2 { font-size: 1.3em; line-height: 1.35; margin-top: 1.5em; }
+[data-slot='message-content'] h3 { font-size: 1.15em; line-height: 1.4; margin-top: 1.25em; }
+[data-slot='message-content'] h4 { font-size: 1.05em; line-height: 1.4; margin-top: 1.25em; }
+[data-slot='message-content'] h5 { font-size: 1em; line-height: 1.4; margin-top: 1em; }
+[data-slot='message-content'] h6 { font-size: 1em; line-height: 1.4; margin-top: 1em; }
+[data-slot='message-content'] pre { font-size: 0.9em; }
+[data-slot='message-content'] code { font-size: 0.9em; }
+[data-slot='message-content'] pre code { font-size: inherit; }
+/* Table, cells, and headers: Streamdown puts `text-sm` (rem) on td/th directly,
+   so overriding the table alone is not enough — the cell class wins. */
+[data-slot='message-content'] table { font-size: 0.95em; }
+[data-slot='message-content'] td { font-size: inherit; }
+[data-slot='message-content'] th { font-size: inherit; }
+/* Code block body wrapper: Streamdown puts `text-sm` on the wrapper div around
+   the <pre>; override so it inherits the 0.9em from the pre rule above. */
+[data-slot='message-content'] [data-streamdown='code-block-body'] { font-size: 0.9em; }
+/* Inline code: Streamdown puts `text-sm` directly on the <code>. */
+[data-slot='message-content'] :not(pre) > code { font-size: 0.9em; }
+/* The composer's prompt area and its chips inherit the panel's font size so the
+   prompt and the output read at the same scale. The two-selector specificity
+   beats the utility class on the element. */
+[data-slot='session-panel'] .prompt-area-container {
+  font-size: var(--wd-font-size, var(--text-body-sm));
+}
+[data-slot='session-panel'] .prompt-area-chip {
+  font-size: var(--wd-font-size, 0.8125rem);
+}
+
 /* The inset frame's gradient "shine" edge (app shells). Do NOT add bg-* on top. */
 .frame-shine {
   border: 1px solid transparent;
@@ -672,7 +725,7 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: var(--text-body-sm);
+  font-size: var(--wd-font-size, var(--text-body-sm));
   color: var(--fg-2);
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(12px);
