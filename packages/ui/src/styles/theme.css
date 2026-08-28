@@ -648,14 +648,28 @@
   top: 0;
   max-width: var(--wd-transcript-max-width);
   margin-inline: auto;
-  height: 2.25rem;
+  /* One visible line of the message card: the card's own top padding (8px)
+     + one line of text (24px line-height) + the inter-row gap that the row
+     carries as top padding. The gap parks above the viewport via negative
+     top — same trick as terminal.css. */
+  height: calc(var(--wd-sticky-head-gap, 0px) + 2rem);
   overflow: hidden;
   background: var(--bg, transparent);
   user-select: none;
   visibility: hidden;
-  /* Frosted glass effect when stuck */
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+/* The gap classes: the head is taller by the gap and pins negative so the
+   padding parks above the viewport edge and the text starts at zero. */
+[data-sticky-lane]:not([data-terminal] *) [data-sticky-head].pt-4 {
+  --wd-sticky-head-gap: 1rem;
+  top: -1rem;
+}
+[data-sticky-lane]:not([data-terminal] *) [data-sticky-head].pt-2 {
+  --wd-sticky-head-gap: 0.5rem;
+  top: -0.5rem;
 }
 
 [data-sticky-lane]:not([data-terminal] *) [data-sticky-head][data-stuck] {

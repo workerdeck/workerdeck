@@ -71,7 +71,7 @@ export const Cards: Story = {
     (Story) => (
       <TranscriptVariantProvider value='cards'>
         <TranscriptDensityProvider value='comfortable'>
-          <div style={{ height: '400px', background: 'var(--bg)' }} data-theme='dark'>
+          <div style={{ height: '300px', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }} data-theme='dark'>
             <Story />
           </div>
         </TranscriptDensityProvider>
@@ -92,7 +92,7 @@ export const CardsCompact: Story = {
     (Story) => (
       <TranscriptVariantProvider value='cards'>
         <TranscriptDensityProvider value='compact'>
-          <div style={{ height: '400px', background: 'var(--bg)' }} data-theme='dark'>
+          <div style={{ height: '300px', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }} data-theme='dark'>
             <Story />
           </div>
         </TranscriptDensityProvider>
@@ -113,7 +113,7 @@ export const Terminal: Story = {
     (Story) => (
       <TranscriptVariantProvider value='terminal'>
         <TranscriptDensityProvider value='comfortable'>
-          <div style={{ height: '400px', background: 'var(--bg)' }} data-theme='dark'>
+          <div style={{ height: '300px', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }} data-theme='dark'>
             <Story />
           </div>
         </TranscriptDensityProvider>
