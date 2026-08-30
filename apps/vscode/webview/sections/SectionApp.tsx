@@ -46,14 +46,11 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
     [bridge, host?.baseUrl],
   )
 
-  // Every view is always contributed now, so "nothing to show" is a state each
-  // one renders rather than a reason to vanish — the sidebar keeps its shape.
   if (!info) {
     return <Empty>Select a session in the WorkerDeck sidebar.</Empty>
   }
 
-  // Live capabilities first, the REST rollup next, the engine's record last —
-  // the panel's own gating order, and the same one the view header uses.
+  // Live capabilities, then the REST rollup, then the engine's record — the panel's own gating order.
   const caps = vitals?.capabilities ?? info.capabilities ?? ENGINE_CAPABILITIES[info.engine ?? 'claude']
   const engine = info.engine ?? 'claude'
 

@@ -1,14 +1,7 @@
 /**
- * Per-section sidebar geometry, remembered across navigations and reloads.
- *
- * Every nav entry now has a sidebar of its own — sessions, gateways, jobs,
- * profiles — and each remembers its **own** width and collapsed state. One
- * shared number would be wrong the moment two sections want different widths,
- * which they do: a job list is narrow, a session list is not.
- *
- * Same contract as `rail.ts`: clamped to the splitter's bounds on read, so a
- * width stored by an older build (or a hand-edited entry) can never render a
- * sidebar too narrow to use or wide enough to crowd out the detail pane.
+ * Per-section sidebar geometry. Each nav entry remembers its **own** width and
+ * collapsed state — one shared number is wrong the moment two sections want
+ * different widths. Clamped to the splitter's bounds on read, like `rail.ts`.
  */
 export type SidebarSection = 'sessions' | 'gateways' | 'jobs' | 'profiles'
 
@@ -17,18 +10,14 @@ export const SIDEBAR_MAX = 520
 /** Also what a double-click on the splitter snaps back to. */
 export const SIDEBAR_DEFAULT = 300
 
-/**
- * Sessions keeps the key it had when it was the only sidebar, so a width chosen
- * before this file was per-section survives the upgrade rather than snapping
- * back to the default.
- */
-const widthKey = (section: SidebarSection) =>
+/** Sessions keeps the key it had when it was the only sidebar, so stored widths survive. */
+const widthKey = (section: SidebarSection): string =>
   section === 'sessions' ? 'workerdeck.sessions-sidebar-width' : `workerdeck.${section}-sidebar-width`
 
-const collapsedKey = (section: SidebarSection) =>
+const collapsedKey = (section: SidebarSection): string =>
   section === 'sessions' ? 'workerdeck.sessions-sidebar-collapsed' : `workerdeck.${section}-sidebar-collapsed`
 
-export function getSidebarWidth(section: SidebarSection): number {
+export const getSidebarWidth = (section: SidebarSection): number => {
   try {
     const stored = Number(localStorage.getItem(widthKey(section)))
     return stored ? Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, stored)) : SIDEBAR_DEFAULT
@@ -37,7 +26,7 @@ export function getSidebarWidth(section: SidebarSection): number {
   }
 }
 
-export function setSidebarWidth(section: SidebarSection, width: number): void {
+export const setSidebarWidth = (section: SidebarSection, width: number): void => {
   try {
     localStorage.setItem(widthKey(section), String(width))
   } catch {
@@ -46,13 +35,10 @@ export function setSidebarWidth(section: SidebarSection, width: number): void {
 }
 
 /**
- * Whether the section's sidebar is collapsed to its icon rail.
- *
- * Distinct from the width above rather than encoded as "width 0": expanding has
- * to restore the width the reader chose, and a collapsed rail is a different
- * layout, not a narrow one.
+ * Distinct from the width rather than encoded as "width 0": expanding has to
+ * restore the width the reader chose, and a collapsed rail is a different layout.
  */
-export function getSidebarCollapsed(section: SidebarSection): boolean {
+export const getSidebarCollapsed = (section: SidebarSection): boolean => {
   try {
     return localStorage.getItem(collapsedKey(section)) === '1'
   } catch {
@@ -60,7 +46,7 @@ export function getSidebarCollapsed(section: SidebarSection): boolean {
   }
 }
 
-export function setSidebarCollapsed(section: SidebarSection, collapsed: boolean): void {
+export const setSidebarCollapsed = (section: SidebarSection, collapsed: boolean): void => {
   try {
     localStorage.setItem(collapsedKey(section), collapsed ? '1' : '0')
   } catch {
@@ -69,16 +55,13 @@ export function setSidebarCollapsed(section: SidebarSection, collapsed: boolean)
 }
 
 /**
- * Whether the sessions filter bar is open.
- *
- * Sessions-only, and **separate from the filters themselves** — closing the bar
- * hides the controls, it does not clear what they were set to. Defaults closed,
- * because the list is the thing worth showing in a sidebar this narrow; the
- * subset line under it is what says a filter is on.
+ * Whether the sessions filter bar is open — **separate from the filters
+ * themselves**: closing the bar hides the controls, it does not clear them. The
+ * subset line under the bar is what says a filter is on.
  */
 const FILTERS_KEY = 'workerdeck.sessions-filters-shown'
 
-export function getFiltersShown(): boolean {
+export const getFiltersShown = (): boolean => {
   try {
     return localStorage.getItem(FILTERS_KEY) === '1'
   } catch {
@@ -86,7 +69,7 @@ export function getFiltersShown(): boolean {
   }
 }
 
-export function setFiltersShown(shown: boolean): void {
+export const setFiltersShown = (shown: boolean): void => {
   try {
     localStorage.setItem(FILTERS_KEY, shown ? '1' : '0')
   } catch {

@@ -14,9 +14,7 @@
  */
 import { isHTMLElement, isTextNode } from './dom-helpers.ts'
 
-// ---------------------------------------------------------------------------
 // Inline style / emphasis detection
-// ---------------------------------------------------------------------------
 
 /** Reads a single declaration value from an inline `style` attribute string. */
 function getStyleValue(style: string, prop: string): string {
@@ -57,9 +55,7 @@ function inlineEmphasis(node: HTMLElement): { prefix: string; suffix: string } {
   return { prefix, suffix }
 }
 
-// ---------------------------------------------------------------------------
 // Text handling
-// ---------------------------------------------------------------------------
 
 /** Collapses HTML whitespace runs (incl. `&nbsp;` -> U+00A0) to single spaces. */
 function collapseWhitespace(text: string): string {
@@ -71,9 +67,7 @@ function escapeText(text: string): string {
   return text.replace(/\*/g, '\\*')
 }
 
-// ---------------------------------------------------------------------------
 // Block serializers
-// ---------------------------------------------------------------------------
 
 /** Derives a fenced-block language from `class="language-ts"` or `lang="ts"`. */
 function detectCodeLang(pre: HTMLElement): string {
@@ -191,9 +185,7 @@ function serializeTable(table: HTMLElement, depth: number): string {
   return [toRow(header), toRow(separator), ...cells.slice(1).map(toRow)].join('\n')
 }
 
-// ---------------------------------------------------------------------------
 // Recursive walker
-// ---------------------------------------------------------------------------
 
 function serializeChildren(node: Node, depth: number): string {
   let out = ''
@@ -263,9 +255,7 @@ function serializeNode(node: Node, depth: number): string {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Output normalization
-// ---------------------------------------------------------------------------
 
 /** Trims trailing spaces and caps consecutive blank lines at one. */
 function normalizeOutput(markdown: string): string {
@@ -275,9 +265,7 @@ function normalizeOutput(markdown: string): string {
     .trim()
 }
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
 /**
  * Converts an HTML string to markdown source text. Returns '' for empty or

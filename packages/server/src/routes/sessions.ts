@@ -1,7 +1,6 @@
-/** `{basePath}/sessions[/:id[...]]` — the list, the create, and every
- * per-session subroute. One `canSee` gate covers all of them, byte-identical
- * to the unknown-id answer: whether a session exists elsewhere is not this
- * caller's business. */
+/** `{basePath}/sessions[/:id[...]]` — the list, the create, and every per-session subroute.
+ * One `canSee` gate covers all of them, and its refusal is byte-identical to the unknown-id
+ * answer: whether a session exists elsewhere is not this caller's business. */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { CreateSessionRequest, ResolvePermissionRequest, UpdateSessionRequest } from '@workerdeck/protocol'
 import { contentTypeFor, json, readJsonBody } from '../lib/http.ts'
@@ -26,12 +25,12 @@ export async function handleSessions(
 
   if (!route.id) {
     if (req.method === 'GET') {
-      // Parked sessions are live sessions that happen to have no runner right
-      // now — leaving them out would read as "gone".
+      // Parked sessions are live sessions that happen to have no runner right now — leaving
+      // them out would read as "gone".
       const sessions = [...registry.list(), ...(await parking.listInfo())]
       json(res, 200, {
-        // Project identity is stamped at serve time, after the scope filter:
-        // decorating a row nobody may see would spend walks on hidden sessions.
+        // Project identity is stamped after the scope filter: decorating a row nobody may
+        // see would spend walks on hidden sessions.
         sessions: sessions.filter((session) => authSvc.canSee(auth, session)).map((session) => projects.withProject(session)),
       })
       return
@@ -82,18 +81,15 @@ export async function handleSessions(
   }
 
   const runner = registry.get(route.id)
-  // A parked session has no runner but is very much alive: it reads, lists, and
-  // serves its files from the snapshot, and only waking it needs a rebuild.
+  // A parked session has no runner but is very much alive: it reads, lists and serves its
+  // files from the snapshot, and only waking it needs a rebuild.
   const parked = runner ? null : await parking.get(route.id)
   if (!runner && !parked) {
     json(res, 404, { error: 'session not found' })
     return
   }
-  // One gate for every `/sessions/:id/*` subroute below — GET, PATCH, DELETE,
-  // files, produced, attachments, mcp, and the permission decision that would
-  // otherwise let another scope answer this session's approvals. Byte-identical
-  // to the unknown-id answer above: whether a session exists elsewhere is not
-  // this caller's business.
+  // One gate for every `/sessions/:id/*` subroute below, including the permission decision
+  // that would otherwise let another scope answer this session's approvals.
   if (!authSvc.canSee(auth, runner?.info() ?? parked!.info)) {
     json(res, 404, { error: 'session not found' })
     return
@@ -111,14 +107,14 @@ export async function handleSessions(
     return
   }
   if (route.files) {
-    // Deliverables live in the session's in-memory VFS — downloadable while
-    // the session lives (durability is a persistence-tier concern, not ours).
+    // Deliverables live in the session's in-memory VFS — downloadable while the session
+    // lives (durability is a persistence-tier concern, not ours).
     if (req.method !== 'GET') {
       json(res, 405, { error: 'method not allowed' })
       return
     }
-    // A dormant session has no VFS to serve: its files, if it made any, live
-    // wherever the engine wrote them, not in a snapshot we kept.
+    // A dormant session has no VFS to serve: its files live wherever the engine wrote them,
+    // not in a snapshot we kept.
     const snapshotFiles = parked && !isDormant(parked) ? parked.snapshot.vfs : undefined
     const vfs =
       runner?.vfs ??
@@ -157,8 +153,7 @@ export async function handleSessions(
     return
   }
   if (route.projectIcon) {
-    // The cwd is the gateway's own record of this session, never client input,
-    // and the `canSee` gate above is the route's whole authorization story.
+    // The cwd is the gateway's own record of this session, never client input.
     handleProjectIcon(projects, req, res, (runner?.info() ?? parked!.info).cwd)
     return
   }
@@ -173,8 +168,8 @@ export async function handleSessions(
     return
   }
   if (route.permissionId) {
-    // REST counterpart of the WS permission_decision command, for controllers
-    // without a socket (e.g. answering a job's AskUserQuestion from a webhook).
+    // REST counterpart of the WS permission_decision command, for controllers without a
+    // socket (e.g. answering a job's AskUserQuestion from a webhook).
     if (req.method !== 'POST') {
       json(res, 405, { error: 'method not allowed' })
       return
@@ -200,8 +195,8 @@ export async function handleSessions(
     return
   }
   if (req.method === 'PATCH') {
-    // Rename. A parked session has no runner to carry the change and its
-    // snapshot belongs to the park store, so it is refused rather than lied to.
+    // Rename. A parked session has no runner to carry the change and its snapshot belongs to
+    // the park store, so it is refused rather than lied to.
     if (!runner) {
       json(res, 409, { error: 'session is parked (wake it before renaming)' })
       return
@@ -214,9 +209,8 @@ export async function handleSessions(
       }
       const title = typeof body.title === 'string' ? body.title.trim() : ''
       runner.setTitle(title || undefined)
-      // A rename emits no event, so nothing else would re-save the dormant
-      // record — and the wake rebuilds from it. Without this the new name
-      // survives only until the next restart.
+      // A rename emits no event, so nothing else would re-save the dormant record the wake
+      // rebuilds from, and the new name would survive only until the next restart.
       parking.touch(runner)
     }
     json(res, 200, { session: projects.withProject(runner.info()) })
@@ -226,10 +220,9 @@ export async function handleSessions(
     registry.remove(route.id)
     // Fail anything still bridged: the session is gone, so no answer can land.
     bridge.remove(route.id)
-    // And drop any parked state, so a late execution result can't wake a session
-    // the client just ended.
+    // Drop parked state too, so a late execution result can't wake a session the client just
+    // ended.
     await parking.discard(route.id)
-    // The session is gone; so is anything it was holding for it.
     attachmentStore.drop(route.id)
     producedFiles.drop(route.id)
     json(res, 200, {

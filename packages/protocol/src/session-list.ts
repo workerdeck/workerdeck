@@ -74,15 +74,6 @@ export function runningSubagents(info: SessionInfo): SubagentInfo[] {
 }
 
 /**
- * A sub-agent's identity on one line: `Explore · find the auth check`.
- *
- * The same two fields `taskLabel` builds its transcript row from, minus the
- * `Task(…)` wrapper — a list row is already inside a session, so naming the tool
- * spends the width that the description needs. Falls back to the bare agent type,
- * then to a generic word: a row with no label at all reads as a rendering bug,
- * and an engine is free to send neither field.
- */
-/**
  * Does this record name an **agent**, as opposed to a task the model merely
  * described?
  *
@@ -102,6 +93,15 @@ export function isAgentRecord(sub: SubagentInfo): boolean {
   return (sub.agentType?.trim() ?? '') !== ''
 }
 
+/**
+ * A sub-agent's identity on one line: `Explore · find the auth check`.
+ *
+ * The same two fields `taskLabel` builds its transcript row from, minus the
+ * `Task(…)` wrapper — a list row is already inside a session, so naming the tool
+ * spends the width that the description needs. Falls back to the bare agent type,
+ * then to a generic word: a row with no label at all reads as a rendering bug,
+ * and an engine is free to send neither field.
+ */
 export function subagentLabel(sub: SubagentInfo): string {
   const agent = sub.agentType?.trim()
   const description = sub.description?.trim()
@@ -296,7 +296,7 @@ export function isJobRun(info: SessionInfo): boolean {
   return typeof info.meta?.jobId === 'string'
 }
 
-function matchesSearch(row: SessionRow, needle: string): boolean {
+const matchesSearch = (row: SessionRow, needle: string): boolean => {
   if (!needle) {
     return true
   }
@@ -314,11 +314,11 @@ function matchesSearch(row: SessionRow, needle: string): boolean {
 
 /** Trailing separators dropped and separators unified, so containment is a
  * plain prefix test on both a posix and a Windows gateway. */
-function normalizePath(path: string): string {
+const normalizePath = (path: string): string => {
   return path.replace(/\\/g, '/').replace(/\/+$/, '')
 }
 
-function isWithin(root: string, path: string): boolean {
+const isWithin = (root: string, path: string): boolean => {
   const base = normalizePath(root)
   const dir = normalizePath(path)
   // The separator matters: /a/project must not swallow /a/project-2.
@@ -359,11 +359,11 @@ export function filterRows(rows: readonly SessionRow[], config: ViewConfig, scop
   )
 }
 
-function facetKey(row: SessionRow, facet: Facet): string {
+const facetKey = (row: SessionRow, facet: Facet): string => {
   return facet === 'gateway' ? row.hostId : facet === 'adapter' ? row.adapter : facet === 'project' ? projectKey(row) : row.state
 }
 
-function facetLabel(row: SessionRow, facet: Facet): string {
+const facetLabel = (row: SessionRow, facet: Facet): string => {
   return facet === 'gateway'
     ? row.hostName
     : facet === 'adapter'
@@ -375,7 +375,7 @@ function facetLabel(row: SessionRow, facet: Facet): string {
 
 /** Comparable rank for a facet: states run worst-first (attention before ended),
  * the rest alphabetically by their visible label. */
-function facetRank(row: SessionRow, facet: Facet): string {
+const facetRank = (row: SessionRow, facet: Facet): string => {
   if (facet === 'state') {
     return String(STATE_ORDER.indexOf(row.state))
   }
@@ -385,7 +385,7 @@ function facetRank(row: SessionRow, facet: Facet): string {
 const byRecency = (a: SessionRow, b: SessionRow) =>
   (b.info.lastActivityAt ?? b.info.createdAt) - (a.info.lastActivityAt ?? a.info.createdAt)
 
-function compare(a: SessionRow, b: SessionRow, sortBy: SortBy): number {
+const compare = (a: SessionRow, b: SessionRow, sortBy: SortBy): number => {
   if (sortBy === 'recent') {
     return byRecency(a, b)
   }
@@ -430,13 +430,10 @@ export function groupRows(rows: readonly SessionRow[], config: ViewConfig): Sess
 }
 
 /**
- * What the list is hiding, and why — the one "you are seeing a subset" signal.
- *
- * There used to be two: a dot on the funnel and a scope line above the list.
- * They competed (the scope line said one thing, the dot counted a superset of
- * it) and neither said how much was missing. This is the single rule both the
- * count and the wording come from: absent when nothing is hidden, and otherwise
- * naming every cause, so the line is never "12 of 30" with no way to guess why.
+ * What the list is hiding, and why — the one "you are seeing a subset" signal,
+ * the single rule both the count and the wording come from: absent when nothing
+ * is hidden, and otherwise naming every cause, so the line is never "12 of 30"
+ * with no way to guess why.
  *
  * Search is a cause like any other. Its box is visible, but the *consequence*
  * of it — rows gone from the list — is the thing being reported, and leaving it

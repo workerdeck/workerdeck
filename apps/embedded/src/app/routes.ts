@@ -18,17 +18,13 @@ export type AppRoutesDeps = {
 
 /**
  * Everything outside the gateway's `/v1` that is *not* an action: login, the
- * app-state channel, the MCP endpoint, and the built SPA. The wiki's own data
- * API is not here — it is `/trpc`, mounted in `main.ts` from the same actions
- * the agent gets (see `wiki/actions.ts`).
+ * app-state channel, the MCP endpoint, and the built SPA. The wiki's own data API
+ * is `/trpc`, mounted in `main.ts` from the same actions the agent gets.
  *
- * Handed to `createWorkerServer` as its `fallback`, which is
- * what puts all of it on **one origin** — not a convenience, but the reason the
- * browser can authenticate a WebSocket attach at all: a tab cannot put a header
- * on an upgrade, so a cookie is the only credential it has, and a cookie only
- * rides same-origin requests.
+ * Handed to `createWorkerServer` as its `fallback`, which is what puts all of it on
+ * one origin — the reason the browser can authenticate a WebSocket attach at all.
  */
-export function createAppRoutes(deps: AppRoutesDeps): Express {
+export const createAppRoutes = (deps: AppRoutesDeps): Express => {
   const app = express()
   app.disable('x-powered-by')
 
@@ -76,18 +72,6 @@ export function createAppRoutes(deps: AppRoutesDeps): Express {
     res.json({ user: null })
   })
 
-  // --- wiki ------------------------------------------------------------------
-  //
-  // There is nothing here any more. The wiki's CRUD lives in `wiki/actions.ts`
-  // and reaches the SPA over tRPC at `/trpc`, which is the *same* action set the
-  // agent reaches over MCP at `/mcp`. What used to be here was a second
-  // implementation of those operations — `PATCH /api/docs/:id` and
-  // `update_doc` being two spellings of one thing, already drifting.
-  //
-  // The 404-not-403 rule the routes carried is not lost: `db` scopes every query
-  // by user id, so another user's document is a plain not-found — the same
-  // uniform-disclosure rule the gateway follows for a session out of scope.
-
   // --- agent -----------------------------------------------------------------
 
   app.get('/api/agent', requireUser, (_req, res) => {
@@ -104,12 +88,9 @@ export function createAppRoutes(deps: AppRoutesDeps): Express {
   })
 
   /**
-   * The other direction: intents from `open_doc`, streamed to this user's tabs.
-   *
-   * Server-Sent Events rather than a second WebSocket — one direction, text
-   * frames, and `EventSource` reconnects on its own. The session socket the
-   * sidebar already holds carries *session* events and is not ours to put app
-   * messages on; the protocol is the product boundary.
+   * Intents from `open_doc`, streamed to this user's tabs. SSE rather than a second
+   * WebSocket: the session socket carries *session* events and is not ours to put
+   * app messages on — the protocol is the product boundary.
    */
   app.get('/api/ui-events', requireUser, (req, res) => {
     res.writeHead(200, {
@@ -124,9 +105,8 @@ export function createAppRoutes(deps: AppRoutesDeps): Express {
     const unsubscribe = deps.state.subscribe(currentUser(res).id, (intent) => {
       res.write(`data: ${JSON.stringify(intent)}\n\n`)
     })
-    // A comment line every 25s: proxies and laptops drop a stream that says
-    // nothing, and the reconnect is silent enough that the symptom is only
-    // "navigation stopped working after a while".
+    // Proxies and laptops drop a stream that says nothing, and the reconnect is
+    // silent enough that the symptom is only "navigation stopped working".
     const keepAlive = setInterval(() => res.write(': ping\n\n'), 25_000)
 
     req.on('close', () => {
@@ -140,9 +120,8 @@ export function createAppRoutes(deps: AppRoutesDeps): Express {
   if (deps.webRoot && existsSync(deps.webRoot)) {
     const root = deps.webRoot
     app.use(express.static(root, { index: false }))
-    // History fallback, and only for navigations: an unmatched /api or /mcp
-    // path must 404 rather than quietly answer with the app shell, which is the
-    // classic way an API typo becomes a baffling JSON parse error in the client.
+    // History fallback, and only for navigations: an unmatched /api or /mcp path must
+    // 404 rather than answer with the app shell.
     app.get(/.*/, (req, res, next) => {
       if (req.path.startsWith('/api/') || req.path.startsWith('/mcp')) {
         next()

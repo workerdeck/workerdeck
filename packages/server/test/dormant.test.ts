@@ -166,7 +166,7 @@ afterEach(async () => {
 
 /** Start a gateway over `store`. Calling it twice with the same store is the
  * restart this whole feature is about. */
-async function startGateway(store: SessionStore): Promise<Gateway> {
+const startGateway = async (store: SessionStore): Promise<Gateway> => {
   const built: ResumableRunner[] = []
   const server = createWorkerServer({
     allowUnauthenticated: true,
@@ -208,7 +208,7 @@ const rename = async (base: string, id: string, title: string): Promise<SessionI
 const list = async (base: string): Promise<SessionInfo[]> =>
   ((await (await fetch(`${base}/sessions`)).json()) as { sessions: SessionInfo[] }).sessions
 
-async function stateDir(): Promise<string> {
+const stateDir = async (): Promise<string> => {
   const dir = await mkdtemp(join(tmpdir(), 'wd-dormant-'))
   dirs.push(dir)
   return dir

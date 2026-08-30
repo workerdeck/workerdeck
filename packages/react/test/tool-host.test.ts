@@ -5,7 +5,7 @@ import type { RunScriptResult } from '@workerdeck/sandbox'
 import { createToolCallHost, type ToolCallHostOptions } from '../src/lib/tool-host.ts'
 
 /** Drives the framework-free host through a fake handle — no renderer needed. */
-function fakeHandle() {
+const fakeHandle = () => {
   const listeners = {
     toolCallRequest: [] as Array<(f: ToolCallRequestFrame) => void>,
     toolCallCanceled: [] as Array<(p: { executionId: string; reason: string }) => void>,
@@ -50,7 +50,7 @@ function fakeHandle() {
   return { handle, results, errors, request, cancel }
 }
 
-function mount(handle: SessionHandle, options: ToolCallHostOptions) {
+const mount = (handle: SessionHandle, options: ToolCallHostOptions) => {
   const host = createToolCallHost(handle, options)
   return { cleanup: () => host.dispose() }
 }

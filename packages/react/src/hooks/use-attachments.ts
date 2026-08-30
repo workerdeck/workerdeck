@@ -29,28 +29,6 @@ export type StagedAttachment = {
 /** The kind vocabulary of {@link EngineCapabilities.attachments}. */
 export type AttachmentKind = 'image' | 'pdf' | 'text'
 
-/**
- * How a media type reaches a model, in the capability record's vocabulary.
- * `undefined` means this build can't classify it — the upload still goes,
- * because the gateway's vocabulary is the authoritative one.
- */
-export function attachmentKind(mediaType: string): AttachmentKind | undefined {
-  const type = mediaType.split(';')[0]!.trim().toLowerCase()
-  if (type.startsWith('image/')) {
-    return 'image'
-  }
-  if (type === 'application/pdf') {
-    return 'pdf'
-  }
-  if (type.startsWith('text/')) {
-    return 'text'
-  }
-  if (TEXTUAL_TYPES.has(type)) {
-    return 'text'
-  }
-  return undefined
-}
-
 /** Textual types whose media type doesn't start with `text/` — mirrors core. */
 const TEXTUAL_TYPES = new Set([
   'application/json',
@@ -68,6 +46,28 @@ const TEXTUAL_TYPES = new Set([
  * recommendation, and the same number the iOS client uses — a phone photo is
  * several times this in each direction and costs tokens for nothing. */
 const MAX_IMAGE_EDGE = 1568
+
+/**
+ * How a media type reaches a model, in the capability record's vocabulary.
+ * `undefined` means this build can't classify it — the upload still goes,
+ * because the gateway's vocabulary is the authoritative one.
+ */
+export const attachmentKind = (mediaType: string): AttachmentKind | undefined => {
+  const type = mediaType.split(';')[0]!.trim().toLowerCase()
+  if (type.startsWith('image/')) {
+    return 'image'
+  }
+  if (type === 'application/pdf') {
+    return 'pdf'
+  }
+  if (type.startsWith('text/')) {
+    return 'text'
+  }
+  if (TEXTUAL_TYPES.has(type)) {
+    return 'text'
+  }
+  return undefined
+}
 
 export type UseAttachmentsOptions = {
   /** The session's capability record — its `attachments` list decides which
@@ -108,11 +108,11 @@ export type UseAttachmentsResult = {
  * else is the gateway's call — its vocabulary is authoritative, so an unknown
  * media type is uploaded rather than guessed at.
  */
-export function useAttachments(
+export const useAttachments = (
   client: WorkerDeckClient,
   sessionId: string | undefined,
   { capabilities, engine }: UseAttachmentsOptions,
-): UseAttachmentsResult {
+): UseAttachmentsResult => {
   const [items, setItems] = useState<StagedAttachment[]>([])
   const [error, setError] = useState<string | undefined>()
   const counter = useRef(0)
@@ -256,7 +256,7 @@ export function useAttachments(
 /** What a file input should offer. The full set keeps the open door (anything —
  * the gateway refuses the rest with a clear message); a narrower record narrows
  * the browsing too, so most refusals never happen. */
-function acceptAttribute(kinds: readonly AttachmentKind[]): string {
+const acceptAttribute = (kinds: readonly AttachmentKind[]): string => {
   if (kinds.length === 0) {
     return ''
   }
@@ -306,7 +306,7 @@ const imaging = globalThis as unknown as {
  * — and anything the browser can't decode — is uploaded as-is, so a failure here
  * is never worse than not trying.
  */
-async function prepare(file: File): Promise<{ body: Blob; mediaType: string }> {
+const prepare = async (file: File): Promise<{ body: Blob; mediaType: string }> => {
   const mediaType = file.type || 'application/octet-stream'
   const { createImageBitmap, document } = imaging
   // GIFs are excluded because a redraw would keep one frame of an animation.

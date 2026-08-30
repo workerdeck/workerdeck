@@ -7,29 +7,22 @@
  *   pnpm smoke:push toby.example.ts.net:8787 a8cabb30-… 1800   # land mid-transcript
  *
  * **This exists because push is the one surface that cannot be tested by
- * waiting.** Everything else on this gateway answers a request; a notification
- * only happens when a session decides to raise one, which makes "does a tap
- * open the right session" a thing you can only observe by accident — and so it
- * went unobserved. Tapping a notification aborted the iOS app on a main-thread
- * assert for two days and eight crash reports before anyone tapped one on
- * purpose (see `docs/GOTCHAS.md`, §APNs push).
+ * waiting**: everything else answers a request, but a notification only happens
+ * when a session raises one, so "does a tap open the right session" is otherwise
+ * only observable by accident (see `docs/GOTCHAS.md`, §APNs push).
  *
- * It goes through `buildPush`, not a hand-written `aps` dictionary, and that is
- * the whole point. A hand-rolled payload carries no `sessionId`, so
- * `PushPayload.init?` returns nil, so the tap routes nowhere — which reads
- * exactly like a broken deep link and is not one. If you are testing routing,
- * the payload has to be the one the forwarder actually sends.
+ * It goes through `buildPush`, not a hand-written `aps` dictionary: a hand-rolled
+ * payload carries no `sessionId`, so `PushPayload.init?` returns nil and the tap
+ * routes nowhere — which reads exactly like a broken deep link and is not one.
  *
  * Reads the device registry the gateway itself writes, so it pushes to whatever
  * is really registered. Requires an `apns`-configured gateway (a gateway
  * without one answers `/apns/devices` with 404 and has no registry at all).
  *
- * **`[seq]` is what makes the deep link testable.** Without it the push carries
- * the session's `lastSeq` — the tail — and a client that lands on the right row
- * is indistinguishable from one that ignores `seq` entirely and scrolls to the
- * bottom, which is exactly the bug the whole feature exists to fix. Pass a seq
- * from the *middle* of a long session and the answer is unambiguous: the reader
- * arrives with history above them, or the feature does not work.
+ * **`[seq]` is what makes the deep link testable.** Without it the push carries the
+ * session's `lastSeq` — the tail — and a client that lands on the right row is
+ * indistinguishable from one that ignores `seq` and scrolls to the bottom. Pass a seq
+ * from the *middle* of a long session and the answer is unambiguous.
  *
  * Two things that will 401 you against a real gateway, both learned here:
  * `WD_AUTH_KEY` (the gateway's own operator secret, `<state-dir>/auth-key`) is
@@ -62,9 +55,8 @@ if (wantedSeq !== undefined && !/^\d+$/.test(wantedSeq)) {
   process.exit(2)
 }
 
-// Everything below the gateway's own config: the registry path and the key are
-// the operator's, and this script is deliberately not a second place that knows
-// how to mint a credential.
+// The registry path and the key are the operator's: this script is deliberately not
+// a second place that knows how to mint a credential.
 const stateDir = process.env.WD_STATE_DIR ?? '/tmp/workerdeck-prod'
 const keyFile = process.env.WD_APNS_KEY
 const keyId = process.env.WD_APNS_KEY_ID
@@ -79,9 +71,8 @@ if (keyFile === undefined || keyId === undefined || teamId === undefined || topi
 }
 
 const base = host.startsWith('http') ? host : `http://${host}`
-// The gateway's own operator secret, never a model credential (root CLAUDE.md,
-// auth red lines). Absent is normal — a gateway started without `--auth-key`
-// wants no header at all.
+// The gateway's own operator secret, never a model credential (root CLAUDE.md, auth
+// red lines). Absent is normal — a gateway started without `--auth-key` wants none.
 const authKey = process.env.WD_AUTH_KEY
 const listed = await fetch(`${base}/v1/sessions`, {
   headers: authKey === undefined ? {} : { authorization: `Bearer ${authKey}` },

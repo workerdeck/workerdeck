@@ -20,10 +20,6 @@ import { segmentsToPlainText, plainTextToSegments } from './prompt-area-engine.t
 // Re-export serialization utilities so consumers have a single import.
 export { segmentsToPlainText, plainTextToSegments }
 
-// ---------------------------------------------------------------------------
-// Factories
-// ---------------------------------------------------------------------------
-
 /** Create a text segment. */
 export function text(value: string): TextSegment {
   return { type: 'text', text: value }
@@ -33,10 +29,6 @@ export function text(value: string): TextSegment {
 export function chip(opts: Omit<ChipSegment, 'type'>): ChipSegment {
   return { type: 'chip', ...opts }
 }
-
-// ---------------------------------------------------------------------------
-// Predicates
-// ---------------------------------------------------------------------------
 
 /** Returns `true` when the segment array is empty or contains only whitespace text. */
 export function isSegmentsEmpty(segments: Segment[]): boolean {

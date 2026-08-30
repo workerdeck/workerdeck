@@ -26,24 +26,19 @@ export interface FileTreeProps {
 const INDENT = 12
 
 /**
- * The workspace's left rail: an expandable tree of the session's project,
- * with a search box over the same fuzzy route `@file` completion uses.
+ * The workspace's left rail. Presentational — every piece of state comes from
+ * the hooks in `@workerdeck/react`; it owns only the search query.
  *
- * Presentational by construction — every piece of state it renders comes from
- * the hooks in `@workerdeck/react`, and the only thing it owns is the search
- * query, which is the text in its own input.
- *
- * Searching replaces the tree with matches rather than filtering it: the route
- * answers with paths from all over the project, and threading those back into
- * tree positions would mean expanding a dozen directories to show six results.
+ * Searching **replaces** the tree with matches rather than filtering it: the
+ * route answers with paths from all over the project.
  */
 export function FileTree({ tree, search, activePath, onOpenFile, onCollapse, style, className }: FileTreeProps) {
   const [query, setQuery] = useState('')
   const [matches, setMatches] = useState<HostFileMatch[] | undefined>()
   const searching = query.trim().length > 0
 
-  // Debounced, and only while there is something to search for — an empty box
-  // means "show me the tree again", not "match everything".
+  // Debounced; an empty box means "show me the tree again", not "match
+  // everything".
   useEffect(() => {
     if (!search?.available) {
       return
@@ -120,10 +115,8 @@ export function FileTree({ tree, search, activePath, onOpenFile, onCollapse, sty
                 <li key={match.path}>
                   <Row
                     label={fileName(match.relative)}
-                    // The directory, dimmed and truncated separately, so a deep
-                    // path cannot push the filename out of the row — a rail full
-                    // of `apps/ios/DerivedData/B…` says nothing about which file
-                    // each hit is.
+                    // Truncated separately, so a deep path cannot push the
+                    // filename out of the row.
                     detail={directoryOf(match.relative)}
                     title={match.relative}
                     icon={<File className="size-3.5 shrink-0 text-fg-4" />}
@@ -184,7 +177,7 @@ export function FileTree({ tree, search, activePath, onOpenFile, onCollapse, sty
 
 /** One clickable line. A directory and a file differ only in what the click does
  * and whether there is a chevron — visually they are the same row. */
-function Row({
+const Row = ({
   label,
   detail,
   title,
@@ -203,10 +196,8 @@ function Row({
   indent?: number
   active?: boolean
   onClick: () => void
-}) {
-  // Scroll a row that became active elsewhere (a search hit, a `reveal`) into
-  // view, but never yank the list while someone is reading it — `nearest` moves
-  // the minimum and does nothing when the row is already visible.
+}) => {
+  // `nearest` moves the minimum, so a row already visible does not jump.
   const ref = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (active) {
@@ -229,12 +220,9 @@ function Row({
       <span className="flex size-3 shrink-0 items-center justify-center">{chevron}</span>
       {icon}
       {/* `shrink-0` on the name and `min-w-0` on the detail: when the row runs
-          out of room the directory gives way and the filename stays whole.
-          The rail reads in the **UI font**, never mono: it is workbench chrome
-          — a list you scan — and the editors it sits beside (VS Code, Finder)
-          all set filenames in their UI face. Mono is for content on a grid, and
-          nothing here is on one. It is also independent of `transcriptFont`,
-          which scopes to the session panel alone. */}
+          out of room the directory gives way and the filename stays whole. The
+          rail reads in the **UI font**, never mono — it is workbench chrome, and
+          independent of `transcriptFont`, which scopes to the session panel. */}
       <span className="shrink-0 truncate text-label">{label}</span>
       {detail ? <span className="min-w-0 flex-1 truncate text-label text-fg-4">{detail}</span> : null}
     </button>
@@ -242,19 +230,17 @@ function Row({
 }
 
 /** Last segment of a relative match. */
-function fileName(relative: string): string {
-  return relative.slice(relative.lastIndexOf('/') + 1)
-}
+const fileName = (relative: string): string => relative.slice(relative.lastIndexOf('/') + 1)
 
 /** Everything before it, or `undefined` for a file at the search root. */
-function directoryOf(relative: string): string | undefined {
+const directoryOf = (relative: string): string | undefined => {
   const cut = relative.lastIndexOf('/')
   return cut === -1 ? undefined : relative.slice(0, cut)
 }
 
 /** A symlink is reported as itself and never silently resolved — following it is
  * the next request's problem, and that request is refused if it escapes the roots. */
-function EntryIcon({ type }: { type: HostDirEntry['type'] }) {
+const EntryIcon = ({ type }: { type: HostDirEntry['type'] }) => {
   if (type === 'symlink') {
     return <Link2 className="size-3.5 shrink-0 text-fg-4" />
   }

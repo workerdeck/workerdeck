@@ -17,14 +17,8 @@ export interface SessionInfoDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-/**
- * What this session *is*: engine, profile, model, mode, where it runs, which
- * credentials it found, and the files it has handed over.
- *
- * The identity half of the session's facts. Context and usage have their own
- * panels — they change every turn and are consulted mid-run, while everything
- * here is fixed at creation and looked up once.
- */
+/** What this session *is*: engine, profile, model, mode, where it runs, which
+ * credentials it found, and the files it has handed over. */
 export function SessionInfoDialog({ state, client, sessionId, open, onOpenChange }: SessionInfoDialogProps) {
   const session = state.session
   const mode = state.permissionMode ? permissionModeMeta(state.permissionMode) : undefined
@@ -57,8 +51,8 @@ export function SessionInfoDialog({ state, client, sessionId, open, onOpenChange
                 {formatCost(state.totalCostUsd)}
               </DialogRow>
             </div>
-            {/* Only for an engine that has a scratch VFS — for the rest the route
-                404s, and a "Files" heading over nothing reads as a failed load. */}
+            {/* Only for an engine that has a scratch VFS — for the rest the
+                route 404s. */}
             {state.capabilities.vfs ? <SessionFiles client={client} sessionId={sessionId} open={open} /> : null}
           </div>
         </DialogBody>
@@ -68,7 +62,7 @@ export function SessionInfoDialog({ state, client, sessionId, open, onOpenChange
 }
 
 /** Long ids are for pasting elsewhere, so give them a copy target. */
-function CopyRow({ label, value }: { label: string; value: string }) {
+const CopyRow = ({ label, value }: { label: string; value: string }) => {
   return (
     <div className="flex items-start justify-between gap-2 py-1.5">
       <div className="min-w-0 flex-1">
@@ -82,7 +76,7 @@ function CopyRow({ label, value }: { label: string; value: string }) {
 
 /** Files the agent produced inside the session's VFS. Fetched when the panel
  * opens — this is not a live list and nothing pushes changes to it. */
-function SessionFiles({ client, sessionId, open }: { client: WorkerDeckClient; sessionId: string | undefined; open: boolean }) {
+const SessionFiles = ({ client, sessionId, open }: { client: WorkerDeckClient; sessionId: string | undefined; open: boolean }) => {
   const [files, setFiles] = useState<SessionFileInfo[] | undefined>()
   const [loading, setLoading] = useState(false)
 

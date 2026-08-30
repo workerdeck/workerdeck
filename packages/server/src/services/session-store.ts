@@ -154,7 +154,7 @@ const EPHEMERAL_CONFIG_KEYS = ['queryFn', 'historyFn', 'extraOptions', 'env'] as
 
 /** The record as it may be persisted: same session, config narrowed to what is
  * safe and meaningful to keep (see {@link EPHEMERAL_CONFIG_KEYS}). */
-export function toDurableRecord<T extends StoredSessionRecord>(record: T): T {
+export const toDurableRecord = <T extends StoredSessionRecord>(record: T): T => {
   const config: SessionRunnerConfig = { ...record.config }
   for (const key of EPHEMERAL_CONFIG_KEYS) {
     delete config[key]
@@ -195,7 +195,7 @@ export type FileSessionStoreOptions = {
  * `timeoutMs`) has no watchdog to end the wait, so its record — and its transcript
  * — stays until `DELETE /sessions/:id`. Give deferred calls a deadline, or sweep.
  */
-export function createFileSessionStore(options: FileSessionStoreOptions = {}): SessionStore {
+export const createFileSessionStore = (options: FileSessionStoreOptions = {}): SessionStore => {
   const dir = options.dir ?? join(process.cwd(), '.workerdeck', 'parked')
   // Encoded, not interpolated: an id is a runner-assigned string, and a '/' in one
   // would otherwise write outside `dir`.
@@ -311,7 +311,7 @@ const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).
 
 /** Shape-check a parsed file. A record missing any of these could not be rebuilt,
  * and half-restoring one is worse than skipping it. */
-function parseRecord(value: unknown): StoredSessionRecord | null {
+const parseRecord = (value: unknown): StoredSessionRecord | null => {
   if (!value || typeof value !== 'object') {
     return null
   }

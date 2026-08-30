@@ -4,18 +4,10 @@ import { Button } from './Button.tsx'
 /**
  * A view with nothing in it: icon, title, description, and at most one action.
  *
- * Centered and given room, because an empty view is the first thing a new
- * install shows and a flush-left sentence in the top corner reads like a bug
- * report. It lives here rather than in one client because every panel that can
- * be empty should be empty the same way — the extension's views and the
- * dashboard's four sidebars are the same shape of thing.
- *
- * **At most one action, and never one the view header already offers.** Creating
- * a session and adding a gateway are the `+` in the native title bar, exclusively
- * — so those empty states point at it in words rather than growing a second
- * button that does the same thing two inches lower. A button here is for the way
- * out of a state the header has no answer to: clearing a filter, widening a
- * scope.
+ * **At most one action, and never one the view header already offers** — creating a
+ * session and adding a gateway are the native title bar's `+`, exclusively, so those
+ * empty states name it in words. A button here is only for a state the header has no
+ * answer to: clearing a filter, widening a scope.
  */
 export function Empty({
   icon,

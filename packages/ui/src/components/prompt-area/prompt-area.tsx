@@ -115,19 +115,15 @@ export function PromptArea({
     maxLength,
   })
 
-  // Expose imperative handle via ref
   useImperativeHandle(ref, () => handle, [handle])
 
-  // Auto-focus on mount
   useEffect(() => {
     if (autoFocus) {
       editorRef.current?.focus()
     }
   }, [autoFocus, editorRef])
 
-  // -----------------------------------------------------------------------
   // Auto-grow: expand on focus/input, shrink on blur
-  // -----------------------------------------------------------------------
 
   const [isFocused, setIsFocused] = useState(false)
   const [editorHeight, setEditorHeight] = useState<number | undefined>(undefined)
@@ -186,9 +182,7 @@ export function PromptArea({
     }
   }, [value, autoGrow, isFocused, syncHeight])
 
-  // -----------------------------------------------------------------------
   // Overflow indicator: detect when collapsed content is clipped
-  // -----------------------------------------------------------------------
 
   const [hasOverflow, setHasOverflow] = useState(false)
   const overflowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -221,9 +215,7 @@ export function PromptArea({
     }
   }, [autoGrow, isFocused, value, editorRef])
 
-  // -----------------------------------------------------------------------
   // Compute editor style
-  // -----------------------------------------------------------------------
 
   const editorStyle = useMemo((): React.CSSProperties => {
     if (!autoGrow) {
@@ -291,8 +283,6 @@ export function PromptArea({
     <div className={cn('prompt-area-container relative text-sm leading-relaxed', className)}>
       {imagePosition === 'above' && imageStrip}
       {filePosition === 'above' && fileStrip}
-
-      {/* Editor + placeholder wrapper */}
       <div className="relative">
         <div
           ref={editorRef}
@@ -343,8 +333,6 @@ export function PromptArea({
             />
           </div>
         )}
-
-        {/* Placeholder overlay */}
         {isEmpty &&
           placeholder &&
           (Array.isArray(placeholder) ? (
@@ -362,8 +350,6 @@ export function PromptArea({
 
       {filePosition === 'below' && fileStrip}
       {imagePosition === 'below' && imageStrip}
-
-      {/* Trigger suggestion popover */}
       {activeTrigger && activeTrigger.config.mode === 'dropdown' && (
         <TriggerPopover
           suggestions={suggestions}

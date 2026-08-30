@@ -1,21 +1,23 @@
 /**
- * `{basePath}/fs/*` — the operator's real tree. Authorized by the auth key alone
- * and deliberately outside the agent permission flow: the caller is the operator.
+ * `{basePath}/fs/*` — the operator's real tree. Authorized by the auth key alone and
+ * deliberately outside the agent permission flow: the caller is the operator.
  *
- * Every path in here goes through `services/host-files.ts` first, which
- * canonicalizes and *then* re-checks containment. The naive prefix compare
- * `cwdAllowed` does would be wrong at this door — the agent writes into these
- * trees, and a symlink it created is a path the operator never typed.
+ * Every path here goes through `services/host-files.ts` first, which canonicalizes and *then*
+ * re-checks containment. The naive prefix compare `cwdAllowed` does would be wrong at this
+ * door — the agent writes into these trees, and a symlink it created is a path the operator
+ * never typed.
  */
 import { lstatSync, readdirSync, type Dirent } from 'node:fs'
-import { join } from 'node:path'
-import { basename } from 'node:path'
+import { basename, join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { WriteHostFileRequest } from '@workerdeck/protocol'
 import { asUtf8, hashBytes, json, readJsonBody } from '../lib/http.ts'
 import { searchFiles } from '../services/host-file-search.ts'
 import { entryKind, readContained, resolveExisting, resolveForWrite, writeContained } from '../services/host-files.ts'
 import type { ServerContext } from '../context.ts'
+
+/** Directories sort before everything else. */
+const kindRank = (type: string): number => (type === 'dir' ? 0 : 1)
 
 export async function handleHostFiles(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
   const { basePath, hostFiles, hostFilesWritable, maxHostFileBytes, maxHostDirEntries } = ctx
@@ -32,9 +34,8 @@ export async function handleHostFiles(ctx: ServerContext, req: IncomingMessage, 
       json(res, 405, { error: 'method not allowed' })
       return
     }
-    // The canonical spelling, not the operator's: every other route answers in
-    // canonical paths, and a client that round-trips a root it was given must
-    // land on the same tree.
+    // The canonical spelling, not the operator's: every other route answers in canonical
+    // paths, and a client that round-trips a root it was given must land on the same tree.
     json(res, 200, {
       roots: hostFiles.roots.map(({ canonical }) => ({
         path: canonical,
@@ -63,8 +64,7 @@ export async function handleHostFiles(ctx: ServerContext, req: IncomingMessage, 
       json(res, 400, { error: 'not a directory' })
       return
     }
-    // Clamped, not validated: this runs per keystroke from a phone, and a
-    // client asking for 10,000 matches is a client that made a typo.
+    // Clamped, not validated: this runs per keystroke from a phone.
     const asked = Number(url.searchParams.get('limit') ?? '')
     const limit = Number.isFinite(asked) && asked > 0 ? Math.min(asked, 200) : 50
     const result = searchFiles(resolved.path, {
@@ -106,9 +106,8 @@ export async function handleHostFiles(ctx: ServerContext, req: IncomingMessage, 
       const entries = names.slice(0, maxHostDirEntries).map((entry) => {
         const path = join(resolved.path, entry.name)
         const type = entryKind(entry)
-        // Size/mtime for regular files only, and via lstat — a listing must
-        // never stat *through* a link, or a directory holding a link to a fifo
-        // becomes an unlistable directory.
+        // Size/mtime for regular files only, and via lstat — a listing must never stat
+        // *through* a link, or a directory holding a link to a fifo becomes unlistable.
         let bytes: number | undefined
         let modifiedAt: number | undefined
         if (type === 'file') {
@@ -122,10 +121,7 @@ export async function handleHostFiles(ctx: ServerContext, req: IncomingMessage, 
         }
         return { name: entry.name, path, type, bytes, modifiedAt }
       })
-      entries.sort((a, b) => {
-        const rank = (t: string): number => (t === 'dir' ? 0 : 1)
-        return rank(a.type) - rank(b.type) || a.name.localeCompare(b.name)
-      })
+      entries.sort((a, b) => kindRank(a.type) - kindRank(b.type) || a.name.localeCompare(b.name))
       json(res, 200, { path: resolved.path, entries, ...(truncated ? { truncated } : {}) })
       return
     }
@@ -134,9 +130,9 @@ export async function handleHostFiles(ctx: ServerContext, req: IncomingMessage, 
       json(res, 400, { error: 'not a regular file' })
       return
     }
-    // Cheap pre-check so a gigabyte is refused rather than buffered. Advisory
-    // only — the authoritative cap is on the bytes actually read, since the
-    // file can grow between the stat and the open.
+    // Cheap pre-check so a gigabyte is refused rather than buffered. Advisory only — the
+    // authoritative cap is on the bytes actually read, since the file can grow between the
+    // stat and the open.
     let modifiedAt = 0
     try {
       const stats = lstatSync(resolved.path)
@@ -149,9 +145,8 @@ export async function handleHostFiles(ctx: ServerContext, req: IncomingMessage, 
       json(res, 404, { error: 'not found' })
       return
     }
-    // Opens the canonical path with O_NOFOLLOW and gates on fstat, so a
-    // component swapped for a symlink or a fifo after the resolve is refused
-    // rather than followed or blocked on.
+    // Opens the canonical path with O_NOFOLLOW and gates on fstat, so a component swapped
+    // for a symlink or a fifo after the resolve is refused rather than followed or blocked on.
     const read = readContained(resolved.path)
     if (!read.ok) {
       json(res, read.status, { error: read.error })
@@ -205,14 +200,10 @@ export async function handleHostFiles(ctx: ServerContext, req: IncomingMessage, 
       json(res, 413, { error: `content is larger than ${maxHostFileBytes} bytes` })
       return
     }
-    // The agent is editing this same tree. Every write is conditional: either it
-    // creates a file that does not exist, or it names the hash it is replacing.
-    // There is no unconditional overwrite to reach for from a phone.
-    //
-    // Existence is decided by the read, not by a stat: `readContained` answers
-    // 404 only for ENOENT, so anything else — an unreadable file, a swapped-in
-    // device — refuses here instead of being mistaken for "not there yet" and
-    // then clobbered as a create.
+    // The agent is editing this same tree, so every write is conditional: it either creates
+    // a file that does not exist or names the hash it is replacing. Existence is decided by
+    // the read, not by a stat — `readContained` answers 404 only for ENOENT, so anything else
+    // refuses here instead of being mistaken for "not there yet" and clobbered as a create.
     const current = readContained(resolved.path)
     if (!current.ok && current.status !== 404) {
       json(res, current.status, { error: current.error })
@@ -240,8 +231,7 @@ export async function handleHostFiles(ctx: ServerContext, req: IncomingMessage, 
     try {
       writtenAt = lstatSync(resolved.path).mtimeMs
     } catch {
-      // The write landed; a stat that loses a race with a delete is not a
-      // reason to report failure.
+      // The write landed; a stat that loses a race with a delete is not a failure.
     }
     json(res, 200, {
       path: resolved.path,

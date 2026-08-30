@@ -5,17 +5,15 @@ import type { ModelOption, RateLimitInfo, SessionStatus } from '@workerdeck/prot
  * host spells "Needs approval", "80% is a warning" and "which window is the
  * binding one" the same way.
  *
- * Structurally typed against `SessionVitals` rather than importing it: this file
- * ships from the React-free `@workerdeck/ui/format` entry, and a host drawing
- * the readings outside React (the VS Code extension host in the window status
- * bar) must not pull a component graph in to do it. A real `SessionVitals`
- * satisfies every shape here.
+ * Structurally typed against `SessionVitals` rather than importing it: this
+ * file ships from the React-free `@workerdeck/ui/format` entry, and a host
+ * drawing the readings outside React must not pull a component graph in.
  */
 export type StatusSeverity = 'none' | 'warning' | 'error'
 
-/** What a status slot shows, before any host's icon vocabulary gets involved.
- * `icon` is a VS Code codicon name — the one host-shaped thing left, because the
- * alternative is a second mapping table in the only consumer. */
+/** What a status slot shows. `icon` is a VS Code codicon name — the one
+ * host-shaped thing left, rather than a second mapping table in the only
+ * consumer. */
 export type StatusPresentation = {
   icon: string
   label: string
@@ -72,28 +70,16 @@ export function meterSeverity(pct: number | undefined): StatusSeverity {
 }
 
 /**
- * The three *lanes* a plan-usage reading can occupy, and the whole reason this
- * is a rule rather than a per-client `if`.
+ * The three lanes a plan-usage reading can occupy, each independently
+ * showable — `tightestWindow`'s single "fullest wins" slot would let a 71%
+ * weekly window permanently hide the five-hour reading you watch while
+ * working:
  *
- * The CLI reports one window per limit (`five_hour`, `seven_day`, and a
- * `seven_day_<model>` bucket per model-scoped limit — `seven_day_opus`,
- * `seven_day_sonnet`, and whatever `model_scoped` names next). A surface with
- * one slot shows the fullest of them, which is why `tightestWindow` exists —
- * but that answers "what is closest to blocking me", not "how much of *this
- * session's* budget have I spent", and those are different questions a reader
- * asks at different times. A weekly window at 71% will win the single slot over
- * a five-hour window at 60% every time, so the reading you actually watch while
- * working is the one you can never see.
- *
- * Hence three lanes, each independently showable:
- *
- * - `'session'` — the five-hour window. The one that resets while you work.
+ * - `'session'` — the five-hour window.
  * - `'weekly'` — the plain seven-day window, the account-wide ceiling.
- * - `'model'` — the fullest of the *model-scoped* weekly buckets. Deliberately
+ * - `'model'` — the fullest of the model-scoped weekly buckets. Deliberately
  *   not a named model: which models have their own bucket is the plan's
- *   business and changes without notice, so a client that hardcoded
- *   `seven_day_opus` would show nothing the month it becomes something else.
- *   The label comes from the key, so this lane names whatever it found.
+ *   business and changes without notice; the label comes from the key.
  */
 export type UsageLane = 'session' | 'weekly' | 'model'
 
@@ -120,10 +106,8 @@ export function usageWindow(
   return tightestWindow(scoped)
 }
 
-/** The rate-limit window that gets the one visible slot: whichever is fullest,
- * since the binding constraint is the one worth glancing at. Still the right
- * rule for a surface with exactly one slot; {@link usageWindow} is for one with
- * three. */
+/** The rate-limit window for a surface with exactly one slot: whichever is
+ * fullest. {@link usageWindow} is for one with three. */
 export function tightestWindow(rateLimits: Record<string, RateLimitInfo> | undefined): { key: string; info: RateLimitInfo } | undefined {
   const entries = Object.entries(rateLimits ?? {})
   if (entries.length === 0) {
@@ -146,10 +130,9 @@ export function tightestWindow(rateLimits: Record<string, RateLimitInfo> | undef
   return best
 }
 
-/** A rate-limit window's key, named for a human. A model-scoped bucket is named
- * for its model alone (`seven_day_fable` → "Fable"): the lane it sits in
- * already says weekly, and "Seven day fable" in a status bar is three words to
- * say one. */
+/** A rate-limit window's key, named for a human. A model-scoped bucket is
+ * named for its model alone (`seven_day_fable` → "Fable"): its lane already
+ * says weekly. */
 export function windowLabel(key: string): string {
   if (key === 'five_hour') {
     return 'Session'
@@ -189,20 +172,15 @@ export function modelLabel(vitals: ModelReadings | undefined): string {
   return currentModel(vitals)?.displayName ?? vitals.model
 }
 
-/** Context percentage as its meter severity — the reading and the colour come
- * from one place so a panel and a status bar never disagree.
- *
- * Takes only the number it reads, so the compact `ContextReading` that rides
- * the sessions list and the full `ContextUsage` on the event stream are coloured
- * by one rule rather than two. */
+/** Context percentage as its meter severity. Takes only the number it reads,
+ * so the compact `ContextReading` and the full `ContextUsage` are coloured by
+ * one rule. */
 export function contextSeverity(usage: { percentage: number } | undefined): StatusSeverity {
   return meterSeverity(usage?.percentage)
 }
 
-/** {@link meterSeverity} as a text colour class. Here rather than beside each
- * meter because the status bar, the context dialog and a sessions-list row all
- * paint the same reading, and a fourth copy of the thresholds is a fourth
- * chance for one surface to call 81% orange and another call it grey. */
+/** {@link meterSeverity} as a text colour class — one copy of the thresholds
+ * for every surface that paints the reading. */
 export function meterColorClass(pct: number | undefined): string {
   const severity = meterSeverity(pct)
   return severity === 'error' ? 'text-danger' : severity === 'warning' ? 'text-warning' : 'text-fg-3'

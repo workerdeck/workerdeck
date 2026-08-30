@@ -92,7 +92,7 @@ export type ToolCallHostOptions = {
  * evaluated here and never touch the server. The engine loads lazily, so a page
  * that never bridges a call never pays for the WASM guest.
  */
-export function createToolCallHost(handle: SessionHandle, options: ToolCallHostOptions = {}): { dispose: () => void } {
+export const createToolCallHost = (handle: SessionHandle, options: ToolCallHostOptions = {}): { dispose: () => void } => {
   const inFlight = new Map<string, AbortController>()
   let enginePromise: Promise<SandboxEngine> | undefined
   let disposed = false
@@ -231,7 +231,7 @@ export function createToolCallHost(handle: SessionHandle, options: ToolCallHostO
       if (disposed || !inFlight.has(frame.executionId)) {
         return
       }
-      // Engine load failures land here �� tell the server so the agent can adapt
+      // Engine load failures land here — tell the server so the agent can adapt
       // instead of waiting out the deadline.
       refuse(frame, 'host_error', error instanceof Error ? error.message : String(error), startedAt)
     } finally {
@@ -272,7 +272,7 @@ export function createToolCallHost(handle: SessionHandle, options: ToolCallHostO
 
 /** The single-file browser build keeps this to one lazy chunk — no separate
  * .wasm fetch, and nothing at all until the first bridged call. */
-async function defaultLoadEngine(): Promise<SandboxEngine> {
+const defaultLoadEngine = async (): Promise<SandboxEngine> => {
   const [sandbox, variant] = await Promise.all([import('@workerdeck/sandbox'), import('@jitl/quickjs-singlefile-browser-release-asyncify')])
   return sandbox.loadEngine(variant as never)
 }

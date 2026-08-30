@@ -211,7 +211,7 @@ export const CODEX_AGENT_TOOL = 'CodexAgent'
 export const CODEX_COLLAB_TOOL = 'CodexCollab'
 
 /** An agent's name is its path's basename: '/root/date_one' → 'date_one'. */
-function agentName(agentPath: string | null | undefined): string | undefined {
+const agentName = (agentPath: string | null | undefined): string | undefined => {
   if (typeof agentPath !== 'string') {
     return undefined
   }
@@ -222,7 +222,7 @@ function agentName(agentPath: string | null | undefined): string | undefined {
 /** The collab card's input: the verb always, the rich fields only when codex
  * actually filled them (measured against 0.146.0 they arrive empty — the card
  * must not render five null columns to say 'wait'). */
-function collabInput(item: AppServerCollabAgentToolCallItem): Record<string, unknown> {
+const collabInput = (item: AppServerCollabAgentToolCallItem): Record<string, unknown> => {
   return {
     tool: item.tool,
     ...(item.receiverThreadIds?.length ? { receiverThreadIds: item.receiverThreadIds } : {}),
@@ -234,7 +234,7 @@ function collabInput(item: AppServerCollabAgentToolCallItem): Record<string, unk
 /** A completed turn's answer, from its summary `items` page — the last
  * `agentMessage` text. For a sub-agent's thread this is the agent's report,
  * which is exactly what belongs in the anchor's `tool_result`. */
-function turnReport(turn: AppServerTurn): string | undefined {
+const turnReport = (turn: AppServerTurn): string | undefined => {
   const items = Array.isArray(turn.items) ? turn.items : []
   for (let index = items.length - 1; index >= 0; index--) {
     const item = items[index]
@@ -261,16 +261,8 @@ const shortResult = (result: string): boolean => result.length > 0 && result.len
  * a session rebuilt from a snapshot re-derives the same ids, so a client's
  * cached URL still resolves after a park/restore.
  */
-function producedFileId(path: string): string {
+const producedFileId = (path: string): string => {
   return createHash('sha256').update(path).digest('hex').slice(0, 32)
-}
-
-/** Media type from the extension, for the handful a client renders inline.
- * Undefined for everything else — the route sniffs, and guessing here is how a
- * text file ends up labelled `image/png`. */
-function producedMediaType(path: string): string | undefined {
-  const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
-  return PRODUCED_MEDIA_TYPES[extension]
 }
 
 const PRODUCED_MEDIA_TYPES: Record<string, string> = {
@@ -283,13 +275,21 @@ const PRODUCED_MEDIA_TYPES: Record<string, string> = {
   pdf: 'application/pdf',
 }
 
+/** Media type from the extension, for the handful a client renders inline.
+ * Undefined for everything else — the route sniffs, and guessing here is how a
+ * text file ends up labelled `image/png`. */
+const producedMediaType = (path: string): string | undefined => {
+  const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
+  return PRODUCED_MEDIA_TYPES[extension]
+}
+
 /**
  * Codex's `SkillMetadata` as the protocol states it. `interface.shortDescription`
  * beats the legacy top-level one (codex's own comment says to prefer it), and
  * `enabled` defaults to true — an entry codex listed without the field is one it
  * considers live, and defaulting to false would hide working skills.
  */
-function skillInfo(skill: AppServerSkillMetadata): SkillInfo {
+const skillInfo = (skill: AppServerSkillMetadata): SkillInfo => {
   return {
     name: skill.name,
     ...(skill.description ? { description: skill.description } : {}),
@@ -316,11 +316,11 @@ function skillInfo(skill: AppServerSkillMetadata): SkillInfo {
  * A server with no startup notification yet is 'pending', not 'connected':
  * `mcpServerStatus/list` alone only proves it is *configured*.
  */
-function mcpStatusOf(
+const mcpStatusOf = (
   authStatus: string | undefined,
   update: { status: string; failureReason?: string } | undefined,
   hasTools: boolean,
-): string {
+): string => {
   if (update?.status === 'failed') {
     return update.failureReason === 'reauthenticationRequired' ? 'needs-auth' : 'failed'
   }
@@ -353,10 +353,10 @@ function mcpStatusOf(
 }
 
 /** One `mcpServerStatus/list` entry as the protocol states it. */
-function mcpServerInfo(
+const mcpServerInfo = (
   server: AppServerMcpServerStatus,
   update: { status: string; error?: string; failureReason?: string } | undefined,
-): McpServerStatusInfo {
+): McpServerStatusInfo => {
   // A map keyed by tool name, not an array — and the key is authoritative when
   // the value omits its own `name`.
   const tools = Object.entries(server.tools ?? {}).flatMap(([key, tool]) => {
@@ -396,7 +396,7 @@ function mcpServerInfo(
 /** What the card shows while the picture is being made, and after. `savedPath`
  * only exists once it lands — a client keys its preview off it, so it is a
  * field rather than a sentence in the result text. */
-function imageGenerationInput(item: AppServerImageGenerationItem): Record<string, unknown> {
+const imageGenerationInput = (item: AppServerImageGenerationItem): Record<string, unknown> => {
   return {
     ...(item.revisedPrompt ? { prompt: item.revisedPrompt } : {}),
     ...(item.savedPath ? { savedPath: item.savedPath } : {}),
@@ -410,7 +410,7 @@ function imageGenerationInput(item: AppServerImageGenerationItem): Record<string
  * channel's schema enum applies. Present only under `experimentalApi: true` —
  * which WorkerDeck always declares.
  */
-function offeredDecisions(params: unknown): Set<string> | undefined {
+const offeredDecisions = (params: unknown): Set<string> | undefined => {
   const raw = (params as { availableDecisions?: unknown })?.availableDecisions
   if (!Array.isArray(raw)) {
     return undefined
@@ -445,7 +445,7 @@ function offeredDecisions(params: unknown): Set<string> | undefined {
  * - deny+interrupt → 'cancel' (codex's deny-and-interrupt) when offered;
  *   otherwise 'decline', and the caller interrupts the turn itself.
  */
-function pickDecision(behavior: 'allow' | 'deny', interrupt: boolean, offered: Set<string> | undefined): string | undefined {
+const pickDecision = (behavior: 'allow' | 'deny', interrupt: boolean, offered: Set<string> | undefined): string | undefined => {
   const has = (name: string) => !offered || offered.has(name)
   if (behavior === 'allow') {
     return has('accept') ? 'accept' : undefined
@@ -458,7 +458,7 @@ function pickDecision(behavior: 'allow' | 'deny', interrupt: boolean, offered: S
 
 /** Codex `requestUserInput` questions in the AskUserQuestion wire shape both
  * clients already render (QuestionPrompt / QuestionPromptView). */
-function userQuestionsFromCodex(questions: readonly AppServerUserInputQuestion[]): UserQuestion[] {
+const userQuestionsFromCodex = (questions: readonly AppServerUserInputQuestion[]): UserQuestion[] => {
   return questions.map((question) => ({
     question: question.question,
     header: question.header ?? '',
@@ -471,17 +471,12 @@ function userQuestionsFromCodex(questions: readonly AppServerUserInputQuestion[]
 
 /**
  * The text of a history `userMessage` item: its content entries' text parts
- * joined.
- *
- * Image parts have no replayable representation — the bytes went to the model,
- * not into the rollout we can render from — so they are named rather than
- * dropped. A prompt that was *only* an image used to produce an empty string,
- * which the caller read as "nothing to replay" and skipped: the turn lost its
- * user row and, with it, the prompt mark the scrubber navigates by, so a resumed
- * thread had answers with no visible question. A word in place of the picture is
- * a smaller lie than a turn that never happened.
+ * joined. Image parts have no replayable representation (the bytes went to the
+ * model, not into the rollout), so they are named rather than dropped — an
+ * image-only prompt must still yield a user row, or the resumed turn loses the
+ * prompt mark the scrubber navigates by.
  */
-function historyUserText(item: AppServerUserMessageItem): string {
+const historyUserText = (item: AppServerUserMessageItem): string => {
   if (!Array.isArray(item.content)) {
     return ''
   }
@@ -511,10 +506,10 @@ function historyUserText(item: AppServerUserMessageItem): string {
 /** The AskUserQuestion answer convention (question text → chosen label(s),
  * comma-joined) mapped back to codex's id-keyed shape. Questions the client
  * did not answer are absent, not empty. */
-function codexAnswers(
+const codexAnswers = (
   questions: readonly AppServerUserInputQuestion[],
   answers: Record<string, unknown> | undefined,
-): Record<string, { answers: string[] }> {
+): Record<string, { answers: string[] }> => {
   const out: Record<string, { answers: string[] }> = {}
   for (const question of questions) {
     const value = answers?.[question.question] ?? answers?.[question.id]
@@ -547,7 +542,10 @@ type ApprovalChannel = {
 }
 
 /** The two channels whose response is `{decision: …}` share their pick logic. */
-function decisionChannel(describe: (params: unknown) => ApprovalSurface, itemId: (params: unknown) => string | undefined): ApprovalChannel {
+const decisionChannel = (
+  describe: (params: unknown) => ApprovalSurface,
+  itemId: (params: unknown) => string | undefined,
+): ApprovalChannel => {
   return {
     describe,
     itemId,
@@ -740,7 +738,7 @@ type QueuedTurn = { input: AppServerUserInput[] }
  * 10080 min = 7d); anything else keeps a self-describing key rather than
  * borrowing a name that would size it wrongly.
  */
-function rateLimitWindowName(minutes: number | null | undefined): string | undefined {
+const rateLimitWindowName = (minutes: number | null | undefined): string | undefined => {
   if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) {
     return undefined
   }
@@ -785,9 +783,7 @@ type ActiveTurn = {
  * streaming `item/agentMessage/delta` and the reasoning deltas token-by-token
  * (`streaming: 'token'`). Follows `SessionRunner`'s event-log/seq/status
  * discipline with `AiSdkRunner`'s turn-chain (one turn at a time; sendMessage
- * queues). The first codex transport was `codex exec --experimental-json` (one
- * child per turn) — retired because its JSONL carries no partial messages, so
- * a turn could never stream.
+ * queues).
  *
  * A dead child is a failed *turn*, not a failed session: the thread persists
  * on disk, the connection is dropped, and the next message spawns a fresh
@@ -1132,24 +1128,14 @@ export class CodexRunner implements Runner {
     if (this.#closed) {
       throw new Error('session is closed')
     }
-    // `/clear` typed into a codex session, intercepted rather than sent.
-    //
-    // This engine declares `slashCommands: false` because the app-server has no
-    // command surface at all — so before this, the string went to the model as
-    // an ordinary prompt and got an ordinary answer. It did not error, which is
-    // worse than erroring: it looked like it might have worked. Everyone who
-    // has used the other engine will type it, so it does the thing they meant.
-    //
-    // Deliberately narrow: the bare word, no attachments. `/clear` with a file
-    // attached, or any sentence containing it, is a prompt — this must never
-    // silently steal a message someone meant to send.
-    //
-    // `clearContext()` is the same call the route makes, and it queues behind
-    // in-flight work rather than racing it — so a `/clear` typed mid-turn waits
-    // for that turn and lands with nothing in flight. Fire-and-forget with the
-    // failure surfaced as a `session_error`, because `sendMessage` is void by
-    // contract and a clear that could not happen must not be silent. No
-    // `user_message` echo: the reset would clear it in the same breath.
+    // `/clear` typed into a codex session, intercepted rather than sent: the
+    // app-server has no command surface (`slashCommands: false`), so the model
+    // would otherwise answer it as an ordinary prompt. Deliberately narrow —
+    // the bare word, no attachments; `/clear` with a file attached, or any
+    // sentence containing it, is a prompt and must never be silently stolen.
+    // `clearContext()` queues behind in-flight work; fire-and-forget with the
+    // failure surfaced as `session_error` (`sendMessage` is void by contract).
+    // No `user_message` echo: the reset would clear it in the same breath.
     if (text.trim() === '/clear' && !attachments?.length) {
       void this.clearContext().catch((error: unknown) => {
         this.#emit({
@@ -1298,11 +1284,9 @@ export class CodexRunner implements Runner {
     if (this.#closed) {
       throw new Error('session is closed')
     }
-    // Deliberately NOT wiping `#queue`. Everything queued before the clear was
-    // requested has already run — its `#runTurn` links sit ahead of this one on
-    // the chain — so whatever is left was pushed *after* the clear and belongs
-    // to the new conversation. Wiping it dropped exactly those messages, and
-    // silently: the echo appeared, the reset cleared it, and no turn ever ran.
+    // Deliberately NOT wiping `#queue`: everything queued before the clear has
+    // already run (its `#runTurn` links sit ahead on the chain), so whatever is
+    // left was pushed *after* the clear and belongs to the new conversation.
     //
     // Order matters below. The fallible step happens FIRST among the things
     // that can fail, and the state that cannot be rolled back is only dropped
@@ -2490,9 +2474,8 @@ export class CodexRunner implements Runner {
    * The completed-item mapping, one handler per member of the {@link AppServerItem}
    * union. The mapped type is the invariant made checkable: model a new item
    * type in `types.ts` and this table fails to compile until it says what the
-   * item becomes on the wire — the old switch silently fell through to the
-   * unknown-item passthrough instead. (The runtime still receives types the
-   * union has never heard of; those take the passthrough above.)
+   * item becomes on the wire. (The runtime still receives types the union has
+   * never heard of; those take the passthrough above.)
    */
   readonly #itemCompleted: {
     [K in AppServerItem['type']]: (item: Extract<AppServerItem, { type: K }>, active: ActiveTurn, id: string, agent?: CodexAgent) => void
@@ -2919,8 +2902,6 @@ export class CodexRunner implements Runner {
     // not this conversation's, exactly as the transcript state clears it.
     if (body.type === 'conversation_reset') {
       this.#resetSeq = event.seq
-      // A reset retires the conversation the window described; the old fill is
-      // not this conversation's, exactly as the transcript state clears it.
       this.#contextUsage = undefined
     }
     this.#events.push(event)

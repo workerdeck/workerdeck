@@ -3,10 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TriggerConfig, TriggerSuggestion } from './types.ts'
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 type UseTriggerSearchReturn = {
   suggestions: TriggerSuggestion[]
   suggestionsLoading: boolean
@@ -16,10 +12,6 @@ type UseTriggerSearchReturn = {
   /** Cancel any in-flight search and reset state. */
   reset: () => void
 }
-
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
 
 /**
  * Manages async trigger search lifecycle: debouncing, AbortController
@@ -35,9 +27,7 @@ export function useTriggerSearch(): UseTriggerSearchReturn {
 
   // Version counter – belt-and-suspenders alongside AbortController
   const searchVersion = useRef(0)
-  // AbortController for cancelling in-flight async searches
   const abortController = useRef<AbortController | null>(null)
-  // Debounce timer for search queries
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const reset = useCallback(() => {
@@ -55,7 +45,6 @@ export function useTriggerSearch(): UseTriggerSearchReturn {
       return
     }
 
-    // Cancel any previous in-flight request and pending debounce
     abortController.current?.abort()
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current)
@@ -109,7 +98,6 @@ export function useTriggerSearch(): UseTriggerSearchReturn {
     }
   }, [])
 
-  // Clean up on unmount
   useEffect(() => {
     return () => {
       abortController.current?.abort()

@@ -2,18 +2,10 @@
  * "Is this text a file path" — one answer for both the Cmd/Ctrl+click and the
  * hold-to-highlight, so nothing lights up that a click would ignore.
  *
- * Two shapes, and the second is why this is not a one-line regex. An **absolute**
- * path (`/a/b.ts`, `./a/b.ts`, `../a/b.ts`) is unambiguous. A **relative** one
- * (`_docs/BACKLOG.md`) is not — `and/or` and `TypeScript/JavaScript` have the
- * same shape — so a relative match additionally has to end in something that
- * looks like a filename with an extension. Without that the modifier would
- * underline half of ordinary prose and every click would end in a warning.
- *
- * The match must also start at a **token boundary**. The old pattern required a
- * leading `/` and was unanchored, so `@_docs/BACKLOG.md` matched the *suffix*
- * `/BACKLOG.md` and the extension confidently tried to open a file at the
- * filesystem root. Anchoring is the whole fix for that; the relative branch is
- * what makes the intended path openable.
+ * Two rules the regex cannot explain itself. A match must start at a **token
+ * boundary**: unanchored, `@_docs/BACKLOG.md` matches the suffix `/BACKLOG.md` and
+ * the host opens a file at the filesystem root. And a **relative** match must end
+ * in a filename-with-extension, or `and/or` underlines as a path.
  */
 
 /** One path segment: no whitespace, no separator, none of the characters that

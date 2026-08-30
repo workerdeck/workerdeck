@@ -1,22 +1,10 @@
 /**
- * What the user is looking at, and how the agent asks to move them.
+ * What the user is looking at, and how the agent asks to move them: **the app owns
+ * its UI state on the server**, not on WorkerDeck's tool bridge (a bridged tool is
+ * by definition `sandboxed`, and the bridge asks an arbitrary attached client).
  *
- * The problem this solves: the agent loop runs on the server, but "which
- * document is open" is browser state, and "open that one for me" is a browser
- * action. Something has to carry both across.
- *
- * The choice made here is that **the app owns its UI state on the server** — the
- * tab pushes it up on change, and subscribes to intents coming down. The
- * alternative was to bridge the tools into the tab over WorkerDeck's own tool
- * bridge, which is a real mechanism and the natural-looking one. It is rejected
- * for two reasons: a bridged tool is by definition `sandboxed`, and the bridge
- * asks *the first attached client*, so with two tabs open the answer comes from
- * an arbitrary one. Keeping the state here means every tab of a user agrees, and
- * an agent working while the tab is closed still knows where it left them.
- *
- * Keyed by **user**, not by session: two agent sessions in the sidebar are
- * looking at the same screen, and the phrase "the document I'm on" means the
- * same thing to both.
+ * Keyed by **user**, not by session: two sessions in the sidebar are looking at the
+ * same screen.
  */
 
 export type UiState = {
@@ -42,7 +30,7 @@ export type AppState = {
   subscribe(userId: string, listener: (intent: UiIntent) => void): () => void
 }
 
-export function createAppState(): AppState {
+export const createAppState = (): AppState => {
   const states = new Map<string, UiState>()
   const listeners = new Map<string, Set<(intent: UiIntent) => void>>()
 

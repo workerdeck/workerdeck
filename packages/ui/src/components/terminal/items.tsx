@@ -15,9 +15,8 @@ import { runFailed, runSummary } from './tool-run.ts'
 import { type ToolCallItem } from './blocks.ts'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
 
-// The pure block model — which rows exist — lives in `blocks.ts` now that a
-// task block made it non-trivial; re-exported here because this file is where
-// consumers have always found it.
+// The pure block model — which rows exist — lives in `blocks.ts`; re-exported
+// here because this file is where consumers have always found it.
 export {
   blockNeedsBlank,
   isRunCall,
@@ -34,15 +33,9 @@ export {
 } from './blocks.ts'
 
 /**
- * One transcript item, drawn as terminal rows.
- *
- * Each renderer here answers the same two questions the CLI answers: which
- * marker goes in the gutter, and what the body says. Nothing chooses a spacing,
- * a radius or a border — a row is a row, and the space between blocks is a
- * {@link Blank} decided by the transcript, which is the only thing that knows
- * whether two blocks belong together.
- *
- * The markers are the CLI's:
+ * One transcript item, drawn as terminal rows. Each renderer answers the same
+ * two questions: which marker goes in the gutter, and what the body says —
+ * never a spacing, radius or border. The markers are the CLI's:
  *
  * | glyph | means                                    |
  * |-------|------------------------------------------|
@@ -54,14 +47,8 @@ export {
  */
 
 /**
- * The prompt marker, in the transcript and in the composer both.
- *
- * `❯` rather than `>`: it is the shell prompt of every terminal anyone has
- * configured this decade, and it reads as a *prompt* where `>` reads as a
- * quotation or a greater-than. Exported because the composer is the same
- * marker in the same gutter cell — that is the whole claim of the terminal
- * composer, and two spellings of it would put the caret one glyph off the
- * column the rows above start on.
+ * The prompt marker, in the transcript and the composer both — exported so
+ * the composer's caret sits on the same column the rows above start on.
  */
 export const PROMPT_GLYPH = '❯'
 
@@ -74,10 +61,9 @@ export const PROMPT_GLYPH = '❯'
  * `full` press ever fetches. That relationship is asserted, not assumed. */
 export const RESULT_PREVIEW_CHARS = 2000
 
-/** Whole lines up to a character budget — never zero, because a single line
- * longer than the budget still has to be shown or the row would open onto
- * nothing. */
-function clipToChars(lines: string[], maxChars: number): string[] {
+/** Whole lines up to a character budget — never zero: a single line longer
+ * than the budget still has to be shown. */
+const clipToChars = (lines: string[], maxChars: number): string[] => {
   const out: string[] = []
   let chars = 0
   for (const line of lines) {
@@ -98,8 +84,7 @@ export function UserRow({ item }: { item: Extract<TranscriptItem, { kind: 'user'
           {item.attachments.map((attachment) => attachment.name).join(', ')}
         </Row>
       ) : null}
-      {/* Every line of a multi-line prompt keeps the band and the column; only
-          the first keeps the marker, exactly as a shell continuation does. */}
+      {/* Only the first line keeps the marker, as a shell continuation does. */}
       {item.text
         ? item.text.split('\n').map((line, index) => (
             <Row key={index} glyph={index === 0 ? PROMPT_GLYPH : undefined} glyphTone="dim" tone="fg">
@@ -113,10 +98,8 @@ export function UserRow({ item }: { item: Extract<TranscriptItem, { kind: 'user'
 
 export function AssistantRow({ item }: { item: Extract<TranscriptItem, { kind: 'assistant_text' }> }) {
   return (
-    // Copy the markdown source, not the rendered text: what you paste into an
-    // issue or a commit message should keep its lists and its code fences.
-    // Absent while streaming — half a message is not a thing anyone wants on
-    // their clipboard, and the button would appear mid-sentence.
+    // Copy the markdown source, not the rendered text. Absent while streaming
+    // — the button would appear mid-sentence.
     <WithActions actions={item.streaming ? null : <CopyAction text={item.text} label="Copy message" />}>
       <Row glyph="●" glyphTone="fg" tone="fg">
         <TerminalMarkdown streaming={item.streaming}>{item.text}</TerminalMarkdown>
@@ -145,57 +128,49 @@ const TOOL_TONE: Record<string, Tone> = {
 export function ToolRow({ item }: { item: ToolCallItem }) {
   const [open, setOpen] = useState(false)
   const [full, setFull] = useState(false)
-  // Set while the rest of a truncated result is in flight. Row-local, unlike the
-  // text itself, which lands in transcript state — this is a spinner, not a
-  // fact about the session.
+  // Row-local, unlike the fetched text itself (which lands in transcript
+  // state) — this is a spinner, not a fact about the session.
   const [fetching, setFetching] = useState(false)
   const fetchResult = useToolResultFetcher()
   const reveal = useRevealOnOpen(open)
   const status = item.status ?? (item.result === undefined ? 'running' : 'settled')
   const busy = status === 'running' || status === 'pending'
   const isError = status === 'failed' || item.result?.isError === true
-  // Ticks only while this row is really running: an idle transcript of a hundred
-  // settled calls starts no timers at all.
+  // Ticks only while this row is really running: an idle transcript starts no
+  // timers at all.
   const pulse = usePulse(busy)
 
   const text = item.result?.text ?? ''
   const lines = text.trimEnd().split('\n')
-  // Three states, not two. Collapsed shows a few lines; open shows the output up
-  // to a character budget; `full` lifts the budget. The middle one is the reason
-  // the budget exists at all: a tool result can be a hundred thousand characters
-  // (a test run, a `find /`), and the whole of it lands in **one** virtual row —
-  // the virtualizer mounts rows, so it cannot help with what is inside a single
-  // one. Without the clip, expanding one row commits thousands of DOM nodes and
-  // the transcript stops being smooth for the rest of the session.
-  // The true total when the replay delivered only a head — the row must count
-  // what is missing, not what it happens to hold.
+  // Three states, not two: collapsed shows a few lines, open shows up to a
+  // character budget, `full` lifts it. The middle state exists because a
+  // hundred-thousand-character result lands in ONE virtual row — the
+  // virtualizer mounts rows and cannot help with what is inside a single one,
+  // so an unclipped expand commits thousands of DOM nodes.
   const collapsed = collapsedResult(lines, item.result?.totalChars)
   const preview = open ? (full ? lines : clipToChars(lines, RESULT_PREVIEW_CHARS)) : collapsed.shown
   const hidden = lines.length - preview.length
   const clipped = open && !full && hidden > 0
-  // The replay sent a head. `full` then means "fetch the rest", not "lift the
-  // clip" — and the marker outlives the clip, because a head short enough to fit
-  // the open budget still is not the result.
+  // The replay sent a head: `full` then means "fetch the rest", and the marker
+  // outlives the clip — a head short enough to fit the open budget still is
+  // not the result.
   const truncated = item.result?.truncated === true
   const missing = truncated ? (item.result?.totalChars ?? 0) - text.length : 0
 
   const tone: Tone = isError
     ? 'red'
-    : // A settled write is green: skimming a run, "what did it change" is the
-      // question you come back to, and the one you might need to undo.
+    : // A settled write is green: "what did it change" is the skimming question.
       status === 'settled' && isMutatingTool(item.name)
       ? 'green'
       : (TOOL_TONE[status] ?? 'dim')
 
-  // What is worth having on the clipboard from a tool call is the command you
-  // would re-run, when there is one, and otherwise its output.
+  // Copy the command you would re-run when there is one, otherwise the output.
   const command = (item.input as { command?: unknown } | null)?.command
   const copyable = typeof command === 'string' ? command : text
 
   return (
-    // Open, the whole block keeps a fill: an expansion that runs past the top of
-    // the screen otherwise leaves no mark of where it began, and the reader has
-    // to guess which rows they opened.
+    // Open, the whole block keeps a fill: an expansion running past the top of
+    // the screen otherwise leaves no mark of where it began.
     <div ref={reveal} className={open ? 'term-open' : undefined}>
       <WithActions actions={copyable ? <CopyAction text={copyable} label="Copy" /> : null}>
         <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
@@ -207,16 +182,13 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
             {item.backend && item.backend !== 'server' ? <Ink tone="faint"> · {item.backend}</Ink> : null}
           </Row>
         </Pressable>
-        {/* Above the output, because when a call returned a picture the picture is
-          what the call was: a screenshot's result text is "took a screenshot".
-          Drawn collapsed as well as open — this is not detail behind a press,
-          it is the answer. */}
+        {/* Above the output, drawn collapsed as well as open: when a call
+          returned a picture, the picture is the answer, not detail. */}
         {item.result?.images?.map((image) => (
           <TerminalImage key={image.partIndex} toolUseId={item.id} image={image} />
         ))}
-        {/* A file edit shows its diff, not its result prose: "The file has been
-          updated" is what the *model* needed to hear, and the change is what the
-          reader did. The text stays reachable by expanding. */}
+        {/* A file edit shows its diff, not its result prose; the text stays
+          reachable by expanding. */}
         {item.patch && !open ? (
           <TerminalDiff patch={item.patch} />
         ) : text ? (
@@ -226,13 +198,9 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
                 {line || ' '}
               </Row>
             ))}
-            {/* One row for "there is more", pressable exactly when pressing it
-              would do something. Collapsed, the count is a label — the header
-              above is already the toggle, and a second control for the same act
-              is one too many. Open and clipped, it is the way to the rest.
-              Collapsed spells its own label (it may be counting characters
-              rather than lines, having cut inside one), and it is the string
-              `height.ts` sizes the row from. */}
+            {/* One "there is more" row, pressable exactly when pressing does
+              something. Collapsed it is a label (the header is the toggle) and
+              its text is the string `height.ts` sizes the row from. */}
             {!open ? (
               collapsed.more ? (
                 <Row indent={1} columns={3} tone="faint">
@@ -242,19 +210,17 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
             ) : clipped || truncated ? (
               <Row indent={1} columns={3} tone="faint">
                 {fetching ? (
-                  // Never a row that does nothing when pressed: it says what it is
-                  // doing instead. See `planToolCall`'s comment on the same rule.
+                  // Never a row that does nothing when pressed: it says what
+                  // it is doing instead.
                   <>… fetching {(item.result?.totalChars ?? 0).toLocaleString()} chars</>
                 ) : clipped || truncated ? (
                   <button
                     type="button"
                     className="term-press term-link"
                     onClick={() => {
-                      // One press, two acts, in the order that keeps the row
-                      // honest: lift the clip immediately (that part is local and
-                      // instant), and fetch the rest when there is a rest. The
-                      // fetched text lands in transcript state, so the row
-                      // re-renders with the marker gone.
+                      // Lift the clip immediately (local and instant), fetch
+                      // the rest when there is a rest — the fetched text lands
+                      // in transcript state and the marker goes with it.
                       setFull(true)
                       if (!truncated) {
                         return
@@ -290,16 +256,10 @@ type ToolResultImage = NonNullable<NonNullable<ToolCallItem['result']>['images']
 
 /**
  * A picture a tool returned, in a box of {@link IMAGE_BOX_LINES} whole lines.
- *
- * **Three states, one height.** Before the fetch lands the box is a wash and the
- * size the gateway declared; after it, the picture, letterboxed inside the same
- * box; on a refusal, `image unavailable` in it. Nothing here may ever collapse
- * to nothing — that is `HostImage`'s return-null-then-pop, which in a
- * *virtualized* list is not a flicker but a reflow of every row below it, and
- * the height calculator would have been lying about the row from plan time.
- *
- * The box is why the calculator can stay exact: it is a constant, not a function
- * of pixels nobody has downloaded yet.
+ * **Three states, one height** — pending wash, loaded (letterboxed), failed.
+ * Nothing here may ever collapse to nothing: in a virtualized list that is a
+ * reflow of every row below, and the height calculator would have been lying
+ * about the row from plan time.
  */
 function TerminalImage({ toolUseId, image }: { toolUseId: string; image: ToolResultImage }) {
   const { src, failed } = useToolResultImageSrc({ toolUseId, ...image })
@@ -308,9 +268,8 @@ function TerminalImage({ toolUseId, image }: { toolUseId: string; image: ToolRes
       <div
         className="term-image"
         data-state={src ? 'loaded' : failed ? 'failed' : 'pending'}
-        // The one measurement in this file, and it is the shared constant
-        // spelled once — `height.ts` adds exactly this many lines for exactly
-        // this box.
+        // The one measurement in this file — `height.ts` adds exactly this
+        // many lines for exactly this box.
         style={{ height: `calc(var(--term-line) * ${IMAGE_BOX_LINES})` }}
       >
         {src ? (
@@ -324,20 +283,10 @@ function TerminalImage({ toolUseId, image }: { toolUseId: string; image: ToolRes
 }
 
 /**
- * A run of tool calls, as one line.
- *
- * The CLI's own compression, and the reason it works: a tool call is almost
- * never what you came back to read. `Bash(pnpm -w typecheck)` and forty lines of
- * its output say nothing the model's next sentence doesn't say better, and six
- * of them in a row bury that sentence a screen and a half down. So a run
- * collapses to its count and gets out of the way — and opens, in full, the
- * moment it is the thing you actually want.
- *
- * The membership, wording and failure rules live in `tool-run.ts`, shared with
- * the height calculator. A failure never breaks the run — fragmenting it around
- * one would hide the failure in a longer list rather than surface it — but only
- * the run's **last** call colours it, because that is the run's outcome and an
- * outcome is what a collapsed row can honestly claim (see `runFailed`).
+ * A run of tool calls, as one line — the CLI's own compression. Membership,
+ * wording and failure rules live in `tool-run.ts`, shared with the height
+ * calculator. A failure never breaks the run, and only the run's **last** call
+ * colours it (see `runFailed`).
  */
 export function ToolRunRow({ items }: { items: ToolCallItem[] }) {
   const [open, setOpen] = useState(false)
@@ -352,9 +301,8 @@ export function ToolRunRow({ items }: { items: ToolCallItem[] }) {
   return (
     <div ref={reveal} className={open ? 'term-open' : undefined}>
       <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
-        {/* No marker once settled: a run of calls is an aside, and a bullet
-            would give it the weight of something the model said. While one is
-            running the pulse earns the gutter — that much is news. */}
+        {/* No marker once settled: a run is an aside. While one is running the
+            pulse earns the gutter. */}
         <Row glyph={busy ? pulse : undefined} glyphTone={busy ? 'mark' : undefined} tone={failed ? 'red' : 'dim'}>
           {runSummary(items, busy)}
         </Row>
@@ -376,8 +324,8 @@ export function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 
       <Row tone={item.isError ? 'red' : 'faint'}>
         {item.isError ? item.subtype : 'done'} · {formatDuration(item.durationMs)} · {formatCost(item.totalCostUsd)}
       </Row>
-      {/* A failed turn's reasons are the whole point of the row — dropping them
-          leaves "error_during_execution" and nothing to act on. */}
+      {/* Dropping the reasons would leave "error_during_execution" and nothing
+          to act on. */}
       {item.errors?.map((message, index) => (
         <Row key={index} tone="red">
           {message}
@@ -432,9 +380,8 @@ export function useTicker(on: boolean): number {
  */
 export function WorkingRow({ label, startedAt, tokens }: { label: string; startedAt?: number; tokens?: number }) {
   const pulse = usePulse(true)
-  // The row owns its clock rather than taking `now` from above, because it is
-  // mounted only while a turn is in flight: the ticking starts and stops with
-  // the thing being timed, and an idle transcript runs no interval at all.
+  // The row owns its clock: it is mounted only while a turn is in flight, so
+  // an idle transcript runs no interval at all.
   const now = useTicker(startedAt !== undefined)
   const elapsed = startedAt === undefined ? undefined : formatDuration(now - startedAt)
   const readings = [elapsed, tokens ? `↓ ${(tokens / 1000).toFixed(1)}k tokens` : undefined].filter(Boolean)

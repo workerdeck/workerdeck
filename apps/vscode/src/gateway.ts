@@ -4,12 +4,10 @@ import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl } from './hosts.ts'
 
 /**
- * Extension-host-side clients: real Node fetch with the gateway's auth header.
- *
- * `WebSocketImpl` must be passed even though the extension host never attaches
- * a session (live truth belongs to the panel, rollups to the sidebar — one
- * attach per session): the client resolves its WS implementation at
- * construction, and VS Code's Node 18 has no global `WebSocket`.
+ * Extension-host-side client: real Node fetch with the gateway's auth header.
+ * `WebSocketImpl` must be passed even though the host never attaches a session —
+ * the client resolves its WS implementation at construction and VS Code's Node 18
+ * has no global `WebSocket`.
  */
 export async function clientFor(store: HostStore, host: GatewayHost): Promise<WorkerDeckClient | undefined> {
   const base = apiUrl(host)

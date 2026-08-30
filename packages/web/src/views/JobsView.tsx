@@ -43,8 +43,7 @@ export function QueueStatsStrip({ stats }: { stats: QueueStats }) {
       <span>
         Queued <span className="font-mono text-fg-1">{stats.queued}</span>
       </span>
-      {/* Only worth the space once something is actually waiting on an external
-          execution — most deployments never defer at all. */}
+      {/* Only worth the space once something is waiting on an external execution. */}
       {stats.parked > 0 ? (
         <span>
           Parked <span className="font-mono text-fg-1">{stats.parked}</span>
@@ -75,8 +74,7 @@ export function QueueStatsStrip({ stats }: { stats: QueueStats }) {
 }
 
 function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
-  // Jobs are the primary gateway's, so the cwd suggestions come from its
-  // sessions — see `primaryClient()`.
+  // Jobs are the primary gateway's, so the cwd suggestions come from its sessions.
   const { snapshots } = useSessions()
   const sessions = snapshots.find((snap) => snap.host.id === primaryHost()?.id)?.sessions ?? []
   const form = useRunForm('job')
@@ -109,12 +107,10 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
       await client()!.createJob({
         session: {
           ...form.sessionFields({
-            // Opt-in per job, unlike an interactive session: nobody is present
-            // to make the call, so pre-authorizing it has to be deliberate.
+            // Opt-in per job: nobody is present to make the call, so this must be deliberate.
             allowBypass,
           }),
-          // Restated rather than passed through: a job's prompt is required (it
-          // is the whole job), where a session's is optional.
+          // A job's prompt is required — it is the whole job — where a session's is optional.
           prompt: form.prompt.trim(),
           // Meaningless without an approval channel — the record decides.
           questionBehavior: engine.capabilities.interactiveApprovals ? questions : undefined,
@@ -140,8 +136,7 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
         sessions={sessions}
         promptLabel="Prompt (the task — runs unattended)"
         extras={
-          // Questions ride the approval channel; without one there is nothing
-          // to configure.
+          // Questions ride the approval channel; without one there is nothing to configure.
           engine.capabilities.interactiveApprovals ? (
             <label className="flex min-w-0 flex-col gap-1">
               <span className="text-label font-medium text-fg-3">Questions</span>
@@ -248,11 +243,7 @@ export function ScheduleJobDialog({
   )
 }
 
-/**
- * What fills the detail pane when no job is selected: the queue's own health,
- * which is the one thing worth saying about jobs in general rather than about
- * any one of them.
- */
+/** What fills the detail pane when no job is selected: the queue's own health. */
 export function JobsView() {
   const { stats, enabled, error } = useJobs()
   return (

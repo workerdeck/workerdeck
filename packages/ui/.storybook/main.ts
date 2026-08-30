@@ -2,15 +2,8 @@ import type { StorybookConfig } from '@storybook/react-vite'
 import { defaultClientConditions } from 'vite'
 
 /**
- * The component catalog.
- *
- * Separate from `dev/`, which stays what it always was: a *measurement* harness
- * for the terminal renderer (the character-cell overlay, the height audit, the
- * perf sweep). Those answer "is this on the grid", which is a question about one
- * running surface and not about a component's states. This answers "does every
- * state of this component look right, in both themes, at sidebar width", which
- * is a question `dev/` could only ever answer by growing a second app inside
- * itself.
+ * The component catalog — component states in both themes, as opposed to `dev/`,
+ * which measures one running terminal surface against the grid.
  *
  * Nothing here is published — `package.json`'s `files` is `build` + `src`.
  */

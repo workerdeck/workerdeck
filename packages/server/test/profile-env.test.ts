@@ -21,7 +21,7 @@ vi.mock('node:os', async (importOriginal) => {
   return { ...actual, homedir: () => fakeHome }
 })
 
-function captureHarness() {
+const captureHarness = () => {
   const captured: { options?: Options } = {}
   const queryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }) => {
     captured.options = params.options
@@ -64,7 +64,7 @@ afterEach(async () => {
   vi.restoreAllMocks()
 })
 
-async function createSession(port: number, profile?: string): Promise<Response> {
+const createSession = async (port: number, profile?: string): Promise<Response> => {
   return fetch(`http://127.0.0.1:${port}/v1/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

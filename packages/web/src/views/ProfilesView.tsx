@@ -6,12 +6,7 @@ export function openInVsCode(path: string): void {
   window.location.href = `vscode://file${path}`
 }
 
-/**
- * What fills the detail pane when no profile is selected.
- *
- * The list is the sidebar now, so this route has nothing to list — VS Code's
- * empty editor group.
- */
+/** What fills the detail pane when no profile is selected — the list is the sidebar. */
 export function ProfilesView() {
   return (
     <div className="flex flex-1 items-center justify-center p-8">

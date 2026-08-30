@@ -40,7 +40,6 @@ export function saveCursorPosition(editor: HTMLElement): SavedCursor | null {
     return { nodeIndex: range.startOffset, offset: 0 }
   }
 
-  // Walk up to find the direct child of editor using type-safe helper
   const directChild = getDirectChildContaining(editor, node)
   if (!directChild) {
     return null
@@ -323,7 +322,6 @@ export function findDOMPosition(container: HTMLElement, targetOffset: number): {
     } else if (isChipElement(child)) {
       const chipLen = chipNodeTextLength(child)
       if (remaining <= chipLen) {
-        // Position after the chip element
         return { node: container, offset: i + 1 }
       }
       remaining -= chipLen

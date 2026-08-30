@@ -8,17 +8,7 @@ import { RowAction, SidebarRow } from './SidebarRow.tsx'
 import { useHosts, type GatewayHost } from '@/lib/hosts.ts'
 import { useSessions } from '@/hooks/useSessions.ts'
 
-/**
- * The configured gateways, as their own section sidebar.
- *
- * It used to be a strip pinned under the sessions list, on the reasoning that a
- * gateway is a *mode* every session belongs to. That is still true, but it made
- * managing one a hover-icon affair inside somebody else's view; here the list is
- * the sidebar and a gateway opens as a page, which is what the other three
- * sections do. The health dot is the fact worth having at a glance, and the
- * header carries the connected count for the same reason the extension's view
- * description does.
- */
+/** The configured gateways, as their own section sidebar. */
 export function GatewaysSidebar() {
   const navigate = useNavigate()
   const activeId = useRouterState({
@@ -54,8 +44,7 @@ export function GatewaysSidebar() {
       >
         <SidebarBody>
           {ready && hosts.length === 0 ? (
-            // No implicit localhost is invented here, exactly as the extension
-            // refuses to: a gateway you did not configure is one you cannot reach.
+            // No implicit localhost is invented, exactly as the extension refuses to.
             <Empty
               icon={<Server />}
               title="No gateways yet"
@@ -78,8 +67,6 @@ export function GatewaysSidebar() {
                 status={
                   <>
                     {host.implicit ? <span className="shrink-0 text-label text-fg-4">this page</span> : null}
-                    {/* State as one glyph on the right edge, where every other
-                        list in this app puts it. */}
                     <span
                       aria-hidden
                       title={snapshot?.error ?? (state === 'ok' ? 'Connected' : 'Connecting…')}
@@ -92,8 +79,7 @@ export function GatewaysSidebar() {
                 }
                 description={host.baseUrl}
                 actions={
-                  // The implicit gateway has nothing to remove — removing it
-                  // would just be closing the tab.
+                  // The implicit gateway has nothing to remove: that would just be closing the tab.
                   host.implicit ? null : (
                     <RowAction label={`Remove ${host.name}`} onClick={() => setRemoving(host)}>
                       <Trash2 className="size-3" />
@@ -113,8 +99,7 @@ export function GatewaysSidebar() {
           onRemoved={() => {
             const gone = removing.id === activeId
             setRemoving(undefined)
-            // Standing on the page for a gateway that no longer exists is the
-            // one case the detail route cannot recover from on its own.
+            // The detail route cannot recover from standing on a gateway that no longer exists.
             if (gone) {
               void navigate({ to: '/gateways' })
             }

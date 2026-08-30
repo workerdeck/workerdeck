@@ -15,7 +15,7 @@ import { clearTranscriptCache, deleteTranscriptCache, readTranscriptCache, write
  * the seed feeds is pinned in transcript.test.ts.
  */
 
-function info(overrides: Partial<SessionInfo> = {}): SessionInfo {
+const info = (overrides: Partial<SessionInfo> = {}): SessionInfo => {
   return {
     id: 's1',
     status: 'idle',
@@ -28,7 +28,7 @@ function info(overrides: Partial<SessionInfo> = {}): SessionInfo {
 }
 
 /** A transcript that attached and saw events up to `lastSeq`. */
-function held(lastSeq: number): TranscriptState {
+const held = (lastSeq: number): TranscriptState => {
   return seedFromSessionInfo({ ...initialTranscriptState, lastSeq }, info({ lastSeq }))
 }
 
@@ -36,7 +36,7 @@ const KEY = 'identity s1'
 
 /** The plan inputs for one healthy, cache-on attach; tests override the part
  * whose decision they pin. */
-function inputs(overrides: Partial<Parameters<typeof planAttach>[0]> = {}) {
+const inputs = (overrides: Partial<Parameters<typeof planAttach>[0]> = {}) => {
   return {
     resyncSeq: 0,
     key: KEY,

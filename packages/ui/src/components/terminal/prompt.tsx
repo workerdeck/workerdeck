@@ -3,25 +3,16 @@ import { cn } from '../../lib/utils.ts'
 import { Blank, Ink, Row } from './row.tsx'
 
 /**
- * The parts a terminal prompt is built from.
- *
- * An approval and a question are the two places the transcript stops being a log
- * and becomes a form, and "no boxes" has to be paid for by something. In the CLI
- * it is paid for three ways, and all three are here: a **rule** marks where the
- * run stops and the decision starts, the options are **numbered** so a key press
- * is an answer, and a **hint line** says which keys. That is what makes a prompt
- * answerable without reaching for the mouse — which is the whole reason a
- * terminal UI can be faster than a dialog.
- *
- * Everything stays on the grid: the rules are one line tall with the stroke
- * drawn through the middle by a background (a border would cost layout), and the
- * roving `❯` lives in the same gutter cell every other row uses.
+ * The parts a terminal prompt is built from, in the CLI's idiom: a rule marks
+ * where the run stops and the decision starts, options are numbered so a key
+ * press is an answer, a hint line says which keys. Everything stays on the
+ * grid — rules and box frames are drawn by backgrounds, never borders that
+ * would cost layout.
  */
 
 /**
- * The boundary above a prompt. Solid separates the run from the decision; dashed
- * separates parts *within* it (the CLI puts one between a diff and its question),
- * which is why there are two weights and not one.
+ * The boundary above a prompt. Solid separates the run from the decision;
+ * dashed separates parts *within* it.
  */
 export function Rule({ dashed }: { dashed?: boolean }) {
   return <div className={cn('term-rule-row', dashed && 'term-rule-dashed')} aria-hidden />
@@ -33,21 +24,16 @@ export function Hint({ children }: { children: ReactNode }) {
 }
 
 /**
- * A framed payload — a preview, a snippet. The frame is drawn with four
- * background gradients rather than a border, so it costs no layout: a 1px border
- * would push its contents a pixel off the column every other row sits on.
+ * A framed payload — a preview, a snippet. The frame is background gradients,
+ * not a border: a 1px border would push the contents off the column grid.
  */
 export function Box({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn('term-box', className)}>{children}</div>
 }
 
 /**
- * The prompt's heading: what is being asked, and about what.
- *
- * Two lines because the engine gives two — `displayName` ("Edit file") is the
- * action, and the subject (the path) is the thing it acts on. The CLI shows them
- * exactly this way, and it is the one place in the theme where colour is used
- * for emphasis rather than for state.
+ * The prompt's heading: the action (`displayName`), then the subject it acts
+ * on — the CLI's own two lines.
  */
 export function PromptTitle({ title, subject }: { title: string; subject?: string }) {
   return (
@@ -63,26 +49,20 @@ export function PromptTitle({ title, subject }: { title: string; subject?: strin
 export type Choice = {
   key: string
   label: string
-  /** Rendered dim on its own row under the label, as the CLI does for a
-   * multi-select's options — never appended to the label, which would make the
-   * row wrap and cost the list its scannability. */
+  /** Rendered dim on its own row under the label — never appended to it. */
   description?: string
   /**
-   * Present → the row carries selection state and draws it. `marker` says in
-   * which idiom: `[x]` for a multi-select, `(•)` for a one-of. Absent → the row
-   * is an action (Allow, Cancel), which has no state to show.
+   * Present → the row carries selection state; `marker` says in which idiom
+   * (`[x]` multi-select, `(•)` one-of). Absent → the row is an action.
    */
   checked?: boolean
   marker?: 'check' | 'radio'
-  /**
-   * Chosen, in a list that draws no markers (a one-of). The colour is the whole
-   * signal there: without it, tabbing back to an answered question would show no
-   * trace of the answer given.
-   */
+  /** Chosen, in a list that draws no markers (a one-of) — the colour is the
+   * only trace of the answer when tabbing back. */
   selected?: boolean
   danger?: boolean
-  /** Rendered under the row, outside the button — a preview, a text field. The
-   * caller decides when it exists (focused, checked); a button may not hold one. */
+  /** Rendered under the row, outside the button (a preview, a text field) — a
+   * button may not hold one. */
   detail?: ReactNode
 }
 
@@ -100,26 +80,21 @@ export interface ChoicesProps {
   onChoose: (index: number) => void
   /**
    * Own the DOM focus, moving it with the roving index. False while something
-   * else inside the prompt holds it (a text field, another question's list) —
-   * two lists both chasing `focused` would tear the caret back and forth.
+   * else inside the prompt holds it — two lists both chasing `focused` would
+   * tear the caret back and forth.
    */
   active?: boolean
   /**
-   * Take the keyboard when the list first appears. True by default — a prompt
-   * whose whole affordance is "press 1" is useless if the keys go somewhere
-   * else, and the CLI hands the keyboard over the moment it asks.
-   *
-   * It is a *first mount* decision only, and it declines when the reader is
-   * already typing (see {@link isTyping}): an approval landing mid-sentence must
-   * not pull the caret out of the composer and scatter the rest of the sentence
-   * across an option list.
+   * Take the keyboard when the list first appears (default true). A first-mount
+   * decision only, and it declines while the reader is mid-message (see
+   * {@link isTyping}): an approval landing mid-sentence must not steal the caret.
    */
   autoFocus?: boolean
   label: string
 }
 
 /** Is the reader mid-keystroke somewhere that keeps its own caret? */
-function isTyping(element: Element | null): boolean {
+const isTyping = (element: Element | null): boolean => {
   if (!(element instanceof HTMLElement)) {
     return false
   }
@@ -127,28 +102,18 @@ function isTyping(element: Element | null): boolean {
   if (!editable) {
     return false
   }
-  // Focus in a field is not the same as a message in progress, and only the
-  // second is worth protecting. This used to return true for any focused
-  // editable, which read fine until a host that keeps the composer focused at
-  // all times ran it: VS Code puts the caret in the composer when a session is
-  // shown and again on any click in dead space, so the field was *always* the
-  // active element and the prompt therefore *never* took the keyboard. The
-  // approval that has to be answered was the one thing you could not answer
-  // without reaching for the mouse.
-  //
-  // An empty field has nothing to lose, so the takeover proceeds; a half-typed
-  // message still wins, which is the case the guard was written for.
+  // Only a message in progress is worth protecting, not mere focus in a field:
+  // some hosts (VS Code) keep the composer focused at all times, and guarding
+  // on focus alone means the prompt can never take the keyboard. An empty
+  // field has nothing to lose.
   const text = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : (element.textContent ?? '')
   return text.trim().length > 0
 }
 
 /**
  * A keyboard-first list of choices, as rows: `↑`/`↓` move, `1`–`9` pick
- * directly, `Enter`/`Space` take the focused one (the button does that itself).
- *
- * The number is part of the gutter, not the label, so every option's text starts
- * on the same column and the list reads as a column of answers rather than a
- * ragged paragraph.
+ * directly, `Enter`/`Space` take the focused one. The number is part of the
+ * gutter, not the label, so every option's text starts on the same column.
  */
 export function Choices({ options, focused, onFocus, onChoose, active = true, autoFocus = true, label }: ChoicesProps) {
   const refs = useRef<Array<HTMLButtonElement | null>>([])
@@ -157,20 +122,12 @@ export function Choices({ options, focused, onFocus, onChoose, active = true, au
     if (!active) {
       return
     }
-    // Two different jobs, told apart by where the keyboard already is rather
-    // than by how many times this has run.
-    //
-    // If focus is already on one of these rows, the roving cursor is moving and
-    // the DOM must follow `focused` unconditionally — otherwise the `❯` and the
-    // real caret drift apart. If it is not, this is the initial takeover, which
-    // is refusable so it cannot snatch a half-written message.
-    //
-    // This used to be a `mounted` ref: refuse on the first pass, follow on
-    // every pass after. That is not safe under StrictMode, which mounts,
-    // unmounts and remounts in development — the ref survives the simulated
-    // remount, so the second pass saw `mounted === true`, skipped the guard
-    // entirely and stole focus from whatever you were typing. It read as
-    // correct in production and wrong in dev, which is the worst way round.
+    // Told apart by where the keyboard already is, NOT by how many times this
+    // has run: if focus is on one of these rows the DOM must follow `focused`
+    // unconditionally (or the `❯` and the caret drift apart); otherwise this
+    // is the refusable initial takeover. A `mounted` ref is not safe here —
+    // StrictMode's simulated remount preserves refs, so it skips the guard and
+    // steals focus in dev.
     const focusIsInList = refs.current.some((row) => row !== null && row === document.activeElement)
     if (!focusIsInList && (!autoFocus || isTyping(document.activeElement))) {
       return
@@ -199,9 +156,8 @@ export function Choices({ options, focused, onFocus, onChoose, active = true, au
           event.preventDefault()
           return
         }
-        // Digits are the whole point of numbering the rows — but only as far as
-        // the rows that exist, so `9` on a three-option prompt stays a no-op
-        // rather than a silent miss.
+        // Digits pick directly — but only rows that exist; `9` on a
+        // three-option prompt stays a no-op.
         const digit = Number(event.key)
         if (Number.isInteger(digit) && digit >= 1 && digit <= Math.min(options.length, 9)) {
           onFocus(digit - 1)
@@ -225,8 +181,8 @@ export function Choices({ options, focused, onFocus, onChoose, active = true, au
               onClick={() => onChoose(index)}
               className="term-press"
             >
-              {/* `❯ 1.` is the gutter: marker and number together, so the label
-                  starts on one column whether or not the row is focused. */}
+              {/* `❯ 1.` is the gutter, so the label starts on one column
+                  whether or not the row is focused. */}
               <Row
                 columns={5}
                 glyph={`${isFocused ? '❯' : ' '} ${index + 1}.`}
@@ -296,22 +252,17 @@ export function PromptInput({
 }
 
 /**
- * The question strip: one chip per question plus the submit step, with the
- * active one filled.
- *
- * It exists because the CLI asks **one question at a time**, and a form that
- * hides two of its three questions has to say so — otherwise answering the first
- * looks like finishing. The arrows are not controls, they are the legend for
- * `Tab`/`Shift+Tab`, which is what actually moves between them.
+ * The question strip: one chip per question plus the submit step, active one
+ * filled — a form that hides two of its three questions has to say so. The
+ * arrows are the legend for `Tab`/`Shift+Tab`, not controls.
  */
 export function TabStrip({
   tabs,
   active,
   onSelect,
 }: {
-  /** `glyph` rather than a derived done/not-done mark: the submit step is always
-   * a `✓` (it is the act of finishing, not a thing to answer), and deriving it
-   * would make it a hollow box until every question was done. */
+  /** `glyph` rather than a derived done/not-done mark: the submit step is
+   * always a `✓`, not a thing to answer. */
   tabs: { key: string; label: string; glyph: string }[]
   active: number
   onSelect: (index: number) => void

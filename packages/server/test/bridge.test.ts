@@ -6,7 +6,7 @@ import type { ToolExecutionResult } from '@workerdeck/core'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 /** Minimal stand-in for the SDK: the bridge tests never drive the model. */
-function idleHarness() {
+const idleHarness = () => {
   const query = {
     [Symbol.asyncIterator]() {
       return this
@@ -22,7 +22,7 @@ function idleHarness() {
   }
 }
 
-function frameCollector(ws: WebSocket) {
+const frameCollector = (ws: WebSocket) => {
   const frames: ServerFrame[] = []
   const waiters: Array<{ match: (f: ServerFrame) => boolean; resolve: (f: ServerFrame) => void }> = []
   ws.on('message', (data) => {
@@ -57,7 +57,7 @@ afterEach(async () => {
   results.length = 0
 })
 
-async function startServer(bridgeTimeoutMs?: number) {
+const startServer = async (bridgeTimeoutMs?: number) => {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
@@ -71,7 +71,7 @@ async function startServer(bridgeTimeoutMs?: number) {
   return { base: `http://127.0.0.1:${port}/v1`, wsBase: `ws://127.0.0.1:${port}/v1` }
 }
 
-async function createSession(base: string): Promise<SessionInfo> {
+const createSession = async (base: string): Promise<SessionInfo> => {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -80,7 +80,7 @@ async function createSession(base: string): Promise<SessionInfo> {
   return ((await res.json()) as { session: SessionInfo }).session
 }
 
-async function attach(wsBase: string, sessionId: string) {
+const attach = async (wsBase: string, sessionId: string) => {
   const ws = new WebSocket(`${wsBase}/sessions/${sessionId}/ws`)
   const collector = frameCollector(ws)
   await collector.waitFor((f) => f.type === 'attached')

@@ -6,20 +6,15 @@ import { Choices, Hint, PromptInput, PromptTitle, Rule } from './prompt.tsx'
 import { Blank, Row } from './row.tsx'
 
 /**
- * The approval, as the CLI draws it: a rule, what is being asked and about what,
- * the change itself, a dashed rule, the question, numbered answers, and the keys.
+ * The approval, as the CLI draws it. Two rules taken from the CLI:
  *
- * Two things it does that the card version does not, both taken from the CLI:
- *
- * - **It shows the change, not the payload.** For a file edit, `old_string` and
- *   `new_string` are a diff — so it renders one, rather than the JSON input a
- *   reader would have to diff in their head. Without line numbers, necessarily:
- *   the edit has not happened and this client has never read the file (see
- *   {@link previewPatch}). Everything else falls back to the input.
- * - **The heading is the engine's own sentence.** `displayName` ("Edit file")
- *   over `title`, never "wants to use {tool}" composed here — for codex an
- *   approval is an *escalation after a sandbox refusal*, and the runner has
- *   already written the sentence that says so.
+ * - A file edit renders as a diff, not its JSON payload — without line
+ *   numbers, necessarily: this client has never read the file (see
+ *   {@link previewPatch}).
+ * - The heading is the engine's own sentence (`displayName` over `title`),
+ *   never "wants to use {tool}" composed here — for codex an approval is an
+ *   escalation after a sandbox refusal, and the runner already wrote the
+ *   sentence that says so.
  */
 export interface TerminalPermissionPromptProps {
   request: PermissionRequest
@@ -45,12 +40,10 @@ export function TerminalPermissionPrompt({ request, onApprove, onDeny, className
   const patch = previewPatch(request.input)
   const summary = toolInputPreview(request.input)
   const heading = request.displayName ?? request.title ?? 'Permission needed'
-  // The path is the subject when there is one; otherwise the input preview says
-  // what this is about, which for a Bash approval is the command itself.
+  // For a Bash approval the input preview is the command itself.
   const subject = patch?.path ?? (summary || undefined)
 
-  // "Deny" opens the reason field rather than acting, because a denial the agent
-  // can learn from is the one worth defaulting to — an empty field still denies.
+  // "Deny" opens the reason field rather than acting; an empty field still denies.
   const options = [
     { key: 'allow', label: 'Yes' },
     {

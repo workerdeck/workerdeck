@@ -63,19 +63,18 @@ export type SessionRunnerConfig = CreateSessionRequest & {
   backfillHistory?: boolean
   /** Injectable history reader (tests). Defaults to the SDK's getSessionMessages. */
   historyFn?: HistoryFn
-  /** Injectable session-metadata reader (tests). Defaults to the SDK's
-   * getSessionInfo — the only place the CLI's own session title is readable
-   * from, since no message on the stream carries it. */
+  /** Injectable session-metadata reader (tests). Defaults to the SDK's getSessionInfo —
+   * the only source of the CLI's own session title (no stream message carries it). */
   sessionInfoFn?: SessionInfoFn
 }
-
-const DEFAULT_APPROVAL_TIMEOUT_MS = 300_000
 
 type PendingApproval = {
   request: PermissionRequest
   resolve: (result: PermissionResult) => void
   timer: ReturnType<typeof setTimeout>
 }
+
+const DEFAULT_APPROVAL_TIMEOUT_MS = 300_000
 
 /**
  * One live Agent SDK session: owns the query() call, the streaming input queue, the
@@ -92,22 +91,13 @@ export class SessionRunner implements Runner {
   #events: SessionEvent[] = []
   #subscribers = new SubscriberSet()
   #seq = 0
-  /**
-   * Latest context-window reading, retained from the last `context_usage` this
-   * runner emitted so `GET /sessions` can answer it without an attach — see
-   * `SessionInfo.contextUsage`. Folded in the emit path, so it is by
-   * construction the same number the transcript last drew.
-   */
+  /** Latest context-window reading, folded in the emit path so `GET /sessions`
+   * answers it without an attach (`SessionInfo.contextUsage`). */
   #contextUsage: ContextReading | undefined
   #activityCount = 0
-  /**
-   * Seq of the latest `conversation_reset` event, 0 when none. The log itself is
-   * never truncated — it still carries the state-bearing events (`capabilities`,
-   * `system_init`, …) a fresh attacher depends on and which are not re-emitted —
-   * but `subscribe()` skips transcript *content* strictly below this mark, so a
-   * replay does not resurrect a cleared conversation. A later reset supersedes
-   * an earlier one by overwriting it.
-   */
+  /** Seq of the latest `conversation_reset`, 0 when none. The log is never
+   * truncated — state-bearing events are emitted once and must replay — but
+   * `subscribe()` skips transcript content strictly below this mark. */
   #resetSeq = 0
   #status: SessionStatus = 'starting'
   #statusDetail: string | undefined
@@ -116,24 +106,9 @@ export class SessionRunner implements Runner {
   #apiKeySource: string | undefined
   #permissionMode: PermissionMode | undefined
   #pending = new Map<string, PendingApproval>()
-  /**
-   * The turn ended while an approval was standing, and nothing has started a
-   * new one since.
-   *
-   * `awaiting_approval` rightly outranks `idle` for display, so a turn-over
-   * signal arriving under a standing approval cannot be applied when it lands.
-   * It used to be **discarded** for that reason, which is a different thing
-   * from outranked: the settle path then asserted `running` on the assumption
-   * that an answered approval means work resumes, and when the turn was already
-   * over — an interrupt, a timeout — the session claimed to be running one that
-   * had produced its result. Status is purely edge-driven here, with no poll and
-   * no reconciliation anywhere, so that single dropped edge never came back and
-   * every client rendered it faithfully for the life of the session.
-   *
-   * So the fact is *deferred* rather than dropped, and it is deliberately
-   * cleared the moment work genuinely resumes — a turn-over belongs to the turn
-   * that produced it and must not settle the next one.
-   */
+  /** The turn ended while an approval was standing. Status is purely edge-driven,
+   * so the fact must be deferred, never dropped, and cleared the moment work
+   * resumes — see docs/GOTCHAS.md §Permissions. */
   #turnOverWhileBlocked = false
   /** The read-time sub-agent rollup (`SessionInfo.subagents`), fed from #emit —
    * the one chokepoint — so the resume backfill reconstructs it for free. */
@@ -155,10 +130,8 @@ export class SessionRunner implements Runner {
   #runPromise: Promise<void> | undefined
 
   constructor(config: SessionRunnerConfig, id: string = randomUUID()) {
-    // Optional on the wire (an engine with no host filesystem takes none) but
-    // required here: this one spawns the CLI in a real directory. The gateway
-    // enforces it off `EngineCapabilities.hostCwd`, so reaching this throw means
-    // a host built a runner around that check.
+    // Optional on the wire, required here: this engine spawns the CLI in a real
+    // directory. The gateway enforces it off `EngineCapabilities.hostCwd`.
     if (!config.cwd) {
       throw new Error('the claude engine requires a cwd')
     }
@@ -201,9 +174,8 @@ export class SessionRunner implements Runner {
       capabilities: ENGINE_CAPABILITIES.claude,
       model: this.#model ?? this.#config.model,
       permissionMode: this.#permissionMode,
-      // Fixed at spawn: the CLI refuses to switch into bypass unless it was
-      // launched for it (see #buildOptions). Reported so a client can disable
-      // the mode rather than offer a switch that will be refused.
+      // Fixed at spawn (see #buildOptions); clients disable the mode instead of
+      // offering a switch the CLI will refuse.
       canBypassPermissions: this.#config.permissionMode === 'bypassPermissions' || this.#config.allowDangerouslySkipPermissions === true,
       apiKeySource: this.#apiKeySource,
       createdAt: this.createdAt,
@@ -221,16 +193,9 @@ export class SessionRunner implements Runner {
     }
   }
 
-  /**
-   * Three sources, most-deliberate first: the host's own rename (`meta.title`),
-   * the title the CLI gave this thread (`#engineTitle`), then the first prompt
-   * truncated.
-   *
-   * The rename outranks everything by design — a person naming a session must
-   * not have it renamed under them by a model — which is also why the engine
-   * title is *only ever read* while `meta.title` is unset (see
-   * `#fetchEngineTitle`), rather than read and then discarded here.
-   */
+  /** Most-deliberate first: the host's rename (`meta.title`), the CLI's own title,
+   * then the first prompt truncated. A person's rename must never be overwritten
+   * by a model — see `#fetchEngineTitle`. */
   #title(): string | undefined {
     const metaTitle = this.#config.meta?.title
     if (typeof metaTitle === 'string' && metaTitle.length > 0) {
@@ -343,22 +308,12 @@ export class SessionRunner implements Runner {
   }
 
   /**
-   * Reset the conversation by sending the `/clear` the CLI already honors.
-   *
-   * Deliberately not a second mechanism: this engine's reset arrives *from the
-   * SDK*, and `normalizeSdkMessage` turns the CLI's report of it into the
-   * `conversation_reset` event (adopting the new conversation id and re-polling
-   * context usage on the way through). Reimplementing the clear here would give
-   * one engine two ways to reach the same state, and only one of them would get
-   * the id adoption right. So the command and the composer's `/clear` are one
-   * behaviour, and this method is the thin end of it.
-   *
-   * The one place it differs from the other two engines: this resolves when the
-   * `/clear` has been **handed to the CLI**, not when the reset has happened —
-   * the CLI queues its own streamed input, so waiting is its job, and there is
-   * no chain here to ride. The observable contract is the same (a clear sent
-   * mid-turn queues rather than cutting the turn short); only the moment the
-   * promise settles is weaker, and no caller depends on it.
+   * Reset by sending the `/clear` the CLI already honors — deliberately not a
+   * second mechanism: the reset arrives from the SDK and `normalizeSdkMessage`
+   * maps it to `conversation_reset` (with the id adoption). Unlike the other
+   * engines this resolves when the `/clear` is handed to the CLI, not when the
+   * reset lands — the CLI queues its own streamed input, and no caller depends
+   * on the stronger settle.
    */
   async clearContext(): Promise<void> {
     if (this.#status === 'closed' || this.#status === 'failed') {
@@ -405,9 +360,8 @@ export class SessionRunner implements Runner {
     this.#setStatus('closed')
   }
 
-  /** See `Runner.eventAt`. A linear scan: the one caller is a reader pressing
-   * "show everything" on one row, so a per-runner seq index would be a map
-   * maintained on every emit to save a walk nobody makes twice a minute. */
+  /** See `Runner.eventAt`. A linear scan on purpose: the one caller is a reader
+   * pressing "show everything" on one row. */
   eventAt(seq: number): SessionEvent | undefined {
     return this.#events.find((event) => event.seq === seq)
   }
@@ -416,14 +370,10 @@ export class SessionRunner implements Runner {
    * Replay buffered events with seq > afterSeq, then deliver live events.
    * Returns an unsubscribe function.
    *
-   * Replay honours the reset watermark: transcript content below the latest
-   * `conversation_reset` is skipped (the reducer would clear it again anyway,
-   * and a pre-reset client that never learned the reducer's case would render
-   * a conversation the engine has discarded), while state-bearing events —
-   * which are emitted once and never again — always replay. The reset event
-   * itself replays (the skip is strictly-below), which is what clears a
-   * reconnecting client still holding pre-reset rows; superseded resets are
-   * content below the newer one and are skipped with what they cleared.
+   * Replay honours the reset watermark: transcript content strictly below the
+   * latest `conversation_reset` is skipped, state-bearing events (emitted once,
+   * never again) always replay, and the reset event itself replays — which is
+   * what clears a reconnecting client still holding pre-reset rows.
    */
   subscribe(listener: SessionEventListener, afterSeq = 0, options?: SubscribeOptions): () => void {
     return this.#subscribers.subscribe(this.#events, listener, afterSeq, options, this.#resetSeq)
@@ -437,12 +387,9 @@ export class SessionRunner implements Runner {
         return
       }
       this.#query = queryFn({ prompt: this.#input, options: this.#buildOptions() })
-      // Without an initial prompt the CLI stays silent (no init handshake) until the
-      // first message arrives, so 'starting' would never resolve — the session is
-      // already accepting input, which is what 'idle' means. The control channel
-      // does answer before init, though — fetch capabilities, a context baseline and
-      // the plan's usage now so promptless sessions aren't blank until their first
-      // turn. A session opened only to be watched may never have one.
+      // Promptless: the CLI emits no init until the first message, so 'starting'
+      // would never resolve — but the control channel answers before init, so
+      // fetch capabilities, a context baseline and plan usage eagerly.
       if (!this.#config.prompt) {
         this.#setStatus('idle')
         void this.#fetchCapabilities()
@@ -500,12 +447,9 @@ export class SessionRunner implements Runner {
           message,
           parentToolUseId: m.parent_tool_use_id,
           replay: true,
-          // The live path reads this off `isSynthetic` / `origin.kind`; a stored
-          // message carries neither (see `isSyntheticUserText`), so the wrapper
-          // text is the only thing left to read it from. Without it a resumed
-          // session's `<task-notification>` blobs come back as blue user rows —
-          // and, because `transcriptActivity` counts a non-synthetic user
-          // message as a row, as unread badges for work nobody typed.
+          // A stored message carries no `isSynthetic`/`origin`; the wrapper text is
+          // the only signal left (`isSyntheticUserText`). Without it resumed
+          // harness blobs render as user rows and count as unread activity.
           synthetic: isSyntheticUserText(message) ? true : undefined,
           uuid: m.uuid,
         })
@@ -539,22 +483,15 @@ export class SessionRunner implements Runner {
       // the CLI silently downgrades an effort the model doesn't support.
       effort: c.reasoningEffort as Options['effort'],
       includePartialMessages: c.includePartialMessages ?? true,
-      // Without this the SDK forwards only a subagent's tool_use/tool_result
-      // blocks — "enough for a heartbeat counter", in its own words — and its
-      // prompt, thinking and final report never reach the stream at all. That
-      // is not a rendering gap a client can close: a nested transcript with no
-      // text in it is a list of tool names. On, therefore, because this surface
-      // claims to be the session rather than a summary of it; a host that wants
-      // the quieter stream sets it back through `extraOptions`, which is spread
-      // last precisely so it can.
+      // Off (the SDK default) the stream carries only a subagent's
+      // tool_use/tool_result blocks — no brief, thinking or final report.
+      // `extraOptions` is spread last so a host can turn it back off.
       forwardSubagentText: true,
       canUseTool: this.#canUseTool,
       env: c.env,
       pathToClaudeCodeExecutable: c.pathToClaudeCodeExecutable,
       // The CLI refuses to *switch into* bypassPermissions unless it was spawned
-      // with the capability — smoke-verified: "Cannot set permission mode to
-      // bypassPermissions because the session was not launched with
-      // --dangerously-skip-permissions".
+      // with the capability (smoke-verified refusal).
       ...(c.permissionMode === 'bypassPermissions' || c.allowDangerouslySkipPermissions ? { allowDangerouslySkipPermissions: true } : {}),
       ...c.extraOptions,
     }
@@ -591,9 +528,8 @@ export class SessionRunner implements Runner {
       return
     }
     if (msg.type === 'system' && msg.subtype === 'session_state_changed') {
-      // Authoritative turn-over signal — but a pending approval outranks it for
-      // *display*, which is not a reason to forget what it said. Remember, and
-      // apply it when the approval settles.
+      // Authoritative turn-over signal — a pending approval outranks it for
+      // display, but the fact is deferred, not dropped (see #turnOverWhileBlocked).
       if (this.#pending.size > 0) {
         if (msg.state === 'idle') {
           this.#turnOverWhileBlocked = true
@@ -613,16 +549,13 @@ export class SessionRunner implements Runner {
     if (body) {
       this.#emit(body)
       if (body.type === 'conversation_reset') {
-        // Same session, fresh conversation: adopt the new conversation id now
-        // rather than waiting for the follow-up system_init (which only arrives
-        // with the next prompt) — a dormant record written in between must
-        // resume the fresh conversation, not replay the cleared one. The next
-        // system_init stays authoritative and overwrites it.
+        // Adopt the new conversation id now, not at the follow-up system_init
+        // (which only comes with the next prompt) — a dormant record written in
+        // between must resume the fresh conversation, not replay the cleared one.
         if (body.sdkSessionId) {
           this.#sdkSessionId = body.sdkSessionId
         }
-        // The window now holds an almost-empty conversation; re-poll so clients
-        // aren't left staring at the cleared conversation's reading.
+        // Re-poll: the cleared conversation's reading no longer applies.
         void this.#fetchContextUsage()
       }
       if (body.type === 'turn_result') {
@@ -680,28 +613,12 @@ export class SessionRunner implements Runner {
   }
 
   /**
-   * Adopt the title the CLI gave this thread — the "friendly title" it writes a
-   * turn or two into a session, and the name a resumed thread already carries.
-   *
-   * A **poll, not an observation**, and unavoidably so: no member of the SDK's
-   * `SDKMessage` union carries it (the whole union was checked). It lives on
-   * `SDKSessionInfo`, which only `getSessionInfo` / `listSessions` return — the
-   * same record `GET /sdk-sessions` already serves as `SdkSessionSummary`. So it
-   * is read at init and after each turn, which is also roughly the rate at which
-   * it changes.
-   *
-   * Two rules:
-   * - **Never while `meta.title` is set.** A rename is a person's decision and a
-   *   generated summary must not overwrite it. Not read at all in that case, so
-   *   there is no stored value waiting to resurface if the rename is cleared —
-   *   the next turn simply fetches it again.
-   * - `summary` falls back to the first prompt when the session has no real
-   *   title yet, so it is taken only when it *differs* from `firstPrompt`.
-   *   Otherwise `#title()`'s own prompt fallback covers it, and the two would
-   *   disagree only in how they truncate.
-   *
-   * Best-effort throughout: an unreadable transcript, a session file that is not
-   * there yet, an SDK without the function — all leave the title as it was.
+   * Adopt the title the CLI gave this thread. A poll, not an observation — no
+   * `SDKMessage` carries it; only `getSessionInfo`/`listSessions` do. Two rules:
+   * never read while `meta.title` is set (a rename is a person's decision, and
+   * not fetching means nothing is stored waiting to resurface if it is cleared),
+   * and `summary` is taken only when it differs from `firstPrompt` (the SDK's
+   * fallback before a session has a real title). Best-effort throughout.
    */
   async #fetchEngineTitle(): Promise<void> {
     const metaTitle = this.#config.meta?.title
@@ -760,15 +677,10 @@ export class SessionRunner implements Runner {
   }
 
   /**
-   * Snapshot the plan's rate-limit windows and surface them as `rate_limit`
-   * events — the same event a live `rate_limit_event` produces, so clients need
-   * nothing new to render it.
-   *
-   * The CLI only *pushes* a window when it changes, which for a session being
-   * watched rather than driven can be never; polling is what makes usage show up
-   * at all. The control request is marked experimental in the SDK, name included,
-   * so it is probed for by name and every failure is silent — one more reason
-   * this can only ever be decoration.
+   * Poll the plan's rate-limit windows and re-emit them as ordinary `rate_limit`
+   * events. The CLI only pushes a window when it changes — a watched session
+   * would show nothing otherwise. The control request is experimental, name
+   * included, so it is probed by name and every failure is silent.
    */
   async #fetchRateLimits(): Promise<void> {
     const query = this.#query as { usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<unknown> } | undefined
@@ -781,9 +693,7 @@ export class SessionRunner implements Runner {
       if (this.#closed) {
         return
       }
-      // The plan names the windows, so it goes out ahead of them — and only when
-      // it changes, since this is polled after every turn and the answer is the
-      // same one all session long.
+      // The plan names the windows, so it goes out ahead of them — on change only.
       const subscriptionType = usage.subscription_type
       if (subscriptionType && subscriptionType !== this.#subscriptionType) {
         this.#subscriptionType = subscriptionType
@@ -922,22 +832,17 @@ export class SessionRunner implements Runner {
   #emit(body: SessionEventBody): void {
     const event: SessionEvent = { ...body, seq: ++this.#seq, ts: Date.now() }
     this.#lastActivityAt = event.ts
-    // Rows, not events: what a client diffs to know how much it missed. The
-    // count is monotonic across a conversation_reset on purpose — it is an
-    // unread cursor, not an item count (see SessionInfo.activityCount).
+    // Monotonic across a conversation_reset on purpose: it is an unread cursor,
+    // not an item count (see SessionInfo.activityCount).
     this.#activityCount += transcriptActivity(body)
-    // The list's copy of the reading the transcript already has. Folded here
-    // rather than at the point it is fetched, so every producer — and any
-    // future one — passes through the same rule.
+    // Folded here, not at the fetch sites, so every producer passes the same rule.
     this.#contextUsage = contextReading(body) ?? this.#contextUsage
     if (body.type === 'conversation_reset') {
       this.#resetSeq = event.seq
-      // A reset retires the conversation the window described; the old fill is
-      // not this conversation's, exactly as the transcript state clears it.
+      // A reset retires the conversation the window described.
       this.#contextUsage = undefined
     }
-    // Before fan-out, like #pending: a listener that reads info() on this very
-    // event must see it already folded in.
+    // Before fan-out: a listener reading info() on this event must see it folded in.
     this.#subagents.observe(body, event.ts)
     this.#events.push(event)
     this.#subscribers.emit(event)
@@ -947,7 +852,7 @@ export class SessionRunner implements Runner {
 /** Answer each AskUserQuestion question with its first option's label — the tool's
  * convention puts the recommended choice first. Keyed by question text, the shape the
  * CLI expects back in `updatedInput.answers`. */
-function recommendedAnswers(input: Record<string, unknown>): Record<string, string> {
+const recommendedAnswers = (input: Record<string, unknown>): Record<string, string> => {
   const answers: Record<string, string> = {}
   const questions = Array.isArray(input.questions) ? input.questions : []
   for (const entry of questions) {

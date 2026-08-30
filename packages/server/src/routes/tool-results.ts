@@ -1,32 +1,22 @@
 /**
- * `{basePath}/sessions/:id/events/:seq/result?toolUseId=` — the whole of a tool
- * result whose replay delivered only its head.
+ * `{basePath}/sessions/:id/events/:seq/result?toolUseId=` — the whole of a tool result whose
+ * replay delivered only its head. **No new store**: the bytes are already in the runner's
+ * event log, read back through `Runner.eventAt`.
  *
- * **No new store.** The bytes are already in the runner's event log, which is
- * the same log the replay walked past; a second copy of a 641 KB result kept
- * "for fetching" would be exactly the cost this feature exists to remove.
- * `Runner.eventAt` is the read side of it.
+ * `toolUseId` is **required and verified against the block**. A woken dormant session has a
+ * fresh log with fresh seqs, so a `sourceSeq` a client cached before a gateway restart can
+ * name a completely different event — unchecked, the reader is silently handed another tool's
+ * output under the row they pressed.
  *
- * `toolUseId` is **required and verified against the block**, and that is not
- * belt-and-braces. A woken dormant session has a fresh log with fresh seqs, so
- * a `sourceSeq` a client cached before a gateway restart can name a completely
- * different event — and without the check the reader is handed another tool's
- * output under the row they pressed, silently. That is the exact bug class this
- * feature exists to remove, so it is refused rather than guessed at.
- *
- * The scope gate is the caller's (`/sessions/:id/*` is checked before this runs),
- * which is the whole authorization story here: visibility is full control.
+ * The scope gate is the caller's (`/sessions/:id/*` runs before this).
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { imagePartRef, type SessionEvent, type ToolResultBlock } from '@workerdeck/protocol'
 import { json } from '../lib/http.ts'
 
-/** How this route reaches the log: a live runner's `eventAt`, or a **parked**
- * snapshot's own events. A park keeps the log untruncated precisely so a
- * session read days later can still be read whole, so refusing one here would
- * break the case the design was careful to preserve. A *dormant* record holds no
- * log at all, so it resolves to `undefined` and 404s — the same answer `/files`
- * already gives it. */
+/** How this route reaches the log: a live runner's `eventAt`, or a **parked** snapshot's own
+ * events (a park keeps the log untruncated for exactly this). A *dormant* record holds no log,
+ * so it resolves to `undefined` and 404s — the same answer `/files` gives it. */
 export type EventLookup = ((seq: number) => SessionEvent | undefined) | undefined
 
 export function handleToolResult(req: IncomingMessage, res: ServerResponse, lookup: EventLookup, seq: number): void {
@@ -40,9 +30,8 @@ export function handleToolResult(req: IncomingMessage, res: ServerResponse, look
     json(res, 400, { error: 'toolUseId is required' })
     return
   }
-  // An engine that never truncates need not offer the log either — see
-  // `Runner.eventAt`. 501 rather than 404: the session exists and the row the
-  // reader pressed is real; it is this gateway's engine that cannot answer.
+  // 501 rather than 404: the session exists and the row the reader pressed is real; it is this
+  // gateway's engine that does not offer the log (`Runner.eventAt` is optional).
   if (!lookup) {
     json(res, 501, { error: 'engine does not serve stored events' })
     return
@@ -61,18 +50,16 @@ export function handleToolResult(req: IncomingMessage, res: ServerResponse, look
     return
   }
 
-  // `part=N` — one image part's bytes, which is the other half of the image-ref
-  // rule: the replay delivered an address, this answers it. Raw bytes rather
-  // than JSON+base64, because `readProducedFile` → Blob → object URL is the
-  // shipped precedent, the platform decodes it, and JSON would double the
-  // memory and put a decode on the client's main thread.
+  // `part=N` — one image part's bytes: the replay delivered an address, this answers it. Raw
+  // bytes rather than JSON+base64, which would double the memory and put a decode on the
+  // client's main thread.
   const partParam = url.searchParams.get('part')
   if (partParam !== null) {
     const index = Number(partParam)
     const parts = block.content
     const part = Number.isInteger(index) && Array.isArray(parts) ? parts[index] : undefined
-    // Verified against the STORED block, never trusted from the query: the
-    // address was stamped from this array and must still name a base64 image.
+    // Verified against the STORED block, never trusted from the query: the address was
+    // stamped from this array and must still name a base64 image.
     const ref = part ? imagePartRef(part, index) : undefined
     if (!ref) {
       json(res, 404, { error: 'no such image part in that tool result' })
@@ -85,11 +72,9 @@ export function handleToolResult(req: IncomingMessage, res: ServerResponse, look
     return
   }
 
-  // The JSON mode. `imageRefs=1` projects the whole block's image parts through
-  // the same rule the replay used — without it a "show everything" press against
-  // an image-bearing block ships every screenshot's base64 inside the JSON, and
-  // `hydrateToolResult` keeps only the text. Default stays whole, so this is
-  // byte-identical to what shipped before the flag existed.
+  // `imageRefs=1` projects the block's image parts through the same rule the replay used —
+  // without it a "show everything" press against an image-bearing block ships every
+  // screenshot's base64 inside the JSON. Default stays whole, for older clients.
   const content =
     url.searchParams.get('imageRefs') === '1' && Array.isArray(block.content)
       ? block.content.map((part, index) => imagePartRef(part, index) ?? part)

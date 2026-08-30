@@ -182,29 +182,13 @@ const MODEL_FAMILIES: Record<string, { name: string; joiner?: string }> = {
 }
 
 /**
- * The name a person says, from a wire model id:
- *
- * - `claude-opus-5[1m]` → "Opus 5"
- * - `claude-haiku-4-5-20251001` → "Haiku 4.5"
- * - `gpt-5.6-luna` → "GPT-5.6 Luna"
- * - `gemini-2.5-pro` → "Gemini 2.5 Pro"
- * - `o3-mini` → "o3 Mini"
- *
- * Three kinds of token after the family, because vendors mix them freely: a
- * **version** (`5`, `4-5`, `5.6` — joined with dots, since Anthropic splits what
- * OpenAI writes as one token), a **code name or tier** (`luna`, `codex`, `pro`,
- * `mini` — kept and capitalised, since it is often the only thing telling two
- * models apart), and a **snapshot date** (`20251001` — dropped; it is a build,
- * not a version).
- *
- * Anything genuinely unreadable falls back to the id: a wrong name is worse than
- * a raw one, which is at least true.
- *
- * The server has a narrower version of this (`friendlyModelName` in core's
- * `normalize.ts`) that derives Claude catalog names at authoring time. This one
- * is the *render-time* fallback for an id with no catalog row behind it — the
- * sidebar has only `SessionInfo.model` — so it has to cope with every vendor the
- * provider engine can reach, not just the CLI's own.
+ * The name a person says, from a wire model id: `claude-opus-5[1m]` → "Opus 5",
+ * `claude-haiku-4-5-20251001` → "Haiku 4.5", `gpt-5.6-luna` → "GPT-5.6 Luna",
+ * `o3-mini` → "o3 Mini". Version tokens join with dots, code names/tiers are
+ * capitalised, snapshot dates (`20251001`) are dropped; anything unreadable
+ * falls back to the raw id. Render-time counterpart of core's narrower
+ * `friendlyModelName` — this one must cope with every vendor the provider
+ * engine can reach.
  */
 export function friendlyModel(id: string | undefined): string | undefined {
   if (!id) {

@@ -31,7 +31,7 @@ import { TerminalSurface } from '../terminal/surface.tsx'
 import { BriefRow, TaskRow, TerminalItemView } from '../terminal/TerminalTranscript.tsx'
 import { ROW_GAP, TranscriptVariantProvider, type TranscriptDensity, type TranscriptVariant } from './transcript-variant.tsx'
 
-function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_result' }> }) {
+const TurnResultRow = ({ item }: { item: Extract<TranscriptItem, { kind: 'turn_result' }> }) => {
   return (
     <div data-slot="turn-result" className="py-1">
       <div className="flex items-center gap-2">
@@ -56,7 +56,7 @@ function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_r
   )
 }
 
-function NoticeRow({ item }: { item: Extract<TranscriptItem, { kind: 'notice' }> }) {
+const NoticeRow = ({ item }: { item: Extract<TranscriptItem, { kind: 'notice' }> }) => {
   return (
     <div
       data-slot="notice"
@@ -70,7 +70,7 @@ function NoticeRow({ item }: { item: Extract<TranscriptItem, { kind: 'notice' }>
   )
 }
 
-function TranscriptItemView({
+const TranscriptItemView = ({
   item,
   fileUrl,
   attachmentUrl,
@@ -82,7 +82,7 @@ function TranscriptItemView({
   attachmentUrl?: (attachmentId: string) => string
   hostImage?: (path: string) => Promise<string | undefined>
   terminal?: boolean
-}) {
+}) => {
   // The terminal theme is a renderer, not a branch: it draws every kind itself,
   // so the switch below is never reached under it.
   if (terminal) {
@@ -126,25 +126,17 @@ function TranscriptItemView({
 
 /**
  * The "you were here" line: what happened since the session was last looked at,
- * counted from the transcript rather than written by the model (see
- * `summarizeSince`). Everything above it is dimmed while catch-up is on, so the
- * boundary is visible from anywhere in the scrollback, not just at the mark.
- *
- * The line itself is computed in `Transcript`, not here: the recap is a row of
- * the virtual list, and a boundary with nothing to say must contribute no row
- * at all rather than an empty slot that still costs its gap.
+ * counted from the transcript (see `summarizeSince`). The line itself is
+ * computed in `Transcript`, because a boundary with nothing to say must
+ * contribute no row rather than an empty slot that still costs its gap.
  */
-function RecapRow({ line, since, terminal }: { line: string; since?: number; terminal?: boolean }) {
+const RecapRow = ({ line, since, terminal }: { line: string; since?: number; terminal?: boolean }) => {
   const away = since === undefined ? undefined : formatRelativeTime(since)
   const text = away ? `${line} · last here ${away}` : line
 
-  // Under the terminal theme it is a Row like everything else, and that is not
-  // cosmetic: the cards markup measures 42px against an 18px line, so it was the
-  // one row in the transcript sitting off the grid — and it shifted *every row
-  // below it* by the remainder, which is precisely the failure the whole-multiple
-  // rule exists to prevent. It was invisible until a fixture carried a recap
-  // splice. Being a real row also makes it exactly computable, so the height
-  // calculator loses its last estimated constant.
+  // Under the terminal theme it must be a `Row` like everything else: the cards
+  // markup measures 42px against an 18px line, so it sat off the grid and
+  // shifted every row below it by the remainder.
   if (terminal) {
     return (
       <div data-slot="recap">
@@ -185,15 +177,11 @@ function RecapRow({ line, since, terminal }: { line: string; since?: number; ter
  */
 
 /**
- * When the current run began — the clock the working line counts from.
- *
- * Taken here rather than in the loader because the loader comes and goes within
- * a single turn (it hides the moment text starts streaming), and a clock that
- * restarted every time the model paused for a tool would be measuring the wrong
- * thing. Held as state, not a ref: the value has to survive re-renders and reset
- * exactly once, when the session goes back to idle.
+ * When the current run began. Taken here rather than in the loader, which comes
+ * and goes within a single turn — a clock that restarted every time the model
+ * paused for a tool would measure the wrong thing.
  */
-function useRunStart(status: TranscriptState['status']): number | undefined {
+const useRunStart = (status: TranscriptState['status']): number | undefined => {
   const running = status === 'running' || status === 'starting'
   const [startedAt, setStartedAt] = useState<number | undefined>(undefined)
   useEffect(() => {
@@ -204,7 +192,7 @@ function useRunStart(status: TranscriptState['status']): number | undefined {
 
 /** Should the "waiting for output" loader show? Only while running with no in-flight
  * streamed content at the tail of the transcript. */
-function showLoader(state: TranscriptState): boolean {
+const showLoader = (state: TranscriptState): boolean => {
   if (state.status !== 'running' && state.status !== 'starting') {
     return false
   }
@@ -223,13 +211,13 @@ function showLoader(state: TranscriptState): boolean {
 
 /** Files sent with a message: thumbnails for images, named chips for the rest.
  * References only — the bytes are fetched from the gateway. */
-function SentAttachments({
+const SentAttachments = ({
   attachments,
   attachmentUrl,
 }: {
   attachments: MessageAttachment[]
   attachmentUrl?: (attachmentId: string) => string
-}) {
+}) => {
   return (
     <div className="mb-1 flex flex-wrap justify-start gap-1.5">
       {attachments.map((attachment) => {
@@ -247,16 +235,13 @@ function SentAttachments({
 }
 
 /**
- * The terminal theme's root, when that is the variant, and a passthrough when it
- * is not.
- *
- * It has to live *inside* the scroller's content element rather than around the
- * whole `Conversation`: `--term-line` and `1ch` are inherited, and the rows are
- * rendered by the virtualizer several levels down. Wrapping the scroller instead
- * would work identically for the cells and break the full-bleed bands, whose
- * negative margins are measured against this element's padding.
+ * The terminal theme's root, and a passthrough otherwise. It must live *inside*
+ * the scroller's content element, never around the whole `Conversation`:
+ * wrapping the scroller works identically for the inherited cells but breaks
+ * the full-bleed bands, whose negative margins are measured against this
+ * element's padding.
  */
-function TerminalShell({
+const TerminalShell = ({
   active,
   fontSize,
   lineHeight,
@@ -268,7 +253,7 @@ function TerminalShell({
   lineHeight?: number
   affordances?: TerminalAffordances | boolean
   children: ReactNode
-}) {
+}) => {
   if (!active) {
     return <>{children}</>
   }
@@ -280,9 +265,7 @@ function TerminalShell({
 }
 
 /** Already read: present, legible, and visibly behind you. */
-function read(boundary: number | undefined, index: number): boolean {
-  return boundary !== undefined && index < boundary
-}
+const read = (boundary: number | undefined, index: number): boolean => boundary !== undefined && index < boundary
 
 /** Rows produced inside a subagent (`parentToolUseId != null`) are stepped in
  * behind a rule, so a Task's own output reads as belonging to the tool call
@@ -292,7 +275,7 @@ function read(boundary: number | undefined, index: number): boolean {
  * top level and there is no main thread to be an aside from — stepping every row
  * in would draw a rule down the whole surface saying "this happened somewhere
  * else" about the only thing on screen. */
-function nestedClass(item: TranscriptItem, frameParentId?: string): string | undefined {
+const nestedClass = (item: TranscriptItem, frameParentId?: string): string | undefined => {
   const parent = 'parentToolUseId' in item ? item.parentToolUseId : undefined
   const nested = parent != null && parent !== frameParentId
   return nested ? 'border-l-2 border-border pl-3' : undefined
@@ -303,16 +286,11 @@ function nestedClass(item: TranscriptItem, frameParentId?: string): string | und
 // here because this file is where consumers have always found them.
 export { rowIndexForItem, type TranscriptRow } from './transcript-rows.ts'
 
-/** The cards head's one line: the prompt as a plain run of text. Deliberately
- * not the Message component — a proportional card clipped by height is a
- * sliced bubble, and un-styling one from CSS is a fight (see theme.css's
- * sticky-prompt block for the other half of this decision). Prompt syntax
- * stays literal — a 28px bar is a reminder of what was asked, not a rendering
- * surface — and newlines collapse under the bar's `nowrap`. Attachment-only
- * prompts fall back to the attachments' names so the bar is never blank. */
-function promptHeadText(item: Extract<TranscriptItem, { kind: 'user' }>): string {
-  return item.text || (item.attachments ?? []).map((attachment) => attachment.name).join(', ')
-}
+/** The cards head's one line: the prompt as plain text, never the `Message`
+ * component — a proportional card clipped by height is a sliced bubble.
+ * Attachment-only prompts fall back to the attachments' names. */
+const promptHeadText = (item: Extract<TranscriptItem, { kind: 'user' }>): string =>
+  item.text || (item.attachments ?? []).map((attachment) => attachment.name).join(', ')
 
 /**
  * A prompt row's sticky lane — the strip spanning its turn, leading with the
@@ -345,7 +323,7 @@ function promptHeadText(item: Extract<TranscriptItem, { kind: 'user' }>): string
  * during scrolling, and the pin itself is still the compositor's; only the
  * bar's visibility rides the listener.
  */
-function StickyPromptLane({
+const StickyPromptLane = ({
   top,
   height,
   gapClass,
@@ -371,14 +349,11 @@ function StickyPromptLane({
   /** What the pinned head shows — see the component comment. */
   head: ReactNode
   content: ReactNode
-}) {
+}) => {
   const headRef = useRef<HTMLDivElement | null>(null)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   // `top`/`height`/`gapClass` are deps because they move the sentinel without
-  // any scroll: a measurement refinement re-positions the lane under a still
-  // scroller, and only a fresh evaluation notices. Scroll covers the rest —
-  // including programmatic jumps, which fire a scroll event like any other
-  // write of `scrollTop`.
+  // any scroll; scroll covers the rest, programmatic jumps included.
   useEffect(() => {
     const headElement = headRef.current
     const sentinel = sentinelRef.current
@@ -398,16 +373,13 @@ function StickyPromptLane({
   }, [scrollRoot, top, height, gapClass])
   return (
     // The attribute VALUE is the styling seam: terminal.css matches the bare
-    // attribute under its `[data-terminal]` scope, theme.css keys the cards
-    // bar on `[data-sticky-lane='cards']` — no `:not()` acrobatics either side.
+    // attribute under `[data-terminal]`, theme.css keys the cards bar on
+    // `[data-sticky-lane='cards']`.
     <div data-sticky-lane={terminal ? 'terminal' : 'cards'} className="absolute inset-x-0" style={{ top, height }}>
-      {/* The head rides in its own absolutely positioned sub-lane rather than
-          in flow with a cancelled footprint: sticky confinement clamps the
-          *margin* box, and a negative bottom margin shrinks that box to zero
-          height — the head then overshoots the lane's end by its own height,
-          which put two pinned prompts on screen at once during the handoff.
-          Out of flow, the border box is what gets clamped, and the push-off
-          lands exactly at the lane's bottom edge. */}
+      {/* The head rides in its own absolutely positioned sub-lane, never in
+          flow with a cancelled footprint: sticky confinement clamps the
+          *margin* box, so a negative bottom margin lets the head overshoot the
+          lane by its own height and puts two pinned prompts on screen at once. */}
       <div data-sticky-headlane="" aria-hidden>
         <div ref={headRef} data-sticky-head="" className={(terminal && gapClass) || undefined}>
           {head}
@@ -460,7 +432,7 @@ function StickyPromptLane({
  * transient UI state (an expanded tool card, an opened reasoning block) resets
  * once the row scrolls far enough away to unmount.
  */
-function TranscriptRows({
+const TranscriptRows = ({
   rows,
   boundary,
   since,
@@ -519,31 +491,24 @@ function TranscriptRows({
   jumpToRecapRef?: RefObject<(() => void) | null>
   repinRef?: RefObject<(() => void) | null>
   reveal?: { toolUseId: string; nonce: number }
-}) {
+}) => {
   const stick = useStickToBottomContext()
-  // The scroll element belongs to an ancestor — `StickToBottom.Content`
-  // renders it — so when this component's layout effects run at mount, the
-  // ancestor's ref is not attached yet and the virtualizer would see null.
-  // Handing it over from a passive effect (which runs after every ref in the
-  // commit is attached) also guarantees the re-render that lets the
-  // virtualizer adopt it promptly: without one, a transcript short enough to
-  // never fire a scroll event could sit renderless indefinitely.
+  // The scroll element belongs to an ancestor, so at mount its ref is not
+  // attached yet and a layout effect would see null. A passive effect runs
+  // after every ref in the commit is attached, and its re-render is also what
+  // lets the virtualizer adopt the element without waiting for a scroll event.
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null)
-  // Which rows *could* be the pinned prompt. Recomputed only when the row list
-  // changes, so the per-scroll work below is a walk over prompts rather than
-  // over the transcript.
+  // Which rows *could* be the pinned prompt, so the per-scroll work below is a
+  // walk over prompts rather than over the transcript.
   const promptRows = useMemo(
-    // Top-level prompts only: a subagent's brief is a `user` item too, and one
-    // that escaped absorption (an orphan) must not become the pinned prompt —
-    // it is not what the answer on screen belongs to.
+    // Top-level prompts only: a subagent's brief is a `user` item too, and an
+    // orphan of one must not become the pinned prompt.
     () => rows.flatMap((row, index) => ('item' in row && row.item.kind === 'user' && parentOf(row.item) === undefined ? [index] : [])),
     [rows],
   )
-  // The pinned row must stay mounted even when it is far above the window, so
-  // it is forced into the virtual range — see `rangeExtractor` below, which
-  // reads these refs rather than closing over render values: it is called from
-  // inside the virtualizer's own range pass, where a closure would be a stale
-  // render's.
+  // The pinned row is forced into the virtual range by `rangeExtractor` below,
+  // which reads these refs rather than closing over render values: it runs
+  // inside the virtualizer's range pass, where a closure would be stale.
   const pinRef = useRef<{ enabled: boolean; promptRows: readonly number[] }>({
     enabled: false,
     promptRows: [],
@@ -553,30 +518,17 @@ function TranscriptRows({
     setScrollElement(stick.scrollRef.current)
   }, [stick.scrollRef])
 
-  // A composer that grows steals a line from the transcript.
+  // A composer that grows steals a line from the transcript: the two are
+  // siblings in the panel's flex column, so typing a newline shrinks this
+  // scroller and the row being read slides under the fold.
+  // `use-stick-to-bottom` cannot catch it — its ResizeObserver watches the
+  // **content** element, and here the content is unchanged and the *scroller*
+  // moved, with no scroll event either. Hence an observer of our own.
   //
-  // The composer and the transcript are siblings in the panel's flex column, so
-  // typing a newline shrinks this scroller by one line. "At the bottom" is a
-  // `scrollTop`, and that number stops meaning the bottom the moment the
-  // viewport changes height — so the last row, the one you were reading, slides
-  // under the fold as you type.
-  //
-  // `use-stick-to-bottom` cannot catch this: its ResizeObserver observes the
-  // **content** element (`.observe(content)` in its `useStickToBottom`), and
-  // here the content is unchanged and the *scroller* moved. Nor does the browser
-  // help — scrollTop is untouched, so no scroll event fires and nothing
-  // recomputes. Hence an observer of our own, on the scroller's own box.
-  //
-  // The guard is the whole feature: re-pin **only when already pinned**, or
-  // every newline yanks a reader who had deliberately scrolled up. That state
-  // lives in here, which is why this is in `Transcript` and not `SessionPanel`.
-  // Reading `stick.state.isAtBottom` (the library's live object, not the
-  // rendered boolean) is safe precisely because of the paragraph above: no
-  // scroll event fired, so the flag still holds the pre-resize answer.
-  //
-  // This is not a third writer of `scrollTop` — it presses the follow spring's
-  // own button, instantly, which is what the spring would have done had it
-  // noticed. The pinned-suppresses-corrections regime below is untouched.
+  // **Re-pin only when already pinned**, or every newline yanks a reader who
+  // deliberately scrolled up. Reading `stick.state.isAtBottom` (the live
+  // object) is safe for the reason above: no scroll event fired, so the flag
+  // still holds the pre-resize answer.
   useEffect(() => {
     if (!scrollElement) {
       return
@@ -597,17 +549,12 @@ function TranscriptRows({
   }, [scrollElement, stick])
 
   // The replay hold's reveal must paint already at the bottom, and the follow
-  // spring cannot make that true: even `scrollToBottom('instant')` defers its
-  // write behind a `requestAnimationFrame`, one frame after the reveal's paint
-  // — so the first visible frame showed the tail a burst shy of the bottom and
-  // then hopped (measured: revealTop 33037 against final 34459 on the 600-row
-  // fixture). A layout effect runs after the commit that removed the hold's
-  // visibility and before its paint, so this write lands in the very frame the
-  // transcript appears. It presses the library's own `state.scrollTop` setter
-  // — which records the write in `ignoreScrollToTop`, so the scroll handler
-  // knows it for its own — not a raw `scrollTop`, and only on the hold's
-  // falling edge, only while pinned; it is the pin's own move made a frame
-  // early, not a third writer.
+  // spring cannot: even `scrollToBottom('instant')` defers behind a
+  // `requestAnimationFrame`, one frame after the reveal's paint. A layout
+  // effect lands in the frame the transcript appears. It presses the library's
+  // own `state.scrollTop` setter (recorded in `ignoreScrollToTop`, so the
+  // scroll handler knows the write for its own), never a raw `scrollTop`, and
+  // only on the hold's falling edge while pinned.
   const wasReplaying = useRef(replaying)
   useLayoutEffect(() => {
     const was = wasReplaying.current
@@ -629,15 +576,11 @@ function TranscriptRows({
   const virtualizer = useVirtualizer<HTMLElement, HTMLDivElement>({
     count: rows.length,
     // On adopting a scroll element the virtualizer *replays* its remembered
-    // offset into the DOM (that is how `initialOffset` is honored). By then
-    // the pin has usually scrolled the element already, so the remembered 0
-    // would yank a pinned transcript silently back to the top — the observed
-    // race was exactly that, the follow jump at ~180ms and the replay undoing
-    // it at ~590ms. Syncing the remembered offset to the DOM at the adoption
-    // boundary makes every replay a no-op; from then on the scroll observer
-    // owns the field.
+    // offset into the DOM, and by then the pin has usually scrolled the element
+    // already — so the remembered 0 yanks a pinned transcript back to the top.
+    // Syncing the offset at the adoption boundary makes every replay a no-op.
     // Annotated because the body reads `virtualizer` back: without a declared
-    // return type the inference is circular and tsgo gives up on the whole hook.
+    // return type the inference is circular and tsgo gives up on the hook.
     getScrollElement: (): HTMLElement | null => {
       if (scrollElement && virtualizer.scrollElement !== scrollElement) {
         virtualizer.scrollOffset = scrollElement.scrollTop
@@ -646,27 +589,20 @@ function TranscriptRows({
     },
     // Estimates only shape the scrollbar and the span of never-mounted rows; a
     // measurement replaces them the moment a row mounts. Under the terminal
-    // theme they are *computed* (`terminal/height.ts`): the theme's one line
-    // height and one cell make a row's height derivable from its item, so the
-    // scrollbar is honest before rows mount and `scrollToIndex` sums real
-    // sizes instead of accumulating error over unmeasured spans. The gap rides
-    // the same estimate because it is real height on the same measured element
-    // — one line, decided per pair by `gapBefore`, exactly as the renderer
-    // applies the class. The recap row is a Row here too, so it is one line and
-    // exact — it used to be the cards markup, which measured 42px against an
-    // 18px line and pushed every row below it off the grid.
-    // Cards keep the flat constant: they vary too much for any constant to be
-    // right, so it is merely the order of magnitude — and the calculator has
-    // no claim there (padding scales, borders, a proportional face).
+    // theme they are *computed* (`terminal/height.ts`), so the scrollbar is
+    // honest before rows mount and `scrollToIndex` sums real sizes instead of
+    // accumulating error. The gap rides the same estimate because it is real
+    // height on the same measured element. Cards keep the flat constant — they
+    // vary too much for any constant to be right, and the calculator has no
+    // claim over a proportional face.
     estimateSize: (index) => {
       if (terminal && epoch) {
         const row = rows[index]
         const gapPx = index > 0 && gapBefore(rows, index) ? epoch.line : 0
-        if (row && 'text' in row && row.key === 'brief') // Collapsed by default and clipped to BRIEF_LINES, so its height is
-        // known before it mounts — the same discipline the task row keeps by
-        // always being collapsed when unmounted. Expanding is local state on
-        // a mounted row, which the virtualizer re-measures.
-        {
+        // Collapsed by default and clipped to BRIEF_LINES, so its height is
+        // known before it mounts. Expanding is local state on a mounted row,
+        // which the virtualizer re-measures.
+        if (row && 'text' in row && row.key === 'brief') {
           return briefPx(row.text, epoch) + gapPx
         }
         if (row && !('line' in row)) {
@@ -678,16 +614,11 @@ function TranscriptRows({
     },
     overscan: 8,
     getItemKey: (index) => rows[index].key,
-    // The sticky row, forced into the range. This is the virtualizer's own
-    // sticky-header seam: without it the pinned prompt's lane unmounts the
-    // moment it leaves the window, which is exactly when it is doing its job.
-    // The active prompt — the last one starting at or above the fold — is
-    // computed *here*, from the instance's own offset, rather than in the
-    // render body: the range pass runs before the render that would refresh a
-    // ref, so a value computed outside this callback is one scroll event
-    // stale, and a long programmatic jump would leave the pinned row unmounted
-    // until the next scroll. (`virtualizer` is safe to close over: the hook
-    // returns one stable instance for the component's lifetime.)
+    // The sticky row, forced into the range, or the pinned prompt's lane
+    // unmounts the moment it leaves the window. The active prompt is computed
+    // **here**, from the instance's own offset: the range pass runs before the
+    // render that would refresh a ref, so a value computed outside this
+    // callback is one scroll event stale.
     rangeExtractor: useCallback((range: Range) => {
       const indexes = new Set(defaultRangeExtractor(range))
       const { enabled, promptRows: prompts } = pinRef.current
@@ -707,27 +638,19 @@ function TranscriptRows({
       }
       return [...indexes].sort((a, b) => a - b)
     }, []),
-    // Explicit, and left at the default, because the obvious cleanup here is
-    // wrong. A correction fires from `measureElement`'s ref callback — inside
-    // React's commit — so the core's synchronous flush draws a "flushSync was
-    // called from inside a lifecycle method" error, which in an embedder's
-    // console reads as our bug. Turning it off silences that and costs
-    // anchoring: over the same six-step walk up through unmeasured rows, `true`
-    // holds the scrollback to the pixel and `false` let one step slide 112px
-    // under the reader. Holding still is the entire point of the correction,
-    // so the noise stays.
+    // Explicit and left at the default: it logs a "flushSync was called from
+    // inside a lifecycle method" warning, and turning it off costs anchoring —
+    // `false` let a scrollback step slide 112px under the reader.
     useFlushSync: true,
     // The list sits below the content div's top padding, so row offsets are a
-    // few px shy of true scroll offsets. `scrollMargin` exists for exactly
-    // this, but feeding it means measuring the spacer's offsetTop into state;
-    // the error is smaller than one overscan row, so it is deliberately left.
+    // few px shy of true scroll offsets. `scrollMargin` would fix it at the
+    // cost of measuring the spacer into state; the error is smaller than one
+    // overscan row, so it is deliberately left.
   })
-  // (See the component comment.) Supplying the callback at all replaces the
-  // core's default rules, so the escaped branch restates them: on a first
-  // measurement compensate any row whose top sits above the fold; on a
-  // re-measurement only a row entirely above it — a row *spanning* the fold
-  // grows below the reader's anchor point — and never while scrolling up,
-  // where corrections cascade.
+  // Supplying the callback at all replaces the core's default rules, so the
+  // escaped branch restates them: on a first measurement compensate any row
+  // whose top is above the fold; on a re-measurement only a row *entirely*
+  // above it; never while scrolling up, where corrections cascade.
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
     if (stick.state.isAtBottom) {
       return false
@@ -736,18 +659,11 @@ function TranscriptRows({
     return instance.itemSizeCache.has(item.key) ? item.end <= fold && instance.scrollDirection !== 'backward' : item.start < fold
   }
 
-  // A new epoch means every remembered size is against the wrong metrics —
-  // the *measurements* included, which were taken at the old width. Dropping
-  // both together is the whole point: better estimates layered under
-  // stale-width measurements would be worse than either alone.
-  //
-  // The second half is not optional: `measure()` clears the size cache and a
-  // row re-enters it only when its ResizeObserver fires — which needs a *size
-  // change*. A mounted row whose height happens to survive the width change
-  // (short lines that never rewrap) would keep its estimate forever, and
-  // wherever the estimate is off the transcript grows a phantom tail — 2,052px
-  // of scrollable nothing after one sidebar toggle, on a real session. So the
-  // mounted rows are fed straight back in.
+  // A new epoch invalidates every remembered size, *measurements* included —
+  // they were taken at the old width. Feeding the mounted rows straight back in
+  // is **not optional**: `measure()` clears the size cache and a row re-enters
+  // it only when its ResizeObserver fires, so a row whose height survives the
+  // width change would keep its estimate forever and grow a phantom tail.
   useEffect(() => {
     if (!terminal || !epoch) {
       return
@@ -757,15 +673,12 @@ function TranscriptRows({
     if (!container) {
       return
     }
-    // Two sharp edges in the re-feed, both learned the hard way. Order:
-    // `resizeItem` diffs a measure against `measurementsCache`, and straight
-    // after `measure()` that array is still the pre-wipe one — an unchanged
-    // row diffs to zero against its own old measurement and the write is
-    // skipped; recomputing first (any measurement read does it) rebuilds the
-    // array from estimates, so the diff is real again. And `resizeItem`
-    // directly, not `measureElement(element)`: the latter is gated on the
-    // scroll state and silently drops a measure that lands while a scroll is
-    // still hot — which a resize's own scroll anchoring makes routine.
+    // Two sharp edges. **Order**: `resizeItem` diffs against
+    // `measurementsCache`, which straight after `measure()` is still the
+    // pre-wipe array, so an unchanged row diffs to zero and the write is
+    // skipped — reading a measurement first rebuilds it from estimates. And
+    // **`resizeItem` directly**, never `measureElement`, which is gated on the
+    // scroll state and drops measures that land while a scroll is hot.
     virtualizer.getTotalSize()
     for (const element of container.querySelectorAll<HTMLElement>('[data-index]')) {
       const index = Number(element.getAttribute('data-index'))
@@ -775,9 +688,8 @@ function TranscriptRows({
     }
   }, [terminal, epoch, virtualizer])
 
-  // The jump machinery — the aim loop, the catch-up strip's jump, the re-pin
-  // — lives in `use-transcript-jumps.ts`; every jump on this surface comes
-  // through the one function it returns.
+  // The jump machinery lives in `use-transcript-jumps.ts`; every jump on this
+  // surface comes through the one function it returns.
   const jumpToRow = useTranscriptJumps({
     rows,
     terminal,
@@ -792,19 +704,10 @@ function TranscriptRows({
     repinRef,
   })
 
-  // Reveal a tool call from outside the transcript — a sub-agent picked in a
-  // sessions list, whose `Task` row is the thing the reader asked for.
-  //
-  // Keyed on the **nonce**, never on the id: asking for the same sub-agent twice
+  // Keyed on the **nonce**, never the id: asking for the same sub-agent twice
   // is a second request, and a props-equal effect would answer only the first.
-  // The lookup goes through `rowIndexForItem` for the reason that function
-  // exists — a row covers a *membership*, not a contiguous span, so a Task's id
-  // resolves to the folded row that absorbed it rather than to a position. That
-  // also makes a nested child's id work, which is what a client holding only a
-  // `parentToolUseId` can offer.
-  //
-  // `'start'`, like the recap seam and the scrubber's marks: the sub-agent's
-  // work runs *downward* from its row, so the reader wants the screen below it.
+  // The lookup goes through `rowIndexForItem`, so a Task's id — or a nested
+  // child's — resolves to the folded row that absorbed it.
   const revealNonce = reveal?.nonce
   const revealId = reveal?.toolUseId
   useEffect(() => {
@@ -812,9 +715,8 @@ function TranscriptRows({
       return
     }
     const itemIndex = items.findIndex((item) => item.kind === 'tool_call' && item.id === revealId)
-    // Not here: a compaction, a `/clear`, or simply a client whose list knows
-    // about a Task this transcript has not replayed yet. Staying put beats
-    // jumping somewhere arbitrary.
+    // Not here: a compaction, a `/clear`, or a client whose list knows about a
+    // Task this transcript has not replayed. Staying put beats jumping.
     if (itemIndex < 0) {
       return
     }
@@ -822,10 +724,9 @@ function TranscriptRows({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the nonce IS the trigger
   }, [revealNonce])
 
-  // The scrubber. Interactivity follows the hover affordance — with
-  // `affordances={false}` the rail is passive paint (pointer-events off) and
-  // the native scrollbar stays; interactive, the rail IS the scrollbar, so the
-  // native one is hidden via an attribute on the scroll element.
+  // Interactivity follows the hover affordance: with `affordances={false}` the
+  // rail is passive paint and the native scrollbar stays; interactive, the rail
+  // IS the scrollbar and the native one is hidden by an attribute.
   const scrubInteractive = resolveAffordances(affordances).hover
   const recapIndex = rows.findIndex((row) => row.key === 'recap')
   const recapRow = recapIndex >= 0 ? { rowIndex: recapIndex, label: (rows[recapIndex] as { line: string }).line } : undefined
@@ -839,41 +740,20 @@ function TranscriptRows({
 
   /**
    * The pinned prompt: the prompt's **first line**, held at the top of the
-   * scroller.
+   * scroller. What pins is a one-line `overflow: hidden` **head** — the same
+   * row rendered again over the real row's first line, so it aligns by
+   * construction. It takes no pointer events and is `aria-hidden`: the real row
+   * owns interaction and the accessibility tree.
    *
-   * One line, not the row: a pasted twenty-line prompt pinned whole covers the
-   * viewport and buries the very answer being read under it. So what pins is a
-   * **head** — one line tall, `overflow: hidden` — whose content is the same
-   * row rendered again, laid exactly over the real row's first line. It is a
-   * duplicate, which an earlier design here rejected — but that rejection was
-   * of a *separate header* with its own padding and its own idea of the
-   * gutter. This copy is the same component in the same column at the same
-   * width, so it aligns with the row beneath by construction, and while the
-   * row is in flow the overlay is pixel-identical and invisible. It takes no
-   * pointer events and is `aria-hidden`: the real row owns interaction and
-   * the accessibility tree; the head is paint.
+   * **The pin is the browser's, not ours.** Each prompt row renders inside a
+   * **lane** — an absolutely positioned strip spanning its turn — with the head
+   * `position: sticky` inside it. The compositor pins and the lane's bottom
+   * edge pushes off. A JS-written pin (render or a scroll handler) runs behind
+   * the compositor thread and wobbles under momentum scroll.
    *
-   * The pin itself is the browser's, not ours. Each prompt row renders inside a
-   * **lane**: an absolutely positioned strip spanning from the prompt's start to
-   * the next prompt's (its turn), with the head `position: sticky` inside it
-   * (its flow footprint cancelled by a negative bottom margin, so the real row
-   * sits at the lane's top as if the head were not there). The compositor does
-   * the pinning and the lane's bottom edge does the push-off — `sticky` is
-   * inert on an absolutely positioned element, but works unchanged on a child
-   * *of* one, confined to the lane's box. An earlier version clamped the row's
-   * transform from render instead, and paid for it every frame: any JS-written
-   * pin — React render or a raw scroll handler — runs behind the compositor
-   * thread, so the row wobbled under momentum scroll. With the lane there is
-   * no per-scroll JS and no lag.
-   *
-   * Which row — the last prompt at or above the fold, the question the answer
-   * on screen belongs to — falls out of the geometry: only the lane spanning
-   * the viewport top has its child stuck; every earlier lane has pushed its row
-   * off its bottom edge, every later one hasn't reached the top.
-   *
-   * The one job left to JS is keeping that row *mounted* once it scrolls far
-   * above the virtual window — which is exactly when it is working. That lives
-   * in the `rangeExtractor` above.
+   * Which row falls out of the geometry: only the lane spanning the viewport
+   * top has its child stuck. The one job left to JS is keeping that row
+   * *mounted* once it scrolls above the virtual window — see `rangeExtractor`.
    */
   const measurements = virtualizer.measurementsCache
 
@@ -881,16 +761,12 @@ function TranscriptRows({
     <div ref={rowsRef} data-slot="transcript-rows" className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
       {virtualizer.getVirtualItems().map((virtualRow) => {
         const row = rows[virtualRow.index]
-        // The inter-row gap, folded into each row so the measured height
-        // carries it: flex `gap` cannot reach absolutely positioned rows,
-        // and a pixel constant for the virtualizer's `gap` option would
-        // drift from the rem the layout is set in. On the measured wrapper,
-        // not the row div, so a nested row's left border still breaks
-        // across the gap as it did under flex. Skipped for the first row —
-        // a gap above it would be padding, not spacing.
-        // Every variant but terminal spaces every row alike. Terminal
-        // asks whether the pair belongs together — a tool call and its
-        // output get no blank line, exactly as the CLI leaves none.
+        // The inter-row gap folded into each row so the measured height carries
+        // it: flex `gap` cannot reach absolutely positioned rows, and a pixel
+        // constant would drift from the rem the layout is set in. On the
+        // measured wrapper, not the row div, so a nested row's left border
+        // still breaks across the gap. Terminal asks whether the pair belongs
+        // together; every other variant spaces every row alike.
         const gapClass = virtualRow.index > 0 && (!terminal || gapBefore(rows, virtualRow.index)) ? gap.className : undefined
         const content =
           'run' in row ? (
@@ -912,31 +788,21 @@ function TranscriptRows({
           ) : 'line' in row ? (
             <RecapRow line={row.line} since={since} terminal={terminal} />
           ) : (
-            // A task block. No `nestedClass` here: the rule belongs *inside*
-            // the row, around the children it opens onto — the collapsed line
-            // is the main thread's, and stepping it in would say a `Task` call
-            // happened somewhere else.
+            // No `nestedClass`: the rule belongs *inside* the row, around the
+            // children it opens onto — the collapsed line is the main thread's.
             <div className={cn(read(boundary, row.index) && 'opacity-45')}>
               <TaskRow block={row} fileUrl={fileUrl} onOpenSubagent={onOpenSubagent} />
             </div>
           )
         // A prompt row's sticky lane — see the pinned-prompt comment above.
-        // The lane is sized to the turn; the sticky **head** comes first, out
-        // of flow, and the *measured* element is the real row after it, so
-        // the virtualizer's heights are untouched by either. Under terminal
-        // the head is the same content again clipped to one line, and carries
-        // the row's gap class so its visible line sits on the same y while in
-        // flow (the pin parks that padding above the viewport edge when
-        // stuck). Under cards the head is the prompt as plain text — theme.css
-        // draws it as a compact bar — and carries no gap class: it is never
-        // an in-flow overlay of the row, so it has no y to match.
-        // Positioned with `top`, NOT the translate every other row gets:
-        // `position: sticky` is resolved at layout time and a transform is
-        // paint-only, so under a translate the head would stick against the
-        // lane's un-translated box at the top of the list — observed as the
-        // row clamped to its lane's bottom edge, never pinning at all.
-        // Same predicate as `promptRows` above — the lane and the forced range
-        // must agree on which rows are prompts.
+        // The *measured* element is the real row, so the virtualizer's heights
+        // are untouched by the head. Only the terminal head carries the row's
+        // gap class, because only it is an in-flow overlay of the row.
+        // Positioned with `top`, **never the translate every other row gets**:
+        // `position: sticky` resolves at layout time and a transform is
+        // paint-only, so under a translate the head sticks against the lane's
+        // un-translated box and never pins at all. Same predicate as
+        // `promptRows` above — the lane and the forced range must agree.
         if (stickyPrompt && 'item' in row && row.item.kind === 'user' && parentOf(row.item) === undefined) {
           const next = promptRows.find((index) => index > virtualRow.index)
           const laneEnd = next === undefined ? virtualizer.getTotalSize() : (measurements[next]?.start ?? virtualRow.start)
@@ -968,12 +834,10 @@ function TranscriptRows({
           </div>
         )
       })}
-      {/* The overview ruler, portalled beside the scroll element rather than
-          rendered as content: it must not scroll with the rows it maps. It
-          lives here, not in the shell above, because everything it draws from
-          — the virtualizer's offsets, the epoch, the row list, the jump — is
-          this component's. The portal target is the Conversation root
-          (`relative`), the same containing block the scroll button uses. */}
+      {/* Portalled beside the scroll element rather than rendered as content:
+          it must not scroll with the rows it maps. It lives here because
+          everything it draws from is this component's. The target is the
+          Conversation root, the containing block the scroll button uses. */}
       {scrubber && scrollElement?.parentElement
         ? createPortal(
             terminal ? (
@@ -1052,16 +916,11 @@ export interface TranscriptProps {
    * bar. The *real* row is pinned, not a copy — see `TranscriptRows`. */
   stickyPrompt?: boolean
   /**
-   * Mount the overview scrubber — a 12px rail of marks (your prompts, each
-   * turn's response and result as one mark, errors, the pending approval, the
-   * catch-up boundary) over the scroller's right edge. Two rails behind one
-   * prop: under `terminal` it is the pixel-exact ruler that replaces the
-   * native scrollbar (positions ride the height calculator; drag scrubs), and
-   * under `cards` it is the **proportional annotation rail** — positioned by
-   * `itemIndex / items.length`, because proportional text gives the
-   * calculator no claim there — where the native scrollbar stays and the rail
-   * only peeks and jumps. With `affordances={false}` either rail degrades to
-   * passive paint — no drag, peek or click.
+   * Mount the overview scrubber over the scroller's right edge. Two rails
+   * behind one prop: under `terminal` a pixel-exact ruler that replaces the
+   * native scrollbar, under `cards` a **proportional annotation rail** beside
+   * the native scrollbar, which stays. `affordances={false}` degrades either to
+   * passive paint.
    */
   scrubber?: boolean
   /**
@@ -1072,12 +931,8 @@ export interface TranscriptProps {
   scrubberMarks?: readonly number[]
   /**
    * The attach replay is still landing (`useClaudeSession().replaying`): rows
-   * render, measure and pin exactly as normal but nothing paints, and a loading
-   * line shows in their place; when it flips false the settled tail appears in
-   * one frame. Hiding is by *visibility*, never by not mounting — see the
-   * comment at the render site. Optional: an embedder that never passes it
-   * gets today's behaviour, and a short or empty session holds for no visible
-   * time at all (the frame between attach and replay-complete).
+   * render, measure and pin exactly as normal but nothing paints. **Hiding is
+   * by `visibility`, never by not mounting.**
    */
   replaying?: boolean
   /**
@@ -1088,58 +943,37 @@ export interface TranscriptProps {
    */
   catchUp?: { from: number; since?: number }
   /**
-   * Filled with a closure that scrolls the recap row into view — the seam the
-   * panel's catch-up strip presses. A ref rather than a DOM query because the
-   * rows are virtualized: when the recap row isn't mounted, only the
-   * virtualizer knows where it would be. Optional; embedders without a
-   * catch-up strip never touch it. `null` while no transcript is mounted.
+   * Filled with a closure that scrolls the recap row into view. A ref rather
+   * than a DOM query because the rows are virtualized: when the recap row is
+   * not mounted, only the virtualizer knows where it would be. `null` while no
+   * transcript is mounted.
    */
   jumpToRecapRef?: RefObject<(() => void) | null>
   /**
-   * Filled with a closure that re-pins the transcript to the bottom, so a host
-   * can resume following after the reader has scrolled away. The panel presses
-   * it on send: choosing to say something is choosing to watch what happens
-   * next, and a transcript left parked where you were reading makes a sent
-   * message look like it did nothing at all.
+   * Filled with a closure that re-pins the transcript to the bottom. The panel
+   * presses it on send: a transcript left parked where you were reading makes a
+   * sent message look like it did nothing.
    */
   repinRef?: RefObject<(() => void) | null>
   /**
-   * Scroll a tool call into view — bump `nonce` to ask again for the same one.
-   *
-   * The seam a *list* needs: sub-agent work is nested inside the `Task` call
-   * that spawned it, so "open that sub-agent" can only ever mean "take me to its
-   * row". A `parentToolUseId` works here as well as the Task's own id, since the
-   * lookup resolves an absorbed child to the row that folded it.
-   *
-   * A prop rather than a ref (the shape `jumpToRecapRef` uses) because the asker
-   * is outside this webview entirely and the request travels as data; a ref
-   * would need a live closure at the other end of a postMessage bridge.
+   * Scroll a tool call into view — **bump `nonce` to ask again for the same
+   * one**, since an identical prop is a no-op. A `parentToolUseId` works as
+   * well as the Task's own id: the lookup resolves an absorbed child to the row
+   * that folded it. A prop rather than a ref because the asker is outside the
+   * webview and the request travels as data.
    */
   reveal?: { toolUseId: string; nonce: number }
   /**
-   * Render **only** the work one sub-agent did, rather than the conversation —
-   * the sub-agent takeover's frame.
+   * Render **only** the work one sub-agent did — the takeover's frame.
+   * Membership is `subagentItems` (`terminal/blocks.ts`): everything the agent
+   * produced, and not the spawning `Task` call, which *is* the frame.
    *
-   * Membership is `subagentItems` (`terminal/blocks.ts`), which is also the rule
-   * iOS will mirror: everything the agent produced, and not the spawning `Task`
-   * call itself, which *is* the frame rather than a row in it.
-   *
-   * Features are switched off internally whenever it is set, and the gate lives
-   * here rather than at the call site on purpose: each is keyed to a
-   * **full-transcript item index**, so a host that passed a frame and a catch-up
-   * boundary together would not be making a strange choice, it would be making
-   * an incoherent one. Those are the catch-up boundary and its recap row, the
-   * sticky prompt, `reveal`, and the scrubber's **bookmarks** (host indices in
-   * full-transcript space).
-   *
-   * The **scrubber itself stays**, and the distinction is the point: the rail
-   * derives every one of its inputs from the rows it is given, and inside a
-   * frame those are the sub-agent's own — so it marks that agent's prompts,
-   * answers and failures at that agent's offsets. It was originally gated with
-   * the marks, on the reasonable-looking argument that they are one feature;
-   * they are two, and a fifty-tool agent run is exactly where a rail earns its
-   * keep. What stays besides is everything that makes a long stream readable —
-   * virtualization, the height epoch, the follow spring, the replay hold.
+   * Everything keyed to a **full-transcript item index** is switched off
+   * internally while this is set, and the gate lives here rather than at the
+   * call site: the catch-up boundary and its recap row, the sticky prompt,
+   * `reveal`, and the scrubber's bookmarks. The **scrubber itself stays** — it
+   * derives its inputs from the rows it is given, which inside a frame are the
+   * sub-agent's own.
    */
   frame?: { parentToolUseId: string }
   /**
@@ -1196,25 +1030,18 @@ export function Transcript({
   )
   const gap = ROW_GAP[variant][density]
   const runStartedAt = useRunStart(state.status)
-  // A boundary at (or past) the end means nothing is new — no row, no dimming.
-  //
-  // That "past the end" arm now also covers a `/clear`. The mark a client
-  // stored is an item index, and `conversation_reset` empties `items` while
-  // `activityCount` stays monotonic (it is an unread cursor, not an item count
-  // — a count that went backwards would silence the badge for good against a
-  // monotonic watermark store). So a session returned to after a clear has a
-  // boundary well past its few fresh rows and gets **no recap row**, which is
-  // the honest answer: an index into a conversation that no longer exists
-  // cannot say what you missed. Clamping it would land on `items.length` and
-  // read as "nothing is new" — the same outcome, told less truthfully.
+  // A boundary at or past the end means nothing is new — no row, no dimming.
+  // The "past the end" arm also covers a `/clear`: `conversation_reset` empties
+  // `items` while `activityCount` stays monotonic (it is an unread cursor, not
+  // an item count), so a session returned to after a clear gets **no recap
+  // row** — an index into a conversation that no longer exists cannot say what
+  // you missed. Clamping it would read as "nothing is new" instead.
   const boundary = !frame && catchUp && catchUp.from > 0 && catchUp.from < state.items.length ? catchUp.from : undefined
   const recap = useMemo(() => (boundary === undefined ? undefined : recapLine(summarizeSince(state, boundary))), [state, boundary])
-  // What this agent was asked, when the stream does not already say. A
-  // foreground `Task` forwards its brief as a real nested user message and it is
-  // already the frame's first row; a background agent forwards nothing, and
-  // without this the takeover shows an answer with the question missing. Hence
-  // the guard rather than an unconditional splice — drawn both ways, the reader
-  // would see the same instruction twice.
+  // What this agent was asked, when the stream does not already say: a
+  // foreground `Task` forwards its brief as a nested user message, a background
+  // agent forwards nothing. Hence the guard rather than an unconditional
+  // splice, which would show the instruction twice.
   const brief = useMemo(
     () => (frame && frameTask && !items.some((item) => item.kind === 'user') ? taskBrief(frameTask) : undefined),
     [frame, frameTask, items],
@@ -1232,29 +1059,22 @@ export function Transcript({
   }, [items, boundary, recap, terminal, brief])
   return (
     <TranscriptVariantProvider value={variant}>
-      {/* The replay hold hides by VISIBILITY, never by not mounting. The rows
-          must exist and lay out while hidden: the virtualizer measures them,
-          the height epoch builds, and the follow pin settles on the real
-          bottom — so the reveal is the removal of one style, a single paint of
-          an already-settled tail, and the catch-up jump always fires against a
-          measured list. (Unmounting instead would replay the entire
-          mount-measure-correct churn, visibly, at reveal time.) `visibility`
-          is the one hiding property a descendant can turn back ON, which is
-          how the loading line below stays visible inside a hidden root — and
-          the root is the right scope because the scrubber and the scroll
-          button portal/position into it, not into the scroller. */}
+      {/* The replay hold hides by VISIBILITY, never by not mounting: the rows
+          must lay out while hidden so the virtualizer measures them, the epoch
+          builds and the pin settles, making the reveal one paint of a settled
+          tail. `visibility` is also the one hiding property a descendant can
+          turn back ON, which is how the loading line stays visible inside a
+          hidden root. The root is the right scope because the scrubber and the
+          scroll button portal into it, not into the scroller. */}
       <Conversation className={cn(replaying && 'invisible', className)}>
         <ConversationContent className={cn(terminal && 'gap-0 p-0')}>
           <TerminalShell active={terminal} fontSize={fontSize} lineHeight={lineHeight} affordances={affordances}>
             {frame ? (
-              // The frame's own empty states, and they are two different facts.
-              // A task that is present with nothing under it yet is simply an
-              // agent that has not spoken — the loader below says so. A task the
-              // transcript does not have is either still replaying (say nothing,
-              // the hold is up) or genuinely absent: a `/clear` retired the
-              // conversation it lived in, or the id was never this session's.
-              // **Never auto-exit on that** — navigating out from under a reader
-              // is worse than one honest line they can leave when they choose.
+              // Two different facts: a task present with nothing under it is an
+              // agent that has not spoken (the loader says so); a task the
+              // transcript does not have is either still replaying or genuinely
+              // absent. **Never auto-exit on that** — navigating out from under
+              // a reader is worse than one honest line.
               frameTask === undefined && !replaying ? (
                 <div className={cn(terminal ? 'term-row text-fg-4' : 'p-4 text-body-sm text-fg-4')}>
                   This sub-agent's work is not in this transcript.
@@ -1285,13 +1105,9 @@ export function Transcript({
                 lineHeight={lineHeight}
                 items={items}
                 pendingApprovals={state.pendingApprovals}
-                /* The rail rides the frame's OWN rows, so inside a takeover it
-                 marks the sub-agent's prompts, answers and failures — the thing
-                 a long agent run most needs, and coherent because every input
-                 it takes (`items`, `rowIndexFor`, `offsetOfRow`) is the frame's.
-                 The **bookmarks are not**: those indices are the host's, in
-                 full-transcript space, and painting them here would put marks
-                 at meaningless offsets. See `frame`'s doc for the rest. */
+                /* The rail rides the frame's OWN rows. The **bookmarks do
+                 not**: those indices are the host's, in full-transcript space,
+                 and painting them here would put marks at meaningless offsets. */
                 scrubber={scrubber}
                 scrubberMarks={frame ? undefined : scrubberMarks}
                 affordances={affordances}
@@ -1307,9 +1123,7 @@ export function Transcript({
             )}
             {(frame ? frameTask !== undefined && taskBusy(frameTask, items) : showLoader(state)) ? (
               terminal ? (
-                // The CLI's own working line, and it is a *row of the transcript*
-                // rather than a spinner floating over it — one blank line down,
-                // like every other block.
+                // A *row of the transcript* rather than a spinner over it.
                 <>
                   {state.items.length > 0 ? <div className="term-blank" aria-hidden /> : null}
                   <WorkingRow
@@ -1329,20 +1143,13 @@ export function Transcript({
           </TerminalShell>
         </ConversationContent>
         <ConversationScrollButton />
-        {/* What shows while the hold is on — and for a normal attach that is
-            *nothing*. `wd-hold-appear` (theme.css) keeps it at `opacity: 0`
-            and fades it in only after 600ms, so a healthy ~0.5s hold unmounts
-            it before it ever paints. An unconditional line here was worse than
-            no hold at all: it appeared and vanished inside half a second, which
-            is the flicker the hold exists to remove, relocated to the top of
-            the panel. Only a genuinely slow attach earns a placeholder, which
-            is the case where a reader would otherwise think the panel is dead.
-            An overlay rather than a flow row
-            because the hidden content is at full height and pinned to its
-            bottom; a row in flow would sit at the bottom edge. It mirrors
-            `ConversationContent`'s wrapper (not the component itself — a
-            second `StickToBottom.Content` would steal the library's content
-            ref) so the paddings line up with the real rows'. */}
+        {/* What shows while the hold is on — for a normal attach, *nothing*:
+            `wd-hold-appear` (theme.css) fades it in only after 600ms, so a
+            healthy hold unmounts it before it paints. An overlay rather than a
+            flow row, because the hidden content is at full height and pinned to
+            its bottom. It mirrors `ConversationContent`'s wrapper rather than
+            the component — a second `StickToBottom.Content` would steal the
+            library's content ref. */}
         {replaying ? (
           <div
             data-slot="transcript-hold"

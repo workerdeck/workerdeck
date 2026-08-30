@@ -2,17 +2,11 @@ import type { CSSProperties, HTMLAttributes, ReactNode } from 'react'
 import { cn } from '../../lib/utils.ts'
 
 /**
- * The primitives every terminal row is built from.
- *
- * There are three, and that is the whole vocabulary: a {@link Row} (a gutter
- * cell and a body cell), a {@link Blank} (one empty line), and a {@link Band} (a
- * run of rows carrying a full-bleed background). Anything the theme draws — a
- * message, a tool call, a diff hunk, an approval prompt — is some arrangement of
- * those, which is what keeps the grid a property of the renderer rather than a
- * thing each component re-derives.
- *
- * Geometry is in `styles/terminal.css`. These components choose a class, a
- * marker and a tone; they never carry a measurement.
+ * The primitives every terminal row is built from — the whole vocabulary:
+ * {@link Row} (gutter cell + body cell), {@link Blank} (one empty line),
+ * {@link Band} (a run of rows under a full-bleed background). Geometry is in
+ * `styles/terminal.css`; these choose a class, a marker and a tone, never a
+ * measurement.
  */
 
 /** The palette, as a name. See the `[data-tone]` rules in `terminal.css`. */
@@ -20,11 +14,9 @@ export type Tone = 'fg' | 'bright' | 'dim' | 'faint' | 'mark' | 'blue' | 'green'
 
 export interface RowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
   /**
-   * What sits in the gutter — `●`, `⎿`, `>`, a list bullet, or nothing. Kept to
-   * the width of the gutter (`--term-cell`, two columns by default): a wider
-   * marker would push its own body off the column every other row starts on.
-   * Omitted, the gutter is still drawn as empty space, so an unmarked row's
-   * text lines up with a marked one's.
+   * What sits in the gutter — `●`, `⎿`, `>`, a list bullet, or nothing. Must
+   * fit the gutter width (`--term-cell`, two columns by default) or it pushes
+   * the body off the shared column. Omitted, the gutter still occupies space.
    */
   glyph?: ReactNode
   /** The marker's colour. Defaults to dim — the marker is structure, not content. */
@@ -36,10 +28,9 @@ export interface RowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children
    * exactly under its parent row's first letter. */
   indent?: 0 | 1 | 2 | 3
   /**
-   * Gutter width in columns, when the marker needs other than two — an ordered
-   * list's `10.` is four, a prompt's `❯ 1.` is five, and a framed payload wants
-   * `0`. Changes only this row's split, so the body still starts on a whole
-   * column.
+   * Gutter width in columns when the marker needs other than two (an ordered
+   * list's `10.` is four, a framed payload wants `0`). Changes only this row's
+   * split; the body still starts on a whole column.
    */
   columns?: number
   children?: ReactNode
@@ -68,13 +59,9 @@ export function Row({ glyph, glyphTone, tone, bold, indent, columns, className, 
 }
 
 /**
- * One empty line — the theme's only vertical spacing.
- *
- * A terminal separates blocks with a blank line, not with padding, and saying it
- * that way has a practical payoff: spacing is part of the row list, so it can be
- * decided by whoever knows whether two blocks belong together (a tool call and
- * its output do not get one; two assistant turns do), instead of by a margin
- * rule that cannot tell them apart.
+ * One empty line — the theme's only vertical spacing. Spacing is part of the
+ * row list, decided by whoever knows whether two blocks belong together, never
+ * by a margin rule.
  */
 export function Blank() {
   return <div className="term-blank" aria-hidden />
@@ -82,9 +69,7 @@ export function Blank() {
 
 /**
  * A run of rows under a background: a code block, a command's output, a diff
- * hunk. Full-bleed — the wash reaches the scroller's edges, because in a
- * terminal the line is the full width of the screen. See `--term-bleed` on
- * {@link TerminalSurface}.
+ * hunk. Full-bleed via `--term-bleed` on {@link TerminalSurface}.
  */
 export function Band({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return <div className={cn('term-band', className)} {...props} />

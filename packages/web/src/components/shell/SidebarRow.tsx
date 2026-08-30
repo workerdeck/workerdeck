@@ -17,51 +17,34 @@ export interface SidebarRowProps {
 }
 
 /**
- * One row in a section sidebar: a rounded inset card, hover and selection
- * carried by **fill** rather than by a left edge.
+ * One row in a section sidebar. The shape is `rowShapeClass` in `@workerdeck/ui`,
+ * which `SessionBrowser` draws its rows with too, so every list hovers identically
+ * — fill means hover, selection is the accent bar.
  *
- * The shape comes from `rowShapeClass` in `@workerdeck/ui`, which is also what
- * `SessionBrowser` draws its rows with — so all four section lists hover
- * identically. The fill is the `row-hover` **alpha** token: a flat colour tuned
- * for one background is invisible on another, which is exactly how
- * `bg-surface-hover` on the dark sidebar came to be one step of 255 away from
- * it. Selection is the accent bar, not a fill — see `rowShapeClass`.
- *
- * The anatomy is fixed on purpose — title top-left, status top-right,
- * description bottom-left, actions bottom-right — because a reader scanning
- * four different sections should not have to re-learn where the state lives.
- * Note what is *not* here: a leading glyph. An icon in front of the title
- * pushes the one thing you are reading off the left edge, so anything
- * identifying (an engine mark) belongs on the description line, where it lines
- * up under the title rather than displacing it.
+ * The anatomy is fixed on purpose (title top-left, status top-right, description
+ * bottom-left, actions bottom-right), and there is deliberately **no leading
+ * glyph**: an icon in front of the title pushes the thing you are reading off the
+ * left edge, so an engine mark goes on the description line instead.
  */
 export function SidebarRow({ title, status, description, actions, active, onSelect, onDoubleClick }: SidebarRowProps) {
   return (
     <div
       data-slot="sidebar-row"
       data-active={active || undefined}
-      // The whole row selects, including the status corner: `status` and
-      // `actions` sit outside the two text buttons, so with the handler on the
-      // buttons alone the right-hand third of every row did nothing. The
-      // buttons stay for keyboard reach — activating one fires a click that
-      // bubbles here, so there is one path and no double-fire — and `RowAction`
-      // stops the event, since an action is not a slower way of opening a thing.
+      // The whole row selects, including the status corner, which sits outside the two text
+      // buttons. Those stay for keyboard reach: activating one bubbles here, so there is one
+      // path and no double-fire, and `RowAction` stops the event.
       onClick={onSelect}
       onDoubleClick={onDoubleClick}
       className={cn(
         'group flex cursor-pointer flex-col gap-0.5 text-left transition-colors',
-        // Borrowed from `SessionBrowser` rather than restated: the dashboard's
-        // sessions list is that component, and two hand-written copies of the
-        // same fill is how one list comes to hover differently from the list
-        // beside it.
+        // Borrowed from `SessionBrowser`, not restated: two copies of one fill is how a list
+        // comes to hover differently from the list beside it.
         rowShapeClass(active === true),
       )}
     >
-      {/* Both lines are real buttons, and the wrapper is only styling. A div
-          with an `onClick` looks identical and is unreachable by keyboard — and
-          a single button around everything cannot hold the row actions, since a
-          button inside a button is invalid. This is the shape `SessionBrowser`
-          arrived at for the same two reasons. */}
+      {/* Both lines are real buttons and the wrapper is only styling: a div with an `onClick`
+          is unreachable by keyboard, and one button around everything cannot hold the actions. */}
       <div className="flex items-center gap-1.5">
         <button
           type="button"
@@ -90,8 +73,7 @@ export function RowAction({ label, onClick, children }: { label: string; onClick
       aria-label={label}
       title={label}
       onClick={(e) => {
-        // The row itself is the click target for selection; an action is not a
-        // slower way of opening the thing.
+        // The row is the selection target; an action is not a slower way of opening the thing.
         e.stopPropagation()
         onClick()
       }}

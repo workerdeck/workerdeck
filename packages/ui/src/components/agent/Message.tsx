@@ -5,19 +5,9 @@ export interface MessageProps extends HTMLAttributes<HTMLDivElement> {
   from: 'user' | 'assistant'
 }
 
-/**
- * One chat turn row.
- *
- * `cards`: user messages sit in a bubble, assistant content is flat and
- * full-width. Both are **left-aligned**: the transcript is a log read top to
- * bottom, and an editor-shaped host (a full-width session view beside a sessions
- * rail) has no right edge to anchor to — a bubble drifting right in a 1600px
- * column separates a prompt from the reply it produced. The bubble alone is
- * enough to say who spoke.
- *
- * The terminal theme draws none of this: it is its own renderer
- * (`components/terminal/`) and mounts instead of these rows.
- */
+/** One chat turn row (`cards` only — the terminal theme is its own renderer):
+ * user messages in a bubble, assistant content flat and full-width, both
+ * left-aligned because the transcript is a log read top to bottom. */
 export function Message({ from, className, children, ...props }: MessageProps) {
   return (
     <div data-slot="message" data-from={from} className={cn('flex w-full flex-col items-start gap-1', className)} {...props}>
@@ -32,8 +22,8 @@ export function MessageContent({ className, ...props }: HTMLAttributes<HTMLDivEl
       data-slot="message-content"
       className={cn(
         'min-w-0 text-body-sm leading-6 text-fg-1',
-        // Bubble treatment only within a user message row.
-        // The tail points bottom-*left* now that the bubble is left-aligned.
+        // Bubble treatment only within a user message row; the tail points
+        // bottom-*left*, matching the left alignment.
         'in-data-[from=user]:max-w-[85%] in-data-[from=user]:rounded-lg in-data-[from=user]:rounded-bl-sm',
         'in-data-[from=user]:bg-accent-bg in-data-[from=user]:px-3 in-data-[from=user]:py-2',
         'in-data-[from=user]:whitespace-pre-wrap',

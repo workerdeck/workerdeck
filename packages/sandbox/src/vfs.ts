@@ -1,11 +1,7 @@
 /**
- * Per-call in-memory scratch filesystem. Seeded from the task's documents,
- * discarded after the call — never backed by host paths. The guest only ever
- * touches it through the by-value host bridge (vfs_read/vfs_write/vfs_list).
- *
- * A plain path→content map on purpose: this package must run unpolyfilled in
- * the browser (the tab-side tool host seeds a VFS per bridged call), and a
- * node-flavored fs emulation drags `node:buffer` in with it.
+ * Per-call in-memory scratch filesystem — never backed by host paths. A plain
+ * path→content map on purpose: this package must run unpolyfilled in the
+ * browser, and a node-flavored fs emulation drags `node:buffer` in with it.
  */
 export type SandboxVfs = {
   read(path: string): string | undefined
@@ -17,8 +13,8 @@ export type SandboxVfs = {
 }
 
 /** Collapse '.', '..' and empty segments into a rooted absolute path — the VFS
- * has no host backing to escape into, this is pure path hygiene. */
-export function normalizeVfsPath(path: string): string {
+ * has no host backing to escape into, so this is path hygiene, not a sandbox. */
+export const normalizeVfsPath = (path: string): string => {
   const out: string[] = []
   for (const part of path.split('/')) {
     if (part === '' || part === '.') {
@@ -33,7 +29,7 @@ export function normalizeVfsPath(path: string): string {
   return '/' + out.join('/')
 }
 
-export function createVfs(seed?: Record<string, string>): SandboxVfs {
+export const createVfs = (seed?: Record<string, string>): SandboxVfs => {
   const files = new Map<string, string>()
   const write = (path: string, content: string): void => {
     files.set(normalizeVfsPath(path), content)

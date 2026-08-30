@@ -20,12 +20,10 @@ export function CopyButton({ value, glyph, className, variant = 'ghost', size = 
       aria-label="Copy"
       className={cn('text-fg-3', className)}
       onClick={() => {
-        // Through `copyText`, which falls back for insecure origins — the
-        // dashboard on a LAN address has no `navigator.clipboard` at all, and
-        // reaching straight for `.writeText` there throws.
+        // `copyText` falls back for insecure origins: the dashboard on a LAN address
+        // has no `navigator.clipboard`, and `.writeText` there throws.
         void copyText(value).then((ok) => {
-          // Only tick when it really copied: a check mark over an empty
-          // clipboard is worse than no feedback.
+          // Only tick when it really copied.
           if (!ok) {
             return
           }

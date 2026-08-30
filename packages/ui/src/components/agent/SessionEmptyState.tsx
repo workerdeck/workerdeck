@@ -4,34 +4,23 @@ import { cn } from '../../lib/utils.ts'
 export interface SessionEmptyStateProps {
   cwd?: string
   /** Whether `/command` completion is live yet — the CLI reports its commands a
-   * beat after the session starts, and promising a feature that isn't wired up
-   * yet is worse than not mentioning it. */
+   * beat after the session starts. */
   hasCommands?: boolean
-  /** Whether the engine has reported skills the `/` popover can offer. Its own
-   * flag, not a variant of `hasCommands`: what `/` does differs — a command is
-   * submitted, a skill is typed for you to edit — and an engine can have one
-   * without the other. */
+  /** Whether the engine has reported skills. Its own flag, not a variant of
+   * `hasCommands`: a command is submitted, a skill is typed for you to edit,
+   * and an engine can have one without the other. */
   hasSkills?: boolean
   /** Whether this gateway serves `@file` search for the session's directory. */
   canBrowseFiles?: boolean
   className?: string
 }
 
-/**
- * What a session shows before it has said anything: where the agent is sitting,
- * and what the composer accepts beyond prose.
- *
- * Every hint is conditional on the affordance actually existing — an engine
- * without slash commands, or a gateway without host files, is not told about
- * them. Deliberately no project name (the header already carries it) and no
- * brand mark (its geometry is inlined in several places already and they are
- * meant to stay identical).
- */
+/** What a session shows before it has said anything. Every hint is conditional
+ * on the affordance actually existing. */
 export function SessionEmptyState({ cwd, hasCommands, hasSkills, canBrowseFiles, className }: SessionEmptyStateProps) {
   const hints = [
     { icon: MessageSquareText, text: 'Tell the agent what to do.' },
-    // Two keys, two hints — they are different features, not two spellings of
-    // one. `$` is codex's own sigil for skills; `/` stays the CLI's commands.
+    // `$` is codex's own sigil for skills; `/` stays the CLI's commands.
     ...(hasCommands ? [{ icon: SlashSquare, text: 'Type / for the CLI’s slash commands.' }] : []),
     ...(hasSkills ? [{ icon: Sparkles, text: 'Type $ to draft a message for one of the agent’s skills.' }] : []),
     ...(canBrowseFiles ? [{ icon: AtSign, text: 'Type @ to search this project’s files.' }] : []),

@@ -3,9 +3,8 @@ import { cn } from '../../lib/utils.ts'
 
 export interface SplitterProps {
   /**
-   * ARIA's sense of the word: a `vertical` splitter is a vertical bar between
-   * two side-by-side panes, and it resizes a **width**. A `horizontal` one sits
-   * between stacked panes and resizes a **height**.
+   * ARIA's sense of the word: a `vertical` splitter is a vertical bar between two
+   * side-by-side panes and resizes a **width**; `horizontal` resizes a **height**.
    */
   orientation: 'vertical' | 'horizontal'
   /** Current size of the pane this splitter controls, in pixels. */
@@ -15,11 +14,7 @@ export interface SplitterProps {
   max: number
   /** Keyboard step. */
   step?: number
-  /**
-   * Size to snap back to on a double-click — the convention every pane divider
-   * that can be dragged is expected to honour. Omit and a double-click does
-   * nothing, which is the honest behaviour when there is no default to mean.
-   */
+  /** Size to snap back to on a double-click; omit and a double-click does nothing. */
   defaultValue?: number
   /** Set when dragging the splitter *away* from the origin should shrink the
    * controlled pane — i.e. the pane is on the right or the bottom. */
@@ -30,21 +25,12 @@ export interface SplitterProps {
 }
 
 /**
- * A draggable pane divider.
+ * A draggable pane divider (hand-rolled — `@base-ui/react` ships no splitter).
  *
- * Hand-rolled rather than depended on: `@base-ui/react` ships no splitter, the
- * behaviour is a hundred lines of pointer events, and this repo's instinct at
- * this layer is to own it (the composer is vendored for the same reason).
- *
- * Pointer capture is what makes it survive a fast drag — without it the pointer
- * leaves the 5px bar within a frame and the moves go to whatever is underneath,
- * which for this layout is an iframe-free but still selection-happy code pane.
- * The drag origin is captured on pointerdown and every move is measured against
- * it, so the pane cannot drift relative to the cursor over a long drag the way
- * per-move deltas do once clamping is involved.
- *
- * Keyboard-operable and announced as a separator, because a pane you can only
- * size by dragging is a pane some people cannot size.
+ * Pointer capture is what survives a fast drag: without it the pointer leaves the
+ * 5px bar within a frame and the moves go to whatever is underneath. Moves are
+ * measured against the pointerdown origin, not per-move deltas, so the pane cannot
+ * drift from the cursor once clamping is involved.
  */
 export function Splitter({
   orientation,
@@ -92,8 +78,8 @@ export function Splitter({
     }
   }
 
-  // The second click of a double-click has already started a drag, so the reset
-  // has to land after `endDrag` — which it does: dblclick fires after pointerup.
+  // The second click of a double-click has already started a drag, so the reset must
+  // land after `endDrag` — it does: dblclick fires after pointerup.
   const onDoubleClick = () => {
     if (defaultValue !== undefined) {
       onValueChange(clamp(defaultValue))
@@ -101,8 +87,7 @@ export function Splitter({
   }
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    // The arrows that move *along* this splitter's axis of travel; the other
-    // pair is left to the page, which is what a separator should do with them.
+    // Only the arrows along this splitter's axis; the other pair is left to the page.
     const grow = vertical ? 'ArrowRight' : 'ArrowDown'
     const shrink = vertical ? 'ArrowLeft' : 'ArrowUp'
     const direction = inverted ? -1 : 1
@@ -137,8 +122,7 @@ export function Splitter({
       onDoubleClick={onDoubleClick}
       onKeyDown={onKeyDown}
       className={cn(
-        // A 1px line that reads as a border, with a larger invisible grab area
-        // around it — a hairline is an honest divider and a cruel target.
+        // A 1px line that reads as a border, with a larger invisible grab area around it.
         'group relative shrink-0 touch-none bg-border transition-colors',
         'hover:bg-border-strong focus-visible:bg-accent focus-visible:outline-none',
         vertical ? 'w-px cursor-col-resize' : 'h-px cursor-row-resize',

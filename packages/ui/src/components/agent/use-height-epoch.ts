@@ -1,18 +1,13 @@
-/**
- * The height epoch: one cache generation of computed row heights (terminal
- * theme only — cards have no calculator and keep the flat estimate). Owned by
- * the transcript shell because it owns the virtualizer the heights feed; the
- * WeakMap inside self-invalidates through the reducer's replace-on-mutation,
- * and the epoch itself is replaced wholesale when the wrap width or the cell
- * changes. Measured off the rows container: it *is* the width rows wrap in
- * (the scroller can resize without it moving — `ConversationContent` caps at
- * 48rem — and the window never hears about a splitter drag), and it inherits
- * the surface's font, which is what makes the `ch` probe honest. All DOM
- * reads happen in the effect, debounced; render never touches layout.
- */
 import { useEffect, useState, type RefObject } from 'react'
 import { createHeightEpoch, measureCh, type HeightEpoch } from '../terminal/height.ts'
 
+/**
+ * One cache generation of computed row heights (terminal theme only). Measured
+ * off the **rows container**, never the scroller: it is the width rows wrap in
+ * and it inherits the surface's font, which is what makes the `ch` probe
+ * honest. All DOM reads happen in the debounced effect; render never touches
+ * layout.
+ */
 export function useHeightEpoch(options: {
   terminal: boolean
   /** The terminal cell, when the host set one — only read as a signal that the
@@ -55,10 +50,8 @@ export function useHeightEpoch(options: {
       observer.disconnect()
       clearTimeout(timer)
     }
-    // fontSize/lineHeight: a cell change re-renders every row, which usually
-    // moves the container's size and fires the observer — but a transcript
-    // whose height happens to survive the change would keep a stale `ch`, so
-    // the props re-arm the measurement directly.
+    // fontSize/lineHeight re-arm the measurement directly: a transcript whose
+    // container size survives a cell change never fires the observer.
   }, [terminal, fontSize, lineHeight, rowsRef])
   return epoch
 }

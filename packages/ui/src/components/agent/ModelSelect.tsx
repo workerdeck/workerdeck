@@ -27,7 +27,7 @@ const dropVariant = (id: string) => id.replace(/\[.*\]$/, '')
 
 /** 'claude-opus-4-8' → "opus", 'sonnet' → "sonnet". The vendor prefix and the
  * version tail are dropped; what is left is the name a person would say. */
-function family(id: string): string {
+const family = (id: string): string => {
   const parts = id.toLowerCase().split('-')
   if (parts[0] === 'claude') {
     parts.shift()
@@ -36,17 +36,12 @@ function family(id: string): string {
 }
 
 /**
- * Whether a row is the one naming `model`.
- *
- * Three passes, narrowest first, because the rows and the id a session *reports*
- * are written differently: the rows are aliases ('opus[1m]', 'sonnet',
- * 'claude-fable-5[1m]') and a session reports a resolved wire id
- * ('claude-opus-5[1m]'). `resolvedModel` is the server's own answer to this and
- * wins when present; the family fallback covers a server that doesn't send it,
- * which is the difference between the chip reading "Opus 5" and reading
- * `claude-opus-5[1m]`. Kept identical to the iOS client's `ModelOption.matches`.
+ * Whether a row is the one naming `model`. Three passes, narrowest first: the
+ * rows are aliases ('opus[1m]', 'sonnet') and a session reports a resolved wire
+ * id ('claude-opus-5[1m]'). **Kept identical to the iOS client's
+ * `ModelOption.matches`.**
  */
-function optionMatches(option: ModelOption, model: string): boolean {
+const optionMatches = (option: ModelOption, model: string): boolean => {
   if (model === option.value || model === option.resolvedModel) {
     return true
   }
@@ -62,7 +57,7 @@ function optionMatches(option: ModelOption, model: string): boolean {
 }
 
 /** Find the option matching a (possibly decorated/aliased) session model id. */
-function matchModel(models: ModelOption[], model?: string): ModelOption | undefined {
+const matchModel = (models: ModelOption[], model?: string): ModelOption | undefined => {
   if (!model) {
     return undefined
   }

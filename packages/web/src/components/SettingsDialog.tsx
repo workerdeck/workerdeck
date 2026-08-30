@@ -27,11 +27,9 @@ import {
 } from '@/lib/settings.ts'
 
 /**
- * One reader preference, one select.
- *
- * All three read their stored value **on open** rather than tracking it live:
- * the panel stamps variant, density and font at mount, and reshaping every row
- * under someone reading another screen's transcript is not worth the jump.
+ * One reader preference, one select. All of them read their stored value **on
+ * open** rather than tracking it live: the panel stamps variant, density and font
+ * at mount, and reshaping every row under a reader is not worth the jump.
  */
 function PrefSelect<T extends string>({
   label,
@@ -72,15 +70,7 @@ function PrefSelect<T extends string>({
   )
 }
 
-/**
- * A group of rows under a label.
- *
- * A label and nothing else — no card, no border. Every row in this sheet is one
- * control with its name beside it, and a box drawn around a list of those says
- * they are a *thing* when they are only a heading's worth of grouping. The
- * explanations went the same way: a select whose two options are "Cards" and
- * "Terminal" is answered by trying it, not by a paragraph under it.
- */
+/** A label and nothing else: a box around a list of one-line controls claims they are a thing. */
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-3">
@@ -91,26 +81,18 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /**
- * Settings as a dialog rather than a destination.
- *
- * These are client-side preferences — theme, transcript shape, the defaults the
- * create forms pre-fill — and none of them is somewhere you *work*. A nav entry
- * that replaced the sidebar and the detail pane to show four rows of selects was
- * spending the whole window on a preference sheet; a modal returns you to what
- * you were doing when you close it, which is the only thing anyone wants from
- * this screen.
+ * Settings as a dialog, not a destination: these are this browser's preferences,
+ * and a modal returns you to what you were doing when you close it.
  */
 export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  // Held here, not in the select, because two rows below it are only meaningful
-  // under `cards` — the terminal theme has one line height and one (monospace)
-  // face by construction. A control that changes nothing is worse than an absent
-  // one: it invites you to keep pressing it.
+  // Held here, not in the select, because the two rows below are only meaningful under `cards`
+  // — the terminal theme has one line height and one face by construction, and a control that
+  // changes nothing invites you to keep pressing it.
   const [variant, setVariant] = useState<TranscriptVariant>(getTranscriptVariant)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* A column of one-line rows, so it is sized to the widest control rather
-          than to a reading measure. Wider than this and each label drifts a
-          screen away from the select it names. */}
+      {/* Sized to the widest control, not to a reading measure: wider and each label drifts
+          away from the select it names. */}
       <DialogContent size="md" className="w-[min(30rem,calc(100vw-2rem))]">
         <DialogHeader
           title="Settings"

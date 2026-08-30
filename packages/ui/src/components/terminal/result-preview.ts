@@ -1,58 +1,38 @@
 /**
  * How much of a tool result a collapsed row shows, and what it says it hid.
+ * Pure and its own module because two consumers must agree to the character:
+ * `items.tsx` draws these rows and `height.ts` wraps these exact strings to
+ * predict their pixel height without a DOM.
  *
- * Its own module, and pure, because **two** consumers must agree on it to the
- * character: `items.tsx` draws these rows, and `height.ts` predicts their pixel
- * height for the virtualizer's `estimateSize` without a DOM. The budget used to
- * be a private constant in `items.tsx` restated as a copy in `height.ts` with a
- * comment admitting the drift risk — this is that comment's fix.
- *
- * **Two budgets, not one.** Lines alone was the old rule and it has an exact
- * blind spot: a minified JSON reply — which is every MCP tool's reply — is ONE
- * line, so a four-line slice kept all thirty thousand characters of it and the
- * row wrapped to a screenful. `hidden` was computed as `lines.length -
- * shown.length`, so it came out zero and the row did not even offer the "+N"
- * affordance: the whole blob was simply the transcript now. Characters alone
- * would be wrong the other way, cutting an ordinary short-line result mid-way
- * for no reason. So both apply, and a *first* line longer than the budget is
- * truncated rather than shown whole — a row has to show something or it opens
- * onto nothing.
+ * Two budgets, not one: a one-line minified JSON blob defeats a line budget
+ * (all 30k characters "fit" in one line, and `hidden` counts zero), while a
+ * character budget alone cuts ordinary short-line results for no reason. A
+ * first line longer than the character budget is truncated rather than shown
+ * whole — a row has to show something.
  */
 
 /** At most this many lines, however short they are. */
 const PREVIEW_LINES = 4
-/**
- * …and at most this many characters, however few lines they are. Four lines'
- * worth at any realistic terminal width — the row is indented six cells, so a
- * 100ch panel fits ~94 per line — which keeps the budget honest whether the
- * result arrives as four lines or as one long one.
- */
+/** …and at most this many characters — roughly four lines at a realistic terminal width. */
 const PREVIEW_CHARS = 400
 
 export type CollapsedResult = {
   /** The lines to draw. The last may be truncated (it ends in `…`). */
   shown: string[]
   /**
-   * The trailing "there is more" row, already spelled. The *string* rather than
-   * a count, because `height.ts` wraps this exact text to size the row, and two
-   * spellings would be two different heights.
+   * The trailing "there is more" row, already spelled. A string rather than a
+   * count: `height.ts` wraps this exact text, and two spellings would be two
+   * different heights.
    */
   more?: string
 }
 
 /**
- * Reported in characters when the truncation happened *inside* a line and in
- * lines otherwise — a one-line JSON blob has no hidden lines to count, and
- * "+0 lines" under a visibly cut-off row is worse than saying nothing.
- */
-/**
- * `totalChars` is the **untruncated** length when the replay delivered only a
- * head (protocol's `ToolResultBlock.total_chars`). Passing it is not cosmetic:
- * computed from the head this row would say "… +7,600 chars" where the truth is
- * 641,003, and the wrong string is a *different pixel height* — which is exactly
- * the drift this module exists to prevent, since `height.ts` sizes the row by
- * wrapping this same text. Omitted for a whole result, where the lines are the
- * whole truth.
+ * `totalChars` is the untruncated length when the replay delivered only a head
+ * (protocol's `ToolResultBlock.total_chars`). It changes the "+N chars" string,
+ * and thereby the row's predicted height — omit it only for a whole result.
+ * Hidden amounts are reported in characters when the cut happened inside a
+ * line, in lines otherwise.
  */
 export function collapsedResult(lines: string[], totalChars?: number): CollapsedResult {
   const shown: string[] = []
@@ -73,16 +53,14 @@ export function collapsedResult(lines: string[], totalChars?: number): Collapsed
     chars += line.length + 1
   }
 
-  // `join` because the newlines are part of what is not being shown — and
-  // `totalChars` wins when it exists, because the lines in hand are then a head
-  // rather than the result.
+  // `totalChars` wins when it exists: the lines in hand are then only a head.
   const held = lines.join('\n').length
   const total = totalChars ?? held
   if (cut) {
     return { shown, more: `… +${(total - chars).toLocaleString()} chars` }
   }
-  // A truncated result always has more, even when its head happened to fit the
-  // line budget: the row must never claim to be showing everything.
+  // A truncated result always has more, even when its head fit the line
+  // budget: the row must never claim to be showing everything.
   if (totalChars !== undefined && total > held) {
     return { shown, more: `… +${(total - chars).toLocaleString()} chars` }
   }

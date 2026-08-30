@@ -6,7 +6,7 @@ import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
 import type { ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import { createFileProfileStore, createMemoryProfileStore, createWorkerServer, type WorkerServer } from '../src/index.ts'
 
-function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
+const fakeRunner = (id: string, config: SessionRunnerConfig): Runner => {
   return {
     id,
     pendingApprovals: [],
@@ -245,6 +245,6 @@ describe('createFileProfileStore', () => {
 })
 
 /** A path that is definitely outside a fresh temp dir. */
-function homedirLike(): string {
+const homedirLike = (): string => {
   return join(tmpdir(), 'cw-definitely-elsewhere')
 }

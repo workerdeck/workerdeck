@@ -59,8 +59,10 @@ const fail = (name: string, detail: string) => {
 
 const codexBin = resolveBundledCodexExecutable()
 
+type RunnerHarness = { runner: CodexRunner; events: SessionEvent[] }
+
 /** Complete child env (codex replaces, never merges) with a scratch home. */
-function scratchEnv(extra: Record<string, string | undefined> = {}): Record<string, string> {
+const scratchEnv = (extra: Record<string, string | undefined> = {}): Record<string, string> => {
   const home = mkdtempSync(join(tmpdir(), 'codex-smoke-home-'))
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env)) {
@@ -83,7 +85,7 @@ function scratchEnv(extra: Record<string, string | undefined> = {}): Record<stri
   return env
 }
 
-function makeRunner(cwd: string, overrides: Record<string, unknown> = {}): { runner: CodexRunner; events: SessionEvent[] } {
+const makeRunner = (cwd: string, overrides: Record<string, unknown> = {}): RunnerHarness => {
   if (!codexBin) {
     throw new Error('bundled codex binary not resolvable — is @openai/codex installed?')
   }
@@ -102,7 +104,7 @@ const turnResults = (events: SessionEvent[]) =>
   events.filter((e): e is Extract<SessionEvent, { type: 'turn_result' }> => e.type === 'turn_result')
 
 /** Poll until `pred` holds; throws with `what` in the message on timeout. */
-async function waitFor(pred: () => boolean, timeoutMs: number, what: string): Promise<void> {
+const waitFor = async (pred: () => boolean, timeoutMs: number, what: string): Promise<void> => {
   const deadline = Date.now() + timeoutMs
   for (;;) {
     if (pred()) {
@@ -127,7 +129,7 @@ const userTexts = (events: SessionEvent[]) =>
  * as the turn's error — which is exactly what makes the canaries a drift alarm
  * for the spawn contract as well as the auth chain.
  */
-async function probeTurn(env: Record<string, string>): Promise<string> {
+const probeTurn = async (env: Record<string, string>): Promise<string> => {
   const cwd = mkdtempSync(join(tmpdir(), 'codex-smoke-probe-'))
   const { runner, events } = makeRunner(cwd, { prompt: 'say hi', model: undefined, env })
   const timeout = setTimeout(() => runner.close(), 90_000)
@@ -145,7 +147,7 @@ async function probeTurn(env: Record<string, string>): Promise<string> {
   }
 }
 
-async function canaries(): Promise<void> {
+const canaries = async (): Promise<void> => {
   console.log('\n— free auth-drift canaries (fake keys, scratch CODEX_HOME, no tokens) —')
 
   // 1. OPENAI_API_KEY alone must still be a no-op ("Missing bearer" — no
@@ -378,7 +380,7 @@ async function canaries(): Promise<void> {
  * standing decision recorded below. Mapping every variant is not the goal —
  * knowing about each one is.
  */
-async function threadItemUnionCanary(): Promise<void> {
+const threadItemUnionCanary = async (): Promise<void> => {
   if (!codexBin) {
     return
   }
@@ -467,7 +469,7 @@ async function threadItemUnionCanary(): Promise<void> {
 
 /** The auth this run will use, mirroring the availability probe's chain:
  * `login status` alone — the env keys are not read by the app-server. */
-async function detectAuth(): Promise<string | null> {
+const detectAuth = async (): Promise<string | null> => {
   if (!codexBin) {
     return null
   }
@@ -483,7 +485,7 @@ async function detectAuth(): Promise<string | null> {
  * The clear, against the real binary — VERIFICATION-DEBT item 9. Split out so
  * `pnpm smoke:codex --clear` can pay for these two turns alone.
  */
-async function clearScenario(cwd: string): Promise<void> {
+const clearScenario = async (cwd: string): Promise<void> => {
   // A timeout in here used to leave the codex children running, which kept the
   // process alive long past the failure it was trying to report.
   const open: CodexRunner[] = []
@@ -496,7 +498,7 @@ async function clearScenario(cwd: string): Promise<void> {
   }
 }
 
-async function runClearScenario(cwd: string, open: CodexRunner[]): Promise<void> {
+const runClearScenario = async (cwd: string, open: CodexRunner[]): Promise<void> => {
   // The scripted peer can prove the runner's bookkeeping and nothing about
   // the only thing that matters: that a fresh `thread/start` actually yields
   // an EMPTY model context. Only a codeword the model cannot produce by
@@ -623,7 +625,7 @@ async function runClearScenario(cwd: string, open: CodexRunner[]): Promise<void>
   resumedOld.runner.close()
 }
 
-async function paid(): Promise<void> {
+const paid = async (): Promise<void> => {
   const auth = await detectAuth()
   if (!auth) {
     fail(

@@ -121,7 +121,7 @@ ws.on('error', (err: Error) => {
 
 const KB = (bytes: number) => `${(bytes / 1024).toFixed(0)} KB`
 
-function finish() {
+const finish = (): void => {
   if (done) {
     return
   }

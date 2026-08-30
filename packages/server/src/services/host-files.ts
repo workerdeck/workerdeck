@@ -34,6 +34,11 @@ import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
  * pretended away.
  */
 
+// win32 lacks O_NOFOLLOW/O_NONBLOCK (undefined at runtime despite the typing);
+// there they contribute 0 and the fstat gates below stand alone.
+const O_NOFOLLOW: number = constants.O_NOFOLLOW ?? 0
+const O_NONBLOCK: number = constants.O_NONBLOCK ?? 0
+
 export type HostFileRoot = {
   /** The operator's spelling, kept for display (`GET /v1/fs/roots`). */
   readonly configured: string
@@ -53,7 +58,7 @@ export type HostFileRoots = { readonly roots: readonly HostFileRoot[] }
  * refuses everything; "no roots means allow all" is `cwdAllowed`'s contract,
  * never this module's.
  */
-export function createHostFileRoots(roots: string[]): HostFileRoots {
+export const createHostFileRoots = (roots: string[]): HostFileRoots => {
   return {
     roots: roots.map((configured) => {
       if (invalidRequest(configured)) {
@@ -79,21 +84,21 @@ export type ResolveOutcome =
 
 type Refusal = { ok: false; status: 403 | 404; error: string }
 
-function refuse(status: 403 | 404, error: string): Refusal {
+const refuse = (status: 403 | 404, error: string): Refusal => {
   return { ok: false, status, error }
 }
 
 /** The uniform filesystem refusal — see the disclosure policy in the header.
  * The string is deliberately constant: a distinct message is as much an oracle
  * as a distinct status. */
-function notFound(): Refusal {
+const notFound = (): Refusal => {
   return refuse(404, 'not found')
 }
 
 /** NUL is rejected before any fs call — Node throws a TypeError on NUL paths,
  * and that must surface as a refusal, not a 500. Relative paths are refused
  * outright rather than resolved against a cwd this API never promised. */
-function invalidRequest(requested: string): boolean {
+const invalidRequest = (requested: string): boolean => {
   return requested.length === 0 || requested.includes('\0') || !isAbsolute(requested)
 }
 
@@ -103,12 +108,12 @@ function invalidRequest(requested: string): boolean {
  * root to candidate is empty or never has to leave through `..`. Exported for
  * the project-icon resolver (`project-info.ts`), which makes the same claim
  * against a project root; both callers must hand it realpath output only. */
-export function contained(rootCanonical: string, candidate: string): boolean {
+export const contained = (rootCanonical: string, candidate: string): boolean => {
   const rel = relative(rootCanonical, candidate)
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
 }
 
-function rootContaining(roots: HostFileRoots, canonical: string): HostFileRoot | undefined {
+const rootContaining = (roots: HostFileRoots, canonical: string): HostFileRoot | undefined => {
   return roots.roots.find((root) => contained(root.canonical, canonical))
 }
 
@@ -120,7 +125,7 @@ function rootContaining(roots: HostFileRoots, canonical: string): HostFileRoot |
  * containment is a property of the canonical target, not of the route to it —
  * the operator granted the whole subtree, so nothing new becomes reachable.
  */
-export function resolveExisting(roots: HostFileRoots, requested: string): ResolveOutcome {
+export const resolveExisting = (roots: HostFileRoots, requested: string): ResolveOutcome => {
   if (invalidRequest(requested)) {
     return refuse(403, 'invalid path')
   }
@@ -169,7 +174,7 @@ export function resolveExisting(roots: HostFileRoots, requested: string): Resolv
  * so a distinct status for the dangling case would hand back exactly the
  * existence bit the uniform 404 exists to withhold.
  */
-export function resolveForWrite(roots: HostFileRoots, requested: string): ResolveOutcome {
+export const resolveForWrite = (roots: HostFileRoots, requested: string): ResolveOutcome => {
   if (invalidRequest(requested)) {
     return refuse(403, 'invalid path')
   }
@@ -239,7 +244,7 @@ export type HostEntryKind = 'file' | 'dir' | 'symlink' | 'other'
  * when the entry is itself requested, through {@link resolveExisting}, which
  * refuses it if it escapes. `readdir(withFileTypes)` already answers without
  * following, so this is classification, not I/O. */
-export function entryKind(entry: Dirent): HostEntryKind {
+export const entryKind = (entry: Dirent): HostEntryKind => {
   if (entry.isSymbolicLink()) {
     return 'symlink'
   }
@@ -252,11 +257,6 @@ export function entryKind(entry: Dirent): HostEntryKind {
   return 'other'
 }
 
-// win32 lacks O_NOFOLLOW/O_NONBLOCK (undefined at runtime despite the typing);
-// there they contribute 0 and the fstat gates below stand alone.
-const O_NOFOLLOW: number = constants.O_NOFOLLOW ?? 0
-const O_NONBLOCK: number = constants.O_NONBLOCK ?? 0
-
 export type ReadOutcome = { ok: true; data: Buffer } | Refusal
 
 /**
@@ -268,7 +268,7 @@ export type ReadOutcome = { ok: true; data: Buffer } | Refusal
  * anything that is not a plain file before a byte is read — `/dev/zero` would
  * otherwise be an unbounded read.
  */
-export function readContained(path: string): ReadOutcome {
+export const readContained = (path: string): ReadOutcome => {
   let fd: number
   try {
     fd = openSync(path, constants.O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
@@ -296,7 +296,7 @@ export type WriteOutcome = { ok: true } | Refusal
  * regular file, so a swapped-in device or fifo is never truncated or written;
  * O_NONBLOCK turns the reader-less-fifo open from a hang into ENXIO.
  */
-export function writeContained(path: string, data: string | Uint8Array): WriteOutcome {
+export const writeContained = (path: string, data: string | Uint8Array): WriteOutcome => {
   let fd: number
   try {
     fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | O_NOFOLLOW | O_NONBLOCK, 0o644)

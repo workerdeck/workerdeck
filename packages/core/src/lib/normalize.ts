@@ -2,10 +2,13 @@ import type { McpServerStatus, SDKMessage } from '@anthropic-ai/claude-agent-sdk
 import type { ApiMessage, ContentBlock, McpServerStatusInfo, ModelOption, SessionEventBody, TextBlock } from '@workerdeck/protocol'
 import { filePatchFromToolResult } from './patch.ts'
 
+/** Capability order for `primary` sorting; unknown families sort after. */
+const FAMILY_ORDER = ['fable', 'opus', 'sonnet', 'haiku']
+
 /** Does this message answer exactly one tool call? A patch is per-file-edit and
  * the message says nothing about which of two results it describes, so anything
  * else gets no patch rather than a diff pinned to the wrong call. */
-function singleToolResult(message: ApiMessage): boolean {
+const singleToolResult = (message: ApiMessage): boolean => {
   const content = message.content
   if (!Array.isArray(content)) {
     return false
@@ -14,36 +17,22 @@ function singleToolResult(message: ApiMessage): boolean {
 }
 
 /**
- * The wrappers the CLI writes into the transcript when the *harness* is talking
- * to the model rather than a person talking to the session.
- *
- * Deliberately a text test, and only these two. The live path has structure to
- * go on (`isSynthetic`, `origin.kind`), but **the resumed path has none**: the
- * SDK's `SessionMessage` carries exactly `message`, `uuid`, `session_id`,
- * `parent_tool_use_id`, `parent_agent_id` and `timestamp` — every one of
- * `isMeta`, `isSidechain`, `promptSource` and `origin` is dropped between the
- * stored JSONL and what `getSessionMessages` hands back (verified against real
- * transcripts). So on resume this is the only signal there is, and without it a
- * `<task-notification>` blob comes back as a blue user row and a scrubber mark,
- * as if someone had typed it.
- *
- * `<local-command-caveat>` is here for symmetry and cheap insurance: the SDK
- * filters `isMeta` entries out of a resumed transcript itself today, which is
- * not a contract anyone wrote down.
- *
- * What is *not* here matters as much:
+ * The wrappers the CLI writes when the *harness* is talking to the model rather
+ * than a person. Deliberately a text test, and only these two: a resumed
+ * transcript carries no `isMeta`/`origin` structure, so on resume this is the
+ * only signal there is (docs/GOTCHAS.md §Claude engine). What is *not* here
+ * matters as much:
  * - `<local-command-stdout>` — the reducer turns it into a notice row on
  *   purpose; marking it synthetic would delete a row both paths show.
- * - `<command-name>` — that is a person running a slash command. The reducer
- *   renders it as the command line they typed; hiding it would erase the turn's
- *   cause.
+ * - `<command-name>` — a person running a slash command; hiding it would erase
+ *   the turn's cause.
  */
 const SYNTHETIC_USER_PREFIXES = ['<task-notification>', '<local-command-caveat>']
 
 /** First text block's leading tag, for the test above. Tool results and images
  * carry no text and are never synthetic by this rule (a tool result is already
  * a tool result to every renderer). */
-export function isSyntheticUserText(message: ApiMessage): boolean {
+export const isSyntheticUserText = (message: ApiMessage): boolean => {
   const content = message.content
   const text =
     typeof content === 'string'
@@ -58,7 +47,7 @@ export function isSyntheticUserText(message: ApiMessage): boolean {
   return SYNTHETIC_USER_PREFIXES.some((prefix) => head.startsWith(prefix))
 }
 
-export function toApiMessage(message: unknown): ApiMessage {
+export const toApiMessage = (message: unknown): ApiMessage => {
   const m = message as {
     role?: 'user' | 'assistant'
     content: string | ContentBlock[]
@@ -109,7 +98,7 @@ type UsageWindow = { utilization: number | null; resets_at?: string | null } | n
  * the CLI is running for us is, by construction. A window with no utilization is
  * unknown, not zero, and is dropped rather than reported at 0%.
  */
-export function rateLimitEventsFromUsage(usage: UsageRateLimits): SessionEventBody[] {
+export const rateLimitEventsFromUsage = (usage: UsageRateLimits): SessionEventBody[] => {
   if (!usage.rate_limits_available || !usage.rate_limits) {
     return []
   }
@@ -160,7 +149,7 @@ export function rateLimitEventsFromUsage(usage: UsageRateLimits): SessionEventBo
  * app reading the REST route — can turn "show me my MCP servers" into a
  * credential dump. Only the connection's identity survives.
  */
-export function mcpStatusInfo(status: McpServerStatus): McpServerStatusInfo {
+export const mcpStatusInfo = (status: McpServerStatus): McpServerStatusInfo => {
   const config = status.config as { type?: string; command?: string; args?: string[]; url?: string } | undefined
   // stdio is the CLI's implicit default: a config with a command and no type.
   const transport = config?.type ?? (config?.command ? 'stdio' : undefined)
@@ -194,31 +183,20 @@ export type SdkModelInfo = {
   supportsEffort?: boolean
 }
 
-/**
- * The CLI's model list, as `ModelOption[]`.
- *
- * Two decisions live here rather than in each client:
- *
- * - **`default` is dropped.** The CLI offers a row whose id is literally
- *   `default` ("Default (recommended)"), meaning "whatever I would have picked".
- *   It is a legal id to send, but it is not a model: a session running on it
- *   reports a real model, so a picker showing it has a row that can never be
- *   checked, and a status bar naming it would say "Default" for a session
- *   answering as Opus. Which model the default resolved to is a different
- *   question, and `system_init` answers it.
- * - **`primary` is derived.** The CLI reports one flat list; Claude Code's own
- *   picker shows the newest of each family and files the rest under "more
- *   models". The list arrives newest-first, so the first row of each family is
- *   the primary one. A heuristic, but a stable one — and doing it once here
- *   means the dashboard and the phone group identically.
- */
 /** What the CLI's `default` row resolves to — the model a session will answer as
  * before it has answered anything. Dropped from the list, kept as this. */
-export function defaultModelFromSdk(models: readonly SdkModelInfo[]): string | undefined {
+export const defaultModelFromSdk = (models: readonly SdkModelInfo[]): string | undefined => {
   return models.find((model) => model.value === 'default')?.resolvedModel
 }
 
-export function modelOptionsFromSdk(models: readonly SdkModelInfo[]): ModelOption[] {
+/**
+ * The CLI's model list, as `ModelOption[]` — the one place the list is shaped,
+ * so no client invents its own (docs/GOTCHAS.md §Claude engine). The `default`
+ * sentinel row is dropped (a choice, not a model — `system_init` answers what
+ * it resolved to) and `primary` is derived here: the list arrives newest-first,
+ * so the first row of each family is the primary one.
+ */
+export const modelOptionsFromSdk = (models: readonly SdkModelInfo[]): ModelOption[] => {
   const rows = models.filter((model) => model.value !== 'default')
   // A derived name is only used when it is unambiguous. Two rows of one model
   // (a 1M-context variant beside a plain one) would derive the same string, and
@@ -266,9 +244,7 @@ export function modelOptionsFromSdk(models: readonly SdkModelInfo[]): ModelOptio
     .map(({ option }) => option)
 }
 
-const FAMILY_ORDER = ['fable', 'opus', 'sonnet', 'haiku']
-
-function familyRank(option: ModelOption): number {
+const familyRank = (option: ModelOption): number => {
   const rank = FAMILY_ORDER.indexOf(modelFamily(option.resolvedModel ?? option.value))
   return rank === -1 ? FAMILY_ORDER.length : rank
 }
@@ -283,7 +259,7 @@ function familyRank(option: ModelOption): number {
  * read from there. Returns null when the id has no version to read — a bare
  * alias like 'sonnet' — and the CLI's name stands.
  */
-export function friendlyModelName(id: string): string | null {
+export const friendlyModelName = (id: string): string | null => {
   const withoutVariant = id.split('[')[0] ?? id
   const parts = withoutVariant.toLowerCase().split('-').filter(Boolean)
   if (parts[0] === 'claude') {
@@ -305,7 +281,7 @@ export function friendlyModelName(id: string): string | null {
  * and the version tail are all dropped; what is left is the family a person
  * names. Unrecognisable ids become their own family, so a model this rule has
  * never seen lands in the main list rather than being hidden. */
-function modelFamily(id: string): string {
+const modelFamily = (id: string): string => {
   const withoutVariant = id.split('[')[0] ?? id
   const parts = withoutVariant.toLowerCase().split('-')
   if (parts[0] === 'claude') {
@@ -319,15 +295,16 @@ function modelFamily(id: string): string {
  * consumes itself (system_init and session-state changes carry runner state and are
  * emitted by the runner with extra context).
  */
-export function normalizeSdkMessage(msg: SDKMessage): SessionEventBody | null {
+export const normalizeSdkMessage = (msg: SDKMessage): SessionEventBody | null => {
   switch (msg.type) {
-    case 'assistant':
+    case 'assistant': {
       return {
         type: 'assistant_message',
         message: toApiMessage(msg.message),
         parentToolUseId: msg.parent_tool_use_id,
         uuid: msg.uuid,
       }
+    }
     case 'user': {
       const message = toApiMessage(msg.message)
       return {
@@ -348,14 +325,15 @@ export function normalizeSdkMessage(msg: SDKMessage): SessionEventBody | null {
         uuid: msg.uuid,
       }
     }
-    case 'stream_event':
+    case 'stream_event': {
       return {
         type: 'stream_delta',
         event: msg.event as { type: string; [key: string]: unknown },
         parentToolUseId: msg.parent_tool_use_id,
         uuid: msg.uuid,
       }
-    case 'result':
+    }
+    case 'result': {
       return {
         type: 'turn_result',
         subtype: msg.subtype,
@@ -367,12 +345,14 @@ export function normalizeSdkMessage(msg: SDKMessage): SessionEventBody | null {
         errors: msg.subtype === 'success' ? undefined : msg.errors,
         usage: msg.usage,
       }
-    case 'conversation_reset':
+    }
+    case 'conversation_reset': {
       // /clear, plan-mode exit, fresh-conversation flows: same session, fresh
       // conversation. The runner reacts to this body too (reset watermark,
       // sdkSessionId adoption) — see SessionRunner.#handleMessage.
       return { type: 'conversation_reset', sdkSessionId: msg.new_conversation_id }
-    case 'rate_limit_event':
+    }
+    case 'rate_limit_event': {
       return {
         type: 'rate_limit',
         info: {
@@ -383,13 +363,16 @@ export function normalizeSdkMessage(msg: SDKMessage): SessionEventBody | null {
           isUsingOverage: msg.rate_limit_info.isUsingOverage,
         },
       }
-    case 'system':
+    }
+    case 'system': {
       // init and session_state_changed are handled by the runner directly.
       if (msg.subtype === 'init' || msg.subtype === 'session_state_changed') {
         return null
       }
       return { type: 'sdk_event', payload: msg as unknown as { type: string } }
-    default:
+    }
+    default: {
       return { type: 'sdk_event', payload: msg as unknown as { type: string } }
+    }
   }
 }

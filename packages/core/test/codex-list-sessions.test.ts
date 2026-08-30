@@ -3,21 +3,19 @@ import { listCodexSessions } from '../src/engines/codex/adapter.ts'
 import type { AppServerConnectFn, AppServerConnection, AppServerThreadSummary } from '../src/engines/codex/types.ts'
 
 /** A thread/list row as 0.146.0 returns it (timestamps in epoch SECONDS). */
-function row(over: Partial<AppServerThreadSummary> & { id: string }): AppServerThreadSummary {
-  return {
-    name: null,
-    preview: 'Create a file named approved.txt',
-    createdAt: 1_785_981_891,
-    updatedAt: 1_785_982_986,
-    cwd: '/tmp/project',
-    ephemeral: false,
-    gitInfo: null,
-    ...over,
-  }
-}
+const row = (over: Partial<AppServerThreadSummary> & { id: string }): AppServerThreadSummary => ({
+  name: null,
+  preview: 'Create a file named approved.txt',
+  createdAt: 1_785_981_891,
+  updatedAt: 1_785_982_986,
+  cwd: '/tmp/project',
+  ephemeral: false,
+  gitInfo: null,
+  ...over,
+})
 
 /** Scripted connection: pages served by index, requests recorded, close counted. */
-function scriptedList(pages: Array<{ data: AppServerThreadSummary[]; nextCursor?: string | null }>) {
+const scriptedList = (pages: Array<{ data: AppServerThreadSummary[]; nextCursor?: string | null }>) => {
   const requests: Array<{ method: string; params: unknown }> = []
   const notifies: string[] = []
   const envs: Array<Record<string, string>> = []

@@ -4,12 +4,11 @@ import { apiUrl } from './hosts.ts'
 import type { TransportToHost, TransportToWebview, WebviewToHost } from './bridge-protocol.ts'
 
 /**
- * Host side of a webview's bridged transports — shared by the agent panel and
- * the sidebar, each with its own instance (transport ids are per-webview).
- * Executes the webview client's fetch/WS with Node fetch / `ws`, injecting the
- * matched gateway's `Authorization` header; refuses URLs that belong to no
- * registered gateway, so neither webview can use the extension host as an open
- * proxy.
+ * Host side of a webview's bridged transports; one instance per webview, transport
+ * ids being per-webview. Executes the webview client's fetch/WS with Node fetch /
+ * `ws`, injecting the matched gateway's `Authorization` header. It **refuses URLs
+ * belonging to no registered gateway** — otherwise a webview could use the
+ * extension host as an open proxy.
  */
 export class WebviewTransportHost {
   readonly #store: HostStore

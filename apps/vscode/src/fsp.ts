@@ -6,21 +6,17 @@ import type { HostStore } from './hosts.ts'
 import { clientFor } from './gateway.ts'
 
 /**
- * `workerdeck://<hostId>/<abs path>` — a remote gateway's project, served over
- * its `/fs/*` routes. Registered globally at activation, so transcript links
- * open even when no folder is mounted; "Open Session Project Folder" mounts a
- * session's cwd on top.
+ * `workerdeck://<hostId>/<abs path>` — a remote gateway's project, served over its
+ * `/fs/*` routes. Registered globally at activation, so transcript links open even
+ * when no folder is mounted.
  *
- * Honest about what `/fs` offers:
- * - reads/lists follow the gateway's roots; anything outside is the same
- *   uniform 404 the server answers with (surfaced as FileNotFound).
- * - `writeFile` is CONDITIONAL, always: the hash from the last read rides
- *   every write, and a mismatch (the agent edited the same file) surfaces as
- *   an error naming the conflict — VS Code keeps the buffer dirty, the user
- *   re-opens/reverts to take the gateway's version. Never a silent overwrite.
+ * What `/fs` offers, and what this provider therefore cannot do:
+ * - reads/lists follow the gateway's roots; outside them is a uniform 404.
+ * - `writeFile` is **conditional, always**: the hash from the last read rides every
+ *   write, and a mismatch (the agent edited the same file) surfaces as an error.
+ *   Never a silent overwrite.
  * - no mkdir/delete/rename routes exist server-side → NoPermissions.
- * - no change stream exists → `watch` is a no-op; refreshes are event-driven
- *   from the panel (turn end) plus tab focus, not a poll.
+ * - no change stream exists → `watch` is a no-op; refreshes are event-driven.
  */
 export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.Disposable {
   static readonly scheme = 'workerdeck'
@@ -52,8 +48,7 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
 
   async stat(uri: vscode.Uri): Promise<vscode.FileStat> {
     const client = await this.#client(uri)
-    // A directory answers /fs/list; a file answers its parent's listing. Try
-    // the cheap parent lookup first — most stats are for files being opened.
+    // A directory answers /fs/list; a file answers its parent's listing, and most stats are for files.
     const path = uri.path
     const parent = path.replace(/\/[^/]*$/, '') || '/'
     if (parent !== path) {
@@ -111,8 +106,7 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
         path: uri.path,
         content: Buffer.from(content).toString('base64'),
         encoding: 'base64',
-        // Absent for a brand-new file — the server treats "no hash" as
-        // create-only and refuses to clobber an existing file with it.
+        // Absent for a brand-new file: the server treats "no hash" as create-only.
         expectedHash,
       })
       this.#hashes.set(key, res.hash)
@@ -163,7 +157,7 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
   }
 }
 
-function fileType(entry: HostDirEntry): vscode.FileType {
+const fileType = (entry: HostDirEntry): vscode.FileType => {
   switch (entry.type) {
     case 'dir':
       return vscode.FileType.Directory
@@ -176,7 +170,7 @@ function fileType(entry: HostDirEntry): vscode.FileType {
   }
 }
 
-function statOf(entry: HostDirEntry): vscode.FileStat {
+const statOf = (entry: HostDirEntry): vscode.FileStat => {
   return {
     type: fileType(entry),
     ctime: 0,
@@ -185,7 +179,7 @@ function statOf(entry: HostDirEntry): vscode.FileStat {
   }
 }
 
-function toFsError(err: unknown, uri: vscode.Uri): Error {
+const toFsError = (err: unknown, uri: vscode.Uri): Error => {
   if (err instanceof WorkerDeckError) {
     if (err.status === 404) {
       return vscode.FileSystemError.FileNotFound(uri)

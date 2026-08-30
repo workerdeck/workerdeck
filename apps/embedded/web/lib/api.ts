@@ -1,19 +1,14 @@
 import type { AgentConfigResponse, Doc, MeResponse, User } from '../../src/shared.ts'
 
 /**
- * The app's non-data endpoints: login, agent config, and the UI-state channel.
+ * The app's non-data endpoints: login, agent config, and the UI-state channel. The
+ * wiki's documents are tRPC procedures inferred from the server's actions
+ * (`web/lib/trpc.ts`), not here.
  *
- * The wiki's own documents are NOT here — they are tRPC procedures generated
- * from the server's actions (`web/lib/trpc.ts`), the same ones the agent reaches
- * over MCP. What is left is everything that is not an action: login sets a
- * cookie (a response header, not a return value), and the UI-state pair is this
- * app's own navigation channel rather than a wiki operation.
- *
- * Same origin as the gateway, so the session cookie rides every call and there
- * is no token to hold in the tab.
+ * Same origin as the gateway, so the session cookie rides every call.
  */
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
+const call = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const res = await fetch(path, {
     ...init,
     headers: { 'content-type': 'application/json', ...init?.headers },

@@ -18,14 +18,8 @@ export interface SessionWorkspaceProps {
   /** Passed straight through to {@link SessionPanel} — including the render-prop
    * form that claims the session-actions menu. */
   header?: SessionPanelProps['header']
-  /**
-   * Panel seams the workspace does not interpret, forwarded verbatim.
-   *
-   * They are listed rather than spread so the workspace stays explicit about
-   * what it passes on: the panel owns the session's one attach, and a seam that
-   * silently arrived here would be a second place to look for why a session
-   * renders the way it does.
-   */
+  /** Panel seams the workspace does not interpret, forwarded verbatim. Listed
+   * rather than spread, so the workspace stays explicit about what it passes. */
   transcriptVariant?: SessionPanelProps['transcriptVariant']
   transcriptDensity?: SessionPanelProps['transcriptDensity']
   transcriptFont?: SessionPanelProps['transcriptFont']
@@ -60,44 +54,33 @@ export interface SessionWorkspaceProps {
   defaultRailWidth?: number
   /** Start with the file rail collapsed even on a wide viewport. */
   defaultRailCollapsed?: boolean
-  /**
-   * The rail moved. Paired with the two defaults so an embedder can persist the
-   * layout — the workspace deliberately does not, because *where* to keep it (a
-   * Memento, localStorage, a workspace file) is the embedder's call, and a
-   * component that picked one would be wrong in the other hosts.
-   */
+  /** The rail moved. Paired with the two defaults so an embedder can persist
+   * the layout; the workspace deliberately does not. */
   onRailChange?: (rail: { width: number; collapsed: boolean }) => void
   className?: string
 }
 
 const RAIL_MIN = 180
 const RAIL_MAX = 520
-/** How little of the agent column the editor may leave. Below this the composer
- * and a line of transcript stop fitting together, which is the point at which the
- * agent has stopped being usable rather than merely small. */
+/** How little of the agent column the editor may leave — below this the
+ * composer and a line of transcript stop fitting together. */
 const AGENT_MIN = 220
 const EDITOR_MIN = 120
 
 /**
  * A VS Code-shaped workspace around a live session: file tree on the left, open
- * files above, the agent below.
+ * files above, the agent below. **Strictly additive** — {@link SessionPanel} is
+ * still the whole session surface on its own.
  *
- * **Strictly additive.** {@link SessionPanel} is untouched and still the whole
- * session surface on its own — an embedder picks one or the other, and one that
- * has its own file tree keeps using the panel.
- *
- * Two things here are load-bearing and easy to break:
+ * Two things are load-bearing and easy to break:
  *
  * 1. **The editor region is absent from the layout when nothing is open**, not
- *    collapsed to zero height. A zero-height pane leaves a draggable splitter and
- *    parks the composer at an odd offset; absence is what makes the agent's
- *    "claims the full column" state actually look like the panel alone.
- * 2. **`SessionPanel` keeps its position in the tree across that transition.** It
- *    holds the WebSocket attach and the entire transcript, so moving it between
- *    parents — or wrapping it conditionally — would remount it and drop the
- *    session's rendered history on the floor the first time someone opens a file.
- *    The conditional children before it are `? :` expressions that leave a null in
- *    their slot, which is exactly what keeps its index stable.
+ *    collapsed to zero height, which would leave a draggable splitter behind.
+ * 2. **`SessionPanel` keeps its position in the tree across that transition.**
+ *    It holds the WebSocket attach and the entire transcript, so moving or
+ *    conditionally wrapping it would remount it and drop the rendered history.
+ *    The conditional children before it are `? :` expressions leaving a null in
+ *    their slot, which is what keeps its index stable.
  */
 export function SessionWorkspace({
   client,
@@ -124,10 +107,9 @@ export function SessionWorkspace({
   onRailChange,
   className,
 }: SessionWorkspaceProps) {
-  // The cwd is the tree's root, and it comes from the registry rather than from
-  // the panel: reading it off the panel's own session hook would mean attaching
-  // a second WebSocket client, and the tool bridge asks the *first* attached
-  // client — a second one changes who answers.
+  // The cwd comes from the registry, never off the panel's own session hook:
+  // that would attach a second WebSocket client, and the tool bridge asks the
+  // *first* attached client.
   const { info } = useSessionInfo(client, sessionId)
   const cwd = info?.cwd
 
@@ -138,9 +120,8 @@ export function SessionWorkspace({
   // editor asks before it offers to save anything.
   const { canWrite } = useHostFileRoots(client)
 
-  // Nothing here can save on the user's behalf when the tab is going away, so
-  // the browser's own guard is the last line. Registered only while there is
-  // something to lose — an unconditional handler makes every navigation prompt.
+  // Registered only while there is something to lose — an unconditional handler
+  // makes every navigation prompt.
   useEffect(() => {
     if (!files.hasUnsaved) {
       return
@@ -153,8 +134,8 @@ export function SessionWorkspace({
   const wide = useIsWide()
   const [railCollapsed, setRailCollapsed] = useState(defaultRailCollapsed ?? false)
   const [railWidth, setRailWidth] = useState(defaultRailWidth)
-  // Reported rather than stored. Kept in a ref so the effect below fires on a
-  // real change instead of on every render an inline callback would cause.
+  // In a ref so the effect below fires on a real change rather than on every
+  // render an inline callback would cause.
   const onRailChangeRef = useRef(onRailChange)
   onRailChangeRef.current = onRailChange
   useEffect(() => {
@@ -162,13 +143,12 @@ export function SessionWorkspace({
   }, [railWidth, railCollapsed])
   const [editorHeight, setEditorHeight] = useState(360)
 
-  // Closing every tab returns the agent to the full column; opening one again
-  // should restore the height the user had chosen, so this is not reset here.
+  // Not reset when the last tab closes: reopening should restore the height the
+  // user chose.
   const hasFiles = files.files.length > 0
 
-  // A narrow viewport cannot spare 260px of rail beside a transcript, so there
-  // the rail overlays the workspace instead of sitting next to it — and starts
-  // out of the way.
+  // A narrow viewport cannot spare 260px beside a transcript, so the rail
+  // overlays the workspace instead of sitting next to it.
   const overlayRail = !wide
   const railOpen = tree.available && !railCollapsed
   useEffect(() => {
@@ -177,11 +157,8 @@ export function SessionWorkspace({
     }
   }, [overlayRail])
 
-  // Closing a dirty tab is the one destructive thing the strip can do, and the
-  // edits are not recoverable once the tab is gone. `confirm` rather than a
-  // styled dialog on purpose: it is modal, it cannot be missed, and a
-  // custom one here would be a second modal system inside a component an
-  // embedder already renders inside their own.
+  // `confirm` rather than a styled dialog: a custom one would be a second modal
+  // system inside a component an embedder already renders inside their own.
   const closeTab = useCallback(
     (path: string) => {
       const file = files.files.find((f) => f.path === path)
@@ -198,12 +175,9 @@ export function SessionWorkspace({
 
   const column = useRef<HTMLDivElement>(null)
   const columnHeight = useElementHeight(column)
-  // Cmd/Ctrl+click a file the agent named and it opens in the editor above —
-  // the workspace is the only surface that *has* an editor, which is why this
-  // lives here and not in the panel. Gated on the tree being available: without
-  // a host filesystem there is nothing to open, and a link that cannot resolve
-  // is worse than plain text. Monaco is excluded because Cmd+click already
-  // means go-to-definition in there, and every identifier would match.
+  // The workspace is the only surface that *has* an editor, which is why the
+  // path links live here and not in the panel. Monaco is excluded because
+  // Cmd+click already means go-to-definition in there.
   const openPath = useCallback(({ path }: { path: string }) => files.open(resolveAgainstCwd(path, cwd)), [files.open, cwd])
   usePathLinks({
     container: column,
@@ -213,11 +187,10 @@ export function SessionWorkspace({
   })
   const editorMax = Math.max(EDITOR_MIN, columnHeight - AGENT_MIN)
 
-  // The embedder's header is app chrome and belongs above everything — but only
-  // `SessionPanel` can *build* the `⋯` menu it is handed, and only if it is the
-  // one calling the render-prop. So the panel still calls it, in its own tree,
-  // and the result is portalled up here. That keeps `SessionPanel` untouched and
-  // keeps the menu's own context (it is a Base UI popup) intact.
+  // The embedder's header belongs above everything, but only `SessionPanel` can
+  // build the `⋯` menu it is handed. So the panel still calls the render-prop in
+  // its own tree and the result is portalled up here, keeping the menu's own
+  // Base UI popup context intact.
   const [topBar, setTopBar] = useState<HTMLDivElement | null>(null)
   const hoisted: SessionPanelProps['header'] =
     header === undefined || topBar === null
@@ -241,8 +214,7 @@ export function SessionWorkspace({
             className={cn('shrink-0 border-r border-border', overlayRail && 'absolute inset-y-0 left-0 z-20 shadow-lg')}
           />
         ) : tree.available ? (
-          // Collapsed: a slim strip that keeps the rail one click away. In flow
-          // rather than floating over the panel, so it can never land on top of an
+          // In flow rather than floating, so it can never land on top of an
           // embedder's own header controls.
           <div className="flex w-8 shrink-0 flex-col items-center border-r border-border bg-surface pt-1.5">
             <Button variant="ghost" size="icon-sm" aria-label="Show project files" onClick={() => setRailCollapsed(false)}>
@@ -250,8 +222,8 @@ export function SessionWorkspace({
             </Button>
           </div>
         ) : null}
-        {/* No splitter over an overlay rail — dragging a drawer's edge on a phone
-          fights the scroll it is sitting on top of. */}
+        {/* No splitter over an overlay rail — dragging a drawer's edge fights
+          the scroll it sits on top of. */}
         {railOpen && !overlayRail ? (
           <Splitter
             orientation="vertical"
@@ -336,10 +308,10 @@ export function SessionWorkspace({
   )
 }
 
-/** Live height of an element, for a splitter that needs to know how much room it
- * is dividing. Zero until the first observation, which callers treat as
+/** Live height of an element, for a splitter that needs to know how much room
+ * it is dividing. Zero until the first observation, which callers treat as
  * "unmeasured" rather than as a real bound. */
-function useElementHeight(ref: RefObject<HTMLElement | null>): number {
+const useElementHeight = (ref: RefObject<HTMLElement | null>): number => {
   const [height, setHeight] = useState(0)
   useLayoutEffect(() => {
     const element = ref.current
@@ -357,9 +329,8 @@ function useElementHeight(ref: RefObject<HTMLElement | null>): number {
   return height
 }
 
-/** Whether there is room for a rail beside the content. Presentation only — the
- * workspace's actual state lives in the hooks from `@workerdeck/react`. */
-function useIsWide(): boolean {
+/** Whether there is room for a rail beside the content. Presentation only. */
+const useIsWide = (): boolean => {
   const [wide, setWide] = useState(true)
   useEffect(() => {
     const query = window.matchMedia('(min-width: 768px)')

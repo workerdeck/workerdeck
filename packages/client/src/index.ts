@@ -62,11 +62,8 @@ export type ClientOptions = {
 
 /**
  * A REST call the gateway refused, carrying the status alongside the message.
- *
- * An `Error` subclass on purpose: every existing `e instanceof Error` check and
- * every `e.message` read keeps working unchanged. The status is what lets a
- * caller tell "this server doesn't have that route" (404 — stop asking) from
- * "that file was too big" (413 — tell the user), which a message string can't.
+ * The status is what lets a caller tell "this server doesn't have that route"
+ * (404 — stop asking) from "that file was too big" (413 — tell the user).
  */
 export class WorkerDeckError extends Error {
   readonly status: number
@@ -85,38 +82,23 @@ export type AttachOptions = {
   /**
    * Ask the gateway to replay an oversized tool result as its **head**, with
    * `truncated`/`total_chars` on the block and the whole thing one
-   * {@link WorkerDeckClient.toolResult} call away. Measured after shipping, that
-   * is a **0.3%** cut on a real session, not the 68% it was designed against —
-   * the projection had counted base64 as text. The mechanism is right and the
-   * bytes were elsewhere; see {@link AttachOptions.imageRefs}.
+   * {@link WorkerDeckClient.toolResult} call away.
    *
    * Default off, and the default must stay off: **only the unit that renders may
-   * ask for it**. `client` and `react` are separate packages an embedder can
-   * skew, and a caller that asked for heads without knowing how to fetch the
-   * rest would show one as though it were the whole result — the silent lie this
-   * rule family exists to prevent. `useClaudeSession` sets it; nothing else here
-   * does. Live events are never affected.
+   * ask for it** — a caller that asked for heads without knowing how to fetch the
+   * rest would present one as the whole result. `useClaudeSession` sets it;
+   * nothing else here does. Live events are never affected.
    */
   truncateResults?: boolean
   /**
-   * Ask the gateway to deliver a tool result's base64 image parts as
-   * `image_ref` addresses, their bytes one {@link
-   * WorkerDeckClient.toolResultImage} call away.
-   *
-   * This is where the bytes actually were: measured across 214 local sessions,
-   * **91% of all tool-result payload is base64 no client renders** — 489 MB
-   * against 44 MB of text, two thirds of it from `Read` looking at a PNG. One
-   * session's attach fell from 4,550 KB to 771 KB with no image in it.
+   * Ask the gateway to deliver a tool result's base64 image parts as `image_ref`
+   * addresses, their bytes one {@link WorkerDeckClient.toolResultImage} call away.
    *
    * Default off under the same rule as {@link AttachOptions.truncateResults} —
    * only the unit that renders may ask — and its **own** flag rather than a
-   * widening of that one, because this family's "additive at protocol 7"
-   * argument rests on a client that never asked being unable to receive one, by
-   * construction rather than by release archaeology.
-   *
-   * Unlike truncation this **also applies to live events**. The render path is
-   * ref-then-fetch, so bytes arriving live would only be discarded or pinned in
-   * client state.
+   * widening of that one, so a client that never asked cannot receive one by
+   * construction. Unlike truncation this **also applies to live events**: the
+   * render path is ref-then-fetch, so live bytes would only be discarded.
    */
   imageRefs?: boolean
 }
@@ -448,17 +430,12 @@ export class WorkerDeckClient {
   }
 
   /**
-   * Stable identity of the (gateway, principal) pair this client speaks as:
-   * the base URL plus the auth headers it sends, order-insensitively.
-   *
-   * Exists for client-side caches that must survive the client *instance*
-   * being rebuilt (a `useMemo` recreating it when a view switches gateways)
-   * without ever sharing an entry across gateways — a session id is unique
-   * only within one — or across credentials. Auth that rides outside
-   * `headers` (a same-origin cookie, a fetch shim adding the key host-side)
-   * is chosen per origin in every such host, so the base URL still separates
-   * principals there; an embedder whose principal varies some other way on
-   * one base URL should not key anything on this.
+   * Stable identity of the (gateway, principal) pair this client speaks as: the
+   * base URL plus the auth headers it sends, order-insensitively. For caches that
+   * must survive the client *instance* being rebuilt without ever sharing an entry
+   * across gateways (a session id is unique only within one) or credentials. An
+   * embedder whose principal varies on one base URL outside `headers` should not
+   * key anything on this.
    */
   get identityKey(): string {
     const headers = Object.entries(this.#options.headers ?? {}).map(([name, value]) => [name.toLowerCase(), value] as const)
@@ -578,22 +555,14 @@ export class WorkerDeckClient {
   }
 
   /**
-   * Fetch a project icon's bytes.
+   * Fetch a project icon's bytes. A `Blob` and not a URL because a VS Code webview
+   * has **no external `connect-src` at all** — the bytes must ride a bridged fetch.
    *
-   * Here rather than left to each client for the reason `readProducedFile`
-   * exists, plus one this route makes sharper: a VS Code webview has **no
-   * external `connect-src` at all**, so it cannot point an `<img src>` at a
-   * gateway even in principle — the bytes have to come back through a bridged
-   * fetch, which is exactly what this wraps. Three clients building the same
-   * URL from `baseUrl` was the other half of the argument.
+   * Cache the result by `ProjectIcon.image.hash`, never by session: two sessions in
+   * one project serve identical bytes.
    *
-   * Cache the result by `ProjectIcon.image.hash`, never by session: two
-   * sessions in one project serve identical bytes, and the hash is on the wire
-   * precisely so a client fetches once per project.
-   *
-   * A 404 is the uniform "no icon" — no project, a glyph-only project, or an
-   * icon the gateway refused. It is deliberately not distinguishable, so treat
-   * it as "draw no image", never as an error worth reporting.
+   * A 404 is the uniform, deliberately indistinguishable "no icon" (no project, a
+   * glyph-only project, an icon the gateway refused) — draw no image, never report.
    */
   async projectIcon(sessionId: string): Promise<Blob> {
     const res = await this.#fetch(this.projectIconUrl(sessionId), {
@@ -648,12 +617,10 @@ export class WorkerDeckClient {
     return (await this.#call('POST', `/executions/${encodeURIComponent(executionId)}/result`, result)) as SubmitExecutionResultResponse
   }
 
-  /** List the profiles (named Claude Code config dirs) this server declares, filtered
-   * to what the caller may use. Feed a result's `name` to createSession({ profile }).
-   * Servers predating profiles 404 here — catch and treat as none declared. */
-  /** The profiles this caller may use, plus whether it may create new ones.
-   * Each profile carries `managed: true` when it is store-backed and therefore
-   * editable; profiles declared in server options are not. */
+  /** The profiles this caller may use, plus whether it may create new ones. Each
+   * profile carries `managed: true` when it is store-backed and therefore editable;
+   * profiles declared in server options are not. Feed a result's `name` to
+   * `createSession({ profile })`. Servers predating profiles 404 here. */
   async listProfiles(): Promise<ListProfilesResponse> {
     return (await this.#call('GET', '/profiles')) as ListProfilesResponse
   }
@@ -805,11 +772,9 @@ export class WorkerDeckClient {
 
   /** @internal used by SessionHandle */
   openSocket(sessionId: string, afterSeq: number, truncateResults = false, imageRefs = false): WebSocket {
-    // A third *optional* parameter rather than an options object, so every
-    // existing `buildWsUrl` implementation still typechecks. The hazard worth
-    // naming: a custom one that ignores it yields a full replay — safe only
-    // because every client keys its rendering off the server's own `truncated`
-    // marker and never off what it asked for.
+    // A custom `buildWsUrl` that ignores the optional flags yields a full replay —
+    // safe only because every client keys its rendering off the server's own
+    // `truncated` marker and never off what it asked for.
     const query = `afterSeq=${afterSeq}` + (truncateResults ? '&truncateResults=1' : '') + (imageRefs ? '&imageRefs=1' : '')
     const url =
       this.#options.buildWsUrl?.(sessionId, afterSeq, truncateResults, imageRefs) ??
@@ -844,21 +809,14 @@ export class WorkerDeckClient {
   }
 
   /**
-   * One image part's bytes, addressed by the `image_ref` a replay delivered in
-   * its place.
-   *
-   * A `Blob` and not a URL, and that is the whole reason this method exists: an
-   * `<img src>` pointing at the gateway carries a credential in exactly one of
-   * this project's four clients (the dashboard's same-origin implicit host,
-   * where the cookie rides along). Everywhere else — an added cross-origin
-   * gateway on a Bearer header, the VS Code webview whose every byte crosses a
-   * postMessage bridge, iOS — the URL is unauthenticated and the picture is a
-   * broken icon. Fetched rather than pointed at, then handed to
-   * `URL.createObjectURL`; `readProducedFile` is the shipped precedent.
+   * One image part's bytes, addressed by the `image_ref` a replay delivered in its
+   * place. A `Blob` and not a URL: an `<img src>` at the gateway carries a
+   * credential only for the dashboard's same-origin cookie — everywhere else it is
+   * unauthenticated. Fetch, then `URL.createObjectURL`.
    *
    * A 404 means "ask again with a fresh attach": a woken dormant session has a
-   * fresh log with fresh seqs, and the gateway refuses a stale address rather
-   * than serving another call's pixels under the row you are looking at.
+   * fresh log with fresh seqs, and the gateway refuses a stale address rather than
+   * serving another call's pixels under the row you are looking at.
    */
   async toolResultImage(sessionId: string, seq: number, toolUseId: string, partIndex: number): Promise<Blob> {
     const path =

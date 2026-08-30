@@ -9,18 +9,10 @@ export type Crumb = {
 }
 
 /**
- * The top bar every detail page wears: breadcrumbs on the left, the page's own
- * actions on the right.
- *
- * The session view has had one since it was the only detail page, and the other
- * three grew their own headings *inside* the scroll area instead — which meant
- * the thing telling you where you were scrolled away, and each page put its
- * actions somewhere slightly different. This is that bar, shared.
- *
- * The first crumb links back to the section even though its list is right there
- * in the sidebar and never left. That is deliberate: it names the section, which
- * is what a breadcrumb is for, and clicking it clears the selection — the one
- * thing the sidebar cannot do for you.
+ * The top bar every detail page wears: breadcrumbs left, the page's actions right,
+ * outside the scroll area so neither scrolls away. The first crumb links back to
+ * the section even though its list never left the sidebar — clicking it clears the
+ * selection, which is the one thing the sidebar cannot do for you.
  */
 export function DetailBar({
   crumbs,

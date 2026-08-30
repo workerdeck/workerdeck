@@ -10,15 +10,7 @@ const LOCAL_GATEWAY_DEFAULTS = { name: 'localhost', baseUrl: 'http://127.0.0.1:8
 type Form = { editing?: GatewayFormValue }
 
 /**
- * The Gateways view. Unlike the sessions list this one *does* draw a header row
- * over its form — and for a reason that is the mirror image of why the list
- * doesn't: VS Code lets an extension retitle a view, but the title bar it
- * retitles is shared with whatever `view/title` actions the manifest gave the
- * view, and this view's single action (`+`) is the thing that opens the form.
- * Hiding it behind a context key to make room for a back chevron would mean two
- * context keys racing one collapsed view. The form is one level deep and never
- * more, so an in-body back row is honest here where a second *screen stack* was
- * not.
+ * The Gateways view. The form is one level deep and never more.
  *
  * No transports: everything this view does is host-side (globalState and the
  * keychain), so it runs no client and could not reach a gateway if it tried.

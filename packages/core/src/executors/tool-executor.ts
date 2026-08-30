@@ -33,11 +33,6 @@ export type ToolExecutionDispatch =
   | { executionId: string; status: 'pending' }
 
 /**
- * The seam between the agent loop and wherever code actually runs — in-process
- * QuickJS, a browser tab over the WS bridge, or a managed sandbox. Backends are
- * interchangeable and selected by context.
- */
-/**
  * How an executor will handle one specific call, asked before dispatch so the
  * runner can announce it on `execution_dispatched` (which is emitted before the
  * call goes out, so a bridged request never precedes its own record).
@@ -60,6 +55,11 @@ export type ToolExecutionProfile = {
   timeoutMs?: number
 }
 
+/**
+ * The seam between the agent loop and wherever code actually runs — in-process
+ * QuickJS, a browser tab over the WS bridge, or a managed sandbox. Backends are
+ * interchangeable and selected by context.
+ */
 export interface ToolExecutor {
   /** Describe what this call will be: backend, deferredness, deadline. Omitted =
    * an in-band execution on the runner's configured backend. */

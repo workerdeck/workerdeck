@@ -3,22 +3,11 @@ import { dirname, join } from 'node:path'
 import type { CliSessionStore, StoredSession } from './auth.ts'
 
 /**
- * Durable browser-login sessions for the turnkey CLI — the other half of
- * `materializeAuthKey`, and here for the same reason: the key survives a
- * restart so clients stay paired, and the login cookie should too. Without
- * this the cookie outlives the table it points into, so a restart signs every
- * browser out while the browser still holds a perfectly valid-looking cookie.
+ * Durable browser-login sessions for the turnkey CLI. What lands on disk is not
+ * credential material — `createCliAuth` keys its table by `HMAC-SHA256(secret,
+ * token)`, which is also what makes key rotation invalidate every outstanding
+ * cookie for free (`docs/GOTCHAS.md` §Server, profiles & auth).
  *
- * What lands on disk is **not credential material**: `createCliAuth` keys its
- * table by `HMAC-SHA256(secret, token)`, so a stolen file yields neither the
- * operator secret nor any cookie value (inverting either needs a preimage of a
- * 256-bit-entropy input). That keying is also what makes key rotation
- * invalidate every outstanding cookie for free — entries written under the old
- * secret simply never match a lookup again, and age out on their own expiry.
- *
- * Writes are whole-file and serialized behind one promise chain (the table is
- * capped at `MAX_SESSIONS`, so "whole file" is a few kilobytes), and go through
- * a temp file + rename so a crash mid-write cannot leave a truncated table.
  * Every failure is a warning, never a throw: losing durability signs the
  * operator out, losing the gateway does much worse.
  */
@@ -54,11 +43,11 @@ const parseSessions = (raw: string, now: number): [string, StoredSession][] => {
       continue
     }
     const [key, expiresAt] = entry
-    // Expired entries are dropped on load rather than carried and swept later:
-    // the cap they would otherwise occupy is the operator's own login budget.
     if (typeof key !== 'string' || key === '') {
       continue
     }
+    // Expired entries drop on load rather than being carried and swept later:
+    // the cap they would otherwise occupy is the operator's own login budget.
     if (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt) || expiresAt <= now) {
       continue
     }
@@ -67,7 +56,7 @@ const parseSessions = (raw: string, now: number): [string, StoredSession][] => {
   return entries
 }
 
-export async function createAuthSessionStore(options: AuthSessionStoreOptions): Promise<CliSessionStore> {
+export const createAuthSessionStore = async (options: AuthSessionStoreOptions): Promise<CliSessionStore> => {
   const now = options.now ?? Date.now
   const warn = options.warn ?? ((message: string) => process.stderr.write(`[workerdeck] ${message}\n`))
   const path = join(options.stateDir, FILE_NAME)

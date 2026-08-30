@@ -69,7 +69,7 @@ const MAX_FILE_BYTES = 1024 * 1024
  * simply absent rather than present-and-failing, so a model cannot be tempted
  * by a capability the operator did not grant.
  */
-export function createToolContext(options: ToolContextOptions): ToolContext {
+export const createToolContext = (options: ToolContextOptions): ToolContext => {
   const vfs = options.vfs ?? createVfs()
   const definitions: ToolDefinition[] = []
 
@@ -119,7 +119,7 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
       trust: 'authoritative',
       tool: tool({
         description:
-          'Hand a file from the scratch filesystem over to the user as a deliverable. ' + 'Write it with fs_write first, then deliver it.',
+          'Hand a file from the scratch filesystem over to the user as a deliverable. Write it with fs_write first, then deliver it.',
         inputSchema: z.object({
           path: z.string().describe('Path of an existing file in the scratch filesystem'),
           description: z.string().optional().describe('What this file is, for the recipient'),
@@ -233,7 +233,7 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
 
 /** Add host-side MCP tools to a context. They are ALWAYS authoritative: they run
  * server-side with server credentials, and must never be handed to a browser. */
-export function withMcpTools(context: ToolContext, mcpTools: ToolSet): ToolContext {
+export const withMcpTools = (context: ToolContext, mcpTools: ToolSet): ToolContext => {
   return withHostTools(
     context,
     Object.fromEntries(Object.entries(mcpTools).map(([name, mcpTool]) => [name, { tool: mcpTool, trust: 'authoritative' as const }])),
@@ -268,12 +268,7 @@ export type HostToolDefinition = {
  * - an `authoritative` tool *without* `execute` would park the turn on a call no
  *   executor claims, and the session would simply stop.
  */
-export function withHostTools(
-  context: ToolContext,
-  hostTools: Record<string, HostToolDefinition>,
-  /** What to call these in error messages ('MCP tool', 'host tool'). */
-  kind = 'host tool',
-): ToolContext {
+export const withHostTools = (context: ToolContext, hostTools: Record<string, HostToolDefinition>, kind = 'host tool'): ToolContext => {
   const entries = Object.entries(hostTools)
   if (entries.length === 0) {
     return context
@@ -309,6 +304,6 @@ export function withHostTools(
   return { ...context, tools, definitions, sandboxedToolNames }
 }
 
-function truncate(text: string): string {
+const truncate = (text: string): string => {
   return text.length > MAX_FILE_BYTES ? text.slice(0, MAX_FILE_BYTES) : text
 }

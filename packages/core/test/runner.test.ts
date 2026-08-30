@@ -13,7 +13,7 @@ type HarnessCapabilities = {
 
 /** Controllable stand-in for the SDK: emit SDKMessages, capture options + streamed input.
  * Pass `capabilities` to also implement supportedModels/supportedCommands. */
-function fakeHarness(capabilities?: HarnessCapabilities) {
+const fakeHarness = (capabilities?: HarnessCapabilities) => {
   const messages: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
   let done = false
@@ -135,7 +135,7 @@ const resultMessage = {
   session_id: 'sdk-session-1',
 } as unknown as SDKMessage
 
-function makeRunner(overrides: Partial<SessionRunnerConfig> = {}, capabilities?: HarnessCapabilities) {
+const makeRunner = (overrides: Partial<SessionRunnerConfig> = {}, capabilities?: HarnessCapabilities) => {
   const harness = fakeHarness(capabilities)
   const runner = new SessionRunner({
     cwd: '/tmp/project',
@@ -930,24 +930,10 @@ describe('SessionRunner', () => {
 })
 
 /**
- * A session must never claim to be running a turn that has ended.
- *
- * Both routes to `idle` — the SDK's authoritative `session_state_changed` and
- * the `turn_result` fallback — are gated on there being no pending approval,
- * and the gate **discarded** that signal rather than deferring it. The settle
- * path then asserted `running` unconditionally, on the assumption that an
- * answered approval means work resumes. When the turn had already ended that
- * assumption is false, and nothing ever re-emitted the truth: status is purely
- * edge-driven — no poll, no reconciliation — so one dropped edge is permanent
- * for the life of the session.
- *
- * Observed in the wild as a session reading "running" for hours on the web
- * dashboard, the VS Code dock and the phone at once, which is one runner field
- * faithfully rendered three times rather than three bugs.
- *
- * The display rule the original guard was protecting is still right and is
- * asserted here too: while an approval stands, `awaiting_approval` outranks
- * whatever the engine says about the turn.
+ * A turn that ends under a standing approval must be *deferred*, not discarded:
+ * status is edge-driven, so one dropped edge is permanent for the life of the
+ * session (docs/GOTCHAS.md §Permissions). `awaiting_approval` still outranks
+ * `idle` for display while the approval stands, which is asserted here too.
  */
 describe('status after a turn ends under a standing approval', () => {
   const askApproval = (harness: ReturnType<typeof makeRunner>['harness'], id: string): void =>

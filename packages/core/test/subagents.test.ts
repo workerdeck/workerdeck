@@ -13,7 +13,7 @@ import { SessionRunner, type SessionRunnerConfig } from '../src/index.ts'
 
 /** Minimal stand-in for the SDK: emit SDKMessages, capture options + streamed
  * input (same shape as runner.test.ts's harness, without the control surface). */
-function fakeHarness() {
+const fakeHarness = () => {
   const messages: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
   let done = false
@@ -70,7 +70,7 @@ function fakeHarness() {
   return { emit, end, captured, queryFn }
 }
 
-function makeRunner(overrides: Partial<SessionRunnerConfig> = {}) {
+const makeRunner = (overrides: Partial<SessionRunnerConfig> = {}) => {
   const harness = fakeHarness()
   const runner = new SessionRunner({
     cwd: '/tmp/project',

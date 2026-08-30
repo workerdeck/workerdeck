@@ -26,7 +26,7 @@ export type ProfileStore = {
 }
 
 /** Non-durable store for tests and ephemeral deployments. */
-export function createMemoryProfileStore(seed: ProfileInfo[] = []): ProfileStore {
+export const createMemoryProfileStore = (seed: ProfileInfo[] = []): ProfileStore => {
   const profiles = new Map(seed.map((p) => [p.name, p]))
   return {
     list: () => [...profiles.values()],
@@ -43,7 +43,7 @@ export function createMemoryProfileStore(seed: ProfileInfo[] = []): ProfileStore
  * Single-process by design, exactly like the bundled queue adapter — two servers
  * sharing one file would race. That is what the seam is for.
  */
-export function createFileProfileStore(path = join(process.cwd(), '.workerdeck', 'profiles.json')): ProfileStore {
+export const createFileProfileStore = (path = join(process.cwd(), '.workerdeck', 'profiles.json')): ProfileStore => {
   const read = (): Map<string, ProfileInfo> => {
     try {
       const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown

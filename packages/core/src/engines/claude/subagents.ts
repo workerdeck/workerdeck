@@ -1,12 +1,3 @@
-// Always keep imports single line, avoid trailing comma on last type
-// Remove comments where possible, documentation should be readable from code, and from docs files
-// Always use curly braces for single-line statements, e.g. `if (!record) { continue }`
-// if/else if should always take newlines and curly braces, e.g. `if () { [NEWLINE] } else { [NEWLINE] }`
-// if possible, avoid inline type definitions, e.g. const x = ... as { tool_use_id?: unknown, ... }. Ideally define meaningful interfaces.
-// I don't mind long line lengths, hence we should try to keep function signatures on a single line, e.g. `const fn = (a: string) => { [NEWLINE] }`
-// I'd like to keep CONSTS (e.g. SPAWNER_NAMES) at the top of the file
-// `case` statements should always use curly braces
-
 import { SUBAGENT_HISTORY, type ContentBlock, type SessionEventBody, type SubagentInfo } from '@workerdeck/protocol'
 
 type TrackedSubagent = SubagentInfo & {
@@ -258,7 +249,7 @@ const cleaned = (value: unknown): string | undefined => {
   return text.length > 80 ? text.slice(0, 79) + '…' : text
 }
 
-function toolUseBlocks(content: string | ContentBlock[]): Array<{ id: string; name: string; input: unknown }> {
+const toolUseBlocks = (content: string | ContentBlock[]): Array<{ id: string; name: string; input: unknown }> => {
   if (typeof content === 'string') {
     return []
   }

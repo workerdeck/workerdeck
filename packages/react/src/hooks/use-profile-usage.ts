@@ -37,11 +37,11 @@ export type UseProfileUsageResult = {
  * route will never grow one mid-session, so stop asking rather than log a miss
  * every minute.
  */
-export function useProfileUsage(
+export const useProfileUsage = (
   client: WorkerDeckClient,
   profile: string | undefined,
   options: UseProfileUsageOptions = {},
-): UseProfileUsageResult {
+): UseProfileUsageResult => {
   const { intervalMs = 60_000, enabled = true } = options
   const [usage, setUsage] = useState<ProfileUsage | undefined>()
   const [unsupported, setUnsupported] = useState(false)

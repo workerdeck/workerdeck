@@ -20,11 +20,9 @@ import type { AgentConfigResponse } from './shared.ts'
  *             ├─ /api/*  login, app state, agent config
  *             └─ /*      the built SPA
  *
- * One port is load-bearing. The tab drives sessions over a WebSocket, a browser
- * cannot put an Authorization header on an upgrade, and a cookie only rides
- * same-origin requests — so single-origin is what makes the sidebar work at all.
- * It is also what lets `/trpc` be cookie-authenticated at all, which is what lets
- * the SPA and the agent share one implementation of the wiki.
+ * One port is load-bearing: a browser cannot put an Authorization header on a WS
+ * upgrade and a cookie only rides same-origin requests, so single-origin is what
+ * makes both the session socket and cookie-authed `/trpc` possible.
  */
 
 const port = Number(process.env.PORT ?? 8788)
@@ -40,12 +38,10 @@ const db = openWikiDb(dbFile)
 const auth = createCookieAuth(resolveSecret(`${stateDir}/cookie-secret`))
 const state = createAppState()
 const wikiMcp = createWikiMcp(db, state, USERS)
-// The same actions, for the browser: cookie-authenticated, typed end to end.
 const wikiApi = createWikiApi(db, state, auth)
 await wikiApi.start()
 
-// Resolved after listen, when the real port is known — but `createEngineRunner`
-// only reads it when a session is created, which is necessarily later.
+// Resolved after listen; `createEngineRunner` only reads it at session create.
 let mcpUrl = ''
 
 let agentConfig: AgentConfigResponse = { baseUrl: '/v1', profile: PROFILE_NAME, available: false }
@@ -65,10 +61,8 @@ const gateway = await createEmbeddedGateway({
   get mcpUrl() {
     return mcpUrl
   },
-  // Express apps are `(req, res)` handlers, so the gateway's fallback can be
-  // one directly — no proxy hop, no second port, no WS upgrade to forward.
-  // `/trpc` is checked first because silkweave's node handler slices its own
-  // prefix off unconditionally: it must only ever see URLs that belong to it.
+  // `/trpc` is checked first because silkweave's node handler slices its own prefix
+  // off unconditionally: it must only ever see URLs that belong to it.
   fallback: (req, res) => {
     if (req.url === '/trpc' || req.url?.startsWith('/trpc/') || req.url?.startsWith('/trpc?')) {
       wikiApi.handler(req, res)
@@ -86,9 +80,6 @@ agentConfig = {
 }
 
 const { port: bound } = await gateway.server.listen(port, host).catch((error: unknown) => {
-  // This repo runs several gateways at once, so a busy port is the likeliest
-  // first-run failure — and an EADDRINUSE stack trace does not tell you that
-  // something else is already answering there.
   if ((error as { code?: string }).code === 'EADDRINUSE') {
     console.error(
       `\n  Port ${port} is already in use — something else is listening on ${host}:${port}.\n` +

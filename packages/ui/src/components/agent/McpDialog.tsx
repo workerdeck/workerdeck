@@ -15,9 +15,8 @@ export interface McpDialogProps {
   onOpenChange: (open: boolean) => void
   /**
    * Whether this engine can reconnect/enable/disable a server
-   * (`EngineCapabilities.mcpServerActions`). False renders the panel read-only:
-   * codex reports rich status but exposes no per-server action, and buttons
-   * that 501 are worse than buttons that aren't there.
+   * (`EngineCapabilities.mcpServerActions`). False renders the panel read-only —
+   * codex reports rich status but exposes no per-server action.
    */
   canManageServers?: boolean
   className?: string
@@ -34,24 +33,20 @@ const STATUS_VARIANT: Record<string, NonNullable<BadgeProps['variant']>> = {
 }
 
 /**
- * The session's MCP servers, at the CLI's own `/mcp` depth: servers → one server
- * → its tools → one tool, with Reconnect / Enable / Disable where they apply.
+ * The session's MCP servers, at the CLI's own `/mcp` depth: servers → one
+ * server → its tools → one tool.
  *
- * Two things vary by engine rather than being fixed here. **The actions** exist
- * only where the engine has them (`canManageServers`): codex reports rich status
- * but has no per-server reconnect or toggle, so its panel is read-only. And
- * **tool parameters** appear only where the engine reports a schema — codex
- * returns each tool's full JSON Schema, the Agent SDK returns none at all, so
- * the tool view either renders it or says why it can't, rather than leaving a
- * silent gap or claiming the absence is universal.
+ * Two things vary by engine: the **actions** exist only where the engine has
+ * them (`canManageServers`), and **tool parameters** only where it reports a
+ * schema (codex returns full JSON Schema, the Agent SDK returns none).
  */
 export function McpDialog({ client, sessionId, open, onOpenChange, canManageServers = true, className }: McpDialogProps) {
   const [servers, setServers] = useState<McpServerStatusInfo[] | undefined>()
   const [error, setError] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
   const [busyServer, setBusyServer] = useState<string | undefined>()
-  // The drill-down, by name rather than by object — an action replaces the whole
-  // list, and a held reference would go stale on the first Reconnect.
+  // By name rather than by object: an action replaces the whole list, and a
+  // held reference would go stale on the first Reconnect.
   const [selectedServer, setSelectedServer] = useState<string | undefined>()
   const [selectedTool, setSelectedTool] = useState<string | undefined>()
 
@@ -130,7 +125,7 @@ export function McpDialog({ client, sessionId, open, onOpenChange, canManageServ
               onAct={(action) => void act(server.name, action)}
               onSelectTool={setSelectedTool}
             />
-          ) : error && !servers ? null : ( // gives us no standing to make. // it — a claim about the operator's config that a failed request // the list here would print "No MCP servers configured" underneath // The strip above already says what went wrong. Falling through to
+          ) : error && !servers ? null : ( // The strip above already said what went wrong; the empty list would claim the operator has no servers configured.
             <ServerList servers={servers} loading={loading} onSelect={setSelectedServer} />
           )}
         </DialogBody>
@@ -139,7 +134,7 @@ export function McpDialog({ client, sessionId, open, onOpenChange, canManageServ
   )
 }
 
-function ServerList({
+const ServerList = ({
   servers,
   loading,
   onSelect,
@@ -147,7 +142,7 @@ function ServerList({
   servers: McpServerStatusInfo[] | undefined
   loading: boolean
   onSelect: (name: string) => void
-}) {
+}) => {
   if (loading && !servers) {
     return (
       <div className="py-6 text-center">
@@ -191,7 +186,7 @@ function ServerList({
   )
 }
 
-function ServerView({
+const ServerView = ({
   server,
   busy,
   canManage,
@@ -203,7 +198,7 @@ function ServerView({
   canManage: boolean
   onAct: (action: McpServerActionRequest['action']) => void
   onSelectTool: (name: string) => void
-}) {
+}) => {
   const disabled = server.status === 'disabled'
   return (
     <div className="flex flex-col gap-4">
@@ -234,9 +229,7 @@ function ServerView({
 
       {server.error ? <div className="rounded-md bg-danger-bg px-3 py-2 text-body-sm break-words text-danger">{server.error}</div> : null}
 
-      {/* Absent, not disabled, when the engine has no per-server action: a
-          greyed-out Reconnect invites the question "why can't I?" on every
-          visit, where nothing at all reads as "this engine works differently". */}
+      {/* Absent, not disabled, when the engine has no per-server action. */}
       {canManage ? (
         <div className="flex gap-2">
           <Button variant="outline" size="sm" disabled={busy} onClick={() => onAct('reconnect')}>
@@ -277,7 +270,7 @@ function ServerView({
   )
 }
 
-function ToolView({ tool }: { tool: McpServerToolInfo }) {
+const ToolView = ({ tool }: { tool: McpServerToolInfo }) => {
   const annotations = tool.annotations
   return (
     <div className="flex flex-col gap-3">
@@ -293,10 +286,8 @@ function ToolView({ tool }: { tool: McpServerToolInfo }) {
           {annotations.openWorld ? <Badge variant="warning">open world</Badge> : null}
         </div>
       ) : null}
-      {/* Engine-dependent, and said as such: codex returns each tool's full
-          JSON Schema, the Agent SDK returns none at all. So this is a real
-          section where one exists and an explanation where it doesn't — never a
-          silent gap, and never a claim that no engine has them. */}
+      {/* Engine-dependent: codex returns each tool's full JSON Schema, the
+          Agent SDK returns none at all. */}
       {tool.inputSchema !== undefined ? (
         <div>
           <h3 className="text-label font-medium text-fg-3">Parameters</h3>
@@ -315,7 +306,7 @@ function ToolView({ tool }: { tool: McpServerToolInfo }) {
 
 /** The schema is an opaque JSON document from another process — pretty-print it,
  * and never let an unserializable value take the dialog down with it. */
-function safeSchema(schema: unknown): string {
+const safeSchema = (schema: unknown): string => {
   try {
     return JSON.stringify(schema, null, 2)
   } catch {

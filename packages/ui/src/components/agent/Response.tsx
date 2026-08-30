@@ -18,9 +18,7 @@ export const Response = memo(
         mode={streaming ? 'streaming' : 'static'}
         parseIncompleteMarkdown={streaming}
         shikiTheme={['github-light', 'github-dark']}
-        // Link safety is handled at the panel level — VS Code's native
-        // webview handler, the browser's `target="_blank"`, or the
-        // embedder's `onLinkClick` prop — not by Streamdown's own modal.
+        // Link safety is handled at the panel level, not by Streamdown's modal.
         linkSafety={{ enabled: false }}
         className={cn('size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0', className)}
       >

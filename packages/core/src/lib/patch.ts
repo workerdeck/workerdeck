@@ -26,7 +26,11 @@ import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
  */
 const MAX_PATCH_LINES = 400
 
-function capHunks(hunks: PatchHunk[]): { hunks: PatchHunk[]; truncated?: boolean } {
+/** `@@ -oldStart,oldLines +newStart,newLines @@` — the counts are optional and
+ * mean 1 when absent, which is what a single-line hunk looks like. */
+const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
+
+const capHunks = (hunks: PatchHunk[]): { hunks: PatchHunk[]; truncated?: boolean } => {
   const kept: PatchHunk[] = []
   let lines = 0
   for (const hunk of hunks) {
@@ -41,7 +45,7 @@ function capHunks(hunks: PatchHunk[]): { hunks: PatchHunk[]; truncated?: boolean
 
 /** Structural, not `instanceof`: this reads a field the SDK types as `unknown`,
  * and a shape check is the only honest way to know what arrived. */
-function isHunk(value: unknown): value is PatchHunk {
+const isHunk = (value: unknown): value is PatchHunk => {
   const hunk = value as Partial<PatchHunk> | null
   return (
     !!hunk &&
@@ -62,7 +66,7 @@ function isHunk(value: unknown): value is PatchHunk {
  * alone is the entire pre-edit file, which is precisely what must not be logged
  * (see `FilePatch`'s own note).
  */
-export function filePatchFromToolResult(result: unknown): FilePatch | undefined {
+export const filePatchFromToolResult = (result: unknown): FilePatch | undefined => {
   const output = result as { filePath?: unknown; structuredPatch?: unknown; originalFile?: unknown; type?: unknown } | null | undefined
   if (!output || !Array.isArray(output.structuredPatch)) {
     return undefined
@@ -88,10 +92,6 @@ export function filePatchFromToolResult(result: unknown): FilePatch | undefined 
   }
 }
 
-/** `@@ -oldStart,oldLines +newStart,newLines @@` — the counts are optional and
- * mean 1 when absent, which is what a single-line hunk looks like. */
-const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
-
 /**
  * A {@link FilePatch} from a unified diff — codex's `fileChange.diff`.
  *
@@ -103,7 +103,7 @@ const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
  * diff, and inventing hunk numbers for it would put wrong line numbers on screen
  * — worse than none.
  */
-export function parseUnifiedDiff(diff: string, path?: string): FilePatch | undefined {
+export const parseUnifiedDiff = (diff: string, path?: string): FilePatch | undefined => {
   const hunks: PatchHunk[] = []
   let current: PatchHunk | undefined
   for (const line of diff.split('\n')) {

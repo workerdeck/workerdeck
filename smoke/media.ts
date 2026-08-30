@@ -11,21 +11,16 @@
  *   pnpm smoke:media --engine codex       # codex: image + text through, PDF refused
  *   pnpm smoke:media text --engine codex  # both filters
  *
- * This is the only thing that can validate the attachment wire. The fake
- * harnesses in `pnpm test` prove the server builds the right content blocks, but
- * not that the engine *accepts* them — a CLI that dropped non-text blocks would
- * look exactly like a model ignoring the picture. Each case asks a question whose
- * answer is only in the attachment, so a dropped block fails loudly instead of
- * producing a plausible sentence.
+ * The fakes in `pnpm test` prove the server builds the right content blocks but not
+ * that the engine *accepts* them — a CLI dropping non-text blocks looks exactly like
+ * a model ignoring the picture. Each case asks a question whose answer is only in the
+ * attachment, so a dropped block fails loudly instead of producing a plausible
+ * sentence.
  *
- * **The refusal is a case too, not a gap.** Which kinds an engine takes is the
- * capability record's claim, so each case is checked against
- * `ENGINE_CAPABILITIES[engine].attachments` rather than against a hard-coded
- * engine name: a kind the record forswears must be refused by the upload route
- * with **415** and a message naming the engine, and one it claims must reach the
- * model. That way the same three cases prove claude takes all three and codex
- * takes image + text but not PDF — and the day a record changes, this file needs
- * no edit to keep testing the truth.
+ * **The refusal is a case too.** Cases are checked against
+ * `ENGINE_CAPABILITIES[engine].attachments`, never a hard-coded engine name: a kind
+ * the record forswears must be refused with **415** and a message naming the engine,
+ * and one it claims must reach the model — so a record change needs no edit here.
  *
  * The files are generated here, not committed: a PNG built byte by byte and a
  * one-page PDF with computed xref offsets, so the repo carries no binaries and
@@ -48,7 +43,7 @@ const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
   return c >>> 0
 })
 
-function crc32(buf: Buffer): number {
+const crc32 = (buf: Buffer): number => {
   let c = 0xff_ff_ff_ff
   for (const byte of buf) {
     c = CRC_TABLE[(c ^ byte) & 0xff]! ^ (c >>> 8)
@@ -56,7 +51,7 @@ function crc32(buf: Buffer): number {
   return (c ^ 0xff_ff_ff_ff) >>> 0
 }
 
-function pngChunk(type: string, data: Buffer): Buffer {
+const pngChunk = (type: string, data: Buffer): Buffer => {
   const length = Buffer.alloc(4)
   length.writeUInt32BE(data.length)
   const typed = Buffer.concat([Buffer.from(type, 'ascii'), data])
@@ -66,7 +61,7 @@ function pngChunk(type: string, data: Buffer): Buffer {
 }
 
 /** A solid-colour RGB PNG, `size`×`size`. */
-function solidPng(size: number, [r, g, b]: [number, number, number]): Buffer {
+const solidPng = (size: number, [r, g, b]: [number, number, number]): Buffer => {
   const ihdr = Buffer.alloc(13)
   ihdr.writeUInt32BE(size, 0)
   ihdr.writeUInt32BE(size, 4)
@@ -85,7 +80,7 @@ function solidPng(size: number, [r, g, b]: [number, number, number]): Buffer {
 
 /** A one-page PDF showing `text`. Offsets are computed as the objects are laid
  * out — a hand-guessed xref is the usual reason a minimal PDF is rejected. */
-function onePagePdf(text: string): Buffer {
+const onePagePdf = (text: string): Buffer => {
   const stream = `BT /F1 36 Tf 60 500 Td (${text}) Tj ET`
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
@@ -165,9 +160,8 @@ const ACCEPTED: readonly string[] = ENGINE_CAPABILITIES[ENGINE as 'claude'].atta
 
 // --------------------------------------------------------------- harness ----
 
-// A single declared profile is implicit on create, so the codex leg needs no
-// profile name on the request — but it does need the profile to exist, because
-// the engine is a property of the profile, not of the session request.
+// A single declared profile is implicit on create, so the codex leg sends no profile
+// name — but the profile must exist: the engine is a property of it, not of the request.
 const server = createWorkerServer({
   allowUnauthenticated: true,
   allowedCwdRoots: ['/tmp'],
@@ -213,7 +207,7 @@ handle.on('event', (event: SessionEvent) => {
   }
 })
 
-async function ask(prompt: string, attachmentIds: string[]): Promise<string> {
+const ask = async (prompt: string, attachmentIds: string[]): Promise<string> => {
   return await new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('timed out waiting for the turn')), 120_000)
     inFlight = {
@@ -229,12 +223,11 @@ async function ask(prompt: string, attachmentIds: string[]): Promise<string> {
 }
 
 /**
- * A kind the record forswears must die at the door. Uploaded with raw `fetch`
- * rather than `client.uploadAttachment`, which throws away the status — and the
- * status is half the claim: a 415 says "wrong kind", while a 400/500 would mean
- * the route merely failed to cope with it.
+ * A kind the record forswears must die at the door. Raw `fetch` rather than
+ * `client.uploadAttachment`, which throws the status away — and the status is half
+ * the claim: 415 says "wrong kind", 400/500 says the route failed to cope.
  */
-async function expectRefused(testCase: Case): Promise<string | null> {
+const expectRefused = async (testCase: Case): Promise<string | null> => {
   const url = `http://127.0.0.1:${port}/v1/sessions/${session.id}/attachments?name=${encodeURIComponent(testCase.name)}`
   const res = await fetch(url, {
     method: 'POST',

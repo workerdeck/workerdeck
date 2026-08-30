@@ -6,6 +6,8 @@ import { JsonRpcError } from '../src/engines/codex/jsonrpc.ts'
 import type { Runner } from '../src/runner-interface.ts'
 import type { AppServerConnectFn, AppServerConnection } from '../src/engines/codex/types.ts'
 
+type ScriptedPeer = ReturnType<typeof scriptedPeer>
+
 const THREAD_RESULT = {
   thread: { id: 'thread-1' },
   model: 'gpt-5.6-terra',
@@ -56,7 +58,7 @@ const USAGE_B = {
  * recorded and answered by method responders; the test emits server→client
  * notifications and requests through the handlers the runner registered.
  */
-function scriptedPeer() {
+const scriptedPeer = () => {
   const requests: Array<{ method: string; params: unknown; connection: number }> = []
   const notifies: string[] = []
   const envs: Array<Record<string, string>> = []
@@ -118,11 +120,11 @@ function scriptedPeer() {
 
 /** Scripted happy-path turn: deltas, items, usage, completion — all emitted
  * synchronously from inside the turn/start responder. */
-function scriptTurn(
-  peer: ReturnType<typeof scriptedPeer>,
+const scriptTurn = (
+  peer: ScriptedPeer,
   script: (emit: (method: string, params: unknown) => void, turnId: string) => void,
   turnId = 'turn-1',
-) {
+) => {
   peer.respond('turn/start', () => {
     peer.emit('turn/started', { threadId: 'thread-1', turn: { id: turnId, status: 'inProgress' } })
     script(peer.emit, turnId)
@@ -130,15 +132,14 @@ function scriptTurn(
   })
 }
 
-function collect(runner: CodexRunner): SessionEvent[] {
+const collect = (runner: CodexRunner): SessionEvent[] => {
   const events: SessionEvent[] = []
   runner.subscribe((event) => events.push(event))
   return events
 }
 
-function ofType<T extends SessionEvent['type']>(events: SessionEvent[], type: T): Array<Extract<SessionEvent, { type: T }>> {
-  return events.filter((e): e is Extract<SessionEvent, { type: T }> => e.type === type)
-}
+const ofType = <T extends SessionEvent['type']>(events: SessionEvent[], type: T): Array<Extract<SessionEvent, { type: T }>> =>
+  events.filter((e): e is Extract<SessionEvent, { type: T }> => e.type === type)
 
 describe('CodexRunner', () => {
   it("ignores a sub-agent thread's turn lifecycle and usage, but keeps its work", async () => {
@@ -2002,21 +2003,19 @@ describe('CodexRunner resume backfill', () => {
 type ToolUseBlock = { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
 
 /** Every emitted tool_use, with the parent its event carried. */
-function toolUses(events: SessionEvent[]) {
-  return ofType(events, 'assistant_message').flatMap((e) =>
+const toolUses = (events: SessionEvent[]) =>
+  ofType(events, 'assistant_message').flatMap((e) =>
     (Array.isArray(e.message.content) ? e.message.content : [])
       .filter((c): c is ToolUseBlock => (c as { type?: string }).type === 'tool_use')
       .map((block) => ({ block, parent: e.parentToolUseId ?? null, seq: e.seq })),
   )
-}
 
 /** Every streamed delta as (text, parent) — the attribution under test. */
-function deltas(events: SessionEvent[]) {
-  return ofType(events, 'stream_delta').map((e) => {
+const deltas = (events: SessionEvent[]) =>
+  ofType(events, 'stream_delta').map((e) => {
     const delta = (e.event as { delta?: { text?: string; thinking?: string } }).delta
     return { text: delta?.text ?? delta?.thinking ?? '', parent: e.parentToolUseId ?? null }
   })
-}
 
 const spawnItem = (call: string, thread: string, path: string) => ({
   id: call,

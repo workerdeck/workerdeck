@@ -52,15 +52,11 @@ export {
   type SessionVitals,
   type TerminalMetrics,
 } from './components/agent/SessionPanel.tsx'
-// The workspace layout and its Monaco editor live at `@workerdeck/ui/workspace`
-// — deliberately unreachable from here, so importing this entry never drags
-// Monaco into the bundle. See `src/workspace.ts`.
+// The workspace layout and its Monaco editor stay unreachable from this entry, at
+// `@workerdeck/ui/workspace` — see `src/workspace.ts`.
 export { Transcript, type TranscriptProps } from './components/agent/Transcript.tsx'
-// The terminal theme. `SessionPanel`/`Transcript` reach it through
-// `variant: 'terminal'` and most embedders need nothing else — these are for a
-// host composing the surface by hand (a prompt outside the panel, a status line
-// in its own chrome) and for the primitives, so a host's own row lands on the
-// same character cell as ours.
+// The terminal theme. `SessionPanel`/`Transcript` reach it through `variant:
+// 'terminal'`; these exports are for a host composing the surface by hand.
 export { TerminalSurface, type TerminalSurfaceProps } from './components/terminal/surface.tsx'
 export { TerminalTranscript, TerminalItemView, type TerminalTranscriptProps } from './components/terminal/TerminalTranscript.tsx'
 export { TerminalStatusLine, type TerminalStatusLineProps } from './components/terminal/StatusLine.tsx'
@@ -115,19 +111,13 @@ export { SkillsDialog, type SkillsDialogProps } from './components/agent/SkillsD
 export { HostFilesDialog, type HostFilesDialogProps } from './components/agent/HostFilesDialog.tsx'
 export { SessionList, SessionListItem, type SessionListItemProps, type SessionListProps } from './components/agent/SessionList.tsx'
 export { SessionBrowser, rowShapeClass, type SessionBrowserProps } from './components/agent/SessionBrowser.tsx'
-// The session card itself — one component, every client. `SessionBrowser` is the
-// dashboard's list *around* it; a host that wants only the card (the VS Code
-// sidebar does, because the filtering chrome above it is native) takes this.
+// The session card itself — one component, every client; `SessionBrowser` is the
+// dashboard's list *around* it.
 export { SessionItem, type SessionItemProps } from './components/agent/SessionItem.tsx'
 export { SessionStatusIcon } from './components/agent/SessionStatusIcon.tsx'
-// Lifted out of the VS Code sidebar once the dashboard grew a collapsed rail
-// that needs the same glyph — two copies of a trademark set is one too many.
 export { EngineIcon, engineMark, vendorMarkClass, vendorTextClass } from './components/agent/EngineIcon.tsx'
-// Lifted out of the sidebar for the same reason: the work under a row is a
-// protocol fact, so every list annotates it with one component.
 export { type Step, StepRow, StepToggle, runningSteps, sessionSteps } from './components/agent/SessionSteps.tsx'
-// The sub-agent takeover's one line. Exported for hosts that draw their own
-// panel chrome; the panel raises it itself.
+// The sub-agent takeover's one line, for hosts drawing their own panel chrome.
 export { SubagentStrip } from './components/agent/SubagentStrip.tsx'
 export { ProjectIcon } from './components/agent/ProjectIcon.tsx'
 export { SessionEmptyState, type SessionEmptyStateProps } from './components/agent/SessionEmptyState.tsx'

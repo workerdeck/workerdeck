@@ -55,15 +55,10 @@ import {
 } from './transcript-variant.tsx'
 import { UsageDialog } from './UsageDialog.tsx'
 
-/**
- * The box the pending prompts sit in.
- *
- * Under the terminal theme they are rows of the same run as the transcript, so
- * they need that theme's cell — and its `--term-bleed`, so an approval's diff
- * bands reach the same edges the transcript's do. Every other variant keeps the
- * centred content column the panel uses everywhere else.
- */
-function PromptSurface({
+/** The box the pending prompts sit in. Under the terminal theme they are rows
+ * of the same run as the transcript, so they need that theme's cell and its
+ * `--term-bleed`; every other variant keeps the centred content column. */
+const PromptSurface = ({
   terminal,
   metrics,
   affordances,
@@ -73,7 +68,7 @@ function PromptSurface({
   metrics?: TerminalMetrics
   affordances?: TerminalAffordances | boolean
   children: ReactNode
-}) {
+}) => {
   if (!terminal) {
     return <div className="mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] flex-col gap-2">{children}</div>
   }
@@ -91,17 +86,10 @@ function PromptSurface({
 }
 
 /**
- * The character cell the terminal theme draws on, in **whole pixels**.
- *
- * One object rather than two props because the panel mounts three separate
- * `TerminalSurface`s — the transcript, the pending prompts, the composer — and
- * they must agree: a prompt drawn at a different line height from the rows above
- * it is three surfaces on three grids, which is the failure this theme is built
- * to make impossible. Passing one value through one prop is what keeps them from
- * drifting.
- *
- * Absent means the CLI's own 13/18. A host that follows an editor font size
- * (VS Code) hands that down instead.
+ * The character cell the terminal theme draws on, in **whole pixels**. One
+ * object rather than two props because the panel mounts three separate
+ * `TerminalSurface`s — transcript, prompts, composer — and they must agree.
+ * Absent means the CLI's own 13/18.
  */
 export type TerminalMetrics = { fontSize?: number; lineHeight?: number }
 
@@ -112,15 +100,9 @@ export interface SessionPanelProps {
    * Optional slot rendered at the top, above the status bar.
    *
    * Pass a **function** to take the session-actions (`⋯`) menu into your own
-   * chrome: it is called with the menu element, and wherever you put it is
-   * where it lives — the status bar then renders without it, so it never
-   * appears twice. Pass a plain node (or nothing) and the menu stays in the
-   * status bar's trailing slot.
-   *
-   * The seam exists because the menu can only be *built* here — it needs the
-   * capability record, the host-file verdict and the panel's own dialog state —
-   * but an embedder with a real header usually wants it up there with the rest
-   * of the session's controls, not stranded on the status line.
+   * chrome: it is called with the menu element and the status bar then renders
+   * without it. The seam exists because the menu can only be *built* here — it
+   * needs the capability record, the host-file verdict and the dialog state.
    */
   header?: ReactNode | ((slots: { actions: ReactNode }) => ReactNode)
   /**
@@ -186,25 +168,16 @@ export interface SessionPanelProps {
   terminalMetrics?: TerminalMetrics
   /**
    * Terminal theme only: replace the scrollbar with the **overview ruler** — a
-   * `2ch` rail of coloured marks in three lanes (what you typed, the answer and
-   * its turn end, errors and a waiting approval), which you can hover to peek,
-   * click to jump, and drag to scrub.
-   *
-   * Its premise is the terminal theme's own: one line height and one cell make
-   * every row's height derivable, so a mark's position is *computed* rather than
-   * guessed from rows that have not mounted. That is why it is not offered under
-   * `cards` — there the flag is inert.
-   *
-   * `false` keeps the native scrollbar. So does `affordances={false}`, which
-   * leaves the marks painted but inert rather than removing a reader's only way
-   * to scroll.
+   * `2ch` rail of marks in three lanes, hover to peek, click to jump, drag to
+   * scrub. Its premise is the theme's own computed row heights, so it is inert
+   * under `cards`. `false` keeps the native scrollbar; so does
+   * `affordances={false}`, which leaves the marks painted but inert.
    */
   scrubber?: boolean
   /**
    * Bookmarked **item indices**, painted full-width on the rail. Paint only —
-   * the panel neither stores bookmarks nor offers a way to set one, because who
-   * owns that store is the embedder's question (a private pin belongs with the
-   * client's watermarks; a shared one is session metadata on the gateway).
+   * the panel neither stores bookmarks nor offers a way to set one; who owns
+   * that store is the embedder's question.
    */
   scrubberMarks?: readonly number[]
   /**
@@ -219,56 +192,28 @@ export interface SessionPanelProps {
    * Open a **sub-agent takeover**: the panel body becomes that agent's own work,
    * with a way back. Bump `nonce` to ask again for the same one.
    *
-   * A *request*, not a controlled value — the panel owns which agent is open,
-   * exactly as it owns `panel`. Dismissal has to work with zero host wiring
-   * (Back and Escape are the panel's own affordances), and the two hosts in
-   * scope reach this across a postMessage bridge where a controlled prop would
-   * need a live closure at the far end. Same shape and same reason as
-   * {@link SessionPanelProps.reveal}.
+   * A *request*, not a controlled value: the panel owns which agent is open and
+   * *reports* through {@link SessionPanelProps.onSubagentChange}; only a
+   * **change** of this prop is a request.
    *
-   * **Withdrawing the request closes the frame.** The prop going away without a
-   * remount is itself a request — "the conversation, plainly" — and it leaves
-   * through the same path Back takes, so the reader lands on the Task row they
-   * came from. It has to mean that, because a host that keeps its request in
-   * route state (the dashboard's `?subagent=`) has exactly one way to say it:
-   * clear the search — which is what the sidebar's plain session click already
-   * navigated with, and what the browser's Back button re-arrives on. Before
-   * this, both were silently ignored and the frame outlived the address that
-   * claimed it was gone. Still not a controlled value: the panel enters and
-   * leaves frames on its own and *reports* through
-   * {@link SessionPanelProps.onSubagentChange}; only a **change** of the prop
-   * is a request.
+   * **Withdrawing the request closes the frame** — the prop going away without a
+   * remount means "the conversation, plainly", because a host keeping its
+   * request in route state (`?subagent=`) has only that one way to say it.
    *
-   * Hosts must still clear their request on a session switch: a stale one
-   * replayed at remount would open a frame the new transcript cannot answer.
-   *
-   * Claude-only in practice, and gated by data rather than by a flag — codex and
-   * provider sessions have no `parentToolUseId`, so they grow no task blocks and
-   * no sub-agent rows, and nothing can raise this.
+   * Hosts must clear their request on a session switch: a stale one replayed at
+   * remount would open a frame the new transcript cannot answer.
    */
   openSubagent?: { toolUseId: string; nonce: number }
   /**
-   * Which sub-agent the panel now has framed, or `undefined` for the session's
-   * own conversation — the outward half of
-   * {@link SessionPanelProps.openSubagent}, and a *statement* where that one is
-   * a *request*. Deliberately not an echo: the panel enters frames the host
-   * never asked for (a Task row pressed in the transcript) and leaves them on
-   * its own (Back, Escape, a reveal), so a host that tracked only its own
-   * requests would be wrong within one click. No nonce, for the same reason —
-   * a state that arrives twice is the same state, where a request that arrives
-   * twice is two requests.
+   * Which sub-agent the panel now has framed — a *statement* where
+   * {@link SessionPanelProps.openSubagent} is a *request*, and not an echo: the
+   * panel enters frames the host never asked for and leaves them on its own.
    *
-   * Never fired for a fresh mount's initial `undefined`, and never fired from
-   * an unmount. The first would be a lie with consequences: the seeding effect
-   * consumes `openSubagent` in the same commit, so for one commit the state is
-   * `undefined` even though a frame is about to open, and a host folding
-   * reports into route state would clear the very `?subagent=` request the
-   * panel is in the middle of honouring. The second lets a panel keyed away on
-   * a session switch stomp what the host already believes about the next one.
-   * See the notify effect for the mechanics.
-   *
-   * What the sessions list's secondary selection feeds on: the row of the agent
-   * on screen takes the blue and its session's card steps back to grey.
+   * **Never fired for a fresh mount's initial `undefined`, and never from an
+   * unmount.** The first would clear the very `?subagent=` request the panel is
+   * mid-way through honouring (the seeding effect consumes `openSubagent` in
+   * the same commit); the second lets a panel keyed away on a session switch
+   * stomp what the host believes about the next one.
    */
   onSubagentChange?: (toolUseId: string | undefined) => void
   /**
@@ -287,33 +232,21 @@ export interface SessionPanelProps {
    */
   transcriptDensity?: TranscriptDensity
   /**
-   * The panel's typeface — `'sans'` (default, the host's UI font) or `'mono'`,
-   * which repoints the sans token at the mono stack **for this subtree only**.
-   *
-   * The third reader preference beside variant and density, and the same kind of
-   * thing: how a transcript should read is a property of the person reading it.
-   * Scoped to the panel because that is the whole claim — a monospace agent view
-   * next to an ordinary app, not a monospace app.
+   * The panel's typeface — `'sans'` (default) or `'mono'`, which repoints the
+   * sans token at the mono stack **for this subtree only**: a monospace agent
+   * view next to an ordinary app, not a monospace app.
    */
   transcriptFont?: TranscriptFont
   /**
    * Where the session's own controls — model and permission mode — live.
-   * `'internal'` (default) draws them in the composer's toolbar row.
-   * `'status'` draws them in the panel's OWN status bar, beside the readings
-   * they act on; the composer collapses to a single line either way. That is
-   * VS Code's arrangement without VS Code — a host whose panel carries a status
-   * bar of its own (`statusPlacement: 'bottom'`) gets the same streamlined
-   * shape without having to host the pickers itself.
-   * `'external'` draws neither: the embedder renders the pickers in its own
-   * chrome (VS Code's window status bar, where a click opens a QuickPick) and
-   * drives them through {@link onControls}.
+   * `'internal'` (default) draws them in the composer's toolbar row; `'status'`
+   * in the panel's own status bar beside the readings they act on; `'external'`
+   * neither, leaving the embedder to render them and drive them through
+   * {@link onControls}.
    *
-   * `'status'` needs a status bar to put them in — with
-   * `statusSurface: 'external'` there is none, and the two together would hide
-   * the controls entirely, so that combination falls back to the composer.
-   *
-   * The options themselves ride {@link SessionVitals} — an embedder must not
-   * attach a second time to learn what the models are.
+   * `'status'` needs a status bar, so with `statusSurface: 'external'` it falls
+   * back to the composer. The options themselves ride {@link SessionVitals} —
+   * an embedder must not attach a second time to learn what the models are.
    */
   controlsSurface?: 'internal' | 'external' | 'status'
   /**
@@ -324,57 +257,38 @@ export interface SessionPanelProps {
    */
   onControls?: (controls: SessionControls | undefined) => void
   /**
-   * Click anywhere the panel isn't already doing something and the caret lands
-   * in the composer — the terminal/chat convention, and what a docked panel
-   * wants: the field is why the panel is focussed at all.
-   *
-   * Only dead space. A click that hits a control (a tool row expanding, a link,
-   * a button) or that ends a text selection is that action, not a request for
-   * the input. Off by default: a full-page surface has plenty of dead space that
-   * means nothing in particular.
+   * Click dead space and the caret lands in the composer. Only dead space — a
+   * click that hits a control, or that ends a text selection, is that action.
+   * Off by default: a full-page surface has plenty of meaningless dead space.
    */
   focusComposerOnClick?: boolean
   /**
-   * What this session looked like when it was last looked at: how many
-   * transcript items had been seen, and when. Present and behind the current
+   * What this session looked like when last looked at. Behind the current
    * transcript → **catch-up**: a recap row at the boundary, everything above it
-   * dimmed, and a bar offering to jump there or to dismiss.
-   *
-   * The embedder owns the watermark because only it knows what "looked at"
-   * means in its own chrome — a hidden dock is not being read. The panel reports
-   * the number to remember through `SessionVitals.itemCount`.
+   * dimmed, and a bar offering to jump or dismiss. The embedder owns the
+   * watermark — only it knows what "looked at" means in its own chrome — and
+   * the panel reports the number through `SessionVitals.itemCount`.
    */
   unseen?: { itemCount: number; since?: number }
   /**
-   * A viewer, not a seat at the session: transcript, status bar and panels as
-   * usual, but no composer and no approval prompts.
+   * A viewer, not a seat at the session: no composer and no approval prompts,
+   * for a surface that is *about* a run rather than in it. Absent rather than
+   * disabled — a greyed-out composer says the session is busy, an absent one
+   * says this screen does not drive it.
    *
-   * For a surface that is *about* a run rather than in it — the dashboard's job
-   * detail, where the session belongs to the queue and typing into it would be a
-   * second operator arriving mid-run. Deliberately not "disabled controls": a
-   * greyed-out composer says the session is busy, an absent one says this screen
-   * does not drive it. The attach is still live and read paths are untouched,
-   * so the transcript streams and the file tree browses.
-   *
-   * It does **not** claim to be an authorization boundary. Anything holding this
-   * client can still send; what it removes is the affordance, and the honest
-   * enforcement lives on the gateway.
+   * **Not an authorization boundary.** Anything holding this client can still
+   * send; this removes the affordance, and the gateway does the enforcing.
    */
   readOnly?: boolean
   /**
-   * Options for the browser tool host this panel runs on its own attach — or
-   * `false` to run none at all.
+   * Options for the browser tool host this panel runs on its own attach, or
+   * `false` for none. The panel hosts server-bridged calls itself because the
+   * bridge asks the *first attached client* and the panel owns the session's
+   * one attach.
    *
-   * The panel hosts server-bridged tool calls itself, because the bridge asks
-   * the *first attached client* and the panel owns the session's one attach: an
-   * embedder subscribing to the same handle separately would find this host
-   * already answering, and refusing, anything outside its allow-list. So the
-   * options come through here.
-   *
-   * Merged over the defaults, which host `eval_script` alone. Widening `tools`
-   * is a real grant — this tab will execute what the gateway asks it to for
-   * every name in the list — so it names them explicitly rather than accepting
-   * a wildcard.
+   * Merged over the defaults, which host `eval_script` alone. **Widening
+   * `tools` is a real grant** — this tab will execute what the gateway asks for
+   * every name in the list — so names are explicit and there is no wildcard.
    */
   toolHost?: UseToolCallHostOptions | false
   /**
@@ -392,23 +306,10 @@ export interface SessionPanelProps {
    */
   emptyState?: ReactNode
   /**
-   * Called when a link in the transcript is clicked. The embedder decides what
-   * happens: navigate in-app, open a browser tab, show a confirmation, or
-   * suppress.
-   *
-   * Return `true` (or a truthy value) to indicate the click was handled — the
-   * default action (`window.open(href, '_blank')`) is suppressed. Return
-   * `false` / `undefined` / nothing to let the browser open the link normally.
-   *
-   * Absent means "browser default" — links open in a new tab as Streamdown's
-   * `target="_blank"` intends. VS Code's webview overrides this through its own
-   * native handler (the "allow once / add to allowlist" dialog) and does not
-   * need this prop.
-   *
-   * **Typical embedder patterns:**
-   * - Relative URLs → in-app navigation, no confirmation
-   * - External URLs → confirmation dialog, or open unconditionally
-   * - Suppress all links → `() => true`
+   * Called when a link in the transcript is clicked. Return truthy to say the
+   * click was handled and suppress the default `window.open(href, '_blank')`.
+   * Absent means browser default; VS Code's webview overrides this through its
+   * own native handler and does not need the prop.
    */
   onLinkClick?: (href: string) => boolean | void
   /**
@@ -434,17 +335,11 @@ export interface SessionPanelProps {
    */
   clientTools?: Record<string, import('@workerdeck/react').ClientToolHandler>
   /**
-   * Base font size in **whole pixels**. Drives the overall scale of everything
-   * the panel draws — prompt, output, markdown, status bar — in both variants.
-   *
-   * Under the terminal theme it sets `--term-font-size` and derives
-   * `--term-line` at the CLI's own 13 : 18 ratio (unless {@link terminalMetrics}
-   * overrides those individually). Under cards it sets the panel root's
-   * `font-size`, which scales every `rem`/`em`-based token the type scale uses.
-   *
-   * Absent means "platform default": 13 px for the terminal theme, the
-   * inherited body size for cards. That is the right choice for a host that has
-   * no preference — the panel reads at the size the rest of the app does.
+   * Base font size in **whole pixels**, scaling everything the panel draws in
+   * both variants. Under the terminal theme it sets `--term-font-size` and
+   * derives `--term-line` at the CLI's 13 : 18 ratio (unless
+   * {@link terminalMetrics} overrides them); under cards it sets the panel
+   * root's `font-size`. Absent means platform default.
    */
   fontSize?: number
   className?: string
@@ -455,14 +350,9 @@ export type SessionControls = {
   setModel: (model?: string) => void
   setPermissionMode: (mode: PermissionMode) => void
   interrupt: () => void
-  /**
-   * Put the caret in the composer.
-   *
-   * For an embedder whose own chrome is how you arrive at a session — clicking a
-   * row in VS Code's sidebar — where revealing the panel and being able to type
-   * are the same intention. The panel cannot infer it: from in here, a session
-   * appearing looks identical whether someone asked for it or it was restored.
-   */
+  /** Put the caret in the composer. The panel cannot infer this: from in here a
+   * session appearing looks identical whether someone asked for it or it was
+   * restored. */
   focusComposer: () => void
 }
 
@@ -495,13 +385,9 @@ type Panel = SessionSurfacePanel
  * which the tool bridge forbids (it asks the first attached client). */
 export type SessionVitals = {
   status: TranscriptState['status']
-  /**
-   * How the client is reaching the gateway. Load-bearing for a host rendering
-   * these outside the panel: `status` is the last thing the session *said*, and
-   * over a dropped socket that is a stale reading. The panel's own bar gives
-   * the connection the status slot when it isn't `'live'` for exactly this
-   * reason — an embedder showing `status` alone would present stale as current.
-   */
+  /** How the client is reaching the gateway. Load-bearing outside the panel:
+   * `status` is the last thing the session *said*, and over a dropped socket
+   * that is a stale reading. */
   connection: ConnectionState
   engine: TranscriptState['engine']
   capabilities: TranscriptState['capabilities']
@@ -581,11 +467,9 @@ export function SessionPanel({
   // what collapses it to a single line.
   const controlsInStatus = controlsSurface === 'status' && !statusExternal
   const controlsExternal = controlsSurface === 'external' || controlsInStatus
-  // Rejected commands (the CLI refusing a permission-mode switch, say) render INSIDE
-  // the panel rather than through `toast`. The panel does not mount a `Toaster`, and
-  // an embedder that doesn't either would drop the only signal that a command failed
-  // — the select would just "not stick". An error channel a host can lose by omission
-  // is not an error channel.
+  // Rejected commands render INSIDE the panel rather than through `toast`: the
+  // panel mounts no `Toaster`, and an embedder that doesn't either would lose
+  // the only signal that a command failed.
   const [protocolError, setProtocolError] = useState<string | undefined>(undefined)
   const [panel, setPanel] = useState<Panel | undefined>()
   /**
@@ -650,18 +534,11 @@ export function SessionPanel({
   }, [])
 
   // The host asking — or withdrawing the ask. Keyed on the nonce, so asking
-  // twice for the same agent works — and so a request that arrives while
-  // another frame is open swaps it in place rather than being ignored.
-  //
-  // A withdrawn request (the prop going away without a remount) CLOSES the
-  // frame — see the prop's docblock for why a host keeping its request in
-  // route state needs that to be true. Two non-cases are worth naming because
-  // they look like hazards and are not: on a fresh mount with no request this
-  // fires once and `leaveSubagent` finds nothing framed, so first render
-  // cannot wipe anything; and a host *echoing* the panel's own report back
-  // (the dashboard folding `onSubagentChange` into `?subagent=`) re-arrives
-  // with the nonce unchanged, so this effect never re-runs for it — the echo
-  // is inert by construction, not by a same-value bail-out.
+  // twice works and a request arriving while another frame is open swaps it in
+  // place. A withdrawn request CLOSES the frame (see the prop's docblock). Two
+  // non-cases that look like hazards: a fresh mount with no request finds
+  // nothing framed, and a host echoing the panel's own report re-arrives with
+  // the nonce unchanged, so the echo is inert by construction.
   const openSubagentNonce = openSubagent?.nonce
   const openSubagentId = openSubagent?.toolUseId
   useEffect(() => {
@@ -702,23 +579,17 @@ export function SessionPanel({
     return () => window.removeEventListener('keydown', onKey)
   }, [subagentId, leaveSubagent])
 
-  // The report out — see the prop's docblock for what it claims. Fired off the
-  // STATE rather than from each exit path, because the state is the only place
-  // all four ways out and both ways in already meet; a notification hung on
-  // the affordances would go stale the first time someone added a fifth.
+  // Fired off the STATE rather than from each exit path: the state is the only
+  // place all the ways in and out meet.
   //
-  // The ref pair is the mount guard, and it is load-bearing. On a deep-linked
-  // mount, `subagentId` is `undefined` for the whole first commit — the
-  // seeding effect above runs in that same commit and its setState lands in
-  // the next one — so a naive `useEffect(..., [subagentId])` reports
-  // `undefined` first, the host clears the `?subagent=` it was asked with,
-  // and the withdrawal closes the frame the reader just requested. The ref
-  // starts at `undefined`, so the first commit is silent by construction —
-  // not by effect ordering, which is why this works wherever it sits relative
-  // to the seeding effect (and under StrictMode's double mount). No cleanup
-  // report on unmount, deliberately: hosts key this panel by session, and a
-  // departing panel announcing "nothing framed" would stomp whatever the host
-  // already holds for the next one.
+  // The ref pair is the mount guard and it is load-bearing. On a deep-linked
+  // mount `subagentId` is `undefined` for the whole first commit (the seeding
+  // effect's setState lands in the next one), so a naive dep array reports
+  // `undefined` first and the host clears the `?subagent=` it asked with. The
+  // ref starts at `undefined`, so the first commit is silent by construction,
+  // wherever this sits relative to the seeding effect. No cleanup report on
+  // unmount: a departing panel announcing "nothing framed" would stomp what
+  // the host holds for the next session.
   const onSubagentChangeRef = useRef(onSubagentChange)
   onSubagentChangeRef.current = onSubagentChange
   const reportedSubagentId = useRef<string | undefined>(undefined)
@@ -730,12 +601,9 @@ export function SessionPanel({
     onSubagentChangeRef.current?.(subagentId)
   }, [subagentId])
 
-  // Catch-up is entered once, from the watermark the embedder handed over, and
-  // left when dismissed or when the user sends anything (they are plainly
-  // caught up at that point). Snapshotted into state rather than read from the
-  // prop each render: the embedder keeps updating the watermark while the panel
-  // is on screen, and a boundary that crept forward under the reader would
-  // un-dim the very rows they came back to read.
+  // Snapshotted into state rather than read from the prop each render: the
+  // embedder keeps updating the watermark while the panel is on screen, and a
+  // boundary creeping forward would un-dim the rows the reader came back for.
   const [caughtUp, setCaughtUp] = useState(false)
   useEffect(() => {
     setCaughtUp(false)
@@ -768,10 +636,9 @@ export function SessionPanel({
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [reconnectNow])
-  // Host server-bridged tool calls (provider-engine sessions) in this tab, on the
-  // SAME handle the panel attached with — the bridge asks the first attached
-  // client. Free for Claude sessions: the guest loads lazily on the first call,
-  // which for them never comes.
+  // On the SAME handle the panel attached with — the bridge asks the first
+  // attached client. Free for Claude sessions: the guest loads lazily on a
+  // first call that never comes.
   useToolCallHost(
     handle,
     toolHost === false
@@ -782,9 +649,9 @@ export function SessionPanel({
   )
   const terminal = transcriptVariant === 'terminal'
 
-  // What the strip reads. The frame's items and its spawning call both come from
-  // the transcript, which is the only complete source: `SessionInfo.subagents`
-  // keeps eight settled records and is explicitly not a session's Task history.
+  // Both come from the transcript, the only complete source:
+  // `SessionInfo.subagents` keeps eight settled records and is explicitly not a
+  // session's Task history.
   const subagentFrameItems = useMemo(
     () => (subagentId === undefined ? [] : subagentItems(state.items, subagentId)),
     [state.items, subagentId],
@@ -805,13 +672,11 @@ export function SessionPanel({
   const capabilities = state.capabilities
 
   // Plan usage as the *gateway* knows it, merged over this session's own
-  // reading — one derivation, feeding the bar, the terminal status line, the
-  // Usage panel and the vitals an external chrome renders from, because four
-  // surfaces disagreeing about the same percentage is worse than any of them
-  // being stale. A session's own `rate_limit` readings land only at a turn's
-  // edges, so an idle session's numbers age silently and a sibling session's
-  // spend never shows up here at all; `mergeUsage` is where that rule is
-  // written down. Skipped entirely for an engine that reports no windows.
+  // reading — **one** derivation feeding the bar, the terminal status line, the
+  // Usage panel and the vitals, because four surfaces disagreeing about one
+  // percentage is worse than any of them being stale. A session's own
+  // `rate_limit` readings land only at a turn's edges; `mergeUsage` holds the
+  // rule. Skipped for an engine that reports no windows.
   const { usage: profileUsage } = useProfileUsage(client, state.session?.profile, {
     enabled: capabilities.rateLimits,
   })
@@ -830,8 +695,8 @@ export function SessionPanel({
     return stamps.length > 0 ? Math.max(...stamps) : undefined
   }, [usage])
 
-  // Vitals out to the embedder, keyed on the readings themselves so an inline
-  // closure prop doesn't retrigger it every render.
+  // Keyed on the readings themselves, so an inline closure prop does not
+  // retrigger this every render.
   const onVitalsRef = useRef(onVitals)
   onVitalsRef.current = onVitals
   const vitalsModel = effectiveModel ?? state.model
@@ -896,20 +761,17 @@ export function SessionPanel({
     capabilities,
     engine: state.engine,
   })
-  // Rooted at the session's cwd, which arrives with the snapshot — so `@` is
-  // inert for the moment before it does, and stays inert on a gateway that
-  // serves no host files.
+  // Rooted at the session's cwd, which arrives with the snapshot, so `@` is
+  // inert until then and on a gateway that serves no host files.
   const hostFiles = useHostFileSearch(client, state.cwd)
   // Protocol's ordering, over the merged readings — each row keeping its own
   // date, since they no longer share one clock.
   const windows = useMemo(() => orderUsageWindows(usage), [usage])
-  // Reads a picture the engine left on the host (codex's `image_gen` reports a
-  // path, never bytes). Stable and memoized per path: transcript rows re-render
-  // on every delta, and a fresh function would re-fetch each time.
+  // Reads a picture the engine left on the host. Memoized per path: transcript
+  // rows re-render on every delta, and a fresh function would re-fetch.
   const hostImage = useHostImage(client, sessionId, state.producedFiles)
-  // The other picture route, and the other store: an image *part* of a tool
-  // result, which an opted-in replay delivered as a reference rather than half a
-  // megabyte of base64. Bounded, unlike `useHostImage` — see the module.
+  // The other picture route: an image *part* of a tool result, delivered as a
+  // reference by an opted-in replay. Bounded, unlike `useHostImage`.
   const resultImages = useToolResultImages(client, sessionId)
   const composerRef = useRef<ComposerHandle>(null)
   // The catch-up strip's way of scrolling the (virtualized, usually unmounted)
@@ -948,8 +810,7 @@ export function SessionPanel({
         return
       }
     }
-    // Typing into a session is the clearest possible statement that you have
-    // read it — nothing left to catch up on.
+    // Typing into a session says you have read it.
     setCaughtUp(true)
     // ...and sending is the statement that you want to watch what happens next,
     // so following resumes here too. Scrolling up escapes the bottom lock, and
@@ -1021,9 +882,8 @@ export function SessionPanel({
   const menu = external ? null : actionsMenu
   const headerTakesActions = typeof header === 'function'
 
-  // Built once and placed at one end or the other — the bar has a `⋯` menu and
-  // three open handlers, and two copies of that in the tree would be two things
-  // to keep in step.
+  // Built once and placed at one end or the other; two copies in the tree would
+  // be two things to keep in step.
   // Built once, placed by `controlsSurface`: the composer's toolbar row, or the
   // status bar beside the readings they act on, or nowhere at all when the host
   // draws them in its own chrome.
@@ -1072,12 +932,9 @@ export function SessionPanel({
     />
   )
 
-  // ── Link click handler ────────────────────────────────────────────────
-  // When onLinkClick is provided, intercept <a> clicks on the panel root so
-  // the embedder controls navigation. Capture phase so it fires before any
-  // default handling. Only installed when the prop is present — a host that
-  // does not provide it (VS Code, the dashboard) gets the browser / webview
-  // default, which is the right thing in both cases.
+  // Capture phase, so it fires before any default handling. Only installed when
+  // the prop is present — VS Code and the dashboard want the webview/browser
+  // default.
   const panelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!onLinkClick) {
@@ -1105,9 +962,8 @@ export function SessionPanel({
     return () => el.removeEventListener('click', handler, true)
   }, [onLinkClick])
 
-  // Dead-space clicks land in the composer. Anything the user actually aimed at
-  // — a control, a link, the end of a drag-selection — keeps its own meaning;
-  // this only claims what was left over.
+  // Dead-space clicks land in the composer; anything the user actually aimed at
+  // keeps its own meaning.
   const handleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (!focusComposerOnClick || readOnly) {
       return
@@ -1123,9 +979,8 @@ export function SessionPanel({
   }
 
   return (
-    // The variant is a panel-wide fact, not a transcript-only one: the composer
-    // and the pending prompts live outside the scroller but belong to the same
-    // run, and they read it from this context rather than a prop chain.
+    // The variant is panel-wide: the composer and the pending prompts live
+    // outside the scroller but belong to the same run.
     <TranscriptVariantProvider value={transcriptVariant}>
       <TranscriptDensityProvider value={transcriptDensity}>
         {/* The panel owns the session's one attach, so it is the only thing that
@@ -1389,11 +1244,11 @@ export function SessionPanel({
  * failed `/fs/read` is retried under a different key rather than staying cached
  * as a miss.
  */
-function useHostImage(
+const useHostImage = (
   client: WorkerDeckClient,
   sessionId: string | undefined,
   producedFiles: Record<string, ProducedFileRef> | undefined,
-): (path: string) => Promise<string | undefined> {
+): ((path: string) => Promise<string | undefined>) => {
   const cache = useRef(new Map<string, Promise<string | undefined>>())
   // Object URLs pin their blob until revoked, so a long session that generated
   // a dozen images would hold a dozen megabytes past unmount.
@@ -1463,7 +1318,7 @@ const IMAGE_MEDIA_TYPES: Record<string, string> = {
 }
 
 /** A dismissible advisory strip above the transcript. */
-function Notice({ level, onDismiss, children }: { level: 'warning' | 'error'; onDismiss?: () => void; children: ReactNode }) {
+const Notice = ({ level, onDismiss, children }: { level: 'warning' | 'error'; onDismiss?: () => void; children: ReactNode }) => {
   return (
     <div className="px-3 pt-2">
       <div

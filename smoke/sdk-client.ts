@@ -29,6 +29,14 @@ import type { SessionEvent } from '@workerdeck/protocol'
 
 type ProviderName = 'moonshot' | 'openai' | 'anthropic'
 
+const indent = (text: string): string =>
+  text
+    .split('\n')
+    .map((line) => '   │ ' + line)
+    .join('\n')
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
 const PROVIDERS: Record<ProviderName, { env: string; defaultModel: string; load: () => Promise<unknown> }> = {
   moonshot: {
     env: 'MOONSHOT_API_KEY',
@@ -285,13 +293,3 @@ host.dispose()
 handle.closeSession()
 await server.close()
 process.exit(0)
-
-function indent(text: string): string {
-  return text
-    .split('\n')
-    .map((line) => '   │ ' + line)
-    .join('\n')
-}
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms))
-}

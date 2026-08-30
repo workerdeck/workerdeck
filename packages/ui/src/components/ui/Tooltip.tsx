@@ -25,12 +25,9 @@ export const TooltipContent: FunctionComponent<
 )
 
 /**
- * Convenience wrapper: `<Tip content="..."><Button/></Tip>`.
- *
- * Pass `render` when the trigger must *be* an element you already have — a tab, a
- * row — rather than something wrapped in a span. The default span is fine beside
- * a button but would break any layout that styles its own children (a flex tab
- * strip gets an extra box between the container and its items).
+ * Convenience wrapper: `<Tip content="..."><Button/></Tip>`. Pass `render` when the
+ * trigger must *be* an element you already have — the default wrapping span adds a box
+ * that breaks any layout styling its own children (a flex tab strip).
  */
 export function Tip({
   content,

@@ -29,18 +29,10 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import type { Segment, ChipSegment, PromptAreaHandle } from './types.ts'
 import { segmentsToPlainText } from './prompt-area-engine.ts'
 
-// ---------------------------------------------------------------------------
-// Options
-// ---------------------------------------------------------------------------
-
 export type UsePromptAreaStateOptions = {
   /** Initial segment value. Defaults to `[]`. */
   initialValue?: Segment[]
 }
-
-// ---------------------------------------------------------------------------
-// Return type
-// ---------------------------------------------------------------------------
 
 export type PromptAreaBind = {
   /** Ref to attach to PromptArea — gives access to imperative methods. */
@@ -72,17 +64,12 @@ export type PromptAreaState = {
   insertChip: (chip: Omit<ChipSegment, 'type'>) => void
 }
 
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
-
 export function usePromptAreaState(options: UsePromptAreaStateOptions = {}): PromptAreaState {
   const { initialValue = [] } = options
 
   const [value, setValue] = useState<Segment[]>(initialValue)
   const ref = useRef<PromptAreaHandle>(null)
 
-  // Derived
   const plainText = useMemo(() => segmentsToPlainText(value), [value])
 
   const isEmpty = useMemo(() => {
@@ -99,7 +86,6 @@ export function usePromptAreaState(options: UsePromptAreaStateOptions = {}): Pro
   // Bind object — safe to spread onto <PromptArea>
   const bind = useMemo<PromptAreaBind>(() => ({ ref, value, onChange: setValue }), [value])
 
-  // Actions that proxy to the imperative handle
   const clear = useCallback(() => {
     if (ref.current) {
       ref.current.clear()

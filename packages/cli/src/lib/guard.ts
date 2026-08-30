@@ -6,22 +6,10 @@ import { parseArgs } from 'node:util'
  *
  *   workerdeck guard --wait 300 --allow-parked && launchctl kickstart -k …
  *
- * What a restart costs, and why this is policy and not a server route: an
- * in-flight turn dies with the process (the CLI subprocess and the provider
- * request both go), a pending permission request dies with it, and a running job
- * is left claimed. Two more depend on configuration rather than on state, so each
- * has an opt-out flag that says "I made that durable":
- *
- *   --allow-parked   parked sessions survive with a durable SessionStore, not
- *                    with the in-memory default. Note this covers the *session*:
- *                    a parked job's queue-side record lives in the QueueAdapter,
- *                    so with the bundled in-memory adapter the woken session
- *                    completes with no job attached to finish.
- *   --allow-queued   queued jobs survive only in a durable QueueAdapter; the
- *                    bundled one loses them with the process.
- *
  * Exit codes: 0 safe to restart, 1 still busy, 2 could not tell (bad URL, auth,
- * or an unexpected response — never treated as safe).
+ * or an unexpected response — never treated as safe). `--allow-parked` /
+ * `--allow-queued` are the operator asserting a durable SessionStore / durable
+ * QueueAdapter; see `docs/PACKAGES.md`.
  */
 
 const BUSY_STATUSES = new Set(['starting', 'running', 'awaiting_approval'])
@@ -49,7 +37,7 @@ type Verdict = {
 
 class GuardError extends Error {}
 
-export async function runGuard(argv: string[]): Promise<number> {
+export const runGuard = async (argv: string[]): Promise<number> => {
   let values: {
     url: string
     token?: string
@@ -190,8 +178,7 @@ export async function runGuard(argv: string[]): Promise<number> {
       )
     }
     if ((stats?.parked ?? 0) > 0 && values['allow-parked']) {
-      // Not a blocking reason: the operator has already said parks are durable.
-      // But session durability is not job durability, and only one of the two is theirs.
+      // Not blocking — the operator has said parks are durable; session durability is not job durability.
       notes.push(
         `${stats!.parked} parked job(s): their queue-side records are the QueueAdapter's, ` +
           "not the SessionStore's — with the in-memory adapter they never finish",

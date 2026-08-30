@@ -56,7 +56,7 @@ const streamStalls =
 
 const TOOLS = { remote_task: tool({ inputSchema: z.object({ task: z.string() }) }) }
 
-function harness(config: Partial<AiSdkRunnerConfig> & Pick<AiSdkRunnerConfig, 'languageModel'>) {
+const harness = (config: Partial<AiSdkRunnerConfig> & Pick<AiSdkRunnerConfig, 'languageModel'>) => {
   const runner = new AiSdkRunner({ tools: TOOLS, executableTools: ['remote_task'], ...config })
   const events: SessionEvent[] = []
   runner.subscribe((e) => events.push(e))

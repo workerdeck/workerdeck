@@ -2,12 +2,10 @@ import * as vscode from 'vscode'
 export { apiUrl, isLoopbackHost } from '@workerdeck/client'
 
 /**
- * A workerdeck gateway this window can drive — the iOS `Host` model, ported.
- *
- * `baseUrl` is stored exactly as the user typed it; `apiUrl()` appends the
- * `/v1` prefix so nobody has to remember it. Names and URLs live in
- * `globalState`; the auth key lives in `SecretStorage` (the OS keychain),
- * keyed by host id, and is deleted with the host.
+ * A workerdeck gateway this window can drive. `baseUrl` is stored exactly as the
+ * user typed it; `apiUrl()` appends the `/v1` prefix. Names and URLs live in
+ * `globalState`; the auth key lives in `SecretStorage`, keyed by host id, and is
+ * deleted with the host.
  */
 export type GatewayHost = {
   id: string
@@ -29,12 +27,8 @@ export class HostStore {
     this.#secrets = context.secrets
   }
 
-  /**
-   * The gateways the operator configured — nothing more. There is no implicit
-   * localhost entry: an unconfigured install shows an empty list with an "add
-   * gateway" affordance (prefilled with the loopback URL), rather than a phantom
-   * gateway that is usually unreachable.
-   */
+  /** The gateways the operator configured — nothing more. There is deliberately no
+   * implicit localhost entry, only an empty list with an "add gateway" affordance. */
   all(): GatewayHost[] {
     return this.#state.get<GatewayHost[]>(HOSTS_KEY, [])
   }
@@ -71,11 +65,8 @@ export class HostStore {
     return (await this.#secrets.get(secretKey(id))) || undefined
   }
 
-  /**
-   * Auth headers for REST/WS against this host. The single place the
-   * `Authorization: Bearer` transport is spelled — the same one secret the CLI
-   * accepts over its header transport.
-   */
+  /** Auth headers for REST/WS against this host — the single place the
+   * `Authorization: Bearer` transport is spelled. */
   async authHeaders(id: string): Promise<Record<string, string>> {
     const key = await this.authKey(id)
     return key ? { authorization: `Bearer ${key}` } : {}

@@ -14,22 +14,13 @@ export interface EditorTabsProps {
 }
 
 /**
- * The open-file tab strip.
- *
- * Hand-rolled rather than built on `@base-ui/react`'s `Tabs`: a VS Code tab
- * carries a close button, and a `<button>` inside a `<button>` is invalid HTML —
- * getting the primitive to render something else costs more than the roving
- * tabindex it would have provided. So that part is here, explicitly, along with
- * the two affordances that actually make a tab strip feel right: middle-click to
- * close, and the active tab scrolling itself into view.
- *
- * Deliberately state-free. Which files are open, which is focused and what
- * closing does are all decided by `useOpenFiles`.
+ * The open-file tab strip. Hand-rolled rather than built on `@base-ui/react`'s
+ * `Tabs`: a tab carries a close button, and a `<button>` inside a `<button>` is
+ * invalid HTML. State-free — `useOpenFiles` decides everything it renders.
  */
 export function EditorTabs({ files, activePath, onActivate, onClose, className }: EditorTabsProps) {
   return (
-    // Grouped, so moving along the strip shows each tab's path immediately
-    // instead of re-serving the open delay on every tab.
+    // Grouped, so moving along the strip shows each tab's path immediately.
     <TooltipProvider delay={500} closeDelay={0}>
       <div
         data-slot="editor-tabs"
@@ -58,7 +49,7 @@ export function EditorTabs({ files, activePath, onActivate, onClose, className }
   )
 }
 
-function Tab({
+const Tab = ({
   file,
   active,
   onActivate,
@@ -70,12 +61,10 @@ function Tab({
   onActivate: () => void
   onClose: () => void
   onArrow: (direction: 1 | -1) => void
-}) {
+}) => {
   const dirty = isDirty(file)
   const ref = useRef<HTMLDivElement>(null)
-  // Opening a file from the tree can push the new tab off the end of the strip;
-  // the point of opening it was to look at it. `nearest` scrolls the minimum, so
-  // a tab already on screen stays exactly where it is.
+  // `nearest` scrolls the minimum, so a tab already on screen does not move.
   useEffect(() => {
     if (active) {
       ref.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
@@ -83,8 +72,8 @@ function Tab({
   }, [active])
 
   const onAuxClick = (event: ReactMouseEvent) => {
-    // Middle click. `auxclick` rather than `mousedown` so it matches how every
-    // other middle-click target on the platform behaves.
+    // `auxclick` rather than `mousedown`, matching the platform's other
+    // middle-click targets.
     if (event.button !== 1) {
       return
     }
@@ -93,10 +82,8 @@ function Tab({
   }
 
   return (
-    // The tab *is* the trigger (`render`), and it carries the full path — which
-    // is why the viewer no longer spends a whole row on a line of monospace
-    // nobody reads. No `title` alongside it: the browser's native tooltip would
-    // show up underneath this one.
+    // The tab *is* the trigger (`render`) and carries the full path. No `title`
+    // alongside it — the native tooltip would show up underneath this one.
     <Tip
       side="bottom"
       render={
@@ -134,28 +121,25 @@ function Tab({
       }
     >
       <span className={cn('max-w-40 truncate font-mono text-label', dirty && 'italic')}>{file.name}</span>
-      {/* Errors are the one state the strip shows, because a failed tab
-          otherwise looks identical to a loaded one until you focus it. */}
+      {/* Errors are the one state the strip shows: a failed tab otherwise looks
+          identical to a loaded one until you focus it. */}
       {file.status === 'error' ? <span className="shrink-0 text-danger">!</span> : null}
       <button
         type="button"
         aria-label={dirty ? `Close ${file.name} (unsaved changes)` : `Close ${file.name}`}
         onClick={(event) => {
-          // Without this the click also activates the tab being closed, which
-          // fights the reducer's focus-the-neighbour rule.
+          // Otherwise the click also activates the tab being closed, fighting
+          // the reducer's focus-the-neighbour rule.
           event.stopPropagation()
           onClose()
         }}
         className={cn(
           'shrink-0 rounded p-0.5 text-fg-4 transition-opacity hover:bg-surface-hover hover:text-fg-1',
-          // Always reachable by keyboard and on touch; only *shown* on hover for
-          // the tab you are pointing at, as VS Code does.
+          // Always reachable by keyboard and on touch; only *shown* on hover.
           active || dirty ? 'opacity-70' : 'opacity-0 group-hover:opacity-70 focus-visible:opacity-100',
         )}
       >
-        {/* VS Code's move: a dirty tab shows a dot where the ✕ goes, and the ✕
-            comes back when you point at it — so unsaved work is visible at rest
-            without taking away the way to close it. */}
+        {/* A dirty tab shows a dot where the ✕ goes; the ✕ returns on hover. */}
         <span className={cn('block', dirty && 'group-hover:hidden')}>
           {dirty ? <span className="block size-3 rounded-full bg-fg-2" /> : <X className="size-3" />}
         </span>

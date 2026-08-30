@@ -21,22 +21,13 @@ const SORT_LABELS: Record<SortBy, string> = {
 }
 
 /**
- * Everything that decides what the list shows: search, the facet filters, and
- * the group/sort choices — every one of them a dropdown on the right of its
- * label, because a sidebar this narrow cannot spend its width on chip rows that
- * wrap. A multi-select with nothing chosen means "all", which is why there is no
- * All entry to keep in sync with the rest of the list.
+ * Everything that decides what the list shows: search, the facet filters, and the
+ * group/sort choices — each a dropdown to the right of its label, a sidebar this
+ * narrow having no width for chip rows that wrap. A multi-select with nothing chosen
+ * means "all", which is why there is no All entry to keep in sync.
  *
- * Revealed by a **native view-title toggle**, not a control of its own. A
- * toggle whose icon must visibly differ open vs. closed is a pair of commands
- * gated on a context key, and commands live in the title bar — so the host owns
- * the boolean and this panel simply is or is not mounted. That also frees the
- * list of a permanent control row: a sidebar this narrow should spend its width
- * on sessions until asked otherwise.
- *
- * Search sits at the top because it is what people reach for; the facets follow
- * as a settings sheet (label left, control right, one row each) on the
- * section-header surface VS Code uses for exactly this.
+ * Revealed by a native view-title toggle, so the host owns the boolean and this
+ * panel simply is or is not mounted.
  */
 export function ViewConfigPanel({
   config,
@@ -59,8 +50,6 @@ export function ViewConfigPanel({
 
   return (
     <div className="shrink-0 border-b border-border">
-      {/* Search leads: it is what people reach for, and unlike the facets it
-          needs no explaining. */}
       <div className="px-2 pb-1 pt-1.5">
         <div className="relative">
           <Input
@@ -84,9 +73,7 @@ export function ViewConfigPanel({
       </div>
 
       <div className="flex flex-col gap-1 px-2 pb-1.5">
-        {/* Only where there is a folder to be inside of — an inert control in a
-            folderless window would be one that does nothing. Single-select:
-            the list is either scoped to this window or it isn't. */}
+        {/* Only where there is a folder to be inside of. */}
         {scope ? (
           <Row label="Scope">
             <OneOf
@@ -144,9 +131,7 @@ export function ViewConfigPanel({
         <Row label="Sort">
           <OneOf value={config.sortBy} options={labelledOptions(SORT_LABELS)} onChange={(v) => set('sortBy', v)} />
         </Row>
-        {/* No "clear filters" here: the subset line below already carries the
-            one way out, and two of them is how the old design ended up with two
-            competing signals in the first place. */}
+        {/* No "clear filters" here: the subset line below already carries the one way out. */}
       </div>
     </div>
   )
@@ -154,13 +139,12 @@ export function ViewConfigPanel({
 
 type Option<T extends string> = { value: T; label: string }
 
-function labelledOptions<T extends string>(labels: Record<T, string>): Option<T>[] {
+const labelledOptions = <T extends string>(labels: Record<T, string>): Option<T>[] => {
   return (Object.keys(labels) as T[]).map((value) => ({ value, label: labels[value] }))
 }
 
-/** One settings row: label left, control right. The label column is fixed so
- * every control starts on the same edge — the sidebar is too narrow to let them
- * drift. */
+/** One settings row: label left, control right. The label column is fixed so every
+ * control starts on the same edge. */
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2 py-0.5">
@@ -175,8 +159,8 @@ function OneOf<T extends string>({ value, options, onChange }: { value: T; optio
   return (
     <Select value={value} onValueChange={(v) => onChange(v as T)}>
       <SelectTrigger className="h-6 w-full min-w-0 text-body-sm">
-        {/* The popup is portalled and mounted lazily, so Base UI has no item
-            label to resolve the value against — name it explicitly. */}
+        {/* The popup is portalled and mounted lazily, so Base UI has no item label to
+            resolve the value against — name it explicitly. */}
         <SelectValue className="truncate">{(v) => options.find((o) => o.value === v)?.label ?? String(v)}</SelectValue>
       </SelectTrigger>
       <SelectContent>
@@ -191,9 +175,8 @@ function OneOf<T extends string>({ value, options, onChange }: { value: T; optio
 }
 
 /**
- * Pick any number, none meaning all. The trigger names one or two choices and
- * counts beyond that — a sidebar-width trigger listing five states would just
- * truncate, which says less than "3 selected".
+ * Pick any number, none meaning all. The trigger names one or two choices and counts
+ * beyond that: at sidebar width, five listed states truncate to less than "3 selected".
  */
 function AnyOf<T extends string>({
   values,

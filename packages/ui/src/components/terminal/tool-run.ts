@@ -1,20 +1,11 @@
 /**
  * What a folded run of tool calls is, and the one line that stands for it.
+ * Any consecutive tool calls fold — not just shell (a shell-only membership
+ * rule fragments an alternating run into per-gap counts).
  *
- * The fold was shell-only, and the screenshot that started this made the cost
- * obvious: a run of six calls that happened to alternate `Bash` with an MCP tool
- * folded into *four* rows reading "Ran 1 shell command", "Ran 2 shell commands",
- * "Ran 1 shell command" — a count for every gap between the calls it could not
- * group. The grouping rule was right and the *membership* rule was too narrow.
- *
- * So any consecutive tool calls fold. The CLI's own line is the target
- * (`called roam-code, ran 1 shell command`), and the claim is unchanged from the
- * shell version: a tool call is almost never what you came back to read, and six
- * of them bury the sentence that is.
- *
- * Pure and separate because `items.tsx` draws this line and `height.ts` wraps it
- * to predict the row's pixel height without a DOM — the same reason
- * `result-preview.ts` exists. Two spellings would be two different heights.
+ * Pure and separate because `items.tsx` draws this line and `height.ts` wraps
+ * these exact strings to predict the row's pixel height without a DOM — two
+ * spellings would be two different heights.
  */
 import type { TranscriptItem } from '@workerdeck/react'
 import { toolInputPreview } from '../../lib/format.ts'
@@ -23,32 +14,20 @@ import { isShellTool } from '../../lib/tool-icon.ts'
 type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
 
 /**
- * What breaks a run.
- *
- * *Consecutive* is still the whole rule, and it is the reason the fold is honest:
- * anything the model said between two calls breaks the run, because that
- * sentence is the reason the second one happened and a count spanning it would
- * claim the two were one act. The recap boundary breaks it too — the virtualized
- * shell folds each side separately — so a count never spans "what you already
- * read".
- *
- * `parentToolUseId` is the one addition the wider membership rule needs: a
- * subagent's calls are drawn stepped in behind a rule, and folding one together
- * with a top-level call would put rows from two different frames of reference
- * under a single count.
+ * What breaks a run. *Consecutive* is the rule — anything the model said
+ * between two calls breaks it, and the recap boundary breaks it too (the shell
+ * folds each side separately), so a count never spans "what you already read".
+ * Equal `parentToolUseId` is the one membership condition: a subagent's calls
+ * must not fold under a top-level count.
  */
 export function foldsTogether(a: ToolCallItem, b: ToolCallItem): boolean {
   return a.parentToolUseId === b.parentToolUseId
 }
 
 /**
- * The family a tool counts as in a run's breakdown.
- *
- * An MCP tool is `mcp__<server>__<tool>`, and the *server* is the useful unit:
- * "3 roam-code" is a thing that happened, where three separate tool names are a
- * list to read. Shell tools from both engines collapse to "shell" for the same
- * reason. Everything else is its own name, lowercased so the breakdown reads as
- * prose rather than as identifiers.
+ * The family a tool counts as in a run's breakdown: MCP tools by their server
+ * (`mcp__<server>__<tool>`), shell tools from both engines as "shell",
+ * everything else its own name lowercased.
  */
 export function toolFamily(name: string): string {
   if (isShellTool(name)) {
@@ -62,12 +41,8 @@ export function toolFamily(name: string): string {
 }
 
 /**
- * The run's one line.
- *
- * A shell-only run keeps its old wording exactly — "Ran 3 shell commands" — both
- * because it is the commonest run by far and because it is already the sentence
- * people read here; widening the fold should not have re-worded the case that
- * was working. Anything mixed gets the count plus a breakdown, loudest family
+ * The run's one line. A shell-only run keeps the CLI's wording ("Ran 3 shell
+ * commands"); anything mixed gets the count plus a breakdown, loudest family
  * first.
  */
 export function runSummary(items: readonly ToolCallItem[], busy: boolean): string {
@@ -83,25 +58,19 @@ export function runSummary(items: readonly ToolCallItem[], busy: boolean): strin
   if (counts.size === 1 && counts.has('shell')) {
     return `${verb}${n} shell command${n === 1 ? '' : 's'}${tail}`
   }
-  // Descending by count, then alphabetical — a stable order matters more than it
-  // looks: this string is the row's measured height, so a run whose breakdown
-  // reordered between renders would remeasure for no reason.
+  // Descending by count, then alphabetical — this string is the row's measured
+  // height, so an unstable order would remeasure for no reason.
   const breakdown = [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([family, count]) => `${count} ${family}`)
     .join(', ')
-  // The ellipsis trails the whole line, not the count — "Running 2 tools… · 1
-  // read, 1 shell" reads as though the sentence ended and then carried on.
+  // The ellipsis trails the whole line, not the count.
   return `${verb}${n} tool${n === 1 ? '' : 's'} · ${breakdown}${tail}`
 }
 
 /* ── The task block's one line ─────────────────────────────────────────────
- *
- * A `Task` call and everything its subagent produced collapse to one row (see
- * `blocks.ts`), and these are that row's words. Same contract as `runSummary`:
- * `height.ts` wraps these exact strings to predict the row's pixel height with
- * no DOM, so the component must render them verbatim — two spellings would be
- * two different heights.
+ * Same contract as `runSummary`: `height.ts` wraps these exact strings, so the
+ * component must render them verbatim.
  */
 
 const clip = (text: string, max = 80): string => (text.length > max ? text.slice(0, max - 1) + '…' : text)
@@ -109,28 +78,18 @@ const clip = (text: string, max = 80): string => (text.length > max ? text.slice
 const trimmed = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined)
 
 /**
- * The row's identity half: which task this is.
- *
- * The Claude SDK's `Task` input carries `subagent_type` (e.g. "Explore") and a
- * 3–5 word `description`, and both are worth the line: parallel tasks are the
- * whole reason the block exists, and two rows both reading `Task(…)` answer
- * nothing. `Task(Explore · find the auth check)` — falling back to the
- * ordinary input preview when an engine sends neither, so the header is never
- * emptier than a plain tool row's.
+ * The row's identity half: `Task(Explore · find the auth check)`, from the
+ * Task input's `subagent_type` and `description`, falling back to the ordinary
+ * input preview when an engine sends neither.
  */
 export function taskLabel(task: ToolCallItem): string {
   return `${task.name}(${taskIdentity(task)})`
 }
 
 /**
- * The inner half of {@link taskLabel} — `Explore · find the auth check` — without
- * the `Task(…)` wrapper.
- *
- * Split out for the sub-agent takeover's header, which names the agent it is
- * showing and has no room (or reason) to repeat the tool's own name: the whole
- * surface *is* that Task. Extracted rather than re-spelled so the header and the
- * row it was opened from cannot drift, and so both keep matching protocol's
- * `subagentLabel`, which reads the same two input fields for the sessions list.
+ * The inner half of {@link taskLabel}, without the `Task(…)` wrapper — the
+ * sub-agent takeover's header. One spelling so the header, the row it opened
+ * from, and protocol's `subagentLabel` cannot drift.
  */
 export function taskIdentity(task: ToolCallItem): string {
   const input = task.input as { description?: unknown; subagent_type?: unknown } | null
@@ -142,31 +101,14 @@ export function taskIdentity(task: ToolCallItem): string {
 }
 
 /**
- * **What this agent was actually asked** — the sub-agent's brief, or undefined
- * when the engine did not give us one.
- *
- * Measured against a live session rather than assumed: the Agent SDK's call
- * carries `{description, subagent_type, run_in_background, prompt}`, and
- * `prompt` is the instruction.
- *
- * **Whether it also arrives in the stream depends on the agent.** A foreground
- * `Task` forwards its brief as a real nested `user_message` (that is what
- * `forwardSubagentText` buys and what the reducer stamps a `parentToolUseId`
- * on), so `subagentItems` picks it up and the frame already has it. A
- * **background** agent does not: measured on a session with eight of them,
- * zero items carried a `parentToolUseId` on a `user` kind. Those runs are
- * exactly the ones you open a takeover on — an agent working while you read
- * something else — and their brief was nowhere at all.
- *
- * So this is the *fallback*, not the source: the callers splice it in only when
- * the frame carries no brief of its own, or the same instruction would be drawn
- * twice.
- *
- * `description` is deliberately not a fallback: it is the 3–5 word label the
- * header already prints, and repeating it as a brief would claim we know the
- * instruction when we do not. **Codex genuinely has none** — its `spawn_agent`
- * message is an encrypted blob on the wire — so on that engine this is
- * undefined and the row is not drawn, rather than drawn empty.
+ * The sub-agent's brief (the Task input's `prompt`), or undefined when the
+ * engine did not give us one. This is the *fallback*, not the source: a
+ * foreground `Task` forwards its brief as a nested `user_message` and the
+ * frame already has it, but a **background** agent's brief never arrives in
+ * the stream (measured), so callers splice this in only when the frame carries
+ * no brief of its own. `description` is deliberately not a fallback — the
+ * header already prints it, and it is not the instruction. Codex genuinely has
+ * none (`spawn_agent` is an encrypted blob), so there the row is not drawn.
  */
 export function taskBrief(task: ToolCallItem): string | undefined {
   const input = task.input as { prompt?: unknown } | null
@@ -181,24 +123,11 @@ const callBusy = (call: ToolCallItem): boolean => call.status === 'running' || c
 export const callFailed = (call: ToolCallItem): boolean => call.status === 'failed' || call.result?.isError === true
 
 /**
- * Does a folded run colour red? **Only when its last call failed.**
- *
- * It used to be `some`, on the argument that a failure should colour the block
- * rather than fragment it. The argument was right about not fragmenting and
- * wrong about `some`: a run is a sequence the model worked through, and a
- * failure it recovered from two calls later is how work goes — a grep that
- * matched nothing, a build fixed on the second go. Reddening the whole run for
- * it means a normal working session is painted red, which spends the colour
- * that should have been left for the one thing still broken.
- *
- * The last call is the run's *outcome*, and an outcome is what a collapsed row
- * can honestly claim. The failures inside it are not hidden — they are one
- * press away, each red on its own row, and the recap counts every one. The
- * **scrubber agrees with this rule** rather than overriding it: it marks a
- * failed call only when the call is its row's outcome, which for a run is
- * exactly this one. It used to mark every member on the argument that the
- * rail asks a different question; against a real session that was nine alarms
- * on the rail for a transcript reddening one row.
+ * Does a folded run colour red? **Only when its last call failed.** The last
+ * call is the run's *outcome* — a failure the model recovered from mid-run is
+ * normal work, and `some` would paint a healthy session red. Failures inside
+ * are one press away and the recap counts them. The scrubber follows this
+ * rule: it marks a failed call only when the call is its row's outcome.
  */
 export function runFailed(items: readonly ToolCallItem[]): boolean {
   const last = items[items.length - 1]
@@ -214,50 +143,22 @@ export function taskBusy(task: ToolCallItem, children: readonly TranscriptItem[]
 }
 
 /**
- * Does the row colour red? **The task's own outcome, and nothing else.**
- *
- * It used to be "or any child call's", which does not survive contact with a
- * real subagent: an agent that ran a hundred calls, one of them a grep that
- * matched nothing, came back with a red line saying it had failed. It had not —
- * it had done exactly what it was asked, and the transcript said otherwise in
- * the one colour reserved for things that need a human.
- *
- * This is the call `SubagentInfo.status` already makes, and it made it for this
- * reason (see `packages/protocol`): the sub-agent's **own** `tool_result`
- * `is_error`, deliberately not `taskFailed`. The argument there was that a
- * nothing-matched grep must not read as a failed run *beside a session name*;
- * what a hundred-call agent shows is that it must not read that way beside the
- * `Task` row either. Two surfaces, one rule, one spelling.
- *
- * Nothing is concealed by this. A failed child is red on its own row, one press
- * away, and the recap counts it. The **scrubber follows this rule too** and no
- * longer marks such a child: a red tick on the rail says precisely what this
- * row is forbidden from saying. The sub-agent band still says an agent ran
- * here, and the task's own red tick still says it came back broken — which is
- * what the two channels are for.
+ * Does the row colour red? **The task's own outcome, and nothing else** — the
+ * same call protocol's `SubagentInfo.status` makes. A child's recovered
+ * failure must not redden the task; it is red on its own row, one press away,
+ * and the recap counts it. The scrubber follows this rule too.
  */
 export function taskFailed(task: ToolCallItem): boolean {
   return callFailed(task)
 }
 
 /**
- * The collapsed task row's one line: identity, then scale.
- *
- * `Task(Explore · find the auth check) · 7 tools…` while the subagent works —
- * the count grows as it does, which is the row's progress reading, and the
- * trailing ellipsis is the same in-flight signal `runSummary` uses (the pulse
- * in the gutter carries the beat). Settled, the ellipsis drops:
- * `… · 7 tools`. "Tools" and not "tool calls" because `runSummary` already
- * chose that word for the same count one row over.
- *
- * The counts are counted from the absorbed children, never read from the
- * engine's structured Task output — WorkerDeck does not plumb structured tool
- * results to clients, so a transcript replayed tomorrow must spell the same
- * line from the same items it holds today.
- *
- * With no tool calls yet — the subagent thinking, or only its brief arrived —
- * the line says `working…`, because `0 tools…` reads as a stall; settled with
- * none it says `done`.
+ * The collapsed task row's one line: identity, then scale —
+ * `Task(Explore · find the auth check) · 7 tools…`, ellipsis dropping when
+ * settled. Counted from the absorbed children, never read from the engine's
+ * structured Task output: a transcript replayed tomorrow must spell the same
+ * line from the same items it holds today. With no tool calls yet the line
+ * says `working…` (`0 tools…` reads as a stall); settled with none, `done`.
  */
 export function taskSummary(task: ToolCallItem, children: readonly TranscriptItem[]): string {
   const busy = taskBusy(task, children)

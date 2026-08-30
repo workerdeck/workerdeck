@@ -20,14 +20,10 @@ export const JOB_STATUS_META: Record<JobStatus, { label: string; variant: BadgeP
 }
 
 /**
- * Jobs run to completion and are kept, so this list only grows — a queue that
- * has been up a week is mostly history. Search and an active-only toggle are
- * what make the two jobs you care about findable in it.
- *
- * Its own small model rather than the sessions list's: a job's statuses are the
- * queue's (`queued`/`succeeded`/`canceled`), not a session's lifecycle, and
- * collapsing them into the session buckets would lose the distinction the queue
- * is actually about.
+ * Jobs are kept after they finish, so this list only grows; search and the
+ * active-only toggle are what keep it usable. Its own model rather than the
+ * sessions list's, because a job's statuses are the *queue's*, not a session
+ * lifecycle, and collapsing them loses the distinction the queue is about.
  */
 const ACTIVE_JOB_STATUSES: JobStatus[] = ['queued', 'running', 'parked']
 
@@ -142,9 +138,7 @@ export function JobsSidebar() {
                   onChanged={() => void refresh()}
                 />
               ))}
-              {/* Said whenever the list is shorter than the queue — the control
-                  that explains a short list must not be the thing you have to
-                  guess at. */}
+              {/* Whenever the list is shorter than the queue: a short list must explain itself. */}
               {hiding > 0 ? (
                 <p className="px-1 pt-2 text-center text-label text-fg-4">
                   {shown.length} of {jobs.length}
@@ -171,10 +165,8 @@ function JobRow({ job, active, onOpen, onChanged }: { job: JobInfo; active: bool
   const meta = JOB_STATUS_META[job.status]
   // Parked jobs are live too — cancelling one is how you abandon a wait.
   const cancellable = job.status === 'queued' || job.status === 'running' || job.status === 'parked'
-  // The age rides the description line rather than the status side: a job's
-  // status is a *word*, not a glyph the way a session's is, and a badge plus a
-  // timestamp on one line leaves the prompt — the only thing that tells two
-  // jobs apart — truncated to nothing.
+  // The age rides the description line: a job's status is a *word*, not a glyph, and a badge
+  // plus a timestamp leaves the prompt — the only thing telling two jobs apart — truncated away.
   const details = [
     formatRelativeTime(job.finishedAt ?? job.startedAt ?? job.createdAt),
     job.cwd.split('/').filter(Boolean).pop() ?? job.cwd,

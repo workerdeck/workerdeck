@@ -17,16 +17,13 @@ export interface PermissionPromptProps {
 }
 
 /**
- * Generic allow/deny prompt for a pending permission request.
+ * Generic allow/deny prompt for a pending permission request. Three outcomes,
+ * not two: plain Deny lets the turn continue (with an optional reason the agent
+ * reads), "Deny & stop" also interrupts.
  *
- * Three outcomes, not two: denying usually means "not that, try something else",
- * so plain Deny lets the turn continue (with an optional reason the agent reads)
- * while "Deny & stop" also interrupts.
- *
- * The heading is whatever the engine authored — `title`, else `displayName`.
- * Composing "wants to use {tool}" instead would be wrong for codex, where an
- * approval is usually an *escalation after a sandbox refusal* and the runner has
- * already written the sentence that says so.
+ * The heading is whatever the engine authored — composing "wants to use {tool}"
+ * would be wrong for codex, where an approval is an escalation after a sandbox
+ * refusal and the runner has already written the sentence that says so.
  */
 export function PermissionPrompt({ request, onApprove, onDeny, className }: PermissionPromptProps) {
   const [showInput, setShowInput] = useState(false)

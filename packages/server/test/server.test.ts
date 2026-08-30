@@ -11,7 +11,7 @@ import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 /** `models` makes the fake query answer `supportedModels`, which is what makes a
  * runner emit `capabilities` — the event the server learns a profile's models
  * from. */
-function fakeHarness(models?: Array<Record<string, unknown>>) {
+const fakeHarness = (models?: Array<Record<string, unknown>>) => {
   const messages: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
   let done = false
@@ -94,7 +94,7 @@ const initMessage = {
 } as unknown as SDKMessage
 
 /** Collects server frames and lets tests await one matching a predicate. */
-function frameCollector(ws: WebSocket) {
+const frameCollector = (ws: WebSocket) => {
   const frames: ServerFrame[] = []
   const waiters: Array<{ match: (f: ServerFrame) => boolean; resolve: (f: ServerFrame) => void }> = []
   ws.on('message', (data) => {
@@ -132,7 +132,7 @@ afterEach(async () => {
   running = undefined
 })
 
-async function startServer(harness: ReturnType<typeof fakeHarness>) {
+const startServer = async (harness: ReturnType<typeof fakeHarness>) => {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
@@ -207,7 +207,6 @@ describe('createWorkerServer', () => {
     const harness = fakeHarness()
     const { base, wsBase } = await startServer(harness)
 
-    // create
     const createRes = await fetch(`${base}/sessions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -217,12 +216,10 @@ describe('createWorkerServer', () => {
     const { session } = (await createRes.json()) as { session: SessionInfo }
     expect(session.status).toBe('starting')
 
-    // list
     const listRes = await fetch(`${base}/sessions`)
     const listBody = (await listRes.json()) as { sessions: SessionInfo[] }
     expect(listBody.sessions.map((s) => s.id)).toContain(session.id)
 
-    // attach
     const ws = new WebSocket(`${wsBase}/sessions/${session.id}/ws`)
     const collector = frameCollector(ws)
     await collector.waitFor((f) => f.type === 'attached')
@@ -241,7 +238,6 @@ describe('createWorkerServer', () => {
     await collector.waitFor((f) => f.type === 'event' && f.event.type === 'model_changed' && f.event.model === 'claude-opus-4-8')
     expect(harness.setModel).toHaveBeenCalledWith('claude-opus-4-8')
 
-    // permission round-trip
     const resultPromise = harness.captured.options!.canUseTool!(
       'Bash',
       { command: 'ls' },

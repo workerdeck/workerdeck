@@ -15,7 +15,7 @@ import { initialReplayTarget } from '../src/hooks/use-session.ts'
  * rather than a heuristic.
  */
 
-function frame(replayingFrom: number, lastSeq: number): AttachedFrame {
+const frame = (replayingFrom: number, lastSeq: number): AttachedFrame => {
   const session: SessionInfo = {
     id: 's1',
     status: 'idle',
@@ -46,7 +46,7 @@ describe('initialReplayTarget', () => {
 
 // -- The wire contract the hold rests on -------------------------------------
 
-function idleQueryFn() {
+const idleQueryFn = () => {
   const query = {
     [Symbol.asyncIterator]() {
       return this
@@ -71,7 +71,7 @@ afterEach(async () => {
   running = undefined
 })
 
-async function start() {
+const start = async () => {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],

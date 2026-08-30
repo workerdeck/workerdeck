@@ -41,7 +41,7 @@ const tempDir = (prefix: string): string => {
 
 /** Echoes `config.scope` the way every real runner does — the thing `buildRunner`
  * asserts on, and what every enforcement point below reads. */
-function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
+const fakeRunner = (id: string, config: SessionRunnerConfig): Runner => {
   let title: string | undefined
   return {
     id,
@@ -574,7 +574,7 @@ describe('cwd for a filesystem-less engine', () => {
 })
 
 /** A query that never yields — the claude sessions here are only ever built. */
-function neverQuery() {
+const neverQuery = () => {
   return {
     [Symbol.asyncIterator]() {
       return this

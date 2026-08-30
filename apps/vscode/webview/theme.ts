@@ -1,8 +1,7 @@
 /**
- * `@workerdeck/ui` themes off `<html data-theme="light|dark">`; VS Code themes
- * a webview by stamping `vscode-light` / `vscode-dark` / `vscode-high-contrast*`
- * onto `<body>` and swapping it live on theme change. Map one onto the other
- * and keep it mapped.
+ * `@workerdeck/ui` themes off `<html data-theme>`; VS Code stamps
+ * `vscode-light`/`vscode-dark`/`vscode-high-contrast*` onto `<body>` and swaps it
+ * live on theme change. Map one onto the other and keep it mapped.
  */
 export function syncVsCodeTheme(): void {
   const apply = () => {

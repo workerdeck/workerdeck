@@ -4,10 +4,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join, resolve, sep } from 'node:path'
 
 /**
- * Static file serving for the bundled dashboard. Deliberately policy-free: what
+ * Static file serving for the bundled dashboard. Deliberately policy-free — what
  * counts as a document, and whether an unauthenticated visitor gets the app or a
- * login page, is decided by the caller (see `instance.ts`). This module only
- * answers "is there such a file, and what headers does it want".
+ * login page, is `instance.ts`'s call.
  */
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -31,7 +30,7 @@ const CONTENT_TYPES: Record<string, string> = {
   '.txt': 'text/plain; charset=utf-8',
 }
 
-export function contentTypeFor(pathname: string): string {
+export const contentTypeFor = (pathname: string): string => {
   const dot = pathname.lastIndexOf('.')
   if (dot < 0) {
     return 'application/octet-stream'
@@ -40,7 +39,7 @@ export function contentTypeFor(pathname: string): string {
 }
 
 /** A request for a file rather than an app route: anything with a known extension. */
-export function looksLikeAsset(pathname: string): boolean {
+export const looksLikeAsset = (pathname: string): boolean => {
   const dot = pathname.lastIndexOf('.')
   if (dot < 0) {
     return false
@@ -48,13 +47,8 @@ export function looksLikeAsset(pathname: string): boolean {
   return pathname.slice(dot).toLowerCase() in CONTENT_TYPES
 }
 
-/**
- * Resolve `pathname` inside `root`, or null if it escapes. Vite emits every
- * asset under a content-hashed name, so the only paths that ever reach here are
- * ones the app itself generated — but this server is reachable by anything that
- * can open a socket, and `..` in a URL is the oldest trick there is.
- */
-export function resolveWithinRoot(root: string, pathname: string): string | null {
+/** Resolve `pathname` inside `root`, or null if it escapes. */
+export const resolveWithinRoot = (root: string, pathname: string): string | null => {
   let decoded: string
   try {
     decoded = decodeURIComponent(pathname)
@@ -76,7 +70,7 @@ export function resolveWithinRoot(root: string, pathname: string): string | null
   return candidate
 }
 
-export function sendHtml(req: IncomingMessage, res: ServerResponse, status: number, html: string, cache: string): void {
+export const sendHtml = (req: IncomingMessage, res: ServerResponse, status: number, html: string, cache: string): void => {
   const body = Buffer.from(html, 'utf8')
   res.writeHead(status, {
     'content-type': 'text/html; charset=utf-8',
@@ -94,17 +88,16 @@ export function sendHtml(req: IncomingMessage, res: ServerResponse, status: numb
 export type ServeResult = 'served' | 'not-found' | 'method-not-allowed'
 
 /**
- * Stream a file out of `root`. `immutable` is the caller's call, because it is a
- * promise about the URL, not the file: Vite's hashed assets can be cached
- * forever, but index.html must be revalidated every time or a deployed update
- * never reaches a browser that already has the old one.
+ * Stream a file out of `root`. `immutable` is a promise about the URL, not the
+ * file, so it is the caller's call: hashed assets cache forever, index.html must
+ * revalidate or a deployed update never reaches a browser holding the old one.
  */
-export async function serveFile(
+export const serveFile = async (
   req: IncomingMessage,
   res: ServerResponse,
   filePath: string,
   options: { immutable?: boolean } = {},
-): Promise<ServeResult> {
+): Promise<ServeResult> => {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return 'method-not-allowed'
   }

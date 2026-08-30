@@ -39,11 +39,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /**
- * Create a store-managed profile. Only reachable where the server reports it
- * will accept one (a profile store plus a principal allowed to manage) — the
- * fields here carry no credentials: `apiKeyEnv` is a variable name the server
- * resolves, and a config directory is a path bounded by the server's allowed
- * roots.
+ * Create a store-managed profile. The fields here carry **no credentials**:
+ * `apiKeyEnv` is a variable name the server resolves, and a config directory is a
+ * path bounded by the server's `allowedConfigDirRoots`.
  */
 function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void }) {
   const [engine, setEngine] = useState<ProfileEngine>('provider')
@@ -77,8 +75,7 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
         models: commaList(models).length > 0 ? commaList(models) : undefined,
         apiKeyEnv: apiKeyEnv.trim() || undefined,
       }
-      // Only send a grants block when something was actually declared: absent
-      // means "whatever the server wired", which is not the same as empty.
+      // Absent means "whatever the server wired", which is not the same as empty.
       const session: NonNullable<CreateProfileRequest['session']> = {}
       if (capabilities.length > 0) {
         session.capabilities = capabilities
@@ -231,8 +228,6 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
   )
 }
 
-/** The `+` in the Profiles sidebar header opens this — the shape every create
- * in this app now takes. */
 export function CreateProfileDialog({
   open,
   onOpenChange,

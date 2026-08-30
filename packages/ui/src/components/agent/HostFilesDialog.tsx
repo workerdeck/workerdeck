@@ -18,13 +18,9 @@ export interface HostFilesDialogProps {
 }
 
 /**
- * Browse the project the session is working in.
- *
- * Deliberately rooted at the session's cwd rather than at the server's
- * `hostFiles.roots`: the roots are the *security* boundary (the server enforces
- * them on every request), but what someone wants while watching an agent is this
- * project's tree. Read-only — writing is a separate server opt-in and not
- * something a session viewer should be doing behind the agent's back.
+ * Browse the project the session is working in. Rooted at the session's cwd,
+ * not at the server's `hostFiles.roots` — the roots are the *security* boundary
+ * and the server enforces them on every request. Read-only.
  */
 export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDialogProps) {
   const [path, setPath] = useState<string | undefined>(cwd)
@@ -54,9 +50,8 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
     [client],
   )
 
-  // Opening resets the browser to the session's directory. Navigation from here
-  // is explicit (`list`) rather than an effect on `path`, so walking into a
-  // folder is one request and not two.
+  // Navigation is explicit (`list`) rather than an effect on `path`, so walking
+  // into a folder is one request and not two.
   useEffect(() => {
     if (!open) {
       return
@@ -70,8 +65,7 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
     }
   }, [open, cwd, list])
 
-  // Debounced, and only while there is something to search for; an empty box is
-  // "show me the directory again", not "search for everything".
+  // Debounced; an empty box is "show me the directory again".
   useEffect(() => {
     if (!open || !cwd) {
       return
@@ -204,7 +198,7 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
 
 /** A symlink is reported as itself and never silently resolved — following it is
  * the next request's problem, and that request is refused if it escapes the roots. */
-function EntryIcon({ type }: { type: HostDirEntry['type'] }) {
+const EntryIcon = ({ type }: { type: HostDirEntry['type'] }) => {
   if (type === 'dir') {
     return <Folder className="size-3.5 shrink-0 text-accent" />
   }

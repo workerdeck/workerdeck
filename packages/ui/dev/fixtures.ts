@@ -3,20 +3,16 @@ import type { PermissionRequest } from '@workerdeck/protocol'
 import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 
 /**
- * Canned transcripts for the playground.
- *
- * Hand-written rather than captured, and chosen for the cases that break a
- * renderer: prose that wraps, a message that is mostly markdown, output that is
- * far longer than its row, a call still in flight, a failure, and a turn that
- * ended. If a fixture looks right at three widths, the theme is right.
+ * Canned transcripts for the playground — hand-written, and chosen for the cases that
+ * break a renderer: prose that wraps, a message that is mostly markdown, output far
+ * longer than its row, a call in flight, a failure, and a turn that ended.
  */
 
 let seq = 0
 
-/** Stamps the id, so a fixture says what it is about and nothing else.
- * `Omit` has to distribute over the union by hand — applied to the union
- * directly it collapses to the members' common keys, and every fixture's own
- * fields would then be rejected. */
+/** Stamps the id, so a fixture says what it is about and nothing else. `Omit` must
+ * distribute over the union by hand: applied to the union directly it collapses to the
+ * members' common keys and every fixture's own fields would be rejected. */
 type ItemDraft = TranscriptItem extends infer T ? (T extends object ? Omit<T, 'id'> : never) : never
 
 const item = (draft: ItemDraft): TranscriptItem => ({ ...draft, id: `f${++seq}` }) as TranscriptItem
@@ -167,21 +163,18 @@ git tag v0.16.0 && git push --tags
 
 See [the workflow](https://github.com/workerdeck/workerdeck) for the gate it re-runs.`,
   }),
-  // The break rule's guard, one poem per half. CommonMark: a line ending in
-  // two spaces is a **hard** break and renders as <br>; a bare newline is
-  // **soft** and collapses to a space under `white-space: normal`. Models
-  // really do write poems both ways (GPT-5.6 Luna emits the double-space
-  // form), and the calculator has been wrong in each direction once —
-  // join-always undershot the hard form by ~115 lines on a long poem,
-  // break-always overshot the soft form by four here.
+  // The break rule's guard, one poem per half. CommonMark: a line ending in two spaces
+  // is a **hard** break rendering as <br>; a bare newline is **soft** and collapses to
+  // a space under `white-space: normal`. Models write poems both ways, and the height
+  // calculator has been wrong in each direction once.
   item({ kind: 'user', text: 'now a short poem about releases' }),
   item({
     kind: 'assistant_text',
     streaming: false,
     parentToolUseId: null,
     // Hard breaks: trailing double spaces, every line renders. Appended
-    // programmatically — a literal trailing space in source is one
-    // format-on-save away from silently deleting the case this guards.
+    // programmatically — a literal trailing space in source is one format-on-save away
+    // from deleting the case this guards.
     text: [
       '**The Tag That Was Never Pushed**',
       '',
@@ -258,10 +251,9 @@ const long: TranscriptItem[] = Array.from({ length: 40 }, (_, index) =>
       }),
 )
 
-/** 600 rows of varied height — the scale where estimate error becomes
- * visible scrollbar drift and short-landing jumps. Rendered with a catch-up
- * splice at item 300 (see App.tsx), so the recap jump exercises the re-aim
- * loop across ~300 unmeasured rows. */
+/** 600 rows of varied height — the scale where estimate error becomes visible
+ * scrollbar drift. Rendered with a catch-up splice at item 300 (see App.tsx), so the
+ * recap jump exercises the re-aim loop across ~300 unmeasured rows. */
 const huge: TranscriptItem[] = Array.from({ length: 600 }, (_, index) => {
   const step = index % 6
   if (step === 0) {
@@ -305,11 +297,10 @@ const huge: TranscriptItem[] = Array.from({ length: 600 }, (_, index) => {
 })
 
 /**
- * A massive, varied session for performance work — every content shape the
- * renderer knows, cycled deterministically over thousands of items (~10× the
- * `huge` fixture, with far heavier rows). This is what `__wdPerf()` sweeps;
- * it is deliberately bigger than any session ought to get, so a cost that
- * grows with session size is visible here first.
+ * A massive, varied session for performance work — every content shape the renderer
+ * knows, cycled deterministically over thousands of items (~10× `huge`, with far
+ * heavier rows). What `__wdPerf()` sweeps: deliberately bigger than any real session,
+ * so a cost that grows with session size shows up here first.
  */
 const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
   const turn = Math.floor(index / 10)
@@ -429,10 +420,8 @@ The refactor holds. ${'The call sites stay compatible and the tests agree. '.rep
  * tokens, CJK, emoji, combining marks, tabs, a wide table, a deep diff. Used by
  * the height audit (`height-audit.ts`); adversarial on purpose. */
 const adversarial: TranscriptItem[] = [
-  // A tool result far bigger than the expanded row's character budget — the case
-  // the fixtures file claimed to cover and did not: nothing here reached 2000
-  // characters, which is how the "show all N chars" button stayed a no-op
-  // without anyone noticing. Expanded, this must clip and offer the rest.
+  // A tool result far bigger than the expanded row's character budget: expanded, this
+  // must clip and offer the rest, which is what keeps "show all N chars" honest.
   item({
     kind: 'tool_call',
     name: 'Bash',
@@ -632,17 +621,12 @@ export const QUESTIONS: PermissionRequest = {
 }
 
 /**
- * Two subagents running at once, their rows interleaved — the case fixtures
- * exist for, because it is the one a real session produces and no amount of
- * reading the grouping code proves.
- *
- * It carries every edge the block model has to answer at once: two `Task` calls
- * whose children alternate with each other *and* with the main thread's own
- * work, a failed child (which must colour its task's collapsed line without
- * fragmenting it), a task still running beside one that settled, and an **orphan
- * child** whose `Task` call is not in the slice — what a recap boundary or a
- * compaction leaves behind, and which must stay a visible row rather than
- * disappear into a block above it.
+ * Two subagents running at once, their rows interleaved, carrying every edge the block
+ * model has to answer: two `Task` calls whose children alternate with each other *and*
+ * with the main thread's work, a failed child (which colours its task's collapsed line
+ * without fragmenting it), a task still running beside one that settled, and an
+ * **orphan child** whose `Task` call is not in the slice — what a recap boundary or a
+ * compaction leaves behind, which must stay a visible row.
  */
 const withId = (id: string, draft: ItemDraft): TranscriptItem => ({ ...draft, id }) as TranscriptItem
 
@@ -669,8 +653,6 @@ const subagents: TranscriptItem[] = [
     parentToolUseId: null,
     status: 'running',
   }),
-  // The two briefs, then their work, interleaved the way two children of one
-  // turn really arrive.
   item({ kind: 'user', text: 'Search the engines for permission mode parsing.', parentToolUseId: 'toolu_A' }),
   item({ kind: 'user', text: 'Check docs/ for permission mode claims.', parentToolUseId: 'toolu_B' }),
   item({
@@ -689,8 +671,7 @@ const subagents: TranscriptItem[] = [
     status: 'settled',
     result: { text: 'docs/GOTCHAS.md\ndocs/ARCHITECTURE.md', isError: false },
   }),
-  // The main thread carries on between them — a top-level call that must not be
-  // folded into either subagent's run.
+  // A top-level call that must not fold into either subagent's run.
   item({
     kind: 'tool_call',
     name: 'Bash',
@@ -707,8 +688,8 @@ const subagents: TranscriptItem[] = [
     status: 'settled',
     result: { text: 'export function routes() { /* … */ }', isError: false },
   }),
-  // A failure inside a subagent: it colours the collapsed task line and keeps
-  // its scrubber mark, and it does not break the run around it.
+  // A failure inside a subagent: colours the collapsed task line, keeps its scrubber
+  // mark, does not break the run around it.
   item({
     kind: 'tool_call',
     name: 'Grep',
@@ -740,16 +721,12 @@ const subagents: TranscriptItem[] = [
   }),
 ]
 
-/** Replayed image parts — the seventh rule's rows. The playground supplies no
- * image loader (its default resolves `undefined`), so every box here settles
- * into its *failure* state, which is deliberate: placeholder, picture and
- * failure are all one box of `IMAGE_BOX_LINES`, so whichever state the audit
- * catches must measure the same. A row whose height moved when the fetch failed
- * would be the exact defect the fixed box exists to prevent.
+/** Replayed image parts. The playground supplies no image loader, so every box settles
+ * into its *failure* state — deliberate: placeholder, picture and failure are all one
+ * box of `IMAGE_BOX_LINES`, so whichever state the audit catches must measure the same.
  *
- * Three shapes on purpose: one image beside prose, several on one call (a run of
- * screenshots), and an image on a call whose text is also over the collapsed
- * budget — the two rules composed, which is where the addresses get renumbered.
+ * Three shapes on purpose: one image beside prose, several on one call, and an image on
+ * a call whose text is also over the collapsed budget — where addresses get renumbered.
  */
 const images: TranscriptItem[] = [
   item({ kind: 'user', text: 'Look at the three mockups and tell me which one holds up.' }),
@@ -795,8 +772,8 @@ const images: TranscriptItem[] = [
     result: {
       text: Array.from({ length: 120 }, (_, i) => ` ✓ packages/ui/test/case ${i + 1} (${i * 2}ms)`).join('\n'),
       isError: false,
-      // A picture after the text budget ran out: stored at index 7, and it must
-      // still be addressed as 7 rather than by where it landed.
+      // A picture after the text budget ran out: stored at index 7, and still addressed
+      // as 7 rather than by where it landed.
       images: [{ partIndex: 7, mediaType: 'image/png', bytes: 12_288, sourceSeq: 51 }],
     },
   }),

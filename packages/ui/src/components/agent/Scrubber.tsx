@@ -16,23 +16,15 @@ import {
 } from './scrubber-marks.ts'
 
 /**
- * The cards variant's overview rail — the terminal scrubber's proportional
- * sibling.
+ * The cards variant's overview rail.
  *
- * Positions are **index space**, not pixel space: mark y is
- * `itemIndex / items.length` of the rail, because proportional text and
- * variable row heights leave the cards transcript with no honest pixel claim
- * (the terminal rail's positions ride the height calculator, which has none
- * here). Less precise, but it still answers the reader's questions — where did
- * I type, where did it fail, where is the approval waiting.
- *
- * And because the positions are approximate, the rail is an **annotation, not
- * a scrollbar**: no drag-to-scrub, no viewport band (meaningless without pixel
- * positions), and the native scrollbar stays. The container never takes the
- * pointer — only the marks do, when interactive — so the scrollbar keeps
- * working straight through the paint. Hover peeks (from `items`, never the DOM
- * — the row a mark describes is usually unmounted) and a click jumps to the
- * mark's item through `onJumpToItem`.
+ * Positions are **index space**: mark y is `itemIndex / items.length` of the
+ * rail, because proportional text and variable row heights leave the cards
+ * transcript with no honest pixel claim. Because they are approximate the rail
+ * is an **annotation, not a scrollbar** — no drag-to-scrub, no viewport band,
+ * and the container never takes the pointer (only the marks do, when
+ * interactive) so the native scrollbar keeps working through the paint. Peeks
+ * read `items`, never the DOM: the row a mark describes is usually unmounted.
  */
 
 export interface ScrubberProps {
@@ -54,13 +46,13 @@ export interface ScrubberProps {
   className?: string
 }
 
-function peekContent(
+/** `first` is the member the pointer resolved to — see {@link nearestMember}. */
+const peekContent = (
   cluster: Cluster,
-  /** The member the pointer resolved to — see {@link nearestMember}. */
   first: Mark | undefined,
   items: readonly TranscriptItem[],
   pendingApprovals: readonly PermissionRequest[],
-): ReactNode {
+): ReactNode => {
   const more = cluster.marks.length > 1 ? ` · ${cluster.marks.length} marks` : ''
   let body: ReactNode = null
   if (cluster.kind === 'approval') {
@@ -105,8 +97,7 @@ function peekContent(
             {first.kind === 'user' ? <span data-tone="muted">{'❯ '}</span> : null}
             {excerpt(item)}
           </div>
-          {/* Which tool failed is rarely the question — the first non-blank
-              line of what it said back is the thing worth peeking at. */}
+          {/* The first non-blank line of what the tool said back. */}
           {failure ? (
             <div className="wd-scrub-ex" data-tone="danger">
               {failure}
@@ -153,9 +144,8 @@ export function Scrubber({
     return () => observer.disconnect()
   }, [])
 
-  // A peek is a snapshot of the cluster it was opened on; if the transcript
-  // changes underneath (a fixture/session swap, a burst of new items), drop it
-  // rather than describe items that no longer exist.
+  // A peek is a snapshot of the cluster it was opened on; drop it when the
+  // transcript changes underneath rather than describe vanished items.
   useEffect(() => {
     setPeek(null)
   }, [items])
@@ -211,9 +201,8 @@ export function Scrubber({
     )
   }
 
-  // Paint either way: the rail duplicates information the transcript itself
-  // carries, and interactive it is a pointer affordance rather than the
-  // scroll surface — the native scrollbar stays the accessible one.
+  // `aria-hidden` either way: the rail duplicates what the transcript carries,
+  // and the native scrollbar stays the accessible scroll surface.
   return (
     <div ref={railRef} className={cn('wd-scrubber', className)} data-interactive={interactive || undefined} aria-hidden>
       {clusters.map((cluster, index) => (

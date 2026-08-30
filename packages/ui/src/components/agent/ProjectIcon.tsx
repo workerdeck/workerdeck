@@ -116,48 +116,10 @@ import type { ComponentType } from 'react'
 import { cn } from '../../lib/utils.ts'
 
 /**
- * A project's icon — the render side of protocol's `ProjectIcon`, for a list
- * row or a group header.
- *
- * **The glyph arm is a curated set, and that is the design rather than a
- * shortcut.** The gateway validates a glyph name by *shape* only (lucide's
- * lowercase-kebab convention) and explicitly declines to grow an icon catalog,
- * so the contract already says a client must fall back on a name it does not
- * know.
- *
- * The alternative was measured rather than argued, against the VS Code
- * sidebar's own bundle: `sidebar.js` is **31 KB** with one glyph, **77 KB**
- * with the 110 below (~418 bytes each), and **927 KB** with a
- * `import * as` over lucide's ~1,600 — which is what it costs, because a
- * namespace import defeats tree-shaking by construction. (`DynamicIcon` is the
- * third option and worse in a different currency: ~1,600 chunk files shipped
- * inside the `.vsix`.) Twelve times the bundle to render a name nobody has
- * declared yet is not a trade worth making; 46 KB to cover the names people
- * actually use is.
- *
- * The set is chosen to cover what people call a project; an unlisted-but-valid
- * name draws {@link Folder}, which is what the row drew before this feature
- * existed. **Grow it freely** — each addition is ~400 bytes and the fallback
- * means a missing one is a shrug, not a hole.
- *
- * **The image arm draws nothing until its bytes arrive**, and takes them as a
- * resolved `src` rather than fetching: the wire carries only an address
- * (media type, size, content hash), and *who* fetches it differs per client —
- * a VS Code webview cannot reach a gateway at all and must be handed a data
- * URL by its extension host, while a browser can fetch and `createObjectURL`.
- * A component that fetched would be wrong on one of them. Absent `src` renders
- * nothing rather than a placeholder box: an icon is decoration beside a name
- * that is already there, and a box that becomes a picture a beat later is more
- * movement than the picture is worth.
- *
- * One thing an image icon cannot do, and a glyph can: **take the row's
- * colour.** An `<img>`-embedded SVG is its own document, so `currentColor` does
- * not reach it and its own `prefers-color-scheme` resolves against the *OS*
- * rather than the host's theme (measured: it does resolve, which is the
- * surprise — so a monochrome mark tuned for both schemes is right on a dark OS
- * in a dark editor and wrong on a light OS in a dark one). A repo that wants a
- * mark that always matches its row should declare a glyph; one that wants its
- * brand should declare the image and accept that it is a picture.
+ * A curated glyph set — **never a namespace import over lucide**: `import * as`
+ * defeats tree-shaking and costs the VS Code sidebar bundle 927 KB against
+ * 77 KB for these. An unlisted-but-valid name draws {@link Folder}; grow the
+ * set freely, each addition is ~400 bytes.
  */
 const GLYPHS: Record<string, ComponentType<{ className?: string }>> = {
   anchor: Anchor,
@@ -273,6 +235,9 @@ const GLYPHS: Record<string, ComponentType<{ className?: string }>> = {
   zap: Zap,
 }
 
+/** A project's icon — the render side of protocol's `ProjectIcon`. An image
+ * icon cannot take the row's colour (an `<img>`-embedded SVG is its own
+ * document); a repo that wants that should declare a glyph. */
 export function ProjectIcon({
   icon,
   src,
@@ -280,8 +245,10 @@ export function ProjectIcon({
   className,
 }: {
   icon: ProjectIconSpec | undefined
-  /** Resolved bytes for the `image` arm — an object URL or a data URL. The
-   * caller fetches (see the note above); absent draws nothing. */
+  /** Resolved bytes for the `image` arm — an object URL or a data URL. **The
+   * caller fetches**, because who can differs per client: a VS Code webview
+   * cannot reach the gateway and must be handed a data URL by its extension
+   * host. Absent draws nothing. */
   src?: string
   /** The project's name, for the alt text. */
   name?: string
@@ -300,8 +267,7 @@ export function ProjectIcon({
         alt=""
         aria-hidden
         title={name}
-        // `object-contain` because a declared icon is whatever aspect the repo
-        // checked in, and a squashed logo reads worse than a letterboxed one.
+        // `object-contain`: a declared icon is whatever aspect the repo checked in.
         className={cn('inline-block size-3 shrink-0 object-contain', className)}
       />
     )

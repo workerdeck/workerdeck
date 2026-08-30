@@ -17,12 +17,9 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /**
- * One gateway: how it is doing, and — unless it is the one that served this page
- * — the form that edits it.
- *
- * The implicit gateway has nothing to edit. Its address is this page's own
- * origin and its credential is the cookie it already set, so the form would be
- * three disabled fields pretending otherwise.
+ * One gateway: how it is doing, plus the form that edits it — except for the
+ * implicit gateway, whose address is this page's origin and whose credential is
+ * the cookie it already set, so there is nothing to edit.
  */
 export function GatewayView() {
   const { hostId } = useParams({ from: '/gateways/$hostId' })
@@ -35,8 +32,7 @@ export function GatewayView() {
   const snapshot = snapshots.find((s) => s.host.id === hostId)
 
   useEffect(() => {
-    // Not until the same-origin probe has answered: the implicit gateway does
-    // not exist yet at first paint, and bouncing off it would break its links.
+    // Not until the probe has answered: the implicit gateway does not exist at first paint.
     if (!ready || host) {
       return
     }

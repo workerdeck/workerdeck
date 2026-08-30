@@ -6,6 +6,30 @@ import {
 } from 'quickjs-emscripten-core'
 import type { SandboxVfs } from './vfs.ts'
 
+/** Trusted prelude, evaluated before the untrusted script. Everything crossing the
+ * boundary is a string: by-value marshalling, never a host object reference. */
+const PRELUDE = `
+"use strict";
+(() => {
+  const fmt = (v) => {
+    if (typeof v === 'string') return v
+    if (v === undefined) return 'undefined'
+    try { return JSON.stringify(v) } catch { return String(v) }
+  }
+  globalThis.console = Object.freeze({
+    log: (...a) => __host_log('log', a.map(fmt).join(' ')),
+    warn: (...a) => __host_log('warn', a.map(fmt).join(' ')),
+    error: (...a) => __host_log('error', a.map(fmt).join(' ')),
+  })
+  globalThis.vfs = Object.freeze({
+    read: (p) => __host_vfs_read(String(p)),
+    write: (p, c) => { __host_vfs_write(String(p), String(c)) },
+    list: (d) => JSON.parse(__host_vfs_list(d === undefined ? '/' : String(d))),
+  })
+  globalThis.fetchText = (u) => __host_fetch_text(String(u))
+})();
+`
+
 /**
  * The guest engine, loaded from an injected WASM variant so server (Node
  * asyncify) and browser (singlefile asyncify) share this package unchanged.
@@ -13,15 +37,14 @@ import type { SandboxVfs } from './vfs.ts'
  */
 export type SandboxEngine = { module: QuickJSAsyncWASMModule }
 
-/** Accepts the variant itself, a `{ default }` module namespace, or a promise of
- * either — so callers can pass `import('...')` or a plain default import without
- * caring how their bundler/runtime resolved the interop. */
+/** The variant itself, a `{ default }` module namespace, or a promise of either —
+ * so a caller can pass `import('...')` whatever its bundler did to the interop. */
 export type SandboxVariantInput =
   | QuickJSAsyncVariant
   | { default: QuickJSAsyncVariant }
   | Promise<QuickJSAsyncVariant | { default: QuickJSAsyncVariant }>
 
-export async function loadEngine(variant: SandboxVariantInput): Promise<SandboxEngine> {
+export const loadEngine = async (variant: SandboxVariantInput): Promise<SandboxEngine> => {
   const resolved = await variant
   const unwrapped = 'default' in resolved ? resolved.default : resolved
   return { module: await newQuickJSAsyncWASMModuleFromVariant(unwrapped) }
@@ -60,37 +83,12 @@ export type RunScriptResult =
       logs: SandboxLog[]
     }
 
-/** Trusted prelude, evaluated before the untrusted script: ergonomic frozen
- * wrappers over the raw host functions. Everything crossing the boundary is a
- * string (by-value marshalling — never a host object reference). */
-const PRELUDE = `
-"use strict";
-(() => {
-  const fmt = (v) => {
-    if (typeof v === 'string') return v
-    if (v === undefined) return 'undefined'
-    try { return JSON.stringify(v) } catch { return String(v) }
-  }
-  globalThis.console = Object.freeze({
-    log: (...a) => __host_log('log', a.map(fmt).join(' ')),
-    warn: (...a) => __host_log('warn', a.map(fmt).join(' ')),
-    error: (...a) => __host_log('error', a.map(fmt).join(' ')),
-  })
-  globalThis.vfs = Object.freeze({
-    read: (p) => __host_vfs_read(String(p)),
-    write: (p, c) => { __host_vfs_write(String(p), String(c)) },
-    list: (d) => JSON.parse(__host_vfs_list(d === undefined ? '/' : String(d))),
-  })
-  globalThis.fetchText = (u) => __host_fetch_text(String(u))
-})();
-`
-
 /**
- * Evaluate one untrusted script in a fresh QuickJS context: deny-by-default
- * (no ambient fs/network/host access — only the granted bridge), interpreter-
- * enforced memory and time limits, everything disposed afterwards.
+ * Evaluate one untrusted script in a fresh QuickJS context: deny-by-default (no
+ * ambient fs/network/host access — only the granted bridge), interpreter-enforced
+ * memory and time limits, everything disposed afterwards.
  */
-export async function runScript(engine: SandboxEngine, options: RunScriptOptions): Promise<RunScriptResult> {
+export const runScript = async (engine: SandboxEngine, options: RunScriptOptions): Promise<RunScriptResult> => {
   const logs: SandboxLog[] = []
   const deadline = Date.now() + (options.timeoutMs ?? 5000)
   let interruptedBy: 'timeout' | 'aborted' | undefined
@@ -163,8 +161,7 @@ export async function runScript(engine: SandboxEngine, options: RunScriptOptions
       evaluated.error.dispose()
       return failure(error, interruptedBy, logs)
     }
-    // Drain the microtask queue so a returned promise can settle. resolvePromise()
-    // takes ownership of the handle it is given — never dispose that one again.
+    // resolvePromise() takes ownership of the handle it is given — never dispose that one again.
     runtime.executePendingJobs()
     const evaluatedValue = evaluated.value
     const state = context.getPromiseState(evaluatedValue)
@@ -202,13 +199,13 @@ export async function runScript(engine: SandboxEngine, options: RunScriptOptions
   }
 }
 
-function failure(error: unknown, interruptedBy: 'timeout' | 'aborted' | undefined, logs: SandboxLog[]): RunScriptResult {
+const failure = (error: unknown, interruptedBy: 'timeout' | 'aborted' | undefined, logs: SandboxLog[]): RunScriptResult => {
   const text = describeGuestError(error)
   const reason = interruptedBy ?? (/out of memory/i.test(text) ? 'oom' : 'exception')
   return { ok: false, reason, error: text, logs }
 }
 
-function describeGuestError(error: unknown): string {
+const describeGuestError = (error: unknown): string => {
   if (typeof error === 'string') {
     return error
   }

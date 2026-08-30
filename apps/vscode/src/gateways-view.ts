@@ -9,42 +9,24 @@ export type GatewaysFeed = {
   state: () => SidebarState
   /** The gateway set changed — re-probe now rather than waiting for a poll. */
   refresh: () => Promise<void>
-  /**
-   * Whether this view needs fresh probe readings. It is collapsible on its own,
-   * and the poll used to be gated on the sessions list alone — so with that list
-   * collapsed this view would show every gateway stuck at `pending`, which is
-   * the single question it exists to answer.
-   */
+  /** Whether this view needs fresh probe readings. It is collapsible on its own, and
+   * gating the poll elsewhere leaves it showing every gateway stuck at `pending`. */
   setWatching: (watching: boolean) => void
 }
 
 /**
- * The Gateways view: the gateways this window can drive, as its OWN VS Code view
- * in the WorkerDeck container.
+ * The Gateways view: the gateways this window can drive, as its own VS Code view in
+ * the WorkerDeck container. `visibility: "collapsed"` in the manifest, so a fresh
+ * install sees the header without spending rows on it, and the header's
+ * `description` carries the count.
  *
- * It used to be a screen the sessions list pushed over itself, reached from a
- * plug icon in that view's title. That was the wrong shape twice over. A gateway
- * is a **mode** — every session belongs to one, and gateway is a filter facet on
- * the list — so managing them is configuration that should sit beside the list,
- * permanently, rather than replacing it. And a pushed screen is somewhere you
- * can be stranded: the list vanished, the native title still said SESSIONS, and
- * the only way back was a chevron this extension drew itself.
- *
- * As a view it gets VS Code's own header, collapse state, drag-to-reorder and
- * right-click visibility — the same deal the four scoped section views already
- * take. It is `visibility: "collapsed"` in the manifest, so a fresh install sees
- * the header without spending rows on it, and the header's `description` carries
- * the count so a collapsed view still reports whether anything is connected.
- *
- * Like the sessions list, it draws no header: the form it opens one level deep
- * is announced with `wd-gateway-form-state`, and this side answers by retitling
- * the view and swapping its `+` for a back chevron. No webview in this extension
- * owns its own chrome.
+ * The webview draws no header: the form it opens one level deep is announced with
+ * `wd-gateway-form-state`, and this side answers by retitling the view and swapping
+ * its `+` for a back chevron.
  *
  * **No transports.** Saving a gateway is globalState plus the OS keychain, both
- * host-side; this webview runs no `WorkerDeckClient` and has no route to a
- * gateway. Auth keys reach it exactly once, prefilled into an edit form, and
- * only because the person asked to edit that gateway.
+ * host-side; this webview runs no `WorkerDeckClient` and has no route to a gateway.
+ * Auth keys reach it exactly once, prefilled into an edit form the person asked for.
  */
 export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewId = 'workerdeck.gateways'
@@ -82,8 +64,7 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
       this.#view = undefined
       this.#ready = false
       this.#feed.setWatching(false)
-      // The key is global; a disposed view must not leave a back chevron gated
-      // on for whichever view resolves next.
+      // The key is global: a disposed view must not leave a back chevron gated on.
       this.#setFormOpen(false)
     })
   }
@@ -116,8 +97,7 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
     }
     const state = this.#feed.state()
     const connected = state.hosts.filter((h) => h.probe === 'connected').length
-    // Said while collapsed, which is the point: whether anything is reachable is
-    // the one fact about this view worth having without opening it.
+    // Said while collapsed: whether anything is reachable is worth having without opening it.
     this.#view.description =
       state.hosts.length === 0 ? 'none' : connected === state.hosts.length ? String(connected) : `${connected}/${state.hosts.length}`
     if (!this.#ready) {
@@ -163,8 +143,7 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
         if (!host) {
           return
         }
-        // The key can only come from here — SecretStorage is not reachable from
-        // a webview, which is the whole reason the form is filled by a message.
+        // SecretStorage is not reachable from a webview, which is why the form is filled by message.
         this.#setFormOpen(true, host.name)
         this.#pendingForm = {
           kind: 'wd-gateway-form',
@@ -180,8 +159,7 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
         return
       }
       case 'wd-gateway-form-state':
-        // The webview is the authority on whether the form is up (it closes on
-        // cancel and on a successful save); this side only dresses the frame.
+        // The webview is the authority on whether the form is up; this side only dresses the frame.
         this.#setFormOpen(msg.open)
         return
       case 'wd-remove-gateway':

@@ -20,18 +20,14 @@ export type PanelDelegate = {
   /** Live vitals for the shown session — relayed to the sidebar's sections. */
   vitals: (vitals: SessionVitals) => void
   /**
-   * Which sub-agent the panel now has framed, or `undefined` for the session's
-   * own conversation. The sessions list draws it as a secondary selection.
-   *
-   * Reported rather than inferred: `openSubagent` below is not the only way into
-   * a frame (a Task row pressed inside the transcript opens one) and not the
-   * only way out (Back, Escape, a reveal), so a host that tracked only its own
-   * requests would be wrong within one click.
+   * Which sub-agent the panel now has framed, or `undefined` for the session's own
+   * conversation. Reported rather than inferred: `openSubagent` is not the only way
+   * into a frame, nor the only way out, so a host tracking only its own requests
+   * would be wrong within one click.
    */
   subagent: (toolUseId: string | undefined) => void
-  /** What had been seen of this session last time it was on screen, for the
-   * panel's catch-up. The store lives in `activate`; the panel only carries it
-   * across the bridge. */
+  /** What had been seen of this session last time it was on screen, for the panel's
+   * catch-up. The store lives in `activate`. */
   unseen: (hostId: string, sessionId: string) => { itemCount: number; since: number } | undefined
   /** The panel became visible or hidden. Visibility is what makes a session
    * "read", so the watermark writer needs to hear about it. */
@@ -39,14 +35,12 @@ export type PanelDelegate = {
 }
 
 /**
- * The bottom-panel agent surface — purely the conversation. `SessionPanel`
- * runs with `panelSurface: 'external'`: no dialogs, no `⋯` menu; every
- * would-be dialog intent and the live vitals flow OUT to the sidebar through
- * the delegate. The webview's client rides bridged transports executed here
- * (Node fetch / `ws` with the gateway's `Authorization` header — keys stay in
- * SecretStorage on this side of the boundary).
+ * The bottom-panel agent surface — purely the conversation. `SessionPanel` runs with
+ * `panelSurface: 'external'`, so every would-be dialog intent and the live vitals
+ * flow out to the sidebar through the delegate. The webview's client rides bridged
+ * transports executed here; keys stay in SecretStorage on this side of the boundary.
  *
- * One live attach per session, and this webview owns it. The notification tap
+ * **One live attach per session, and this webview owns it.** The notification tap
  * reads frames already crossing the bridge — never a second attach.
  */
 export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -89,16 +83,15 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
 
   /** Is this exactly what the panel is already showing? Load-bearing for
    * re-selection: the panel does not remount, so anything a caller tears down
-   * "because the session changed" will not be rebuilt. */
+   * "because the session changed" is not rebuilt. */
   isShowing(hostId: string, sessionId: string): boolean {
     return this.#active?.sessionId === sessionId && this.#active.host.id === hostId
   }
 
   /**
    * Settings the panel needs on its **first paint**, stamped onto `#root` for the
-   * webview to read synchronously — the same trick the section views use for
-   * which section they are. A postMessage cannot do this job: the density decides
-   * every row's height, so learning it one tick late reflows the whole transcript
+   * webview to read synchronously. A postMessage cannot do this job: these decide
+   * every row's height, so learning them one tick late reflows the whole transcript
    * in front of the reader.
    */
   #rootAttrs(): Record<string, string> {
@@ -106,8 +99,6 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     return {
       'data-density': transcriptDensity(),
       'data-variant': transcriptVariant(),
-      // The cell for the same reason as the density: it decides every row's
-      // height, and learning it one tick late reflows the whole transcript.
       'data-panel-font-size': String(panelFontSize()),
       'data-font-size': String(cell.fontSize),
       'data-line-height': String(cell.lineHeight),
@@ -132,35 +123,25 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
       this.#view = undefined
       this.#ready = false
       this.#transports?.dispose()
-      // A disposed panel is not showing anything: whatever was on screen stops
-      // counting as read from here on.
+      // A disposed panel is not showing anything: nothing counts as read from here on.
       this.#delegate.visibilityChanged()
     })
   }
 
   /**
-   * Show a session, or clear it with undefined.
-   *
-   * `focus` reveals the panel AND puts the caret in the composer — what clicking
-   * a session in the sidebar means: you picked it in order to talk to it. This
-   * used to be suppressed when the session was already on screen, on the theory
-   * that a second click on a card is not a request to leave the list. That was
-   * wrong in practice: re-clicking the active session is exactly how you go back
-   * to typing at it, and having to click the card and then the field is one click
-   * too many for the common case.
+   * Show a session, or clear it with undefined. `focus` reveals the panel *and* puts
+   * the caret in the composer — including when the session is already on screen,
+   * re-clicking the active card being exactly how you go back to typing at it.
    */
   async show(active: ActiveSession | undefined, options: { focus?: boolean } = {}): Promise<void> {
     const existed = !!this.#view
     this.#active = active
     this.#onDidChangeActive.fire(active)
-    // Focussing also materializes the view if the panel has never been opened,
-    // which is why it happens even unasked for a first show.
+    // Focussing also materializes the view, which is why a first show does it unasked.
     if (active && (options.focus || !existed)) {
       await vscode.commands.executeCommand(`${SessionPanelProvider.viewId}.focus`)
     }
-    // Queued rather than posted: a panel opening for the first time has not said
-    // `wd-ready` yet, and a focus request that arrives before the composer exists
-    // is one that silently does nothing.
+    // Queued rather than posted: a panel opening for the first time has not said `wd-ready` yet.
     if (active && options.focus) {
       this.#focusPending = true
     }
@@ -168,16 +149,10 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
   }
 
   /**
-   * Adopt a session on activation without revealing anything.
-   *
-   * Deliberately not `show()`: that materializes the view when none exists yet
-   * (`!existed`), which on activation is *always* true and would force the dock
-   * open on every window start, including for someone who had closed it. A
-   * reload is not a request to be shown anything — it is a request to still be
-   * where you were. So this only seeds `#active`, and the push happens if and
-   * when VS Code re-resolves the view itself. Without it the restored panel
-   * renders its empty state and never attaches, so a session that is mid-run
-   * looks like no session at all until you re-click it.
+   * Adopt a session on activation without revealing anything. Deliberately not
+   * `show()`, which materializes the view — always true on activation, so it would
+   * force the dock open on every window start. This only seeds `#active`; the push
+   * happens if and when VS Code re-resolves the view itself.
    */
   restoreActive(active: ActiveSession): void {
     if (this.#active) {
@@ -197,8 +172,7 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
       this.#post({ kind: 'wd-show-session', session: undefined })
       return
     }
-    // After the session, never before: focusing a composer that is about to be
-    // replaced by another session's would put the caret in a field on its way out.
+    // After the session, never before: a composer about to be replaced must not take the caret.
     const focus = this.#focusPending
     this.#focusPending = false
     const base = apiUrl(active.host)
@@ -217,20 +191,17 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     if (focus) {
       this.#post({ kind: 'wd-focus-composer' })
     }
-    // After the session, for the same reason the focus is: an id only means
-    // something once the panel is on the transcript that contains it. Order
-    // between these two does not matter, and that is enforced rather than
-    // assumed — each queue clears the other, so at most one is ever pending.
+    // After the session: an id only means something once the panel is on the transcript that
+    // contains it. Order between these two is a non-question — each queue clears the other.
     this.#flushSubagent()
     this.#flushReveal()
   }
 
   /**
-   * Hand the panel over to a sub-agent — the one picked in the sessions list.
-   * Queued like the composer focus, and for the same reason: a panel opening for
-   * the first time has not said `wd-ready` yet, so a request posted now would
-   * land in the void. The queue holds one because only the newest matters — two
-   * clicks before the panel exists is one destination.
+   * Hand the panel over to a sub-agent — the one picked in the sessions list. Queued
+   * like the composer focus: a panel opening for the first time has not said
+   * `wd-ready` yet. The queue holds one, because two clicks before the panel exists
+   * are one destination.
    */
   openSubagent(toolUseId: string): void {
     this.#subagentPending = toolUseId
@@ -240,20 +211,14 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
   }
 
   /**
-   * Travel to a tool call in the conversation — the **task** picked in the
-   * sessions list. Queued exactly like `openSubagent` and for the same reason: a
-   * panel opening for the first time has not said `wd-ready` yet.
-   *
-   * Not `openSubagent` with a different name. A task has no agent behind it, so
-   * framing its tool-use id selects no items and the panel draws an empty agent
-   * view — which is what it did until this existed.
+   * Travel to a tool call in the conversation — the **task** picked in the sessions
+   * list. Not `openSubagent` under another name: a task has no agent behind it, so
+   * framing its tool-use id selects no items and draws an empty agent view.
    */
   reveal(toolUseId: string): void {
     this.#revealPending = toolUseId
-    // One click picks ONE destination, and a reveal is the panel's own way out
-    // of a frame — so a takeover still queued here is a stale intent that would
-    // land after this one and undo it. Dropping it is what makes the flush order
-    // in `#pushActive` a non-question.
+    // One click picks ONE destination: a takeover still queued here would land after this
+    // one and undo it.
     this.#subagentPending = undefined
     this.#flushReveal()
   }
@@ -279,8 +244,7 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
       return
     }
     this.#subagentPending = undefined
-    // The nonce is what makes asking twice mean twice — `openSubagent` is a
-    // prop, so an identical one is a no-op.
+    // The nonce is what makes asking twice mean twice: `openSubagent` is a prop.
     this.#post({ kind: 'wd-open-subagent', toolUseId, nonce: ++this.#subagentNonce })
   }
 
@@ -295,17 +259,10 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     switch (msg.kind) {
       case 'wd-ready':
         this.#ready = true
-        // A fresh webview has no frame open, by construction — `SessionPanel`
-        // mounts on the session's own conversation. Saying so here is what
-        // stops a **stale grey card**: the panel reports frame *changes*, and
-        // deliberately does not report on mount (an unprompted `undefined` at
-        // mount time is what wiped the dashboard's `?subagent=` before it could
-        // be read), so a webview that was disposed while framed and then
-        // reloaded would never contradict the value the host still held.
-        //
-        // Safe ahead of `#pushActive`/`#flushSubagent` below: a frame queued for
-        // this panel is re-posted straight after and reported back as soon as it
-        // opens, so the clear can only ever be corrected forward.
+        // A fresh webview has no frame open by construction, and the panel reports frame
+        // *changes* only (it deliberately stays silent on mount) — so without this a panel
+        // disposed while framed and reloaded would never contradict the value we still hold.
+        // Safe ahead of the flushes below: a queued frame is re-posted straight after.
         this.#delegate.subagent(undefined)
         this.#pushActive()
         return
@@ -326,17 +283,16 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
   }
 
   /**
-   * Human-attention moments, sniffed from the frames already flowing to the
-   * panel — no second attach. Approve/Deny act over REST (`resolvePermission`),
-   * which is attach-independent by design.
+   * Human-attention moments, sniffed from the frames already flowing to the panel —
+   * no second attach. Approve/Deny act over REST (`resolvePermission`), which is
+   * attach-independent by design.
    */
   #tapFrame(text: string): void {
     const active = this.#active
     if (!active) {
       return
     }
-    // The visible panel already renders the prompt — a notification on top
-    // would be noise. This exists for the user who is elsewhere.
+    // The visible panel already renders the prompt; this exists for the user who is elsewhere.
     if (this.#view?.visible) {
       return
     }
@@ -380,8 +336,8 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     })
   }
 
-  /** Switch the live session's model / permission mode. Inert when the panel
-   * has never been opened: with no webview there is no attach to command. */
+  /** Switch the live session's model / permission mode. Inert when the panel has
+   * never been opened: with no webview there is no attach to command. */
   setModel(model?: string): void {
     this.#post({ kind: 'wd-set-model', model })
   }
@@ -390,8 +346,8 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     this.#post({ kind: 'wd-set-permission-mode', mode })
   }
 
-  /** Re-render this webview from disk — the dev reloader after a rebuild, and
-   * a font-setting change (the typeface is baked into the HTML). The webview
+  /** Re-render this webview from disk — the dev reloader after a rebuild, and a
+   * font-setting change (the typeface is baked into the HTML). The webview
    * re-announces `wd-ready`, which is what re-pushes its state. */
   reloadWebview(): void {
     const view = this.#view
@@ -410,16 +366,13 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
 }
 
 /**
- * A path clicked in the transcript. Loopback gateway → the file is on this
- * machine (in a Remote SSH window, "this machine" is the remote box — which is
- * exactly where a loopback gateway's files are): open it directly. Remote
- * gateway → a `workerdeck://` URI served by the FileSystemProvider.
- *
- * A **relative** path is resolved here and only here: the webview matched the
- * text, but the session's cwd is host-side state. With no cwd there is nothing
- * to resolve against, so the click is a no-op rather than a guess at the root.
+ * A path clicked in the transcript. Loopback gateway → the file is on this machine
+ * (in a Remote SSH window "this machine" is the remote box, which is exactly where a
+ * loopback gateway's files are): open it directly. Remote gateway → a `workerdeck://`
+ * URI. A relative path is resolved here and only here, the cwd being host-side state;
+ * with no cwd the click is a no-op rather than a guess at the root.
  */
-async function openTranscriptPath(active: ActiveSession | undefined, clicked: string, line: number | undefined): Promise<void> {
+const openTranscriptPath = async (active: ActiveSession | undefined, clicked: string, line: number | undefined): Promise<void> => {
   if (!active) {
     return
   }
@@ -440,12 +393,11 @@ async function openTranscriptPath(active: ActiveSession | undefined, clicked: st
 }
 
 /**
- * Turn a clicked path into an absolute one. Deliberately POSIX arithmetic and
- * not `node:path`: the cwd is the *gateway's*, so its separators are the
- * gateway's too, and a Windows extension host joining a remote session's cwd
+ * Turn a clicked path into an absolute one. Deliberately POSIX arithmetic and not
+ * `node:path`: the cwd is the *gateway's*, so a Windows extension host joining it
  * with `\` would produce a path neither side has ever seen.
  */
-function resolveAgainstCwd(clicked: string, cwd: string | undefined): string | undefined {
+const resolveAgainstCwd = (clicked: string, cwd: string | undefined): string | undefined => {
   if (clicked.startsWith('/')) {
     return normalizePosix(clicked)
   }
@@ -455,7 +407,7 @@ function resolveAgainstCwd(clicked: string, cwd: string | undefined): string | u
   return normalizePosix(`${cwd.replace(/\/+$/, '')}/${clicked}`)
 }
 
-function normalizePosix(path: string): string {
+const normalizePosix = (path: string): string => {
   const out: string[] = []
   for (const part of path.split('/')) {
     if (part === '' || part === '.') {

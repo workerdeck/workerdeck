@@ -1,18 +1,12 @@
 import { initialTranscriptState, type TranscriptState } from './transcript.ts'
 
 /**
- * The attach effect's decisions, pure.
- *
- * `useClaudeSession` is never rendered in tests — this package deliberately
- * carries no jsdom and no testing-library — so the logic that used to live
- * inline in the attach effect (which state an attach holds, whether the
- * reducer must be re-seeded, which `afterSeq` to request, whether the parting
- * state may go back into the cache) is decided here, where plain vitest
- * reaches it, and the effect keeps only glue: read its refs into inputs,
- * apply the returned instructions, subscribe. The refs themselves stay in the
- * hook — a decision function that owned React state would be the untestable
- * thing again — so everything stateful arrives as a value and leaves as an
- * instruction.
+ * The attach effect's decisions, pure. `useClaudeSession` is never rendered in
+ * tests — this package deliberately carries no jsdom — so everything the effect
+ * decides (which state an attach holds, whether to re-seed the reducer, which
+ * `afterSeq` to request, whether the parting state may be cached) is decided
+ * here where plain vitest reaches it. The refs stay in the hook: everything
+ * stateful arrives as a value and leaves as an instruction.
  */
 
 /**
@@ -22,9 +16,7 @@ import { initialTranscriptState, type TranscriptState } from './transcript.ts'
  * the stale-log retry looking already-seeded, and the fresh replay would
  * compose into the condemned state the resync just discarded.
  */
-export function attachSeedToken(resyncSeq: number, key: string): string {
-  return `${resyncSeq}:${key}`
-}
+export const attachSeedToken = (resyncSeq: number, key: string): string => `${resyncSeq}:${key}`
 
 /** Everything the decision reads — the hook's refs and options, as values.
  * `warm` is the caller's ONE cache read for this attach; whether it may be
@@ -61,10 +53,8 @@ export type AttachPlan = {
   afterSeq?: number
 }
 
-/**
- * Decide what one run of the attach effect does before it opens the socket.
- */
-export function planAttach(input: AttachInputs): AttachPlan {
+/** Decide what one run of the attach effect does before it opens the socket. */
+export const planAttach = (input: AttachInputs): AttachPlan => {
   const seedToken = attachSeedToken(input.resyncSeq, input.key)
   // The warm entry is admissible only when caching is on and no stale-log
   // detection stands between us and it: after one, the retry must attach cold
@@ -93,6 +83,5 @@ export function planAttach(input: AttachInputs): AttachPlan {
  * finished attaching, and a state with no `session` never saw its attached
  * frame at all.
  */
-export function shouldWriteParting(input: { cacheEnabled: boolean; skipCache: boolean; parting: TranscriptState }): boolean {
-  return input.cacheEnabled && !input.skipCache && input.parting.lastSeq > 0 && input.parting.session !== undefined
-}
+export const shouldWriteParting = (input: { cacheEnabled: boolean; skipCache: boolean; parting: TranscriptState }): boolean =>
+  input.cacheEnabled && !input.skipCache && input.parting.lastSeq > 0 && input.parting.session !== undefined

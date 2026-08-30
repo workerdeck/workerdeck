@@ -20,7 +20,7 @@ export const QUESTION_BEHAVIORS: QuestionBehaviorMeta[] = [
 ]
 
 /** Extract well-formed questions from an AskUserQuestion permission request's input. */
-export function parseUserQuestions(input: Record<string, unknown>): UserQuestion[] {
+export const parseUserQuestions = (input: Record<string, unknown>): UserQuestion[] => {
   const raw = Array.isArray(input.questions) ? input.questions : []
   return raw.flatMap((entry): UserQuestion[] => {
     const q = entry as Partial<UserQuestion>
@@ -48,7 +48,7 @@ const EMPTY_SELECTION: Selection = { labels: [], other: '', otherActive: false }
 
 /** A question's answer string: chosen label(s) (multi-select comma-joined), with any
  * free-text "Other" appended — the value the CLI expects in `updatedInput.answers`. */
-function answerFor(selection: Selection): string {
+const answerFor = (selection: Selection): string => {
   const parts = [...selection.labels]
   if (selection.otherActive && selection.other.trim()) {
     parts.push(selection.other.trim())
@@ -66,10 +66,9 @@ export interface QuestionPromptProps {
   className?: string
 }
 
-/** Interactive form for the AskUserQuestion tool: option buttons per question
- * (multi-select where the question allows it), a free-text "Other" escape hatch,
- * and the focused option's preview. Falls back to nothing renderable → the caller
- * should show a generic PermissionPrompt if `parseUserQuestions` finds no questions. */
+/** Interactive form for the AskUserQuestion tool. Renders nothing usable when
+ * `parseUserQuestions` finds no questions — the caller should fall back to a
+ * generic `PermissionPrompt` in that case. */
 export function QuestionPrompt({ request, onAnswer, onDismiss, className }: QuestionPromptProps) {
   const questions = parseUserQuestions(request.input)
   const [selections, setSelections] = useState<Selection[]>(() => questions.map(() => EMPTY_SELECTION))

@@ -9,11 +9,9 @@ export const DialogTrigger = DialogPrimitive.Trigger
 export const DialogClose = DialogPrimitive.Close
 
 /**
- * A dismissible panel, sized for reading rather than confirming — the web
- * counterpart of the iOS app's detail sheets (context, usage, session info, MCP).
- *
- * Taller than {@link AlertDialogContent} and scrollable inside, because these
- * carry lists whose length is the engine's business, not the layout's.
+ * A dismissible panel sized for reading rather than confirming: taller than
+ * {@link AlertDialogContent} and scrollable inside, because these carry lists whose
+ * length is the engine's business.
  */
 export const DialogContent: FunctionComponent<DialogPrimitive.Popup.Props & { size?: 'sm' | 'md' | 'lg' }> = ({
   className,

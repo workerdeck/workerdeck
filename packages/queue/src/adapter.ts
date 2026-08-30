@@ -7,11 +7,11 @@ export type JobRecord = {
 }
 
 /**
- * Storage + claiming contract the JobQueue runs against. The bundled implementation
- * is {@link InMemoryQueueAdapter}; redis/bullmq/pubsub adapters implement the same
- * interface. Everything is Promise-based so remote backends fit without changing the
- * queue, and `claimNext` is the one operation that must be atomic across workers
- * (two concurrent claims must never return the same job).
+ * Storage + claiming contract the JobQueue runs against; the bundled implementation
+ * is {@link InMemoryQueueAdapter}. Everything is Promise-based so remote backends
+ * (redis/bullmq/pubsub) fit without changing the queue, and **`claimNext` is the one
+ * operation that must be atomic across workers** — two concurrent claims must never
+ * return the same job.
  */
 export interface QueueAdapter {
   /** Persist a newly submitted job (status 'queued'). */

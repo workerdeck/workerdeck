@@ -12,19 +12,20 @@ import { createVfs, loadEngine, runScript, type RunScriptResult } from '@workerd
 
 const engine = await loadEngine(variant)
 
-const custom = process.argv.slice(2).join(' ').trim()
-if (custom) {
-  const vfs = createVfs({ '/docs/example.txt': 'revenue: 120' })
-  console.log(`\nRunning your script (VFS seeded with /docs/example.txt):\n  ${custom}\n`)
-  const result = await runScript(engine, { script: custom, vfs, timeoutMs: 5000 })
-  report(result)
-  console.log('\nVFS after the run:', vfs.snapshot())
-  process.exit(result.ok ? 0 : 1)
-}
-
 let failures = 0
 
-async function scenario(title: string, proves: string, run: () => Promise<{ ok: boolean; detail: string }>): Promise<void> {
+const report = (result: RunScriptResult): void => {
+  if (result.ok) {
+    console.log('  value:', JSON.stringify(result.value))
+  } else {
+    console.log(`  failed (${result.reason}):`, result.error)
+  }
+  for (const log of result.logs) {
+    console.log(`  guest ${log.level}:`, log.text)
+  }
+}
+
+const scenario = async (title: string, proves: string, run: () => Promise<{ ok: boolean; detail: string }>): Promise<void> => {
   process.stdout.write(`\n▸ ${title}\n  proves: ${proves}\n`)
   const started = Date.now()
   try {
@@ -39,15 +40,14 @@ async function scenario(title: string, proves: string, run: () => Promise<{ ok: 
   }
 }
 
-function report(result: RunScriptResult): void {
-  if (result.ok) {
-    console.log('  value:', JSON.stringify(result.value))
-  } else {
-    console.log(`  failed (${result.reason}):`, result.error)
-  }
-  for (const log of result.logs) {
-    console.log(`  guest ${log.level}:`, log.text)
-  }
+const custom = process.argv.slice(2).join(' ').trim()
+if (custom) {
+  const vfs = createVfs({ '/docs/example.txt': 'revenue: 120' })
+  console.log(`\nRunning your script (VFS seeded with /docs/example.txt):\n  ${custom}\n`)
+  const result = await runScript(engine, { script: custom, vfs, timeoutMs: 5000 })
+  report(result)
+  console.log('\nVFS after the run:', vfs.snapshot())
+  process.exit(result.ok ? 0 : 1)
 }
 
 console.log('QuickJS sandbox smoke — untrusted script boundary\n' + '='.repeat(50))

@@ -25,12 +25,9 @@ export interface SidebarFrameProps {
   actions?: ReactNode
   children: ReactNode
   /**
-   * What the collapsed rail shows instead of the list.
-   *
-   * Optional, and its absence is meaningful: a section whose rows carry nothing
-   * legible at 44px — a job's prompt, a profile's name — collapses to the
-   * expand button alone rather than to a column of identical glyphs. Sessions
-   * has one because an engine mark plus a state icon really does identify a row.
+   * What the collapsed rail shows instead of the list. Optional, and its absence
+   * is meaningful: a section whose rows carry nothing legible at 44px collapses to
+   * the expand button rather than to a column of identical glyphs.
    */
   rail?: ReactNode
   /** Rail actions above the rail body — usually the same `+`, icon-only. */
@@ -38,14 +35,9 @@ export interface SidebarFrameProps {
 }
 
 /**
- * The frame every section sidebar shares: view header, collapse toggle,
- * persisted width, and the splitter that resizes it.
- *
- * It exists because there are four of these now and they must agree on the
- * chrome — a sidebar that headed itself differently per section would read as
- * four apps rather than one. What it deliberately does *not* own is the list:
- * each section's rows, filtering and empty state are its own business, since
- * they have nothing in common beyond sitting in this box.
+ * The chrome every section sidebar shares: view header, collapse toggle, persisted
+ * width, splitter. It deliberately owns nothing else — each section's rows,
+ * filtering and empty state have nothing in common beyond sitting in this box.
  */
 export function SidebarFrame({ section, title, badge, actions, children, rail, railActions }: SidebarFrameProps) {
   const [width, setWidth] = useState(() => getSidebarWidth(section))
@@ -71,8 +63,6 @@ export function SidebarFrame({ section, title, badge, actions, children, rail, r
   return (
     <>
       <div style={{ width }} className="flex min-h-0 shrink-0 flex-col border-r border-border bg-sidebar">
-        {/* VS Code's view header: a small-caps title and the actions that belong
-            to the view, not a page heading. */}
         <header className="flex h-9 shrink-0 items-center gap-1 pr-1 pl-3">
           <span className="truncate text-label font-medium tracking-wide text-fg-3 uppercase">{title}</span>
           {badge}

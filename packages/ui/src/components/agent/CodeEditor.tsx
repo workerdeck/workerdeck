@@ -17,29 +17,19 @@ export interface CodeEditorProps {
 }
 
 /**
- * Monaco — VS Code's own editor — behind a small React surface.
+ * Monaco behind a small React surface, **loaded on demand** (the `import()` is
+ * inside an effect, so it is a separate chunk).
  *
- * Two deliberate choices, both about `@workerdeck/ui` being a **published
- * library** rather than an app:
- *
- * 1. **Loaded on demand.** The `import()` is inside an effect, so Monaco is a
- *    separate chunk that arrives when someone first opens a file. A dashboard
- *    that never opens one never pays for it, and Monaco's ~90 language grammars
- *    are themselves lazy (each `registerLanguage` carries an `import()` loader),
- *    so opening a `.ts` file fetches the TypeScript grammar and nothing else.
- * 2. **No `MonacoEnvironment` is configured here, and none is needed.** Workers
- *    in a library become every embedder's bootstrapping problem, and
- *    `packages/web` ships prebuilt static files at a domain root, which is
- *    exactly where hardcoded worker URLs break. The editor is configured so it
- *    never asks for one: `wordBasedSuggestions` and `quickSuggestions` off,
- *    no diff editor. A host that wants the worker-backed language services
- *    (TypeScript IntelliSense, JSON schema validation) sets `MonacoEnvironment`
- *    itself before the first file is opened — Monaco is a singleton and nothing
- *    here fights that.
+ * **No `MonacoEnvironment` is configured here, and none is needed.** Workers in
+ * a published library become every embedder's bootstrapping problem, and
+ * `packages/web` ships prebuilt static files at a domain root, where hardcoded
+ * worker URLs break. The editor is configured so it never asks for one:
+ * `wordBasedSuggestions` and `quickSuggestions` off, no diff editor. A host
+ * that wants the worker-backed language services sets `MonacoEnvironment`
+ * itself before the first file is opened.
  *
  * One model per path, kept across tab switches, so undo history and view state
- * survive clicking away and back — which is most of what makes tabs feel like
- * tabs rather than like re-opening a file.
+ * survive clicking away and back.
  */
 export function CodeEditor({ path, value, onChange, onSave, readOnly, className }: CodeEditorProps) {
   const host = useRef<HTMLDivElement>(null)
@@ -48,9 +38,8 @@ export function CodeEditor({ path, value, onChange, onSave, readOnly, className 
   const [ready, setReady] = useState(false)
   const theme = useDocumentTheme()
 
-  // Callbacks through refs: they change identity every render, and re-creating
-  // the editor (or re-registering its listeners) on each one would drop the
-  // cursor mid-keystroke.
+  // Callbacks through refs: they change identity every render, and
+  // re-registering listeners on each one would drop the cursor mid-keystroke.
   const handlers = useRef({ onChange, onSave })
   handlers.current = { onChange, onSave }
 
@@ -76,8 +65,8 @@ export function CodeEditor({ path, value, onChange, onSave, readOnly, className 
         smoothScrolling: true,
         padding: { top: 8, bottom: 8 },
         scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
-        // Without a worker there is no word-based suggestion provider to ask, so
-        // asking would surface an empty popup on every identifier.
+        // Without a worker there is no suggestion provider, so asking would
+        // surface an empty popup on every identifier.
         wordBasedSuggestions: 'off',
         quickSuggestions: false,
       })
@@ -98,10 +87,9 @@ export function CodeEditor({ path, value, onChange, onSave, readOnly, className 
       editor.current = null
       setReady(false)
     }
-    // Deliberately created once, with no dependencies. Path, value and readOnly
-    // are applied by the effects below instead, because re-creating the editor
-    // to change any of them would lose the cursor, the scroll position and the
-    // undo history.
+    // Created once, with no dependencies: path, value and readOnly are applied
+    // by the effects below, because re-creating the editor would lose the
+    // cursor, the scroll position and the undo history.
   }, [])
 
   // Swap the model when the focused file changes. One model per path, created
@@ -119,9 +107,8 @@ export function CodeEditor({ path, value, onChange, onSave, readOnly, className 
     }
   }, [path, ready, value])
 
-  // Apply an external change — a reload from disk, a revert — without
-  // disturbing anything when the text already matches, which is the common case
-  // because most changes to `value` are echoes of the user's own typing.
+  // Apply an external change (a reload, a revert) without disturbing anything
+  // when the text already matches — most `value` changes echo the user's typing.
   useEffect(() => {
     const instance = editor.current
     if (!instance || !ready) {
@@ -162,13 +149,10 @@ export function CodeEditor({ path, value, onChange, onSave, readOnly, className 
   )
 }
 
-/**
- * Follow the `data-theme` the design tokens already swap on, so the editor is
- * never the one light rectangle in a dark app (or the reverse). An attribute
- * observer rather than a media query: the app has a manual toggle, and the
- * attribute is what that toggle writes.
- */
-function useDocumentTheme(): string | null {
+/** Follow the `data-theme` the design tokens swap on. An attribute observer
+ * rather than a media query: the app has a manual toggle, and the attribute is
+ * what that toggle writes. */
+const useDocumentTheme = (): string | null => {
   const [theme, setTheme] = useState<string | null>(() =>
     typeof document === 'undefined' ? null : document.documentElement.getAttribute('data-theme'),
   )
@@ -185,24 +169,16 @@ function useDocumentTheme(): string | null {
 
 /** An unset attribute means the host never opted into the token themes, in which
  * case dark matches this package's default surface. */
-function monacoTheme(theme: string | null): string {
-  return theme === 'light' ? 'wd-light' : 'wd-dark'
-}
+const monacoTheme = (theme: string | null): string => (theme === 'light' ? 'wd-light' : 'wd-dark')
 
-/**
- * Load Monaco once, register the themes, and hand back the API.
- *
- * Cached as a promise rather than a value so that several editors mounting in
- * the same frame share one load instead of racing three of them.
- */
+/** Load Monaco once and hand back the API. Cached as a **promise**, so several
+ * editors mounting in the same frame share one load instead of racing. */
 let monacoPromise: Promise<typeof Monaco> | undefined
-function loadMonaco(): Promise<typeof Monaco> {
+const loadMonaco = (): Promise<typeof Monaco> => {
   monacoPromise ??= (async () => {
     const api = await import('monaco-editor')
-    // Themes that inherit the surrounding surface instead of Monaco's own
-    // near-black, so the editor does not sit in the layout as a differently
-    // coloured rectangle. Both are defined; the CSS variable decides nothing
-    // here, so the panel picks by `prefers-color-scheme` on the document.
+    // Transparent background so the editor inherits the surrounding surface
+    // instead of Monaco's own near-black.
     api.editor.defineTheme('wd-dark', {
       base: 'vs-dark',
       inherit: true,
@@ -220,14 +196,9 @@ function loadMonaco(): Promise<typeof Monaco> {
   return monacoPromise
 }
 
-/**
- * Monaco's language id for a path.
- *
- * By extension, with a short table for the files that have none — Monaco's own
- * registry is keyed on extensions it knows, and an unmatched file falls through
- * to `plaintext`, which is the honest answer rather than a guess.
- */
-function languageOf(path: string): string {
+/** Monaco's language id for a path; an unmatched file falls through to
+ * `plaintext` rather than a guess. */
+const languageOf = (path: string): string => {
   const name = path.slice(path.lastIndexOf('/') + 1)
   const byName = FILENAME_LANGUAGES[name.toLowerCase()]
   if (byName) {

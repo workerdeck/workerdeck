@@ -2,24 +2,17 @@ import { sessionState } from '@workerdeck/protocol'
 import type { SessionInfo, SessionRow, SubagentInfo } from '@workerdeck/protocol'
 
 /**
- * Canned rows for the session-list stories.
- *
- * Ages are offsets from *now*, not from a frozen timestamp. That looks like the
- * less reproducible choice and is the opposite: the card draws
- * `formatRelativeTime`, so a fixed epoch drifts (`4m ago` today, `three weeks
- * ago` next month, `just now` if the clock is ahead of it) while a fixed
- * *offset* renders the same two characters forever.
+ * Canned rows for the session-list stories. Ages are offsets from *now*, not a frozen
+ * timestamp: the card draws `formatRelativeTime`, so a fixed epoch drifts while a fixed
+ * offset renders the same two characters forever.
  */
 const MINUTE = 60_000
 
 /**
- * Three sub-agents, one per state the step row draws.
- *
- * `agentType` is what makes these *agents* rather than tasks (`isAgentRecord`),
- * and the distinction is not cosmetic: both press, but an agent wears the
- * sub-agent colour and opens its own frame, where a task is muted, can never be
- * the selected thing, and travels to its row in the transcript instead. A
- * fixture without it silently exercises the wrong half of the component.
+ * Three sub-agents, one per state the step row draws. `agentType` is what makes these
+ * *agents* rather than tasks (`isAgentRecord`): an agent wears the sub-agent colour and
+ * opens its own frame, where a task is muted, can never be selected, and travels to its
+ * transcript row instead. A fixture without it exercises the wrong half of the component.
  */
 export const AGENTS: SubagentInfo[] = [
   { toolUseId: 'a', agentType: 'Explore', description: 'Fix base-url and re-run', status: 'done', toolCount: 4 },
@@ -63,13 +56,10 @@ export function makeRow(patch: Partial<SessionInfo> & { id: string }, unseen = 0
 }
 
 /**
- * Two agents and a task, which is what the selection stories need: the rule that
- * a task can be pressed but never selected is unfalsifiable against a list with
- * no task in it.
- *
- * A task is a record with no `agentType` — the model described a piece of work
- * and no agent was dispatched for it, so there is nothing to open and the row is
- * a reference to a place in the transcript instead.
+ * Two agents and a task: the rule that a task can be pressed but never selected is
+ * unfalsifiable against a list with no task in it. A task is a record with no
+ * `agentType` — nothing was dispatched, so the row is a reference to a place in the
+ * transcript rather than a thing to open.
  */
 export const MIXED: SubagentInfo[] = [
   { toolUseId: 'a', agentType: 'Explore', description: 'Fix base-url and re-run', status: 'done', toolCount: 4 },

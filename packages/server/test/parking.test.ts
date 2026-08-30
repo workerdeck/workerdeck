@@ -32,7 +32,7 @@ type Harness = {
   base: string
 }
 
-async function startServer(options: Partial<Parameters<typeof createWorkerServer>[0]> = {}): Promise<Harness> {
+const startServer = async (options: Partial<Parameters<typeof createWorkerServer>[0]> = {}): Promise<Harness> => {
   const runners: ParkableRunner[] = []
   running = createWorkerServer({
     allowUnauthenticated: true,

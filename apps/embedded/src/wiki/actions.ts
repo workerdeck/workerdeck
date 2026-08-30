@@ -5,30 +5,18 @@ import type { WikiDb } from './db.ts'
 import type { User } from '../shared.ts'
 
 /**
- * The wiki's operations, written **once**, as silkweave actions.
+ * The wiki's operations, written **once**, as silkweave actions. Two adapters
+ * project them onto two transports: `wiki/mcp.ts` (MCP over HTTP, for the agent, on
+ * a per-session bearer token) and `wiki/trpc.ts` (tRPC, for the SPA, on the login
+ * cookie).
  *
- * This file is the point of the whole app. Each action is a name, a schema and a
- * function; two adapters project them onto two transports:
+ * **Identity never comes from the caller's input.** Every action reads its user from
+ * `context.get('auth')`, which each adapter resolves its own way onto the same key.
+ * No action takes a `userId` argument, because an argument is something the model
+ * can choose.
  *
- * - `wiki/mcp.ts` → MCP over HTTP, for the **agent**, authenticated by a bearer
- *   token minted per session and never seen by the model.
- * - `wiki/trpc.ts` → tRPC over the same origin, for the **SPA**, authenticated by
- *   the app's own login cookie.
- *
- * They were two implementations before — `update_doc` and `PATCH /api/docs/:id`
- * being two spellings of one operation — which is survivable at six operations
- * and is the entire maintenance cost of the product at fifty. An app whose
- * browser and whose agent act on the same domain has this shape whether or not
- * it admits it.
- *
- * **Identity never comes from the caller's input.** Every action reads its user
- * from `context.get('auth')`, which each adapter resolves its own way and lands
- * on the same key. No action takes a `userId` argument, because an argument is
- * something the model can choose.
- *
- * `kind: 'query'` on the read-only ones is what makes them tRPC *queries* (and
- * therefore cacheable by react-query) rather than mutations; `readOnlyHint` is
- * the same fact told to an agent. Both are worth setting.
+ * `kind: 'query'` makes the read-only ones tRPC queries (so react-query can cache
+ * them); `readOnlyHint` tells an agent the same fact. Both are worth setting.
  */
 
 type AuthInfo = { token: string; userId: string }
@@ -36,18 +24,10 @@ type AuthInfo = { token: string; userId: string }
 const userOf = (context: { get: <T>(key: string) => T }): string => context.get<AuthInfo>('auth').userId
 
 /**
- * Treat a blank optional string as absent.
- *
- * A model asked to omit an optional field frequently sends *something* instead:
- * `""`, and — observed live, which is how this function came to exist — `" "`, a
- * single space. Some providers make it worse by rewriting a tool's schema so
- * every property is required, at which point the model has no way to omit
- * anything and must invent a filler value.
- *
- * So no optional string is trusted as given. This is the one normalization, at
- * the one boundary, rather than a `.min(1)` on each schema — which is what was
- * here before and which a single space walks straight through, because its
- * length is 1.
+ * Treat a blank optional string as absent. A model asked to omit an optional field
+ * sends `""` or (observed live) `" "` instead, and some providers rewrite the schema
+ * so every property is required, leaving it no way to omit anything. `.min(1)` is not
+ * the fix — a single space has length 1 — so no optional string is trusted as given.
  */
 const text = (value: string | undefined): string | undefined => {
   const trimmed = value?.trim()
@@ -68,15 +48,10 @@ const docBody = z.object({
 })
 
 /**
- * The CRUD core: the operations the SPA and the agent both perform, in the same
- * way, on the same rows. This is the set both adapters get.
- *
- * The descriptions read as if written for the model because they were — they
- * cost the SPA nothing, and a tool description is prompt rather than
- * documentation. What is *not* shared is anything where the two callers want
- * different semantics; see below.
+ * The CRUD core, shared by both adapters. The descriptions are written for the model
+ * — a tool description is prompt, not documentation — and cost the SPA nothing.
  */
-export function createWikiActions(db: WikiDb, state: AppState) {
+export const createWikiActions = (db: WikiDb, state: AppState) => {
   const listDocs = createAction({
     name: 'list_docs',
     kind: 'query',
@@ -100,8 +75,8 @@ export function createWikiActions(db: WikiDb, state: AppState) {
     annotations: { readOnlyHint: true },
     run: async (input, context) => {
       const userId = userOf(context)
-      // Normalized, not trusted: `id: " "` would otherwise select the id branch
-      // and turn a perfectly good title lookup into a not-found.
+      // `id: " "` would otherwise select the id branch and turn a good title lookup
+      // into a not-found.
       const id = text(input.id)
       const title = text(input.title)
       if (!id && !title) {
@@ -116,19 +91,11 @@ export function createWikiActions(db: WikiDb, state: AppState) {
   })
 
   /**
-   * Create and update are **two actions**, and that is the fix for a real bug.
-   *
-   * They were one `write_doc` whose behaviour turned on whether an optional `id`
-   * was present — create when absent, overwrite when given. A model that cannot
-   * omit the field (see {@link text}) sent `" "`, which is truthy, so every
-   * attempt to create a document tried to overwrite a document called `" "` and
-   * failed with "no such document". Twenty times, in the transcript that found
-   * this.
-   *
-   * No amount of schema tightening fixes that shape, because the tool asks the
-   * model to express an intent by *withholding* a value, and withholding is the
-   * one thing a model is unreliable at. Two tools with required arguments state
-   * the intent in the name, where it cannot be lost.
+   * **No operation may infer its intent from an absent field.** These were one
+   * `write_doc` that created when `id` was missing and overwrote when it was present;
+   * a live model sent `id: " "` twenty times and every create tried to overwrite a
+   * document named `" "`. Two tools with required arguments state the intent in the
+   * name, where it cannot be lost. See {@link text}.
    */
   const createDoc = createAction({
     name: 'create_doc',
@@ -203,19 +170,14 @@ export function createWikiActions(db: WikiDb, state: AppState) {
   })
 
   /**
-   * Delete: shared, but the one that deserved the most thought.
+   * **Takes an id and nothing else**, unlike `read_doc`: the title lookup is
+   * case-insensitive and returns the first of any duplicates, which is a convenience
+   * for reading and a way to destroy the wrong document for deleting. Resolving via
+   * `list_docs` first also puts the id into the transcript where the user sees it.
    *
-   * **It takes an id and nothing else**, unlike `read_doc` which accepts a title
-   * fallback. The title lookup is case-insensitive and returns the first of any
-   * duplicates — a resolution rule that is a convenience for reading and a way to
-   * destroy the wrong document for deleting. The agent must resolve it with
-   * `list_docs` first, which also puts the id it is about to delete into the
-   * transcript where the user can see it. The SPA always has an id anyway.
-   *
-   * Note what is *not* available: a confirmation prompt. The provider engine's
-   * capability record says `interactiveApprovals: false`, so there is no approval
-   * channel to gate this behind — the honest options are to grant it or not, and
-   * an app with more to lose than a demo wiki should think about which.
+   * There is no confirmation prompt to gate this behind — the provider engine's
+   * capability record says `interactiveApprovals: false`, so the honest options are
+   * to grant it or not.
    */
   const deleteDoc = createAction({
     name: 'delete_doc',
@@ -235,17 +197,15 @@ export function createWikiActions(db: WikiDb, state: AppState) {
       if (!id) {
         throw badRequest('pass the id of the document to delete')
       }
-      // Read first, so the answer can name what went — and so another user's id
-      // is a plain not-found rather than a delete that reports zero rows.
+      // Read first, so the answer can name what went and another user's id is a plain
+      // not-found rather than a delete reporting zero rows.
       const doc = db.getDoc(userId, id)
       if (!doc) {
         throw notFound(`no such document: ${id}`)
       }
       db.deleteDoc(userId, id)
-      // If it was the one on screen, the user is now looking at a document that
-      // does not exist. Clear the record and tell the tab, rather than leaving
-      // it to notice on its next fetch. True whichever caller deleted it — which
-      // is exactly the kind of thing that used to be in one copy and not the other.
+      // The tab is now looking at a document that does not exist; tell it rather than
+      // leaving it to notice on its next fetch.
       if (state.get(userId).openDocId === id) {
         state.set(userId, { ...state.get(userId), openDocId: undefined })
       }
@@ -254,23 +214,17 @@ export function createWikiActions(db: WikiDb, state: AppState) {
     },
   })
 
-  // `as const` so the tuple keeps each action's literal `name`, which is what
-  // lets `InferTrpcRouter` give the SPA a precisely-typed router rather than a
-  // union of every procedure.
+  // `as const` keeps each action's literal `name`, which is what lets
+  // `InferTrpcRouter` type the SPA's router precisely.
   return [listDocs, readDoc, createDoc, updateDoc, renameDoc, deleteDoc] as const
 }
 
 /**
- * Agent-only: the actions that make the loop aware of the *app* rather than only
- * of its data — who it is talking to, what is on their screen, how to move them.
- *
- * Deliberately not on the tRPC router. The SPA knows which document it is showing
- * (it is showing it) and navigates by calling its own router; exposing `open_doc`
- * to the tab would be a component asking a server to tell it what it already
- * decided. A shared action set is not the same as an identical one, and the line
- * falls exactly where the two callers genuinely differ.
+ * Agent-only: the actions that make the loop aware of the *app* rather than only of
+ * its data. Deliberately not on the tRPC router — the SPA knows which document it is
+ * showing. A shared action set is not an identical one.
  */
-export function createAgentActions(db: WikiDb, state: AppState, users: readonly User[]) {
+export const createAgentActions = (db: WikiDb, state: AppState, users: readonly User[]) => {
   const whoAmI = createAction({
     name: 'whoami',
     kind: 'query',
@@ -296,8 +250,8 @@ export function createAgentActions(db: WikiDb, state: AppState, users: readonly 
       return {
         userId,
         name: users.find((u) => u.id === userId)?.name ?? userId,
-        // A doc the user had open and has since deleted resolves to null rather
-        // than to a dangling id the model would then try to read.
+        // A since-deleted doc resolves to null rather than a dangling id the model
+        // would then try to read.
         openDoc: open ? { id: open.id, title: open.title } : null,
         docCount: db.listDocs(userId).length,
       }
@@ -332,8 +286,8 @@ export function createAgentActions(db: WikiDb, state: AppState, users: readonly 
       if (!doc) {
         throw notFound(`no such document: ${id || title}`)
       }
-      // Recorded either way: an agent working while the tab is closed should
-      // still leave the user on the right document when they come back.
+      // Recorded even with no tab listening: an agent working while the tab is closed
+      // should still leave the user on the right document.
       state.set(userId, { ...state.get(userId), openDocId: doc.id })
       const reached = state.dispatch(userId, { type: 'open_doc', docId: doc.id })
       return { id: doc.id, title: doc.title, shown: reached > 0 }

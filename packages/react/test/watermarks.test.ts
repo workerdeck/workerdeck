@@ -3,7 +3,7 @@ import { Watermarks, unseenCount } from '@workerdeck/protocol'
 import type { Watermark, WatermarkStore } from '@workerdeck/protocol'
 
 /** An in-memory store standing in for `globalState` / `localStorage`. */
-function store(initial: Record<string, Watermark> = {}) {
+const store = (initial: Record<string, Watermark> = {}) => {
   let data = { ...initial }
   const writes: number[] = []
   return {

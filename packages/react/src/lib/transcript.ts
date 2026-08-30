@@ -26,6 +26,9 @@ import type {
  * so it can be unit-tested and reused outside React.
  */
 
+/** An `image_ref` address a tool result carried, as the transcript keeps it. */
+export type ToolResultImageRef = { partIndex: number; mediaType: string; bytes: number; sourceSeq: number }
+
 export type TranscriptItem =
   | {
       kind: 'user'
@@ -33,15 +36,11 @@ export type TranscriptItem =
       text: string
       attachments?: MessageAttachment[]
       /**
-       * The `Task` call this prompt was addressed to, when it is a subagent's
-       * brief rather than something a person typed.
-       *
-       * Optional where the other kinds carry it as `string | null`, and the
-       * asymmetry is the point: on those it is a fact about every instance, so
-       * forgetting to stamp it should not typecheck. Here the overwhelming case
-       * is a human prompt, which has no parent at all — `undefined` says that,
-       * where `null` on 24 construction sites would only say "somebody
-       * remembered".
+       * The `Task` call this prompt belongs to, when it is a subagent's brief.
+       * Optional (not `string | null` like the other kinds) deliberately: there
+       * the field is a fact about every instance, so forgetting to stamp it must
+       * not typecheck; here the overwhelming case is a human prompt with no
+       * parent at all.
        */
       parentToolUseId?: string
     }
@@ -60,17 +59,10 @@ export type TranscriptItem =
       input: unknown
       parentToolUseId: string | null
       /**
-       * When the model called it — the event's own `ts`, so it is replay-stable
-       * rather than a receive time (the mistake `rateLimitsUpdatedAt` makes on
-       * iOS). Optional because it is stamped at creation only: an item
-       * reconstructed by an older path has none, and absent must read as "no
-       * elapsed" rather than as the epoch.
-       *
-       * Added for the sub-agent takeover's header, which is the one surface that
-       * has to say how long an agent has been going: `SubagentInfo.startedAt`
-       * cannot answer it, being frozen at attach for anything spawned later.
-       * Immutable after creation, which is what makes it safe for iOS's
-       * `Equatable` row-plan cache key to mirror later.
+       * When the model called it — the event's own `ts`, replay-stable rather
+       * than a receive time. Stamped at creation only and immutable after
+       * (which lets iOS's `Equatable` row-plan cache key mirror it); absent
+       * must read as "no elapsed", never as the epoch.
        */
       ts?: number
       /**
@@ -86,14 +78,10 @@ export type TranscriptItem =
       /**
        * `truncated`/`totalChars`/`sourceSeq` are set **only** when the replay
        * delivered a head (protocol's {@link ToolResultBlock.truncated}), so
-       * every other result stays byte-identical to what it was before this
-       * feature existed. That matters beyond tidiness: on iOS `ToolCallItem` is
-       * `Equatable` and is half the row-plan cache key.
-       *
-       * `sourceSeq` is what makes the press possible at all — the item is what a
-       * renderer holds, and it must be able to name the event to fetch. It goes
-       * away again on hydration, along with the other two, so a hydrated result
-       * is indistinguishable from one that was never cut.
+       * every other result stays byte-identical (on iOS `ToolCallItem` is
+       * `Equatable` and half the row-plan cache key). `sourceSeq` names the
+       * event to fetch; all three clear on hydration, so a hydrated result is
+       * indistinguishable from one never cut.
        */
       result?: {
         text: string
@@ -102,35 +90,19 @@ export type TranscriptItem =
         totalChars?: number
         sourceSeq?: number
         /**
-         * The pictures this result carried, as addresses rather than bytes —
-         * set **only** when the replay delivered `image_ref` parts, so every
-         * other result stays byte-identical (the `Equatable` argument above,
-         * again).
-         *
-         * Each entry carries its **own** `sourceSeq`, which is not redundant
-         * with the one beside it: that one is cleared by text hydration, and a
-         * reader who pressed "show everything" must still be able to load the
-         * screenshot afterwards.
-         *
-         * Raw base64 `image` parts are still dropped on arrival, as they always
-         * were. Folding them in would pin megabytes inside `TranscriptState`,
-         * which the transcript LRU then retains across session switches.
+         * `image_ref` addresses, never bytes — set **only** when the replay
+         * delivered them (the byte-identical rule again). Each entry carries
+         * its **own** `sourceSeq` because the sibling one clears on text
+         * hydration and the pictures must stay loadable after. Raw base64
+         * `image` parts are still dropped on arrival: folded in, the transcript
+         * LRU would pin megabytes across session switches.
          */
-        images?: ReadonlyArray<{
-          partIndex: number
-          mediaType: string
-          bytes: number
-          sourceSeq: number
-        }>
+        images?: ReadonlyArray<ToolResultImageRef>
       }
       /**
-       * What this call changed on disk, when it was a file edit — the engine's
-       * own hunks and line numbers (see protocol's {@link FilePatch}).
-       *
-       * Only ever set from the wire. A client cannot derive it: it has never
-       * seen the file, so a diff it computed from the tool's *input* would have
-       * no line numbers, and one parsed out of the result prose would be welded
-       * to an engine's text formatting.
+       * What this call changed on disk, when it was a file edit (protocol's
+       * {@link FilePatch}). Only ever set from the wire — a client has never
+       * seen the file and cannot derive line-numbered hunks itself.
        */
       patch?: FilePatch
       /** Correlation id when this call is executed outside the model loop. */
@@ -172,18 +144,17 @@ export type TranscriptState = {
    * affordances; absent (an older server) reads as 'claude'. */
   engine?: ProfileEngine
   /**
-   * What this session's engine does and does not do: the runner-reported record
-   * from the attach snapshot when present, else {@link ENGINE_CAPABILITIES} for
-   * the engine. Always defined, so a surface can render every affordance from it
-   * rather than switching on the engine name — an absent capability means the
-   * affordance is *hidden*, never a control that silently does nothing.
+   * The runner-reported capability record from the attach snapshot, else
+   * {@link ENGINE_CAPABILITIES} for the engine. Always defined: surfaces render
+   * every affordance from it, never by switching on the engine name — an absent
+   * capability hides the affordance, never a control that silently does nothing.
    */
   capabilities: EngineCapabilities
   /**
-   * The most recent attach snapshot, whole. The session-level facts no event
-   * carries — profile, apiKeySource, canBypassPermissions, createdAt, numTurns —
-   * live only here. Unlike the fields above it is replaced on every attach: it is
-   * the server's answer, not something the event stream refines.
+   * The most recent attach snapshot, whole — the session-level facts no event
+   * carries (profile, apiKeySource, canBypassPermissions, createdAt, numTurns).
+   * Replaced on every attach: it is the server's answer, not something the
+   * event stream refines.
    */
   session?: SessionInfo
   /** Models the session can switch to (from the `capabilities` event). */
@@ -192,20 +163,16 @@ export type TranscriptState = {
   commands?: SlashCommandInfo[]
   /**
    * Skills the engine can reach (from the `skills` event), replaced whole each
-   * time. Absent until the engine has enumerated them — which for codex is on
-   * its first turn, since listing needs a live child. So gate the affordance on
-   * *this being defined*, not on `capabilities.skillsList` alone: the flag says
-   * the engine can answer, this says it has.
-   *
-   * Not commands, and must not be offered as such — see the protocol's
-   * `SkillInfo`.
+   * time. Gate the affordance on *this being defined*, not on
+   * `capabilities.skillsList` alone: the flag says the engine can answer, this
+   * says it has (codex only enumerates on its first turn). Not commands, and
+   * must not be offered as such — see the protocol's `SkillInfo`.
    */
   skills?: SkillInfo[]
   /**
    * Files the engine wrote on the host, keyed by the absolute path it reported
-   * (from `file_produced`). A tool card holding a `savedPath` looks itself up
-   * here to turn that path into a fetchable id — `client.producedFileUrl` — so
-   * the picture renders without the operator having declared a host-file root.
+   * (`file_produced`) — the lookup a tool card does is by the `savedPath` in
+   * its input, resolved to a fetchable id via `client.producedFileUrl`.
    */
   producedFiles?: Record<string, ProducedFileRef>
 
@@ -220,12 +187,9 @@ export type TranscriptState = {
   /** Latest rate-limit snapshot per window ('five_hour', 'seven_day', ...).
    * Absent for API-key sessions — render nothing, not 0%. */
   rateLimits?: Record<string, RateLimitInfo>
-  /**
-   * When the newest window reading was *taken* (the event's `ts`), not when this
-   * client received it — so a reading replayed on attach is dated honestly
-   * rather than as "just now". Updates come one per turn at best, which makes a
-   * stale reading normal and worth saying out loud.
-   */
+  /** When the newest window reading was *taken* (the event's `ts`), not
+   * received — a reading replayed on attach is dated honestly. One update per
+   * turn at best, so a stale reading is normal. */
   rateLimitsUpdatedAt?: number
   /** claude.ai plan the rate-limit windows belong to ('pro', 'max', ...), from
    * `plan_info`. Absent for API-key sessions, like the windows themselves. */
@@ -238,7 +202,7 @@ export type TranscriptState = {
 
 export const initialTranscriptState: TranscriptState = {
   status: 'starting',
-  // The protocol's own default for an absent `engine`, so a surface has a record
+  // The protocol default for an absent `engine`, so surfaces have a record
   // to render from before the first attach frame lands.
   capabilities: ENGINE_CAPABILITIES.claude,
   items: [],
@@ -248,23 +212,27 @@ export const initialTranscriptState: TranscriptState = {
 }
 
 /**
- * The in-flight streamed text and thought — a singleton **per agent**, not per
- * session.
- *
- * It was one id for the whole stream, which was right while one thread streamed
- * at a time. It is not: with subagent text forwarded, a `Task` and the thread
- * that spawned it stream *concurrently*, and three parallel Tasks stream three
- * ways at once. Under one id every one of those deltas accumulates into the same
- * item — a row welding several agents' half-sentences together — and the first
- * `assistant_message` to land wipes all of them, including the ones still being
- * written.
- *
- * So the id carries the agent: `streaming` for the main thread (unchanged, so
- * nothing that keys off it moves) and `streaming:<parentToolUseId>` inside a
- * subagent.
+ * In-flight streamed text/thought ids are per **agent**, not per session:
+ * `streaming` for the main thread, `streaming:<parentToolUseId>` inside a
+ * subagent. Under one id, concurrently streaming agents (a `Task` and the
+ * thread that spawned it) weld their deltas into one row, and the first
+ * `assistant_message` to land wipes them all.
  */
 const STREAMING_ID = 'streaming'
 const STREAMING_THINKING_ID = 'streaming-thinking'
+
+/** CLI-side command output arrives as user text wrapped in local-command tags. */
+const LOCAL_COMMAND_OUTPUT = /^<local-command-(stdout|stderr)>([\s\S]*?)<\/local-command-\1>$/
+
+/**
+ * A slash command the person ran, as the CLI writes it into the transcript
+ * (`<command-name>…</command-name><command-args>…</command-args>`). Rendered as
+ * the command line, never hidden: it is the turn's cause, and
+ * `transcriptActivity` counts a non-synthetic user message as one row, so
+ * suppressing it would silently disagree with the unread count.
+ */
+const COMMAND_NAME = /<command-name>([\s\S]*?)<\/command-name>/
+const COMMAND_ARGS = /<command-args>([\s\S]*?)<\/command-args>/
 const streamingTextId = (parentToolUseId: string | null): string =>
   parentToolUseId == null ? STREAMING_ID : `${STREAMING_ID}:${parentToolUseId}`
 const streamingThinkingId = (parentToolUseId: string | null): string =>
@@ -276,7 +244,7 @@ const isStreamingItem = (item: TranscriptItem): boolean =>
   (item.kind === 'assistant_text' && item.id.startsWith(STREAMING_ID)) ||
   (item.kind === 'thinking' && item.id.startsWith(STREAMING_THINKING_ID))
 
-function blockText(content: ToolResultBlock['content']): string {
+const blockText = (content: ToolResultBlock['content']): string => {
   if (content === undefined) {
     return ''
   }
@@ -289,13 +257,9 @@ function blockText(content: ToolResultBlock['content']): string {
     .join('\n')
 }
 
-/** The `image_ref` addresses in a result's content, or undefined when it holds
- * none — which is the common case, and is why this returns undefined rather than
- * an empty array: an absent field keeps the item byte-identical. */
-function imageRefsOf(
-  content: ToolResultBlock['content'],
-  seq: number,
-): ReadonlyArray<{ partIndex: number; mediaType: string; bytes: number; sourceSeq: number }> | undefined {
+/** The `image_ref` addresses in a result's content — undefined (never an empty
+ * array) when it holds none, so the common case stays byte-identical. */
+const imageRefsOf = (content: ToolResultBlock['content'], seq: number): ReadonlyArray<ToolResultImageRef> | undefined => {
   if (!Array.isArray(content)) {
     return undefined
   }
@@ -314,12 +278,11 @@ function imageRefsOf(
   return refs.length > 0 ? refs : undefined
 }
 
-function contentToBlocks(content: string | ContentBlock[]): ContentBlock[] {
-  return typeof content === 'string' ? [{ type: 'text', text: content }] : content
-}
+const contentToBlocks = (content: string | ContentBlock[]): ContentBlock[] =>
+  typeof content === 'string' ? [{ type: 'text', text: content }] : content
 
 /** Render an execution's by-value output for the transcript. */
-function outputText(output: ToolExecutionOutput): string {
+const outputText = (output: ToolExecutionOutput): string => {
   if (output.type === 'text') {
     return output.value
   }
@@ -330,26 +293,8 @@ function outputText(output: ToolExecutionOutput): string {
   }
 }
 
-/** CLI-side command output arrives as user text wrapped in local-command tags. */
-const LOCAL_COMMAND_OUTPUT = /^<local-command-(stdout|stderr)>([\s\S]*?)<\/local-command-\1>$/
-
-/**
- * A slash command the person ran, as the CLI writes it into the transcript:
- * `<command-message>…</command-message><command-name>/wrapup</command-name>
- * <command-args>…</command-args>`, in whichever order.
- *
- * Rendered as the command line rather than hidden. It *is* a person's turn — it
- * is the reason everything after it happened — but the raw wrapper is markup
- * nobody typed, and it showed up verbatim in every resumed transcript. Not
- * suppressed in the runner for that same reason: hiding it would erase the
- * turn's cause and, since `transcriptActivity` counts a non-synthetic user
- * message as one row, silently disagree with the unread count.
- */
-const COMMAND_NAME = /<command-name>([\s\S]*?)<\/command-name>/
-const COMMAND_ARGS = /<command-args>([\s\S]*?)<\/command-args>/
-
 /** The typed command line, or undefined when this is ordinary prose. */
-function slashCommandText(text: string): string | undefined {
+const slashCommandText = (text: string): string | undefined => {
   const name = COMMAND_NAME.exec(text)?.[1]?.trim()
   if (!name) {
     return undefined
@@ -358,7 +303,7 @@ function slashCommandText(text: string): string | undefined {
   return args ? `${name} ${args}` : name
 }
 
-function upsert(items: TranscriptItem[], item: TranscriptItem): TranscriptItem[] {
+const upsert = (items: TranscriptItem[], item: TranscriptItem): TranscriptItem[] => {
   const index = items.findIndex((existing) => existing.id === item.id && existing.kind === item.kind)
   if (index === -1) {
     return [...items, item]
@@ -374,18 +319,15 @@ function upsert(items: TranscriptItem[], item: TranscriptItem): TranscriptItem[]
  * `permissionMode` and `model` would otherwise stay empty — fill only what events
  * haven't set yet; the event stream stays authoritative.
  */
-export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): TranscriptState {
-  // Never changes for a live session, and no event carries it — the snapshot is
-  // the only source, so take it whenever it is present.
+export const seedFromSessionInfo = (state: TranscriptState, info: SessionInfo): TranscriptState => {
+  // No event carries the engine — the snapshot is the only source.
   const engine = info.engine ?? state.engine
   return {
     ...state,
-    // Before any event has arrived, the snapshot status is fresher than 'starting'.
-    // With state already held (a reconnect, or a warm transcript-cache seed) the
-    // held status stands: any change since is a `status_changed` in the replay
-    // span — state-bearing, always replayed, last occurrence kept — arriving on
-    // the same socket flush as this frame, so the event stream stays the one
-    // authority instead of a snapshot racing it.
+    // Before any event, the snapshot status is fresher than 'starting'. With
+    // state already held (reconnect, warm cache seed) the held status stands:
+    // any change since is a `status_changed` in the replay span, so the event
+    // stream stays the one authority instead of a snapshot racing it.
     status: state.lastSeq === 0 ? info.status : state.status,
     model: state.model ?? info.model,
     permissionMode: state.permissionMode ?? info.permissionMode,
@@ -400,34 +342,24 @@ export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): 
 }
 
 /**
- * The session's rate-limit windows in reading order: the session window, the
- * weekly window, then whichever per-model weekly windows it reports.
- *
- * The ordering and the drop-the-unknown rule are protocol's `orderUsageWindows`
- * — the dashboard renders the same windows straight off `ProfileInfo.usage`,
- * with no transcript anywhere near it, and two orderings would be one account
- * described two ways. This stays as the transcript-shaped door to it.
+ * The session's rate-limit windows in reading order. The ordering and the
+ * drop-the-unknown rule are protocol's `orderUsageWindows` — the dashboard
+ * renders the same windows straight off `ProfileInfo.usage`, and two orderings
+ * would be one account described two ways.
  */
-export function rateLimitWindows(state: TranscriptState): UsageWindowRow[] {
-  return orderUsageWindows(mergeUsage({ rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt }, undefined))
-}
+export const rateLimitWindows = (state: TranscriptState): UsageWindowRow[] =>
+  orderUsageWindows(mergeUsage({ rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt }, undefined))
 
 /**
  * Put a fetched tool result back where its head was — the other half of
- * `truncateResults`.
- *
- * Into **transcript state**, not row-local state, and the three reasons are the
- * design: the copy button then copies the whole thing rather than the head, the
- * transcript cache retains it across a session switch, and no later event can
- * re-truncate it. The markers are cleared, so a hydrated result is
- * indistinguishable from one that was never cut and every renderer needs a
- * branch for exactly one state, not two.
- *
- * Keyed on `toolUseId`, which is the id the row already holds; `seq` is what the
- * *fetch* needed, not what the fold needs. Unknown id returns `state` unchanged
- * — a press answered after the session was cleared must not resurrect a row.
+ * `truncateResults`. Into **transcript state**, not row-local state: the copy
+ * button copies the whole thing, the cache retains it across a session switch,
+ * and no later event can re-truncate it. The markers are cleared, so a hydrated
+ * result is indistinguishable from one never cut. An unknown `toolUseId`
+ * returns `state` unchanged — a press answered after the session was cleared
+ * must not resurrect a row.
  */
-export function hydrateToolResult(state: TranscriptState, toolUseId: string, text: string): TranscriptState {
+export const hydrateToolResult = (state: TranscriptState, toolUseId: string, text: string): TranscriptState => {
   let changed = false
   const items = state.items.map((item) => {
     if (item.kind !== 'tool_call' || item.id !== toolUseId || !item.result?.truncated) {
@@ -448,7 +380,7 @@ export function hydrateToolResult(state: TranscriptState, toolUseId: string, tex
   return changed ? { ...state, items } : state
 }
 
-export function applyEvent(state: TranscriptState, event: SessionEvent): TranscriptState {
+export const applyEvent = (state: TranscriptState, event: SessionEvent): TranscriptState => {
   if (event.seq <= state.lastSeq) {
     return state
   }
@@ -692,16 +624,11 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
           (item): item is Extract<TranscriptItem, { kind: 'thinking' }> => item.kind === 'thinking' && item.id === id,
         )
         const text = (existing?.text ?? '') + (delta.delta.thinking ?? '')
-        // The same guard the finalized block gets, and for the same reason: a
-        // `thinking_delta` can carry no visible text at all (an empty or
-        // whitespace-only `thinking`, which is what encrypted reasoning looks
-        // like on this channel), and a thinking item with a blank body renders
-        // as a bare `✻` marker with nothing after it. Worse, it does not go
-        // away — `turn_result` finalizes whatever is still streaming under a
-        // stable id, so the empty row outlives the turn that produced it.
-        // Skipping it here costs nothing: the next delta that does carry text
-        // creates the item, since the accumulated text is rebuilt from
-        // `existing` each time.
+        // Same guard as the finalized block: encrypted reasoning streams
+        // whitespace-only `thinking`, and a blank item renders as a bare `✻`
+        // marker that `turn_result` then finalizes into a permanent empty row.
+        // Skipping costs nothing — the text is rebuilt from `existing`, so the
+        // next delta that does carry text creates the item.
         if (text.trim() === '') {
           return base
         }
@@ -722,19 +649,13 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
         // total_cost_usd is session-cumulative on each SDK result message.
         totalCostUsd: event.totalCostUsd,
         items: [
-          // The turn is over: whatever is still streaming is this turn's final
-          // text — an interrupted or failed turn never sends the
-          // assistant_message that normally supersedes it. Finalize it under a
-          // stable id, or it stays the singleton streaming item: the *next*
-          // turn's message would wipe it (a minute of interrupted output
-          // vanishing on the next question) and the next turn's deltas would
-          // append to it, gluing two turns' text into one row.
-          // Every agent's, not just the main thread's: a subagent interrupted
-          // mid-sentence has the same unrecoverable text, and one left under a
-          // `streaming:<id>` key would be adopted by the next Task that reused
-          // the id. The stable id carries the agent for the same reason the
-          // streaming one does — two agents finalizing on one `turn_result`
-          // would otherwise land on a single id, and `upsert` keys by id.
+          // The turn is over: whatever is still streaming is its final text —
+          // an interrupted or failed turn never sends the superseding
+          // assistant_message. Finalize under a stable id, or the next turn's
+          // message wipes it and the next turn's deltas glue onto it. Every
+          // agent's, not just the main thread's, and the stable id carries the
+          // agent: two agents finalizing on one `turn_result` must not land on
+          // a single id (`upsert` keys by id).
           ...base.items.map((item) => {
             if (!isStreamingItem(item)) {
               return item

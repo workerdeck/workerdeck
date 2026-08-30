@@ -24,7 +24,7 @@ const USAGE = {
  * HTTP→adapter→CodexRunner→WS path runs, and `pnpm test` spawns no binary.
  * Each `turns` entry is the agent's answer text for one turn.
  */
-function fakeCodexAdapter(options: {
+const fakeCodexAdapter = (options: {
   turns?: string[]
   probe?: () => EngineAvailability
   onCreate?: (config: SessionRunnerConfig) => void
@@ -32,7 +32,7 @@ function fakeCodexAdapter(options: {
   onTurn?: (notify: (method: string, params: unknown) => void) => void
   /** What `mcpServerStatus/list` answers with (codex's own shape). */
   mcpServers?: unknown[]
-}): { adapter: EngineAdapter; probeCalls: () => number } {
+}): { adapter: EngineAdapter; probeCalls: () => number } => {
   let probeCalls = 0
   let turnIndex = 0
   const adapter: EngineAdapter = {

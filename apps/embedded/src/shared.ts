@@ -1,22 +1,14 @@
 /**
- * The wire shapes the SPA and the server agree on **by hand**.
- *
- * Deliberately small: the wiki's own request/response types used to live here and
- * are gone, because the documents API is now tRPC procedures inferred from
- * `wiki/actions.ts` — the schema is the contract, and a hand-written mirror of it
- * is a second source of truth waiting to drift. What is left is what no action
- * describes: the login exchange (which sets a cookie), and the agent config.
- *
- * Imported by both tsconfigs (node and browser), so it must stay dependency-free
- * and type-only — the same discipline `@workerdeck/protocol` follows for the
- * gateway's own wire.
+ * The wire shapes the SPA and the server agree on **by hand** — only what no
+ * silkweave action describes (the documents API is inferred from
+ * `wiki/actions.ts`). Imported by both tsconfigs, so it stays dependency-free
+ * and type-only.
  */
 
 export type User = {
   id: string
   name: string
-  /** For the demo's login screen. There are three of these and they are in the
-   * source; see `USERS` in `src/auth/users.ts` for why that is the point. */
+  /** For the demo's login screen; see `USERS` in `src/auth/users.ts`. */
   avatar: string
 }
 

@@ -11,13 +11,8 @@ const PROBE_LABELS: Record<WireHost['probe'], string> = {
 }
 
 /**
- * The gateways a window can drive: view, add, edit, remove.
- *
- * Its own VS Code view rather than a screen inside the sessions list. A gateway
- * is a **mode** every session belongs to, and the list is a view across all of
- * them at once — so managing them is configuration sitting beside the list, not
- * somewhere you navigate to and have to find your way back from. It is also the
- * only place a gateway is managed: the list has no picker to keep in sync.
+ * The gateways a window can drive: view, add, edit, remove. The only place a
+ * gateway is managed — the sessions list has no picker to keep in sync.
  */
 export function GatewayList({
   hosts,

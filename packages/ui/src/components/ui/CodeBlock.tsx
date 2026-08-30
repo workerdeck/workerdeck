@@ -8,14 +8,9 @@ export interface CodeBlockProps {
   label?: ReactNode
   copyable?: boolean
   /**
-   * `'panel'` (default) is the framed card: border, header strip, rounded.
-   * `'plain'` is the terminal treatment — the label is a dim line, the code a
-   * flat band, and copy is a character. For surfaces where a box around every
-   * payload is more chrome than content (the transcript's `lines` variant).
-   *
-   * A prop rather than a read of the transcript's variant context: this is a
-   * `ui/` primitive and has no business knowing what a transcript is. The agent
-   * component that renders it does.
+   * `'panel'` (default) is the framed card; `'plain'` is the terminal treatment —
+   * dim label line, flat code band, copy as a character. A prop rather than a read
+   * of the transcript variant context: a `ui/` primitive knows nothing of transcripts.
    */
   variant?: 'panel' | 'plain'
   className?: string

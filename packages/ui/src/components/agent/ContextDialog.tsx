@@ -16,13 +16,7 @@ const cssColor = (color: string): string | undefined => (typeof CSS !== 'undefin
 
 const usageTint = (pct: number) => (pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-warning' : 'bg-accent')
 
-/**
- * What is in the model's context window right now, category by category.
- *
- * One of the three panels the status bar opens. Context, usage and session info
- * are different questions asked at different moments, so they are different
- * screens rather than one "details" list you scroll past two answers to reach.
- */
+/** What is in the model's context window right now, category by category. */
 export function ContextDialog({ usage, open, onOpenChange, className }: ContextDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -47,10 +41,8 @@ export function ContextDialog({ usage, open, onOpenChange, className }: ContextD
                   style={{ width: `${Math.min(100, Math.max(2, usage.percentage))}%` }}
                 />
               </div>
-              {/* Codex reports occupancy with no breakdown, so an engine can send
-                  a real reading and an empty `categories`. A "Breakdown" heading
-                  over nothing reads as a failed load; the row above already says
-                  everything that is known. */}
+              {/* Codex reports occupancy with no breakdown, so an engine can
+                  send a real reading and an empty `categories`. */}
               {usage.categories.length > 0 ? (
                 <div className="mt-5">
                   <h3 className="text-label font-medium text-fg-3">Breakdown</h3>

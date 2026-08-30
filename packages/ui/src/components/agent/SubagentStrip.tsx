@@ -16,18 +16,9 @@ import { useTicker } from '../terminal/items.tsx'
  *
  * **It claims exactly what the `TaskRow` it was opened from claims** — the same
  * `taskBusy` / `taskFailed` / tool count over the same items — and deliberately
- * *not* `SubagentInfo.status`. Protocol documents those two as divergent on
- * purpose (`index.ts:1476-1487`), but that divergence is transcript-versus-*list*
- * and this surface **is** the transcript. The disagreement that must not exist
- * here is between a header and the rows directly beneath it.
- *
- * The rollup is still allowed one job — naming an agent whose `Task` call is not
- * in the transcript — because a label is not content, and `SessionInfo.subagents`
- * keeps only eight settled records (`SUBAGENT_HISTORY`), so it can never be the
- * source of what a frame *shows*.
- *
- * Both variants, because the panel has two and a strip that only existed in one
- * would make the takeover a terminal-theme feature rather than a session feature.
+ * *not* `SubagentInfo.status`, whose documented divergence is
+ * transcript-versus-*list* and this surface **is** the transcript. The rollup is
+ * still allowed to *name* an agent whose `Task` call is not in the transcript.
  */
 export function SubagentStrip({
   task,
@@ -54,26 +45,16 @@ export function SubagentStrip({
   const failed = task ? taskFailed(task) : false
   const pulse = usePulse(busy)
   const tools = items.reduce((n, item) => n + (item.kind === 'tool_call' ? 1 : 0), 0)
-  // Ticks only while it works, off the same once-a-second clock the working
-  // line uses. A settled agent has no end timestamp to measure against, and
-  // "N tools" is the settled reading anyway — a frozen clock would read as a
-  // stall. Absent `ts` (an item from before the reducer stamped it) simply
-  // draws no elapsed rather than counting from the epoch.
+  // Ticks only while it works: a settled agent has no end timestamp to measure
+  // against, and a frozen clock would read as a stall. Absent `ts` draws no
+  // elapsed rather than counting from the epoch.
   const startedAt = busy ? task?.ts : undefined
   const now = useTicker(startedAt !== undefined)
   const elapsed = startedAt === undefined ? undefined : formatDuration(now - startedAt)
 
   const name = task ? taskIdentity(task) : label
-  /**
-   * Running or finished, in the theme's own words rather than new ones:
-   * `taskSummary` already says `working…` and `done` for exactly this state one
-   * row over, and a header that said "running"/"completed" about the same agent
-   * would be a second vocabulary for one fact. The trailing ellipsis is the
-   * theme's in-flight signal; the pulse beside it is the beat.
-   *
-   * Unknown when the transcript has no `Task` call to read — better silent than
-   * confidently wrong about an agent we cannot see.
-   */
+  // `taskSummary`'s own words, so the header and the row it was opened from
+  // share one vocabulary. Silent when the transcript has no `Task` call to read.
   const status = !task ? undefined : failed ? 'failed' : busy ? `${pulse} working…` : 'done'
   const detail = [tools > 0 ? `${tools} tool${tools === 1 ? '' : 's'}` : undefined, elapsed].filter(Boolean).join(' · ')
 
@@ -81,16 +62,11 @@ export function SubagentStrip({
     return (
       <TerminalSurface fontSize={fontSize} lineHeight={lineHeight} className="shrink-0">
         {/* A row on the grid, not a chrome bar: the takeover is a mode of the
-            transcript, and a toolbar in some other metric above it would read as
-            a different application's. The whole line is the target — there is
-            exactly one thing to do here. */}
+            transcript. The whole line is the target. */}
         <button type="button" onClick={onBack} aria-label="Back to the session" className="block w-full cursor-pointer text-left">
-          {/* The arrow is in the gutter unconditionally. It used to give way to
-              the pulse while the agent worked, which put the way *out* of the
-              frame on a timer — the one control here should not come and go.
-              The beat moved into the status instead. `indent` because this is a
-              frame around the rows rather than one of them, and a marker flush
-              against the panel edge reads as a clipped row. */}
+          {/* The arrow holds the gutter unconditionally — the one way out of
+              the frame must not come and go; the beat lives in the status
+              instead. `indent` keeps the marker off the panel edge. */}
           <Row glyph="←" glyphTone="dim" indent={1} tone={failed ? 'red' : 'green'}>
             {name}
             {status ? <Ink tone={failed ? 'red' : busy ? 'mark' : 'dim'}> · {status}</Ink> : null}

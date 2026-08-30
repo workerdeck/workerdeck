@@ -36,7 +36,7 @@ const SENTENCE_TAIL = new Set(['.', ',', ';', ':', '!', '?', ')', ']', '}', '"',
  * Stricter than what a composer completes: a bare `@` is a token being typed, but
  * in a sent message it is just an at sign.
  */
-export function scanPromptTokens(text: string): PromptToken[] {
+export const scanPromptTokens = (text: string): PromptToken[] => {
   const tokens: PromptToken[] = []
   // Word starts: the beginning of the text, and every position after whitespace.
   const words = /\S+/g

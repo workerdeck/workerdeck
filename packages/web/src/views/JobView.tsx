@@ -14,17 +14,12 @@ import { useJobs } from '@/hooks/useJobs.ts'
 import { useSessions } from '@/hooks/useSessions.ts'
 
 /**
- * One job: what the queue knows about it, and — while its session is still in
- * the registry — the run itself, as the session workspace.
+ * One job: what the queue knows, plus — while its session is still in the registry
+ * — the run itself as the session workspace. **Read-only**: typing into a run the
+ * queue owns would be a second operator arriving mid-run. Cancel stays, because
+ * abandoning a wait is a queue action rather than a turn.
  *
- * **Read-only.** The transcript streams and the files browse, but there is no
- * composer and no approval prompts: this screen is *about* a run the queue owns,
- * and typing into it would be a second operator arriving mid-run. Cancel stays,
- * because cancelling is a queue action rather than a turn — it is how you
- * abandon a wait, and it is the only thing this page can actually decide.
- *
- * Jobs belong to the primary gateway (see `primaryClient()`), so the session
- * they ran does too.
+ * Jobs belong to the primary gateway, so the session they ran does too.
  */
 export function JobView() {
   const { jobId } = useParams({ from: '/jobs/$jobId' })
@@ -35,14 +30,13 @@ export function JobView() {
   const job = jobs.find((j) => j.id === jobId)
   const gateway = client()
   const hostId = primaryHost()?.id
-  // Offered only while the job's session is still in the registry — a completed
-  // job's session can be deleted from the Sessions view, and attaching to one
-  // that is gone would render an empty transcript with no explanation.
+  // Only while the session is still in the registry: attaching to a deleted one renders an
+  // empty transcript with no explanation.
   const live =
     job?.sessionId !== undefined && (snapshots.find((s) => s.host.id === hostId)?.sessions.some((i) => i.id === job.sessionId) ?? false)
 
-  // A job id from a bookmark can outlive the queue's retention window. Wait for
-  // the first list before deciding it is gone, or every reload would bounce.
+  // A bookmarked job id can outlive the queue's retention. Wait for the first list before
+  // deciding it is gone, or every reload bounces.
   const [settled, setSettled] = useState(false)
   useEffect(() => {
     if (jobs.length > 0) {
@@ -61,8 +55,7 @@ export function JobView() {
   const [variant] = useState(getTranscriptVariant)
   const [font] = useState(getTranscriptFont)
   const [panelFontSize] = useState(getFontSize)
-  // Read once: the workspace owns the live value from here, and re-seeding it
-  // mid-view would yank the splitter out from under a drag.
+  // Read once: re-seeding mid-view would yank the splitter out from under a drag.
   const [rail] = useState(getRail)
 
   if (!job) {
@@ -98,18 +91,14 @@ export function JobView() {
       transcriptDensity={density}
       transcriptFont={font}
       fontSize={panelFontSize}
-      // A finished job is *only* read — which is exactly the case the rail is
-      // for, and `readOnly` takes nothing away from it (it removes the composer,
-      // not the ability to find your way around).
+      // `readOnly` removes the composer, not the ability to find your way around.
       scrubber
-      // And the prompt you are waiting on, held above the answer.
       stickyPrompt
       statusPlacement="bottom"
       defaultRailWidth={rail.width}
       defaultRailCollapsed={rail.collapsed}
       onRailChange={setRail}
-      // The panel's `⋯` menu is handed over the same way the session view takes
-      // it: this app has a real top bar, and the run's surfaces belong there.
+      // The `⋯` menu is handed over the same way the session view takes it.
       header={({ actions }) => <JobHeader job={job} onChanged={() => void refresh()} actions={actions} />}
     />
   )
@@ -132,8 +121,7 @@ function JobHeader({ job, onChanged, actions }: { job: JobInfo; onChanged: () =>
       crumbs={[{ label: 'Jobs', to: '/jobs' }, { label: job.prompt }]}
       actions={
         <>
-          {/* Said rather than implied: the composer's absence is a decision, and
-              a reader who expected to answer a prompt here deserves to know why. */}
+          {/* Said rather than implied: the composer's absence is a decision. */}
           <Badge variant="neutral" className="shrink-0">
             read-only
           </Badge>

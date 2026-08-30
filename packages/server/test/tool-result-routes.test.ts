@@ -16,7 +16,7 @@ import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 const BIG = 'x'.repeat(TOOL_RESULT_HEAD_CHARS + 12_000)
 
-function fakeHarness() {
+const fakeHarness = () => {
   const buffered: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
   let done = false
@@ -67,7 +67,7 @@ afterEach(async () => {
   running = undefined
 })
 
-async function start(harness: ReturnType<typeof fakeHarness>) {
+const start = async (harness: ReturnType<typeof fakeHarness>) => {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
@@ -77,7 +77,7 @@ async function start(harness: ReturnType<typeof fakeHarness>) {
   return { base: `http://127.0.0.1:${port}/v1`, wsBase: `ws://127.0.0.1:${port}/v1` }
 }
 
-async function createSession(base: string): Promise<string> {
+const createSession = async (base: string): Promise<string> => {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -87,7 +87,7 @@ async function createSession(base: string): Promise<string> {
 }
 
 /** Attach once, collect the replay, close. `query` is the raw suffix. */
-async function replay(wsBase: string, id: string, query = ''): Promise<SessionEvent[]> {
+const replay = async (wsBase: string, id: string, query = ''): Promise<SessionEvent[]> => {
   const ws = new WebSocket(`${wsBase}/sessions/${id}/ws${query}`)
   const events: SessionEvent[] = []
   ws.on('message', (data) => {
@@ -110,7 +110,7 @@ const resultBlock = (event: SessionEvent | undefined): ToolResultBlock | undefin
 }
 
 /** A settled tool call with a very large result, in the log. */
-async function seed(harness: ReturnType<typeof fakeHarness>, base: string) {
+const seed = async (harness: ReturnType<typeof fakeHarness>, base: string) => {
   const id = await createSession(base)
   harness.emit({
     type: 'assistant',
@@ -223,7 +223,7 @@ const IMG_B64 = IMG.toString('base64')
 const imagePart = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: IMG_B64 } }
 
 /** A settled tool call whose result carries text and a picture. */
-async function seedImage(harness: ReturnType<typeof fakeHarness>, base: string) {
+const seedImage = async (harness: ReturnType<typeof fakeHarness>, base: string) => {
   const id = await createSession(base)
   harness.emit({
     type: 'assistant',

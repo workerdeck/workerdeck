@@ -22,7 +22,7 @@ const fold = (events: SessionEvent[]): TranscriptState => events.reduce(applyEve
 
 /** The gateway's rule as the runners apply it, including the guard that the
  * log's last event is delivered whatever the rule says. */
-function retain(events: SessionEvent[]): SessionEvent[] {
+const retain = (events: SessionEvent[]): SessionEvent[] => {
   const lastSeq = events.at(-1)?.seq ?? 0
   return events.filter((event) => event.seq === lastSeq || replayRetains(event))
 }

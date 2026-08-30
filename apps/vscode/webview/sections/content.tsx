@@ -6,12 +6,10 @@ import { Badge, Button, Spinner, UsageMeters, cn } from '@workerdeck/ui'
 import { RefreshCw } from 'lucide-react'
 
 /**
- * The scoped surfaces for the selected session — what the panel's dialogs used
- * to show, each rehomed into its OWN VS Code view (native headers, collapse,
- * drag-anywhere live in VS Code, not here). Info renders from the pushed REST
- * rollup; Context and Usage render from the vitals the agent panel relays (it
- * owns the one live attach — these views must never attach); MCP fetches over
- * its view's own bridged client, REST only.
+ * The scoped surfaces for the selected session, each in its own VS Code view. Info
+ * renders from the pushed REST rollup; Context and Usage from the vitals the agent
+ * panel relays — **it owns the one live attach, so these views must never attach**;
+ * MCP fetches over its view's own bridged client, REST only.
  */
 
 function Row({ label, value }: { label: string; value: ReactNode }) {
@@ -68,22 +66,17 @@ export function ContextSection({ usage }: { usage: ContextUsage | undefined }) {
 }
 
 /**
- * `UsageMeters` rather than a bar of our own: the pace marker is the whole
- * value of these meters — "17% used" only means something once you know how far
- * into the window you are — and it was invented twice already (iOS's `UsageBar`,
- * the panel's Usage dialog). A third hand-rolled copy here is how the dock came
- * to be the one surface without it.
+ * `UsageMeters` rather than a bar of our own: the pace marker is the whole value of
+ * these meters — "17% used" only means something once you know how far into the
+ * window you are.
  */
 export function UsageSection({ rateLimits }: { rateLimits: Record<string, RateLimitInfo> | undefined }) {
-  // rateLimitWindows reads only `rateLimits` — the cast hands it the one field
-  // it consumes without dragging a full transcript state into the sidebar.
+  // rateLimitWindows reads only `rateLimits`; the cast avoids building a whole transcript state.
   const windows = rateLimitWindows({ rateLimits } as TranscriptState)
   if (windows.length === 0) {
     return <div className="py-1 text-body-sm text-fg-4">No plan-usage reading yet.</div>
   }
-  // No `now` prop: this view is mounted for as long as its section is expanded,
-  // so it ticks its own minute clock. Passing one would mean this file owning a
-  // timer the section has no other use for.
+  // No `now` prop: mounted for as long as its section is expanded, it ticks its own clock.
   return <UsageMeters windows={windows} className="gap-4" />
 }
 
@@ -176,7 +169,7 @@ function Meter({ percent, warn }: { percent: number; warn: number }) {
   )
 }
 
-function formatTokens(tokens: number): string {
+const formatTokens = (tokens: number): string => {
   if (tokens >= 1_000_000) {
     return `${(tokens / 1_000_000).toFixed(1)}M`
   }

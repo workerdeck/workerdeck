@@ -40,12 +40,12 @@ const TEXT_TYPES = new Set([
 ])
 
 /** Strips any `; charset=…` parameter and lowercases. */
-export function normalizeMediaType(mediaType: string): string {
+export const normalizeMediaType = (mediaType: string): string => {
   return mediaType.split(';')[0]!.trim().toLowerCase()
 }
 
 /** How this media type can be sent, or null if it can't be. */
-export function attachmentKind(mediaType: string): AttachmentKind | null {
+export const attachmentKind = (mediaType: string): AttachmentKind | null => {
   const type = normalizeMediaType(mediaType)
   if (IMAGE_TYPES.has(type)) {
     return 'image'
@@ -73,34 +73,38 @@ export const SUPPORTED_ATTACHMENT_TYPES = [...IMAGE_TYPES, 'application/pdf', 't
  * Structurally typed — `packages/core` models Anthropic content the way
  * `packages/protocol` does, and the caller casts into the SDK's own param type.
  */
-export function attachmentContentBlocks(attachments: readonly AttachmentInput[]): Array<Record<string, unknown>> {
+export const attachmentContentBlocks = (attachments: readonly AttachmentInput[]): Array<Record<string, unknown>> => {
   return attachments.map((attachment) => {
     const mediaType = normalizeMediaType(attachment.mediaType)
     switch (attachmentKind(mediaType)) {
-      case 'image':
+      case 'image': {
         return {
           type: 'image',
           source: { type: 'base64', media_type: mediaType, data: attachment.data },
         }
-      case 'document':
+      }
+      case 'document': {
         return {
           type: 'document',
           source: { type: 'base64', media_type: mediaType, data: attachment.data },
           title: attachment.name,
         }
-      case 'text':
+      }
+      case 'text': {
         return {
           type: 'text',
           text: `<attachment name="${attachment.name}" type="${mediaType}">\n${decodeText(attachment.data)}\n</attachment>`,
         }
-      default:
+      }
+      default: {
         throw new Error(`unsupported attachment media type: ${attachment.mediaType}`)
+      }
     }
   })
 }
 
 /** Strip the bytes: the log-safe half of an attachment. */
-export function attachmentRef(attachment: AttachmentInput): MessageAttachment {
+export const attachmentRef = (attachment: AttachmentInput): MessageAttachment => {
   return {
     id: attachment.id,
     name: attachment.name,
@@ -109,6 +113,6 @@ export function attachmentRef(attachment: AttachmentInput): MessageAttachment {
   }
 }
 
-function decodeText(base64: string): string {
+const decodeText = (base64: string): string => {
   return Buffer.from(base64, 'base64').toString('utf8')
 }

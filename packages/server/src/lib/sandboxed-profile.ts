@@ -33,7 +33,7 @@ import type { ProfileInfo, ProviderConfig, SessionCapability } from '@workerdeck
  *   environment and are resolved by the host's `createEngineRunner` — never
  *   here, and never on the wire).
  */
-export function sandboxedProviderProfile(
+export const sandboxedProviderProfile = (
   name: string,
   provider: ProviderConfig,
   options: {
@@ -59,7 +59,7 @@ export function sandboxedProviderProfile(
      */
     mcpServers?: string[]
   } = {},
-): ProfileInfo {
+): ProfileInfo => {
   return {
     name,
     engine: 'provider',

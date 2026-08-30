@@ -90,7 +90,7 @@ export type ProviderRunnerOptions = {
  * The hook itself stays open for anything this does not cover — this is the
  * 80% case, not a replacement for it.
  */
-export async function createProviderRunner(ctx: EngineRunnerContext, options: ProviderRunnerOptions): Promise<Runner> {
+export const createProviderRunner = async (ctx: EngineRunnerContext, options: ProviderRunnerOptions): Promise<Runner> => {
   const { config, profile, bridge, restore, id } = ctx
   const resolveModel = (modelId: string | undefined): LanguageModel =>
     typeof options.model === 'function' ? options.model(modelId) : options.model

@@ -48,6 +48,7 @@ const wants = (name: string) => extras.includes(name) || extras.includes('all')
  * not confusable with "it answered plausibly". */
 const WORD = 'ORRERY'
 const PORT = 8791
+const base = `http://127.0.0.1:${PORT}/v1`
 
 const root = mkdtempSync(join(tmpdir(), 'wd-restart-'))
 const stateDir = join(root, 'state')
@@ -68,9 +69,22 @@ const bad = (what: string, detail = '') => {
 }
 const step = (what: string) => console.log(`\n[1m${what}[0m`)
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+const api = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  const res = await fetch(`${base}${path}`, {
+    ...init,
+    headers: { 'content-type': 'application/json', ...init?.headers },
+  })
+  if (!res.ok) {
+    throw new Error(`${init?.method ?? 'GET'} ${path} → ${res.status}`)
+  }
+  return (await res.json()) as T
+}
+
 /** The config, written per run so the "deleted profile" variant is a second
  * file rather than an edit to something checked in. */
-function writeConfig(profiles: string[]): void {
+const writeConfig = (profiles: string[]): void => {
   const decls = profiles
     .map((name) =>
       name === 'codex' ? `{ name: 'codex', engine: 'codex' }` : `{ name: 'claude', configDir: \`\${process.env.HOME}/.claude\` }`,
@@ -84,10 +98,9 @@ function writeConfig(profiles: string[]): void {
   )
 }
 
-const base = `http://127.0.0.1:${PORT}/v1`
 let child: ChildProcess | undefined
 
-async function startGateway(): Promise<void> {
+const startGateway = async (): Promise<void> => {
   child = spawn(
     process.execPath,
     [
@@ -132,7 +145,7 @@ async function startGateway(): Promise<void> {
 
 /** SIGINT and wait for the process to actually be gone — not merely signalled.
  * Returning early would race the next `listen` onto a port still held. */
-async function stopGateway(): Promise<void> {
+const stopGateway = async (): Promise<void> => {
   if (!child) {
     return
   }
@@ -146,49 +159,26 @@ async function stopGateway(): Promise<void> {
   await sleep(500)
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+type AttachResult = { text: string; events: SessionEvent[]; replayed: number; replayingFrom?: number }
 
-const api = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const res = await fetch(`${base}${path}`, {
-    ...init,
-    headers: { 'content-type': 'application/json', ...init?.headers },
-  })
-  if (!res.ok) {
-    throw new Error(`${init?.method ?? 'GET'} ${path} → ${res.status}`)
-  }
-  return (await res.json()) as T
-}
-
-/**
- * Attach, optionally send a prompt, and collect until the turn settles.
- * Returns the assistant text and every event, with the replay flag preserved —
- * the flag is half of what this smoke is checking, so it must not be discarded
- * on the way through.
- */
-async function attach(
-  id: string,
-  prompt?: string,
-  timeoutMs = 120_000,
-): Promise<{ text: string; events: SessionEvent[]; replayed: number; replayingFrom?: number }> {
+/** Attach, optionally send a prompt, and collect until the turn settles. */
+const attach = async (id: string, prompt?: string, timeoutMs = 120_000): Promise<AttachResult> => {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}/v1/sessions/${id}/ws?afterSeq=0`)
   const events: SessionEvent[] = []
   let replayed = 0
   let replayingFrom: number | undefined
   let live = false
   let text = ''
-  // The listener goes on BEFORE the open await, not after. The gateway flushes
-  // the replay the moment the socket is up, and a listener attached one tick
-  // later misses the whole burst — which reads exactly like "the history was
-  // never replayed", the bug this smoke exists to detect.
+  // The listener goes on BEFORE the open await: the gateway flushes the replay the
+  // moment the socket is up, and a listener attached one tick later misses the whole
+  // burst — which reads exactly like "the history was never replayed".
   //
-  // **There is no `replay: true` on the wire.** Both history and live arrive as
-  // `{ type: 'event', event }`; `attached.replayingFrom` is how a client knows
-  // where the backlog starts. So "replayed" here counts events seen before this
-  // attach sent anything, which is the only honest reading of it.
+  // **There is no `replay: true` on the wire.** History and live both arrive as
+  // `{ type: 'event', event }`; `attached.replayingFrom` marks where the backlog
+  // starts, so "replayed" here counts events seen before this attach sent anything.
   const settled = new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, timeoutMs)
-    // Swallowed unless asked for: two variants *expect* the attach to fail, so
-    // an unconditional error line reads as a broken run rather than a passing one.
+    // Swallowed unless asked for: two variants *expect* the attach to fail.
     ws.on('error', (e) => {
       if (process.env.WD_SMOKE_DEBUG) {
         console.log(`    \u001b[2m— ws error: ${(e as Error).message}\u001b[0m`)
@@ -228,9 +218,8 @@ async function attach(
     ws.once('error', reject)
   })
   if (prompt) {
-    // Let the replay drain first, so a `turn_result` from the *history* cannot
-    // be mistaken for this turn's — the flag guards it, but ordering makes the
-    // intent legible.
+    // Let the replay drain first, so a `turn_result` from the *history* cannot be
+    // mistaken for this turn's.
     await sleep(1_500)
     live = true
     ws.send(JSON.stringify({ type: 'user_message', text: prompt }))
@@ -248,7 +237,7 @@ async function attach(
 
 /** Poll the state dir until this session's dormant record exists. Returns
  * whether it ever appeared, so the caller can say so rather than guess. */
-async function waitForRecord(id: string, timeoutMs: number): Promise<boolean> {
+const waitForRecord = async (id: string, timeoutMs: number): Promise<boolean> => {
   const dir = join(stateDir, 'parked')
   const deadline = Date.now() + timeoutMs
   for (;;) {
@@ -265,7 +254,7 @@ async function waitForRecord(id: string, timeoutMs: number): Promise<boolean> {
   }
 }
 
-async function main(): Promise<void> {
+const main = async (): Promise<void> => {
   console.log(`\n[1mThe restart, end to end[0m — engine: ${engine}, port ${PORT}`)
   console.log(`[2mstate ${stateDir}[0m`)
 
@@ -288,13 +277,9 @@ async function main(): Promise<void> {
   }
 
   step('2. ctrl-c, and back')
-  // **The dormant write is asynchronous, and it is not instant.** Claude also
-  // writes on `system_init`, so it has a record from the session's first
-  // moments; codex emits no `system_init` at all, so its first record rides the
-  // post-turn `status_changed`. Killing inside that window loses the session
-  // outright — the row is simply gone on restart, which is how this smoke first
-  // "failed" against codex. Waiting here is the harness being fair, not the
-  // product needing a nap: a real operator's ctrl-c is seconds after a turn.
+  // **The dormant write is asynchronous and not instant.** Claude also writes on
+  // `system_init`; codex emits none, so its first record rides the post-turn
+  // `status_changed`. Killing inside that window loses the session outright.
   await waitForRecord(id, 15_000)
   await stopGateway()
   ok('gateway stopped (SIGINT)')
@@ -335,12 +320,9 @@ async function main(): Promise<void> {
     bad('the engine resumed the SAME thread', `expected ${WORD}, got ${JSON.stringify(second.text.slice(0, 60))}`)
   }
 
-  // Order matters: sweeping the engine store leaves the session unusable (and
-  // the gateway eventually drops the row), so the profile variant — which needs
-  // a live record to assert "the row stays" — runs first. Discovered by running
-  // them the other way round and watching step 6 fail for step 5's reasons.
-  // Before the two destructive variants: this one needs the session's dormant
-  // record to be real and current, and both of those leave it otherwise.
+  // Order matters: `clear` needs a real, current dormant record, and both of the
+  // destructive variants below leave it otherwise; sweeping the engine store leaves
+  // the session unusable, so `noprofile` (which asserts "the row stays") precedes it.
   if (wants('clear')) {
     await clearNoChild(id)
   }
@@ -358,25 +340,23 @@ async function main(): Promise<void> {
  * The engine's own store swept out from under a dormant record.
  *
  * **The predicted behaviour ("the resume fails and the attach 404s") is not what
- * happens**, which is why this step reports instead of asserting: the attach
- * SUCCEEDS, the transcript comes back EMPTY (a claude record is dormant, so it
- * backfills from the CLI rather than from a snapshot the gateway kept), and the
- * next turn is silently never answered. A 404 would at least name the problem.
- * The record staying is still right — a failure here may be transient and a
- * self-removing row would delete a session over a temporary fault. Only claude has a store this script can safely identify —
- * the transcript lives under a slug derived from the cwd, and the cwd is a
- * temp dir this run created, so nothing outside it is ever touched.
+ * happens**, so this step reports rather than asserts: the attach SUCCEEDS, the
+ * transcript comes back EMPTY, and the next turn is silently never answered. The
+ * record staying is still right — a failure here may be transient, and a
+ * self-removing row would delete a session over a temporary fault.
+ *
+ * Claude only: the store is a slug of the cwd, and the cwd is a temp dir this run
+ * created, so nothing outside it is ever touched.
  */
-async function sweptStore(id: string): Promise<void> {
+const sweptStore = async (id: string): Promise<void> => {
   step('7. A swept engine store')
   if (engine !== 'claude') {
     console.log('  [2m— skipped: only wired for claude[0m')
     return
   }
   await stopGateway()
-  // The CLI slugs the **resolved** path, and on macOS `/var/folders/…` is a
-  // symlink to `/private/var/folders/…`. Slugging the unresolved path looks
-  // right and finds nothing.
+  // The CLI slugs the **resolved** path; on macOS `/var/folders/…` is a symlink, so
+  // slugging the unresolved path looks right and finds nothing.
   const slug = realpathSync(workDir).replace(/[/.]/g, '-')
   const dir = join(process.env.HOME ?? '', '.claude', 'projects', slug)
   if (!existsSync(dir)) {
@@ -397,11 +377,9 @@ async function sweptStore(id: string): Promise<void> {
     bad('the record deliberately stays', 'the row removed itself')
   }
 
-  // What actually happens is NOT what this was predicted to do, so the step
-  // reports rather than asserts a guess. The gateway's own event log lives in
-  // its record, not in the engine's store, so the transcript replays either
-  // way — the question is whether the *engine* thread survived, and only a turn
-  // can answer that.
+  // The gateway's event log lives in its own record, not the engine's store, so the
+  // transcript replays either way — only a turn can say whether the engine thread
+  // survived.
   const after = await attach(id, `What word did I ask you to remember? Reply with just that word.`)
   const replayedHistory = after.events.some(
     (e) => e.type === 'user_message' && JSON.stringify(e.message.content).includes('Remember the word'),
@@ -420,27 +398,18 @@ async function sweptStore(id: string): Promise<void> {
 }
 
 /**
- * A clear with **no live child**, across a restart — VERIFICATION-DEBT item 9's
- * negative case, and the one path with no eager `thread/start` to save it.
+ * A clear with **no live child**, across a restart — the one path with no eager
+ * `thread/start` to save it. Elsewhere `#clearNow` starts a fresh thread in the same
+ * breath; with the child dead the engine session id is simply dropped, and the record
+ * still naming the CLEARED conversation must be deleted
+ * (`ParkingService.#forgetDormant`) or the next restart wakes straight back into the
+ * transcript the user threw away. Asserts on the record and the restart, not a turn.
+ * **Costs no model tokens.**
  *
- * Everywhere else a clear happens the child is up, so `#clearNow` starts a
- * fresh thread in the same breath and the dormant record is rewritten to name
- * it. With the child dead there is nothing to start against: the engine session
- * id is simply dropped, and the record that still names the CLEARED
- * conversation has to be deleted (`ParkingService.#forgetDormant`) or the next
- * restart wakes the session straight back into the transcript the user threw
- * away.
- *
- * So the assertion is about the record on disk and what survives the restart —
- * not about a turn. **Costs no model tokens.**
- *
- * Note what "not resurrected" costs, because it is a real product consequence
- * and not a bug: for codex the dormant record IS the session's way back, so a
- * session cleared while dormant does not come back at all. That is the designed
- * trade (see the `#rememberDormant` comment) — losing an empty conversation
- * beats waking into one that was deliberately discarded.
+ * For codex the dormant record IS the way back, so a session cleared while dormant
+ * does not come back at all — the designed trade, not a bug.
  */
-async function clearNoChild(id: string): Promise<void> {
+const clearNoChild = async (id: string): Promise<void> => {
   step('5. A clear with no live child, across a restart')
   if (engine !== 'codex') {
     console.log(
@@ -461,10 +430,9 @@ async function clearNoChild(id: string): Promise<void> {
   }
   ok('a dormant record exists, naming the conversation about to be cleared')
 
-  // The app-server child is spawned by the gateway process itself, so its
-  // parent pid is the one this script started. `pgrep -f codex` would also
-  // match whatever the operator is running in their own terminal — this is a
-  // smoke that must never touch a session it did not create.
+  // Matched by parent pid, never `pgrep -f codex`: that would also match whatever the
+  // operator is running in their own terminal, and this smoke must never touch a
+  // session it did not create.
   const kids = await new Promise<string>((resolve) => {
     const ps = spawn('pgrep', ['-P', String(child?.pid ?? 0)], { stdio: ['ignore', 'pipe', 'ignore'] })
     let out = ''
@@ -519,15 +487,12 @@ async function clearNoChild(id: string): Promise<void> {
 }
 
 /**
- * Type `/clear` into a session and wait for the reset. Not `attach()`: a clear
- * produces no `turn_result`, so that helper would sit on its timeout and report
- * the wait as the result.
- *
- * The typed string rather than the `clear_context` command on purpose — both
- * entry points are the same call in the runner, and this is the one a user has
- * today (no client ships a Clear control yet).
+ * Type `/clear` and wait for the reset. Not `attach()`: a clear produces no
+ * `turn_result`, so that helper would sit on its timeout. The typed string rather
+ * than the `clear_context` command because both are the same call in the runner and
+ * this is the entry point a user actually has.
  */
-async function clearOverWs(id: string): Promise<boolean> {
+const clearOverWs = async (id: string): Promise<boolean> => {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}/v1/sessions/${id}/ws?afterSeq=0`)
   let sawReset = false
   const done = new Promise<void>((resolve) => {
@@ -556,7 +521,7 @@ async function clearOverWs(id: string): Promise<boolean> {
 
 /** A profile deleted between restarts: `buildRunner` throws `unknown profile`,
  * the row stays and the attach fails. No model tokens. */
-async function deletedProfile(id: string): Promise<void> {
+const deletedProfile = async (id: string): Promise<void> => {
   step('6. A profile deleted between restarts')
   await stopGateway()
   writeConfig([engine === 'claude' ? 'codex' : 'claude'])

@@ -12,36 +12,23 @@ export default defineConfig({
     conditions: ['@workerdeck/source', ...defaultClientConditions],
     alias: [
       { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
-      // Drop Monaco's four worker-backed language services (TypeScript, JSON,
-      // CSS, HTML). They are 8.8MB of the build — `ts.worker` alone is 6.7MB of
-      // TypeScript compiler — and they buy IntelliSense and schema validation
-      // in a pane whose job is reading and small edits to what the agent wrote.
-      // Monarch highlighting for ~90 languages is unaffected: it is a separate
-      // mechanism (`languages/definitions/*`) that runs on the main thread.
-      //
-      // Done here rather than with a hand-written Monaco entry because the entry
-      // also imports two CSS files (`codicon.css` — the icon font), and
-      // monaco-editor's exports map (`"./*": "./esm/vs/*.js"`) cannot resolve a
-      // `.css` subpath at all, so the entry is only writable from inside the
-      // package. An embedder who wants IntelliSense simply omits this alias.
+      // Drop Monaco's four worker-backed language services — 8.8MB of the build (`ts.worker`
+      // alone is 6.7MB) for IntelliSense in a pane meant for reading. Monarch highlighting is
+      // a separate main-thread mechanism and is unaffected. An alias rather than a hand-written
+      // Monaco entry because monaco-editor's exports map cannot resolve the `.css` subpaths
+      // such an entry needs. An embedder who wants IntelliSense omits this alias.
       {
-        // Matches the whole specifier, not a suffix of it — Vite substitutes only
-        // the matched span, so a partial match would leave the `./` prefix glued
-        // to an absolute replacement path.
+        // Matches the whole specifier: Vite substitutes only the matched span, so a partial
+        // match leaves the `./` prefix glued to an absolute replacement path.
         find: /^.*languages\/features\/(css|html|json|typescript)\/register\.js$/,
         replacement: fileURLToPath(new URL('./monaco-no-language-services.js', import.meta.url)),
       },
     ],
   },
   build: { target: 'es2022' },
-  // Monaco reaches its own web workers with `new Worker(new URL('...',
-  // import.meta.url))` — the bundler-standard form, which Rollup resolves at
-  // build time. Vite's dev-time dep optimizer, though, rewrites the package into
-  // `.vite/deps/`, and the worker URL then resolves relative to *there* and
-  // 404s: Monaco logs "Failed to load worker script" and falls back to running
-  // the worker code on the main thread, which is exactly the UI freeze the
-  // worker exists to avoid. Excluding it from pre-bundling leaves the imports
-  // pointing at the real files in node_modules, where the relative URL is right.
+  // Monaco reaches its workers with `new Worker(new URL(..., import.meta.url))`. Vite's dev
+  // dep optimizer rewrites the package into `.vite/deps/`, where that URL 404s and Monaco
+  // silently runs the worker on the main thread — the freeze the worker exists to avoid.
   optimizeDeps: { exclude: ['monaco-editor'] },
   server: {
     port: 5191,
@@ -49,9 +36,8 @@ export default defineConfig({
     fs: { allow: ['../..'] },
     proxy: {
       '/v1': { target: workerUrl, changeOrigin: true, ws: true },
-      // The app asks `/auth/status` who served it, so the dev server has to look
-      // like a gateway too — without this the implicit host never appears and
-      // dev starts with an empty gateway list.
+      // The app asks `/auth/status` who served it, so the dev server must look like a gateway
+      // too, or the implicit host never appears.
       '/auth': { target: workerUrl, changeOrigin: true },
     },
   },

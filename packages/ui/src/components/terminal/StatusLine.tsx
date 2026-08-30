@@ -13,21 +13,10 @@ import {
 import { Ink, Row, type Tone } from './row.tsx'
 
 /**
- * The session's readings, as one line.
- *
- * The styled bar puts each of these in its own affordance — a progress ring, a
- * badge, a tooltip — which is right for a dashboard and wrong here for the usual
- * reason: a terminal has one line height, and five widgets of five different
- * heights is five different rhythms in a row that is supposed to be quiet. So
- * they are words, `·`-separated, exactly as the CLI's own status line writes
- * them.
- *
- * The readings themselves come from the same helpers the styled bar uses
- * (`lib/status.ts`), and that matters more than it looks: `statusPresentation`
- * is where the rule lives that **a dropped socket outranks the session status**,
- * because a status held over a dead socket is a stale reading being presented as
- * a live one. Re-deriving that here would be a second answer to a question that
- * already has one.
+ * The session's readings as one `·`-separated line, the way the CLI's status
+ * line writes them. The readings come from the same `lib/status.ts` helpers
+ * the styled bar uses — in particular `statusPresentation` owns the rule that
+ * a dropped socket outranks the session status. Never re-derive them here.
  */
 
 /** Severity → tone. The 80/95 thresholds are `lib/status.ts`'s, not new ones. */
@@ -54,8 +43,7 @@ export interface TerminalStatusLineProps {
   onOpenUsage?: () => void
 }
 
-/** One reading. A button only when it leads somewhere — a segment that looks
- * pressable and does nothing is worse than plain text. */
+/** One reading. A button only when it leads somewhere. */
 function Reading({ tone, onPress, label, children }: { tone?: Tone; onPress?: () => void; label?: string; children: React.ReactNode }) {
   if (!onPress) {
     return <Ink tone={tone}>{children}</Ink>
@@ -103,8 +91,7 @@ export function TerminalStatusLine({
     )
   }
 
-  // Cost last of the numbers: it is the reading you check, never the one you act
-  // on, and nothing about a turn changes because of it.
+  // Cost last of the numbers: the reading you check, never the one you act on.
   if (state.totalCostUsd > 0) {
     parts.push(
       <Ink key="cost" tone="faint">

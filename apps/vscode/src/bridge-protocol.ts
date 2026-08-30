@@ -1,26 +1,18 @@
 /**
- * The postMessage wires between the two webviews and the extension host.
+ * The postMessage wires between the webviews and the extension host.
  *
- * Both webviews run real `WorkerDeckClient`s — the transport messages carry
- * their injected `fetchImpl`/`WebSocketImpl` across the process boundary, and
- * the extension host executes them with Node fetch / `ws`, adding the
- * gateway's `Authorization` header there. Keys never enter a webview; neither
- * webview CSP has an external `connect-src`.
+ * The webviews run real `WorkerDeckClient`s: the transport messages carry their
+ * injected `fetchImpl`/`WebSocketImpl` across the process boundary, and the host
+ * executes them with Node fetch / `ws`, adding the gateway's `Authorization`
+ * header there. **Keys never enter a webview**, and no webview CSP has an external
+ * `connect-src`.
  *
- * Surfaces (see the PRD's design): the **agent panel** is purely the
- * conversation (`SessionPanel` with `panelSurface: 'external'` — no dialogs);
- * the **sidebar** is a session list and nothing else — no screens, no forms,
- * no navigation — fed by REST plus the vitals the panel relays (the panel holds
- * the one live attach; the sidebar must never attach a second time). Everything
- * that used to be a screen it pushed is now either its own VS Code view
- * (Gateways, and the scoped Info/Context/Usage/MCP sections) or a native
- * QuickPick flow (new session, resume), so nowhere in this extension is there a
- * place you navigate to and have to find your way back from.
+ * The panel holds the one live attach; the sidebar must never attach a second time.
  *
  * Dependency-free at runtime (type-only imports, erased at build). Imported by
  * BOTH tsconfigs: keep it to types and constants.
  */
-import type { PermissionMode, SessionInfo } from '@workerdeck/protocol'
+import type { PermissionMode, ScopeRoot, SessionInfo, WorkspaceScope } from '@workerdeck/protocol'
 import type { ViewConfig } from './view-config.ts'
 import type { SessionSurfacePanel, SessionVitals } from '@workerdeck/ui'
 
@@ -39,13 +31,8 @@ export type WireHost = {
   cwdSuggestion?: string
 }
 
-/**
- * The window's open folders, as places sessions can live in — the sessions
- * list's intrinsic scope. Shared with the dashboard (and mirrored on iOS), so
- * the shapes come from protocol; `workspaceScope()` is what fills them in from
- * this window, mapping a `workerdeck://<hostId>` mount to a gateway-tagged root.
- */
-import type { ScopeRoot, WorkspaceScope } from '@workerdeck/protocol'
+/** The window's open folders as places sessions can live in — the sessions list's
+ * intrinsic scope, filled in by `workspaceScope()`. */
 export type { ScopeRoot, WorkspaceScope }
 
 export type SidebarState = {
@@ -53,19 +40,10 @@ export type SidebarState = {
   /** Keyed by host id; present only for connected hosts. */
   sessions: Record<string, SessionInfo[]>
   /**
-   * What the agent panel is showing. `subagentToolUseId` is the *finer* half of
-   * it — which of that session's sub-agents has taken the panel body over — and
-   * the sessions list draws the two at different weights: the session's card
-   * goes blue when the session itself is what you are looking at, and grey when
-   * what you are looking at is one agent inside it (`SessionItem`'s
-   * `activeStepKey`).
-   *
-   * **It is reported by the panel, not decided here.** The host can ask for a
-   * sub-agent (`wd-open-subagent`) but it is not the only way in — a Task row
-   * pressed inside the transcript opens one too, and Back, Escape and a reveal
-   * all leave one — so a value the host inferred from its own requests would be
-   * wrong within one click. `wd-subagent-open` is the panel telling us what it
-   * actually has on screen; this field is where that lands.
+   * What the agent panel is showing. `subagentToolUseId` — which sub-agent has taken
+   * the panel body over — is **reported by the panel, not decided here**: the panel
+   * enters and leaves frames the host never asked for, so a value inferred from our
+   * own requests would be wrong within one click.
    */
   selected?: { hostId: string; sessionId: string; subagentToolUseId?: string }
   /** Absent when no folder is open — the scope filter is then inert. */
@@ -129,14 +107,10 @@ export type PanelToHost =
     }
   | {
       /**
-       * SessionPanel's `onSubagentChange`: which sub-agent the panel now has
-       * framed, or `undefined` for the session's own conversation.
-       *
-       * The **counterpart** to `wd-open-subagent`, and deliberately not its
-       * echo: this is a *statement*, that one is a *request*, and the panel
-       * enters and leaves frames the host never asked for. It carries no nonce
-       * for exactly that reason — a state that arrives twice is the same state,
-       * where a request that arrives twice is two requests.
+       * SessionPanel's `onSubagentChange`: which sub-agent the panel now has framed,
+       * or `undefined` for the session's own conversation. A *statement*, not the echo
+       * of `wd-open-subagent`, which is why it carries no nonce — a state that arrives
+       * twice is the same state, where a request that arrives twice is two requests.
        */
       kind: 'wd-subagent-open'
       toolUseId?: string
@@ -159,10 +133,9 @@ export type HostToPanel =
     }
   | {
       /**
-       * Switch the model / permission mode from outside the panel — the window
-       * status bar's pickers. It has to travel this way round: the panel owns
-       * the session's one live attach, so it is the only place a setter exists.
-       * `model: undefined` means "back to the CLI's default".
+       * Switch the model / permission mode from outside the panel. It has to travel
+       * this way round: the panel owns the session's one live attach, so it is the
+       * only place a setter exists. `model: undefined` means "the CLI's default".
        */
       kind: 'wd-set-model'
       model?: string
@@ -170,22 +143,18 @@ export type HostToPanel =
   | { kind: 'wd-set-permission-mode'; mode: PermissionMode }
   | {
       /**
-       * Put the caret in the composer. Sent when a session is *chosen* — a click
-       * in the sidebar means "I want to talk to this one" — and never on a mere
-       * state push, which is why it is an event of its own rather than a field on
+       * Put the caret in the composer. Sent when a session is *chosen* and never on a
+       * mere state push — hence an event of its own rather than a field on
        * `wd-show-session`.
        */
       kind: 'wd-focus-composer'
     }
   | {
       /**
-       * Scroll the transcript to a tool call — the sub-agent picked in the
-       * sessions list. Carries its own `nonce` because picking the same one
-       * twice is two requests, and the panel drives `SessionPanel.reveal` with
-       * it; without the nonce the second press would be a props-equal no-op.
-       *
-       * Sent *after* `wd-show-session` when the pick also changed session: an id
-       * only means something once the panel is on the right transcript.
+       * Frame the sub-agent picked in the sessions list. Carries its own `nonce`
+       * because picking the same one twice is two requests and without it the second
+       * press is a props-equal no-op. Sent **after** `wd-show-session` when the pick
+       * also changed session: an id only means something on the right transcript.
        */
       kind: 'wd-open-subagent'
       toolUseId: string
@@ -193,14 +162,9 @@ export type HostToPanel =
     }
   | {
       /**
-       * Travel to a tool call without framing anything — where a **task** press
-       * in the sessions list lands, as opposed to `wd-open-subagent`'s takeover.
-       * Drives `SessionPanel.reveal`, and carries its own nonce for the same
-       * reason: asking for the same row twice is two requests.
-       *
-       * This is the arm the sub-agent takeover was once built on top of, before
-       * it grew a frame of its own. It comes back because the two destinations
-       * turned out to be genuinely different, not two spellings of one.
+       * Travel to a tool call without framing anything — where a **task** press in the
+       * sessions list lands, as opposed to `wd-open-subagent`'s takeover. Drives
+       * `SessionPanel.reveal`, and carries its own nonce for the same reason.
        */
       kind: 'wd-reveal-tool-use'
       toolUseId: string
@@ -216,29 +180,17 @@ export type SidebarToHost =
       hostId: string
       sessionId: string
       /**
-       * Set when the click landed on a *sub-agent* under the session rather than
-       * the session itself: select as normal, then hand the panel over to that
-       * agent's own work.
-       *
-       * It used to mean "scroll to that `Task`'s row", on the argument that a
-       * sub-agent is not a session and so cannot be opened as one. That is still
-       * true and is no longer the whole story: the panel now has a **frame** for
-       * one agent — its rows, its own header, no composer — which is a screen
-       * without being a session. Revealing the row remains the honest fallback
-       * for a surface that cannot frame.
+       * Set when the click landed on a *sub-agent* under the session: select as
+       * normal, then hand the panel over to that agent's own work.
        */
       subagentToolUseId?: string
       /**
-       * Set when the click landed on a **task** rather than an agent: select the
-       * session as normal, then travel to the row where that work was started
-       * and finished.
-       *
-       * A sibling of `subagentToolUseId`, not a flag on it, because the two go
-       * to different panel APIs — `openSubagent` takes the body over, `reveal`
-       * stays on the conversation and scrolls. Conflating them is how a task
-       * came to be framed as an agent, which selects no items at all and drew an
-       * **empty agent view**. A task has no agent behind it; it is a reference,
-       * and following it is the only honest thing to do with one.
+       * Set when the click landed on a **task** rather than an agent: select as
+       * normal, then travel to the row where that work happened. A sibling of
+       * `subagentToolUseId`, not a flag on it, because the two go to different panel
+       * APIs — `openSubagent` takes the body over, `reveal` stays on the conversation.
+       * Conflating them is how a task came to be framed as an agent, which selects no
+       * items and draws an empty agent view.
        */
       revealToolUseId?: string
     }
@@ -251,12 +203,9 @@ export type SidebarToHost =
   | { kind: 'wd-delete-session'; hostId: string; sessionId: string }
   | {
       /**
-       * The card's `⋯`. The menu itself is a native QuickPick, built and shown
-       * host-side — no webview in this extension draws its own chrome, and a
-       * popover anchored inside a view this narrow would be clipped by the
-       * view's own bounds. It carries no action: the host reads the session's
-       * state from the model it already polls, so a stale card cannot offer
-       * Stop for a session that finished a second ago.
+       * The card's `⋯`. The menu is a native QuickPick built host-side, and carries
+       * no action: the host reads the session's state from the model it already
+       * polls, so a stale card cannot offer Stop for a session that just finished.
        */
       kind: 'wd-session-menu'
       hostId: string
@@ -279,9 +228,8 @@ export type SidebarToHost =
   | {
       /**
        * The sessions list's filter/group/sort, mirrored to the host whenever it
-       * changes. The webview stays its owner (it renders from its own state);
-       * the host keeps a copy so the activity-bar badge can count the rows the
-       * list is actually showing rather than every session that exists.
+       * changes. The webview stays its owner; the host keeps a copy so the unread
+       * count matches the rows the list is actually showing.
        */
       kind: 'wd-view-config'
       config: ViewConfig
@@ -293,10 +241,9 @@ export type HostToSidebar =
   | { kind: 'wd-sidebar-state'; state: SidebarState }
   | {
       /**
-       * Whether the search-and-filter bar is showing. The **host** owns this,
-       * not the webview: the toggle is a native view-title action, and a
-       * `view/title` entry is a command gated on a context key — so the key has
-       * to live where commands do. The webview renders what it is told.
+       * Whether the search-and-filter bar is showing. The **host** owns this: the
+       * toggle is a `view/title` action, i.e. a command gated on a context key, and
+       * the key has to live where commands do.
        */
       kind: 'wd-filter-open'
       open: boolean
@@ -309,29 +256,20 @@ export type HostToSidebar =
     }
   | {
       /**
-       * Project icon bytes, as data URLs keyed by the icon's own content hash
-       * — the value `SessionInfo.project.icon` carries on the wire.
-       *
-       * Its own message rather than a field on `SidebarState` because the two
-       * have opposite economics: the state is pushed on every poll (1.2s while
-       * anything is working) and must stay small, while an icon is a few
-       * hundred kilobytes that changes only when someone edits a repo. Sent
-       * once per hash, on resolution, and re-sent whole after `wd-ready` —
-       * a webview VS Code has torn down and rebuilt has no map left.
-       *
-       * The map is cumulative and the webview merges rather than replaces: a
-       * later resolution must not drop an earlier icon.
+       * Project icon bytes, as data URLs keyed by the icon's content hash. Its own
+       * message rather than a field on `SidebarState` because the state rides the
+       * poll and must stay small. Sent once per hash on resolution, and re-sent whole
+       * after `wd-ready` — a rebuilt webview has no map left. **Cumulative**: the
+       * webview merges rather than replaces, or a later resolution drops earlier icons.
        */
       kind: 'wd-project-icons'
       icons: Record<string, string>
     }
 
 /**
- * Gateways view → host.
- *
- * Its own view, its own wire, and **no transports**: managing a gateway is
- * entirely host-side work (globalState + the keychain), so this webview runs no
- * `WorkerDeckClient` at all and cannot reach a gateway even if it tried.
+ * Gateways view → host. **No transports**: managing a gateway is entirely host-side
+ * work (globalState + the keychain), so this webview runs no `WorkerDeckClient` and
+ * cannot reach a gateway even if it tried.
  */
 export type GatewaysToHost =
   | { kind: 'wd-ready' }
@@ -351,12 +289,8 @@ export type GatewaysToHost =
       hostId: string
     }
   | {
-      /**
-       * The form opened or closed. Mirrored because the host draws this view's
-       * chrome — the title, and the context key swapping `+` for a back chevron
-       * — exactly as it does for no view at all elsewhere: no webview in this
-       * extension draws its own header.
-       */
+      /** The form opened or closed. Mirrored because the host draws this view's
+       * chrome: the title, and the context key swapping `+` for a back chevron. */
       kind: 'wd-gateway-form-state'
       open: boolean
     }

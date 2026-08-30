@@ -9,7 +9,7 @@ import type { ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type EngineRunnerContext, type WorkerServer } from '../src/index.ts'
 
 /** Minimal Runner implementation — engine selection is what's under test, not the engine. */
-function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
+const fakeRunner = (id: string, config: SessionRunnerConfig): Runner => {
   return {
     id,
     pendingApprovals: [],
@@ -519,7 +519,7 @@ describe('provider profiles and engine selection', () => {
   })
 })
 
-function idleQuery() {
+const idleQuery = () => {
   return {
     [Symbol.asyncIterator]() {
       return this

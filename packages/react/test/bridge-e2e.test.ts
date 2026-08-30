@@ -13,7 +13,7 @@ import { createToolCallHost } from '../src/lib/tool-host.ts'
  * against a VFS seeded from the request, and the result travels back to the
  * server's executor.
  */
-function idleQueryFn() {
+const idleQueryFn = () => {
   const query = {
     [Symbol.asyncIterator]() {
       return this
@@ -44,7 +44,7 @@ afterEach(async () => {
   results.length = 0
 })
 
-async function start(bridgeTimeoutMs?: number) {
+const start = async (bridgeTimeoutMs?: number) => {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],

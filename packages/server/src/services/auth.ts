@@ -28,10 +28,10 @@ export type AuthContext = {
 
 export type AuthService = ReturnType<typeof createAuthService>
 
-export function createAuthService(deps: {
+export const createAuthService = (deps: {
   options: Pick<WorkerServerOptions, 'authenticate' | 'authorizeSession'>
   refs: { registry?: SessionRegistry }
-}) {
+}) => {
   const { options, refs } = deps
 
   const authenticate = async (req: IncomingMessage): Promise<AuthContext> => {

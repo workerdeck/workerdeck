@@ -1,20 +1,17 @@
 /**
- * The height calculator's regression gate — compares the *shipped* calculator
- * (`src/components/terminal/height.ts`, the `estimateSize` feed) against the
- * real DOM, which no jsdom test can do: the property under test is agreement
- * with a browser's text layout. Kept beside `grid-audit.ts` for the same
- * reason that one exists — "looks right" is not a property you can hold by eye.
- *
- * For every *mounted* virtual row it computes the expected height from the
- * transcript item alone and compares it with `getBoundingClientRect().height`,
- * bucketing the error: exact (<0.6px), off by one line, worse. The virtualizer
- * mounts only the viewport plus overscan, so callers audit at several scroll
- * positions and merge (`window.__wdAudit` in App.tsx is the harness).
+ * The height calculator's regression gate — compares the shipped calculator
+ * (`src/components/terminal/height.ts`, the `estimateSize` feed) against the real DOM,
+ * which no jsdom test can do: the property under test is agreement with a browser's
+ * text layout. For every *mounted* virtual row it buckets the error as exact (<0.6px),
+ * off by one line, or worse. The virtualizer mounts only viewport plus overscan, so
+ * callers audit at several scroll positions and merge (`window.__wdAudit` in App.tsx).
  */
 
 import type { TranscriptState } from '@workerdeck/react'
 import { blockHeight, measureCh, type CellMetrics } from '../src/components/terminal/height.ts'
 import { terminalBlocks, type TerminalBlock } from '../src/components/terminal/items.tsx'
+
+const round = (n: number): number => Math.round(n * 100) / 100
 
 export type HeightAuditRow = {
   index: number
@@ -44,13 +41,11 @@ export type HeightAuditReport = {
 }
 
 /**
- * Which virtual-row slot the recap boundary occupies, given the item index it
- * is spliced at — or `Infinity` when there is no boundary. Mirrors the splice
- * in `Transcript`: the recap goes in front of the *block* that carries its
- * item, so a folded shell run before the boundary moves it up by the calls it
- * swallowed.
+ * Which virtual-row slot the recap boundary occupies, or `Infinity` when there is
+ * none. Mirrors the splice in `Transcript`: the recap goes in front of the *block*
+ * carrying its item, so a folded shell run before the boundary moves it up.
  */
-function recapRowIndex(blocks: TerminalBlock[], from: number | undefined): number {
+const recapRowIndex = (blocks: TerminalBlock[], from: number | undefined): number => {
   if (from === undefined) {
     return Infinity
   }
@@ -78,17 +73,10 @@ export function auditHeights(
     '[data-slot="transcript-rows"] [data-index]',
   )
   // The transcript splices a recap row into the virtual list, so a wrapper's
-  // `data-index` is a *row* index while the blocks are indexed by *block*.
-  // After the splice the two differ by one, and comparing across that offset
-  // audits every row against its neighbour — which reads as a broken calculator
-  // rather than a broken instrument. It reported 16 unflagged misses on the only
-  // fixture carrying a splice and none anywhere else, which is the signature.
-  //
-  // The boundary has to be *told*, not found: the recap row is unmounted
-  // whenever you are reading far from it, and that is exactly when the rows
-  // being audited are the ones the offset applies to. Locating it in the DOM
-  // works only while it happens to be on screen — which is to say, it does not
-  // work.
+  // `data-index` is a *row* index while blocks are indexed by *block*; past the splice
+  // the two differ by one and every row would be audited against its neighbour. The
+  // boundary must be *told*, not found: the recap row is unmounted precisely when you
+  // are reading far enough away for the offset to matter.
   const recapIndex = recapRowIndex(blocks, catchUpFrom)
 
   const rows: HeightAuditRow[] = []
@@ -147,9 +135,7 @@ export function auditHeights(
   return { line, ch: round(ch), width, rows, summary, byKind }
 }
 
-const round = (n: number): number => Math.round(n * 100) / 100
-
-function previewOf(item: { kind: string } & Record<string, unknown>): string {
+const previewOf = (item: { kind: string } & Record<string, unknown>): string => {
   const text = item.text ?? item.name ?? item.path ?? item.subtype ?? ''
   return typeof text === 'string' ? text.replace(/\s+/g, ' ') : String(text)
 }

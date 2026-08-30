@@ -335,7 +335,6 @@ export function normalizeListPrefixes(segments: Segment[], markdownEnabled: bool
   return changed ? result : segments
 }
 
-// ---------------------------------------------------------------------------
 // Ordered-list renumbering
 //
 // The visible number is a projection of position (like BlockNote/ProseMirror/
@@ -344,7 +343,6 @@ export function normalizeListPrefixes(segments: Segment[], markdownEnabled: bool
 // a fresh counter at 1, ascending continues the shallower level and clears
 // deeper ones. Every run restarts at 1, so `1. 1. 1.` rebuilds to `1. 2. 3.`
 // and Tab-indenting an item restarts its sublist at 1.
-// ---------------------------------------------------------------------------
 
 /**
  * A single rewritten number's digit run, in the INPUT text's coordinates.

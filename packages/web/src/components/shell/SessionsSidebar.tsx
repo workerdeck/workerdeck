@@ -12,36 +12,25 @@ import { useSessionRows, useSessions } from '@/hooks/useSessions.ts'
 import { useViewConfig } from '@/hooks/useViewConfig.ts'
 
 /**
- * The sessions list as a persistent left sidebar — VS Code's explorer, not a
- * page you navigate away from.
- *
- * It lives in the shell rather than in a route so that opening a session does
- * not replace the list: the whole point of the shape is that the next session is
- * one click away while you are reading this one. Mounted only for `/sessions*`,
- * the way VS Code shows the explorer only for the explorer view.
+ * The sessions list as a persistent left sidebar. It lives in the shell rather
+ * than in a route so opening a session does not replace the list.
  */
 export function SessionsSidebar() {
   const navigate = useNavigate()
   const activeId = useRouterState({
     select: (s) => s.location.pathname.match(/^\/sessions\/[^/]+\/(.+)$/)?.[1] ?? undefined,
   })
-  // The finer selection — which sub-agent is on screen — read from the URL, not
-  // from a second channel out of the panel: `SessionView` folds the panel's
-  // `onSubagentChange` report into `?subagent=`, so the address is already the
-  // one truth and a second wire could only disagree with it. `strict: false`
-  // because this sidebar lives in the shell, above the route that declares the
-  // param; off the session route it is simply absent and nothing highlights.
+  // Which sub-agent is on screen, read from the URL rather than a second channel out of the
+  // panel: `SessionView` folds `onSubagentChange` into `?subagent=`, so the address is the one
+  // truth. `strict: false` because this sidebar sits above the route that declares the param.
   const activeSubagentId = useSearch({ strict: false }).subagent
   const { snapshots, refresh } = useSessions()
   const rows = useSessionRows(snapshots)
-  // Project icon bytes, per gateway — `clientFor` is module scope and stable,
-  // so this is not a dependency that re-fires the fetch effect every render.
+  // `clientFor` is module scope and stable, so it is not a dependency that re-fires the fetch.
   const projectIcons = useProjectIcons(rows, clientFor)
-  // Per gateway, so one unreachable gateway names itself instead of the list
-  // going quiet or — worse — blaming the ones that are fine.
+  // Per gateway, so one unreachable gateway names itself instead of blaming the ones that are fine.
   const failures = snapshots.filter((s) => s.error !== undefined)
-  // Creation targets the primary gateway (see `primaryClient`), so the cwd
-  // suggestions come from its sessions and the new session opens under its id.
+  // Creation targets the primary gateway, so the cwd suggestions come from its sessions.
   const primary = primaryHost()
   const primarySessions = snapshots.find((snap) => snap.host.id === primary?.id)?.sessions ?? []
   const openCreated = (id: string) => {
@@ -57,30 +46,23 @@ export function SessionsSidebar() {
   const [config, setConfig] = useViewConfig()
   const [creating, setCreating] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(getFiltersShown)
-  /**
-   * The collapsed rail renders rows itself, so it has to apply the same filter
-   * `SessionBrowser` would — collapsing must not silently widen the list.
-   */
+  /** The rail renders rows itself, so it must apply the filter `SessionBrowser` would:
+   * collapsing must not silently widen the list. */
   const visible = useMemo(() => filterRows(rows, config), [rows, config])
 
   const open = (row: SessionRow) =>
     void navigate({
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: row.hostId, sessionId: row.info.id },
-      // Cleared explicitly: opening the session plainly must leave any framed
-      // sub-agent behind, and an omitted `search` would inherit the current one.
+      // Cleared explicitly: an omitted `search` inherits the current one, and opening a session
+      // plainly must leave any framed sub-agent behind.
       search: {},
     })
 
   /**
-   * A sub-agent under a session: open the session with that agent's own work
-   * framed.
-   *
-   * The nonce is a counter and not the id, because pressing the *same* agent
-   * twice has to mean twice — the panel takes this as a request rather than as
-   * a controlled value, so a props-equal repeat would do nothing. Navigating
-   * with it in the URL is what survives the route change; component state on
-   * the far side of a navigation is state the navigation cannot carry.
+   * Open the session with one sub-agent's work framed. The nonce is a counter, not
+   * the id: the panel takes this as a request rather than a controlled value, so a
+   * props-equal repeat would do nothing and pressing the same agent twice must mean twice.
    */
   const subagentNonce = useRef(0)
   const openSubagent = (row: SessionRow, toolUseId: string) =>
@@ -91,15 +73,9 @@ export function SessionsSidebar() {
     })
 
   /**
-   * A **task** under a session: open the session and travel to the row where
-   * that work was started and finished. Not a takeover — a task has no agent
-   * behind it, so there is nothing to frame, and framing its tool-use id anyway
-   * selected no items and drew an **empty agent view**. A task is a reference;
-   * this is what following one looks like.
-   *
-   * `search` is written whole, so this also drops any `subagent` standing in the
-   * URL — following a marker means leaving the frame, and the panel's withdrawal
-   * closes it as the navigation lands.
+   * Travel to the row where a **task** was started and finished. Not a takeover: a
+   * task has no agent behind it, so framing its tool-use id draws an empty agent
+   * view. `search` is written whole, which also drops any standing `subagent`.
    */
   const revealNonce = useRef(0)
   const revealStep = (row: SessionRow, toolUseId: string) =>
@@ -110,8 +86,7 @@ export function SessionsSidebar() {
     })
 
   const rename = (row: SessionRow, title: string) => {
-    // A gateway edit, never a local override: the phone and the extension read
-    // the same `meta.title`, so a name set here has to reach them.
+    // A gateway edit, never a local override: the phone and the extension read the same title.
     void clientFor(row.hostId)
       ?.updateSession(row.info.id, { title: title || null })
       .then(() => refresh())
@@ -132,12 +107,8 @@ export function SessionsSidebar() {
         railActions={create}
         actions={
           <>
-            {/* The extension's `$(filter)`/`$(filter-filled)` pair: the icon
-                fills while the bar is **open**, the way a VS Code title toggle
-                does. Whether a filter is actually *set* is the subset line's
-                job — it renders below whether or not the bar is open, which is
-                what lets closing the bar leave the filters alone without hiding
-                the fact. */}
+            {/* The icon fills while the bar is **open**. Whether a filter is actually *set* is
+                the subset line's job, which renders whether or not the bar is open. */}
             <Button
               variant="ghost"
               size="icon-sm"
@@ -156,10 +127,7 @@ export function SessionsSidebar() {
             {create}
           </>
         }
-        // Collapsed, the rail keeps only what identifies a session at a glance:
-        // whose engine it is and how it is doing. Everything else — name, model,
-        // folder, cost — needs width it no longer has, and a truncated name is
-        // worse than no name beside a glyph you can hover.
+        // Collapsed, the rail keeps only what identifies a session at 44px: engine and state.
         rail={visible.map((row) => (
           <button
             key={row.info.id}
@@ -201,11 +169,9 @@ export function SessionsSidebar() {
               if (!client) {
                 return
               }
-              // A clear is a session COMMAND, not a REST route, so a list that
-              // holds only REST clients has to borrow a socket for one frame —
-              // the same shape the VS Code card's menu uses. `reconnect: false`
-              // matters: this handle must not become a second permanent
-              // subscriber to a session the panel may already be attached to.
+              // A clear is a session COMMAND, not a REST route, so a REST-only list borrows a
+              // socket for one frame. `reconnect: false` is load-bearing: this handle must not
+              // become a second permanent subscriber to a session the panel may hold.
               const handle = client.attach(row.info.id, { reconnect: false })
               const done = setTimeout(() => {
                 handle.detach()
@@ -213,14 +179,11 @@ export function SessionsSidebar() {
               }, 5_000)
               handle.on('attached', () => {
                 handle.clearContext()
-                // Let the frame flush before the socket goes. The reset itself
-                // arrives at whoever is watching the session as a
-                // `conversation_reset`; this toast is only about the request.
+                // Let the frame flush before the socket goes; watchers see a `conversation_reset`.
                 setTimeout(() => {
                   clearTimeout(done)
                   handle.detach()
-                  // Never "deleted": the engine keeps the conversation and it
-                  // stays in the resume picker.
+                  // Never "deleted": the engine keeps the conversation, resumable.
                   toast.success('Context cleared — the previous conversation stays resumable')
                   void refresh()
                 }, 150)
@@ -254,8 +217,7 @@ export function SessionsSidebar() {
         onCreated={(id) => {
           setCreating(false)
           openCreated(id)
-          // The create call already returned the id, so the list has no reason
-          // to wait for its next tick to show what we just made.
+          // The create call already returned the id; no reason to wait out a poll tick.
           void refresh()
         }}
       />

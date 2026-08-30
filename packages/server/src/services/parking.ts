@@ -468,11 +468,11 @@ export class SessionParkManager {
 
   /**
    * Drop a dormant record that has stopped being true, leaving the live session
-   * alone — the narrow counterpart to {@link ParkingService.discard}, which also
+   * alone — the narrow counterpart to {@link SessionParkManager.discard}, which also
    * forgets the config and the session's executions and would therefore make a
    * clear cost the session its ability to go dormant ever again.
    *
-   * Only ever called behind {@link ParkingService.#rememberDormant}'s guards,
+   * Only ever called behind `#rememberDormant`'s guards,
    * which is what keeps it off a parked record: a park evicts the runner from
    * the registry before it saves, and the ownership guard turns a late event
    * from an evicted runner into a no-op.

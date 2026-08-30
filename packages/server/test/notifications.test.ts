@@ -6,7 +6,7 @@ import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 /** The SDK stand-in: tests push messages in and hold `canUseTool` to raise a
  * permission request, which is the notification that matters most. */
-function fakeHarness() {
+const fakeHarness = () => {
   const buffered: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
   const captured: { options?: Options } = {}
@@ -66,7 +66,7 @@ const turnResult = {
 } as unknown as SDKMessage
 
 /** A webhook receiver that records what it was POSTed. */
-async function startReceiver(respond: () => number = () => 200) {
+const startReceiver = async (respond: () => number = () => 200) => {
   const received: SessionNotification[] = []
   const server: Server = createServer((req, res) => {
     const chunks: Buffer[] = []
@@ -95,7 +95,7 @@ afterEach(async () => {
   running = undefined
 })
 
-async function createSession(base: string): Promise<SessionInfo> {
+const createSession = async (base: string): Promise<SessionInfo> => {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

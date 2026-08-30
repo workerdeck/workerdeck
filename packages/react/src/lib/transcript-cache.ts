@@ -23,17 +23,10 @@ import type { TranscriptState } from './transcript.ts'
  * readable through a client speaking as a different principal.
  */
 
-/**
- * How many detached transcripts stay warm.
- *
- * Five covers the working set the feature exists for — an operator alternating
- * between the handful of sessions that are simultaneously working or awaiting
- * them — while keeping the pathological case (five `perf`-fixture-sized
- * transcripts of ~4k items each) in the tens of megabytes, no more than a few
- * times what the one mounted panel already holds. Too small degrades to
- * today's behaviour (a replay on switch-back); too large is memory held
- * forever in a webview — the asymmetry favours small.
- */
+/** How many detached transcripts stay warm. Five covers an operator's working
+ * set while keeping the pathological case (five ~4k-item transcripts) in the
+ * tens of megabytes. Too small degrades to a replay on switch-back; too large
+ * is memory held forever in a webview — the asymmetry favours small. */
 const MAX_ENTRIES = 5
 
 const entries = new Map<string, TranscriptState>()
@@ -42,15 +35,11 @@ const entries = new Map<string, TranscriptState>()
  * NUL separator is unambiguous: the identity key is `JSON.stringify` output,
  * which escapes control characters, so no two (identity, session) pairs can
  * spell the same key. */
-export function transcriptCacheKey(client: WorkerDeckClient, sessionId: string): string {
-  return `${client.identityKey}\u0000${sessionId}`
-}
+export const transcriptCacheKey = (client: WorkerDeckClient, sessionId: string): string => `${client.identityKey}\u0000${sessionId}`
 
-export function readTranscriptCache(key: string): TranscriptState | undefined {
-  return entries.get(key)
-}
+export const readTranscriptCache = (key: string): TranscriptState | undefined => entries.get(key)
 
-export function writeTranscriptCache(key: string, state: TranscriptState): void {
+export const writeTranscriptCache = (key: string, state: TranscriptState): void => {
   entries.delete(key)
   entries.set(key, state)
   if (entries.size > MAX_ENTRIES) {
@@ -61,7 +50,7 @@ export function writeTranscriptCache(key: string, state: TranscriptState): void 
   }
 }
 
-export function deleteTranscriptCache(key: string): void {
+export const deleteTranscriptCache = (key: string): void => {
   entries.delete(key)
 }
 
@@ -70,6 +59,6 @@ export function deleteTranscriptCache(key: string): void {
  * (a logout that keeps the page alive) — entries are unreachable through the
  * new principal's client either way, but scrubbing them is free and final.
  */
-export function clearTranscriptCache(): void {
+export const clearTranscriptCache = (): void => {
   entries.clear()
 }

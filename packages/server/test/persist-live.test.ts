@@ -49,7 +49,7 @@ afterEach(async () => {
 
 /** Start a gateway over `store`. Calling it twice with the same store is the
  * restart this whole feature is about. */
-async function startGateway(store: SessionStore, persistLive = true): Promise<Gateway> {
+const startGateway = async (store: SessionStore, persistLive = true): Promise<Gateway> => {
   const built: ParkableRunner[] = []
   const server = createWorkerServer({
     allowUnauthenticated: true,
@@ -79,14 +79,14 @@ const create = async (base: string, scope?: Record<string, string>): Promise<Ses
 const list = async (base: string): Promise<SessionInfo[]> =>
   ((await (await fetch(`${base}/sessions`)).json()) as { sessions: SessionInfo[] }).sessions
 
-async function stateDir(): Promise<string> {
+const stateDir = async (): Promise<string> => {
   const dir = await mkdtemp(join(tmpdir(), 'wd-live-'))
   dirs.push(dir)
   return dir
 }
 
 /** Attach and stay attached, collecting events. The caller closes it. */
-async function openSocket(base: string, id: string): Promise<{ socket: WebSocket; events: SessionEvent[] }> {
+const openSocket = async (base: string, id: string): Promise<{ socket: WebSocket; events: SessionEvent[] }> => {
   const socket = new WebSocket(`${base.replace('http', 'ws')}/sessions/${id}/ws`)
   const events: SessionEvent[] = []
   socket.on('message', (raw) => {
@@ -103,7 +103,7 @@ async function openSocket(base: string, id: string): Promise<{ socket: WebSocket
 }
 
 /** Attach and collect the replayed log, the way a returning client does. */
-async function attach(base: string, id: string): Promise<SessionEvent[]> {
+const attach = async (base: string, id: string): Promise<SessionEvent[]> => {
   const url = `${base.replace('http', 'ws')}/sessions/${id}/ws`
   const socket = new WebSocket(url)
   const events: SessionEvent[] = []

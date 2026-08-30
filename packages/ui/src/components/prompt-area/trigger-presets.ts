@@ -18,16 +18,12 @@
 
 import type { TriggerConfig, TriggerPosition } from './types.ts'
 
-// ---------------------------------------------------------------------------
 // Shared option type — everything in TriggerConfig except the keys each
 // factory sets by default.
-// ---------------------------------------------------------------------------
 
 type TriggerPresetOptions = Omit<Partial<TriggerConfig>, 'char' | 'position' | 'mode'>
 
-// ---------------------------------------------------------------------------
 // @mention — dropdown at any position
-// ---------------------------------------------------------------------------
 
 export type MentionTriggerOptions = TriggerPresetOptions & {
   /** Override the trigger character. Defaults to `'@'`. */
@@ -52,9 +48,7 @@ export function mentionTrigger(opts: MentionTriggerOptions = {}): TriggerConfig 
   }
 }
 
-// ---------------------------------------------------------------------------
 // /command — dropdown anywhere (opt into line-start-only with `position`)
-// ---------------------------------------------------------------------------
 
 export type CommandTriggerOptions = TriggerPresetOptions & {
   /** Override the trigger character. Defaults to `'/'`. */
@@ -89,9 +83,7 @@ export function commandTrigger(opts: CommandTriggerOptions = {}): TriggerConfig 
   }
 }
 
-// ---------------------------------------------------------------------------
 // #hashtag — dropdown at any position, auto-resolve on space
-// ---------------------------------------------------------------------------
 
 export type HashtagTriggerOptions = TriggerPresetOptions & {
   /** Override the trigger character. Defaults to `'#'`. */
@@ -117,9 +109,7 @@ export function hashtagTrigger(opts: HashtagTriggerOptions = {}): TriggerConfig 
   }
 }
 
-// ---------------------------------------------------------------------------
 // Generic callback trigger (e.g., for file pickers, model selectors)
-// ---------------------------------------------------------------------------
 
 export type CallbackTriggerOptions = Omit<Partial<TriggerConfig>, 'mode'> & {
   /** The trigger character. Required. */

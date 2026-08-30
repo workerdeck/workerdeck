@@ -34,6 +34,14 @@ const call = (id: string, name: string, input: unknown) => ({
   ]),
 })
 
+const stubExecutor = (): ToolExecutor => ({
+  dispatch: async (c) => ({
+    executionId: c.executionId,
+    status: 'settled',
+    result: { status: 'ok', output: null } satisfies ToolExecutionResult,
+  }),
+})
+
 describe('capability-scoped tool set', () => {
   it('grants only what the host supplied a backend for', () => {
     const minimal = createToolContext({ executor: stubExecutor(), sessionId: 's' })
@@ -268,13 +276,3 @@ describe('runner-driven tool execution', () => {
     expect(runner.resolveToolCall('c1', { type: 'text', value: 'yes' })).toBe(true)
   })
 })
-
-function stubExecutor(): ToolExecutor {
-  return {
-    dispatch: async (c) => ({
-      executionId: c.executionId,
-      status: 'settled',
-      result: { status: 'ok', output: null } satisfies ToolExecutionResult,
-    }),
-  }
-}

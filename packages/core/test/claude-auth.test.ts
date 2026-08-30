@@ -13,7 +13,7 @@ import { checkClaudeAuth, resolveBundledClaudeExecutable } from '../src/index.ts
 const dir = mkdtempSync(join(tmpdir(), 'cw-auth-probe-'))
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
-function fixture(name: string, script: string): string {
+const fixture = (name: string, script: string): string => {
   const path = join(dir, name)
   writeFileSync(path, `#!/bin/sh\n${script}\n`)
   chmodSync(path, 0o755)

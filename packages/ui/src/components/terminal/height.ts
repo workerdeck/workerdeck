@@ -7,64 +7,42 @@ import { collapsedResult } from './result-preview.ts'
 import { runSummary, taskSummary } from './tool-run.ts'
 
 /**
- * The terminal theme's row-height calculator.
+ * The terminal theme's row-height calculator: the pixel height the renderer
+ * will draw an item at, computed from cell metrics alone — no DOM. A terminal
+ * capability (one line height, one cell, monospace, ligatures off); nothing
+ * here transfers to the cards variant. The consumer is the virtualizer's
+ * `estimateSize`; the contract is "almost always exact, and honest when it
+ * cannot be" — the `exact` flag marks content whose advance this model cannot
+ * know (emoji/CJK render from fallback faces whose advances are not whole
+ * cells). `dev/height-audit.ts` is this file's regression gate.
  *
- * Computes, from a {@link TranscriptItem} and the cell metrics alone — no DOM —
- * the pixel height the terminal renderer will draw it at. This exists because
- * the theme makes it possible: one line height, one cell, monospace, ligatures
- * off. It is a *terminal* capability, deliberately homed here rather than in a
- * generic location — the cards variant has padding scales, borders and a
- * proportional face, and nothing in this file transfers to it.
+ * Two load-bearing invariants keep the model small:
  *
- * The consumer is the virtualizer's `estimateSize` (see `agent/Transcript.tsx`):
- * a computed height governs a row only until the row mounts and is measured, so
- * the contract is "almost always exact, and honest when it cannot be". Honesty
- * is the `exact` flag on {@link ComputedHeight}: `false` marks content whose
- * advance this model cannot know — emoji and CJK render from fallback faces
- * whose advances are not whole cells.
- * Measured against the real renderer in the dev playground
- * (`dev/height-audit.ts`): every unflagged row was pixel-exact across fixtures,
- * widths and cell sizes — the audit is this file's regression gate.
+ * - **Only the default state is ever computed.** Expansion is component-local
+ *   state that dies with the row, so an off-screen row is always collapsed —
+ *   and an expanded row is by definition mounted and really measured. No
+ *   open/expanded branch here, on purpose.
  *
- * Two invariants keep the model small, and both are load-bearing:
+ *   **This is a decided, permanent divergence from iOS**, not a gap to close.
+ *   There (`TerminalExpansion.swift`) nothing self-measures — the layout takes
+ *   every frame from the height book, so expansion is an input to the planner,
+ *   which is what lets the iOS scrubber be expansion-aware. Lifting expansion
+ *   to shared state here would buy that one rail feature and cost this
+ *   invariant, the calculator's central simplification. Nor would a paint-only
+ *   registry help: web expansion exists only while a row is mounted, so a rail
+ *   fed by it could only band the rows already on screen. Said here because
+ *   this is the file where someone would go looking to "fix" it.
  *
- * - **Only the default state is ever computed.** A tool row's expansion is
- *   component-local state that resets when the row unmounts, so an off-screen
- *   row is always collapsed — and an expanded row is by definition mounted,
- *   which means the virtualizer has its real measurement. There is no
- *   open/expanded branch here on purpose.
- *
- *   **This is a decided, permanent divergence from iOS**, not a gap anyone
- *   should close. There (`apps/ios/WorkerDeckKit/.../TerminalExpansion.swift`)
- *   nothing self-measures — a `UICollectionViewLayout` takes every frame from
- *   the height book — so expansion has to be an *input to the planner*, and a
- *   height the book does not know about is a frame the layout gets wrong. That
- *   inversion is what lets the iOS scrubber be expansion-aware (a band over the
- *   region you opened; a failed member of an *open* run marking on its own
- *   line) and it is the one thing this client's rail cannot do. Lifting
- *   expansion to shared state here to match would buy one rail feature and cost
- *   this invariant — the central simplification of the whole calculator — so
- *   the two clients share the *rule* and differ in how much of it each can see.
- *
- *   And the gap is entailed by **where the state can live**, not by how it is
- *   plumbed: a paint-only registry would preserve this invariant, but web
- *   expansion exists only while a row is *mounted*, so the rail it fed could
- *   only ever band the rows currently on screen — the one place an overview
- *   rail is useless, because the yellow wash is already visible there.
- *   Said here as well as in the Swift, because this is the file where someone
- *   would go looking to "fix" it.
- * - **Mutation is object replacement.** The transcript reducer never mutates an
- *   item in place — streaming text, a result arriving, a patch attaching each
- *   produce a new object — which is what lets {@link HeightEpoch}'s cache key on
+ * - **Mutation is object replacement.** The transcript reducer never mutates
+ *   an item in place, which is what lets {@link HeightEpoch}'s cache key on
  *   identity and never go stale.
  *
- * The wrap model mirrors `.term-body` (`white-space: pre-wrap` +
- * `overflow-wrap: break-word` in a `minmax(0,1fr)` grid column): greedy fill,
- * breaks at preserved spaces (which hang at the line end rather than wrapping),
- * after hyphens/dashes/`?` not followed by a digit (verified against Chrome's
- * actual break points in long URLs), and between CJK characters; a token wider
- * than the whole column moves to its own line first and then breaks per cell —
- * which is exactly where `break-word` differs from `anywhere`.
+ * The wrap model mirrors `.term-body` (`pre-wrap` + `break-word` in a
+ * `minmax(0,1fr)` grid column): greedy fill, preserved spaces hang at the line
+ * end, breaks after hyphens/dashes/`?` not followed by a digit (verified
+ * against Chrome's actual break rects), breaks between CJK characters; a token
+ * wider than the column moves to its own line first and then breaks per cell —
+ * exactly where `break-word` differs from `anywhere`.
  */
 
 /** The cell everything is measured in. `ch` is the advance of `0` in px —
@@ -89,17 +67,13 @@ export type ComputedHeight = {
 
 /* ── The epoch ─────────────────────────────────────────────────────────────
  *
- * One cache generation. **Owned by the transcript shell** (`TranscriptRows` in
- * `agent/Transcript.tsx` holds exactly one, in React state): it is created from
- * the first real measurement of the mounted surface and *replaced wholesale*
- * whenever width, `ch` or line change — a computed height is only meaningful
- * against the metrics it was computed for, so partial invalidation is a bug
- * factory and a new WeakMap is free. Within an epoch the cache keys on item
- * object identity, which the reducer's replace-on-mutation discipline turns
- * into automatic invalidation: a streamed delta is a new object and simply
- * misses. Run blocks are not cached — the folded array is rebuilt every
- * render, so its identity is worthless as a key, and a collapsed run is one
- * `wrapOne` over a short string (~2µs).
+ * One cache generation, owned by the transcript shell (`TranscriptRows` holds
+ * exactly one, in React state): created from the first real measurement and
+ * *replaced wholesale* whenever width, `ch` or line change — a computed height
+ * is only meaningful against the metrics it was computed for, so partial
+ * invalidation is a bug factory and a new WeakMap is free. Within an epoch the
+ * cache keys on item object identity; replace-on-mutation makes that automatic
+ * invalidation.
  */
 export type HeightEpoch = CellMetrics & {
   cache: WeakMap<TranscriptItem, ComputedHeight>
@@ -113,12 +87,11 @@ export function createHeightEpoch(width: number, ch: number, line: number): Heig
  * The inter-row gap is the *pair's* business (`gapBefore`), not the row's, so
  * it is added by the caller. */
 export function estimateBlockPx(block: TerminalBlock, epoch: HeightEpoch): number {
-  // Only item blocks cache. A run's array is rebuilt every render, so its
-  // identity is worthless as a key — and a task block must not key on its
-  // `task` item either: children arrive without the call object changing (the
-  // reducer replaces the *child*), so a height cached against the task would
-  // survive exactly the mutation that changes the summary line. Both are one
-  // `wrapOne` over a short string (~2µs), so neither needs the cache.
+  // Only item blocks cache. A run's array is rebuilt every render (worthless
+  // key), and a task block must not key on its `task` item: children arrive
+  // without the call object changing, so a height cached against the task
+  // would survive exactly the mutation that changes the summary line. Both are
+  // one `wrapOne` over a short string (~2µs).
   if (!('item' in block)) {
     return blockHeight(block, epoch).px
   }
@@ -131,24 +104,15 @@ export function estimateBlockPx(block: TerminalBlock, epoch: HeightEpoch): numbe
   return computed.px
 }
 
-/**
- * How many lines of a sub-agent's brief the collapsed row shows.
- *
- * Four, and the number is a judgement rather than a measurement: a brief runs
- * to thousands of characters, and an uncapped one buries the work it was asking
- * for under its own instructions. Four is enough to recognise the task and
- * short enough that the agent's first line stays on screen beside it.
- */
+/** How many lines of a sub-agent's brief the collapsed row shows — enough to
+ * recognise the task without burying the work under its own instructions. */
 export const BRIEF_LINES = 4
 
 /**
- * The collapsed brief row's height — the frame's first row, which is synthetic
- * and so cannot go through {@link estimateBlockPx}.
- *
- * Clipped, so it is `min(wrapped, BRIEF_LINES)` lines plus the row the header
- * occupies. Expanding is local state on a *mounted* row, which the virtualizer
- * re-measures; what has to be right before it mounts is the collapsed height,
- * exactly as a task row is always collapsed when unmounted for the same reason.
+ * The collapsed brief row's height — the frame's first row is synthetic and
+ * cannot go through {@link estimateBlockPx}. `min(wrapped, BRIEF_LINES)` lines
+ * plus the header row; expanding is local state on a mounted (hence measured)
+ * row, so only the collapsed height must be right.
  */
 export function briefPx(text: string, m: CellMetrics): number {
   const cols = Math.max(1, Math.floor(m.width / m.ch + EPS))
@@ -197,7 +161,7 @@ const PICTOGRAPHIC = /\p{Extended_Pictographic}/u
 /** One grapheme cluster's advance, in cells. Wide and pictographic clusters are
  * counted as 2 but flagged: they render from a fallback face whose advance is
  * not a whole number of cells, and the flag is what keeps the model honest. */
-function clusterCells(cluster: string): { w: number; exact: boolean } {
+const clusterCells = (cluster: string): { w: number; exact: boolean } => {
   if (PICTOGRAPHIC.test(cluster) || cluster.includes('‍') || cluster.includes('️')) {
     return { w: 2, exact: false }
   }
@@ -223,18 +187,16 @@ const TAB_SIZE = 2
  * long URLs after it (verified against real break rects). */
 const BREAK_AFTER = new Set(['-', '–', '—', '?'])
 
-/** Printable ASCII, tab excluded: every character is one cell and one grapheme,
- * so the segmenter has nothing to tell us. This is nearly every line a
- * transcript holds, and the segmenter was the calculator's whole CPU bill —
- * ~1s of a 30s scroll sweep on the 4k-item perf fixture, all of it spent
- * segmenting text that `charCodeAt` classifies for free. */
+/** Printable ASCII, tab excluded: every character is one cell and one
+ * grapheme. Nearly every transcript line — and the segmenter was the
+ * calculator's whole CPU bill, so this fast path matters. */
 const PLAIN_ASCII = /^[\x20-\x7e]*$/
 
 /** The ASCII half of {@link tokenize}: same tokens, same break rules ('-' and
  * '?' break unless a digit follows; '–'/'—' are not ASCII), no segmenter and
  * no per-grapheme allocation. Must stay semantically identical to the general
  * path — the height audit runs both, via content that takes each. */
-function tokenizeAscii(line: string): Token[] {
+const tokenizeAscii = (line: string): Token[] => {
   const tokens: Token[] = []
   let wordW = 0
   const flushWord = () => {
@@ -273,7 +235,7 @@ function tokenizeAscii(line: string): Token[] {
  * principle, but content with tabs beyond the first wrap point is vanishingly
  * rare and the error is bounded by one tab stop.
  */
-function tokenize(line: string): Token[] {
+const tokenize = (line: string): Token[] => {
   if (PLAIN_ASCII.test(line)) {
     return tokenizeAscii(line)
   }
@@ -332,7 +294,7 @@ function tokenize(line: string): Token[] {
 }
 
 /** Visual lines one hard line occupies at `cols` columns. */
-function wrapOne(line: string, cols: number): { lines: number; exact: boolean } {
+const wrapOne = (line: string, cols: number): { lines: number; exact: boolean } => {
   if (cols <= 0) {
     return { lines: 1, exact: false }
   }
@@ -399,7 +361,7 @@ const add = (a: Acc, b: Acc): Acc => ({ px: a.px + b.px, exact: a.exact && b.exa
  * override sets), `gutterCells` of gutter, the body wrapping in what is left.
  * `extraPx` is non-cell chrome around the row (the nested-run border+padding).
  */
-function rowH(text: string, m: CellMetrics, { indentCells = 0, gutterCells = 2, extraPx = 0 } = {}): Acc {
+const rowH = (text: string, m: CellMetrics, { indentCells = 0, gutterCells = 2, extraPx = 0 } = {}): Acc => {
   const bodyPx = m.width - extraPx - (indentCells + gutterCells) * m.ch
   const cols = Math.floor(bodyPx / m.ch + EPS)
   const { lines, exact } = textLines(text, cols)
@@ -412,7 +374,7 @@ function rowH(text: string, m: CellMetrics, { indentCells = 0, gutterCells = 2, 
  * renders them (`**bold**` is 4 chars narrower on screen than in source).
  * Approximate: reference links, raw HTML and nested emphasis edge cases are
  * not modelled. */
-function stripInline(s: string): string {
+const stripInline = (s: string): string => {
   return s
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
@@ -426,16 +388,11 @@ function stripInline(s: string): string {
 }
 
 /**
- * Text blocks carry **rendered lines**, resolved by CommonMark's own break
- * rule: a source line ending in two spaces (or a backslash) is a hard break
- * and renders as `<br>`; any other newline is soft and collapses to a space
- * under `white-space: normal`. Both halves are load-bearing and each was the
- * whole model once. Join-always missed the hard breaks — models write poems
- * with trailing double-spaces, and a 350-line one estimated ~115 lines short
- * (a phantom scrollbar tail, scrubber marks resizing as rows mounted).
- * Break-always missed the soft ones and overestimated the same stanza written
- * without them by four lines. The `markdown` fixture carries one poem of each
- * as the audit's guard.
+ * Text blocks carry **rendered lines**, resolved by CommonMark's break rule: a
+ * source line ending in two spaces (or a backslash) is a hard break; any other
+ * newline is soft and collapses to a space. Both halves are load-bearing —
+ * join-always and break-always each mis-estimate real content by dozens of
+ * lines (the `markdown` audit fixture carries one poem of each as the guard).
  */
 type MdBlock =
   | { t: 'p'; lines: string[] }
@@ -451,7 +408,7 @@ type MdBlock =
 /** Source lines of one paragraph-ish run → the lines the renderer draws: hard
  * breaks (trailing double space or backslash) split, soft newlines join with a
  * space. The break marker itself never renders and is stripped. */
-function hardLines(source: string[]): string[] {
+const hardLines = (source: string[]): string[] => {
   const out: string[] = []
   let current: string[] = []
   for (const raw of source) {
@@ -470,7 +427,7 @@ function hardLines(source: string[]): string[] {
 
 /** A line-based CommonMark-ish block parser — just enough structure to mirror
  * what Streamdown + the terminal component map emit for transcript content. */
-function parseBlocks(md: string): MdBlock[] {
+const parseBlocks = (md: string): MdBlock[] => {
   const lines = md.split('\n')
   const blocks: MdBlock[] = []
   let i = 0
@@ -578,10 +535,8 @@ function parseBlocks(md: string): MdBlock[] {
       continue
     }
     if (line.trimStart().startsWith('|')) {
-      // Only the row count. A table lays out at `max-content` and scrolls rather
-      // than compressing, so a row is a line whatever the cells hold — the
-      // per-column width measuring this used to do fed a wrap model that no
-      // longer exists, and it was real work on every table.
+      // Only the row count: a table lays out at `max-content` and scrolls
+      // rather than compressing, so a row is a line whatever the cells hold.
       let rows = 0
       while (i < lines.length && lines[i]!.trimStart().startsWith('|')) {
         const cells = lines[i]!.trim()
@@ -683,13 +638,9 @@ export function markdownHeight(md: string, m: CellMetrics, extraPx = 0): Acc {
         break
       }
       case 'table':
-        // One line per row, always. A table is laid out at `max-content` and
-        // carries no `max-width`, so a wide one scrolls inside
-        // `.term-table-wrap` rather than compressing — which means the auto
-        // table layout never wraps a cell and there is nothing here to model.
-        // This used to branch on whether the table fit, and flag the wide case:
-        // that branch was the theme's own `max-width: 100%` leaking into the
-        // calculator, and both went at once. See `terminal.css` §Markdown.
+        // One line per row, always: no `max-width`, so a wide table scrolls
+        // inside `.term-table-wrap` and a cell never wraps. See `terminal.css`
+        // §Markdown.
         acc = add(acc, { px: block.rows * m.line, exact: true })
         break
       case 'hr':
@@ -702,7 +653,7 @@ export function markdownHeight(md: string, m: CellMetrics, extraPx = 0): Acc {
 
 /* ── Items ─────────────────────────────────────────────────────────────────── */
 
-function diffHeight(patch: FilePatch, m: CellMetrics, extraPx = 0): Acc {
+const diffHeight = (patch: FilePatch, m: CellMetrics, extraPx = 0): Acc => {
   const walk = (hunk: PatchHunk) => {
     let newLine = hunk.newStart
     let oldLine = hunk.oldStart
@@ -739,16 +690,14 @@ function diffHeight(patch: FilePatch, m: CellMetrics, extraPx = 0): Acc {
 /** A collapsed tool row: the header, then the diff (when the call carries a
  * patch) or the shared collapsed preview plus its trailing "there is more" row.
  * No expanded branch — see the module comment's first invariant. */
-function toolRowHeight(item: ToolCallItem, m: CellMetrics, extraPx: number): Acc {
+const toolRowHeight = (item: ToolCallItem, m: CellMetrics, extraPx: number): Acc => {
   const preview = toolInputPreview(item.input)
   const backend = item.backend && item.backend !== 'server' ? ` · ${item.backend}` : ''
   let acc = rowH(`${item.name}(${preview})${backend}`, m, { gutterCells: 2, extraPx })
 
-  // Each replayed image part draws a box of whole lines, and it draws it in
-  // every state — placeholder, picture, failure — so the height is settled
-  // before the first byte is asked for and the load can never reflow the list.
-  // No wrap and no `exact: false`: the box is the constant, not the image (see
-  // `image-box.ts`).
+  // Each image part draws the same box in every state — placeholder, picture,
+  // failure — so the height is settled before the first byte is fetched and a
+  // load can never reflow the list (see `image-box.ts`).
   const images = item.result?.images
   if (images?.length) {
     acc = add(acc, { px: images.length * IMAGE_BOX_LINES * m.line, exact: true })
@@ -761,10 +710,8 @@ function toolRowHeight(item: ToolCallItem, m: CellMetrics, extraPx: number): Acc
   if (!text) {
     return acc
   }
-  // The renderer's own budget, not a copy of it: `collapsedResult` returns both
-  // the lines and the exact trailing label, so this cannot drift from what
-  // `items.tsx` draws — which it previously could, and which its own comment
-  // said only the dev audit was catching.
+  // The renderer's own budget, not a copy: `collapsedResult` returns both the
+  // lines and the exact trailing label, so this cannot drift from `items.tsx`.
   const { shown, more } = collapsedResult(text.trimEnd().split('\n'), item.result?.totalChars)
   for (const line of shown) {
     // indent=1 with columns=3 resolves the indent against the row's own

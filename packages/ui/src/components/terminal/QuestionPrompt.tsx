@@ -5,20 +5,11 @@ import { Box, Choices, Hint, PromptInput, Rule, TabStrip, type Choice } from './
 import { Blank, Ink, Row } from './row.tsx'
 
 /**
- * The AskUserQuestion form, in the CLI's shape: **one question at a time**,
- * behind a strip of chips, ending in a review step.
- *
- * The card version stacks every question on screen at once, which is right for a
- * dialog and wrong here for a reason worth stating: a terminal form is answered
- * with the keyboard, and a stacked form has no answer to "where does `Tab` go" —
- * it has as many focus targets as there are options across every question. One
- * question at a time makes the keys unambiguous (`↑↓` within, `Tab` between,
- * `Enter` to take), and it is why the chips exist: something has to say that
- * answering the first of three is not finishing.
- *
- * The review step is the other half of that. Answers given one screen at a time
- * are answers you cannot see together, so the last chip shows all of them and
- * asks once more before they go back to the model.
+ * The AskUserQuestion form, in the CLI's shape: one question at a time behind
+ * a strip of chips, ending in a review step. One-at-a-time keeps the keyboard
+ * unambiguous (`↑↓` within, `Tab` between, `Enter` to take); the review step
+ * shows answers given one screen at a time together before they go back to the
+ * model.
  */
 
 type Selection = { labels: string[]; other: string; otherActive: boolean }
@@ -27,7 +18,7 @@ const EMPTY: Selection = { labels: [], other: '', otherActive: false }
 
 /** A question's answer: chosen label(s), comma-joined, with any free-text
  * "Other" appended — the shape the CLI's own UI puts in `updatedInput.answers`. */
-function answerFor(selection: Selection): string {
+const answerFor = (selection: Selection): string => {
   const parts = [...selection.labels]
   if (selection.otherActive && selection.other.trim()) {
     parts.push(selection.other.trim())
@@ -62,9 +53,9 @@ export function TerminalQuestionPrompt({ request, onAnswer, onDismiss, className
   const update = (index: number, patch: Partial<Selection>) =>
     setSelections((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)))
 
-  // Functional, and it has to be: reading `selections` from the render closure
-  // means two toggles in one tick both compute from the same base and the second
-  // silently drops the first. A multi-select is exactly where that happens.
+  // Functional, and it has to be: two toggles in one tick computed from the
+  // render closure would both use the same base, and the second silently
+  // drops the first.
   const toggle = (index: number, label: string, multiSelect: boolean) => {
     setSelections((prev) =>
       prev.map((current, i) => {
@@ -137,9 +128,8 @@ export function TerminalQuestionPrompt({ request, onAnswer, onDismiss, className
       ) : (
         <QuestionStep
           // Keyed by question, and load-bearing: without it React reuses the
-          // step across a Tab and the option list never re-arms its focus, so
-          // the keyboard lands on nothing and the next `3` or `Esc` goes
-          // nowhere. Remounting is also what re-runs the focus takeover.
+          // step across a Tab, the option list never re-arms its focus, and
+          // the keyboard lands on nothing.
           key={tab}
           question={questions[tab]!}
           selection={selection}
@@ -185,16 +175,13 @@ function QuestionStep({
         key: option.label,
         label: option.label,
         description: option.description,
-        // Markers only where there is state to keep: a multi-select accumulates
-        // and has to show what is in the set, a one-of answers itself by being
-        // chosen and moves on — a column of empty radios in front of it would be
-        // three characters of nothing on every row. The CLI draws it the same way.
+        // Markers only where there is state to keep: a multi-select must show
+        // its set; a one-of answers itself by being chosen. The CLI draws it
+        // the same way.
         checked: multiSelect ? selected : undefined,
         marker: 'check',
         selected: !multiSelect && selected,
-        // A preview shows on **focus**, not only on selection: walking a list
-        // with the arrow keys, "what does this one look like" is the question
-        // the cursor is asking.
+        // A preview shows on focus, not only on selection.
         detail:
           option.preview && cursor === index ? (
             <Box>
@@ -210,8 +197,7 @@ function QuestionStep({
     {
       key: '__other',
       label: 'Other…',
-      // Always markered, in both kinds: this row is a *mode* (the field is open
-      // or it isn't), which the reader cannot see any other way.
+      // Always markered: this row is a mode (the field is open or it isn't).
       checked: selection.otherActive,
       marker: 'check' as const,
       detail: selection.otherActive ? (
@@ -224,9 +210,7 @@ function QuestionStep({
         />
       ) : undefined,
     },
-    // Multi-select has no natural end — every toggle leaves the list where it
-    // was — so it needs a row that says "done with this one". A one-of answers
-    // itself by being chosen and advances on its own.
+    // Multi-select has no natural end, so it needs a "done with this one" row.
     ...(multiSelect ? [{ key: '__next', label: 'Submit' }] : []),
     { key: '__chat', label: 'Chat about this' },
   ]
@@ -246,8 +230,7 @@ function QuestionStep({
         onChoose={(index) => {
           if (index < question.options.length) {
             onToggle(question.options[index]!.label)
-            // A one-of is finished the moment it is picked; making the reader
-            // press Tab as well would be a keystroke that answers nothing.
+            // A one-of is finished the moment it is picked.
             if (!multiSelect) {
               onAdvance()
             }
@@ -307,9 +290,8 @@ function ReviewStep({
       <Choices
         label="Submit answers"
         options={[
-          // Offered even when incomplete: an unanswered question is a legitimate
-          // answer to give, and the model is told which ones were skipped. What
-          // it must not do is *look* finished, which is what the row above says.
+          // Offered even when incomplete: an unanswered question is a
+          // legitimate answer, and the model is told which ones were skipped.
           { key: 'submit', label: complete ? 'Submit answers' : 'Submit anyway' },
           { key: 'cancel', label: 'Cancel', danger: true },
         ]}

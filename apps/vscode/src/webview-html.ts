@@ -1,42 +1,30 @@
 import * as vscode from 'vscode'
 
 /**
- * The HTML skeleton both webviews share. No external `connect-src`: every byte
- * to a gateway rides postMessage. `img-src` allows http(s) for inline images on
- * KEYLESS gateways only — header auth cannot ride an `<img>`, the same trade
- * the iOS client makes.
+ * The HTML skeleton every webview shares, plus the settings readings that have to
+ * be stamped into it. No external `connect-src`: every byte to a gateway rides
+ * postMessage. `img-src` allows http(s) for inline images on KEYLESS gateways only
+ * — header auth cannot ride an `<img>`, the same trade the iOS client makes.
+ *
+ * Everything below is stamped on `<html>`/`#root` rather than pushed over the
+ * bridge, because it has to be right on the *first* paint and a message cannot be.
+ * A change to any of them re-renders the HTML (see `activate`).
  */
+
 /**
- * The typeface the AGENT PANEL runs in, from settings. Stamped on `<html>` and
- * read by `styles.css`, rather than pushed over the bridge: it has to be right
- * on the first paint, and a message can't be. A change re-renders the HTML (see
- * `activate`).
- *
- * The panel alone opts in (`{ font: true }`). The sidebar and the section views
- * are ordinary VS Code UI and follow the editor's UI font like every other view
- * — a monospace tree is a monospace tree, not a terminal.
- *
- * **`cards` only.** The terminal variant draws on a character cell, so it is
- * monospace by construction and takes the editor font through `--cw-font-mono`
- * (see `webview/styles.css`) whatever this says. A proportional face there would
- * not be a preference, it would be a broken grid.
+ * The typeface the agent panel runs in. The panel alone opts in (`{ font: true }`);
+ * the sidebar and section views are ordinary VS Code UI and follow the editor's UI
+ * font. **`cards` only** — the terminal variant is monospace by construction and
+ * takes the editor font through `--cw-font-mono`.
  */
 export function fontMode(): 'editor' | 'sans' {
   return vscode.workspace.getConfiguration('workerdeck').get<'editor' | 'sans'>('fontFamily') === 'sans' ? 'sans' : 'editor'
 }
 
 /**
- * How much room the transcript gives each message, from settings. Stamped on
- * `<html>` for the same reason the typeface is — the panel reads it as its
- * initial prop, and a first paint at the wrong density is a visible reflow of
- * every row. A change re-renders the HTML (see `activate`).
- *
- * `comfortable` is the default because it is what the Claude Code CLI does, and
- * the panel is trying to read like it.
- *
- * **`cards` only.** A terminal has one line height — that is the premise — so
- * the terminal variant's spacing is a *blank line*, decided per pair of blocks,
- * and there is no density knob to turn. See `ROW_GAP` in `@workerdeck/ui`.
+ * How much room the transcript gives each message. **`cards` only** — a terminal
+ * has one line height, so the terminal variant's spacing is a blank line decided
+ * per pair of blocks (see `ROW_GAP` in `@workerdeck/ui`).
  */
 export function transcriptDensity(): 'comfortable' | 'compact' {
   return vscode.workspace.getConfiguration('workerdeck').get<'comfortable' | 'compact'>('transcriptDensity') === 'compact'
@@ -45,48 +33,17 @@ export function transcriptDensity(): 'comfortable' | 'compact' {
 }
 
 /**
- * How the panel draws a turn, from settings. Stamped on `#root` beside the
- * density and for the same reason — the variant decides every row's shape, so a
- * first paint at the wrong one reflows the whole transcript.
- *
- * `terminal` is the default because this is a dock next to a terminal: the
- * theme draws every row on a character cell, which costs the least vertical
- * space and is what the CLI this panel mirrors actually looks like. `cards` is
- * there for a panel dragged out into the editor area, where the chat form has
- * the width it wants.
- *
- * Anything that is not `cards` resolves to `terminal`, which is what quietly
- * carries a settings file still holding the retired `lines` across: someone who
- * chose the no-boxes form keeps a no-boxes form rather than being dropped back
- * into the one they turned off.
+ * How the panel draws a turn. Anything that is not `cards` resolves to `terminal`,
+ * which is what carries a settings file still holding the retired `lines` across.
  */
 export function transcriptVariant(): 'terminal' | 'cards' {
   return vscode.workspace.getConfiguration('workerdeck').get<'terminal' | 'cards'>('transcriptVariant') === 'cards' ? 'cards' : 'terminal'
 }
 
 /**
- * The terminal theme's character cell, in **whole pixels**.
- *
- * Follows the editor by default, and that is the point rather than a shortcut:
- * the panel is docked beside the editor and the integrated terminal, and a
- * transcript at a different size from both reads as a web page someone embedded.
- * `workerdeck.terminal.fontSize`/`.lineHeight` override it; `0` (the default)
- * means "whatever the editor is set to".
- *
- * `editor.lineHeight` is three settings in one number — VS Code reads `0` as
- * automatic, anything under 8 as a multiplier of the font size, and the rest as
- * pixels — so the same three readings are made here. Everything is rounded
- * because a fractional cell puts every other row on a half-pixel (see the
- * geometry rules in `@workerdeck/ui`'s `terminal.css`); rounding is not a
- * nicety.
- */
-/**
- * The panel-wide base font size, in whole pixels.
- *
- * Priority: `workerdeck.fontSize` → `editor.fontSize` → 13. This is the single
- * knob that drives BOTH the cards variant (through the panel root's `font-size`)
- * and the terminal variant (as the default for the character cell, unless
- * `workerdeck.terminal.fontSize` overrides it). `0` means "follow the editor".
+ * The panel-wide base font size, in whole pixels: `workerdeck.fontSize` →
+ * `editor.fontSize` → 13. The one knob behind both variants — the cards root's
+ * `font-size`, and the terminal cell's default size.
  */
 export function panelFontSize(): number {
   const wd = vscode.workspace.getConfiguration('workerdeck')
@@ -94,6 +51,13 @@ export function panelFontSize(): number {
   return Math.round(wd.get<number>('fontSize') || editor.get<number>('fontSize') || 13)
 }
 
+/**
+ * The terminal theme's character cell, in **whole pixels**. `editor.lineHeight` is
+ * three settings in one number — VS Code reads `0` as automatic, anything under 8
+ * as a multiplier of the font size, the rest as pixels — so the same three
+ * readings are made here. Rounding is not a nicety: a fractional cell puts every
+ * other row on a half-pixel (see `terminal.css`'s geometry rules).
+ */
 export function terminalMetrics(): { fontSize: number; lineHeight: number } {
   const wd = vscode.workspace.getConfiguration('workerdeck')
   const editor = vscode.workspace.getConfiguration('editor')
@@ -105,12 +69,8 @@ export function terminalMetrics(): { fontSize: number; lineHeight: number } {
   return { fontSize: Math.round(fontSize), lineHeight: Math.round(lineHeight) }
 }
 
-/**
- * The pointer affordances the terminal theme allows itself — the hover fill and
- * the hover-revealed copy. On by default: this is a webview, and refusing what a
- * pointer makes possible would be cosplay. Off is the pure article, for someone
- * who wants the panel to behave exactly like the terminal below it.
- */
+/** The pointer affordances the terminal theme allows itself: the hover fill and the
+ * hover-revealed copy. Off is the pure article. */
 export function terminalAffordances(): boolean {
   return vscode.workspace.getConfiguration('workerdeck').get<boolean>('terminal.affordances') !== false
 }

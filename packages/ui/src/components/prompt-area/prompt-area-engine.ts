@@ -4,9 +4,7 @@
  */
 import type { Segment, ChipSegment, TriggerConfig, TriggerPosition, ActiveTrigger } from './types.ts'
 
-// ---------------------------------------------------------------------------
 // Serialization
-// ---------------------------------------------------------------------------
 
 /**
  * Converts an array of segments to a plain text string.
@@ -72,9 +70,7 @@ export function truncateSegmentsToLength(segments: Segment[], maxLength: number)
   return result
 }
 
-// ---------------------------------------------------------------------------
 // Whitespace / word boundaries
-// ---------------------------------------------------------------------------
 
 /**
  * Single source of truth for what counts as an inline-whitespace word boundary
@@ -104,9 +100,7 @@ function buildTriggerCharMap(triggers: TriggerConfig[]): Map<string, TriggerConf
   return map
 }
 
-// ---------------------------------------------------------------------------
 // Trigger position validation
-// ---------------------------------------------------------------------------
 
 /**
  * Checks whether a trigger character at the given position in text
@@ -131,9 +125,7 @@ export function isValidTriggerPosition(text: string, charIndex: number, position
   return isInlineWhitespace(prevChar)
 }
 
-// ---------------------------------------------------------------------------
 // Trigger detection
-// ---------------------------------------------------------------------------
 
 /**
  * Scans backwards from the cursor position to detect if the user is
@@ -176,7 +168,6 @@ export function detectActiveTrigger(text: string, cursorPos: number, triggers: T
       return null
     }
 
-    // Check if this character is a trigger character
     const matchingTrigger = triggerByChar.get(char)
     if (matchingTrigger && isValidTriggerPosition(text, i, matchingTrigger.position)) {
       return {
@@ -190,9 +181,7 @@ export function detectActiveTrigger(text: string, cursorPos: number, triggers: T
   return null
 }
 
-// ---------------------------------------------------------------------------
 // Chip resolution
-// ---------------------------------------------------------------------------
 
 /**
  * Resolves an active trigger into a chip within the segments array.
@@ -211,7 +200,6 @@ export function resolveChip(
   const triggerStart = activeTrigger.startOffset
   const triggerEnd = triggerStart + 1 + activeTrigger.query.length // +1 for trigger char
 
-  // Build the new segments by mapping plain text positions back to segment boundaries
   const newSegments: Segment[] = []
   let offset = 0
 
@@ -268,7 +256,6 @@ export function resolveChip(
     }
   }
 
-  // Merge adjacent text segments
   const merged = mergeAdjacentTextSegments(newSegments)
 
   // Cursor should be placed after the chip + trailing space.
@@ -352,9 +339,7 @@ export function resolveText(
   return { segments: merged, cursorOffset }
 }
 
-// ---------------------------------------------------------------------------
 // Chip removal
-// ---------------------------------------------------------------------------
 
 /**
  * Removes a chip at the given segment index and merges adjacent text segments.
@@ -397,9 +382,7 @@ export function revertChipAtIndex(segments: Segment[], index: number): { segment
   return { segments: mergeAdjacentTextSegments(result), revertedText }
 }
 
-// ---------------------------------------------------------------------------
 // Paste: resolve trigger patterns in segments
-// ---------------------------------------------------------------------------
 
 /**
  * Scans text segments for trigger patterns and auto-resolves them into chips.
@@ -489,9 +472,7 @@ function splitTextByTriggerPatterns(text: string, triggerByChar: Map<string, Tri
   return segments
 }
 
-// ---------------------------------------------------------------------------
 // Text range replacement
-// ---------------------------------------------------------------------------
 
 /**
  * Replaces a range of plain text within the segments array.
@@ -523,13 +504,11 @@ export function replaceTextRange(segments: Segment[], start: number, end: number
       if (chipEnd <= start || chipStart >= end) {
         newSegments.push(seg)
       }
-      // Chips within the range are removed
       offset = chipEnd
     } else {
       const textStart = offset
       const textEnd = offset + seg.text.length
 
-      // Check if this segment contains the insertion/replacement point
       const isBefore = start === end ? textEnd < start : textEnd <= start
       const isAfter = start === end ? textStart > end : textStart >= end
 
@@ -569,9 +548,7 @@ export function replaceTextRange(segments: Segment[], start: number, end: number
   return mergeAdjacentTextSegments(newSegments)
 }
 
-// ---------------------------------------------------------------------------
 // Markdown formatting shortcuts
-// ---------------------------------------------------------------------------
 
 /**
  * Toggles markdown wrap markers around a selected text range.
@@ -597,7 +574,6 @@ export function toggleMarkdownWrap(
   const plainText = segmentsToPlainText(segments)
   const markerLen = marker.length
 
-  // Check if already wrapped
   const hasOpeningMarker = selectionStart >= markerLen && plainText.slice(selectionStart - markerLen, selectionStart) === marker
   const hasClosingMarker =
     selectionEnd + markerLen <= plainText.length && plainText.slice(selectionEnd, selectionEnd + markerLen) === marker
@@ -635,9 +611,7 @@ export function toggleMarkdownWrap(
   }
 }
 
-// ---------------------------------------------------------------------------
 // Inline markdown parsing
-// ---------------------------------------------------------------------------
 
 export type MarkdownToken =
   | { type: 'plain'; text: string }
@@ -667,7 +641,6 @@ export function parseInlineMarkdown(text: string): MarkdownToken[] {
   let match: RegExpExecArray | null
 
   while ((match = pattern.exec(text)) !== null) {
-    // Add any plain text before this match
     if (match.index > lastIndex) {
       tokens.push({ type: 'plain', text: text.slice(lastIndex, match.index) })
     }
@@ -689,7 +662,6 @@ export function parseInlineMarkdown(text: string): MarkdownToken[] {
     lastIndex = match.index + match[0].length
   }
 
-  // Add any remaining plain text
   if (lastIndex < text.length) {
     tokens.push({ type: 'plain', text: text.slice(lastIndex) })
   }
@@ -697,9 +669,7 @@ export function parseInlineMarkdown(text: string): MarkdownToken[] {
   return tokens
 }
 
-// ---------------------------------------------------------------------------
 // Segment comparison
-// ---------------------------------------------------------------------------
 
 /**
  * Shallow equality check for two segment arrays.
@@ -739,10 +709,6 @@ export function segmentsEqual(a: Segment[], b: Segment[]): boolean {
   return true
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 /**
  * Merges adjacent text segments into single text segments.
  * Also removes empty text segments.
@@ -757,7 +723,6 @@ export function mergeAdjacentTextSegments(segments: Segment[]): Segment[] {
 
     const last = result[result.length - 1]
     if (seg.type === 'text' && last?.type === 'text') {
-      // Merge with previous text segment
       result[result.length - 1] = { type: 'text', text: last.text + seg.text }
     } else {
       result.push(seg)

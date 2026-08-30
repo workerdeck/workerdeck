@@ -6,9 +6,7 @@ import { syncVsCodeTheme } from '../theme.ts'
 import { GatewaysApp } from './GatewaysApp.tsx'
 
 syncVsCodeTheme()
-// The host answers `wd-ready` before React has mounted and subscribed, and this
-// view resolves late by design (collapsed in the manifest) — so its one push
-// kind replays rather than leaving an empty list until a gateway changes.
+// This view resolves late by design (collapsed in the manifest), so its push kind replays.
 const bridge = new Bridge(['wd-gateways'])
 
 const root = document.getElementById('root')

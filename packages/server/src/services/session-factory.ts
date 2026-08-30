@@ -44,7 +44,7 @@ export type SessionFactoryDeps = {
 
 export type SessionFactory = ReturnType<typeof createSessionFactory>
 
-export function createSessionFactory(deps: SessionFactoryDeps) {
+export const createSessionFactory = (deps: SessionFactoryDeps) => {
   const { adapterFor, profiles, refs } = deps
 
   /** Profiles (by name; '' = none) whose oauth notice has been logged. */

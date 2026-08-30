@@ -3,21 +3,13 @@ import { chmod, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 /**
- * Materializes the key that `resolveInstanceConfig` promised via
- * `generateAuthKey`: resolution is pure and synchronous, reading a key file is
- * I/O, so the two halves meet here at startup. The contract is that this
- * function returns a usable secret or throws — it never returns "no key",
- * because the resolved config has already stood down the Host-header guard on
- * the strength of the promise, and a silent miss would serve an open gateway
- * that reports itself authenticated.
- *
- * The key persists under `stateDir` so a restart does not un-pair every client
- * that stored it (the iOS app keeps it in its keychain). No `stateDir` means
- * nothing durable to write, so the key is ephemeral per run — the banner says
- * so. This is the gateway's own operator secret and nothing else: Anthropic
- * credentials never pass through here (root CLAUDE.md, auth red lines).
+ * Materializes the key `resolveInstanceConfig` promised via `generateAuthKey`.
+ * Returns a usable secret or throws — never "no key": the resolved config has
+ * already stood the Host-header guard down on the strength of that promise, so
+ * a silent miss would serve an open gateway wearing an authenticated banner
+ * (`docs/GOTCHAS.md` §Server, profiles & auth). This is the gateway's own
+ * operator secret and nothing else — no model-provider credential passes here.
  */
-
 export type MaterializedAuthKey = {
   key: string
   /** 'stored' reused the file, 'created' wrote a new one, 'ephemeral' had nowhere to write. */
@@ -29,18 +21,16 @@ export type MaterializedAuthKey = {
 /** 48 hex chars — far past `createCliAuth`'s 12-char floor, and header-safe. */
 const generateKey = (): string => randomBytes(24).toString('hex')
 
-/** A stored key must be one printable-ASCII line long enough to be a secret:
- * both transports (HTTP header, login form) choke on anything else, and a
- * truncated or garbage file should regenerate, not crash or half-work. */
+/** One printable-ASCII line, header-safe: a truncated or garbage file regenerates rather than half-working. */
 const usableStoredKey = (raw: string): string | null => {
   const line = raw.split('\n', 1)[0]?.trim() ?? ''
   return line.length >= 12 && /^[\x21-\x7e]+$/.test(line) ? line : null
 }
 
-export async function materializeAuthKey(
+export const materializeAuthKey = async (
   stateDir: string | null,
   options: { warn?: (message: string) => void } = {},
-): Promise<MaterializedAuthKey> {
+): Promise<MaterializedAuthKey> => {
   const warn = options.warn ?? ((message: string) => process.stderr.write(`[workerdeck] ${message}\n`))
   if (stateDir === null) {
     return { key: generateKey(), source: 'ephemeral', path: null }

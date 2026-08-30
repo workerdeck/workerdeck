@@ -19,36 +19,26 @@ import { type DefaultsKind } from '@/lib/settings.ts'
 import { useProfileChoice } from '@/hooks/useProfiles.ts'
 
 /**
- * The half of a run that a session and a queue job describe identically: where
- * it runs, what to do, and which engine settings it starts with.
- *
- * It was two copies, and they had already drifted — different placement, and one
- * silently pre-authorizing `bypassPermissions` where the other made it a
- * checkbox. That difference is real and deliberate (an interactive operator is
- * present; an unattended job's operator is not), so it stays a *parameter* here
- * rather than being flattened away. What must not differ — how a cwd is
- * remembered, how a sticky model is reconciled against the chosen profile, which
- * controls a capability record hides — is what this owns.
+ * The half of a run a session and a queue job describe identically: where it runs,
+ * what to do, and which engine settings it starts with. The one real difference —
+ * an interactive operator is present, an unattended job's is not — stays a
+ * *parameter* (`allowBypass`) rather than being flattened away.
  */
 const CWD_KEY = 'workerdeck.last-cwd'
 
 /**
- * Where a run's directory can plausibly be, best first: the one used last, then
- * the directories sessions are already running in, then the gateway's own roots.
- *
- * The roots are authoritative and the only source that works on a fresh install
- * with no sessions, but they are also the least specific, so they come last.
- * Offered as a datalist rather than a modal browser: the field stays typeable,
- * which is what someone who knows the path actually wants.
+ * Where a run's directory can plausibly be, best first: last used, then the
+ * directories sessions already run in, then the gateway's roots — authoritative
+ * and the only source that works on a fresh install, but the least specific.
+ * A datalist rather than a browser, so the field stays typeable.
  */
-function useCwdCandidates(sessions: SessionInfo[]): string[] {
+const useCwdCandidates = (sessions: SessionInfo[]): string[] => {
   const [roots, setRoots] = useState<string[]>([])
   useEffect(() => {
     client()
       ?.listHostRoots()
       .then((r) => setRoots(r.roots.map((root) => root.path)))
-      // A gateway serving no host files is the normal case, not an error — the
-      // field still takes a typed path.
+      // A gateway serving no host files is the normal case; the field still takes a typed path.
       .catch(() => setRoots([]))
   }, [])
   return useMemo(() => {
@@ -63,12 +53,9 @@ function useCwdCandidates(sessions: SessionInfo[]): string[] {
 }
 
 /**
- * Where the permission mode lands when neither the run nor its profile says.
- *
- * Not a preference and not configurable — the one thing that genuinely differs
- * between the two forms. An operator is watching an interactive session, so it
- * asks; an unattended job that stops at every file write has not run, so it
- * accepts edits. A profile default overrides both.
+ * Where the permission mode lands when neither the run nor its profile says. Not
+ * configurable: an operator is watching an interactive session, so it asks; an
+ * unattended job that stops at every file write has not run.
  */
 const MODE_FALLBACK: Record<DefaultsKind, PermissionMode> = {
   session: 'default',
@@ -77,43 +64,34 @@ const MODE_FALLBACK: Record<DefaultsKind, PermissionMode> = {
 
 export type RunForm = ReturnType<typeof useRunForm>
 
-export function useRunForm(kind: DefaultsKind) {
+export const useRunForm = (kind: DefaultsKind) => {
   const [cwd, setCwd] = useState(() => localStorage.getItem(CWD_KEY) ?? '')
   const [prompt, setPrompt] = useState('')
-  // Empty means "whatever the profile says": the gateway fills `model` and
-  // `permissionMode` from `ProfileInfo.defaults` for any field the request
-  // leaves out, so an unset picker is a real choice rather than a missing one.
+  // Empty means "whatever the profile says": the gateway fills any field the request omits
+  // from `ProfileInfo.defaults`, so an unset picker is a real choice.
   const [model, setModel] = useState('')
   const [modeChoice, setModeChoice] = useState<PermissionMode | undefined>(undefined)
   const [effort, setEffort] = useState('')
   const { profiles, profile, selected, select: selectProfile } = useProfileChoice()
-  // What the mode select shows, most specific first: this run's own pick, then
-  // the profile's default, then the per-kind fallback. The fallback is not a
-  // preference — an unattended job that stops at every file write has not run,
-  // so it accepts edits unless something above it says otherwise.
+  // Most specific first: this run's pick, the profile's default, the per-kind fallback.
   const mode = modeChoice ?? selected?.defaults?.permissionMode ?? MODE_FALLBACK[kind]
   const engine = engineFormOptions(selected, mode, model)
 
   /**
-   * The engine-shaped half of a `CreateSessionRequest`.
-   *
-   * `allowBypass` is the caller's call, not this hook's: an interactive session
-   * pre-authorizes `bypassPermissions` because the operator is present and the
-   * CLI refuses the switch mid-session otherwise, while an unattended job makes
-   * it an explicit opt-in.
+   * The engine-shaped half of a `CreateSessionRequest`. `allowBypass` is the
+   * caller's call: an interactive session pre-authorizes `bypassPermissions`
+   * because the CLI refuses the switch mid-session, a job makes it an opt-in.
    */
   const sessionFields = (options: { prompt?: string; resume?: string; allowBypass?: boolean }): CreateSessionRequest => ({
-    // Omitted entirely for an engine with no host filesystem: the gateway takes
-    // no cwd there, and sending one would put a path on a session that never
-    // opens a directory (and drag it through `allowedCwdRoots` for nothing).
+    // Omitted for an engine with no host filesystem: sending one would put a path on a session
+    // that never opens a directory, and drag it through `allowedCwdRoots` for nothing.
     cwd: engine.capabilities.hostCwd === false ? undefined : cwd.trim(),
     profile: profile || undefined,
     prompt: options.prompt,
     permissionMode: engine.mode,
     model: engine.model.trim() || undefined,
     resume: options.resume,
-    // Only when the engine takes one, and only a value the current model offers
-    // — a sticky choice from another profile must not 400 here.
+    // Only a value the current model offers: a sticky choice from another profile must not 400.
     reasoningEffort: effort && engine.reasoningEfforts.includes(effort) ? effort : undefined,
     ...(engine.capabilities.settingSources
       ? {
@@ -216,8 +194,7 @@ export function RunFormFields({
           <span className="text-label font-medium text-fg-3">Model</span>
           <ModelPicker value={engine.model} onChange={form.setModel} models={engine.models} className="min-w-40" />
         </label>
-        {/* Present exactly when the record (or the chosen model's catalog row)
-            declares efforts — never a control that does nothing. */}
+        {/* Only when the record or the model's catalog row declares efforts: never a dead control. */}
         {engine.reasoningEfforts.length > 0 ? (
           <label className="flex min-w-0 flex-col gap-1">
             <span className="text-label font-medium text-fg-3">Effort</span>

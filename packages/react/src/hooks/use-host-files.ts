@@ -32,7 +32,7 @@ export type UseHostFileSearchResult = {
  * holds. Asking again on every character would be a request per keystroke for a
  * feature that does not exist here.
  */
-export function useHostFileSearch(client: WorkerDeckClient, cwd: string | undefined): UseHostFileSearchResult {
+export const useHostFileSearch = (client: WorkerDeckClient, cwd: string | undefined): UseHostFileSearchResult => {
   const [unsupported, setUnsupported] = useState(false)
   // A resume into a different directory invalidates the verdict as well as the
   // results — the new cwd may well be under a configured root.
@@ -87,7 +87,7 @@ export type UseHostFileRootsResult = {
  * write flag are gateway configuration, not session state, and they do not
  * change while the tab is open.
  */
-export function useHostFileRoots(client: WorkerDeckClient): UseHostFileRootsResult {
+export const useHostFileRoots = (client: WorkerDeckClient): UseHostFileRootsResult => {
   const [result, setResult] = useState<UseHostFileRootsResult>({
     available: false,
     canWrite: false,
@@ -157,7 +157,7 @@ export type UseHostFileTreeResult = {
  * Like the search hook, a 404 is answered once for the session: host files are
  * either configured here or they are not.
  */
-export function useHostFileTree(client: WorkerDeckClient, cwd: string | undefined): UseHostFileTreeResult {
+export const useHostFileTree = (client: WorkerDeckClient, cwd: string | undefined): UseHostFileTreeResult => {
   const [dirs, setDirs] = useState<Map<string, HostDirState>>(() => new Map())
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [unsupported, setUnsupported] = useState(false)

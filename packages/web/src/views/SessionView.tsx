@@ -23,12 +23,9 @@ import { useMarkSeen, unseenSince } from '@/hooks/useUnseen.ts'
 import { nudgeSessions, useSessions } from '@/hooks/useSessions.ts'
 
 /**
- * Resolves the route's gateway before anything below it runs.
- *
- * Split in two so the inner view can take a *defined* client: a session id is
- * meaningless without the gateway it belongs to, and hooks cannot be skipped
- * while we work out whether that gateway still exists (a link can outlive the
- * gateway it named — removed, or opened in a browser that never had it).
+ * Resolves the route's gateway before anything below it runs. Split in two so the
+ * inner view can take a *defined* client — a link can outlive the gateway it
+ * named, and hooks cannot be skipped while we find that out.
  */
 export function SessionView() {
   const { hostId, sessionId } = useParams({ from: '/sessions/$hostId/$sessionId' })
@@ -37,9 +34,8 @@ export function SessionView() {
   const client = clientFor(hostId)
 
   useEffect(() => {
-    // Not until the same-origin probe has answered: the implicit gateway does
-    // not exist yet at first paint, and bouncing off it would break every
-    // bookmark on the way in.
+    // Not until the probe has answered: the implicit gateway does not exist at first paint,
+    // and bouncing off it would break every bookmark on the way in.
     if (!ready || client) {
       return
     }
@@ -55,25 +51,21 @@ export function SessionView() {
 
 function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessionId: string; client: WorkerDeckClient }) {
   const navigate = useNavigate()
-  // The sub-agent takeover, addressed in the URL — see the route's
-  // `validateSearch`. `sn` is the nonce; without one, clicking the same agent
-  // twice would be a props-equal no-op.
+  // The sub-agent takeover, addressed in the URL — see the route's `validateSearch`.
   const { subagent, sn, reveal, rn } = useSearch({ from: '/sessions/$hostId/$sessionId' })
-  // The workspace asks for this record too, and the client de-dupes nothing —
-  // but it is one small GET per session view, and the alternative is threading
-  // the panel's session state back out through a prop nobody else wants.
+  // The workspace asks for this record too and nothing de-dupes, but one small GET beats
+  // threading the panel's session state back out through a prop nobody else wants.
   const { info, error } = useSessionInfo(client, sessionId)
   const markSeen = useMarkSeen(hostId, sessionId)
-  // Read ONCE per session, on mount: the catch-up row marks where reading left
-  // off last time, and re-reading it as the mark moves would walk the row down
+  // Read ONCE, on mount: re-reading it as the mark moves would walk the catch-up row down
   // the transcript under the reader.
   const [unseen] = useState(() => unseenSince(hostId, sessionId))
   const [density] = useState(getTranscriptDensity)
   const [variant] = useState(getTranscriptVariant)
   const [font] = useState(getTranscriptFont)
   const [panelFontSize] = useState(getFontSize)
-  // Read once: the workspace owns the live value from here, and re-seeding it
-  // mid-session would yank the splitter out from under a drag.
+  // Read once: the workspace owns the live value, and re-seeding mid-session would yank the
+  // splitter out from under a drag.
   const [rail] = useState(getRail)
 
   useEffect(() => {
@@ -84,11 +76,8 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
     void navigate({ to: '/sessions' })
   }, [error, navigate])
 
-  // Whether this tab is actually being looked at, as **state** rather than a
-  // read of `document.hidden`. It is a dependency of "is this on screen": while
-  // the tab is hidden every mark is refused, so without something re-running on
-  // the way back, a session you left mid-turn keeps its badge after you return
-  // and look straight at it.
+  // **State**, not a read of `document.hidden`: marks are refused while hidden, so without
+  // something re-running on the way back, a session left mid-turn keeps its badge.
   const [visible, setVisible] = useState(() => !document.hidden)
   useEffect(() => {
     const sync = () => setVisible(!document.hidden)
@@ -96,24 +85,9 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
     return () => document.removeEventListener('visibilitychange', sync)
   }, [])
 
-  // Mark off the SAME record the badge counts from — the polled sessions list.
-  //
-  // The badge is `unseenFor(hostId, info)` over `useSessions`' snapshots, which
-  // poll every 1.2s while anything is working. Two near-misses are worth naming,
-  // because both look right and neither is:
-  //
-  //  - Marking inside `onVitals` alone. Those fire per streamed delta and stop
-  //    with the last token, but the row that *ends* a turn reaches the registry
-  //    after them — so the session you sat and watched kept a badge for the rows
-  //    it finished with.
-  //  - Marking off `useSessionInfo`. It is one GET at mount and is never polled,
-  //    so its `activityCount` is frozen; an effect on it fires once and then
-  //    never again, which looks like a fix for exactly one render.
-  //
-  // Reading the same poll the badge reads closes the loop by construction:
-  // anything the badge can count, this has already seen. `useMarkSeen` still
-  // refuses while the tab is hidden, and `Watermarks.mark` is monotonic per
-  // field, so a partial reading can never walk `itemCount` back.
+  // Mark off the SAME record the badge counts from — the polled sessions list — which closes
+  // the loop by construction. `onVitals` and `useSessionInfo` both look right here and are
+  // not; see `docs/PACKAGES.md` §packages/web.
   const { snapshots } = useSessions()
   const polled = useMemo(
     () => snapshots.find((s) => s.host.id === hostId)?.sessions.find((s) => s.id === sessionId),
@@ -135,8 +109,7 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
     void navigate({ to: '/sessions' })
   }
 
-  // The project name, like the iOS app's navigation title — the full path is a
-  // line of monospace nobody reads, and it is one tap away in Session info.
+  // The project name: the full path is a line of monospace nobody reads.
   const project = info?.cwd?.split('/').filter(Boolean).pop()
 
   return (
@@ -149,37 +122,15 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
       transcriptFont={font}
       fontSize={panelFontSize}
       openSubagent={subagent ? { toolUseId: subagent, nonce: sn ?? 0 } : undefined}
-      // Travel to a row without framing anything — where a **task** press
-      // lands. Its own nonce, so asking for the same row twice scrolls twice;
-      // and `reveal` beats a standing frame inside the panel (latest intent
-      // wins), which is exactly right here: the press said "show me where this
-      // happened", and a frame left up over it would be showing something else.
+      // Travel to a row without framing anything — where a **task** press lands. Its own nonce,
+      // so asking twice scrolls twice, and inside the panel `reveal` beats a standing frame.
       reveal={reveal ? { toolUseId: reveal, nonce: rn ?? 0 } : undefined}
-      // The panel's report of what it has framed, folded back into the same
-      // search param the request travels in — the URL stays the one truth about
-      // what is on screen (the sidebar's secondary selection reads it, a copied
-      // link reproduces it, and Back/Forward drive the frame through the
-      // withdrawal semantics of `openSubagent`). Three rules keep the
-      // round-trip from becoming a loop:
-      //
-      //  - **No-op on match.** The commonest report is the echo of our own
-      //    request — the panel consuming the `?subagent=` we just navigated
-      //    with — and navigating again for it would start the URL → panel →
-      //    URL cycle with nothing to say.
-      //  - **`sn` rides through unchanged** when the panel entered a frame the
-      //    URL didn't ask for (a Task row pressed in the transcript). The
-      //    panel's request effect keys on the nonce, so an unchanged one makes
-      //    our write inert on arrival; a fresh nonce here would re-request the
-      //    very frame we are merely describing, and a fresh one per report is
-      //    the loop.
-      //  - **`replace`, never push.** A report is bookkeeping about state
-      //    already on screen, not travel: pushes stay reserved for deliberate
-      //    navigations (the sidebar's clicks), so Escape doesn't mint a
-      //    history entry per press and Back undoes navigations, not
-      //    keystrokes. The one Back-visible consequence: a frame entered from
-      //    inside the transcript leaves no entry of its own, so Back from it
-      //    exits the page rather than the frame — the strip's Back and Escape
-      //    are the frame's own way out.
+      // The panel's report of what it framed, folded back into the param the request travels
+      // in, so the URL stays the one truth about what is on screen. Three rules keep the
+      // round-trip from becoming a loop: **no-op on match** (the commonest report is the echo
+      // of our own request), **`sn` rides through unchanged** (the panel's request effect keys
+      // on the nonce, so a fresh one here re-requests the frame we are merely describing), and
+      // **`replace`, never push** (a report is bookkeeping, not travel).
       onSubagentChange={(toolUseId) => {
         if (toolUseId === subagent) {
           return
@@ -191,43 +142,28 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
           replace: true,
         })
       }}
-      // The overview ruler, when the transcript is the terminal one — a session
-      // that ran for an hour is a long scroll, and the rail is the only thing
-      // that says where in it the answers are. Inert under `cards`.
+      // The overview ruler; inert under `cards`.
       scrubber
-      // And the prompt you are waiting on, held above the answer.
       stickyPrompt
-      // Along the foot of the editor area, as an editor puts it.
       statusPlacement="bottom"
-      // Model and mode ride that bar too, beside the readings they act on —
-      // the VS Code arrangement, and it buys the composer its second row back.
+      // Model and mode ride the status bar, beside the readings they act on.
       controlsSurface="status"
       defaultRailWidth={rail.width}
       defaultRailCollapsed={rail.collapsed}
       onRailChange={setRail}
       unseen={unseen}
-      // This route IS the session on screen, so its readings are what "read up
-      // to here" means. `useMarkSeen` still refuses while the tab is hidden.
       onVitals={(vitals) => {
-        // Only `itemCount` — the socket is the sole source of it, and it is what
-        // the catch-up row reads. `activity`/`turns` ride the effect above, off
-        // the record the badge itself counts from; passing the closure's `info`
-        // here wrote whatever the last render happened to hold.
+        // Only `itemCount`: the socket is its sole source and the catch-up row reads it.
+        // `activity`/`turns` ride the effect above, off the record the badge counts from.
         markSeen({ itemCount: vitals.itemCount })
-        // This socket knows a turn started before any poll could. Coalesced and
-        // rate-limited inside, so calling it per streamed delta is fine.
+        // This socket knows a turn started before any poll could; the nudge is coalesced.
         nudgeSessions()
       }}
-      // A function, so the panel hands over its `⋯` menu instead of leaving it
-      // on the status bar: this app has a real top bar, and the session's
-      // controls belong together there rather than split across two rows.
+      // A function, so the panel hands over its `⋯` menu: this app has a real top bar.
       header={({ actions }) => (
         <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2">
-          {/* No back button: the sessions sidebar is always on screen, so there
-              is nothing to go back *to*. */}
+          {/* No back button: the sessions sidebar never leaves the screen. */}
           <span className="truncate text-body-sm font-medium text-fg-1">{info?.title ?? project ?? sessionId.slice(0, 8)}</span>
-          {/* Which engine is answering — the one session-level fact that changes
-              what every other control means. */}
           {info?.engine && info.engine !== 'claude' ? (
             <Badge variant="neutral" className="shrink-0">
               {info.engine}
@@ -262,8 +198,7 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
               </div>
             </AlertDialogContent>
           </AlertDialog>
-          {/* Last, to the right of Close session — the panel builds it (it needs
-              the capability record and the host-file verdict) and we place it. */}
+          {/* The panel builds it — it needs the capability record and the host-file verdict. */}
           {actions}
         </div>
       )}

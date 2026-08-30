@@ -1,12 +1,8 @@
 /**
- * The login page is the CLI's, not the dashboard's. That split is deliberate:
- * the SPA ships prebuilt and is also served straight from vite in dev, so making
- * it aware of an auth scheme that only exists in the turnkey instance would
- * couple two things that are otherwise independent. An unauthenticated document
- * request gets this instead of index.html; nothing in the SPA changes.
- *
- * Self-contained by necessity — it renders before any bundled asset is worth
- * fetching, and it must not depend on the app it is gating.
+ * The login page belongs to the CLI, not the dashboard: an unauthenticated
+ * document request gets this instead of index.html and nothing in the SPA
+ * knows about it. Self-contained by necessity — it renders before any bundled
+ * asset is worth fetching, and must not depend on the app it is gating.
  */
 
 export type LoginPageOptions = {
@@ -25,7 +21,7 @@ export type LoginPageOptions = {
 const escapeHtml = (value: string): string =>
   value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
 
-export function renderLoginPage(options: LoginPageOptions): string {
+export const renderLoginPage = (options: LoginPageOptions): string => {
   const { action, field, error, redirectTo, redirectField } = options
   const hidden =
     redirectField && redirectTo ? `<input type="hidden" name="${escapeHtml(redirectField)}" value="${escapeHtml(redirectTo)}">` : ''

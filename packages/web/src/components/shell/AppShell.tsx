@@ -11,12 +11,10 @@ import { SessionsSidebar } from './SessionsSidebar.tsx'
 import { ThemeToggle } from './ThemeToggle.tsx'
 
 /**
- * The activity bar. Every entry is a *section* — a list on the left, a detail
- * pane beside it — which is why each one names its own sidebar here rather than
- * mounting it from a route: navigating within a section (opening a session, a
- * gateway, a job) must not replace the list you picked it from.
- *
- * Settings is deliberately absent: it is a dialog, not a section (see below).
+ * The activity bar. Every entry is a *section* — a list on the left, a detail pane
+ * beside it — which is why each names its own sidebar **here** rather than mounting
+ * one from a route: navigating within a section must not replace the list you
+ * picked from. Settings is absent on purpose; it is a dialog, not a section.
  */
 const NAV = [
   { id: 'sessions', label: 'Sessions', icon: SquareTerminal, path: '/sessions', sidebar: SessionsSidebar },
@@ -50,8 +48,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
       return !prev
     })
   }
-  // One spelling for the three foot icons, so they sit on the same grid cell
-  // and answer the pointer identically.
+  // One spelling for the three foot icons, so they answer the pointer identically.
   const footIconClass =
     'flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors outline-none hover:bg-row-hover hover:text-fg-1'
   const itemClass = (active: boolean) =>
@@ -74,11 +71,8 @@ export function AppShell({ children }: { children?: ReactNode }) {
               to={item.path}
               title={collapsed ? item.label : undefined}
               aria-label={item.label}
-              // Already in this section: do nothing. Navigating to the section
-              // root from inside it would throw away the thing you have open —
-              // clicking Sessions while reading a session closed the session —
-              // and "take me where I already am" has no useful answer other
-              // than staying put.
+              // Already in this section: stay put. Navigating to the section root from inside
+              // it would close whatever you have open.
               onClick={(e) => {
                 if (item.id === section?.id) {
                   e.preventDefault()
@@ -91,14 +85,8 @@ export function AppShell({ children }: { children?: ReactNode }) {
             </Link>
           ))}
         </nav>
-        {/* The foot: three things that are not places you navigate to, so they
-            are icons rather than nav rows — Settings opens a dialog (a
-            preference sheet, not a destination), the theme toggle flips a
-            preference, and the last one folds this bar. Evenly spaced across
-            the bar's own axis: a column of three when collapsed, a row of three
-            when not. The version used to sit here and no longer does; it was
-            the only thing in the frame that answered a question nobody was
-            asking, and it left the icons unable to spread. */}
+        {/* Icons rather than nav rows: none of the three is a place you navigate to. Spread
+            across the bar's own axis — a column when collapsed, a row when not. */}
         <div className={cn('mt-1 grid place-items-center gap-1', collapsed ? 'grid-rows-3' : 'grid-cols-3')}>
           <button type="button" onClick={() => setSettingsOpen(true)} title="Settings" aria-label="Settings" className={footIconClass}>
             <Settings className="size-4" />
@@ -115,15 +103,10 @@ export function AppShell({ children }: { children?: ReactNode }) {
           </button>
         </div>
       </aside>
-      {/* VS Code's shape — activity bar, the section's own side bar, then the
-          editor area — inside this app's inset frame rather than flush to the
-          window. The sidebar and the editor share ONE frame: they are two panes
-          of the same surface, so a seam of desktop between them would read as
-          two windows. `overflow-hidden` is what clips the sidebar into the
-          rounded corners.
-
-          Keyed on the section so switching sections mounts a fresh sidebar
-          rather than reconciling one list component into another's shape. */}
+      {/* The sidebar and the editor area share ONE frame: two panes of the same surface, so a
+          seam of desktop between them would read as two windows. `overflow-hidden` clips the
+          sidebar into the rounded corners. Keyed on the section so switching mounts a fresh
+          sidebar rather than reconciling one list component into another's shape. */}
       <div className="app-frame frame-shine m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-xl">
         {Sidebar ? <Sidebar key={section?.id} /> : null}
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">{children ?? <Outlet />}</main>

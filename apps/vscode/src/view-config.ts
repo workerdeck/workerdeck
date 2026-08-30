@@ -3,16 +3,10 @@ import type { SessionRow } from '@workerdeck/protocol'
 import type { SidebarState } from './bridge-protocol.ts'
 
 /**
- * The sessions list's view model, as this extension sees it.
- *
- * The *rules* — the state buckets, the facets, filtering, grouping, sorting, the
- * subset wording — live in `@workerdeck/protocol` now, because more than this
- * extension needs them to agree: the dashboard renders the same list, and iOS
- * mirrors them in Swift. What stays here is the one thing that is genuinely
- * ours: turning the sidebar's bridge state into rows.
- *
- * Re-exported rather than imported directly by every call site so the sidebar's
- * modules keep reading as one view model.
+ * The sessions list's view model. The rules (state buckets, facets, filtering,
+ * grouping, sorting, subset wording) live in `@workerdeck/protocol` so the
+ * dashboard and iOS agree with us; only `buildRows` is ours. Re-exported here so
+ * the sidebar's modules read as one view model.
  */
 export {
   DEFAULT_VIEW_CONFIG,
@@ -37,8 +31,8 @@ export {
 } from '@workerdeck/protocol'
 export type { Facet, GroupBy, SessionGroup, SessionRow, SessionState, SortBy, SubsetSummary, ViewConfig } from '@workerdeck/protocol'
 
-/** Every connected gateway's sessions, flattened. Recency order is preserved
- * from the model, so it survives as the tiebreak through every sort. */
+/** Every connected gateway's sessions, flattened. Recency order is preserved from
+ * the model, so it survives as the tiebreak through every sort. */
 export function buildRows(state: SidebarState | undefined): SessionRow[] {
   if (!state) {
     return []

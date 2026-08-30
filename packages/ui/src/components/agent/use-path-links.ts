@@ -3,27 +3,14 @@ import { useEffect, type RefObject } from 'react'
 /**
  * Cmd/Ctrl+click a file path in the transcript to open it.
  *
- * The agent names files constantly — in prose, in tables, in tool arguments —
- * and every one of them is a place the reader wants to go. They already *look*
- * like links (inline code renders in the accent), so the affordance is half
- * promised before anything is wired: this makes it true.
+ * **Detection is deliberately conservative**, because the cost is asymmetric —
+ * a false positive teaches the reader not to trust any of the links:
  *
- * **Detection is deliberately conservative**, because the cost is asymmetric. A
- * missed path is a path you select and open yourself; a false positive is a
- * word that lights up under the modifier and then does nothing, which teaches
- * the reader not to trust any of them. So:
- *
- * - A trailing `/` means a directory. Directories are not openable in a text
- *   editor, and offering it is worse than staying quiet.
- * - Outside a `<code>` element the match must be *most* of what the element
- *   says, or a paragraph mentioning `src/index.ts` in passing would underline
- *   whole sentences.
- * - A bare filename (`worker.mjs`) is only a path **inside code**, and only
- *   with an extension. `18 B` and `Type` are table cells, not files.
- *
- * The modifier is the editor's own: hold it and what would open lights up
- * (`wd-path-link`), which is the only honest way to show which of the blue
- * things on screen are actually reachable.
+ * - A trailing `/` means a directory, which is not openable.
+ * - Outside a `<code>` element the match must cover most of what the element
+ *   says ({@link COVERAGE}), or a paragraph mentioning a path in passing would
+ *   underline whole sentences.
+ * - A bare filename is only a path **inside code**, and only with an extension.
  */
 export type PathHit = { path: string; line?: number }
 
@@ -38,7 +25,7 @@ const FILE_RE = /^([\w.@-]+\.[A-Za-z0-9]{1,10})(?::(\d+))?$/
 /** How much of an element's text the match must cover, outside code. */
 const COVERAGE = 0.6
 
-export function matchPath(text: string, inCode: boolean): PathHit | undefined {
+export const matchPath = (text: string, inCode: boolean): PathHit | undefined => {
   const trimmed = text.trim()
   if (!trimmed || trimmed.endsWith('/')) {
     return undefined
@@ -51,7 +38,7 @@ export function matchPath(text: string, inCode: boolean): PathHit | undefined {
 }
 
 /** The path a click on this element means, if any. */
-function hitFor(element: HTMLElement | undefined): PathHit | undefined {
+const hitFor = (element: HTMLElement | undefined): PathHit | undefined => {
   if (!element) {
     return undefined
   }
@@ -112,8 +99,8 @@ export function usePathLinks({
       if (!hit) {
         return
       }
-      // Capture phase and stopped here: the row underneath is usually pressable
-      // (a tool call expands), and opening a file is not expanding it.
+      // Capture phase and stopped here: the row underneath is usually
+      // pressable, and opening a file is not expanding it.
       event.preventDefault()
       event.stopPropagation()
       unmark()
@@ -136,8 +123,8 @@ export function usePathLinks({
       element.classList.add(LINKISH)
     }
 
-    // Releasing the modifier has to clear it: an underline that outlives the key
-    // promises a click that will not work.
+    // Releasing the modifier must clear the mark: an underline that outlives
+    // the key promises a click that will not work.
     const onKey = (event: KeyboardEvent) => {
       if (!event.metaKey && !event.ctrlKey) {
         unmark()
@@ -160,13 +147,9 @@ export function usePathLinks({
   }, [container, onOpen, enabled, ignore])
 }
 
-/**
- * A transcript path against the session's cwd.
- *
- * Absolute wins outright. Everything else is relative to where the agent is
- * working, which is the only root that makes `worker.mjs` mean anything.
- */
-export function resolveAgainstCwd(path: string, cwd: string | undefined): string {
+/** A transcript path against the session's cwd — the only root that makes a
+ * bare `worker.mjs` mean anything. */
+export const resolveAgainstCwd = (path: string, cwd: string | undefined): string => {
   if (path.startsWith('/')) {
     return path
   }

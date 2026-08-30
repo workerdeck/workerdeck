@@ -16,10 +16,10 @@ type Shown = {
 
 /**
  * The agent panel webview: purely the conversation. `SessionPanel` runs with
- * `panelSurface: 'external'` — no dialogs, no `⋯` menu; panel-open intents and
- * live vitals flow to the extension host, which routes them to the sidebar's
- * scoped sections. Keyed by gateway+session so switching remounts the panel —
- * the documented way to move it between sessions.
+ * `panelSurface: 'external'`, so panel-open intents and live vitals flow to the
+ * extension host, which routes them to the sidebar's scoped sections. Keyed by
+ * gateway+session, switching remounting the panel being the documented way to move
+ * it between sessions.
  */
 export function App({
   bridge,
@@ -30,14 +30,13 @@ export function App({
   fontSize,
 }: {
   bridge: Bridge
-  /** From `workerdeck.transcriptDensity`, stamped on `#root` so the first paint
-   * is right — see `SessionPanelProvider.#rootAttrs`. Inert under `terminal`. */
+  /** From `workerdeck.transcriptDensity`, stamped on `#root` so the first paint is
+   * right — see `SessionPanelProvider.#rootAttrs`. Inert under `terminal`. */
   density: 'comfortable' | 'compact'
   /** From `workerdeck.transcriptVariant`, stamped alongside it. */
   variant: 'terminal' | 'cards'
   /** The terminal theme's character cell, resolved from `editor.fontSize` /
-   * `editor.lineHeight` unless overridden. Stamped for the same reason the
-   * density is: it decides every row's height. */
+   * `editor.lineHeight` unless overridden. */
   terminalMetrics: TerminalMetrics
   /** From `workerdeck.terminal.affordances`. */
   affordances: boolean
@@ -52,18 +51,13 @@ export function App({
   /** The row the sessions list last asked to be travelled to — a **task**, which
    * has no agent to frame. See `wd-reveal-tool-use`. */
   const [reveal, setReveal] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
-  // The panel owns the session's one attach, so it owns the only setters there
-  // are. The status bar's pickers reach them through here.
+  // The panel owns the session's one attach, so it owns the only setters there are.
   const controls = useRef<SessionControls | undefined>(undefined)
   /**
-   * A focus asked for while no composer could take it yet.
-   *
-   * Needed because `wd-focus-composer` is its own postMessage — a separate task
-   * from the `wd-show-session` before it — and switching sessions REMOUNTS the
-   * panel (the key changes). React flushes the new panel's effects, and therefore
-   * `onControls`, on its own schedule, which can be after this message lands. So
-   * the request is recorded and retried when a composer turns up, rather than
-   * fired once into whatever happens to be mounted.
+   * A focus asked for while no composer could take it yet. `wd-focus-composer` is its
+   * own postMessage, and switching sessions remounts the panel — React flushes the
+   * new panel's `onControls` on its own schedule, which can be after this lands. So
+   * the request is recorded and retried rather than fired into whatever is mounted.
    */
   const focusWanted = useRef(false)
   const tryFocus = () => {
@@ -79,9 +73,8 @@ export function App({
       bridge.onHostMessage((msg) => {
         if (msg.kind === 'wd-show-session') {
           setShown(msg.session)
-          // Clear the takeover with the session. A request left standing across
-          // a switch would frame one session's Task id against another's items,
-          // and the panel's own nonce effect would not re-fire to correct it.
+          // Clear the takeover with the session: a request left standing across a switch
+          // would frame one session's Task id against another's items.
           setOpenSubagent(undefined)
           setReveal(undefined)
         } else if (msg.kind === 'wd-set-model') {
@@ -92,18 +85,13 @@ export function App({
           focusWanted.current = true
           tryFocus()
         } else if (msg.kind === 'wd-open-subagent') {
-          // Straight to state, unlike the focus above: `openSubagent` is a
-          // *prop*, so a request that arrives before the transcript has mounted
-          // is still honoured — the panel reads it on its first render. The
-          // host's nonce rides through unchanged, since it is what makes a
-          // repeat of the same id a second request rather than a no-op.
+          // Straight to state, unlike the focus above: `openSubagent` is a *prop*, so a
+          // request arriving before the transcript mounted is still read on first render.
+          // The host's nonce rides through unchanged — it is what makes a repeat a request.
           setOpenSubagent({ toolUseId: msg.toolUseId, nonce: msg.nonce })
         } else if (msg.kind === 'wd-reveal-tool-use') {
-          // Same shape and same reasoning as `wd-open-subagent` above, to the
-          // other destination: a *task* has no agent behind it, so it is a row
-          // to travel to rather than work to frame. The panel treats a reveal
-          // as its way out of any standing frame, which is what the press
-          // means — "show me where this happened".
+          // Same shape as `wd-open-subagent`, other destination: a *task* has no agent
+          // behind it, so it is a row to travel to rather than work to frame.
           setReveal({ toolUseId: msg.toolUseId, nonce: msg.nonce })
         }
       }),
@@ -125,11 +113,6 @@ export function App({
   useEffect(() => {
     // Capture phase, so it wins over text selection.
     const onClick = (e: MouseEvent) => {
-      // ── Cmd/Ctrl+click on file paths ────────────────────────────────
-      // Text that looks like a path → ask the extension host to open it
-      // (real file for loopback gateways, workerdeck:// for remote ones;
-      // a relative path is resolved against the session cwd there, which
-      // is the only side that knows it).
       if (!e.metaKey && !e.ctrlKey) {
         return
       }
@@ -145,11 +128,8 @@ export function App({
     return () => document.removeEventListener('click', onClick, true)
   }, [bridge])
 
-  // Hold Cmd/Ctrl and the things that would open light up under the pointer —
-  // the editor's own ctrl-hover affordance. Marked in JS rather than CSS because
-  // "is this text a path" is not a selector; the element is only marked when the
-  // path is *most* of what it says, so holding the key doesn't underline a whole
-  // paragraph that happens to mention one.
+  // Hold Cmd/Ctrl and what would open lights up — the editor's own ctrl-hover
+  // affordance. In JS rather than CSS because "is this text a path" is not a selector.
   useEffect(() => {
     let hovered: HTMLElement | undefined
 
@@ -183,8 +163,7 @@ export function App({
         unmark()
       }
     }
-    // Releasing the key (or leaving the window with it down) has to clear it:
-    // an underline that outlives the modifier promises a click that won't work.
+    // An underline that outlives the modifier promises a click that will not work.
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey && !e.ctrlKey) {
         unmark()
@@ -214,61 +193,42 @@ export function App({
         client={client}
         sessionId={shown.sessionId}
         className="h-full"
-        // From `workerdeck.transcriptVariant`, defaulting to `terminal`: this
-        // panel sits beside the editor and the integrated terminal, and the CLI
-        // it mirrors is what it should look like. Someone who drags the panel
-        // out into the editor area can ask for the chat form instead.
         transcriptVariant={variant}
-        // The cell, from the editor's own font size unless overridden — the
-        // panel and the terminal below it then draw at the same size, which is
-        // the whole claim.
+        // The cell, from the editor's own font size unless overridden, so the panel and
+        // the terminal below it draw at the same size.
         terminalMetrics={terminalMetrics}
         affordances={affordances}
         fontSize={fontSize}
-        // The overview ruler, in the dock that most needs it: this panel is
-        // narrow and tall, so a long run scrolls further here than anywhere
-        // else, and VS Code's own ruler is the thing beside it that this is
-        // modelled on. Inert under `cards`.
+        // The overview ruler: this dock is narrow and tall, so a long run scrolls further
+        // here than anywhere else. Inert under `cards`.
         scrubber
-        // Where the sessions list's sub-agent rows land. A sub-agent has no
-        // screen of its own — its work is nested inside one `Task` row of this
-        // transcript — so opening one means arriving at that row.
         openSubagent={openSubagent}
         reveal={reveal}
-        // The CLI keeps the prompt in view while the turn runs; a dock is the
-        // narrowest surface we have, so it needs that most.
         stickyPrompt
-        // From `workerdeck.transcriptDensity`, and `cards` only: a terminal has
-        // one line height, so under `terminal` this reaches nothing.
+        // `cards` only: a terminal has one line height, so under `terminal` this reaches nothing.
         transcriptDensity={density}
         panelSurface="external"
-        // Model and mode live in the window status bar (a click there opens a
-        // QuickPick), so the composer keeps no toolbar row and collapses to a
-        // single line — the vertical space a dock cannot spare.
+        // Model and mode live in the window status bar, so the composer keeps no toolbar
+        // row and collapses to a single line.
         controlsSurface="external"
-        // A dock is focussed in order to type in it: a click on anything that
-        // isn't itself a control puts the caret in the composer.
+        // A dock is focussed in order to type in it.
         focusComposerOnClick
-        // What had been seen last time this session was on screen — the panel
-        // turns it into the recap row, the dimming and the catch-up bar.
+        // What had been seen last time this session was on screen — the panel turns it
+        // into the recap row, the dimming and the catch-up bar.
         unseen={shown.unseen}
         onControls={(c) => {
           controls.current = c
           // A focus that arrived before this panel existed applies now.
           tryFocus()
         }}
-        // The window status bar renders these instead (src/status-bar.ts) — a
-        // second bar inside a panel that already sits in one is a bar too many.
+        // The window status bar renders these instead (src/status-bar.ts).
         statusSurface="external"
         onOpenPanel={(panel) => bridge.post({ kind: 'wd-open-panel', panel })}
         onVitals={(vitals) => bridge.post({ kind: 'wd-vitals', vitals })}
-        /* What the panel now has framed, straight across to the host so the
-           sessions list can draw it as a secondary selection. A *statement*,
-           not an acknowledgement: the panel enters frames the host never asked
-           for (a Task row pressed inside the transcript) and leaves them three
-           ways (Back, Escape, a reveal), so this is the only honest source. It
-           carries no nonce because a state that arrives twice is the same
-           state — see `wd-subagent-open` beside `wd-open-subagent`. */
+        /* What the panel now has framed, so the sessions list can draw it as a secondary
+           selection. A *statement*, not an acknowledgement — the panel enters and leaves
+           frames the host never asked about — and nonce-free, a state arriving twice
+           being the same state. */
         onSubagentChange={(toolUseId) => bridge.post({ kind: 'wd-subagent-open', toolUseId })}
       />
       <Toaster />

@@ -18,7 +18,7 @@ const NOT_INSTALLED = '@openai/codex is not installed — add it (an optional pe
  * executable sessions will actually run. Undefined when it can't be found;
  * callers degrade to 'unknown'.
  */
-export function resolveBundledCodexExecutable(): string | undefined {
+export const resolveBundledCodexExecutable = (): string | undefined => {
   const triple = targetTriple()
   if (!triple) {
     return undefined
@@ -42,7 +42,7 @@ export function resolveBundledCodexExecutable(): string | undefined {
   return undefined
 }
 
-function targetTriple(): string | undefined {
+const targetTriple = (): string | undefined => {
   const { platform, arch } = process
   if (platform === 'darwin') {
     return arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin'
@@ -56,7 +56,7 @@ function targetTriple(): string | undefined {
   return undefined
 }
 
-function platformPackageSuffix(): string {
+const platformPackageSuffix = (): string => {
   return `${process.platform}-${process.arch}`
 }
 
@@ -79,11 +79,11 @@ function platformPackageSuffix(): string {
  * surfaced: `login status` output includes a masked key fragment. The
  * `smoke:codex --canary` run is the drift alarm for all of this.
  */
-async function checkCodexAvailability(
+const checkCodexAvailability = async (
   profile: ProfileInfo,
   env: Record<string, string | undefined>,
   options: { timeoutMs?: number } = {},
-): Promise<EngineAvailability> {
+): Promise<EngineAvailability> => {
   const executable = resolveBundledCodexExecutable()
   if (!executable) {
     return { available: false, reason: NOT_INSTALLED }
@@ -111,7 +111,7 @@ async function checkCodexAvailability(
           ? ' CODEX_API_KEY is read only by `codex exec`, never by the app-server — run ' +
             '`codex login --with-api-key` under this profile’s CODEX_HOME to persist it.'
           : childEnv.OPENAI_API_KEY
-            ? ' OPENAI_API_KEY is not used by codex — run `codex login --with-api-key` ' + 'under this profile’s CODEX_HOME.'
+            ? ' OPENAI_API_KEY is not used by codex — run `codex login --with-api-key` under this profile’s CODEX_HOME.'
             : ''
         resolve({
           available: false,
@@ -136,7 +136,7 @@ const MAX_LIST_PAGES = 40
 /** thread/list's `cwd` filter is an EXACT path match (measured, 0.146.0), so
  * offer both the spelled and canonical forms — macOS listings would otherwise
  * miss `/tmp/...` threads recorded under `/private/tmp/...`. */
-function cwdFilter(dir: string): string[] {
+const cwdFilter = (dir: string): string[] => {
   const forms = new Set([dir])
   try {
     forms.add(realpathSync(dir))
@@ -152,7 +152,7 @@ const secondsToMs = (value: number | null | undefined): number | undefined =>
 /** One thread row in the protocol's browser-safe summary shape. `id` is what
  * `CreateSessionRequest.resume` feeds `thread/resume` — the row's separate
  * `sessionId` field is not it. */
-function summarizeThread(row: AppServerThreadSummary): SdkSessionSummary {
+const summarizeThread = (row: AppServerThreadSummary): SdkSessionSummary => {
   const name = typeof row.name === 'string' && row.name.length > 0 ? row.name : undefined
   const preview = typeof row.preview === 'string' && row.preview.length > 0 ? row.preview : undefined
   return {
@@ -176,14 +176,14 @@ function summarizeThread(row: AppServerThreadSummary): SdkSessionSummary {
  * seam exists for the scripted-peer tests; the adapter passes the real
  * spawn.
  */
-export async function listCodexSessions(options: {
+export const listCodexSessions = async (options: {
   connectFn: AppServerConnectFn
   profile?: ProfileInfo
   env: Record<string, string | undefined>
   dir?: string
   limit?: number
   offset?: number
-}): Promise<SdkSessionSummary[]> {
+}): Promise<SdkSessionSummary[]> => {
   const childEnv: Record<string, string> = {}
   for (const [key, value] of Object.entries(options.env)) {
     if (value !== undefined) {

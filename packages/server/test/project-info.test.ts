@@ -21,7 +21,7 @@ import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 /** A query that emits nothing and unblocks its consumer on close — these tests
  * only ever need sessions to exist, never to speak. */
-function queryFn(params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }): Query {
+const queryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }): Query => {
   void (async () => {
     for await (const _ of params.prompt) {
       // Input is drained, never answered.
@@ -64,7 +64,7 @@ const tempRoot = (): string => {
   return dir
 }
 
-async function startServer(root: string, extra: Parameters<typeof createWorkerServer>[0] = {}): Promise<string> {
+const startServer = async (root: string, extra: Parameters<typeof createWorkerServer>[0] = {}): Promise<string> => {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: [root],
@@ -75,7 +75,7 @@ async function startServer(root: string, extra: Parameters<typeof createWorkerSe
   return `http://127.0.0.1:${port}/v1`
 }
 
-async function createSession(base: string, cwd: string, headers: Record<string, string> = {}): Promise<SessionInfo> {
+const createSession = async (base: string, cwd: string, headers: Record<string, string> = {}): Promise<SessionInfo> => {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...headers },

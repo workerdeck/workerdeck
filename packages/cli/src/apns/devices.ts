@@ -4,19 +4,10 @@ import { join } from 'node:path'
 import type { ApnsEnvironment } from './client.ts'
 
 /**
- * The device-token registry, and the route that fills it.
- *
- * This has to live *somewhere*, and the point of the webhooks-first decision is
- * that it is not `packages/server`: the OSS gateway stays credential-free and
- * knows nothing about APNs. So the turnkey CLI mounts its own route through the
- * server's `fallback` hook — the same seam that serves the dashboard — and
- * registration lands on the gateway's own origin, behind the auth key that
- * already guards everything else.
- *
- * Storage is a JSON file under the state dir with the same 0600 posture as
- * `auth-key`. Device tokens are not secrets in the way an auth key is, but they
- * are a list of which phones belong to the operator, and there is no reason for
- * every user on the machine to read it.
+ * The device-token registry, and the route that fills it — mounted by the CLI
+ * through the server's `fallback` hook so `packages/server` stays credential-free.
+ * Stored 0600 under the state dir: a token is not a secret like the auth key, but
+ * the file is a list of which phones belong to the operator.
  */
 
 export type DeviceRecord = {
@@ -41,22 +32,17 @@ export type DeviceRegistry = {
 }
 
 const FILENAME = 'apns-devices.json'
-/** Apple's tokens are 64 hex chars today. The upper bound is generous because
- * Apple has reserved the right to grow them; the lower one just rejects junk. */
+/** 64 hex chars today; the upper bound is loose because Apple reserved the right to grow them. */
 const TOKEN_PATTERN = /^[0-9a-fA-F]{32,200}$/
 const MAX_BODY_BYTES = 4096
 
 const isEnvironment = (value: unknown): value is ApnsEnvironment => value === 'development' || value === 'production'
 
-/**
- * `dir` null keeps the registry in memory: a restart then forgets every token,
- * which is survivable because the app re-registers on launch, but it does mean
- * an instance with no state dir goes quiet until each phone is next opened.
- */
-export async function createDeviceRegistry(options: {
+/** `dir` null keeps the registry in memory: a restart then goes quiet until each phone is next opened. */
+export const createDeviceRegistry = async (options: {
   dir: string | null
   onError?: (error: unknown, context: { op: string; path: string }) => void
-}): Promise<DeviceRegistry> {
+}): Promise<DeviceRegistry> => {
   const path = options.dir === null ? null : join(options.dir, FILENAME)
   const devices = new Map<string, DeviceRecord>()
 
@@ -69,8 +55,8 @@ export async function createDeviceRegistry(options: {
         }
       }
     } catch {
-      // Missing, unreadable, or corrupt all land here: start empty rather than
-      // refusing to boot over a side channel. Every client re-registers anyway.
+      // Missing, unreadable and corrupt all mean "start empty": push is a side channel and must
+      // never refuse a boot. Every client re-registers anyway.
     }
   }
 
@@ -83,8 +69,7 @@ export async function createDeviceRegistry(options: {
       await writeFile(path, `${JSON.stringify({ devices: [...devices.values()] }, null, 2)}\n`, {
         mode: 0o600,
       })
-      // writeFile's mode only applies on creation, so an existing file with
-      // looser bits would keep them.
+      // writeFile's mode applies only on creation; an existing file would keep its looser bits.
       await chmod(path, 0o600)
     } catch (error) {
       options.onError?.(error, { op: 'write', path })
@@ -96,9 +81,7 @@ export async function createDeviceRegistry(options: {
     async register(record) {
       const existing = devices.get(record.token)
       devices.set(record.token, { ...record, updatedAt: Date.now() })
-      // A repeat registration with nothing new to say is the common case — the
-      // app re-registers on every launch — and rewriting the file for it is
-      // pointless I/O.
+      // The app re-registers on every launch, so a no-change repeat is the common case.
       if (existing !== undefined && existing.environment === record.environment && existing.hostId === record.hostId) {
         return
       }
@@ -141,21 +124,16 @@ const readBody = (req: IncomingMessage): Promise<string | null> =>
   })
 
 /**
- * `POST /apns/devices` to register a token, `DELETE /apns/devices` to drop one.
- * Returns true when it consumed the request.
- *
- * Deliberately outside `/v1`: this is the forwarder's own surface, not part of
- * the protocol `packages/protocol` defines, and a client that finds a 404 here
- * has simply reached a gateway running without push configured.
- *
- * DELETE exists so removing a gateway from the app can stop its pushes. Without
- * it a forgotten server keeps buzzing a phone that no longer has any way to act
- * on what it says.
+ * `POST /apns/devices` registers a token, `DELETE` drops one; returns true when it
+ * consumed the request. Deliberately outside `/v1` — this is the forwarder's own
+ * surface, and a 404 here means a gateway running without push configured (which
+ * the fallback must claim rather than let the SPA catch-all answer 405;
+ * `docs/GOTCHAS.md` §APNs).
  */
-export function createDeviceRoute(
+export const createDeviceRoute = (
   registry: DeviceRegistry,
   authenticate: (req: IncomingMessage) => unknown,
-): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
+): ((req: IncomingMessage, res: ServerResponse) => Promise<boolean>) => {
   return async (req, res) => {
     let pathname: string
     try {
@@ -171,9 +149,8 @@ export function createDeviceRoute(
       res.writeHead(405, { allow: 'POST, DELETE' }).end()
       return true
     }
-    // The same operator secret that guards everything else. A device token is
-    // an address this gateway can buzz, so handing one out unauthenticated
-    // would let anyone who can reach the port aim it.
+    // A device token is an address this gateway can buzz: accepting one unauthenticated would
+    // let anyone who can reach the port aim it.
     if (authenticate(req) === null) {
       respond(res, 401, { error: 'unauthorized' })
       return true
@@ -219,8 +196,7 @@ export function createDeviceRoute(
       bundleId: optionalString(body.bundleId),
       platform: optionalString(body.platform),
     })
-    // The environment is echoed so a client can see what it was recorded as —
-    // the one fact that is expensive to get wrong and invisible otherwise.
+    // Echo the environment: the one fact that is expensive to get wrong and invisible otherwise.
     respond(res, 200, { registered: true, environment: body.environment })
     return true
   }

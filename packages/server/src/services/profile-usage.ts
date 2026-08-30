@@ -91,7 +91,7 @@ export class ProfileUsageTracker {
 }
 
 /** `resetsAt` is epoch **seconds** (protocol contract); `now` is epoch ms. */
-function serveWindow(held: HeldWindow, now: number): ProfileUsageWindow {
+const serveWindow = (held: HeldWindow, now: number): ProfileUsageWindow => {
   const resetsAt = held.info.resetsAt
   if (resetsAt !== undefined && resetsAt * 1000 <= now) {
     return {

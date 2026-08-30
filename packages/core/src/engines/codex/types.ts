@@ -249,11 +249,12 @@ export type AppServerSkillMetadata = {
 }
 
 /**
- * `skills/list` result. One entry per requested cwd (we request none, which
- * codex documents as "the session's own cwd"), each with the skills it found
- * and the manifests it could not parse. Errors are surfaced as list rows, not
- * swallowed: a skill that is present but broken is exactly what an operator
- * would otherwise spend an hour looking for.
+ * `skills/list` result. One entry per requested cwd (the runner always passes
+ * the session's cwd explicitly — see `#refreshSkills` for why the documented
+ * empty-case default lies), each with the skills it found and the manifests it
+ * could not parse. Errors are surfaced as list rows, not swallowed: a skill
+ * that is present but broken is exactly what an operator would otherwise spend
+ * an hour looking for.
  */
 export type AppServerSkillsListResponse = {
   data?: Array<{

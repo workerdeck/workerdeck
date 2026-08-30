@@ -39,8 +39,7 @@ import { SessionRegistry } from './services/registry.ts'
 import { createSessionFactory } from './services/session-factory.ts'
 import { isDormant, MemorySessionStore } from './services/session-store.ts'
 
-// The public option types moved to options.ts; re-exported here so
-// `import { ... } from './server.ts'` keeps working for older in-repo callers.
+// Re-exported so `import { ... } from './server.ts'` keeps working for in-repo callers.
 export type {
   Authenticator,
   EngineRunnerContext,
@@ -50,7 +49,7 @@ export type {
   WorkerServerOptions,
 } from './options.ts'
 
-export function createWorkerServer(options: WorkerServerOptions = {}): WorkerServer {
+export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerServer => {
   if (!options.authenticate && !options.allowUnauthenticated) {
     throw new Error('createWorkerServer: provide `authenticate` or explicitly set `allowUnauthenticated: true`')
   }
@@ -184,25 +183,16 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         ? factory.buildRunner(
             factory.buildRunnerConfig({
               ...record.config,
-              // A wake is "come back as you were", never a new turn. `prompt` is
-              // the *first* prompt and it was consumed by the original run, but
-              // it persists in the record and `start()` sends it unconditionally
-              // — so a session created with an opening prompt used to re-run it
-              // on top of the thread the resume had just replayed, costing a
-              // turn and doing unrequested work. The provider engine has always
-              // had this guard for its own rehydration (`if (config.restore)` in
-              // `AiSdkRunner.start`); claude and codex resume by `resume`, which
-              // — unlike `restore` — is a public request field where
-              // `createSession({ resume, prompt })` legitimately means "continue
-              // this thread, and here is the next thing". So the suppression
-              // belongs here, at the one call site that means rehydration, and
-              // not in the runners.
+              // A wake is "come back as you were", never a new turn: `prompt`
+              // persists in the record and `start()` sends it unconditionally,
+              // so it is cleared here — at the one call site that means
+              // rehydration, never in the runners, where `{ resume, prompt }`
+              // legitimately means "continue this thread, and here is the next
+              // thing" (docs/GOTCHAS.md §Parking).
               prompt: undefined,
-              // Dropping the prompt would otherwise cost the session its name:
-              // `#title()` falls back to deriving one from `prompt` whenever
-              // `meta.title` is unset. `record.info.title` has already resolved
-              // that precedence, so freezing it into `meta` keeps a derived name
-              // through the wake and is a no-op when the session was renamed.
+              // Dropping the prompt would cost the session its name (`#title()`
+              // derives from `prompt` when `meta.title` is unset), so the
+              // resolved title is frozen into `meta`.
               meta: record.info.title ? { ...record.config.meta, title: record.info.title } : record.config.meta,
               resume: record.sdkSessionId,
             }),

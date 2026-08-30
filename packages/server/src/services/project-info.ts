@@ -130,7 +130,7 @@ export class ProjectInfoService {
  * miss the file at `/private/tmp/x`, and canonicalizing here is what makes
  * `root` — the grouping key — spell identically for every cwd inside one
  * project), then nearest `.workerdeck.json` wins, to the filesystem root. */
-function discover(cwd: string): Omit<Resolution, 'expiresAt'> {
+const discover = (cwd: string): Omit<Resolution, 'expiresAt'> => {
   // A relative cwd would realpath against the gateway process's own cwd and
   // walk *its* ancestry — refused outright, like host-files' invalidRequest.
   if (!isAbsolute(cwd) || cwd.includes('\0')) {
@@ -157,7 +157,7 @@ function discover(cwd: string): Omit<Resolution, 'expiresAt'> {
 
 /** One directory's verdict: a project record, or undefined to keep walking —
  * which is the same answer for "absent" and for every malformed shape. */
-function tryLoad(file: string, root: string): Omit<Resolution, 'expiresAt'> | undefined {
+const tryLoad = (file: string, root: string): Omit<Resolution, 'expiresAt'> | undefined => {
   let stat
   try {
     stat = lstatSync(file)
@@ -199,7 +199,7 @@ function tryLoad(file: string, root: string): Omit<Resolution, 'expiresAt'> | un
  * `.png`/`.svg` → repo-relative image path, else lucide-shaped glyph name,
  * else ignored. Total and collision-free — a glyph name contains no dot.
  */
-function classifyIcon(value: unknown, root: string): { wire: ProjectIcon; resolved?: ResolvedProjectIcon } | undefined {
+const classifyIcon = (value: unknown, root: string): { wire: ProjectIcon; resolved?: ResolvedProjectIcon } | undefined => {
   if (typeof value !== 'string') {
     return undefined
   }

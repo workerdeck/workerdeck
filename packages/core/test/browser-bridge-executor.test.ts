@@ -3,7 +3,7 @@ import type { ToolCallRequestFrame } from '@workerdeck/protocol'
 import { createVfs } from '@workerdeck/sandbox'
 import { BrowserBridgeExecutor, type ToolExecutionCall, type ToolExecutionResult } from '../src/index.ts'
 
-function harness(options: { send?: () => boolean; timeoutMs?: number } = {}) {
+const harness = (options: { send?: () => boolean; timeoutMs?: number } = {}) => {
   const sent: ToolCallRequestFrame[] = []
   const canceled: Array<{ executionId: string; reason: string }> = []
   const results: Array<{ executionId: string; result: ToolExecutionResult }> = []

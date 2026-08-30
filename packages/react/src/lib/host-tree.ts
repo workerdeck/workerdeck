@@ -40,7 +40,7 @@ export type HostTreeRow = {
  * `loading: true` and no children: expansion is a request the user already made,
  * so the row must say the answer is coming rather than look like an empty folder.
  */
-export function flattenHostTree(root: string, dirs: ReadonlyMap<string, HostDirState>, expanded: ReadonlySet<string>): HostTreeRow[] {
+export const flattenHostTree = (root: string, dirs: ReadonlyMap<string, HostDirState>, expanded: ReadonlySet<string>): HostTreeRow[] => {
   const rows: HostTreeRow[] = []
   // Iterative rather than recursive: a deep tree is a user's checkout, not a
   // bounded structure, and blowing the stack on someone's monorepo would be a
@@ -84,7 +84,7 @@ export function flattenHostTree(root: string, dirs: ReadonlyMap<string, HostDirS
  * The prefix test is on a **path boundary** (`root` + `/`), so `/src/app` is not
  * treated as living under `/src/a`.
  */
-export function ancestorsWithin(root: string, path: string): string[] {
+export const ancestorsWithin = (root: string, path: string): string[] => {
   const base = root.endsWith('/') ? root.slice(0, -1) : root
   if (path === base || !path.startsWith(`${base}/`)) {
     return []

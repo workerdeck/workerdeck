@@ -11,20 +11,16 @@ export type AgentSidebarProps = {
 }
 
 /**
- * The right-hand rail: the user's agent sessions, and the live one.
+ * The right-hand rail: the user's agent sessions, and the live one. Three things
+ * here are the embedding pattern rather than app code:
  *
- * Three things here are the embedding pattern rather than app code:
- *
- * - **One client for the whole tab.** `baseUrl: '/v1'` and nothing else — same
- *   origin, so the wiki's own cookie authenticates both the REST calls and the
- *   WebSocket upgrade. A second client would open a second socket and split the
- *   panel's "first attached client" in two.
- * - **`listSessions()` needs no filter.** The gateway already answers only with
- *   this user's sessions, because the principal carries `scope: { user }`. There
- *   is no `?mine=true` here and there must not be one — an ownership check the
- *   client performs is an ownership check the client can skip.
- * - **Switching sessions is a remount**, via `key`. That is the documented way:
- *   the panel owns one attach for its lifetime.
+ * - **One client for the whole tab** (`baseUrl: '/v1'`, same origin, so the wiki's
+ *   cookie authenticates the REST calls and the WS upgrade). A second client would
+ *   open a second socket and split the panel's "first attached client" in two.
+ * - **`listSessions()` needs no filter** and must not grow one: the principal carries
+ *   `scope: { user }`, and a check the client performs is a check the client can skip.
+ * - **Switching sessions is a remount**, via `key` — the panel owns one attach for
+ *   its lifetime.
  */
 export function AgentSidebar({ onWikiMaybeChanged }: AgentSidebarProps) {
   const [config, setConfig] = useState<AgentConfigResponse | undefined>()
@@ -59,8 +55,7 @@ export function AgentSidebar({ onWikiMaybeChanged }: AgentSidebarProps) {
     })
   }, [refresh])
 
-  // The list is polled rather than pushed: the sessions list has no socket of
-  // its own, and this rail shows a handful of rows.
+  // Polled rather than pushed: the sessions list has no socket of its own.
   useEffect(() => {
     const timer = setInterval(() => void refresh(), 5_000)
     return () => clearInterval(timer)
@@ -73,10 +68,8 @@ export function AgentSidebar({ onWikiMaybeChanged }: AgentSidebarProps) {
     setCreating(true)
     setError(undefined)
     try {
-      // No `cwd`: this engine has no host filesystem, and the gateway takes none
-      // for it (`EngineCapabilities.hostCwd === false`). No `scope` either — the
-      // gateway stamps it from the principal, and a client-supplied one could
-      // only agree or be refused.
+      // No `cwd` (`EngineCapabilities.hostCwd === false`) and no `scope` — the gateway
+      // stamps it from the principal.
       const session = await client.createSession({ profile: config.profile })
       setActiveId(session.id)
       await refresh()
@@ -145,17 +138,15 @@ export function AgentSidebar({ onWikiMaybeChanged }: AgentSidebarProps) {
             client={client}
             sessionId={activeId}
             className="h-full"
-            // A 26rem rail has no room for cards or for a two-row composer, and
-            // the terminal theme is the densest thing there is: every row on a
-            // character cell, nothing boxed. (Density reaches `cards` only, so
-            // there is nothing to set beside it.)
+            // A 26rem rail has no room for cards; the terminal theme is the densest
+            // thing there is. (Density reaches `cards` only, so nothing to set beside it.)
             transcriptVariant="terminal"
-            // The model and permission pickers move into the panel's own status
-            // bar; this app's chrome has nowhere to put them.
+            // The model and permission pickers move into the panel's own status bar;
+            // this app's chrome has nowhere to put them.
             controlsSurface="status"
             focusComposerOnClick
-            // Cheap change detection: the wiki tools are the only writers, so a
-            // finished turn is the moment to re-read the document list.
+            // The wiki tools are the only writers, so a finished turn is the moment to
+            // re-read the document list.
             onVitals={(vitals) => {
               if (vitals.status === 'idle') {
                 onWikiMaybeChanged()

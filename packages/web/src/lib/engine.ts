@@ -30,16 +30,14 @@ export type EngineFormOptions = {
 
 /**
  * Reconcile the form's stored choices with the selected profile. Both are sticky
- * across profile switches (localStorage), so a Claude alias or a CLI-only mode can
- * arrive at any profile — coerce rather than submit something the gateway
- * will reject.
+ * across profile switches, so a Claude alias or a CLI-only mode can arrive at any
+ * profile — coerce rather than submit something the gateway will reject.
  */
-export function engineFormOptions(profile: ProfileInfo | undefined, mode: PermissionMode, model: string): EngineFormOptions {
+export const engineFormOptions = (profile: ProfileInfo | undefined, mode: PermissionMode, model: string): EngineFormOptions => {
   const capabilities = profile?.capabilities ?? ENGINE_CAPABILITIES[profile?.engine ?? 'claude']
   const safeMode = capabilities.permissionModes.includes(mode) ? mode : capabilities.defaultPermissionMode
 
-  // Rows: the server-stamped catalog when present (claude/codex — correct from
-  // the first request); else the operator-declared provider ids; else the
+  // The server-stamped catalog when present, else the operator-declared provider ids, else the
   // static Claude fallback for a profile-less server.
   let rows: ModelOption[]
   let defaultHint: string | undefined

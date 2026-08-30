@@ -9,11 +9,9 @@ import { toolInputPreview } from '../../lib/format.ts'
 import { toolIcon } from '../../lib/tool-icon.ts'
 import { useToolResultFetcher } from './tool-result-fetch.tsx'
 import { useToolResultImageSrc } from './tool-result-image.tsx'
-// From the terminal folder, which is where the box's one spelling lives: the
-// height calculator is the reason it is a constant at all, and a second copy
-// here would be a second thing to keep in step for no gain. Cards has no
-// calculator — this frame is about not reflowing a virtualized list when the
-// bytes land, which is a claim both themes make.
+// One spelling, in the terminal folder because its height calculator is why it
+// is a constant at all. Both themes need the frame so a virtualized list does
+// not reflow when the bytes land.
 import { IMAGE_UNAVAILABLE, imagePlaceholder } from '../terminal/image-box.ts'
 
 export type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
@@ -58,14 +56,8 @@ const STATE_BADGE = {
   failed: { label: 'Error', variant: 'danger', busy: false },
 } as const
 
-/**
- * The language to highlight a payload as.
- *
- * Parameters are always JSON. A result is whatever file the call was about — so
- * the extension in `file_path`/`path` is the best evidence there is, and a call
- * that names no file gets no guess (plain text renders fine and a wrong grammar
- * is worse than none).
- */
+/** The language to highlight a payload as: the extension in `file_path`/`path`
+ * is the best evidence there is, and a call that names no file gets no guess. */
 const EXTENSION_LANGUAGE: Record<string, string> = {
   ts: 'ts',
   tsx: 'tsx',
@@ -108,7 +100,7 @@ const EXTENSION_LANGUAGE: Record<string, string> = {
   patch: 'diff',
 }
 
-function resultLanguage(item: ToolCallItem): string | undefined {
+const resultLanguage = (item: ToolCallItem): string | undefined => {
   if (item.name === 'Bash' || item.name === 'CodexCommand') {
     return 'bash'
   }
@@ -140,10 +132,9 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
   const resultText = item.result?.text ?? ''
   const clipped = !fullResult && resultText.length > RESULT_PREVIEW_CHARS
   const shownResult = clipped ? resultText.slice(0, RESULT_PREVIEW_CHARS) : resultText
-  // The replay sent a head (see protocol's `ToolResultBlock.truncated`): what is
-  // on screen is not merely clipped, it is all this client was given. The press
-  // therefore fetches rather than only lifting the clip, and the count has to be
-  // the real one — `resultText.length` here is the head's.
+  // The replay sent a head (protocol's `ToolResultBlock.truncated`): the press
+  // fetches rather than only lifting the clip, and the count must be
+  // `totalChars`, since `resultText.length` is the head's.
   const headOnly = item.result?.truncated === true
   const totalChars = item.result?.totalChars ?? resultText.length
 
@@ -182,14 +173,12 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
     </div>
   ) : null
 
-  // The picture is the point of the call — shown without expanding, the way the
-  // tool's own output would be if the engine had sent bytes.
+  // The picture is the point of the call — shown without expanding.
   const image = imagePath && hostImage ? <HostImage path={imagePath} load={hostImage} /> : null
 
   // Beside the host-path picture above, never instead of it: that one is a file
-  // the engine wrote, read back through `/produced` or `/fs`; these are image
-  // parts of the result itself, addressed by `(seq, toolUseId, part)`. Different
-  // store, different route, and a call can plausibly have both.
+  // the engine wrote; these are image parts of the result itself, addressed by
+  // `(seq, toolUseId, part)`. A call can have both.
   const resultImages = item.result?.images?.length ? (
     <div className="flex flex-col gap-2 border-t border-border p-2.5">
       {item.result.images.map((ref) => (
@@ -236,7 +225,7 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
 
 /** The framed card the `cards` transcript expands into. Unhighlighted by
  * design: it is structured data in a panel, not a file. */
-function PlainPayload({ code, label, className }: { code: string; label: string; language?: string; className?: string }) {
+const PlainPayload = ({ code, label, className }: { code: string; label: string; language?: string; className?: string }) => {
   return <CodeBlock code={code} label={label} variant="panel" className={className} />
 }
 
@@ -244,17 +233,13 @@ function PlainPayload({ code, label, className }: { code: string; label: string;
 type ToolResultImage = NonNullable<NonNullable<ToolCallItem['result']>['images']>[number]
 
 /**
- * An image part of the result, fetched by reference.
- *
- * The frame is a **fixed height in all three states** — placeholder, picture,
- * failure — which is the one rule this shares with the terminal theme and the
- * only reason it is worth a component: the transcript is virtualized in both,
- * and a box that appears when the bytes land shoves every row below it down
- * while the reader is mid-sentence. Unlike `HostImage`, a failure here is *said*
- * rather than swallowed: there is no host path in the result text to fall back
- * on, so silence would be a blank frame with no account of itself.
+ * An image part of the result, fetched by reference. The frame is a **fixed
+ * height in all three states** — placeholder, picture, failure — because the
+ * transcript is virtualized and a box that appears when the bytes land shoves
+ * every row below it down. Unlike `HostImage`, a failure here is *said*: there
+ * is no host path in the result text to fall back on.
  */
-function ResultImage({ toolUseId, image }: { toolUseId: string; image: ToolResultImage }) {
+const ResultImage = ({ toolUseId, image }: { toolUseId: string; image: ToolResultImage }) => {
   const { src, failed } = useToolResultImageSrc({ toolUseId, ...image })
   return (
     <div className="flex h-60 items-start overflow-hidden rounded-md border border-border bg-surface-hover">
@@ -269,14 +254,11 @@ function ResultImage({ toolUseId, image }: { toolUseId: string; image: ToolResul
 
 /**
  * A picture that lives on the host, fetched through the gateway's host-file
- * route and shown inline.
- *
- * Silent on failure by design: a path outside the server's allowed roots is the
- * *expected* case for codex's default save location, and the card's result text
- * already names where the file went. An error banner over that would be noise
- * about a thing the operator can fix in one line of config.
+ * route. **Silent on failure by design**: a path outside the server's allowed
+ * roots is the expected case for codex's default save location, and the card's
+ * result text already names where the file went.
  */
-function HostImage({ path, load }: { path: string; load: (path: string) => Promise<string | undefined> }) {
+const HostImage = ({ path, load }: { path: string; load: (path: string) => Promise<string | undefined> }) => {
   const [src, setSrc] = useState<string | undefined>()
   useEffect(() => {
     let cancelled = false

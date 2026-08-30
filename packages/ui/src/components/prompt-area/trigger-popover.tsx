@@ -38,12 +38,10 @@ export function TriggerPopover({
   const popoverRef = useRef<HTMLDivElement>(null)
   const selectedRef = useRef<HTMLButtonElement>(null)
 
-  // Scroll selected item into view
   useEffect(() => {
     selectedRef.current?.scrollIntoView({ block: 'nearest' })
   }, [selectedIndex])
 
-  // Click outside to dismiss
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target

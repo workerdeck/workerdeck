@@ -3,15 +3,10 @@ import { WorkerdeckFileSystem } from './fsp.ts'
 import type { ScopeRoot, WorkspaceScope } from './bridge-protocol.ts'
 
 /**
- * What "this project" means in this window: the open folders, each tagged with
- * the gateway whose sessions could be inside it.
- *
- * A `file:` folder is a path on the machine the extension host runs on, so it
- * scopes loopback gateways only (`hostId` absent → any local host) — the same
- * local-vs-remote call `cwdSuggestion` makes, decided from the gateway URL and
- * never by probing paths. A `workerdeck://<hostId>/…` mount scopes exactly that
- * gateway. Anything else (untitled, virtual FS from another extension) has no
- * meaning as a session cwd and is dropped.
+ * What "this project" means in this window: the open folders, each tagged with the
+ * gateway whose sessions could be inside it. A `file:` folder scopes loopback
+ * gateways only (`hostId` absent → any local host); a `workerdeck://<hostId>/…`
+ * mount scopes exactly that gateway; anything else has no meaning as a session cwd.
  */
 export function workspaceScope(): WorkspaceScope | undefined {
   const folders = vscode.workspace.workspaceFolders ?? []

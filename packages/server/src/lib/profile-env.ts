@@ -10,23 +10,23 @@ import type { ProfileConfigSnapshot, ProfileEngine, ProfileInfo } from '@workerd
 
 /** A profile runs the model-agnostic engine rather than Claude Code. `engine` is
  * optional so profiles written before provider support keep meaning 'claude'. */
-export function isProviderProfile(profile: ProfileInfo): boolean {
+export const isProviderProfile = (profile: ProfileInfo): boolean => {
   return profile.engine === 'provider'
 }
 
 /** The engine a profile runs, absent meaning 'claude' (pre-provider profiles). */
-export function engineOf(profile: ProfileInfo | undefined): ProfileEngine {
+export const engineOf = (profile: ProfileInfo | undefined): ProfileEngine => {
   return profile?.engine ?? 'claude'
 }
 
 /** Where the CLI's own resolution lands for a given environment: an explicit
  * CLAUDE_CONFIG_DIR, else ~/.claude. */
-export function cliConfigDir(env: Record<string, string | undefined>): string {
+export const cliConfigDir = (env: Record<string, string | undefined>): string => {
   return env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude')
 }
 
 /** Auto-created profile when none are declared: the operator's own config dir. */
-export function detectDefaultProfiles(): ProfileInfo[] {
+export const detectDefaultProfiles = (): ProfileInfo[] => {
   const dir = cliConfigDir(process.env)
   return existsSync(dir) ? [{ name: 'default', configDir: dir }] : []
 }
@@ -34,7 +34,7 @@ export function detectDefaultProfiles(): ProfileInfo[] {
 /** Compare config dirs by what they name on disk: declared paths arrive with
  * trailing slashes or symlinked prefixes (`/var` vs `/private/var` on macOS); a
  * path that doesn't exist falls back to plain normalization. */
-export function canonicalDir(path: string): string {
+export const canonicalDir = (path: string): string => {
   try {
     return realpathSync(path)
   } catch {
@@ -54,11 +54,11 @@ export function canonicalDir(path: string): string {
  * the profile, the pin stands: the profile must win over hook- or operator-set
  * env, or sessions under two profiles quietly collapse into one identity.
  */
-export function claudeSessionEnv(profile: ProfileInfo, base: Record<string, string | undefined>): Record<string, string | undefined> {
+export const claudeSessionEnv = (profile: ProfileInfo, base: Record<string, string | undefined>): Record<string, string | undefined> => {
   return canonicalDir(profile.configDir!) === canonicalDir(cliConfigDir(base)) ? base : { ...base, CLAUDE_CONFIG_DIR: profile.configDir! }
 }
 
-export function cwdAllowed(cwd: string, roots: string[] | undefined): boolean {
+export const cwdAllowed = (cwd: string, roots: string[] | undefined): boolean => {
   if (!roots || roots.length === 0) {
     return true
   }
@@ -77,7 +77,7 @@ export function cwdAllowed(cwd: string, roots: string[] | undefined): boolean {
  * Provider profiles have no config dir, so the snapshot is empty for them: their
  * configuration is the `provider` block already on ProfileInfo.
  */
-export function readProfileConfig(profile: ProfileInfo): ProfileConfigSnapshot {
+export const readProfileConfig = (profile: ProfileInfo): ProfileConfigSnapshot => {
   const dir = profile.configDir
   if (!dir) {
     return { hasUserMemory: false, skills: [], agents: [], commands: [] }

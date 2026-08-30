@@ -56,10 +56,6 @@ import {
 import { usePromptAreaEvents } from './use-prompt-area-events.ts'
 import { useTriggerSearch } from './use-trigger-search.ts'
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 type UsePromptAreaOptions = {
   value: Segment[]
   onChange: (segments: Segment[]) => void
@@ -112,10 +108,6 @@ type UsePromptAreaReturn = {
 /** Debounce interval for grouping typed characters into a single undo snapshot */
 const UNDO_DEBOUNCE_MS = 300
 
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
-
 export function usePromptArea({
   value,
   onChange,
@@ -142,37 +134,25 @@ export function usePromptArea({
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0)
   const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null)
 
-  // Chip whose dropdown was reopened via `reopenOnChipClick`. While set, the
-  // active dropdown edits this chip in place instead of resolving typed text.
-  // Cleared on dismiss and by any fresh trigger detection (typing).
-  //
-  // `segIndex` is the segment index at CLICK time (computed from the live DOM,
-  // so it's always accurate then) — deliberately not the DOM node itself,
-  // which can detach if `renderSegmentsToDOM` re-renders while the dropdown is
-  // open (external value update, undo/redo). At selection time we re-verify
-  // this index still holds the same chip and fall back to a trigger+value
-  // search if the model shifted underneath, instead of silently no-op'ing.
+  // Chip whose dropdown was reopened via `reopenOnChipClick`: while set, the active
+  // dropdown edits this chip in place instead of resolving typed text. `segIndex` is
+  // the segment index at CLICK time, not the DOM node, which can detach if
+  // `renderSegmentsToDOM` re-renders while the dropdown is open; selection re-verifies
+  // it and falls back to a trigger+value search if the model shifted underneath.
   const editingChip = useRef<{ chip: ChipSegment; segIndex: number } | null>(null)
 
-  // The DOM node of the chip currently being edited via `reopenOnChipClick`,
-  // kept in lockstep with `editingChip`/`activeTrigger` (set when opened,
-  // cleared by `dismissTrigger`). Used only to answer "is THIS exact chip
-  // element the one whose dropdown is open right now" by reference identity —
-  // never by trigger+value, which can't distinguish two chips that happen to
-  // share the same value.
+  // The chip node currently edited via `reopenOnChipClick`, kept in lockstep with
+  // `editingChip`/`activeTrigger`. Answers "is THIS exact element the open one" by
+  // reference identity — trigger+value cannot distinguish two chips sharing a value.
   const openChipNode = useRef<HTMLElement | null>(null)
 
-  // Set by `handleMouseDown` to the chip node a mousedown landed on, but only
-  // when that node === `openChipNode.current` at that instant; read and
-  // cleared by the following `handleClick` to distinguish "reopen" from
-  // "toggle closed" for that one click. A real `onMouseDown` (bubble-phase,
-  // attached to the editor root) is used instead of piggybacking on
-  // `dismissTrigger` because DOM bubbling reaches the editor root before it
-  // reaches `document` (where TriggerPopover's outside-click dismiss listens),
-  // so this always observes `openChipNode` before that dismiss clears it —
-  // and unlike a `dismissTrigger`-driven flag, it is scoped to mousedowns on
-  // this exact node, so Escape/blur/an unrelated dismiss can never poison a
-  // later, unrelated click on the same chip.
+  // Set by `handleMouseDown` when the mousedown landed on `openChipNode.current`;
+  // read and cleared by the following `handleClick` to tell "reopen" from
+  // "toggle closed". A real mousedown on the editor root rather than a
+  // `dismissTrigger` flag: bubbling reaches the root before `document`, where
+  // TriggerPopover's outside-click dismiss listens and would clear `openChipNode`
+  // first — and it stays scoped to this node, so an unrelated dismiss cannot poison
+  // a later click on the same chip.
   const suppressReopenChip = useRef<HTMLElement | null>(null)
 
   const { suggestions, suggestionsLoading, suggestionsError, search: runSearch, reset: resetSearch } = useTriggerSearch()
@@ -185,9 +165,7 @@ export function usePromptArea({
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const undoBaseState = useRef<Segment[] | null>(null)
 
-  // -----------------------------------------------------------------------
   // DOM -> Model: read segments from the contentEditable DOM
-  // -----------------------------------------------------------------------
 
   const readSegmentsFromDOM = useCallback((): Segment[] => {
     const editor = editorRef.current
@@ -224,7 +202,6 @@ export function usePromptArea({
         }
         segments.push({ type: 'text', text: '\n' })
       } else if (isHTMLElement(node)) {
-        // Unknown element — extract text content
         const text = node.textContent ?? ''
         if (text) {
           segments.push({ type: 'text', text })
@@ -233,13 +210,10 @@ export function usePromptArea({
       }
     }
 
-    // When the user empties the editor (types something, then deletes it all),
-    // the browser leaves a lone filler <br> so the contentEditable block stays
-    // visible and focusable. Reading that <br> as a "\n" text segment would make
-    // `value` permanently non-empty and keep the placeholder hidden forever.
-    // A newline we actually rendered always carries surrounding text/chip
-    // content or a trailing sentinel <br>, so when neither is present the only
-    // <br> nodes are filler and the editor is genuinely empty.
+    // An emptied editor keeps a lone browser filler <br>; reading it as "\n" would
+    // make `value` permanently non-empty and hide the placeholder forever. A newline
+    // we rendered always carries surrounding content or a trailing sentinel <br>, so
+    // with neither present every <br> is filler and the editor is genuinely empty.
     if (!hasRealContent && !hasSentinel) {
       return []
     }
@@ -247,9 +221,7 @@ export function usePromptArea({
     return segments
   }, [])
 
-  // -----------------------------------------------------------------------
   // Model -> DOM: render segments into the contentEditable div
-  // -----------------------------------------------------------------------
 
   const renderSegmentsToDOM = useCallback(
     (segments: Segment[]) => {
@@ -279,7 +251,6 @@ export function usePromptArea({
             }
           }
         } else {
-          // Render chip as non-editable span
           const chip = document.createElement('span')
           chip.contentEditable = 'false'
           chip.dataset.chipTrigger = seg.trigger
@@ -325,9 +296,7 @@ export function usePromptArea({
     [triggers, markdownEnabled],
   )
 
-  // -----------------------------------------------------------------------
   // Trigger detection (extracted so events module can call it)
-  // -----------------------------------------------------------------------
 
   // Builds the insertChip handed to callback/launch activations: replaces the
   // trigger's range with a chip and notifies onChipAdd.
@@ -393,12 +362,10 @@ export function usePromptArea({
         }
       }
 
-      // Fetch suggestions for dropdown mode
       if (detected.config.mode === 'dropdown' && detected.config.onSearch) {
         runSearch(detected.query, detected.config)
       }
 
-      // Fire callback for callback mode
       if (detected.config.mode === 'callback' && detected.config.onActivate) {
         detected.config.onActivate({
           text: plainText,
@@ -412,9 +379,7 @@ export function usePromptArea({
     }
   }, [triggers, readSegmentsFromDOM, buildInsertChip, resetSearch, runSearch])
 
-  // -----------------------------------------------------------------------
   // Dismiss trigger
-  // -----------------------------------------------------------------------
 
   const dismissTrigger = useCallback(() => {
     editingChip.current = null
@@ -424,9 +389,7 @@ export function usePromptArea({
     resetSearch()
   }, [resetSearch])
 
-  // -----------------------------------------------------------------------
   // Wire up edge-case event handlers
-  // -----------------------------------------------------------------------
 
   const events = usePromptAreaEvents({
     editorRef,
@@ -446,9 +409,7 @@ export function usePromptArea({
     onImagePaste,
   })
 
-  // -----------------------------------------------------------------------
   // Sync value prop -> DOM on external changes
-  // -----------------------------------------------------------------------
 
   useEffect(() => {
     if (isSyncing.current) {
@@ -497,9 +458,7 @@ export function usePromptArea({
     }
   }, [])
 
-  // -----------------------------------------------------------------------
   // Handle input events
-  // -----------------------------------------------------------------------
 
   const handleInput = useCallback(() => {
     if (isSyncing.current) {
@@ -606,9 +565,7 @@ export function usePromptArea({
     runTriggerDetection()
   }, [onChange, readSegmentsFromDOM, runTriggerDetection, renderSegmentsToDOM, markdownEnabled, normalizeBullets, maxLength, events])
 
-  // -----------------------------------------------------------------------
   // Chip click delegation
-  // -----------------------------------------------------------------------
 
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -622,7 +579,6 @@ export function usePromptArea({
         return
       }
 
-      // Walk from the click target up to find a link or chip element
       let node: Node | null = target
       while (node && node !== editor) {
         // Check for URL link click — only navigate on Cmd/Ctrl+Click;
@@ -686,12 +642,7 @@ export function usePromptArea({
     [onChipClick, onLinkClick, triggers, runSearch, disabled],
   )
 
-  // -----------------------------------------------------------------------
-  // Chip mousedown delegation — feeds `suppressReopenChip` for handleClick's
-  // toggle-close detection. See `openChipNode`/`suppressReopenChip` above for
-  // why this needs to be a real mousedown listener rather than piggybacking
-  // on `dismissTrigger`.
-  // -----------------------------------------------------------------------
+  // Feeds `suppressReopenChip` for handleClick's toggle-close detection.
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target
@@ -712,9 +663,7 @@ export function usePromptArea({
     suppressReopenChip.current = null
   }, [])
 
-  // -----------------------------------------------------------------------
   // Remove a chip node from DOM and sync model
-  // -----------------------------------------------------------------------
 
   const removeChipNodeFromDOM = useCallback(
     (editor: HTMLElement, chipNode: HTMLElement): boolean => {
@@ -739,9 +688,7 @@ export function usePromptArea({
     [readSegmentsFromDOM, onChange, renderSegmentsToDOM, onChipDelete],
   )
 
-  // -----------------------------------------------------------------------
   // Revert an auto-resolved chip back to plain text
-  // -----------------------------------------------------------------------
 
   const revertChipNodeToText = useCallback(
     (editor: HTMLElement, chipNode: HTMLElement): boolean => {
@@ -758,7 +705,6 @@ export function usePromptArea({
         return false
       }
 
-      // Compute cursor target: plain text offset at end of reverted text
       let targetOffset = 0
       for (let i = 0; i < segIdx; i++) {
         const s = segments[i]
@@ -783,9 +729,7 @@ export function usePromptArea({
     [readSegmentsFromDOM, onChange, renderSegmentsToDOM, onChipDelete],
   )
 
-  // -----------------------------------------------------------------------
   // Chip backspace (delete chip behind cursor as whole unit)
-  // -----------------------------------------------------------------------
 
   const handleChipBackspace = useCallback((): boolean => {
     const editor = editorRef.current
@@ -834,9 +778,7 @@ export function usePromptArea({
     return false
   }, [removeChipNodeFromDOM, revertChipNodeToText])
 
-  // -----------------------------------------------------------------------
   // Chip forward delete (delete chip in front of cursor)
-  // -----------------------------------------------------------------------
 
   const handleChipForwardDelete = useCallback((): boolean => {
     const editor = editorRef.current
@@ -879,16 +821,13 @@ export function usePromptArea({
     return false
   }, [removeChipNodeFromDOM])
 
-  // -----------------------------------------------------------------------
   // Auto-resolve active trigger on space
-  // -----------------------------------------------------------------------
 
   const autoResolveActiveTrigger = useCallback(
     (trigger: ActiveTrigger) => {
       const segments = readSegmentsFromDOM()
       const query = trigger.query
 
-      // Create a synthetic suggestion so onSelect can customize display text
       const syntheticSuggestion: TriggerSuggestion = {
         value: query,
         label: query,
@@ -912,7 +851,6 @@ export function usePromptArea({
         ...chipData,
       })
 
-      // Position cursor after the auto-resolved chip + trailing space
       const editor = editorRef.current
       if (editor) {
         setCursorAtOffset(editor, result.cursorOffset)
@@ -923,9 +861,7 @@ export function usePromptArea({
     [readSegmentsFromDOM, onChange, renderSegmentsToDOM, dismissTrigger, onChipAdd],
   )
 
-  // -----------------------------------------------------------------------
   // Select a suggestion from the dropdown
-  // -----------------------------------------------------------------------
 
   const selectSuggestionInternal = useCallback(
     (suggestion: TriggerSuggestion) => {
@@ -1056,7 +992,6 @@ export function usePromptArea({
         ...chipData,
       })
 
-      // Position cursor after the chip + trailing space
       const editor = editorRef.current
       if (editor) {
         setCursorAtOffset(editor, result.cursorOffset)
@@ -1064,7 +999,6 @@ export function usePromptArea({
 
       dismissTrigger()
 
-      // Refocus editor after popover interaction
       setTimeout(() => {
         editorRef.current?.focus()
       }, 0)
@@ -1087,9 +1021,7 @@ export function usePromptArea({
     }
   }, [suggestions, activeTrigger])
 
-  // -----------------------------------------------------------------------
   // Handle key events
-  // -----------------------------------------------------------------------
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -1299,19 +1231,10 @@ export function usePromptArea({
         return
       }
 
-      // 3. Enter without Shift (skipping IME): submit when `submitOnEnter` is
-      // set, else insert a newline — continuing a list if we are in one.
-      //
-      // Under `submitOnEnter`, Enter submits *unconditionally*. It used to try
-      // a list continuation first, which meant that once you had typed a
-      // bullet, the send key silently stopped sending: every Enter added
-      // another empty bullet, and the only way out was to clear the list. Enter
-      // is the send key in a chat composer, and a key that does something else
-      // depending on what the line above happens to start with is not one.
-      // Continuation lives on Shift+Enter (branch 2.8), which is the newline
-      // key here and therefore where "newline, and keep the list going"
-      // belongs. Without `submitOnEnter`, Enter *is* the newline key, so it
-      // keeps the continuation.
+      // 3. Enter without Shift (skipping IME): under `submitOnEnter` it submits
+      // *unconditionally* — the send key must not turn into "another bullet" because
+      // of what the line above starts with; list continuation lives on Shift+Enter
+      // (branch 2.8). Without `submitOnEnter`, Enter is the newline key and continues.
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault()
         if (submitOnEnter) {
@@ -1403,9 +1326,7 @@ export function usePromptArea({
     ],
   )
 
-  // -----------------------------------------------------------------------
   // Imperative handle (memoized to avoid identity changes)
-  // -----------------------------------------------------------------------
 
   const handle: PromptAreaHandle = useMemo(
     () => ({
@@ -1492,9 +1413,7 @@ export function usePromptArea({
     [readSegmentsFromDOM, onChange, renderSegmentsToDOM, onChipAdd, events],
   )
 
-  // -----------------------------------------------------------------------
   // Compose event handlers
-  // -----------------------------------------------------------------------
 
   const eventHandlers = useMemo(
     () => ({

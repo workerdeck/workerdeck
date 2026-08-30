@@ -19,13 +19,9 @@ import {
 } from 'lucide-react'
 
 /**
- * An icon per tool, so a transcript can be skimmed by shape rather than read.
- *
- * The same mapping the iOS app makes, in lucide's vocabulary rather than SF
- * Symbols — the two clients should be recognisably showing the same thing. An
- * unknown tool falls back to a wrench, and an MCP tool (`mcp__server__name`) to
- * the puzzle piece the MCP screens use, because "which server is this from" is
- * the useful thing to see at a glance.
+ * An icon per tool. The same mapping the iOS app makes in SF Symbols — keep
+ * the two clients recognisably in step. Unknown tools fall back to a wrench,
+ * MCP tools (`mcp__server__name`) to the puzzle piece the MCP screens use.
  */
 export function toolIcon(toolName: string): LucideIcon {
   switch (toolName) {
@@ -74,26 +70,18 @@ export function toolIcon(toolName: string): LucideIcon {
 }
 
 /**
- * Is this tool a shell command?
- *
- * Its own question because a run of them is *one* thing the reader skims past:
- * the terminal theme collapses consecutive shell calls into a single "Ran N
- * shell commands" line, the way the CLI does. Names from both first-party
- * engines. `BashOutput`/`KillShell` are excluded on purpose — they manage a
- * background shell rather than run something, and folding them into the count
- * would inflate it.
+ * Is this tool a shell command? Drives the terminal theme's "Ran N shell
+ * commands" fold. `BashOutput`/`KillShell` are excluded on purpose — they
+ * manage a background shell rather than run something.
  */
 export function isShellTool(toolName: string): boolean {
   return toolName === 'Bash' || toolName === 'CodexCommand'
 }
 
 /**
- * Does this tool *change* the workspace?
- *
- * Worth its own colour in a transcript: skimming a run, "what did it edit" is a
- * different question from "what did it look at", and a write is the one you
- * might need to undo. Names from both first-party engines; an MCP tool is
- * unknowable from its name, so it reads as neutral rather than guessed.
+ * Does this tool *change* the workspace? Names from both first-party engines;
+ * an MCP tool is unknowable from its name, so it reads as neutral rather than
+ * guessed.
  */
 export function isMutatingTool(toolName: string): boolean {
   switch (toolName) {

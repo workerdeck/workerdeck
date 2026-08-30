@@ -23,7 +23,7 @@ export type ClaudeAuthProbe = (env: Record<string, string | undefined>) => Promi
  * can't be found (optional dep skipped, unsupported platform); callers degrade
  * to 'unknown', and the SDK surfaces its own error if a session is created.
  */
-export function resolveBundledClaudeExecutable(): string | undefined {
+export const resolveBundledClaudeExecutable = (): string | undefined => {
   try {
     // Two hops on purpose: the platform package is a dependency of the SDK, not
     // of this package, so under pnpm's strict layout it only resolves from the
@@ -63,10 +63,10 @@ export function resolveBundledClaudeExecutable(): string | undefined {
  * parse to a `loggedIn` boolean is 'unknown', because `auth status` is not a
  * stable contract. Never rejects.
  */
-export function checkClaudeAuth(
+export const checkClaudeAuth = (
   env: Record<string, string | undefined>,
   options: { executable?: string; timeoutMs?: number } = {},
-): Promise<ClaudeAuthStatus> {
+): Promise<ClaudeAuthStatus> => {
   const executable = options.executable ?? resolveBundledClaudeExecutable()
   if (!executable) {
     return Promise.resolve('unknown')

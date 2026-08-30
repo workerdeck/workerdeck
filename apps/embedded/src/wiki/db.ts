@@ -6,19 +6,15 @@ import type { Doc } from '../shared.ts'
 
 /**
  * The wiki's storage: `node:sqlite`, so the reference app carries no database
- * dependency at all (Node 22.5+ ships it; 24 has it unflagged).
+ * dependency at all.
  *
- * `.embedded/` is **data, not build output**. Nothing automated may delete it:
- * `pnpm clean` removes `dist` only, and wiping the wiki is the separate,
- * explicit `pnpm reset`. This is not a hypothetical tidiness rule — the two were
- * once the same script, and it cost someone their documents.
+ * `.embedded/` is **data, not build output** — nothing automated may delete it
+ * (`pnpm clean` removes `dist`; wiping the wiki is the explicit `pnpm reset`).
  *
- * Every query takes a `userId` and every WHERE clause carries it. That is
- * deliberate duplication of the gateway's session scoping rather than a
- * substitute for it: the gateway decides who may *drive a session*, this decides
- * whose *documents* a tool call can reach, and an agent that talked its way into
- * the wrong tool arguments must still come up empty. Two independent checks on
- * two different questions is the whole reason both exist.
+ * **Every query takes a `userId` and every WHERE clause carries it**, deliberately
+ * duplicating the gateway's session scoping rather than substituting for it: the
+ * gateway decides who may drive a session, this decides whose documents a tool call
+ * can reach, so an agent that talked its way into the wrong arguments comes up empty.
  */
 export type WikiDb = {
   listDocs(userId: string): Doc[]
@@ -39,13 +35,12 @@ const toDoc = (row: Row, withBody: boolean): Doc => ({
   ...(withBody ? { body: row.body } : {}),
 })
 
-export function openWikiDb(file: string): WikiDb {
+export const openWikiDb = (file: string): WikiDb => {
   if (file !== ':memory:') {
     mkdirSync(dirname(file), { recursive: true })
   }
   const db = new DatabaseSync(file)
-  // WAL so the agent's writes and the SPA's reads do not block each other; both
-  // arrive on the same process but not on the same tick.
+  // WAL so the agent's writes and the SPA's reads do not block each other.
   db.exec('PRAGMA journal_mode = WAL')
   db.exec(`
     CREATE TABLE IF NOT EXISTS docs (

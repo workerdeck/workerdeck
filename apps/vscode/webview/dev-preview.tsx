@@ -1,20 +1,11 @@
 /**
- * `pnpm --filter workerdeck-vscode dev:preview` — the Sessions sidebar's cards,
- * in a browser, against canned data.
+ * `pnpm --filter workerdeck-vscode dev:preview` — the Sessions sidebar's cards, in a
+ * browser, against canned data. The webview has no dev server, and every state worth
+ * checking here is otherwise rare or expensive to produce on demand.
  *
- * The webview has no dev server (`vite.config.ts` explains why: webview assets
- * must be real files under `localResourceRoots`), so the only way to look at a
- * card is normally to build the extension, launch a second VS Code, connect a
- * gateway and find a session in the state you wanted. Every state that matters
- * here — six sub-agents with one running and one failed, an unread badge, a
- * session waiting on a human, a non-Claude engine — is either rare or expensive
- * to produce on demand.
- *
- * `dev/preview.html` supplies the `--vscode-*` variables VS Code injects, at
- * their Dark+ values. That is the whole fidelity risk of this harness and it is
- * worth naming: a token this file forgets falls back to a `theme.css` default
- * and looks *fine here* while being wrong in the editor. It is a place to check
- * layout and hierarchy, not a substitute for looking at the real thing once.
+ * **The fidelity risk**: `dev/preview.html` hand-supplies the `--vscode-*` variables
+ * at their Dark+ values, so a token it forgets falls back to a `theme.css` default
+ * and looks fine here while being wrong in the editor.
  *
  * Dev-only, and unpackaged: `.vscodeignore` allows `dist/` and nothing else.
  */

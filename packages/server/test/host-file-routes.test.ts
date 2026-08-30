@@ -40,7 +40,7 @@ afterEach(async () => {
   }
 })
 
-async function start(hostFiles?: { roots?: string[]; write?: boolean; maxFileBytes?: number }, allowedCwdRoots?: string[]) {
+const start = async (hostFiles?: { roots?: string[]; write?: boolean; maxFileBytes?: number }, allowedCwdRoots?: string[]) => {
   running = createWorkerServer({ allowUnauthenticated: true, hostFiles, allowedCwdRoots })
   const { port } = await running.listen(0, '127.0.0.1')
   return `http://127.0.0.1:${port}/v1`

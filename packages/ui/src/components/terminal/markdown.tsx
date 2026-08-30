@@ -5,35 +5,19 @@ import { CopyAction, WithActions } from './affordances.tsx'
 import { Band } from './row.tsx'
 
 /**
- * Markdown on the character grid.
+ * Markdown on the character grid: every element mapped onto the theme's own
+ * {@link Row}/{@link Band} primitives, never the renderer's prose defaults
+ * overridden back off with `!important`. Streamdown keeps only what it alone
+ * can do — streaming-safe parsing of half-written markdown.
  *
- * The `lines` variant did this by letting the renderer draw its prose defaults
- * and then overriding roughly sixty declarations back off with `!important` —
- * every margin, every list gap, the fenced-code card's four nested boxes, the
- * table's frame and its floating button pill. That is a losing position by
- * construction: each renderer upgrade is a new set of boxes to find and unpaint,
- * and the CSS says what the output must *not* look like rather than what it is.
- *
- * So this maps the elements instead. Streamdown keeps what only it can do —
- * streaming-safe parsing of half-written markdown — and every block it emits is
- * built from the same {@link Row}/{@link Band} primitives the rest of the theme
- * uses. There is no `!important` here and there is no CSS fighting anything.
- *
- * The rendering rules are a terminal's, not a document's:
- *
- * - **One type size.** Headings are weight and colour; a bigger glyph would
- *   break the only line height the grid has.
- * - **Markers are cells.** A bullet is `- ` (two columns), an ordered marker
- *   `1. ` (three), and the text starts on the next column exactly as it does in
- *   the markdown source — so a wrapped line hangs under the text, not the
- *   bullet, and nesting costs one marker width per level.
- * - **Code is a band, not a card.** No frame, no language strip, no floating
- *   buttons: a fenced block is a wash of dim text running to the screen edge,
- *   which is what a terminal shows.
+ * The rendering rules are a terminal's, not a document's: one type size
+ * (headings are weight and colour — a bigger glyph would break the grid's one
+ * line height), markers are cells (a wrapped line hangs under the text, not
+ * the bullet), and code is a band, not a card.
  */
 
 /** Pull the text out of a fenced block's React children (`<code>…</code>`). */
-function codeText(node: ReactNode): string {
+const codeText = (node: ReactNode): string => {
   if (node === null || node === undefined || typeof node === 'boolean') {
     return ''
   }
@@ -47,11 +31,10 @@ function codeText(node: ReactNode): string {
   return element.props ? codeText(element.props.children) : ''
 }
 
-/** The language a fence declared, from the `language-*` class react-markdown
- * puts on the inner `<code>`. Kept as a data attribute rather than used to
- * highlight: the CLI does not colour a fenced block inside a message, and a
- * second highlighter here would be a second theme to keep in sync. */
-function fenceLanguage(node: ReactNode): string | undefined {
+/** The language a fence declared, from the `language-*` class on the inner
+ * `<code>`. A data attribute only, never highlighted: the CLI does not colour
+ * a fenced block inside a message. */
+const fenceLanguage = (node: ReactNode): string | undefined => {
   const child = Array.isArray(node) ? node.find(Boolean) : node
   const className = (child as { props?: { className?: string } } | undefined)?.props?.className
   const match = /language-([\w-]+)/.exec(className ?? '')
@@ -59,13 +42,9 @@ function fenceLanguage(node: ReactNode): string | undefined {
 }
 
 /**
- * A fenced block: a band of dim text, and the one place a copy affordance earns
- * its keep most — a command in a message is there to be run.
- *
- * The renderer's own copy/download buttons are turned off (`controls={false}`)
- * in favour of this: they are web buttons floating over the content in another
- * application's idiom, and they are not switchable by the surface the way
- * everything else here is.
+ * A fenced block: a band of dim text with the theme's own copy action —
+ * Streamdown's floating copy/download buttons are turned off in its favour
+ * (`controls={false}` below).
  */
 function CodeBand({ code, language }: { code: string; language?: string }) {
   return (
@@ -77,9 +56,8 @@ function CodeBand({ code, language }: { code: string; language?: string }) {
   )
 }
 
-/** Headings differ only in tone — a terminal has one type size, so `h1` and `h4`
- * cannot differ in anything else. Return-typed so the parameter picks up the
- * renderer's own component signature rather than a narrower hand-written one. */
+/** Headings differ only in tone — one type size. Return-typed so the
+ * parameter picks up the renderer's own component signature. */
 const heading = (tone: 'bright' | 'fg'): Components['h1'] =>
   function Heading({ children }) {
     return (
@@ -99,15 +77,13 @@ const TERMINAL_COMPONENTS: Components = {
   h5: heading('fg'),
   h6: heading('fg'),
 
-  // `term-block` on every block-level output, without exception: it is what the
-  // one-blank-line-between-blocks rule keys on, and a block that forgets it butts
-  // straight up against its neighbour (a list running into the paragraph after
-  // it, which is exactly how this was found).
+  // `term-block` on every block-level output, without exception: the
+  // one-blank-line-between-blocks rule keys on it, and a block that forgets it
+  // butts straight up against its neighbour.
   ul: ({ children }) => <ul className="term-block term-list">{children}</ul>,
   ol: ({ children }) => <ol className="term-block term-list term-list-ordered">{children}</ol>,
-  // The marker is the gutter's `::before` (a CSS counter for the ordered case),
-  // so a list item is literally a Row: same two columns, same hanging indent,
-  // and a nested list inside the body indents by exactly one marker width.
+  // The marker is the gutter's `::before`, so a list item is literally a Row:
+  // same columns, same hanging indent.
   li: ({ children }) => (
     <li className="term-row term-li">
       <span className="term-gutter" aria-hidden />
@@ -123,9 +99,8 @@ const TERMINAL_COMPONENTS: Components = {
 
   hr: () => <div className="term-block term-rule" aria-hidden />,
 
-  // Fenced code. `pre` owns the whole block — the inner `<code>` is only where
-  // the text and the language live — so the band is built here and `code` never
-  // sees a fence.
+  // `pre` owns the whole fenced block, so the band is built here and `code`
+  // never sees a fence.
   pre: ({ children }) => <CodeBand code={codeText(children)} language={fenceLanguage(children)} />,
   code: ({ children }) => (
     <code className="term-inline-code" data-tone="blue">
@@ -145,17 +120,16 @@ const TERMINAL_COMPONENTS: Components = {
     </a>
   ),
 
-  // Tables keep the grid by being a grid: monospace cells, one line per row, and
-  // dim box-drawing rules instead of borders that would land between cells.
+  // Tables keep the grid by being a grid: monospace cells, one line per row,
+  // box-drawing rules instead of borders.
   table: ({ children }) => (
     <div className="term-block term-table-wrap">
       <table className="term-table">{children}</table>
     </div>
   ),
-  // Every table element, and not just the ones that looked wrong: any element
-  // left unmapped keeps the renderer's own padded, bordered default, and a
-  // single one of those puts its rows off the line grid (`td`'s `py-2` was
-  // making table rows 23px in an 18px theme).
+  // Every table element must be mapped: one left on the renderer's padded
+  // default puts its rows off the line grid (`td`'s `py-2` → 23px rows in an
+  // 18px theme).
   thead: ({ children }) => <thead className="term-thead">{children}</thead>,
   tbody: ({ children }) => <tbody>{children}</tbody>,
   tr: ({ children }) => <tr>{children}</tr>,
@@ -180,9 +154,7 @@ export const TerminalMarkdown = memo(
       <Streamdown
         mode={streaming ? 'streaming' : 'static'}
         parseIncompleteMarkdown={streaming}
-        // The renderer's copy/download affordances are web buttons floating over
-        // the content. A terminal has none, and the transcript's own selection
-        // is how you copy from one.
+        // Streamdown's floating copy/download buttons — the theme has its own.
         controls={false}
         components={TERMINAL_COMPONENTS}
         className={cn('term-md', className)}

@@ -13,10 +13,6 @@ import {
 import { htmlToMarkdown } from './html-to-markdown.ts'
 import { normalizeListPrefixText, renumberOrderedListLines, hasOrderedListRun } from './prompt-area-list-ops.ts'
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 type EventHandlerDeps = {
   editorRef: React.RefObject<HTMLDivElement | null>
   readSegmentsFromDOM: () => Segment[]
@@ -52,10 +48,6 @@ type PromptAreaEventHandlers = {
   isComposing: React.RefObject<boolean>
 }
 
-// ---------------------------------------------------------------------------
-// Undo/Redo Stack
-// ---------------------------------------------------------------------------
-
 const MAX_UNDO_HISTORY = 100
 
 /** Delay before dismissing trigger on blur, so popover clicks register first */
@@ -65,10 +57,6 @@ type UndoState = {
   undoStack: Segment[][]
   redoStack: Segment[][]
 }
-
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
 
 /**
  * Encapsulates all edge-case event handlers for the prompt area component:
@@ -95,14 +83,12 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
 
   const isComposing = useRef(false)
 
-  // -----------------------------------------------------------------------
   // Undo/redo stack (MAX_UNDO_HISTORY entries; clears redo on new push).
   // Invariants: stacks live in refs (not useState) so pushUndo /
   // resetUndoHistory / handleKeyDownForUndoRedo keep stable identity.
   // Destabilizing this would re-create handleInput / handleKeyDown /
   // imperative handle on every render and silently regress IME + debounced
   // undo in the parent hook.
-  // -----------------------------------------------------------------------
   const undoState = useRef<UndoState>({ undoStack: [], redoStack: [] })
 
   const pushUndo = useCallback((segments: Segment[]) => {
@@ -111,7 +97,6 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
     if (state.undoStack.length > MAX_UNDO_HISTORY) {
       state.undoStack.shift()
     }
-    // Clear redo stack on new change
     state.redoStack = []
   }, [])
 
@@ -119,9 +104,7 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
     undoState.current = { undoStack: [], redoStack: [] }
   }, [])
 
-  // -----------------------------------------------------------------------
   // Paste: strip HTML, insert plain text only
-  // -----------------------------------------------------------------------
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLDivElement>) => {
@@ -138,7 +121,6 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
         return
       }
 
-      // Check for image files in clipboard before processing text
       // Some browsers/OSes provide pasted images via `items` instead of `files` (e.g. screenshots)
       const imageFile =
         Array.from(e.clipboardData.files).find((f) => f.type.startsWith('image/')) ??
@@ -151,16 +133,13 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
         return
       }
 
-      // Record undo snapshot
       const currentSegments = readSegmentsFromDOM()
       pushUndo(currentSegments)
 
-      // Check for internal segment data (copy/paste within the editor)
       const segmentJson = e.clipboardData.getData('text/prompt-area-segments')
       if (segmentJson) {
         const parsed = parseSegmentsFromClipboard(segmentJson)
         if (parsed && parsed.length > 0) {
-          // Insert the copied segments at cursor position
           const range = getSelectionRange()
           if (!range) {
             return
@@ -168,13 +147,11 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
 
           range.deleteContents()
 
-          // Merge pasted segments into current segments at cursor position
           const beforePaste = readSegmentsFromDOM()
           const merged = insertSegmentsAtCursor(beforePaste, parsed, editor)
           onChange(merged)
           renderSegmentsToDOM(merged)
 
-          // Notify: internal paste with chip data preserved
           onPasteCallback?.({ segments: merged, source: 'internal' })
           for (const seg of parsed) {
             if (seg.type === 'chip') {
@@ -236,7 +213,6 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
         text = renumberOrderedListLines(text).text
       }
 
-      // Insert plain text at cursor position using Selection API
       const range = getSelectionRange()
       if (!range) {
         return
@@ -259,13 +235,11 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
 
       range.insertNode(fragment)
 
-      // Move cursor to end of pasted content
       range.collapse(false)
       const sel = window.getSelection()
       sel?.removeAllRanges()
       sel?.addRange(range)
 
-      // Normalize DOM, sync model, detect triggers
       normalizeEditorDOM(editor)
       const newSegments = readSegmentsFromDOM()
 
@@ -276,7 +250,6 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
         onChange(resolvedSegments)
         renderSegmentsToDOM(resolvedSegments)
 
-        // Notify about auto-resolved chips from pasted text
         for (const seg of resolvedSegments) {
           if (
             seg.type === 'chip' &&
@@ -311,9 +284,7 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
     ],
   )
 
-  // -----------------------------------------------------------------------
   // Copy: serialize chips into plain text
-  // -----------------------------------------------------------------------
 
   const handleCopy = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -325,11 +296,9 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
 
     const fragment = range.cloneContents()
 
-    // Walk fragment and serialize, converting chips to their text representation
     const plainText = serializeFragmentToPlainText(fragment)
     e.clipboardData.setData('text/plain', plainText)
 
-    // Also serialize chip segments as JSON for internal paste
     const fragmentSegments = serializeFragmentToSegments(fragment)
     const hasChips = fragmentSegments.some((s) => s.type === 'chip')
     if (hasChips) {
@@ -340,16 +309,12 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
     }
   }, [])
 
-  // -----------------------------------------------------------------------
   // Cut: copy + delete
-  // -----------------------------------------------------------------------
 
   const handleCut = useCallback(
     (e: React.ClipboardEvent<HTMLDivElement>) => {
-      // First, do the copy
       handleCopy(e)
 
-      // Then delete the selection
       const range = getSelectionRange()
       if (!range) {
         return
@@ -372,9 +337,7 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
     [handleCopy, editorRef, readSegmentsFromDOM, onChange, pushUndo, runTriggerDetection],
   )
 
-  // -----------------------------------------------------------------------
   // Drag & Drop: prevent to avoid unpredictable DOM mutations
-  // -----------------------------------------------------------------------
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -384,9 +347,7 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
     e.preventDefault()
   }, [])
 
-  // -----------------------------------------------------------------------
   // IME Composition: track state, defer trigger detection
-  // -----------------------------------------------------------------------
 
   const handleCompositionStart = useCallback(() => {
     isComposing.current = true
@@ -394,13 +355,10 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
 
   const handleCompositionEnd = useCallback(() => {
     isComposing.current = false
-    // Run trigger detection after composition ends
     runTriggerDetection()
   }, [runTriggerDetection])
 
-  // -----------------------------------------------------------------------
   // Blur: dismiss trigger dropdown with delay (so popover clicks work)
-  // -----------------------------------------------------------------------
 
   const handleBlur = useCallback(() => {
     setTimeout(() => {
@@ -419,9 +377,7 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
     }, BLUR_DELAY_MS)
   }, [editorRef, dismissTrigger])
 
-  // -----------------------------------------------------------------------
   // Undo/Redo: intercept Ctrl+Z / Ctrl+Shift+Z
-  // -----------------------------------------------------------------------
 
   const handleKeyDownForUndoRedo = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
@@ -435,7 +391,6 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
       const state = undoState.current
 
       if (e.shiftKey) {
-        // Redo: Ctrl+Shift+Z
         if (state.redoStack.length === 0) {
           return true
         }
@@ -452,7 +407,6 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
         renderSegmentsToDOM(segments)
         onRedo?.(segments)
       } else {
-        // Undo: Ctrl+Z
         if (state.undoStack.length === 0) {
           return true
         }

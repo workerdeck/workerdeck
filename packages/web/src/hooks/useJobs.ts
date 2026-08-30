@@ -4,16 +4,11 @@ import { client } from '../lib/client.ts'
 
 /**
  * Live view of the primary gateway's job queue: jobs stream in over `/queue/ws`
- * (upserted by id), with a slow REST poll as a safety net and for the initial
- * list. `enabled: false` means the server has no queue configured; `live`
- * reflects the WS connection.
+ * (upserted by id), with a slow REST poll as a safety net and for the initial list.
  *
- * A **module-scope store** rather than per-hook state, for the same reason
- * `useSessions` and the watermarks are: the jobs sidebar, the empty detail pane
- * and a job's own page are all on screen at once now, and three copies of this
- * hook would be three queue sockets and three polls answering from three
- * snapshots. The socket is opened when the first subscriber arrives and closed
- * when the last leaves.
+ * A **module-scope store**, not per-hook state: the jobs sidebar, the empty detail
+ * pane and a job's own page mount this at once, and three copies would be three
+ * queue sockets answering from three snapshots.
  */
 const FALLBACK_INTERVAL_MS = 15_000
 
@@ -30,7 +25,7 @@ type State = {
 let state: State = { jobs: [], stats: undefined, enabled: true, live: false, error: undefined }
 const listeners = new Set<() => void>()
 
-function emit(next: Partial<State>) {
+const emit = (next: Partial<State>): void => {
   state = { ...state, ...next }
   for (const listener of listeners) {
     listener()
@@ -40,7 +35,7 @@ function emit(next: Partial<State>) {
 let inFlight: Promise<void> | undefined
 
 /** Re-list now. Concurrent callers share the one pass in flight. */
-export function refreshJobs(): Promise<void> {
+export const refreshJobs = (): Promise<void> => {
   inFlight ??= (async () => {
     try {
       const gateway = client()
@@ -51,8 +46,7 @@ export function refreshJobs(): Promise<void> {
       emit({ jobs, stats, enabled: true, error: undefined })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      // A queue-less server is a configuration, not a failure — saying so is
-      // what lets the UI offer the option rather than an error.
+      // A queue-less server is a configuration, not a failure.
       if (/not configured/i.test(message)) {
         emit({ enabled: false, error: undefined })
       } else {
@@ -69,7 +63,7 @@ let subscribers = 0
 let timer: ReturnType<typeof setInterval> | undefined
 let detach: (() => void) | undefined
 
-function subscribe(listener: () => void) {
+const subscribe = (listener: () => void): (() => void) => {
   listeners.add(listener)
   if (++subscribers === 1) {
     void refreshJobs()
@@ -93,7 +87,7 @@ function subscribe(listener: () => void) {
  * Driven from the hook rather than from `subscribe` because `enabled`/`stats`
  * arrive after the first subscriber does.
  */
-function ensureAttached() {
+const ensureAttached = (): void => {
   if (detach || !state.enabled || state.stats === undefined || subscribers === 0) {
     return
   }
@@ -123,7 +117,7 @@ function ensureAttached() {
   }
 }
 
-export function useJobs(): State & { refresh: () => Promise<void> } {
+export const useJobs = (): State & { refresh: () => Promise<void> } => {
   const value = useSyncExternalStore(
     subscribe,
     () => state,

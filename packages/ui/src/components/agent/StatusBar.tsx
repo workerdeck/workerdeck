@@ -15,36 +15,25 @@ import { useTranscriptVariant } from './transcript-variant.tsx'
 export interface StatusBarProps {
   state: TranscriptState
   /**
-   * Plan windows to draw, when they should not be the session's own. The panel
+   * Plan windows to draw, when they should not be the session's own — the panel
    * hands over the gateway's per-profile state merged over this transcript's
-   * reading (`mergeUsage`): a session's own `rate_limit` readings arrive only at
-   * a turn's edges, so one idle since yesterday would otherwise render
-   * yesterday's number as current. Absent = `state.rateLimits`, which is what a
-   * bar composed by hand outside the panel gets.
+   * reading (`mergeUsage`), because a session's own `rate_limit` readings arrive
+   * only at a turn's edges. Absent = `state.rateLimits`.
    */
   rateLimits?: Record<string, RateLimitInfo>
   /** @deprecated Pass {@link StatusBarProps.connection}; kept so an embedder
    * still handing over a boolean keeps working. */
   connected?: boolean
   /** How the client is doing at reaching the gateway. A dropped socket wins the
-   * status slot: the session status held over a dead socket is a stale reading,
-   * and presenting it as a live one is the thing worth avoiding. */
+   * status slot — session status over a dead socket is a stale reading. */
   connection?: ConnectionState
-  /**
-   * Where the gauges lead. Each one opens the panel that answers *its* question
-   * — the two meters measure different things, so sending both to one "details"
-   * list would be a detour every time. Omit a handler and that gauge stays a
-   * read-only tooltip.
-   */
+  /** Where the gauges lead. Omit a handler and that gauge stays a read-only
+   * tooltip. */
   onOpenStatus?: () => void
   onOpenContext?: () => void
   onOpenUsage?: () => void
-  /**
-   * The session's own controls (model, permission mode), for
-   * `controlsSurface: 'status'`. They sit at the end of the readings cluster —
-   * status, context, usage, then what you can *change* — rather than out by the
-   * actions menu, because they belong with the session facts they act on.
-   */
+  /** The session's own controls (model, permission mode), for
+   * `controlsSurface: 'status'` — at the end of the readings cluster. */
   controls?: ReactNode
   /** Trailing slot — the session-actions menu, at the bar's trailing edge. */
   actions?: ReactNode
@@ -55,7 +44,7 @@ export interface StatusBarProps {
 }
 
 /** Ticking clock for reset countdowns — rate_limit events are sparse, so tick locally. */
-function useNow(intervalMs = 30_000): number {
+const useNow = (intervalMs = 30_000): number => {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), intervalMs)
@@ -64,15 +53,11 @@ function useNow(intervalMs = 30_000): number {
   return now
 }
 
-/** The shared ramp, aliased for the two call sites below — the thresholds live
- * in `lib/status.ts` beside the severity they mirror. */
-const utilizationColor = (pct: number) => meterColorClass(pct)
-
 /** The CLI reports category colors as its own theme token names ('inactive',
  * 'promptBorder', ...), not CSS colors — only pass through what CSS can render. */
 const cssColor = (color: string): string | undefined => (typeof CSS !== 'undefined' && CSS.supports('color', color) ? color : undefined)
 
-function ContextMeter({ usage }: { usage: ContextUsage }) {
+const ContextMeter = ({ usage }: { usage: ContextUsage }) => {
   return (
     <Tip
       content={
@@ -93,14 +78,14 @@ function ContextMeter({ usage }: { usage: ContextUsage }) {
         </div>
       }
     >
-      <span className={cn('inline-flex cursor-default items-center gap-1 font-mono text-label', utilizationColor(usage.percentage))}>
+      <span className={cn('inline-flex cursor-default items-center gap-1 font-mono text-label', meterColorClass(usage.percentage))}>
         Ctx {formatTokens(usage.totalTokens)}
       </span>
     </Tip>
   )
 }
 
-function RateLimitMeter({ label, info, now }: { label: string; info: RateLimitInfo; now: number }) {
+const RateLimitMeter = ({ label, info, now }: { label: string; info: RateLimitInfo; now: number }) => {
   // The CLI omits utilization on some updates — show the window without a made-up 0%.
   const pct = info.utilization
   const resetsAtMs = info.resetsAt !== undefined ? info.resetsAt * 1000 : undefined
@@ -124,15 +109,12 @@ function RateLimitMeter({ label, info, now }: { label: string; info: RateLimitIn
       }
     >
       {/* Inline, not `inline-flex`: a flex container contributes its FIRST
-          item's baseline, and the first item here is the ring — so a flex
-          version hands the row a 13px circle's baseline instead of the number's,
-          and every reading beside it sits on a different line. Inline text has
-          only one baseline to give. `align-middle` centres the ring on the
-          x-height, which is where it looked right anyway. */}
+          item's baseline, which here is the ring's — every reading beside it
+          would sit on a different line. */}
       <span
         className={cn(
           'cursor-default font-mono text-label whitespace-nowrap',
-          info.status === 'rejected' ? 'text-danger' : utilizationColor(pct ?? 0),
+          info.status === 'rejected' ? 'text-danger' : meterColorClass(pct ?? 0),
         )}
       >
         <ProgressRing value={pct ?? 0} className="mr-1 inline-block align-middle" />
@@ -146,7 +128,7 @@ function RateLimitMeter({ label, info, now }: { label: string; info: RateLimitIn
 
 /** A gauge that leads somewhere. `undefined` handler leaves it inert, so an
  * embedder that mounts no panels doesn't get buttons that do nothing. */
-function Slot({ onClick, hint, children }: { onClick?: () => void; hint: string; children: ReactNode }) {
+const Slot = ({ onClick, hint, children }: { onClick?: () => void; hint: string; children: ReactNode }) => {
   if (!onClick) {
     return <>{children}</>
   }
@@ -155,14 +137,9 @@ function Slot({ onClick, hint, children }: { onClick?: () => void; hint: string;
       type="button"
       onClick={onClick}
       aria-label={hint}
-      // `leading-4` matches the label metrics inside: a button's own line box is
-      // the page's 24px one, and the extra strut was padding the bar by 2.5px
-      // that nothing was using.
-      // No horizontal padding: the bar's own 6px is the inset, and a slot that
-      // added its own would start the first reading 10px in. The hover surface
-      // hugs the text instead, which is what a status line's items do anyway.
-      // `leading-4` matches the label metrics inside — a button's own line box
-      // is the page's 24px one, and the strut padded the bar with nothing.
+      // No horizontal padding: the bar's own 6px is the inset. `leading-4`
+      // matches the label metrics inside — a button's own line box is the
+      // page's 24px one, and the strut padded the bar with nothing.
       className="rounded-md py-0.5 leading-4 transition-colors outline-none hover:bg-surface-hover focus-visible:bg-surface-hover"
     >
       {children}
@@ -194,35 +171,22 @@ export function StatusBar({
     <div
       data-slot="status-bar"
       className={cn(
-        // Baselines, not boxes. `items-center` centres each child's *box*, and
-        // this bar's children are boxes of different heights for reasons that
-        // have nothing to do with their text — a badge's pill padding, a ring
-        // beside a number, a select's border and chevron. Centring those lands
-        // their text on four slightly different lines. A flex item's baseline is
-        // its first line's baseline, so aligning on it puts every reading on one
-        // line by construction, whatever is drawn around it.
-        // One explicit height, shared with the docked composer above it (see
-        // `Composer.tsx`) — the two strips along the foot of the panel read as
-        // one piece of chrome, and a pixel of drift between them shows.
+        // Baselines, not boxes: the children are boxes of different heights for
+        // reasons unrelated to their text, and centring lands their text on
+        // four different lines. The height is shared with the docked composer
+        // above it (see `Composer.tsx`) so the two strips read as one chrome.
         'flex h-[var(--wd-status-bar-height)] items-baseline gap-2 border-border bg-surface p-1.5',
-        // The rule goes between the bar and the content, so which edge it sits
-        // on follows the placement — except under the terminal theme at the
-        // foot, where the composer directly above already closes itself with a
-        // rule of its own. Two adjacent 1px rules is a 2px rule with a seam in
-        // it, and it is off the line grid besides.
+        // The rule follows the placement — except under the terminal theme at
+        // the foot, where the composer above already closes itself with one.
         placement === 'bottom' ? (terminal ? undefined : 'border-t') : 'border-b',
         className,
       )}
     >
-      {/* One slot, two meanings: connection trouble wins it, because a session
-          status shown over a dead socket is a stale reading presented as a live
-          one. Tapping it opens the session's own facts — where it runs, on what,
-          with which credentials — which is the question a status prompts. */}
+      {/* One slot, two meanings: connection trouble wins it. */}
       <Slot onClick={onOpenStatus} hint="Session info">
         {link === 'live' ? (
           // `items-baseline` so the badge answers the row with its label's
-          // baseline rather than its pill's box; the dot and the spinner keep
-          // their own centring.
+          // baseline rather than its pill's box.
           <Badge variant={meta.variant} dot={!meta.busy} className="items-baseline">
             {meta.busy ? <Spinner className="size-3 self-center text-current" /> : null}
             {meta.label}
@@ -238,8 +202,7 @@ export function StatusBar({
           </Badge>
         )}
       </Slot>
-      {/* Never a 0% meter for an engine that doesn't measure: an absent reading
-          and a full window are not the same claim. */}
+      {/* Never a 0% meter for an engine that doesn't measure. */}
       {state.capabilities.contextUsage && state.contextUsage ? (
         <Slot onClick={onOpenContext} hint="Context breakdown">
           <ContextMeter usage={state.contextUsage} />

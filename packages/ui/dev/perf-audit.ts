@@ -1,17 +1,10 @@
 /**
- * Performance sweep for the terminal transcript, driven from the playground
- * (`__wdPerf()` in the console, ideally on the `perf` fixture).
+ * Frame-time sweep for the terminal transcript, driven from the playground
+ * (`__wdPerf()` in the console, ideally on the `perf` fixture): walks `scrollTop`
+ * down and back one step per animation frame, timing every frame plus any long
+ * tasks. Rendering cost that grows with session size shows up as a rising p95.
  *
- * What it measures is the cost that matters to a reader: **frame time while
- * scrolling**. The sweep walks `scrollTop` across the whole transcript and
- * back, one step per animation frame, and records every frame's duration plus
- * any long tasks the browser attributes to the page. Rendering cost that grows
- * with session size shows up here as a rising p95 — mounting rows, measuring
- * them, the scrubber rebuilding its marks — because all of it has to happen
- * inside the frames this loop is timing.
- *
- * Real layout only: like the height audit, this cannot run in jsdom, and a
- * unit test timing synthetic work would measure the test, not the renderer.
+ * Real layout only — this cannot run in jsdom.
  */
 
 export interface PerfReport {

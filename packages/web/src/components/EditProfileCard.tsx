@@ -40,14 +40,10 @@ export function EditProfileCard({ profile, onSaved }: { profile: ProfileInfo; on
   const [instructions, setInstructions] = useState(profile.session?.instructions ?? '')
   const [saving, setSaving] = useState(false)
 
-  // The same resolver the create forms use, so "what this profile offers" has
-  // one answer: its served catalog, else its declared provider ids, else the
-  // static Claude aliases. Its `models` carries the "Profile default" row, whose
-  // '' value is exactly what an unset default means here too.
+  // The same resolver the create forms use, so "what this profile offers" has one answer.
   const form = engineFormOptions(profile, mode ?? 'default', defaultModel)
-  // The shared resolver names its empty row "Profile default", which is what a
-  // create form means by it. Inside the profile editor that would be circular —
-  // here the empty row means *this* setting is unset, and the engine decides.
+  // Its empty row is named "Profile default", which is circular inside the profile editor:
+  // here it means *this* setting is unset and the engine decides.
   const modelRows = form.models.map((row) =>
     row.value === 'default'
       ? {
@@ -103,12 +99,9 @@ export function EditProfileCard({ profile, onSaved }: { profile: ProfileInfo; on
         </Field>
         <div className="flex flex-wrap items-end gap-3">
           <Field label="Default model">
-            {/* This profile's OWN catalog, the same list its create form
-                offers — a free-text field here could name a model this engine
-                has never heard of, and the run would fail at spawn rather than
-                at the point someone typed it. A provider profile whose ids the
-                operator is still declaring below has nothing to list yet, so it
-                keeps the text box. */}
+            {/* This profile's OWN catalog: a free-text field could name a model the engine has
+                never heard of, failing at spawn rather than where it was typed. A provider
+                profile still declaring its ids below has nothing to list, so it keeps the box. */}
             {modelRows.length > 1 ? (
               <ModelPicker value={defaultModel} onChange={setDefaultModel} models={modelRows} />
             ) : (
@@ -125,8 +118,7 @@ export function EditProfileCard({ profile, onSaved }: { profile: ProfileInfo; on
               variant="form"
               mode={mode}
               onModeChange={setMode}
-              // The record, not the engine name — the one source of truth for
-              // which modes this profile's engine can honor.
+              // The record, not the engine name: the one truth about which modes this engine honors.
               modes={form.modes}
             />
           </Field>

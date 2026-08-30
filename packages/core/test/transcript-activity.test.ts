@@ -8,7 +8,7 @@ import { contextReading, transcriptActivity, transcriptContent, type SessionEven
  * turn full of tool calls is one turn and many rows.
  */
 describe('transcriptActivity', () => {
-  const assistant = (content: SessionEventBody extends infer _ ? unknown[] : never) =>
+  const assistant = (content: unknown[]) =>
     ({
       type: 'assistant_message',
       message: { role: 'assistant', content },

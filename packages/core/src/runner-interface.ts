@@ -14,17 +14,11 @@ export type ParkedExecution = {
 }
 
 /**
- * Everything needed to rebuild a torn-down session under the same id — the durable
- * half of deferred execution. The engine-neutral fields are what the host persists,
- * indexes, and replays; `state` is the engine's own continuation state (for the
- * provider engine, its ModelMessage history) and is **opaque** outside it. Keeping
- * it opaque is what lets `packages/server` persist a provider session without ever
- * importing a model SDK.
- *
- * Must stay JSON-serializable end to end: a durable store round-trips it verbatim.
- * "Serializable" here means round-trips *unchanged* — a Date, a Map, or a typed
- * array inside `state` survives `JSON.stringify` as something else and rehydrates
- * wrong. Only the in-memory store hides that, by never serializing at all.
+ * Everything needed to rebuild a torn-down session under the same id. `state` is
+ * the engine's own continuation state and is **opaque** outside it — that opacity
+ * is what lets `packages/server` persist a provider session without importing a
+ * model SDK. Must round-trip `JSON.stringify` *unchanged*: a Date, Map or typed
+ * array inside `state` rehydrates wrong, and only the in-memory store hides that.
  */
 export type RunnerSnapshot = {
   /** Engine that produced it. Rehydrating into a different one is refused. */
@@ -68,51 +62,30 @@ export interface Runner {
   info(): SessionInfo
   /** Replay buffered events with seq > afterSeq, then deliver live events. Returns unsubscribe.
    *
+   * All three filters are opt-in and defaults must stay off; the stored log is
+   * never touched (full story: docs/GOTCHAS.md §Attach replay).
+   *
    * `coalesceReplay` drops state readings superseded later in the same replay —
-   * the fifty stale context/rate-limit polls a long session accumulates, which
-   * a client otherwise applies one by one and *renders*, counting its usage
-   * meters up through the session's history on every attach. Opt-in, and the
-   * default must stay off: it is only sound for a consumer whose handling of
-   * those events is last-write-wins, and `parking.ts` — which subscribes from
-   * seq 0 — branches on `status_changed` instead. Live events are never
-   * affected; this touches the buffered replay alone.
+   * only sound for a last-write-wins consumer; `parking.ts` (subscribed from
+   * seq 0) branches on `status_changed` instead. Replay-only.
    *
    * `truncateResults` delivers an oversized `tool_result` block as its head plus
-   * the markers that say so (protocol's {@link TOOL_RESULT_HEAD_CHARS}), leaving
-   * the whole thing one fetch away. Measured, that is 68% of a long session's
-   * attach in three frames. Opt-in for the same reason and with one extra
-   * condition: **the opt-in must be issued by the unit that renders**, because
-   * `client` and `react` are separate packages an embedder can skew, and a
-   * client that asked for heads without knowing how to fetch the rest would show
-   * one as though it were the whole result. Live events are untouched — a result
-   * arriving while you watch is already on screen — and so is the stored log,
-   * which parking snapshots and the fetch route both read.
+   * markers ({@link TOOL_RESULT_HEAD_CHARS}), the rest one fetch away. The
+   * opt-in must be issued by the unit that renders, or a head shows as though
+   * it were the whole result. Replay-only.
    *
-   * `imageRefs` replaces a `tool_result`'s base64 image parts with `image_ref`
-   * addresses (protocol's {@link ImageRefPart}), their bytes one REST fetch
-   * away. Opt-in under the same rule — issued by the unit that renders — but
-   * unlike the other two it applies to **live events as well as the replay**,
-   * because the client's one render path is ref-then-fetch and bytes on a live
-   * event would only be discarded or pinned. Measured, this is 91% of all
-   * tool-result payload and 0% of what any client draws. The stored log keeps
-   * every byte, which is what the fetch route serves back. */
+   * `imageRefs` replaces base64 image parts with `image_ref` addresses, bytes
+   * one REST fetch away. Same renderer-issued rule, but it applies to **live
+   * events as well as replay** — the client's one render path is ref-then-fetch. */
   subscribe(
     listener: SessionEventListener,
     afterSeq?: number,
     options?: { coalesceReplay?: boolean; truncateResults?: boolean; imageRefs?: boolean },
   ): () => void
-  /** One buffered event by seq, or undefined — the read side of the log the
-   * replay already walks.
-   *
-   * Optional, like every member added after `Runner` became public API: an
-   * out-of-tree runner that declines it declines only the on-demand tool result
-   * with it (the route 404s), which is exactly the degradation a runner with no
-   * `truncateResults` support wants anyway.
-   *
-   * Deliberately **not** a "give me the whole log" accessor. The one caller
-   * needs a single event by a seq a client is holding, and a method that handed
-   * out the array would invite a second copy of the bytes this feature exists
-   * to stop shipping. */
+  /** One buffered event by seq, or undefined. Optional: a runner that declines
+   * it declines only the on-demand tool result (the route 404s). Deliberately
+   * not a whole-log accessor — that would invite a second copy of the bytes
+   * `truncateResults` exists to stop shipping. */
   eventAt?(seq: number): SessionEvent | undefined
   /** Queue a user message for the session (starts the next turn when idle).
    * `attachments` carry their bytes to the engine and their reference to the
@@ -134,23 +107,13 @@ export interface Runner {
   resolvePermission(requestId: string, decision: PermissionDecision): boolean
   interrupt(): Promise<void>
   /**
-   * Reset the conversation in place: the session keeps its id, its watermarks
-   * and its place in the list, and the engine starts over with an empty
-   * context. Announced with a `conversation_reset` event, whose replay rules
-   * (see `transcriptContent` in `@workerdeck/protocol`) are what stop an
-   * attaching client from resurrecting the cleared rows.
-   *
-   * Optional, like every member added after `Runner` became public API: an
-   * out-of-tree runner that declines it declines the `clear_context` command
-   * with it, which is exactly what `EngineCapabilities.clearContext: false`
-   * tells clients to expect.
-   *
-   * **Queues behind in-flight work rather than racing it** — resolving when the
-   * clear has actually happened, not when it was accepted. A clear that landed
-   * in the middle of the turn it was clearing would be neither, and the engines
-   * differ in how they wait (claude hands `/clear` to a CLI that queues its own
-   * streamed input; codex and the provider put it on their turn chain), so the
-   * one thing callers may rely on is the resolution, not the mechanism.
+   * Reset the conversation in place: same id, same watermarks, empty engine
+   * context, announced with a `conversation_reset` event (whose replay rules —
+   * `transcriptContent` in `@workerdeck/protocol` — stop an attaching client
+   * from resurrecting the cleared rows). Optional; declining it is what
+   * `EngineCapabilities.clearContext: false` tells clients to expect.
+   * **Queues behind in-flight work rather than racing it** — a clear must not
+   * land in the middle of the turn it was clearing.
    */
   clearContext?(): Promise<void>
   setPermissionMode(mode: PermissionMode): Promise<void>
@@ -173,22 +136,14 @@ export interface Runner {
    */
   park?(): RunnerSnapshot | undefined
   /**
-   * The same snapshot, taken **without ending anything** — the runner stays live,
-   * attached and warm.
-   *
-   * Park and snapshot are two operations that happen to produce the same value,
-   * and separating them is what makes restart-survival possible for an engine
-   * that has no on-disk session of its own. A park is for a session with nothing
-   * to do for possibly days; this is for one whose user is mid-conversation and
-   * whose process might be redeployed out from under it. The host writes it
-   * through after each turn — never on a shutdown hook, because a `kill -9` runs
-   * no hook and that is precisely the case worth surviving — and rebuilds from
-   * the last write through the ordinary `restore` path.
-   *
-   * Returns undefined when a snapshot would capture a half-happened turn: one in
-   * flight, or pending in-process executions whose results die with the process.
-   * Optional for the same reason `park()` is — claude and codex run behind a
-   * binary that owns its process state, and have engine-side resume instead.
+   * `park()`'s value **without its teardown** — the runner stays live, attached
+   * and warm; what lets an engine with no on-disk session survive a restart.
+   * The host writes it through after each turn, never on a shutdown hook (a
+   * `kill -9` runs no hook, and that is precisely the case worth surviving),
+   * and rebuilds through the ordinary `restore` path. Returns undefined when it
+   * would capture a half-happened turn: one in flight, or pending in-process
+   * executions whose results die with the process. Optional for the same reason
+   * `park()` is.
    */
   snapshot?(): RunnerSnapshot | undefined
   /** Emit a session_error and terminate. For host-enforced policy (e.g. requireApiKey). */

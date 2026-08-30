@@ -21,7 +21,7 @@ const seqd = (bodies: SessionEventBody[]): SessionEvent[] => bodies.map((body, i
  * second implementation: if `staleReplaySeqs` and this ever disagree, the
  * disagreement is a bug in one of them, and this file is the one that knows
  * what the answer has to be. */
-function coalesce(events: SessionEvent[]): SessionEvent[] {
+const coalesce = (events: SessionEvent[]): SessionEvent[] => {
   const stale = new Set<number>()
   const seen = new Set<string>()
   for (let i = events.length - 1; i >= 0; i--) {

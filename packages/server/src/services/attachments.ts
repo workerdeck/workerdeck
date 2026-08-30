@@ -124,7 +124,7 @@ export class AttachmentStore {
   }
 }
 
-function ref(attachment: AttachmentInput): MessageAttachment {
+const ref = (attachment: AttachmentInput): MessageAttachment => {
   return {
     id: attachment.id,
     name: attachment.name,
@@ -138,7 +138,7 @@ function ref(attachment: AttachmentInput): MessageAttachment {
  * of the model in the text-attachment envelope, so directory separators, control
  * characters and unbounded length all come off here.
  */
-function safeName(name: string): string {
+const safeName = (name: string): string => {
   const leaf = name.split(/[/\\]/).pop() ?? ''
   // Control characters, plus the two delimiters of the text-attachment envelope.
   // The control range is exactly what makes this worth doing: the name is

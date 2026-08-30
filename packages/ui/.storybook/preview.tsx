@@ -3,18 +3,9 @@ import { useEffect } from 'react'
 import './preview.css'
 
 /**
- * Theme is a **toolbar global**, not a story argument.
- *
- * Every component in this package is themed by one attribute on the document
- * (`data-theme`), so the honest way to review one is to flip that attribute and
- * look again — not to render a second copy of the story inside a differently
- * themed div. Half this package's tokens are declared on `:root` and would not
- * follow a scoped wrapper anyway.
- *
- * `surface` is the other half of the same idea. A session card is drawn on a
- * *sidebar*, and its hover and selected fills were picked against that fill;
- * reviewing one on the page's default background is reviewing it against a
- * colour it never ships on.
+ * Theme is a toolbar global, not a story argument: half this package's tokens are
+ * declared on `:root`, so a scoped wrapper would not theme a story. `surface` is the
+ * same idea — a session card's fills were picked against the sidebar it ships on.
  */
 export const globalTypes = {
   theme: {

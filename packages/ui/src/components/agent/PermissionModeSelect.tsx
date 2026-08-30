@@ -18,14 +18,10 @@ export type PermissionModeMeta = {
 }
 
 /**
- * The modes surfaced across UI surfaces (session creation, in-session switcher),
- * ordered by how much of the approval gate they give away.
- *
- * Notably `default` is **"Manual"**: the wire value is `default`, but calling it
- * that in the UI conflates a real mode (ask me every time) with "whatever the
- * server picked", which is the one confusion a mode chip exists to avoid. The
- * naming, the icons and the summaries are shared with the iOS app on purpose —
- * the two surfaces should read as the same list.
+ * The modes surfaced across UI surfaces, ordered by how much of the approval
+ * gate they give away. The wire value `default` is labelled **"Manual"** so it
+ * cannot be read as "whatever the server picked". Naming, icons and summaries
+ * are **shared with the iOS app** — the two surfaces must read as one list.
  */
 export const PERMISSION_MODES: PermissionModeMeta[] = [
   {
@@ -53,10 +49,8 @@ export const PERMISSION_MODES: PermissionModeMeta[] = [
     value: 'auto',
     label: 'Auto',
     shortLabel: 'Auto',
-    // Engine-neutral on purpose: on claude this is the operator-configurable
-    // auto-mode classifier, on codex it is `approvalsReviewer: 'auto_review'`,
-    // a fixed OpenAI-prompted subagent. Both "something other than you decides";
-    // naming Claude here reads as a bug on a codex session.
+    // Engine-neutral on purpose: claude's auto-mode classifier and codex's
+    // `approvalsReviewer: 'auto_review'` are different mechanisms.
     description: 'The agent handles permission decisions',
     icon: Zap,
   },
@@ -88,17 +82,14 @@ export type PermissionModeChoice = {
   label: string
   description: string
   dangerous?: boolean
-  /** Offered but unreachable: a session not started for bypass can never gain
-   * it, and saying so beats omitting the row. */
+  /** Offered but unreachable: a session not started for bypass can never gain it. */
   disabled?: boolean
 }
 
-/**
- * The modes this session may actually be switched into, with the reasons baked
- * in — the same filtering {@link PermissionModeSelect} applies, so an embedder
- * rendering its own picker cannot drift from the panel's.
- */
-export function permissionModeChoices(modes?: readonly PermissionMode[], canBypass?: boolean): PermissionModeChoice[] {
+/** The modes this session may be switched into — the same filtering
+ * {@link PermissionModeSelect} applies, so an embedder rendering its own picker
+ * cannot drift from the panel's. */
+export const permissionModeChoices = (modes?: readonly PermissionMode[], canBypass?: boolean): PermissionModeChoice[] => {
   const offered = modes ? PERMISSION_MODES.filter((m) => modes.includes(m.value)) : PERMISSION_MODES
   return offered.map((m) => ({
     value: m.value,
@@ -119,11 +110,9 @@ export interface PermissionModeSelectProps {
    * pass the session's `capabilities.permissionModes`. */
   modes?: readonly PermissionMode[]
   /**
-   * Whether this session may be switched into `bypassPermissions` at all. The
-   * CLI refuses unless the process was spawned for it, so a session that didn't
-   * ask up front can never gain it. The row is shown disabled rather than hidden
-   * — "you can't have this here" is a more useful answer than a row that
-   * silently isn't there. `undefined` (an older server) offers it.
+   * Whether this session may be switched into `bypassPermissions` at all: the
+   * CLI refuses unless the process was spawned for it. The row is shown
+   * disabled rather than hidden. `undefined` (an older server) offers it.
    */
   canBypass?: boolean
   /** 'toolbar' (default) is the composer's compact borderless trigger;

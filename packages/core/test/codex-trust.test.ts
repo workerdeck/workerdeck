@@ -7,6 +7,13 @@ import { parseProjectTrustEntries, untrustedProjectNotice } from '../src/engines
 import { CodexRunner } from '../src/engines/codex/runner.ts'
 import type { AppServerConnectFn } from '../src/engines/codex/types.ts'
 
+type NoticeSessionConfig = {
+  cwd: string
+  codexHome?: string
+  env?: Record<string, string | undefined>
+  permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions'
+}
+
 const roots: string[] = []
 afterAll(() => {
   for (const dir of roots) {
@@ -17,7 +24,7 @@ afterAll(() => {
 /** A fresh sandbox dir. `mkdtemp` under macOS's tmpdir returns a symlinked
  * spelling (`/var/...` → `/private/var/...`), so every test here exercises the
  * canonicalization rule for free. */
-function tempDir(): string {
+const tempDir = (): string => {
   const dir = mkdtempSync(join(tmpdir(), 'cw-codex-trust-'))
   roots.push(dir)
   return dir
@@ -25,7 +32,7 @@ function tempDir(): string {
 
 /** `<dir>/.codex/config.toml` declaring one MCP server — the project config
  * whose silent loss this whole feature is about. */
-function projectConfig(dir: string): string {
+const projectConfig = (dir: string): string => {
   mkdirSync(join(dir, '.codex'), { recursive: true })
   const path = join(dir, '.codex', 'config.toml')
   writeFileSync(path, '[mcp_servers.probe]\ncommand = "echo"\n')
@@ -34,7 +41,7 @@ function projectConfig(dir: string): string {
 
 /** A codex home whose config.toml carries the given trust entries, written the
  * way codex itself writes them. */
-function codexHome(entries: Array<{ path: string; level: string }> = []): string {
+const codexHome = (entries: Array<{ path: string; level: string }> = []): string => {
   const home = join(tempDir(), 'home')
   mkdirSync(home, { recursive: true })
   const body = entries.map((e) => `[projects."${e.path}"]\ntrust_level = "${e.level}"\n`).join('\n')
@@ -285,12 +292,7 @@ describe('CodexRunner untrusted-project notice', () => {
     close: () => {},
   })
 
-  async function startAndCollect(config: {
-    cwd: string
-    codexHome?: string
-    env?: Record<string, string | undefined>
-    permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions'
-  }): Promise<SessionEvent[]> {
+  const startAndCollect = async (config: NoticeSessionConfig): Promise<SessionEvent[]> => {
     const runner = new CodexRunner({ connectFn: stubConnectFn, ...config })
     const events: SessionEvent[] = []
     runner.subscribe((event) => events.push(event))

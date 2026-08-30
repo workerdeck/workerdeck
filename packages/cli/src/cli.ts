@@ -77,7 +77,7 @@ Credentials
   gateway, nothing else.
 `
 
-async function readVersion(): Promise<string> {
+const readVersion = async (): Promise<string> => {
   // src/cli.ts and build/cli.mjs are both one level under the package root.
   const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json')
   try {
@@ -89,7 +89,7 @@ async function readVersion(): Promise<string> {
 }
 
 /** Best-effort: a browser that won't open is a convenience missed, not a failure. */
-function openInBrowser(url: string): void {
+const openInBrowser = (url: string): void => {
   const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open'
   try {
     const child = spawn(command, [url], {
@@ -104,7 +104,7 @@ function openInBrowser(url: string): void {
   }
 }
 
-async function main(argv: string[]): Promise<number> {
+const main = async (argv: string[]): Promise<number> => {
   if (argv[0] === 'guard') {
     const { runGuard } = await import('./lib/guard.ts')
     return await runGuard(argv.slice(1))
@@ -130,8 +130,6 @@ async function main(argv: string[]): Promise<number> {
 
   const shutdown = (signal: string): void => {
     process.stdout.write(`\n[workerdeck] ${signal} — shutting down\n`)
-    // Parked sessions are already on disk; this is about letting in-flight
-    // requests finish rather than dropping sockets on the floor.
     instance
       .close()
       .then(() => process.exit(0))

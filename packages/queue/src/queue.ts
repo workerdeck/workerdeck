@@ -193,9 +193,8 @@ export class JobQueue {
       maxAttempts: attempts,
       usage: { tokens: 0, totalCostUsd: 0, numTurns: 0 },
       meta: request.meta,
-      // Copied from the request so the job routes can be gated by the same rule
-      // as the session routes — the run's session inherits it at claim time
-      // through `record.request.session`.
+      // Copied so the job routes gate on the same rule as the session routes; the
+      // run's session inherits it at claim time via `record.request.session`.
       scope: request.session.scope,
     }
     const record: JobRecord = { info, request }
@@ -426,11 +425,9 @@ export class JobQueue {
     const build = this.#options.buildRunnerConfig ?? ((req: CreateSessionRequest) => req)
     let runner: Runner
     try {
-      // Stamped so the session says what it is. A job run is an ordinary
-      // registry session — attachable, listable, indistinguishable — and a
-      // client with a jobs surface of its own needs to know not to show it
-      // twice. `meta` is free-form and already rides SessionInfo, so this costs
-      // no protocol change; `isJobRun` is the one place the key is spelled.
+      // A job run is an ordinary registry session — attachable, listable,
+      // indistinguishable — so `meta.jobId` is how a client with its own jobs
+      // surface knows not to show it twice (`isJobRun` spells the key).
       const request: CreateSessionRequest = {
         ...record.request.session,
         meta: { ...record.request.session.meta, jobId: id },

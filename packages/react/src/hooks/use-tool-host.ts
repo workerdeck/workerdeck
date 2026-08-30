@@ -14,10 +14,10 @@ export type UseToolCallHostOptions = ToolCallHostOptions & {
  * exposes recent executions for rendering. All the logic lives in the
  * framework-free host — this only manages the subscription's lifetime.
  */
-export function useToolCallHost(
+export const useToolCallHost = (
   handle: SessionHandle | undefined,
   options: UseToolCallHostOptions = {},
-): { executions: ToolHostExecution[] } {
+): { executions: ToolHostExecution[] } => {
   const [executions, setExecutions] = useState<ToolHostExecution[]>([])
   // Read options at call time so re-renders never tear down the subscription.
   const optionsRef = useRef(options)

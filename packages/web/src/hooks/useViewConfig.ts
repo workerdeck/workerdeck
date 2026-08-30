@@ -5,15 +5,12 @@ import type { ViewConfig } from '@workerdeck/protocol'
 const KEY = 'workerdeck.view-config'
 
 /**
- * The sessions list's filter/group/sort, remembered across visits.
- *
- * Two deliberate departures from the stored value: `search` always starts empty
- * — a search someone typed last week is a filter they will not remember setting
- * — and `scoped` is forced off, because a dashboard has no open folders for it
- * to mean anything against. Keeping the field rather than dropping it is what
- * lets one `ViewConfig` serve every client.
+ * The sessions list's filter/group/sort, remembered across visits. Two deliberate
+ * departures from the stored value: `search` always starts empty, and `scoped` is
+ * forced off because a dashboard has no open folders for it to mean anything
+ * against — the field stays so one `ViewConfig` can serve every client.
  */
-export function useViewConfig() {
+export const useViewConfig = () => {
   const [config, setConfig] = useState<ViewConfig>(() => {
     try {
       const raw = localStorage.getItem(KEY)

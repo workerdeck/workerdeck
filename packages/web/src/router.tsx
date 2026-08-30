@@ -40,22 +40,14 @@ const sessionRoute = createRoute({
   path: '/sessions/$hostId/$sessionId',
   component: SessionView,
   /**
-   * `?subagent=<toolUseId>&sn=<n>` — open the session with one sub-agent's work
-   * framed, which is how the sessions list hands a running agent over.
+   * `?subagent=<toolUseId>` frames one sub-agent's work; `?reveal=<toolUseId>`
+   * stays on the conversation and travels to a row in it. Two pairs, not a flag,
+   * because they mean different things to the panel — a **task** has no agent
+   * behind it, so framing its tool-use id draws an empty agent view.
    *
-   * In the URL rather than in component state so the takeover is addressable:
-   * the sidebar navigates across a route change, and a piece of state on the
-   * far side of that is a piece of state the navigation cannot carry. `sn` is
-   * the nonce the panel needs to treat asking twice as twice — a plain repeat
-   * of the same id is a props-equal no-op.
-   *
-   * `?reveal=<toolUseId>&rn=<n>` is the **other** destination a step can have,
-   * and it is a separate pair rather than a flag on the first because the two
-   * mean different things to the panel: `subagent` takes the body over with one
-   * agent's work, `reveal` stays on the conversation and travels to a row in it.
-   * A **task** has no agent behind it, so framing its tool-use id selected no
-   * items and drew an empty agent view; a task is a reference, and this is what
-   * following one looks like. `rn` is its own nonce for the same reason `sn` is.
+   * In the URL rather than component state so the takeover survives the route
+   * change the sidebar navigates across. `sn`/`rn` are nonces: without them a
+   * repeat of the same id is a props-equal no-op, and asking twice must count twice.
    */
   validateSearch: (search: Record<string, unknown>): { subagent?: string; sn?: number; reveal?: string; rn?: number } => ({
     subagent: typeof search.subagent === 'string' ? search.subagent : undefined,
@@ -65,11 +57,7 @@ const sessionRoute = createRoute({
   }),
 })
 
-/**
- * The address this app used before it could hold more than one gateway. Kept as
- * a redirect so links and bookmarks made then still open — they can only ever
- * have meant the gateway that served the page.
- */
+/** Pre-multi-gateway address, kept as a redirect: it can only ever have meant the serving gateway. */
 const legacySessionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions/$sessionId',
@@ -118,11 +106,7 @@ const profileRoute = createRoute({
   component: ProfileView,
 })
 
-/**
- * Settings became a dialog the shell opens, so this address no longer names a
- * screen. Kept as a redirect rather than deleted: it was a real bookmark, and a
- * blank page is a worse answer than the sessions list.
- */
+/** Settings is a dialog now, but this was a real bookmark. */
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',

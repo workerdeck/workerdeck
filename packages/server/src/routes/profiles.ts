@@ -27,8 +27,7 @@ export async function handleProfiles(
   if (rest === '') {
     if (req.method === 'GET') {
       const visible = auth.allowedProfiles ? profiles.all().filter((p) => auth.allowedProfiles!.includes(p.name)) : profiles.all()
-      // Stale-while-revalidate: answer from the cache, re-probe anything
-      // older than the TTL so the next read reflects a fresh login.
+      // Stale-while-revalidate: answer from the cache, re-probe anything older than the TTL.
       availability.refresh(visible)
       json(res, 200, {
         profiles: visible.map((p) => profiles.forResponse(p)),
@@ -68,18 +67,11 @@ export async function handleProfiles(
     return
   }
   if (req.method === 'GET') {
-    // The config snapshot is the operator's own config directory read back —
-    // skill, agent and command names, hook names, the *keys* of the env in
-    // `settings.json`. A profile a scoped end user is allowed to *run* is
-    // not thereby a directory they may inventory, so the snapshot is
-    // withheld from a non-operator while the profile record itself (name,
-    // engine, model catalog) still answers, because a create form needs it.
+    // The config snapshot is the operator's own config directory read back — skill, agent,
+    // command and hook names, and the *keys* of the env in `settings.json`. A profile a
+    // scoped end user may *run* is not thereby a directory they may inventory, so it is
+    // withheld from a non-operator while the profile record itself still answers.
     json(res, 200, {
-      // The same decoration the list route serves (`forResponse`): the
-      // capability record, the model catalog, the availability verdict and
-      // the plan usage. It had been the bare record, which made the detail
-      // route answer *less* about a profile than the list it was opened
-      // from — a client could only get the usage state by listing.
       profile: profiles.forResponse(profile),
       config: authSvc.isOperator(auth) ? readProfileConfig(profile) : undefined,
     })

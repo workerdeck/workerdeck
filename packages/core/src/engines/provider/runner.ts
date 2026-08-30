@@ -340,22 +340,14 @@ export class AiSdkRunner implements Runner {
     }
     this.#started = true
     if (this.#config.restore) {
-      // Rehydrated: the prompt was consumed by the original run, and the history
-      // is whatever the snapshot captured. **Schedule nothing.** Waiting is the
-      // whole point — a parked session re-enters the loop when an execution is
-      // settled, and an idle one when the user says something.
-      //
-      // There used to be a `if (#pendingToolCalls.size === 0) #scheduleTurn()`
-      // here, and it was unreachable: `park()` only ever produced a snapshot
-      // while resting on deferred calls, so the size was never 0. `snapshot()`
-      // makes it reachable, and it would be a live bug — an *interrupted* turn
-      // leaves the history ending on the user's message (the catch path flushes
-      // a partial `assistant_message` for the transcript but never pushes the
-      // model's response messages, since the throw skipped that), so
-      // `#runTurn`'s "already answered" guard would pass and the restored
-      // session would re-run the very turn the user killed, unprompted, on first
-      // attach. Restoring behaves exactly as the live session did: the
-      // interrupted turn stays interrupted, and the next message answers both.
+      // Rehydrated: the prompt was consumed by the original run. **Schedule
+      // nothing** — a parked session re-enters when an execution settles, an
+      // idle one when the user speaks. Scheduling here would be a live bug: an
+      // interrupted turn leaves the history ending on the user's message (the
+      // catch path never pushes the model's response messages), so `#runTurn`'s
+      // "already answered" guard would pass and the restored session would
+      // re-run the very turn the user killed, unprompted, on first attach.
+      // (Full story: docs/PACKAGES.md §core.)
       return this.#turnChain
     }
     this.#setStatus('idle')
@@ -606,10 +598,6 @@ export class AiSdkRunner implements Runner {
       if (decision.interrupt) {
         void this.interrupt()
       }
-    }
-    // If no more approvals are pending, update status.
-    if (this.#pendingApprovals.size === 0 && this.#pendingToolCalls.size === 0) {
-      // All approvals resolved and all tool calls settled — the turn continues.
     }
     return true
   }
@@ -1312,8 +1300,6 @@ export class AiSdkRunner implements Runner {
     // not this conversation's, exactly as the transcript state clears it.
     if (body.type === 'conversation_reset') {
       this.#resetSeq = event.seq
-      // A reset retires the conversation the window described; the old fill is
-      // not this conversation's, exactly as the transcript state clears it.
       this.#contextUsage = undefined
     }
     this.#events.push(event)
@@ -1321,7 +1307,7 @@ export class AiSdkRunner implements Runner {
   }
 }
 
-function turnUsage(accum: { input: number; output: number; cacheWrite: number; cacheRead: number }) {
+const turnUsage = (accum: { input: number; output: number; cacheWrite: number; cacheRead: number }) => {
   return {
     input_tokens: accum.input,
     output_tokens: accum.output,
@@ -1330,10 +1316,10 @@ function turnUsage(accum: { input: number; output: number; cacheWrite: number; c
   }
 }
 
-function textValue(output: ToolCallOutput): string {
+const textValue = (output: ToolCallOutput): string => {
   return output.type === 'text' ? output.value : JSON.stringify(output.value)
 }
 
-function errorText(error: unknown): string {
+const errorText = (error: unknown): string => {
   return error instanceof Error ? error.message : String(error)
 }

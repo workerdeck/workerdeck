@@ -1,21 +1,12 @@
 import { cn } from '../../lib/utils.ts'
 
 /**
- * The engine's own mark, monochrome.
- *
- * Inlined rather than depended on: the React package these come from
- * (`@lobehub/icons`) pulls antd, `@lobehub/ui` and a second copy of
- * lucide-react — an absurd amount of bundle for a few glyphs in a sidebar.
- * These are paths from `@lobehub/icons-static-svg` (MIT, © LobeHub), already
- * `fill="currentColor"` single-path marks, so they take the row's colour like
- * any other glyph and need no light/dark variants.
+ * Engine marks, monochrome. Paths from `@lobehub/icons-static-svg` (MIT, ©
+ * LobeHub), inlined because the React package pulls antd, `@lobehub/ui` and a
+ * second copy of lucide-react.
  *
  * The marks are trademarks of their owners (Anthropic, OpenAI, Google,
- * DeepSeek, Moonshot), used here only to identify which engine a session runs
- * on.
- *
- * Codex is drawn as OpenAI: the session's engine *is* OpenAI's, and OpenAI's
- * mark is the one a person recognises at 12px.
+ * DeepSeek, Moonshot), used here only to identify which engine a session runs on.
  */
 const PATHS: Record<string, { title: string; d: string }> = {
   claude: {
@@ -40,15 +31,10 @@ const PATHS: Record<string, { title: string; d: string }> = {
   },
 }
 
-/**
- * Which mark a session wears.
- *
- * The two first-party engines are named directly. A `provider` session is
- * whatever the host wired up, so its *model* is the only thing that says whose
- * it is — sniffed loosely on purpose (`gemini-2.5-pro`, `deepseek-chat`,
- * `kimi-k2`), and falling through to no mark rather than guessing wrong.
- */
-export function engineMark(engine: string, model?: string): string | undefined {
+/** Which mark a session wears. A `provider` session's *model* is the only thing
+ * that says whose it is — sniffed loosely, falling through to no mark rather
+ * than guessing wrong. */
+export const engineMark = (engine: string, model?: string): string | undefined => {
   if (engine === 'claude') {
     return 'claude'
   }
@@ -78,19 +64,10 @@ export function engineMark(engine: string, model?: string): string | undefined {
 }
 
 /**
- * Which engines wear their vendor's colour, and **how far it reaches**.
- *
- * `MARK` is the glyph, `TEXT` is the model name beside it. They are the same for
- * Anthropic and deliberately not for OpenAI, because the two brands differ in
- * kind rather than in hue: coral is an accent, and OpenAI's guidelines forbid
- * adding colour to the mark at all, so theirs is pure white/black. At full
- * contrast that is right on a 12px glyph and wrong on an 11px label — a
- * pure-white model name is *brighter than the session title above it*, which
- * inverts the row's whole hierarchy to say something the mark has already said.
- * So OpenAI's name keeps the muted line it always had, which is also the most
- * literal reading of "don't add any colors".
- *
- * Anything absent falls through to muted on both counts.
+ * Which engines wear their vendor's colour, and how far it reaches: `MARK` is
+ * the glyph, `TEXT` the model name beside it. OpenAI has no `TEXT` entry —
+ * their guidelines forbid adding colour to the mark, and their pure white/black
+ * at label size outshines the session title above it. Absent = muted.
  */
 const VENDOR_MARK: Record<string, string> = {
   claude: 'text-vendor-claude',
@@ -103,19 +80,12 @@ const VENDOR_TEXT: Record<string, string> = {
 /** The colour a session's engine mark wears. Pass it to `EngineIcon`'s
  *  `className` rather than to a parent: the svg carries its own `text-fg-3`,
  *  and only a class on the element itself is merged over it. */
-export function vendorMarkClass(engine: string, model?: string): string {
-  return VENDOR_MARK[engineMark(engine, model) ?? ''] ?? 'text-fg-3'
-}
+export const vendorMarkClass = (engine: string, model?: string): string => VENDOR_MARK[engineMark(engine, model) ?? ''] ?? 'text-fg-3'
 
-/** The colour the model *name* wears beside that mark — muted unless the vendor
- *  is one whose accent survives at label size. See `VENDOR_TEXT`.
- *
- *  The fallback is `text-fg-3` rather than the metadata line's own `text-fg-4`,
- *  so an unbranded model still sits one step above the project and gateway
- *  beside it — the order the spec lists them in, held without a colour. */
-export function vendorTextClass(engine: string, model?: string): string {
-  return VENDOR_TEXT[engineMark(engine, model) ?? ''] ?? 'text-fg-3'
-}
+/** The colour the model *name* wears beside that mark. The fallback is
+ *  `text-fg-3` rather than the metadata line's `text-fg-4`, so an unbranded
+ *  model still sits one step above the project and gateway beside it. */
+export const vendorTextClass = (engine: string, model?: string): string => VENDOR_TEXT[engineMark(engine, model) ?? ''] ?? 'text-fg-3'
 
 export function EngineIcon({ engine, model, className }: { engine: string; model?: string; className?: string }) {
   const mark = PATHS[engineMark(engine, model) ?? '']

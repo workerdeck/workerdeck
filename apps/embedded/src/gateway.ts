@@ -17,6 +17,12 @@ import type { WikiMcp } from './wiki/mcp.ts'
 
 export const PROFILE_NAME = 'wiki-agent'
 
+const SCRATCH_README = `This is a scratch filesystem, private to this conversation.
+
+It is not the wiki and the user cannot see it. Use the wiki__* tools for anything
+that should outlive this chat.
+`
+
 const INSTRUCTIONS = `You are the assistant embedded in a personal wiki app.
 
 You have five kinds of tool and no others:
@@ -59,26 +65,22 @@ export type GatewayDeps = {
   sessionDir: string
 }
 
-/**
- * Which model to run, and how to build it.
- *
- * One provider, one key, deliberately: this app is a *reference embedding*, and
- * every branch here is a branch a reader has to hold in their head that teaches
- * them nothing about embedding WorkerDeck. Point it at a different provider by
- * swapping `createOpenAI` for that provider's factory — the engine takes any AI
- * SDK `LanguageModel`, and nothing below this function knows which one it got.
- */
-function resolveModelFactory(): {
+type ModelFactory = {
   modelId: string
-  /** The variable the key is actually read from — also what the profile declares
-   * as `apiKeyEnv`, so the engine's own availability probe checks the right one. */
+  /** Also what the profile declares as `apiKeyEnv`, so the engine's own availability
+   * probe checks the variable the key is actually read from. */
   apiKeyEnv: string
   available: boolean
   unavailableReason?: string
   build: (id: string) => LanguageModel
-} {
-  // The model id is configuration, not a constant, so retargeting the app at
-  // another OpenAI model needs no code edit.
+}
+
+/**
+ * One provider, one key, deliberately: every branch in a reference embedding is a
+ * branch a reader must hold that teaches nothing about embedding. Retarget by
+ * swapping `createOpenAI` — the engine takes any AI SDK `LanguageModel`.
+ */
+const resolveModelFactory = (): ModelFactory => {
   const modelId = process.env.EMBEDDED_MODEL ?? 'gpt-5.6-luna'
   const apiKey = process.env.OPENAI_API_KEY
   const provider = createOpenAI({ apiKey })
@@ -99,38 +101,18 @@ export type EmbeddedGateway = {
 }
 
 /**
- * The embedded gateway.
- *
- * Four things here are the actual reference material, and each is a decision
- * the plain `createWorkerServer` docs cannot make for you (the fourth,
- * `parking`, is documented at the call itself):
- *
- * 1. **`authenticate` resolves the app's own cookie into a scoped principal.**
- *    `scope: { user }` is what makes every session route, the WS attach and the
- *    job queue answer 404 for someone else's session — without this app writing
- *    a single ownership check. The principal carries no `operator` flag, so the
- *    gateway-wide surfaces (`/fs/*`, `/queue`, `/sdk-sessions`) are closed to
- *    everyone: this deployment has no operator, by construction.
- *
- * 2. **`createEngineRunner` reads `config.scope.user`** to decide which user's
- *    wiki the session's MCP client speaks for. The scope is stamped by the
- *    gateway and re-stamped over this hook's output, so it is not something a
- *    request can talk its way past.
- *
- * 3. **Tool execution stays in this process**, in a QuickJS guest with no
- *    network. The alternative — bridging `eval_script` to the browser tab — is
- *    what the `examples/provider-server.ts` walkthrough shows, and is the wrong
- *    choice here: the data the loop reasons over is in this pod's database, so
- *    pushing execution into the tab buys nothing and hands an executor to the
- *    party being sandboxed against.
+ * The embedded gateway. Four decisions are the reference material — `authenticate`
+ * (the cookie becomes `scope: { user }`, this app's entire ownership model, and no
+ * `operator` flag so `/fs/*`, `/queue` and `/sdk-sessions` are closed to everyone),
+ * `createEngineRunner`, in-process tool execution, and `parking` — each documented
+ * at its own call site.
  */
-export async function createEmbeddedGateway(deps: GatewayDeps): Promise<EmbeddedGateway> {
+export const createEmbeddedGateway = async (deps: GatewayDeps): Promise<EmbeddedGateway> => {
   const model = resolveModelFactory()
   const quickjs = new QuickJsExecutor({
     engine: await loadEngine(variant),
-    // No `allowedHosts`, so the guest has no network at all. `web_fetch` is a
-    // separate, host-side tool with its own SSRF guard — a script cannot reach
-    // it, and that separation is the point.
+    // No `allowedHosts`, so the guest has no network at all; `web_fetch` is a separate
+    // host-side tool with its own SSRF guard, which a script cannot reach.
     defaultTimeoutMs: 5_000,
   })
 
@@ -140,9 +122,7 @@ export async function createEmbeddedGateway(deps: GatewayDeps): Promise<Embedded
     {
       description: 'Sandboxed wiki assistant — VFS, JS sandbox, guarded web_fetch, and your wiki',
       instructions: INSTRUCTIONS,
-      // Raised from the floor deliberately, and this is the whole grant list.
-      // `deliver_file` is absent: a file the user cannot see in their wiki is
-      // not something this app has a surface for.
+      // The whole grant list, raised from the sandboxed floor exactly twice.
       capabilities: ['web_fetch'],
       mcpServers: ['wiki'],
     },
@@ -153,26 +133,12 @@ export async function createEmbeddedGateway(deps: GatewayDeps): Promise<Embedded
     fallback: deps.fallback,
 
     /**
-     * Sessions survive a restart — the fourth decision worth reading here.
-     *
-     * The provider engine has no on-disk session of its own to resume from
-     * (that is claude and codex, and it is what dormancy uses), so the record
-     * has to carry the state itself: `persistLive` writes the runner's snapshot
-     * through after every turn, and a restart rebuilds from it lazily, on the
-     * first attach. Transcript, message history, scratch VFS, model and
-     * permission mode all come back; the session keeps its id, so the tab's
-     * route and its scope still resolve.
-     *
-     * Two things this pairs with, neither of them optional:
-     * - a **durable** store. With the default in-memory one this option does
-     *   nothing, and the failure is silent.
-     * - a **persisted cookie secret** (`resolveSecret`), because a scoped
-     *   session answers 404 to anyone else — signing everyone out on boot would
-     *   preserve every conversation and make each one unreachable.
-     *
-     * Know what is on that disk: the record holds the session's whole
-     * transcript in plaintext. `.embedded/` is beside the wiki database and
-     * wants the same protection.
+     * Sessions survive a restart. The provider engine has no on-disk session to
+     * resume from, so `persistLive` writes the runner's snapshot through after every
+     * turn and a restart rebuilds lazily on first attach. Two non-optional pairings:
+     * a **durable** store (with the default in-memory one this silently does nothing)
+     * and a **persisted cookie secret** (`resolveSecret`), since a scoped session
+     * answers 404 to anyone else. The record holds the whole transcript in plaintext.
      */
     parking: {
       store: createFileSessionStore({
@@ -185,12 +151,9 @@ export async function createEmbeddedGateway(deps: GatewayDeps): Promise<Embedded
     },
 
     /**
-     * The cookie is the only credential a WebSocket attach can carry, so this
-     * surface is cookie-authenticated — which makes it CSRF-able, and the guard
-     * is ours to write. It matters more here than on `/trpc`: a forged
-     * `POST /v1/sessions` runs a prompt of the attacker's choosing *as the
-     * victim*, with the victim's own wiki tools and `web_fetch` to carry the
-     * results out, and a forged upgrade drives an existing session. See
+     * Cookie-authenticated, therefore CSRF-able, and the guard is ours to write: a
+     * forged `POST /v1/sessions` runs the attacker's prompt *as the victim*, with the
+     * victim's wiki tools and `web_fetch` to carry the results out. See
      * {@link sameOrigin} for why `SameSite=Lax` does not cover it.
      */
     authenticate: (req) => {
@@ -202,18 +165,14 @@ export async function createEmbeddedGateway(deps: GatewayDeps): Promise<Embedded
         return null
       }
       return {
-        // The gateway's only scoping primitive, and the app's whole ownership
-        // model. Opaque to WorkerDeck; `{ user }` is this app's vocabulary.
+        // Opaque to WorkerDeck; `{ user }` is this app's vocabulary.
         scope: { user: user.id },
-        // Belt and braces: this deployment declares one profile and a principal
-        // may use exactly it.
         allowedProfiles: [PROFILE_NAME],
       }
     },
 
-    // The provider adapter's probe just checks that the profile's `apiKeyEnv` is
-    // set, so this costs nothing and spawns nothing — and it is display-only, so
-    // a session create still proceeds and fails with the engine's own error.
+    // The provider probe only checks that `apiKeyEnv` is set: no spawn, and display-only
+    // — a create still proceeds and fails with the engine's own error.
     checkCredentials: true,
 
     createEngineRunner: async (ctx) => {
@@ -222,21 +181,16 @@ export async function createEmbeddedGateway(deps: GatewayDeps): Promise<Embedded
       }
       const userId = ctx.config.scope?.user
       if (!userId) {
-        // Unreachable through the routes — `authenticate` stamps the scope on
-        // every principal — but a runner that guessed here would be a runner
-        // reading someone else's wiki, so it refuses instead.
+        // Unreachable through the routes, but a runner that guessed here would read
+        // someone else's wiki.
         throw new Error('session has no user scope; refusing to build a wiki-capable runner')
       }
 
-      // One MCP connection per session, carrying a token that binds it to this
-      // user. Connecting per session rather than per process is what lets the
-      // *transport* carry the identity instead of every tool taking a userId
-      // argument the model could change.
+      // One MCP connection per session, so the *transport* carries the identity
+      // instead of every tool taking a userId argument the model could change.
       const { token, revoke } = deps.wikiMcp.issueToken(userId)
-      // `required`: this app's own MCP server IS the wiki. A session that came
-      // up without it would look completely healthy and spend the conversation
-      // apologising for not finding the user's documents, so a failed connect
-      // fails the create instead — where it is visible and says why.
+      // `required`: without the wiki the session would look healthy and spend the
+      // conversation apologising for not finding the user's documents.
       const mcp = await connectMcpTools(
         { wiki: { type: 'http', url: deps.mcpUrl, headers: { authorization: `Bearer ${token}` } } },
         {
@@ -244,31 +198,29 @@ export async function createEmbeddedGateway(deps: GatewayDeps): Promise<Embedded
           onError: (name, error) => console.warn(`[embedded] MCP '${name}': ${String(error)}`),
         },
       ).catch(async (error: unknown) => {
-        // The token outlives nothing: the connect failed, so nothing will ever
-        // close a connection that would have revoked it.
+        // The connect failed, so nothing will ever close the connection that would
+        // have revoked this token.
         revoke()
         throw error
       })
 
       return createProviderRunner(ctx, {
         model: (id) => model.build(id ?? model.modelId),
-        // In-process, not the tab: the data this loop reasons over is in this
-        // pod's database, so pushing execution into the browser buys nothing and
-        // hands an executor to the party being sandboxed against.
+        // In-process, not bridged to the tab: the data this loop reasons over is in this
+        // pod's database, so pushing execution into the browser buys nothing and hands
+        // an executor to the party being sandboxed against.
         executor: quickjs,
-        // The only host-side capability backend wired at all. Its own guard
-        // refuses loopback, RFC1918, CGNAT and 169.254/16 per redirect hop, so
-        // the loop cannot reach this process's own MCP endpoint or a cloud
-        // metadata service through it.
+        // The only host-side capability backend wired. Its guard refuses loopback,
+        // RFC1918, CGNAT and 169.254/16 per redirect hop, so the loop cannot reach this
+        // process's own MCP endpoint or a metadata service through it.
         capabilities: { webFetch: {} },
-        // The connection, not just its tools: the profile declares `wiki`, and
-        // handing over the connection is what lets that declaration be enforced.
+        // The connection, not just its tools: that is what lets the profile's `wiki`
+        // declaration be enforced.
         mcp,
         // Ignored on a rehydration, so a parked turn's files survive.
         seedVfs: { '/notes/README.md': SCRATCH_README },
         executionLimits: { timeoutMs: 5_000 },
-        // Disposed with the runner: the MCP socket closes and the token stops
-        // working, so a leaked token cannot outlive the session that held it.
+        // A leaked token must not outlive the session that held it.
         onClose: async () => {
           revoke()
           await mcp.close().catch(() => {})
@@ -284,9 +236,3 @@ export async function createEmbeddedGateway(deps: GatewayDeps): Promise<Embedded
     unavailableReason: model.unavailableReason,
   }
 }
-
-const SCRATCH_README = `This is a scratch filesystem, private to this conversation.
-
-It is not the wiki and the user cannot see it. Use the wiki__* tools for anything
-that should outlive this chat.
-`

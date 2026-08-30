@@ -42,7 +42,7 @@ export type UseOpenFilesResult = OpenFilesState & {
  * `/fs/write`, not something re-derived here from a directory this hook would
  * have to trust.
  */
-export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
+export const useOpenFiles = (client: WorkerDeckClient): UseOpenFilesResult => {
   const [state, dispatch] = useReducer(openFilesReducer, initialOpenFilesState)
 
   // Paths whose read has been started. Not derived from status, because a tab

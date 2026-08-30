@@ -61,9 +61,8 @@ export function ProfileView() {
         })
     }
     load()
-    // The record is mostly static, but the plan usage on it is not: it is the
-    // newest reading from any session on this account, and sessions this page
-    // knows nothing about keep spending. A minute is finer than readings arrive.
+    // The plan usage on the record is not static: it is the newest reading from any session
+    // on this account, and sessions this page knows nothing about keep spending.
     const timer = setInterval(load, 60_000)
     return () => {
       alive = false

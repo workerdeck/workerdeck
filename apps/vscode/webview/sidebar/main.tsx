@@ -6,8 +6,7 @@ import { syncVsCodeTheme } from '../theme.ts'
 import { SidebarApp } from './SidebarApp.tsx'
 
 syncVsCodeTheme()
-// State and vitals replay to late subscribers; navigation is transient on
-// purpose (a re-resolved webview should come back to the list, not a stale form).
+// Navigation is deliberately not replayed: a re-resolved webview comes back to the list, not a stale form.
 const bridge = new Bridge(['wd-sidebar-state', 'wd-vitals'])
 
 const root = document.getElementById('root')

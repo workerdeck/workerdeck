@@ -8,12 +8,8 @@ import { SidebarRow } from './SidebarRow.tsx'
 import { useProfileList } from '@/hooks/useProfiles.ts'
 
 /**
- * The profiles the primary gateway declares, as a sidebar.
- *
- * A profile is what a session *runs as* — a Claude config directory, or a
- * provider for the model-agnostic engine — so the engine mark is the fact worth
- * carrying on the row, the same glyph the sessions list uses for the same
- * reason.
+ * The profiles the primary gateway declares. A profile is what a session *runs
+ * as*, so the engine mark is the fact worth carrying on the row.
  */
 export function ProfilesSidebar() {
   const navigate = useNavigate()
@@ -23,8 +19,7 @@ export function ProfilesSidebar() {
   const { profiles, canManage, refresh } = useProfileList()
   const [creating, setCreating] = useState(false)
 
-  // `+` is offered only where the server actually accepts one — a create form
-  // behind a button that 403s is worse than no button.
+  // `+` only where the server accepts one: a create form behind a 403 is worse than no button.
   const create = canManage ? (
     <Button variant="ghost" size="icon-sm" aria-label="New profile" onClick={() => setCreating(true)}>
       <Plus className="size-4" />
@@ -63,8 +58,7 @@ export function ProfilesSidebar() {
               onSelect={() => void navigate({ to: '/profiles/$profileName', params: { profileName: profile.name } })}
               title={profile.name}
               status={
-                // Declared profiles are code and stay read-only; saying so on
-                // the row is cheaper than finding out on the detail page.
+                // Declared profiles are code and stay read-only.
                 profile.managed ? null : (
                   <Badge variant="neutral" className="shrink-0">
                     declared
@@ -73,10 +67,6 @@ export function ProfilesSidebar() {
               }
               description={
                 <>
-                  {/* On the description line rather than in front of the title:
-                      an engine mark identifies, it does not take precedence over
-                      the name you are reading. It lines up under the title, the
-                      way the VS Code sidebar puts it. */}
                   <EngineIcon
                     engine={profile.engine ?? 'claude'}
                     model={profile.defaults?.model ?? profile.provider?.model}
@@ -86,9 +76,8 @@ export function ProfilesSidebar() {
                     {profile.configDir ??
                       (profile.provider
                         ? `${profile.provider.id}${profile.provider.model ? ` · ${profile.provider.model}` : ''}`
-                        : // A codex profile has neither a config dir nor a
-                          // provider block, and a mark alone on an empty line
-                          // reads as a row that failed to load.
+                        : // A codex profile has neither a config dir nor a provider block, and a
+                          // mark alone on an empty line reads as a row that failed to load.
                           (profile.engine ?? 'claude'))}
                   </span>
                 </>

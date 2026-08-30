@@ -2,9 +2,10 @@ import type { ModelCatalog } from '../adapter.ts'
 
 /**
  * The Codex engine's model catalog, seeded from the binary's own embedded
- * presets — `@openai/codex@0.146.0` ships its model table inside the
- * executable, and that table (not the SDK's stale `ModelReasoningEffort`
- * union) is the truth about which reasoning efforts each model takes.
+ * presets — `@openai/codex` ships its model table inside the executable
+ * (see `provenance` for the extracted version), and that table (not the SDK's
+ * stale `ModelReasoningEffort` union) is the truth about which reasoning
+ * efforts each model takes.
  *
  * **Refresh procedure** (release checklist): extract the embedded JSON from
  * the platform binary and diff —

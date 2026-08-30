@@ -84,7 +84,7 @@ export type SearchOptions = {
  * A tree that genuinely lives behind symlinks is not autocompletable — an accepted
  * cost for not having to re-derive containment here.
  */
-export function searchFiles(base: string, options: SearchOptions = {}): SearchResult {
+export const searchFiles = (base: string, options: SearchOptions = {}): SearchResult => {
   const limit = options.limit ?? 50
   const maxScanned = options.maxScanned ?? 20_000
   const ignore = new Set(options.ignore ?? DEFAULT_IGNORED_DIRS)
@@ -150,7 +150,7 @@ export function searchFiles(base: string, options: SearchOptions = {}): SearchRe
  * one buried in the directory path, and characters typed consecutively beat the
  * same characters scattered — rather than trying to be a ranking engine.
  */
-function scoreMatch(relativePath: string, name: string, needle: string): number | null {
+const scoreMatch = (relativePath: string, name: string, needle: string): number | null => {
   if (needle === '') {
     return 0
   }
@@ -161,7 +161,7 @@ function scoreMatch(relativePath: string, name: string, needle: string): number 
   return subsequenceScore(relativePath.toLowerCase(), needle)
 }
 
-function subsequenceScore(haystack: string, needle: string): number | null {
+const subsequenceScore = (haystack: string, needle: string): number | null => {
   let score = 0
   let from = 0
   let previous = -2

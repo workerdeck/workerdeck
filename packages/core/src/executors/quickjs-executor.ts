@@ -98,7 +98,7 @@ export class QuickJsExecutor implements ToolExecutor {
   }
 }
 
-async function defaultHostFetch(url: string, signal: AbortSignal): Promise<string> {
+const defaultHostFetch = async (url: string, signal: AbortSignal): Promise<string> => {
   const response = await fetch(url, { signal })
   if (!response.ok) {
     throw new Error(`request failed: ${response.status}`)
@@ -106,7 +106,7 @@ async function defaultHostFetch(url: string, signal: AbortSignal): Promise<strin
   return await response.text()
 }
 
-function safeHost(url: string): string | undefined {
+const safeHost = (url: string): string | undefined => {
   try {
     return new URL(url).hostname
   } catch {
@@ -116,7 +116,7 @@ function safeHost(url: string): string | undefined {
 
 /** Exact hostname match, or a single leading `*.` wildcard covering subdomains
  * (not the bare parent). Only http(s) — no file:, data:, or other schemes. */
-export function isHostAllowed(url: string, allowedHosts: string[]): boolean {
+export const isHostAllowed = (url: string, allowedHosts: string[]): boolean => {
   let parsed: URL
   try {
     parsed = new URL(url)

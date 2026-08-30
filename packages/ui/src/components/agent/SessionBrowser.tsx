@@ -21,9 +21,8 @@ import { ProjectIcon } from './ProjectIcon.tsx'
 import { SessionItem } from './SessionItem.tsx'
 import { cn } from '../../lib/utils.ts'
 
-// The state glyph moved to its own module when the card did — the extension's
-// list draws it too, and this file re-exports it only so the package's public
-// surface does not shift under a host that imports it from here.
+// Re-exported only so the package's public surface does not shift under a host
+// that imports it from here.
 export { SessionStatusIcon } from './SessionStatusIcon.tsx'
 
 /**
@@ -31,14 +30,8 @@ export { SessionStatusIcon } from './SessionStatusIcon.tsx'
  * grouping, sorting, unread counts, and one honest line about what is hidden.
  *
  * The *rules* are `@workerdeck/protocol`'s (`filterRows`/`groupRows`/
- * `subsetSummary`), not this component's — the VS Code sidebar renders the same
- * model with workbench chrome, its activity-bar badge counts the same rows this
- * would show, and iOS mirrors them in Swift. What lives here is the styled
- * rendering of that model, so a host that wants the dashboard's look gets it
- * without reimplementing the model behind it.
- *
- * `SessionList` remains beside this for the plain case (a fixed set of rows, no
- * controls); this is what you reach for when the list is the screen.
+ * `subsetSummary`), never this component's — every client renders the same
+ * model. `SessionList` remains beside this for the plain case.
  */
 
 export interface SessionBrowserProps {
@@ -60,24 +53,16 @@ export interface SessionBrowserProps {
   onDelete?: (row: SessionRow) => void
   /**
    * Rename, from the row's pencil. Empty string restores the derived title. A
-   * gateway edit (`PATCH /sessions/:id`), never a local override — every client
-   * should see the same name. Omit to make titles read-only.
-   *
-   * A hover affordance rather than the extension's double-click-the-title,
-   * because here a single click on the row navigates: the *first* click of a
-   * double-click would have already left the page.
+   * gateway edit (`PATCH /sessions/:id`), never a local override. A hover
+   * affordance rather than double-click-the-title, because here a single click
+   * on the row navigates.
    */
   onRename?: (row: SessionRow, title: string) => void
   /**
-   * Clear the conversation in place, from the row's eraser. Same session, empty
-   * context — **not** a delete: the engine keeps the old conversation and it
-   * stays resumable, which is why the row's copy never says "deleted".
-   *
-   * Rendered only where the session's own capability record allows it
-   * (`capabilities.clearContext`, absent = false), so a row that cannot be
-   * cleared has no eraser rather than one that errors. Omit the prop to have
-   * none at all — a host with no way to send a session command has nothing to
-   * hang it on (this is a WS command, not a REST route).
+   * Clear the conversation in place. Same session, empty context — **not** a
+   * delete: the engine keeps the old conversation and it stays resumable.
+   * Rendered only where `capabilities.clearContext` allows it. A WS command,
+   * not a REST route.
    */
   onClearContext?: (row: SessionRow) => void
   /** Open a session *at* one of its sub-agents, when the host can scroll a
@@ -86,54 +71,35 @@ export interface SessionBrowserProps {
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
   /** Open a session and travel to one of its **tasks** — see
    * `SessionItem.onRevealStep`. A task has no agent behind it, so it is a place
-   * to go rather than a thing to open, and framing it as an agent drew an empty
-   * view. */
+   * to go rather than a thing to open. */
   onRevealStep?: (row: SessionRow, toolUseId: string) => void
   /** Rendered when nothing at all exists (as opposed to nothing matching). */
   emptyState?: React.ReactNode
   /**
-   * Whether the search + facet bar is shown. Defaults to `true` — a list that
-   * *is* the screen shows its controls.
-   *
-   * A host with somewhere better to put the toggle (a view title bar) passes
-   * `false` and owns the boolean itself, the way the VS Code extension does: the
-   * key lives where the commands do. Two rules come with it, and they are why
-   * this hides only the bar and nothing else — **closing the bar never clears
-   * the filters**, and the subset line below it renders either way, so a list
-   * filtered by a control you can't currently see still says so.
+   * Whether the search + facet bar is shown (default `true`). This hides only
+   * the bar: **closing it never clears the filters**, and the subset line
+   * renders either way, so a list filtered by a hidden control still says so.
    */
   showControls?: boolean
-  /**
-   * Resolved project-icon bytes by content hash — `useProjectIcons`' output.
-   *
-   * Passed in rather than fetched here for the reason `ProjectIcon` states: the
-   * wire carries an *address*, and who can fetch it differs per client. Absent,
-   * or a hash not in it yet, simply draws no picture; the project's name is
-   * already there.
-   */
+  /** Resolved project-icon bytes by content hash — `useProjectIcons`' output.
+   * Passed in rather than fetched here, for `ProjectIcon`'s reason. Absent, or
+   * a hash not in it yet, draws no picture. */
   projectIcons?: Record<string, string>
   className?: string
 }
 
 /**
  * How a list row is drawn, in one place, so `SidebarRow` in `web` matches this
- * exactly rather than approximating it — the dashboard's other three sidebars
- * are that component, and a sessions list that hovered differently from the
- * gateways list beside it would read as a different product.
+ * exactly. Two rules are load-bearing:
  *
- * Two rules are load-bearing:
- *
- * - **Fill means hover, and only hover.** It stays on the row whether or not
- *   the row is selected, because a selected row still has to answer the
- *   pointer. Selection gets the gutter instead.
- * - **`ml-0` on the selected row is not cosmetic.** It hands the accent border
- *   the 4px the margin was holding, so the text does not shift sideways as a
- *   row becomes the selected one. The squared left corners are what let the bar
- *   sit flush against the sidebar edge.
+ * - **Fill means hover, and only hover** — it stays on a selected row too,
+ *   because a selected row still has to answer the pointer. Selection gets the
+ *   gutter instead.
+ * - **`ml-0` on the selected row is not cosmetic**: it hands the accent border
+ *   the 4px the margin was holding, so the text does not shift sideways.
  */
-export function rowShapeClass(active: boolean): string {
-  return cn('px-2 py-1.5 hover:bg-row-hover', active ? 'mr-1 ml-0 rounded-r-md border-l-4 border-l-accent' : 'mx-1 rounded-md')
-}
+export const rowShapeClass = (active: boolean): string =>
+  cn('px-2 py-1.5 hover:bg-row-hover', active ? 'mr-1 ml-0 rounded-r-md border-l-4 border-l-accent' : 'mx-1 rounded-md')
 
 export function SessionBrowser({
   rows,
@@ -172,11 +138,9 @@ export function SessionBrowser({
 
   return (
     <div data-slot="session-browser" className={cn('flex flex-col gap-3', className)}>
-      {/* One control per row, label left, input right — the shape VS Code uses
-          for its own filter surfaces. A wrapping row of pill-shaped selects
-          reflows into an unpredictable number of lines as facets appear and
-          disappear; a column of labelled rows is the same height every time and
-          reads at sidebar width, which is the only width this has. */}
+      {/* One control per row, label left, input right: a column of labelled
+          rows is the same height every time, where a wrapping row of pills
+          reflows as facets appear and disappear. */}
       <div className={cn('flex flex-col gap-1.5 px-2', !showControls && 'hidden')}>
         <div className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-fg-4" />
@@ -275,10 +239,8 @@ export function SessionBrowser({
       {rows.length === 0 ? (
         (emptyState ?? <Empty icon={<Layers />} title="No sessions yet" />)
       ) : visible.length === 0 ? (
-        // Two different dead ends, two different ways out. "Nothing matches" is
-        // a filter someone set; anything else is the state of the world — and
-        // only the first has a button, because an action that does nothing is
-        // worse than none.
+        // Two dead ends, two ways out: only "nothing matches" has a button,
+        // because it is the only one someone can act on.
         hasFacetFilter(config) ? (
           <Empty
             icon={<SearchX />}
@@ -291,13 +253,9 @@ export function SessionBrowser({
           <Empty icon={<Layers />} title="Nothing here" description="No session to show." />
         )
       ) : (
-        /* The list's own 4px inset, as **padding on the list** rather than
-           margins on the cards. `SessionItem` is `w-full` — it fills the slot it
-           is given, which is what lets a host size it — and `w-full` plus
-           `mx-1` is `100% + 8px`: an overflow by construction, which is exactly
-           what it did. The cards ran past the sidebar's right edge and the
-           column grew a horizontal scrollbar. Padding here cannot do that,
-           whatever the card's own width rule turns out to be. */
+        /* The 4px inset is **padding on the list**, never margins on the cards:
+           `SessionItem` is `w-full`, and `w-full` plus `mx-1` is `100% + 8px` —
+           an overflow by construction. */
         <div className="flex flex-col gap-4 px-1">
           {groups.map((group) => (
             <div key={group.key} className="flex flex-col gap-1">
@@ -337,10 +295,9 @@ export function SessionBrowser({
   )
 }
 
-/** The bytes for a row's project icon, if it has an image one and the caller has
- * fetched it yet. Shared by the row and its group header so the two cannot draw
- * different pictures for one project. */
-function iconSrcOf(row: SessionRow | undefined, icons: Record<string, string> | undefined): string | undefined {
+/** The bytes for a row's project icon. Shared by the row and its group header
+ * so the two cannot draw different pictures for one project. */
+const iconSrcOf = (row: SessionRow | undefined, icons: Record<string, string> | undefined): string | undefined => {
   const icon = row?.info.project?.icon
   return icon?.type === 'image' ? icons?.[icon.hash] : undefined
 }
@@ -351,13 +308,9 @@ interface SessionRowItemProps {
   /** See `SessionBrowserProps.activeSubagentId`. */
   activeSubagentId?: string
   showGateway?: boolean
-  /** False when the list is already grouped by project — the header has said the
-   * name, so the row must not spend its metadata line repeating it. What takes
-   * the slot is the *sub-path inside the project* (`projectSubpath`), which is
-   * the one thing the header cannot say and the only thing that tells two
-   * sessions in the same repo apart; a session sitting at the project root has
-   * nothing to add and the slot disappears entirely. The rule `showGateway`
-   * follows one facet over. */
+  /** False when the list is already grouped by project — the slot then goes to
+   * the *sub-path inside the project* (`projectSubpath`). See
+   * `SessionItemProps.showProject`. */
   showProject?: boolean
   projectIcons?: Record<string, string>
   onSelect?: (row: SessionRow) => void
@@ -366,18 +319,15 @@ interface SessionRowItemProps {
   /** See `SessionBrowserProps.onClearContext` — gated on the row's own
    * capability record, not on the engine name. */
   onClearContext?: (row: SessionRow) => void
-  /** Open one of a session's sub-agents — which now means handing the session
-   * panel over to that agent's own work (`SessionPanel.openSubagent`), and meant
-   * "scroll to its `Task` row" before that surface existed. Both are honest; a
-   * host picks what it can draw. Optional, and its absence is not a missing
-   * feature: without it a step just opens the session, which is all a host with
-   * neither can offer. Only *agent* steps ever call it — see `Step.kind`. */
+  /** Open one of a session's sub-agents — handing the panel over to that
+   * agent's own work (`SessionPanel.openSubagent`). Without it a step just
+   * opens the session. Only *agent* steps ever call it — see `Step.kind`. */
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
   /** See `SessionBrowserProps.onRevealStep`. */
   onRevealStep?: (row: SessionRow, toolUseId: string) => void
 }
 
-function SessionRowItem({
+const SessionRowItem = ({
   row,
   active,
   activeSubagentId,
@@ -390,12 +340,11 @@ function SessionRowItem({
   onClearContext,
   onSelectSubagent,
   onRevealStep,
-}: SessionRowItemProps) {
+}: SessionRowItemProps) => {
   const { info } = row
-  // The rename affordance here is a pencil, not the card's own double-click:
-  // the dashboard already spends the row's hover on two other actions, and a
-  // gesture that only one of the three responds to is a gesture nobody finds.
-  // So the trigger is `external` and this owns the flag.
+  // A pencil rather than the card's own double-click: the dashboard already
+  // spends the row's hover on two other actions. The trigger is `external` and
+  // this owns the flag.
   const [editing, setEditing] = useState(false)
 
   return (
@@ -420,9 +369,7 @@ function SessionRowItem({
               <Pencil className="size-3 text-fg-3" />
             </RowAction>
           ) : null}
-          {/* Gated on the row's own capability record, not on the engine name —
-              an engine that grows the ability gets the button with no change
-              here, and one that loses it stops offering a control that fails. */}
+          {/* Gated on the row's own capability record, never on the engine name. */}
           {onClearContext && info.capabilities?.clearContext ? (
             <RowAction
               label="Clear context"
@@ -443,17 +390,10 @@ function SessionRowItem({
   )
 }
 
-/**
- * One of the dashboard's hover actions.
- *
- * Hover-revealed rather than always on, which is the opposite of the
- * extension's single overflow glyph and the right call for each: there are
- * three of them here and a sidebar card has room for one, so the extension
- * spends that room on a menu and this spends the row's hover on the actions
- * themselves. Both stop the click — the whole card is pressable underneath, and
- * an action that also selected the session would do two things per press.
- */
-function RowAction({ label, title, onClick, children }: { label: string; title?: string; onClick: () => void; children: ReactNode }) {
+/** One of the dashboard's hover actions. Stops the click — the whole card is
+ * pressable underneath, and an action that also selected the session would do
+ * two things per press. */
+const RowAction = ({ label, title, onClick, children }: { label: string; title?: string; onClick: () => void; children: ReactNode }) => {
   return (
     <Button
       variant="ghost"
@@ -473,12 +413,9 @@ function RowAction({ label, title, onClick, children }: { label: string; title?:
 
 /** A multi-select facet. Empty = no filter, which is why the trigger reads the
  * facet's name rather than "All": nothing is being excluded. */
-/**
- * One labelled control row. The label column is fixed so every control starts
- * on the same x — the thing that makes a stack of them read as a form rather
- * than as five unrelated widgets.
- */
-function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
+/** One labelled control row. The label column is fixed so every control starts
+ * on the same x. */
+const FilterRow = ({ label, children }: { label: string; children: React.ReactNode }) => {
   return (
     <div className="flex items-center gap-2">
       <span aria-hidden className="w-14 shrink-0 truncate text-label text-fg-3">
@@ -489,7 +426,7 @@ function FilterRow({ label, children }: { label: string; children: React.ReactNo
   )
 }
 
-function FacetSelect({
+const FacetSelect = ({
   label,
   value,
   options,
@@ -499,7 +436,7 @@ function FacetSelect({
   value: string[]
   options: { value: string; label: string }[]
   onChange: (value: string[]) => void
-}) {
+}) => {
   return (
     <div className="flex items-center gap-1">
       <Select multiple value={value} onValueChange={(v) => onChange(v as string[])}>
@@ -530,7 +467,7 @@ function FacetSelect({
   )
 }
 
-function OneOfSelect({
+const OneOfSelect = ({
   label,
   value,
   options,
@@ -540,7 +477,7 @@ function OneOfSelect({
   value: string
   options: readonly { value: string; label: string }[]
   onChange: (value: string) => void
-}) {
+}) => {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as string)}>
       <SelectTrigger aria-label={label} className="w-full min-w-0">

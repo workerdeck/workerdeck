@@ -56,14 +56,10 @@ export type OpenFile = {
 /** Whether a tab has edits that are not on disk. Derived, so typing something
  * and undoing it back leaves the tab clean — which is what an editor should do
  * and what a boolean flag set on first keystroke would get wrong. */
-export function isDirty(file: OpenFile): boolean {
-  return file.draft !== undefined && file.draft !== file.content
-}
+export const isDirty = (file: OpenFile): boolean => file.draft !== undefined && file.draft !== file.content
 
 /** What a tab would write: its edits if it has any, else what it read. */
-export function currentText(file: OpenFile): string {
-  return file.draft ?? file.content ?? ''
-}
+export const currentText = (file: OpenFile): string => file.draft ?? file.content ?? ''
 
 export type OpenFilesState = {
   /** Tab order, left to right. */
@@ -124,7 +120,7 @@ export const initialOpenFilesState: OpenFilesState = { files: [] }
  * Late results are addressed by path and dropped if that tab is gone, so a slow
  * read of a closed file cannot resurrect it.
  */
-export function openFilesReducer(state: OpenFilesState, action: OpenFilesAction): OpenFilesState {
+export const openFilesReducer = (state: OpenFilesState, action: OpenFilesAction): OpenFilesState => {
   switch (action.type) {
     case 'open': {
       if (state.files.some((f) => f.path === action.path)) {
@@ -233,7 +229,7 @@ export function openFilesReducer(state: OpenFilesState, action: OpenFilesAction)
 
 /** Replace one file in place, preserving tab order; a no-op if it was closed
  * while the request was in flight. */
-function patch(state: OpenFilesState, path: string, next: (file: OpenFile) => OpenFile): OpenFilesState {
+const patch = (state: OpenFilesState, path: string, next: (file: OpenFile) => OpenFile): OpenFilesState => {
   const index = state.files.findIndex((f) => f.path === path)
   if (index === -1) {
     return state
@@ -251,7 +247,7 @@ function patch(state: OpenFilesState, path: string, next: (file: OpenFile) => Op
 /** Last path segment. Trailing slashes are not expected here — these are file
  * paths from `/fs/list` and `/fs/find` — but a bare `/` should still show as
  * something rather than as an empty tab. */
-function baseName(path: string): string {
+const baseName = (path: string): string => {
   const trimmed = path.endsWith('/') ? path.slice(0, -1) : path
   return trimmed.slice(trimmed.lastIndexOf('/') + 1) || trimmed || path
 }

@@ -21,7 +21,7 @@ export type SessionRoute = {
   projectIcon?: boolean
 }
 
-export function parseSessionRoute(basePath: string, url: string): SessionRoute | null {
+export const parseSessionRoute = (basePath: string, url: string): SessionRoute | null => {
   const pathname = new URL(url, 'http://internal').pathname
   if (!pathname.startsWith(basePath + '/sessions')) {
     return null

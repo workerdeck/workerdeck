@@ -6,31 +6,20 @@ import { userById } from './users.ts'
 export const SESSION_COOKIE = 'embedded_user'
 
 /**
- * A cookie the server signs and the browser cannot forge.
- *
- * Signed rather than random-and-stored because the cookie *is* the whole session
- * table otherwise, and a restart would log everyone out — which would make the
- * gateway's own restart story impossible to demo.
- *
- * The secret it signs with therefore has to outlive the process too, and that is
- * `resolveSecret`'s job rather than this one's: agent sessions now survive a
- * restart, so a login that did not would leave a user staring at an empty
- * sidebar while their restored conversations sat behind a 404. The default
- * argument stays random for a caller that wants a throwaway (a test), and is not
- * what the app passes.
+ * A signed cookie, so there is no session table and a restart does not log
+ * everyone out. The secret must therefore outlive the process — see
+ * `resolveSecret`; the random default is for a throwaway caller (a test).
  */
-export function createCookieAuth(secret: string = randomBytes(32).toString('hex')) {
+export const createCookieAuth = (secret: string = randomBytes(32).toString('hex')) => {
   const sign = (value: string): string => createHmac('sha256', secret).update(value).digest('base64url')
 
   return {
     /** `Set-Cookie` value for a login. */
     issue(userId: string): string {
       const token = `${userId}.${sign(userId)}`
-      // No `Secure`: the demo runs on loopback http. Add it (and a real domain)
-      // the moment this is served over TLS. `SameSite=Lax` is necessary and
-      // *not* sufficient — it stops cross-site but not same-site, and a page on
-      // another port of the same site sends this cookie. Every cookie-authed
-      // surface therefore checks `sameOrigin` itself; see it for the rest.
+      // No `Secure`: the demo runs on loopback http — add it the moment this is served over TLS.
+      // `SameSite=Lax` is necessary and *not* sufficient (a page on another port of the same site
+      // sends this cookie), so every cookie-authed surface also checks `sameOrigin`.
       return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}`
     },
     /** `Set-Cookie` value for a logout. */
@@ -63,30 +52,17 @@ export function createCookieAuth(secret: string = randomBytes(32).toString('hex'
 export type CookieAuth = ReturnType<typeof createCookieAuth>
 
 /**
- * **The guard every cookie-authenticated surface must apply**, and the reason
- * `SameSite=Lax` is not the whole CSRF story.
- *
- * A cookie rides any request the browser is induced to send, including one a
- * third party's page caused, and `Lax` only stops *cross-site* — a page on
- * another port of the same site is same-site, so its `fetch` carries this
- * cookie. A "simple" request (`content-type: text/plain`) is not preflighted,
- * so CORS never gets a say either, and the attacker does not need to read the
- * response: the side effect is the damage. That matters most on the gateway,
- * where a forged `POST /v1/sessions` would run a prompt of the attacker's
- * choosing as the victim, with the victim's own wiki tools.
- *
- * `Sec-Fetch-Site` is the modern signal and every browser this app targets
- * sends it; `Origin` is the fallback for a request that carries one instead. A
- * request with neither is not a browser request, and these surfaces exist for
- * browsers — the agent reaches its own on a bearer token.
- *
- * Callers should **decline** (return null) rather than throw, so a forged
- * request gets a plain 401 that explains nothing to whoever sent it.
+ * **The CSRF guard every cookie-authenticated surface must apply.** `SameSite=Lax`
+ * stops cross-site only; a simple request from another port of the same site rides
+ * this cookie unpreflighted, and on the gateway a forged `POST /v1/sessions` would
+ * run the attacker's prompt as the victim with the victim's own wiki tools.
+ * A request with neither `Sec-Fetch-Site` nor `Origin` is not a browser request, and
+ * these surfaces exist for browsers — the agent reaches its own on a bearer token.
+ * Callers must **decline** rather than throw, so a forged request gets a plain 401.
  */
-export function sameOrigin(req: Pick<IncomingMessage, 'headers'>): boolean {
+export const sameOrigin = (req: Pick<IncomingMessage, 'headers'>): boolean => {
   const site = req.headers['sec-fetch-site']
-  // 'none' is a direct navigation (the user typed the URL); 'same-origin' is the
-  // SPA's own fetch. 'same-site' and 'cross-site' are not this app's.
+  // 'none' is a direct navigation; 'same-origin' is the SPA's own fetch.
   if (typeof site === 'string') {
     return site === 'same-origin' || site === 'none'
   }
@@ -102,7 +78,7 @@ export function sameOrigin(req: Pick<IncomingMessage, 'headers'>): boolean {
   return false
 }
 
-export function readCookie(header: string | undefined, name: string): string | undefined {
+export const readCookie = (header: string | undefined, name: string): string | undefined => {
   if (!header) {
     return undefined
   }

@@ -94,6 +94,6 @@ const ADAPTERS: Record<ProfileEngine, EngineAdapter> = {
 }
 
 /** The in-repo adapter for an engine. An absent `engine` means 'claude'. */
-export function getEngineAdapter(engine: ProfileEngine | undefined): EngineAdapter {
+export const getEngineAdapter = (engine: ProfileEngine | undefined): EngineAdapter => {
   return ADAPTERS[engine ?? 'claude']
 }

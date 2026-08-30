@@ -82,48 +82,30 @@ export type ToolResultBlock = {
  * fetches. That collapses the entire feature to one press, and it is asserted
  * in a test rather than trusted — lowered below the open budget, this would
  * silently clip the open state with no marker, which is the one failure this
- * design must not have.
- *
- * Measured justification: on one 1,270-row session three `tool_result` frames
- * were 641 / 463 / 396 KB, 68% of a 3.1 MB attach. The cut is *structural* —
- * proportional to the thing that is actually large, wherever in the log it sits
- * — which a row window is not.
+ * design must not have. (Measurements behind the number: docs/PACKAGES.md.)
  */
 export const TOOL_RESULT_HEAD_CHARS = 8_000
 
 /**
- * A base64 image part, delivered as an address instead of its bytes.
+ * A base64 image part, delivered as an address instead of its bytes. No client
+ * renders block image bytes — both draw a tool's picture from a host path — so
+ * the bytes' only effect on a reader is `return base` (measurements:
+ * docs/PACKAGES.md).
  *
- * The **seventh** rule of the family, and the first written *after* its
- * measurement rather than before it. Across 214 local sessions, 91% of all
- * tool-result payload is base64 image data — 489 MB against 44 MB of text — and
- * **no client renders a byte of it**: `blockText` in the reducer and
- * `joinedText` on iOS both fold a `tool_result` to its text parts, and both
- * clients draw a tool's picture from a host *path* (`savedPath` → `/produced`,
- * `/fs/read`), never from block content. So it is `replayRetains`' argument at
- * nine times the size of the case that rule was written for: bytes whose entire
- * effect on the reader is `return base`.
- *
- * A **new part type rather than a hollowed-out `image`**, and that is the one
- * judgement here worth stating. `headOf`'s shape-preservation rule — "a
- * truncation is a shorter result, never a different kind of one" — cuts the
- * other way for pixels: a head *is* a valid shorter text, but an image with no
- * bytes is not a smaller image, and spelling it `{ type: 'image', source }` with
- * no `data` invites precisely the failure shape-preservation exists to prevent,
- * a renderer that trusts `source.data` drawing `data:;base64,undefined`. An
- * unfamiliar type instead falls through every fold that already exists, exactly
- * as the CLI's own `tool_reference` part does: no `text`, so it contributes
- * nothing, and an unaware consumer renders what it renders today, which is
- * nothing. That is this family's safe failure.
+ * A **new part type rather than a hollowed-out `image`**: a head is a valid
+ * shorter text, but an image with no bytes is not a smaller image, and
+ * `{ type: 'image', source }` with no `data` invites a renderer drawing
+ * `data:;base64,undefined`. An unfamiliar type instead falls through every
+ * existing fold, exactly as the CLI's own `tool_reference` part does — this
+ * family's safe failure.
  *
  * Only ever produced for a socket that asked (`imageRefs`), so a client that has
  * never heard of this type cannot receive one — which is why this is additive at
  * protocol 7, the same argument {@link ToolResultBlock.truncated} makes. Unlike
  * truncation it applies to **live events as well as replays**: the client's one
  * render path is ref-then-fetch, so bytes on a live event would either be
- * discarded (335 KB median, once per attached watcher) or need a second
- * decode-from-event path pinning megabytes inside the transcript cache — the
- * disease relocated rather than cured.
+ * discarded or need a second decode-from-event path pinning megabytes inside
+ * the transcript cache.
  */
 export type ImageRefPart = {
   type: 'image_ref'
@@ -150,7 +132,7 @@ export type ImageRefPart = {
 }
 
 /** How many bytes a base64 payload decodes to, without decoding it. */
-function base64Bytes(data: string): number {
+const base64Bytes = (data: string): number => {
   const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0
   return Math.max(0, Math.floor((data.length * 3) / 4) - padding)
 }
@@ -165,10 +147,9 @@ function base64Bytes(data: string): number {
  * proves the fold is otherwise unchanged (react) — the same reason every other
  * member of this family lives here rather than in whichever package applies it.
  *
- * Deliberately narrow. The corpus holds exactly two non-text part kinds: this
- * one, and the CLI's `tool_reference`, of which every instance across 214
- * sessions totals 122 KB. A "drop non-text parts" rule would sweep those in for
- * no measurable gain, and narrowness is this family's standing habit.
+ * Deliberately narrow — `image` with a base64 source, never "non-text": a
+ * "drop non-text parts" rule would sweep in `tool_reference` for no measurable
+ * gain, and narrowness is this family's standing habit.
  */
 export function imagePartRef(part: { type?: string; [key: string]: unknown }, index: number): ImageRefPart | undefined {
   if (part.type !== 'image') {
@@ -185,6 +166,7 @@ export function imagePartRef(part: { type?: string; [key: string]: unknown }, in
     part_index: index,
   }
 }
+
 /** Forward-compatible fallback for block types this protocol version doesn't model. */
 export type UnknownBlock = { type: string; [key: string]: unknown }
 
@@ -856,13 +838,6 @@ export type ProfileDefaults = {
 }
 
 /**
- * A named Claude Code config directory sessions can run under: the session's CLI
- * process gets it as CLAUDE_CONFIG_DIR, so the profile carries that directory's
- * settings, memory, skills, and whatever credentials the SDK/CLI resolves from it.
- * Profiles are declared in server options at startup (or a 'default' one is
- * auto-created from the operator's own config dir) — the API only reads them.
- */
-/**
  * Which engine a profile runs on. A **closed union, deliberately**: both clients
  * switch exhaustively, the Swift mirror ships in lockstep, and a closed set is
  * what lets this package carry per-engine capability defaults
@@ -1239,6 +1214,14 @@ export type ProfileUsageWindow = {
  * ...) — the same keying as a transcript's rate-limit state. */
 export type ProfileUsage = Record<string, ProfileUsageWindow>
 
+/**
+ * A named engine configuration sessions can run under. For the claude engine:
+ * a config directory the session's CLI process gets as CLAUDE_CONFIG_DIR, so
+ * the profile carries that directory's settings, memory, skills, and whatever
+ * credentials the SDK/CLI resolves from it. Profiles are declared in server
+ * options at startup (or a 'default' one is auto-created from the operator's
+ * own config dir); managed profiles additionally live in the profile store.
+ */
 export type ProfileInfo = {
   /** Unique name, used as {@link CreateSessionRequest.profile}. */
   name: string
@@ -1483,9 +1466,7 @@ export type CreateSessionRequest = {
  * the model's `spawn_agent` call id — a genuine tool-use id — so `toolUseId`
  * keeps its documented meaning there: the codex runner authors the anchor
  * `tool_use` itself and keys every event of the agent's *thread* to it
- * (`engines/codex/subagents.ts`). The earlier version of this comment asserted
- * codex had no sidechains; that was true of the exec era and has not been true
- * for a while.
+ * (`engines/codex/subagents.ts`).
  *
  * It is deliberately **not** the input to `taskSummary`. That string is spelled
  * from the absorbed transcript items and must stay that way, so a transcript
@@ -1788,13 +1769,10 @@ export function contextReading(body: SessionEventBody): ContextReading | undefin
  * reducer's row rule changes, change this with it.
  */
 export function transcriptActivity(body: SessionEventBody): number {
-  // A subagent's own messages are not rows of *this* conversation: they render
-  // inside the `Task` call that spawned them, which is itself a row and already
-  // counted. Scoring them would make an unread badge announce dozens of rows a
-  // reader cannot see without expanding a block — and the badge is a promise
-  // about what is on screen. The claim is the same one `transcriptContent`
-  // declines to make: nested items still *mutate* items, so they must still
-  // replay; they merely do not add to the count.
+  // A subagent's own messages score 0: they render inside the `Task` call that
+  // spawned them, which is itself a counted row — the badge is a promise about
+  // what is on screen. Unlike `transcriptContent`, which still counts them:
+  // nested items mutate `items` and must replay; they just do not add rows.
   if ('parentToolUseId' in body && body.parentToolUseId != null) {
     return 0
   }
@@ -1872,19 +1850,13 @@ export function transcriptContent(body: SessionEventBody): boolean {
  * The dedupe key for an event that is **last-write-wins** on replay, or
  * `undefined` for one that must always be delivered.
  *
- * The problem: the runner polls context usage and the plan's rate limits after
- * every turn, so a fifty-turn session's log holds fifty context readings and
- * fifty per rate-limit window. Replaying all of them is not merely wasteful —
- * it is *visible*. A client applies each in turn, so opening a session shows
- * the usage meters counting up from the session's first reading to its last
- * over the length of the replay, announcing history as if it were news.
- *
- * The fix is a backwards scan over the buffered log keeping the first
- * occurrence of each key, which is `staleReplaySeqs` in `@workerdeck/core`.
- * The key is per *window* for rate limits, not per event type: the reducer
- * stores them keyed by window ("so five_hour and seven_day updates don't
- * clobber each other"), so a single key would keep only the most recently
- * polled window and silently drop the others.
+ * The runner polls context usage and rate limits after every turn, and a
+ * replay that ships every stale poll is *visible* — the usage meters count up
+ * through the session's history on attach. The coalescer is a backwards scan
+ * keeping the first occurrence of each key (`staleReplaySeqs` in
+ * `@workerdeck/core`). The key is per *window* for rate limits, not per event
+ * type: the reducer stores them keyed by window, so a single key would keep
+ * only the most recently polled window and silently drop the others.
  *
  * **This is a claim about the reducer**, which is why it lives here rather
  * than in core: only the server coalesces, but only `@workerdeck/react` can
@@ -1927,19 +1899,12 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
       // handed to every subscriber would silently skip that side effect.
       return 'status_changed'
     case 'sdk_event':
-      // The CLI's own liveness chatter — `{ type: 'system', subtype: 'status' }`
-      // saying "requesting" — and it is the single most numerous thing in a real
-      // log: 1,363 of them over 388 KB in a measured session, a ninth of the
-      // whole attach payload, for a field describing what the runner was doing
-      // an hour ago. Last-write-wins is the *generous* reading: the honest one
-      // is that a replayed status is never true, since the only status that can
-      // be is the current one.
-      //
-      // Narrow on purpose. `sdk_event` is the escape hatch for SDK messages this
-      // protocol version does not model, and the family's standing rule is that
-      // the safe failure is replaying a stale row rather than withholding state
-      // — so a compaction boundary or an auth notice keeps arriving in full, and
-      // only the one payload that is *by nature* transient is folded.
+      // The CLI's transient liveness chatter — the single most numerous thing
+      // in a real log, describing what the runner was doing an hour ago.
+      // Narrow on purpose: `sdk_event` is the escape hatch for SDK messages
+      // this protocol version does not model, and the family's standing rule is
+      // that the safe failure is replaying a stale row, never withholding state
+      // — a compaction boundary or an auth notice keeps arriving in full.
       return body.payload.type === 'system' && body.payload.subtype === 'status' ? 'sdk_event:system:status' : undefined
     default:
       return undefined
@@ -1956,14 +1921,10 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
  * and *discards*, so a replay that sends them is spending the reader's network
  * on frames whose whole effect is `return base`.
  *
- * Today that is exactly one thing, and it is the second-largest item in a real
- * attach: the `stream_delta`s the reducer does not model. Measured over one
- * 1,270-row session, the delta run was 774 KB, and **~85% of it was frames the
- * reducer throws away** — `input_json_delta` (a tool call's arguments, streamed
- * character by character, 383 KB), `signature_delta` (encrypted-thinking
- * signatures, 153 KB) and the `message_start`/`content_block_start`/`_stop`
- * scaffolding (244 KB). The reducer models two delta kinds, `text_delta` and
- * `thinking_delta`; everything else falls through its switch untouched.
+ * Today that is exactly one thing: the `stream_delta`s the reducer does not
+ * model — `input_json_delta`, `signature_delta` and the
+ * `message_start`/`content_block_*` scaffolding all fall through its switch
+ * untouched (sizes measured in docs/PACKAGES.md).
  *
  * What is deliberately **not** dropped, though the arithmetic would allow it:
  *
@@ -1972,12 +1933,9 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
  *   (`streamedThinking`). Dropping these erases every thought from a replayed
  *   transcript. This is the same carve-out `snapshotRetains` documents, and it
  *   is the reason that rule is provider-engine-only.
- * - `text_delta` — superseded by the `assistant_message` that follows it, which
- *   filters the streaming id and rebuilds from the full content blocks. It could
- *   go, but only with a lookahead proving the message arrived, and at 24 KB in
- *   the measured session it is not worth a rule that has to be right about
- *   supersession. A merge is likewise not worth it: a *drop* needs no synthesized
- *   event and therefore no invented seq.
+ * - `text_delta` — superseded by the `assistant_message` that follows it, but
+ *   dropping it would need a lookahead proving the message arrived, and it is
+ *   too small to be worth a rule that has to be right about supersession.
  *
  * A live event is never affected — this is about the buffered replay alone — and
  * the caller must never drop the log's highest-seq event whatever this says, for
@@ -2005,12 +1963,10 @@ export function replayRetains(body: SessionEventBody): boolean {
  *
  * The fourth of the same family, and the same shape of claim as
  * {@link replayCoalesceKey}: which events a *store* may drop without any client
- * being able to tell. It exists because a snapshot embeds the whole event log,
- * and a log is mostly stream deltas — a four-character token rides a ~180-byte
- * JSON envelope, so the delta run is tens of times the size of the text it
- * spells, sitting on disk *beside* the `assistant_message` that respells it in
- * full. That was affordable while a snapshot was written once, at a park. It is
- * not affordable written after every turn, which is what restart-survival needs.
+ * being able to tell. A snapshot embeds the whole event log, a log is mostly
+ * stream deltas sitting on disk beside the `assistant_message` that respells
+ * them, and a snapshot written after every turn (restart-survival) cannot
+ * afford that.
  *
  * So: everything is retained except `stream_delta`. The reason that is safe is
  * not that deltas are unimportant but that they are **superseded by

@@ -6,17 +6,11 @@ import { join } from 'node:path'
 export type ReloadableView = { reloadWebview: () => void }
 
 /**
- * The dev loop, for an Extension Development Host window (`code
- * --extensionDevelopmentPath=…`, or F5). Watches this extension's own `dist/`
- * while `pnpm --filter workerdeck-vscode dev` rebuilds into it:
- *
- * - a **webview** bundle changed → re-render the webviews in place. Instant, and
- *   the extension host keeps its state (gateways, selection, sockets).
- * - the **extension host** bundle changed → reload the window. VS Code has no
- *   way to swap an extension's code in a live host, so the window is the unit.
- *
- * Off outside development mode: a real install's `dist/` never changes, and a
- * self-triggered window reload is the last thing a user's editor should do.
+ * The dev loop for an Extension Development Host window: watches this extension's
+ * `dist/` and re-renders the webviews in place, or reloads the whole window when
+ * the extension-host bundle changed — VS Code cannot swap extension code in a live
+ * host. Development mode only; a self-triggered reload of a real install would be
+ * the last thing a user's editor should do.
  */
 export function startDevReload(context: vscode.ExtensionContext, views: readonly ReloadableView[]): vscode.Disposable {
   const enabled =
@@ -60,8 +54,7 @@ export function startDevReload(context: vscode.ExtensionContext, views: readonly
   }
 
   try {
-    // Non-recursive, two watchers: `dist/` itself carries the extension bundle,
-    // `dist/webview/` the two webview bundles and their CSS.
+    // Non-recursive: `dist/` carries the extension bundle, `dist/webview/` the webview bundles.
     watchers.push(watch(dist, (_e, file) => onChange(file, true)))
     watchers.push(watch(join(dist, 'webview'), (_e, file) => onChange(file, false)))
     output.appendLine(`watching ${dist} for rebuilds`)

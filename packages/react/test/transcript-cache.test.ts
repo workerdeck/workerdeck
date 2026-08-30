@@ -23,7 +23,7 @@ import {
  * failure `staleAttach` exists to catch).
  */
 
-function info(overrides: Partial<SessionInfo> = {}): SessionInfo {
+const info = (overrides: Partial<SessionInfo> = {}): SessionInfo => {
   return {
     id: 's1',
     status: 'idle',
@@ -35,11 +35,11 @@ function info(overrides: Partial<SessionInfo> = {}): SessionInfo {
   }
 }
 
-function frame(replayingFrom: number, session: SessionInfo): AttachedFrame {
+const frame = (replayingFrom: number, session: SessionInfo): AttachedFrame => {
   return { type: 'attached', protocolVersion: 7, session, replayingFrom }
 }
 
-function held(lastSeq: number, createdAt = 1_000): TranscriptState {
+const held = (lastSeq: number, createdAt = 1_000): TranscriptState => {
   return seedFromSessionInfo({ ...initialTranscriptState, lastSeq }, info({ createdAt, lastSeq }))
 }
 
@@ -153,7 +153,7 @@ describe('a reset replayed above the cached afterSeq', () => {
 
 // -- The wire facts the cache rests on ----------------------------------------
 
-function idleQueryFn() {
+const idleQueryFn = () => {
   const query = {
     [Symbol.asyncIterator]() {
       return this
@@ -178,7 +178,7 @@ afterEach(async () => {
   running = undefined
 })
 
-async function start() {
+const start = async () => {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
@@ -192,12 +192,12 @@ async function start() {
 }
 
 /** Run one attach the way the hook does: seed, then frames into the reducer. */
-function reduceAttach(
+const reduceAttach = (
   client: WorkerDeckClient,
   sessionId: string,
   seed: TranscriptState,
   afterSeq: number,
-): { handle: SessionHandle; frames: AttachedFrame[]; events: SessionEvent[]; state: () => TranscriptState } {
+): { handle: SessionHandle; frames: AttachedFrame[]; events: SessionEvent[]; state: () => TranscriptState } => {
   let state = seed
   const frames: AttachedFrame[] = []
   const events: SessionEvent[] = []

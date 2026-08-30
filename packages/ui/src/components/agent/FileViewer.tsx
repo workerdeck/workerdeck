@@ -24,13 +24,8 @@ export interface FileViewerProps {
   className?: string
 }
 
-/**
- * The focused file: Monaco, plus the states a file can be in that are not
- * "here is some text".
- *
- * No path row — the tab's tooltip carries the path and the size, and a line of
- * monospace above every file is chrome that never earns its height.
- */
+/** The focused file: Monaco, plus the states a file can be in that are not
+ * "here is some text". No path row — the tab's tooltip carries it. */
 export function FileViewer({
   file,
   canWrite,
@@ -49,8 +44,7 @@ export function FileViewer({
   return (
     <div data-slot="file-viewer" className={cn('flex min-h-0 min-w-0 flex-1 flex-col bg-bg', className)}>
       {/* The one failure with a choice attached, so it gets a bar rather than a
-          toast: the agent rewrote this file while it was open, and which
-          version wins is not something to decide on the user's behalf. */}
+          toast: which version wins is not ours to decide. */}
       {file.conflict ? (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-warning/40 bg-warning-bg px-3 py-2">
           <TriangleAlert className="size-3.5 shrink-0 text-warning" />
@@ -88,8 +82,6 @@ export function FileViewer({
         <Centred>
           <FileWarning className="size-4 text-fg-4" />
           <p className="text-body-sm text-fg-4">This file isn’t text.</p>
-          {/* Said out loud, because "can't show it" and "editing it here would
-              destroy it" are different reassurances. */}
           <p className="text-label text-fg-4">It can’t be edited here without corrupting it.</p>
         </Centred>
       ) : (
@@ -102,8 +94,7 @@ export function FileViewer({
         />
       )}
 
-      {/* A status strip only while there is something to say. Saving is fast
-          enough that a permanent row would mostly be blank. */}
+      {/* A status strip only while there is something to say. */}
       {file.status === 'ready' && (file.saving || isDirty(file) || !canWrite) ? (
         <div className="flex shrink-0 items-center gap-2 border-t border-border px-3 py-1">
           {file.saving ? (
@@ -118,8 +109,7 @@ export function FileViewer({
               <span className="text-label text-fg-3">Unsaved changes</span>
               <span className="flex-1" />
               {/* Revert, not reload: discard *my* edits and go back to what
-                  this tab read. Re-reading is the conflict bar's job, and it is
-                  a different question. */}
+                  this tab read. Re-reading is the conflict bar's job. */}
               <Button variant="ghost" size="xs" onClick={() => onRevert?.(file.path)}>
                 Revert
               </Button>
@@ -135,6 +125,6 @@ export function FileViewer({
   )
 }
 
-function Centred({ children }: { children: ReactNode }) {
-  return <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6">{children}</div>
-}
+const Centred = ({ children }: { children: ReactNode }) => (
+  <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6">{children}</div>
+)

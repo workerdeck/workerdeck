@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { JsonRpcError, JsonRpcStdioConnection } from '../src/engines/codex/jsonrpc.ts'
 
 /** A fake `codex app-server` on the other end of two in-memory pipes. */
-function harness() {
+const harness = () => {
   const toClient = new PassThrough() // server stdout → client input
   const fromClient = new PassThrough() // client output → server stdin
   const connection = new JsonRpcStdioConnection({ input: toClient, output: fromClient })

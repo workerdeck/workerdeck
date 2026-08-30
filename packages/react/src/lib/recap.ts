@@ -1,16 +1,12 @@
 import type { TranscriptItem } from './transcript.ts'
 
 /**
- * "What happened while you were away", counted rather than written.
- *
- * Deterministic on purpose. A prose recap would mean spending a turn — tokens,
- * context and latency — on a summary nobody asked the model for, and it would
- * be wrong in the one case that matters most (a session that failed while
- * unattended, where the model is exactly who you shouldn't ask). Everything
- * here is already in the transcript; this only counts it.
- *
- * Framework-free and pure, like the reducer it reads from: both clients render
- * the same recap from the same numbers.
+ * "What happened while you were away", counted rather than written: a prose
+ * recap would spend a turn on a summary nobody asked for, and would be wrong in
+ * the case that matters most — a session that failed unattended, where the
+ * model is exactly who you shouldn't ask. Framework-free and pure, like the
+ * reducer it reads from: both clients render the same recap from the same
+ * numbers.
  */
 export type RecapSummary = {
   /** Completed turns — `turn_result` rows, the engine's own unit of work. */
@@ -48,7 +44,7 @@ export type RecapInput = {
  * reading of "you last saw 40 items, there are now 12" is "everything here is
  * new", not a negative count.
  */
-export function summarizeSince(state: RecapInput, fromIndex: number): RecapSummary {
+export const summarizeSince = (state: RecapInput, fromIndex: number): RecapSummary => {
   const start = Math.max(0, Math.min(fromIndex, state.items.length))
   const fresh = state.items.slice(start)
   const toolCounts = new Map<string, number>()
@@ -110,7 +106,7 @@ export function summarizeSince(state: RecapInput, fromIndex: number): RecapSumma
  * Returns `undefined` when there is nothing to say, so a caller can render the
  * row or not on the value alone.
  */
-export function recapLine(summary: RecapSummary): string | undefined {
+export const recapLine = (summary: RecapSummary): string | undefined => {
   if (!summary.any) {
     return undefined
   }
@@ -139,6 +135,4 @@ export function recapLine(summary: RecapSummary): string | undefined {
   return parts.join(' · ')
 }
 
-function plural(count: number, one: string, many = `${one}s`): string {
-  return `${count} ${count === 1 ? one : many}`
-}
+const plural = (count: number, one: string, many = `${one}s`): string => `${count} ${count === 1 ? one : many}`

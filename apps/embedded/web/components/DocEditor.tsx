@@ -10,20 +10,17 @@ export type DocEditorProps = {
 }
 
 /**
- * Title bar and a textarea, which is the whole editor.
- *
- * The one subtlety worth the code: the agent can write this document *while it
- * is open*. So the editor keeps the loaded copy and the draft apart — the same
- * split `useOpenFiles` makes in `@workerdeck/react` — and when the two disagree
- * it offers the choice rather than picking for you. Silently overwriting either
- * side is the one behaviour that would make the agent feel unsafe to use.
+ * Title bar and a textarea. The agent can write this document *while it is open*, so
+ * the editor keeps the loaded copy and the draft apart — the same split
+ * `useOpenFiles` makes in `@workerdeck/react` — and offers the choice when they
+ * disagree; silently overwriting either side is what makes an agent feel unsafe.
  */
 export function DocEditor({ doc, onSave, onReload }: DocEditorProps) {
   const [title, setTitle] = useState(doc.title)
   const [body, setBody] = useState(doc.body ?? '')
   const [saving, setSaving] = useState(false)
-  // What the server last told us this document was. Compared against the props
-  // to notice a write that did not come from this textarea.
+  // What the server last told us this document was, compared against the props to
+  // notice a write that did not come from this textarea.
   const known = useRef({ id: doc.id, title: doc.title, body: doc.body ?? '' })
   const dirty = title !== known.current.title || body !== known.current.body
 
@@ -56,15 +53,9 @@ export function DocEditor({ doc, onSave, onReload }: DocEditorProps) {
   const save = async () => {
     setSaving(true)
     try {
-      // Adopt the server's answer, not the local guess.
-      //
-      // This used to record what it *sent*, and the parent refreshed only the
-      // document list. So the next render still carried the pre-save `doc`
-      // prop, the effect above compared it against the newer `known`, read the
-      // difference as "the agent changed it", and — not dirty any more —
-      // helpfully restored the old text over the save that had just succeeded.
-      // Both sides now hold the same server-authored record, so the comparison
-      // finds nothing and the effect no-ops.
+      // Adopt the server's answer, not what was sent: otherwise the next render still
+      // carries the pre-save `doc` prop, the effect above reads the difference as "the
+      // agent changed it", and restores the old text over the save that just succeeded.
       const saved = await onSave({ title: title.trim() || 'Untitled', body })
       known.current = { id: saved.id, title: saved.title, body: saved.body ?? '' }
       setTitle(saved.title)

@@ -30,10 +30,6 @@
 
 import { useCallback, useMemo, useState } from 'react'
 
-// ---------------------------------------------------------------------------
-// Mode
-// ---------------------------------------------------------------------------
-
 /**
  * The two rendering variants of a PromptArea.
  * - `'markdown'`: inline markdown is decorated and list markers normalize to `•`.
@@ -45,10 +41,6 @@ export type PromptAreaMode = 'markdown' | 'plain'
 export function oppositeMode(mode: PromptAreaMode): PromptAreaMode {
   return mode === 'markdown' ? 'plain' : 'markdown'
 }
-
-// ---------------------------------------------------------------------------
-// Options / return type
-// ---------------------------------------------------------------------------
 
 export type UseMarkdownModeOptions = {
   /** Starting mode for the uncontrolled hook. Defaults to `'markdown'`. */
@@ -74,10 +66,6 @@ export type MarkdownModeState = {
   /** Flip between markdown and plain text. */
   toggle: () => void
 }
-
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
 
 export function useMarkdownMode(options: UseMarkdownModeOptions = {}): MarkdownModeState {
   const { initialMode = 'markdown', mode: controlledMode, onModeChange } = options

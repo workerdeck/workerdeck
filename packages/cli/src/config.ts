@@ -8,25 +8,16 @@ import type { ApnsConfig } from './apns/client.ts'
 import type { CliAuthOptions } from './auth/auth.ts'
 
 /**
- * The config surface has to be JavaScript, not JSON: the two options a real
- * deployment always needs — `authenticate` and `buildRunnerConfig` — are
- * functions. So the file default-exports `WorkerServerOptions` (optionally as a
- * function, sync or async, for config that has to await something), and flags
- * and env cover the cases that fit on a command line.
+ * The config surface is JavaScript, not JSON, because the options a real
+ * deployment needs (`authenticate`, `buildRunnerConfig`) are functions.
  *
- * Precedence, narrowest wins: flags > env > config file > defaults. A config
- * file that sets `authenticate` itself opts out of the built-in shared-secret
- * auth entirely — see `resolveInstanceConfig`.
+ * Precedence, narrowest wins: flags > env > config file > defaults. A config file
+ * that sets `authenticate` opts out of the built-in shared-secret auth entirely.
  */
 
 const CONFIG_BASENAMES = ['workerdeck.config.mjs', 'workerdeck.config.js', 'workerdeck.config.cjs']
 
-/**
- * What a `workerdeck.config.mjs` default-exports: the server options, plus
- * the few instance-level settings that aren't the server's business. Keeping
- * them in one object means a deployment is one file, not a file plus a
- * memorised command line.
- */
+/** What a `workerdeck.config.mjs` default-exports: the server options plus the instance-level settings. */
 export type WorkerDeckConfig = WorkerServerOptions & {
   port?: number
   host?: string
@@ -40,28 +31,19 @@ export type WorkerDeckConfig = WorkerServerOptions & {
    */
   allowedHosts?: string[]
   /**
-   * Bind hosts that may serve without auth. One declaration, two effects:
-   * binding a listed host waives the auth requirement (no key demanded, none
-   * generated), and while unauthenticated every entry is also accepted as a
-   * Host header, so the operator states the intent once. Entries name a host,
-   * never an endpoint — a port is rejected — and match the bind host literally
-   * and case-insensitively: nothing is inferred from DNS or the network, and
-   * `0.0.0.0` means the all-interfaces bind itself, not "any host". When auth
-   * is on this widens nothing.
+   * Bind hosts that may serve without auth. One declaration, two effects: binding
+   * a listed host waives the auth requirement, and while unauthenticated every
+   * entry is also accepted as a Host header. Entries name a host, never an
+   * endpoint (a port is rejected) and match the bind host literally — `0.0.0.0`
+   * means the all-interfaces bind itself, never "any host". Auth on widens nothing.
    */
   insecureHosts?: string[]
   /** Serve a dashboard build from here instead of the bundled one. */
   webRoot?: string
   /**
-   * Serve the web dashboard at all. Default true — being turnkey is the point
-   * of this package.
-   *
-   * `false` makes the instance a bare gateway: `/v1` and the auth routes answer
-   * exactly as before, everything else 404s, and the dashboard build is never
-   * even looked for (so a checkout with no `@workerdeck/web` build can still
-   * run one). For an operator who reaches this gateway only from the VS Code
-   * extension, the phone, or another machine's dashboard, the served copy is
-   * surface they were not using.
+   * Serve the web dashboard at all; default true. `false` makes this a bare
+   * gateway: `/v1` and the auth routes are unchanged, everything else 404s, and
+   * the dashboard build is never even looked for.
    */
   web?: boolean
   /**
@@ -72,14 +54,9 @@ export type WorkerDeckConfig = WorkerServerOptions & {
    */
   corsOrigins?: string[]
   /**
-   * Forward session notifications to Apple Push Notification service, for the
-   * iOS app. Absent turns the forwarder off entirely — including its
-   * `/apns/devices` route, so a gateway without this answers 404 there and the
-   * app quietly stops asking.
-   *
-   * Lives here rather than in `packages/server` on purpose: this is the only
-   * place in the project that holds a push credential, and the OSS gateway
-   * stays credential-free. `keyFile` is a path, never key contents.
+   * Forward session notifications to APNs, for the iOS app. Absent turns the
+   * forwarder off entirely, and `/apns/devices` answers 404. `keyFile` is a path,
+   * never key contents — this is the only push credential in the project.
    */
   apns?: ApnsConfig
 }
@@ -109,7 +86,7 @@ export type CliFlags = {
 
 export class ConfigError extends Error {}
 
-function parsePort(raw: string, source: string): number {
+const parsePort = (raw: string, source: string): number => {
   const port = Number(raw)
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new ConfigError(`${source}: not a valid port: ${raw}`)
@@ -117,12 +94,8 @@ function parsePort(raw: string, source: string): number {
   return port
 }
 
-/**
- * Hand-rolled rather than a dependency: the CLI's whole value is that `npx
- * workerdeck` pulls down a small tree, and an arg parser is a hundred lines
- * of it.
- */
-export function parseArgs(argv: string[]): CliFlags {
+/** Hand-rolled rather than a dependency: `npx workerdeck` pulling down a small tree is the point. */
+export const parseArgs = (argv: string[]): CliFlags => {
   const flags: CliFlags = {
     profiles: [],
     cwdRoots: [],
@@ -170,8 +143,7 @@ export function parseArgs(argv: string[]): CliFlags {
         i++
         break
       case '--profile': {
-        // name=dir — the config dir is a credential store, so naming one is a
-        // deliberate act and never inferred.
+        // name=dir — a config dir is a credential store, so naming one is deliberate, never inferred.
         const raw = next(i, arg)
         i++
         const eq = raw.indexOf('=')
@@ -251,7 +223,7 @@ export type LoadedConfig = {
  * walking parent directories would make what a given command does depend on
  * where it was run from.
  */
-export async function loadConfigFile(explicit?: string, cwd = process.cwd()): Promise<LoadedConfig> {
+export const loadConfigFile = async (explicit?: string, cwd = process.cwd()): Promise<LoadedConfig> => {
   let path: string | null = null
   if (explicit) {
     path = isAbsolute(explicit) ? explicit : resolve(cwd, explicit)
@@ -267,9 +239,8 @@ export async function loadConfigFile(explicit?: string, cwd = process.cwd()): Pr
 
   let mod: { default?: unknown }
   try {
-    // The specifier is a runtime value on purpose: the config file is the
-    // operator's code, not part of our module graph, so no bundler should ever
-    // try to resolve or inline it.
+    // A runtime specifier on purpose: the config file is the operator's code, not part of our
+    // module graph, so no bundler should try to resolve or inline it.
     mod = (await import(pathToFileURL(path).href)) as { default?: unknown }
   } catch (error) {
     throw new ConfigError(`failed to load ${path}: ${error instanceof Error ? error.message : String(error)}`)
@@ -287,9 +258,7 @@ export async function loadConfigFile(explicit?: string, cwd = process.cwd()): Pr
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost', '::ffff:127.0.0.1'])
 
-export function isLoopback(host: string): boolean {
-  return LOOPBACK.has(host)
-}
+export const isLoopback = (host: string): boolean => LOOPBACK.has(host)
 
 export type ResolvedConfig = {
   port: number
@@ -304,12 +273,9 @@ export type ResolvedConfig = {
   /** True when the config file supplied its own `authenticate` — built-in auth stands down. */
   hostAuthenticates: boolean
   /**
-   * Auth is required here but no key was supplied: `startInstance` must
-   * materialize one (stored under `stateDir`, ephemeral without one). This is a
-   * *promise* rather than a key because resolution is pure and synchronous while
-   * reading a key file is I/O — and the promise is load-bearing: `allowedHosts`
-   * is already null on the strength of it, so `startInstance` refuses to serve
-   * if materialization ever fails to arm the built-in auth.
+   * Auth is required but no key was supplied: `startInstance` must materialize
+   * one. A *promise* rather than a key because resolution must stay I/O-free —
+   * and load-bearing, since `allowedHosts` is already null on the strength of it.
    */
   generateAuthKey: boolean
   /**
@@ -331,19 +297,15 @@ export type ResolvedConfig = {
 }
 
 /**
- * Durable parking is on by default because this is a long-lived instance: a
- * turnkey tool that silently drops parked work on every restart is the wrong
- * default. The store writes whole transcripts in plaintext, so it goes beside
- * the config file (or under the home directory) rather than anywhere temporary,
- * and one directory serves exactly one instance — the store is single-process
- * by design, which the single-port model already implies.
+ * The store writes whole transcripts in plaintext, so state goes beside the config
+ * file (or under the home directory) rather than anywhere temporary, and one
+ * directory serves exactly one instance — the store is single-process by design.
  */
-export function defaultStateDir(configPath: string | null): string {
-  return configPath ? join(dirname(configPath), '.workerdeck') : join(homedir(), '.workerdeck')
-}
+export const defaultStateDir = (configPath: string | null): string =>
+  configPath ? join(dirname(configPath), '.workerdeck') : join(homedir(), '.workerdeck')
 
 /** Hostname out of a Host header, minus the port and any IPv6 brackets. */
-export function hostnameOf(hostHeader: string): string {
+export const hostnameOf = (hostHeader: string): string => {
   try {
     return new URL(`http://${hostHeader}`).hostname.replace(/^\[|\]$/g, '').toLowerCase()
   } catch {
@@ -352,7 +314,7 @@ export function hostnameOf(hostHeader: string): string {
 }
 
 /** 127.0.0.0/8, ::1, and the names that mean them. */
-export function isLoopbackHostname(hostname: string): boolean {
+export const isLoopbackHostname = (hostname: string): boolean => {
   if (LOOPBACK.has(hostname)) {
     return true
   }
@@ -360,15 +322,12 @@ export function isLoopbackHostname(hostname: string): boolean {
 }
 
 /**
- * An `insecureHosts` entry names a host, never an endpoint: it is compared
- * against the bind host and against Host headers, and both are portless by the
- * time they are compared. An entry carrying a port would therefore never match
- * anything — a gate that looks armed and is not — so it is rejected loudly, as
- * is anything that does not parse as a host name or address. Bare IPv6 is
- * bracketed before parsing (WHATWG URL requires that), and the result is
- * lowercased to match `hostnameOf`'s normal form.
+ * An entry carrying a port could never match anything the guard compares — a gate
+ * that looks armed and is not — so it is rejected loudly rather than normalized
+ * away. Bare IPv6 is bracketed before parsing (WHATWG URL requires it) and the
+ * result lowercased to match `hostnameOf`'s normal form.
  */
-function normalizeInsecureHost(raw: string): string {
+const normalizeInsecureHost = (raw: string): string => {
   const entry = raw.trim()
   const looksLikeNamePort = /^[^:]+:\d+$/.test(entry)
   const candidate = entry.includes(':') && !entry.startsWith('[') && !looksLikeNamePort ? `[${entry}]` : entry
@@ -387,37 +346,29 @@ function normalizeInsecureHost(raw: string): string {
   return url.hostname.replace(/^\[|\]$/g, '').toLowerCase()
 }
 
-export function resolveInstanceConfig(
+export const resolveInstanceConfig = (
   flags: CliFlags,
   loaded: LoadedConfig,
   env: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
-): ResolvedConfig {
+): ResolvedConfig => {
   const envPort = env.WORKERDECK_PORT ? parsePort(env.WORKERDECK_PORT, 'WORKERDECK_PORT') : undefined
   const port = flags.port ?? envPort ?? loaded.options.port ?? 8787
   const host = flags.host ?? env.WORKERDECK_HOST ?? loaded.options.host ?? '127.0.0.1'
-  // `?? undefined` would keep an empty string, and an empty secret is not a
-  // secret: WORKERDECK_AUTH_KEY= in an env file means "unset", not "no auth
-  // but pretend otherwise".
+  // `||`, not `??`: an empty secret is not a secret — `WORKERDECK_AUTH_KEY=` means "unset".
   const authKey = flags.authKey || env.WORKERDECK_AUTH_KEY || loaded.options.auth?.secret || undefined
   const hostAuthenticates = typeof loaded.options.authenticate === 'function'
 
   const insecureHosts = new Set([...flags.insecureHosts, ...(loaded.options.insecureHosts ?? [])].map(normalizeInsecureHost))
-  /** The bind host in the same normal form the entries were put in. It never
-   * carries a port — that is a separate flag — so only brackets and case vary. */
+  /** The bind host in the normal form the entries were put in; it never carries a port. */
   const bindHost = host
     .trim()
     .replace(/^\[|\]$/g, '')
     .toLowerCase()
 
-  // An unauthenticated Claude Code gateway on a routable interface is a shell
-  // for anyone who can reach the port, so serving one takes an explicit opt-out:
-  // `--insecure`, `allowUnauthenticated`, or the bind host declared in
-  // `insecureHosts`. Absent all three and absent a key, auth still goes ON — a
-  // key gets generated at startup rather than the old refusal, because "secure
-  // by default" beats "off by default". Materializing it is I/O, which this
-  // function must stay free of, so the decision is recorded as `generateAuthKey`
-  // and `startInstance` does the reading and writing.
+  // An unauthenticated gateway on a routable interface is a shell for anyone who can reach the
+  // port, so serving one takes an explicit opt-out: `--insecure`, `allowUnauthenticated`, or the
+  // bind host declared in `insecureHosts`. Absent all three, auth goes ON and a key is generated.
   const generateAuthKey =
     !authKey &&
     !hostAuthenticates &&
@@ -452,20 +403,10 @@ export function resolveInstanceConfig(
   }
 
   /**
-   * DNS rebinding is the one attack an unauthenticated loopback instance is
-   * actually exposed to: a hostile page resolves its own name to 127.0.0.1 and
-   * then talks to us same-origin, with no cookie needed because nothing is
-   * checked. The defence is to require the Host header to name a loopback
-   * address — an attacker controls their DNS, not the name the victim's browser
-   * puts in Host. With auth on this is moot (their origin holds no cookie), and
-   * for a deliberately exposed instance the operator has said what they want, so
-   * only the unauthenticated case is fenced.
-   *
-   * `generateAuthKey` counts as auth here on the promise that `startInstance`
-   * materializes the key — and `startInstance` asserts the promise was kept
-   * before serving. Entries are lowercased because the guard compares them
-   * against `hostnameOf`'s lowercased hostnames; `insecureHosts` folds in so
-   * declaring a bind host once also names it as an acceptable Host header.
+   * Only the unauthenticated case is fenced, and DNS rebinding is what it is fenced
+   * against: a hostile page resolving its own name to 127.0.0.1 talks to a keyless
+   * instance same-origin. `generateAuthKey` counts as auth here on the promise that
+   * `startInstance` materializes the key, and `startInstance` asserts it was kept.
    */
   const authEnabled = Boolean(authKey) || hostAuthenticates || generateAuthKey
   const allowedHosts = authEnabled
@@ -481,9 +422,8 @@ export function resolveInstanceConfig(
 
   const corsOrigins = flags.corsOrigins.length ? flags.corsOrigins : (loaded.options.corsOrigins ?? [])
   for (const origin of corsOrigins) {
-    // Exactness is the guarantee. A wildcard would hand the API to every page
-    // on the internet that can reach this port, and a bare hostname is not an
-    // origin — the browser sends scheme + host + port, and compares literally.
+    // Exactness is the guarantee: a wildcard hands the API to every page that can reach this
+    // port, and a bare hostname is not an origin — browsers send and compare scheme+host+port.
     if (origin === '*') {
       throw new ConfigError('--cors-origin does not accept "*"')
     }
@@ -497,8 +437,7 @@ export function resolveInstanceConfig(
       throw new ConfigError(`--cors-origin expects scheme://host[:port] with no path, got: ${origin}`)
     }
   }
-  // Naming both is a mistake, not a preference to silently resolve: one of the
-  // two says what the operator meant and we cannot tell which.
+  // Naming both is a mistake, not a preference to resolve: we cannot tell which one was meant.
   if (!web && flags.open) {
     throw new ConfigError('--open cannot be used with --no-web: there is no dashboard to open')
   }
@@ -528,8 +467,7 @@ export function resolveInstanceConfig(
       ...(flags.fsWrite ? { write: true } : {}),
     }
   }
-  // Flags win, but they *replace* rather than merge: a half-declared profile set
-  // is a credential mix-up waiting to happen.
+  // Flags *replace* rather than merge: a half-declared profile set is a credential mix-up.
   if (flags.profiles.length) {
     options.profiles = flags.profiles
   }
@@ -554,13 +492,11 @@ export function resolveInstanceConfig(
 }
 
 /**
- * A relative `keyFile` resolves against the config file's own directory, not the
- * cwd — the same convention `defaultStateDir` uses, and the one that makes a
- * deployment directory self-contained. Missing required fields throw here rather
- * than at the first push, since a half-configured forwarder is a notification
- * that silently never arrives.
+ * A relative `keyFile` resolves against the config file's directory, not the cwd,
+ * so a deployment directory stays self-contained. Missing fields throw here rather
+ * than at the first push, which would be a notification that silently never arrives.
  */
-function resolveApns(loaded: LoadedConfig): ApnsConfig | undefined {
+const resolveApns = (loaded: LoadedConfig): ApnsConfig | undefined => {
   const apns = loaded.options.apns
   if (!apns) {
     return undefined

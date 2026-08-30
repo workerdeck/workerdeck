@@ -26,19 +26,10 @@ import { Blank, Row } from './row.tsx'
 import { TerminalSurface } from './surface.tsx'
 
 /**
- * The transcript, drawn as a terminal.
- *
- * The whole of the layout is here and it is four lines long, which is the point:
- * items become row blocks, a blank line goes between blocks that do not belong
- * together, and the working line is one more row at the end. There is no gap
- * scale, no density knob and no variant branch — a terminal has one line height
- * and one type size, and everything the theme can express is expressed in which
- * rows exist and what marker each carries.
- *
- * Not virtualized yet: the row blocks are the part that has to be right first,
- * and the existing `Transcript` already owns a hard-won virtualizer plus the
- * scroll-regime rules it needs. This renders into that shell when the rows are
- * settled, rather than growing a second copy of that logic.
+ * The transcript, drawn as a terminal: items become row blocks, a blank line
+ * between blocks that do not belong together, the working line one more row at
+ * the end. Deliberately not virtualized — the virtualized shell in
+ * `agent/Transcript.tsx` owns that, and renders rows through the same pieces.
  */
 export interface TerminalTranscriptProps {
   state: TranscriptState
@@ -81,43 +72,12 @@ export function TerminalItemView({ item, fileUrl }: { item: TranscriptItem; file
 }
 
 /**
- * A `Task` and everything the subagent it spawned produced, as one row.
- *
- * The same claim the tool-run fold makes, and a stronger one: a subagent is
- * *sixty* rows of somebody else's working — a brief, a dozen greps, its own
- * thinking — and none of it is what you came back to read. What you came back
- * to read is the report, and the report is the model's next sentence. So the
- * whole frame collapses to one line saying what was asked and how big the
- * answer was, and opens in full the moment it is the thing you want.
- *
- * **Always collapsed when unmounted**, and that is load-bearing rather than
- * tidy: `height.ts` predicts this row as exactly one wrapped `taskSummary`, and
- * expansion is component-local state that dies with the row. A row auto-opening
- * because its subagent happens to be running would make its own height
- * unpredictable — which is why the live signal is *in* the collapsed line (the
- * pulse, and a count that climbs) rather than in an open block.
- *
- * The children are the theme's ordinary rows, stepped in behind a rule, and
- * they fold among themselves: a subagent's consecutive tool calls are as much
- * an aside inside its frame as they are in the main thread.
- */
-/**
- * **What the agent was asked** — the sub-agent's brief, clipped to
- * {@link BRIEF_LINES} and pressable for the whole of it.
- *
- * It leads the takeover's frame and the inline task expansion alike, because
- * both are answering the same question and an answer without its question is
- * half a transcript. This is the one row here built from something other than
- * the stream, and it exists for the case the stream does not cover: a
- * **background** agent forwards no brief, where a foreground `Task` forwards a
- * real nested user item that renders as an ordinary prompt row. The callers
- * splice this in only when that row is absent. Codex draws nothing either way —
- * its spawn message is encrypted on the wire, so there is no brief to give.
- *
- * `>` and blue, the prompt's own marker and colour, because that is what this
- * is: somebody's instruction, one level in. The clip is `line-clamp`, which
- * cuts on the same wrapped lines `briefPx` counts — one rule, so the reserved
- * height and the drawn height cannot disagree.
+ * The sub-agent's brief, clipped to {@link BRIEF_LINES} and pressable for the
+ * whole of it. Leads the takeover's frame and the inline task expansion alike;
+ * callers splice it in only when the stream carries no brief of its own (see
+ * `taskBrief`). The clip is `line-clamp`, which cuts on the same wrapped lines
+ * `briefPx` counts — one rule, so the reserved height and the drawn height
+ * cannot disagree.
  */
 export function BriefRow({ text, terminal }: { text: string; terminal?: boolean }) {
   const [open, setOpen] = useState(false)
@@ -144,6 +104,13 @@ export function BriefRow({ text, terminal }: { text: string; terminal?: boolean 
   )
 }
 
+/**
+ * A `Task` and everything its subagent produced, as one row. **Always
+ * collapsed when unmounted** — load-bearing: `height.ts` predicts this row as
+ * exactly one wrapped `taskSummary`, and expansion is component-local state
+ * that dies with the row, so the live signal is *in* the collapsed line (the
+ * pulse and a climbing count) rather than in an auto-opened block.
+ */
 export function TaskRow({
   block,
   fileUrl,
@@ -152,16 +119,13 @@ export function TaskRow({
   block: TaskBlock
   fileUrl?: (path: string) => string
   /** Take over the panel with this sub-agent's own frame. Absent draws no
-   * affordance at all — the plain renderer has no surface to take over, and an
-   * action that opens nothing is worse than no action. */
+   * affordance at all — the plain renderer has no surface to take over. */
   onOpenSubagent?: (toolUseId: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const reveal = useRevealOnOpen(open)
   const children = useMemo(() => taskChildItems(block), [block])
-  // Only when the sub-agent's own stream carries no brief — a foreground Task
-  // forwards one as a real user item, and two spellings of one instruction is
-  // worse than none. See `taskBrief`.
+  // Only when the sub-agent's own stream carries no brief — see `taskBrief`.
   const brief = children.some((item) => item.kind === 'user') ? undefined : taskBrief(block.task)
   const busy = taskBusy(block.task, children)
   const failed = taskFailed(block.task)
@@ -170,30 +134,19 @@ export function TaskRow({
   const row = (
     <div ref={reveal} className={open ? 'term-open' : undefined}>
       <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
-        {/* A marker, where a folded run of calls gets none: a run is an aside,
-            but delegating a piece of the work is something the model *did*, and
-            the row stands for the whole of it. The body is `taskSummary`
-            verbatim — it is the string `height.ts` wraps to size this row, and
-            a second spelling here would be a second height. */}
-        {/* Green means sub-agent, and it means it here for the same reason it
-            means it on the rail: every other colour is spoken for — blue is
-            you, white is the answer, red is an alarm, magenta is your bookmark,
-            yellow is the session waiting on you (see `terminal.css`). The
-            *body* is green and the marker is not: a green glyph already means
-            "wrote to the workspace" a few rows down, and one colour cannot mean
-            two things in the same gutter. Failure still outranks it — an alarm
-            is not a category. */}
+        {/* The body is `taskSummary` verbatim — the string `height.ts` wraps
+            to size this row. Green body = sub-agent (same meaning as on the
+            rail; see `terminal.css`), but not the marker: a green glyph
+            already means "wrote to the workspace" in the same gutter. Failure
+            outranks it. */}
         <Row glyph={busy ? pulse : '●'} glyphTone={failed ? 'red' : busy ? 'mark' : 'dim'} tone={failed ? 'red' : 'green'}>
           {taskSummary(block.task, children)}
         </Row>
       </Pressable>
       {open ? (
-        // `term-nested` and not the shell's cards-era `border-l-2 pl-3`: this
-        // sits on the open block's wash, where that border token is invisible,
-        // and its 14px would take every nested marker off the cell grid.
+        // `term-nested`, not a pixel border: 14px would take every nested
+        // marker off the cell grid.
         <div className="term-nested">
-          {/* The brief leads the children for the same reason it leads the
-              frame: the instruction, then the work. */}
           {brief ? <BriefRow text={brief} terminal /> : null}
           {block.children.map((leaf, index) => (
             <Fragment key={leaf.key}>
@@ -205,9 +158,8 @@ export function TaskRow({
       ) : null}
     </div>
   )
-  // Wrapped only when there is somewhere to go. `WithActions` is a no-op when
-  // affordances are off, but wrapping unconditionally would still put an
-  // "open" glyph on a renderer that cannot honour it.
+  // Wrapped only when there is somewhere to go: no "open" glyph on a renderer
+  // that cannot honour it.
   return onOpenSubagent === undefined ? (
     row
   ) : (
@@ -216,10 +168,9 @@ export function TaskRow({
 }
 
 /** When the current run began — the clock the working line counts from. Held
- * here, not in the row, because the row comes and goes within a single turn (it
- * hides the moment text streams) and a clock restarting at every tool call
- * would be measuring the wrong thing. */
-function useRunStart(status: TranscriptState['status']): number | undefined {
+ * here, not in the row: the row comes and goes within a single turn, and a
+ * clock restarting at every tool call would measure the wrong thing. */
+const useRunStart = (status: TranscriptState['status']): number | undefined => {
   const running = status === 'running' || status === 'starting'
   const [startedAt, setStartedAt] = useState<number | undefined>(undefined)
   useEffect(() => {
@@ -230,7 +181,7 @@ function useRunStart(status: TranscriptState['status']): number | undefined {
 
 /** Is the model between outputs? Only then does the working line show — while
  * text is streaming, the text itself is the evidence. */
-function working(state: TranscriptState): boolean {
+const working = (state: TranscriptState): boolean => {
   if (state.status !== 'running' && state.status !== 'starting') {
     return false
   }
@@ -255,8 +206,7 @@ export function TerminalTranscript({ state, fileUrl, fontSize, lineHeight, affor
       fontSize={fontSize}
       lineHeight={lineHeight}
       affordances={affordances}
-      // One cell of breathing room at each edge, and the value a full-bleed
-      // band cancels so its wash reaches the scroller's edge.
+      // One cell of breathing room at each edge; a full-bleed band cancels it.
       bleed="1ch"
       className={cn('term-transcript', className)}
     >

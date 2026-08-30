@@ -4,13 +4,8 @@ import { RotateCcw } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
 import { formatAgoPrecise, formatCountdown, formatRateLimitWindowLong, rateLimitWindowSeconds } from '../../lib/format.ts'
 
-/**
- * Ticking clock — the countdowns and the pace markers both move with it, and a
- * minute is the finest resolution either of them prints.
- *
- * `active` is what a dialog passes its `open`: a closed panel's clock is a timer
- * re-rendering something nobody can see.
- */
+/** Ticking clock for the countdowns and pace markers — a minute is the finest
+ * resolution either prints. `active` is what a dialog passes its `open`. */
 export function useMinuteClock(active = true): number {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -27,21 +22,12 @@ export function useMinuteClock(active = true): number {
 const usageTint = (pct: number) => (pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-warning' : 'bg-accent')
 
 /**
- * The plan's rate-limit windows, spelled out: how much of each is used, how that
- * compares to the pace that would spend the window exactly, and when it resets.
+ * The plan's rate-limit windows: how much of each is used, how that compares to
+ * the pace that would spend the window exactly, and when it resets.
  *
- * The pace marker is the point. A bar alone says "17% used", which is only
- * alarming or reassuring once you know how far into the week you are — so every
- * window draws a tick at the elapsed share of its duration. Left of the tick is
- * under budget, right of it is ahead of it. The duration comes from the window
- * key (5h, 7d) because the engine reports a reset time and a percentage and
- * never a duration; a window whose key doesn't say gets no marker rather than a
- * guessed one.
- *
- * Its own component rather than the Usage dialog's private helper because two
- * surfaces draw these now — the session panel's Usage panel, from the session's
- * readings merged with the gateway's, and the dashboard's profile page, straight
- * off `ProfileInfo.usage` with no session in sight. Same account, same bars.
+ * The duration behind the pace marker comes from the window key (5h, 7d) —
+ * the engine reports a reset time and a percentage and never a duration, so a
+ * window whose key doesn't say gets no marker rather than a guessed one.
  */
 export function UsageMeters({
   windows,
@@ -50,8 +36,8 @@ export function UsageMeters({
 }: {
   /** In reading order — protocol's `orderUsageWindows`. */
   windows: UsageWindowRow[]
-  /** A shared clock, when the caller already ticks one. Omitted, this ticks its
-   * own for as long as it is mounted. */
+  /** A shared clock, when the caller already ticks one; otherwise this ticks
+   * its own while mounted. */
   now?: number
   className?: string
 }) {
@@ -66,7 +52,7 @@ export function UsageMeters({
   )
 }
 
-function UsageMeter({ window, now }: { window: UsageWindowRow; now: number }) {
+const UsageMeter = ({ window, now }: { window: UsageWindowRow; now: number }) => {
   const { key: windowKey, info, updatedAt, inferredReset } = window
   const utilization = info.utilization ?? 0
   const resetsAtMs = info.resetsAt !== undefined ? info.resetsAt * 1000 : undefined
@@ -110,13 +96,10 @@ function UsageMeter({ window, now }: { window: UsageWindowRow; now: number }) {
         ) : null}
         {info.isUsingOverage ? <span className="text-warning">overage</span> : null}
         {info.status === 'rejected' ? <span className="text-danger">limit reached</span> : null}
-        {/* Said plainly rather than drawn as a fact: the gateway zeroed this
-            because the reading's own reset time passed with nothing newer, so 0
-            is a floor — the account may have been spent elsewhere since. */}
+        {/* The gateway zeroed this because the reading's own reset time passed
+            with nothing newer, so 0 is a floor. */}
         {inferredReset ? <span>window reset · nothing reported since</span> : null}
-        {/* Per window, because they no longer share one clock: a reading learned
-            from a sibling session minutes ago can sit beside one this session
-            last heard about yesterday. */}
+        {/* Per window: readings do not share one clock. */}
         {updatedAt && !inferredReset ? <span>{formatAgoPrecise(updatedAt, now)}</span> : null}
       </div>
     </div>

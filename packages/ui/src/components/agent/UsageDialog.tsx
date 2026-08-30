@@ -8,21 +8,18 @@ export interface UsageDialogProps {
   /**
    * Windows in reading order — session, weekly, then per-model weeklies.
    *
-   * `updatedAt`/`inferredReset` ride each window because the readings no longer
+   * `updatedAt`/`inferredReset` ride each window because the readings do not
    * share one clock: the panel merges the gateway's per-profile state over this
-   * session's, so a `five_hour` learned from a sibling session two minutes ago
-   * can sit beside a `seven_day` this session last heard about yesterday.
-   * `inferredReset` marks the ones the *gateway* zeroed because their own reset
-   * time passed with nothing newer — a floor, not a report.
+   * session's. `inferredReset` marks the ones the *gateway* zeroed because their
+   * reset time passed with nothing newer — a floor, not a report.
    */
   rateLimits: UsageWindowRow[]
   /** claude.ai plan behind the windows ('max', 'pro', …), when there is one. */
   subscriptionType?: string
   engine: ProfileEngine
   totalCostUsd: number
-  /** When the *freshest* of the windows was read, for the footer line. Readings
-   * arrive one per turn at best (and for an idle session, not at all), so a
-   * stale one is normal and worth saying out loud. */
+  /** When the *freshest* of the windows was read. Readings arrive one per turn
+   * at best, so a stale one is normal and worth saying out loud. */
   updatedAt?: number
   open: boolean
   onOpenChange: (open: boolean) => void

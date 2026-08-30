@@ -128,10 +128,10 @@ export class BrowserBridgeExecutor implements ToolExecutor {
 }
 
 /** Map a registry outcome onto the executor's result contract. */
-export function toExecutionResult(outcome: PendingOutcome<BridgeAnswer>): ToolExecutionResult {
+export const toExecutionResult = (outcome: PendingOutcome<BridgeAnswer>): ToolExecutionResult => {
   if (outcome.ok && 'output' in outcome.value) {
     const { output, logs } = outcome.value
-    return { status: 'ok', output: output.type === 'text' ? output.value : output.value, logs }
+    return { status: 'ok', output: output.value, logs }
   }
   if (outcome.ok) {
     const failure = outcome.value as { reason: string; error: string; logs?: string[] }

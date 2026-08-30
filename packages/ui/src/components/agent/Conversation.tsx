@@ -8,16 +8,12 @@ export interface ConversationProps extends Omit<HTMLAttributes<HTMLDivElement>, 
   children: ReactNode
 }
 
-/** Scroll container that stays pinned to the bottom while streaming, unless the user
- * scrolls up — plus a floating scroll-to-bottom button.
+/** Scroll container pinned to the bottom while streaming unless the user
+ * scrolls up, plus a floating scroll-to-bottom button.
  *
- * **Nothing here animates its scroll position.** `initial` and `resize` are both
- * `'instant'` and are no longer configurable: the follow spring's job is to
- * *stay* at the bottom, not to travel there, and every travel a reader has ever
- * complained about on this surface was an animation we asked for. The `resize`
- * prop used to exist so a caller could pick, which required the caller to know
- * whether the transcript was streaming or replaying — a latch's worth of
- * machinery to decide something that has one right answer. */
+ * **Nothing here animates its scroll position** — `initial` and `resize` are
+ * both `'instant'` and deliberately not configurable: the follow spring's job
+ * is to *stay* at the bottom, not to travel there. */
 export function Conversation({ className, children, ...props }: ConversationProps) {
   return (
     <StickToBottom

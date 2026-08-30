@@ -145,7 +145,7 @@ const CAPABILITY_TOOLS = {
  * a capability costs the host no branching. No declaration anywhere = everything
  * the host wired, which is what a host that ignores profiles gets.
  */
-export function createEngineSession(options: EngineSessionOptions): AiSdkRunner {
+export const createEngineSession = (options: EngineSessionOptions): AiSdkRunner => {
   // A rehydrated session brings its scratch filesystem back with it — the
   // deliverables and working files the parked turn already produced. `seedVfs`
   // is for a *new* session only, which is the whole reason it exists here
@@ -251,12 +251,12 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
  * namespace, so a genuinely tool-less server would trip it — the fix there is to
  * pass `mcp` rather than to weaken this.
  */
-function requireDeclaredServers(
+const requireDeclaredServers = (
   profileName: string,
   declared: string[] | undefined,
   mcp: McpConnection | undefined,
   tools: ToolSet | undefined,
-): void {
+): void => {
   if (!declared || declared.length === 0) {
     return
   }
@@ -291,7 +291,7 @@ function requireDeclaredServers(
  * connects everything once, each profile grants a subset. The transport configs —
  * and any credentials in their headers — never leave the host for a profile.
  */
-function selectMcpTools(tools: ToolSet | undefined, servers: string[] | undefined): ToolSet | undefined {
+const selectMcpTools = (tools: ToolSet | undefined, servers: string[] | undefined): ToolSet | undefined => {
   if (!tools || servers === undefined) {
     return tools
   }
@@ -324,7 +324,7 @@ export type McpConnection = {
  * error that names neither the method nor the route. This is the single most
  * common way an otherwise-correct MCP mount fails.
  */
-export async function connectMcpTools(
+export const connectMcpTools = async (
   servers: Record<string, McpServerConfigWire>,
   options: {
     /** `onError` may fire more than once for a single server: transport-level
@@ -343,7 +343,7 @@ export async function connectMcpTools(
      */
     required?: boolean
   } = {},
-): Promise<McpConnection> {
+): Promise<McpConnection> => {
   const entries = Object.entries(servers)
   if (entries.length === 0) {
     return { tools: {}, servers: [], close: async () => {} }
@@ -398,7 +398,7 @@ export async function connectMcpTools(
 }
 
 /** The connection's identity, minus its secrets — `headers` never travel. */
-function describeServer(server: McpServerConfigWire): Pick<McpServerStatusInfo, 'transport' | 'url' | 'command' | 'args'> {
+const describeServer = (server: McpServerConfigWire): Pick<McpServerStatusInfo, 'transport' | 'url' | 'command' | 'args'> => {
   if ('url' in server) {
     return { transport: server.type === 'sse' ? 'sse' : 'http', url: server.url }
   }
@@ -411,7 +411,7 @@ function describeServer(server: McpServerConfigWire): Pick<McpServerStatusInfo, 
  * so that is the only case where parameters are reported — `McpServerToolInfo`
  * models the absence deliberately, and inventing one here would be worse.
  */
-function toToolInfo(name: string, mcpTool: unknown): McpServerToolInfo {
+const toToolInfo = (name: string, mcpTool: unknown): McpServerToolInfo => {
   const { description, inputSchema } = (mcpTool ?? {}) as {
     description?: unknown
     inputSchema?: { jsonSchema?: unknown }
@@ -429,7 +429,7 @@ function toToolInfo(name: string, mcpTool: unknown): McpServerToolInfo {
  * misconfiguration worth surfacing rather than silently dropping — the Claude
  * engine still supports stdio, since the CLI spawns those itself.
  */
-function toTransport(server: McpServerConfigWire) {
+const toTransport = (server: McpServerConfigWire) => {
   if (!('url' in server)) {
     throw new Error(
       'stdio MCP servers are not supported by the model-agnostic engine (use an http or sse ' +

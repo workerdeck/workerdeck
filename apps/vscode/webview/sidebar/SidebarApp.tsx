@@ -24,39 +24,31 @@ import {
 
 type Persisted = { config?: ViewConfig }
 
-/** The resolved bytes for a session's project icon, if it has an image one and
- * the host has fetched it yet. Shared by the row and its group header so the
- * two cannot draw different pictures for one project. */
-function iconSrcOf(info: SessionInfo | undefined, icons: Record<string, string>): string | undefined {
+/** The resolved bytes for a session's project icon. Shared by the row and its group
+ * header so the two cannot draw different pictures for one project. */
+const iconSrcOf = (info: SessionInfo | undefined, icons: Record<string, string>): string | undefined => {
   const icon = info?.project?.icon
   return icon?.type === 'image' ? icons[icon.hash] : undefined
 }
 
 /**
- * The Sessions view: every gateway's sessions in one list, grouped and sorted,
- * and nothing else. No screens, no forms, no navigation — creating a session is
- * a native QuickPick and gateways are their own view, so there is nowhere in
- * here to get lost.
+ * The Sessions view: every gateway's sessions in one list, grouped and sorted, and
+ * nothing else — no screens, no forms, no navigation.
  *
- * Two things it does not own. The **filter bar** is revealed by a native
- * view-title toggle, because that is where a toggle whose icon has to change
- * state can actually live; the host holds that boolean and pushes it down. And
- * the **`+`** in that same title bar is the only way to start a session — this
- * body never grows a second button for it.
+ * Two things it does not own: the **filter bar**, revealed by a native view-title
+ * toggle whose boolean the host holds, and the **`+`** in that same title bar, which
+ * is the only way to start a session — this body never grows a second button for it.
  *
- * What it does own is the view config itself (search, facets, group, sort),
- * which it persists and mirrors to the host so the unread status-bar item counts
- * the same rows the list is showing.
+ * It does own the view config (search, facets, group, sort), which it persists and
+ * mirrors to the host so the unread item counts the rows the list is showing.
  */
 export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const [state, setState] = useState<SidebarState | undefined>(undefined)
-  // Merged, never replaced: the host sends each hash once as it resolves, and
-  // the whole map again after a `wd-ready` (a webview VS Code rebuilt has none).
+  // Merged, never replaced: the host sends each hash once as it resolves.
   const [projectIcons, setProjectIcons] = useState<Record<string, string>>({})
   const [filterOpen, setFilterOpen] = useState(false)
   const persisted = bridge.getState<Persisted>()
-  // Spread over the defaults, not instead of them: a config persisted by an
-  // older build is missing whatever fields have been added since.
+  // Spread over the defaults: a config persisted by an older build is missing newer fields.
   const [config, setConfig] = useState<ViewConfig>({
     ...DEFAULT_VIEW_CONFIG,
     ...persisted?.config,
@@ -67,9 +59,8 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
     bridge.setState<Persisted>({ config })
   }, [bridge, config])
 
-  // …and the host mirrors it, so the unread status-bar item counts the rows this
-  // list is showing rather than every session on every gateway. One-way: the
-  // webview owns the config, the host only reads it.
+  // …and the host mirrors it, so the unread item counts the rows this list is showing.
+  // One-way: the webview owns the config, the host only reads it.
   useEffect(() => {
     bridge.post({ kind: 'wd-view-config', config })
   }, [bridge, config])
@@ -103,24 +94,18 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const scoping = scopeActive(config, scope)
   const subset = subsetSummary(config, scope, filtered.length, rows.length)
   /**
-   * `state.selected` if it names *this* row, otherwise undefined.
-   *
-   * Matched on **host and session**, not on session alone. Two gateways can
-   * hand out the same session id — the ids come from the engines, not from us —
-   * and the list is flat across every connected gateway, so an id-only test
-   * lights the wrong card in the one situation this window exists to make
-   * legible. The old `state?.selected?.sessionId === row.info.id` had that bug
-   * and it was invisible with one gateway attached, which is how it survived.
+   * `state.selected` if it names *this* row. Matched on **host and session**, never on
+   * session alone: ids come from the engines, so two gateways can hand out the same
+   * one, and an id-only test lights the wrong card in exactly the multi-gateway case
+   * this window exists to make legible.
    */
   const selectedIs = (row: SessionRow) =>
     state?.selected?.hostId === row.hostId && state.selected.sessionId === row.info.id ? state.selected : undefined
 
   return (
     <div className="flex h-screen flex-col text-body-sm">
-      {/* Behind the title bar's filter toggle. Hidden by default, which is the
-          whole reason the subset line below is unconditional: a list that is
-          quietly hiding rows must say so even when the control doing it is not
-          on screen. */}
+      {/* Behind the title bar's filter toggle, and hidden by default — which is why the
+          subset line below is unconditional. */}
       {filterOpen ? (
         <ViewConfigPanel config={config} hosts={hosts} adapters={adapters} projects={projects} scope={scope} onChange={setConfig} />
       ) : null}
@@ -157,8 +142,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             }
           />
         ) : groups.length === 0 ? (
-          // Three different nothings, and they want different sentences: the
-          // filter matched none, the scope holds none, or there are none.
+          // Three different nothings: the filter matched none, the scope holds none, or there are none.
           subset ? (
             scoping && !hasFacetFilter(config) ? (
               <Empty
@@ -193,8 +177,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             <div key={group.key} className="flex flex-col gap-1">
               {group.label ? (
                 <div className="flex items-center gap-1.5 px-1.5 pb-0.5 pt-1.5 text-label font-semibold uppercase tracking-wide text-fg-4">
-                  {/* Only the project facet has a mark of its own, and every
-                      row in the group shares it by construction (a group IS one
+                  {/* Every row in the group shares the mark by construction (a group IS one
                       project root), so the first row is a fair source. */}
                   {config.groupBy === 'project' ? (
                     <ProjectIcon
@@ -214,10 +197,8 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
                   showGateway={config.groupBy !== 'gateway' && hosts.length > 1}
                   projectIcons={projectIcons}
                   selected={selectedIs(row) !== undefined}
-                  /* Only THIS card's frame. `selected` is one object for the
-                     whole list, so reading its `subagentToolUseId` unguarded
-                     would hand every card the same key and turn all of them
-                     grey the moment any one agent opened. */
+                  /* Only THIS card's frame: `selected` is one object for the whole list, so
+                     reading its `subagentToolUseId` unguarded turns every card grey. */
                   activeSubagentId={selectedIs(row)?.subagentToolUseId}
                   onSelect={() =>
                     bridge.post({

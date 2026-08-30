@@ -13,29 +13,25 @@ const USAGE = {
 
 // The runner streams every model call (doStream, not doGenerate). One entry =
 // one LLM call; text arrives as deltas like a real provider would send it.
-function textResponse(text: string) {
-  return {
-    stream: convertArrayToReadableStream([
-      { type: 'stream-start' as const, warnings: [] },
-      { type: 'text-start' as const, id: 't1' },
-      ...[...text].map((ch) => ({ type: 'text-delta' as const, id: 't1', delta: ch })),
-      { type: 'text-end' as const, id: 't1' },
-      { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
-    ]),
-  }
-}
+const textResponse = (text: string) => ({
+  stream: convertArrayToReadableStream([
+    { type: 'stream-start' as const, warnings: [] },
+    { type: 'text-start' as const, id: 't1' },
+    ...[...text].map((ch) => ({ type: 'text-delta' as const, id: 't1', delta: ch })),
+    { type: 'text-end' as const, id: 't1' },
+    { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
+  ]),
+})
 
-function toolCallResponse(toolCallId: string, toolName: string, input: unknown) {
-  return {
-    stream: convertArrayToReadableStream([
-      { type: 'stream-start' as const, warnings: [] },
-      { type: 'tool-call' as const, toolCallId, toolName, input: JSON.stringify(input) },
-      { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
-    ]),
-  }
-}
+const toolCallResponse = (toolCallId: string, toolName: string, input: unknown) => ({
+  stream: convertArrayToReadableStream([
+    { type: 'stream-start' as const, warnings: [] },
+    { type: 'tool-call' as const, toolCallId, toolName, input: JSON.stringify(input) },
+    { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
+  ]),
+})
 
-function makeRunner(config: Partial<AiSdkRunnerConfig> & { languageModel: AiSdkRunnerConfig['languageModel'] }) {
+const makeRunner = (config: Partial<AiSdkRunnerConfig> & { languageModel: AiSdkRunnerConfig['languageModel'] }) => {
   const runner = new AiSdkRunner({ ...config })
   const events: SessionEvent[] = []
   runner.subscribe((e) => events.push(e))

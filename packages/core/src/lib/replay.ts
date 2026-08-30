@@ -27,7 +27,7 @@ import {
  * `afterSeq` is honoured so the scan agrees with the caller's replay window: an
  * event the caller was never going to send must not suppress one it was.
  */
-export function staleReplaySeqs(events: readonly SessionEvent[], afterSeq: number): Set<number> {
+export const staleReplaySeqs = (events: readonly SessionEvent[], afterSeq: number): Set<number> => {
   const stale = new Set<number>()
   const seen = new Set<string>()
   for (let index = events.length - 1; index >= 0; index--) {
@@ -49,45 +49,32 @@ export function staleReplaySeqs(events: readonly SessionEvent[], afterSeq: numbe
 }
 
 /**
- * The one replay body, and what a socket receives from it.
- *
- * Every runner had a byte-identical copy of this loop — three spellings of four
- * rules, one of which ("never drop the highest-seq event, whatever the rule
- * says") is load-bearing and was three copies of a comment. Not a base class:
- * the runners share nothing else, and a base class would have to own `#emit`,
- * the most engine-specific method each of them has.
- *
- * The rules, in the order they are applied:
+ * The one replay body every runner delivers through. The rules, in the order
+ * they are applied:
  *
  * 1. `afterSeq` — the caller already holds everything at or below it.
  * 2. `resetSeq` — transcript *content* strictly below the latest
  *    `conversation_reset` is skipped, so a re-attach cannot resurrect a cleared
  *    conversation while state events still replay. **Every engine that can emit
- *    a reset must track it and pass it** — this was Claude's alone only for as
- *    long as Claude's was the only engine that could produce the event, and the
- *    failure when a runner forgets is quiet: the end state is right for a
- *    current reducer, so nothing looks broken while every attach re-sends the
- *    whole cleared conversation for the process's lifetime.
+ *    a reset must track it and pass it** — a runner that forgets fails quietly:
+ *    the end state looks right while every attach re-sends the whole cleared
+ *    conversation.
  * 3. `coalesceReplay` — last-write-wins state readings superseded later in the
  *    same replay (`staleReplaySeqs`), plus everything `replayRetains` says the
- *    reducer reads and discards. Opt-in, and only sound for a consumer whose
- *    handling of those events is last-write-wins.
- * 4. `imageRefs` — a base64 image part is delivered as an `image_ref` address
- *    (protocol's {@link imagePartRef}), its bytes one REST fetch away. Applied
- *    **before** rule 5, because it stamps indices from the stored part array
- *    which rule 5 then reshapes. Unlike rule 5 this also applies to the live
- *    path (see `SubscriberSet`), which is the one place these two rules differ.
+ *    reducer reads and discards. Only sound for a last-write-wins consumer.
+ * 4. `imageRefs` — a base64 image part becomes an `image_ref` address
+ *    ({@link imagePartRef}). Applied **before** rule 5, because it stamps
+ *    indices from the stored part array which rule 5 then reshapes; also the
+ *    only rule that applies to the live path (see `SubscriberSet`).
  * 5. `truncateResults` — a huge `tool_result` block is delivered as its head
  *    plus the markers that say so. **Never mutates the stored event**: the live
- *    path, the parking snapshot and the fetch route all need the whole thing,
- *    so this builds a copy and the log stays the log.
+ *    path, the parking snapshot and the fetch route all need the whole thing.
  *
  * The highest-seq event is delivered whatever rules 2 and 3 say — a client's
  * replay hold waits for `state.lastSeq` to reach the attach's and would
- * otherwise hang forever — but it is still *truncated* when rule 4 applies. A
- * session that ends on a `find /` puts its 641 KB frame exactly there.
+ * otherwise hang forever — but it is still truncated when rule 4 applies.
  */
-export function replaySlice(
+export const replaySlice = (
   events: readonly SessionEvent[],
   options: {
     afterSeq: number
@@ -96,7 +83,7 @@ export function replaySlice(
     truncateResults?: boolean
     imageRefs?: boolean
   },
-): SessionEvent[] {
+): SessionEvent[] => {
   const { afterSeq, resetSeq = 0, coalesceReplay, truncateResults, imageRefs } = options
   const stale = coalesceReplay ? staleReplaySeqs(events, afterSeq) : undefined
   const lastSeq = events[events.length - 1]?.seq ?? 0
@@ -138,7 +125,7 @@ export function replaySlice(
  * where one is a `find /` keeps the two small results whole, which is what makes
  * the per-block marker (rather than a per-event one) honest.
  */
-export function truncateResultBlocks(event: SessionEvent): SessionEvent {
+export const truncateResultBlocks = (event: SessionEvent): SessionEvent => {
   if (event.type !== 'user_message') {
     return event
   }
@@ -178,7 +165,7 @@ export function truncateResultBlocks(event: SessionEvent): SessionEvent {
  * is exactly what `blockText` in the reducer builds. Non-text parts (an image
  * block) contribute nothing, because they are not what is large here and
  * slicing them would corrupt them. */
-function resultChars(content: ToolResultBlock['content']): number {
+const resultChars = (content: ToolResultBlock['content']): number => {
   if (typeof content === 'string') {
     return content.length
   }
@@ -194,7 +181,7 @@ function resultChars(content: ToolResultBlock['content']): number {
  * reducer, both renderers and the copy button all read this the same way they
  * read a whole one, so truncation is a shorter result and never a different
  * kind of one. */
-function headOf(content: ToolResultBlock['content'], chars: number): ToolResultBlock['content'] {
+const headOf = (content: ToolResultBlock['content'], chars: number): ToolResultBlock['content'] => {
   if (typeof content === 'string') {
     return content.slice(0, chars)
   }
@@ -245,7 +232,7 @@ function headOf(content: ToolResultBlock['content'], chars: number): ToolResultB
  * computed on its output would name the wrong part of the stored block. That
  * ordering is asserted in `replay-image-ref.test.ts`, not merely intended.
  */
-export function refImageParts(event: SessionEvent): SessionEvent {
+export const refImageParts = (event: SessionEvent): SessionEvent => {
   if (event.type !== 'user_message') {
     return event
   }

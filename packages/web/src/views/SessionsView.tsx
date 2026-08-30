@@ -37,8 +37,7 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
         ...form.sessionFields({
           prompt: resume ? undefined : form.prompt.trim() || undefined,
           resume: resume?.sessionId,
-          // An interactive session pre-authorizes the switch because the
-          // operator is present — the CLI refuses it mid-session otherwise.
+          // The operator is present, and the CLI refuses this switch mid-session.
           allowBypass: true,
         }),
         // A resumed session runs where it was stored, not where the form points.
@@ -59,8 +58,7 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
     }
     setLoadingSdk(true)
     try {
-      // Named so the server lists the CHOSEN profile's engine store (codex
-      // threads vs Agent SDK sessions) rather than the legacy claude default.
+      // Named, so the server lists the CHOSEN profile's engine store rather than claude's.
       setSdkSessions(
         await client()!.listSdkSessions({
           dir: form.cwd.trim(),
@@ -81,8 +79,7 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
         form={form}
         sessions={sessions}
         promptLabel="Initial prompt (optional)"
-        // The list is per-profile (per-engine store) — another profile's rows
-        // would offer resumes this engine can't honor.
+        // Per-profile: another profile's rows would offer resumes this engine can't honor.
         onProfileChange={() => setSdkSessions(undefined)}
         actions={
           <Button className="ml-auto" onClick={() => void create()} disabled={creating}>
@@ -92,9 +89,8 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
         }
       />
 
-      {/* Resume is a peer of create, not a footnote: same directory, same
-          profile, diverging only at the last step. The engine needs a browsable
-          session store for it to mean anything. */}
+      {/* Resume is a peer of create — same directory, same profile — and needs the engine to
+          have a browsable session store. */}
       {!engine.capabilities.listSessions ? null : (
         <div className="mt-1 border-t border-border pt-3">
           <div className="flex items-center justify-between">
@@ -132,13 +128,7 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
   )
 }
 
-/**
- * The create-session dialog, owned by whoever raises it.
- *
- * Extracted because the `+` that opens it now lives in the sessions sidebar
- * (which is shell, not route) while the form itself belongs beside the rest of
- * the session-creation code.
- */
+/** The create-session dialog, raised from the sidebar's `+` (which is shell, not route). */
 export function CreateSessionDialog({
   open,
   onOpenChange,
@@ -162,13 +152,7 @@ export function CreateSessionDialog({
   )
 }
 
-/**
- * What fills the editor area when no session is open.
- *
- * The list itself is the sidebar now, so this route has nothing to list — it is
- * VS Code's empty editor group: says where you are and points at the one control
- * that does something.
- */
+/** What fills the editor area when no session is open — the list itself is the sidebar. */
 export function SessionsView() {
   return (
     <div className="flex flex-1 items-center justify-center p-8">

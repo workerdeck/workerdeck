@@ -51,7 +51,7 @@ import { dirname, join, resolve, sep } from 'node:path'
 
 const BARE_KEY = /[A-Za-z0-9_-]/
 
-function skipWs(text: string, pos: number): number {
+const skipWs = (text: string, pos: number): number => {
   let i = pos
   while (i < text.length && (text[i] === ' ' || text[i] === '\t')) {
     i++
@@ -64,7 +64,7 @@ type Parsed<T> = { value: T; end: number } | undefined
 /** One-line TOML basic string starting at `pos` (which must be `"`). Undefined
  * on an escape TOML doesn't define or a close quote that never comes — the
  * caller refuses the file rather than guessing what codex would read. */
-function parseBasicString(text: string, pos: number): Parsed<string> {
+const parseBasicString = (text: string, pos: number): Parsed<string> => {
   let out = ''
   let i = pos + 1
   while (i < text.length) {
@@ -113,7 +113,7 @@ function parseBasicString(text: string, pos: number): Parsed<string> {
 }
 
 /** One-line TOML literal string starting at `pos` (which must be `'`). */
-function parseLiteralString(text: string, pos: number): Parsed<string> {
+const parseLiteralString = (text: string, pos: number): Parsed<string> => {
   const close = text.indexOf("'", pos + 1)
   if (close === -1) {
     return undefined
@@ -123,7 +123,7 @@ function parseLiteralString(text: string, pos: number): Parsed<string> {
 
 /** A dotted key path — bare, `"basic"` and `'literal'` keys, whitespace around
  * the dots — as found in table headers and on the left of assignments. */
-function parseKeyPath(text: string, pos: number): Parsed<string[]> {
+const parseKeyPath = (text: string, pos: number): Parsed<string[]> => {
   const keys: string[] = []
   let i = pos
   for (;;) {
@@ -163,7 +163,7 @@ function parseKeyPath(text: string, pos: number): Parsed<string[]> {
  * sections and entries — the exact mistake that could flip a real trust entry
  * — so they are not parsed around, they end the attempt.
  */
-function scanValueLine(text: string, pos: number, depth: number): { depth: number; value?: string } | undefined {
+const scanValueLine = (text: string, pos: number, depth: number): { depth: number; value?: string } | undefined => {
   let i = skipWs(text, pos)
   if (depth === 0 && (text[i] === '"' || text[i] === "'")) {
     if (text.startsWith('"""', i) || text.startsWith("'''", i)) {
@@ -220,7 +220,7 @@ function scanValueLine(text: string, pos: number, depth: number): { depth: numbe
  * undefined as "cannot know" and stays silent. Conflicting duplicate entries
  * also refuse — invalid for TOML, and guessing wrong is a false notice.
  */
-export function parseProjectTrustEntries(source: string): Map<string, string> | undefined {
+export const parseProjectTrustEntries = (source: string): Map<string, string> | undefined => {
   const entries = new Map<string, string>()
   let section: string[] = []
   let carryDepth = 0
@@ -305,7 +305,7 @@ export function parseProjectTrustEntries(source: string): Map<string, string> | 
  * anchor to look up. Anything unreadable or shaped differently resolves false
  * — this route can only ADD trust, i.e. silence, never a false notice.
  */
-function mainRepositoryTrusted(gitRootDir: string, canonical: Map<string, string>): boolean {
+const mainRepositoryTrusted = (gitRootDir: string, canonical: Map<string, string>): boolean => {
   const gitPath = join(gitRootDir, '.git')
   try {
     if (!statSync(gitPath).isFile()) {
@@ -341,7 +341,7 @@ function mainRepositoryTrusted(gitRootDir: string, canonical: Map<string, string
  * lines — trusting a directory is the operator's decision, made in codex's
  * own prompt or by their own hand).
  */
-export function untrustedProjectNotice(options: { cwd: string; codexHome: string }): string | undefined {
+export const untrustedProjectNotice = (options: { cwd: string; codexHome: string }): string | undefined => {
   let cwd: string
   try {
     cwd = realpathSync(options.cwd)

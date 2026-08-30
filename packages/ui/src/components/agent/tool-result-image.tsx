@@ -2,22 +2,14 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import type { WorkerDeckClient } from '@workerdeck/client'
 
 /**
- * How a row gets the picture the replay refused to send.
+ * How a row gets the picture the replay refused to send: an opted-in socket
+ * delivers a base64 `image` part as an `image_ref` and the bytes are fetched
+ * over REST by whoever is looking at the row.
  *
- * The sibling of `tool-result-fetch.tsx` and the same shape of seam, because it
- * answers the same shape of question: an opted-in socket delivers a base64
- * `image` part as an `image_ref` — media type, decoded size, and its index in
- * the stored block — and the bytes are fetched over REST by whoever is actually
- * looking at the row. Across a measured corpus that payload was 91% of every
- * tool result and nothing rendered a byte of it.
- *
- * A **context**, not a prop chain, for the variant's reason: the rows are drawn
- * by `terminalBlocks` and by `ToolCallCard`, several layers under whoever holds
- * the session. The default resolves `undefined`, which is exactly right for
- * every surface that never asked (the playground, a fixture, a hand-composed
- * row): `result.images` is only ever set by a replay a renderer opted into, so a
- * row with no loader also has no reference to load. Only `SessionPanel` supplies
- * a real one, because it owns the session's one attach and therefore the only
+ * The default resolves `undefined`, correct for every surface that never asked:
+ * `result.images` is only ever set by a replay a renderer opted into, so a row
+ * with no loader also has no reference to load. Only `SessionPanel` supplies a
+ * real one — it owns the session's one attach and therefore the only
  * `(seq, toolUseId)` addresses that mean anything.
  */
 
@@ -52,24 +44,17 @@ export function useToolResultImageLoader(): ToolResultImageLoader {
 
 /**
  * Long enough that a fast scrub through an image-heavy session fetches nothing
- * it flew past, short enough to be invisible to a reader who stopped.
- *
- * There is no second visibility system here on purpose: the transcript is
- * virtualized, so a *mounted* row is by definition within an overscan of the
- * viewport — the virtualizer already is the IntersectionObserver, and a second
- * answer to a question that has one is how the two disagree.
+ * it flew past. No IntersectionObserver beside it on purpose: the transcript is
+ * virtualized, so a mounted row is already within an overscan of the viewport.
  */
 const MOUNT_SETTLE_MS = 150
 
 export type ToolResultImageState = { src?: string; failed: boolean }
 
 /**
- * One box's load, for either theme.
- *
- * Fires once the row has been mounted for {@link MOUNT_SETTLE_MS}, and then
- * **runs to completion** — an aborted fetch re-pays the whole image on the
- * return visit, and the gateway is HTTP/1.1, so the browser's per-origin
- * connection cap is the concurrency throttle for free.
+ * One box's load, for either theme. Fires once the row has been mounted for
+ * {@link MOUNT_SETTLE_MS} and then **runs to completion** — an aborted fetch
+ * re-pays the whole image on the return visit.
  *
  * The effect keys on the address's *primitives*, never on the ref object: the
  * reducer replaces items on every streamed delta, so an object-identity dep
@@ -111,19 +96,13 @@ const CACHE_BUDGET_BYTES = 64 * 1024 * 1024
 type Entry = { pending: Promise<string | undefined>; url?: string; bytes: number }
 
 /**
- * `useHostImage`'s shape, generalized to the replay route — and **bounded**,
- * which `useHostImage` is not.
+ * `useHostImage`'s shape generalized to the replay route, and **bounded**.
  *
- * The promise-per-key cache is what makes this callable from a transcript row at
- * all: rows re-render on every streamed delta, and an uncached resolver would
- * re-fetch each time. The LRU is the part that is new. Object URLs pin their
- * blob until revoked, so a fully-scrolled hundred-image session would otherwise
- * hold ~50 MB until the panel unmounted — and evicting means revoking, or the
- * eviction frees a `Map` entry and nothing else.
- *
- * Re-fetching on a return scroll is fine, and is the whole design: the bytes are
- * one authenticated request away, which is precisely what makes it cheap not to
- * have shipped them in the attach.
+ * The promise-per-key cache is what makes this callable from a transcript row:
+ * rows re-render on every streamed delta, and an uncached resolver would
+ * re-fetch each time. **Eviction must revoke** — object URLs pin their blob
+ * until revoked, so freeing only the `Map` entry frees nothing. Re-fetching on
+ * a return scroll is the design.
  */
 export function useToolResultImages(client: WorkerDeckClient, sessionId: string | undefined): ToolResultImageLoader {
   const cache = useRef(new Map<string, Entry>())
@@ -143,8 +122,7 @@ export function useToolResultImages(client: WorkerDeckClient, sessionId: string 
       if (!sessionId) {
         return Promise.resolve(undefined)
       }
-      // The whole address, because every part of it can change under a row that
-      // is still on screen: a dormant wake restarts the seqs, and a cached
+      // The whole address: a dormant wake restarts the seqs, and a cached
       // address that outlived its log must miss rather than serve another
       // call's pixels.
       const key = `${sessionId}:${ref.sourceSeq}:${ref.toolUseId}:${ref.partIndex}`
@@ -156,9 +134,8 @@ export function useToolResultImages(client: WorkerDeckClient, sessionId: string 
         cache.current.set(key, hit)
         return hit.pending
       }
-      // Fetched rather than pointed at: a bare `<img src>` at the gateway
-      // carries a credential in exactly one of four clients (the dashboard's
-      // same-origin host), and a broken icon in the other three.
+      // Fetched rather than pointed at: a bare `<img src>` carries a credential
+      // in only one of the four clients (the dashboard's same-origin host).
       const pending = client
         .toolResultImage(sessionId, ref.sourceSeq, ref.toolUseId, ref.partIndex)
         .then((blob) => {
@@ -172,15 +149,14 @@ export function useToolResultImages(client: WorkerDeckClient, sessionId: string 
             entry.bytes = blob.size
             evict(cache.current, key)
           } else {
-            // Evicted (or unmounted) while in flight — nothing will ever draw
-            // this, and an unrevoked URL is the leak the budget exists to stop.
+            // Evicted while in flight — an unrevoked URL is the leak the budget
+            // exists to stop.
             URL.revokeObjectURL(url)
           }
           return url
         })
         .catch(() => undefined)
-      // The declared size is what the budget counts until the bytes land: a
-      // hundred fetches in flight must not all read as free.
+      // The declared size is what the budget counts until the bytes land.
       cache.current.set(key, { pending, bytes: ref.bytes })
       return pending
     },
@@ -191,7 +167,7 @@ export function useToolResultImages(client: WorkerDeckClient, sessionId: string 
 /** Drop oldest-first until the held bytes fit the budget, revoking as it goes.
  * `keep` is the entry just resolved — evicting the picture a row is about to
  * draw would be a fetch spent on nothing. */
-function evict(cache: Map<string, Entry>, keep: string): void {
+const evict = (cache: Map<string, Entry>, keep: string): void => {
   let held = 0
   for (const entry of cache.values()) {
     held += entry.bytes

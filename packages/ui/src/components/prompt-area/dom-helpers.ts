@@ -7,9 +7,17 @@
 
 import type { ChipSegment } from './types.ts'
 
-// ---------------------------------------------------------------------------
+/** URL pattern for detecting URLs in text content. */
+const URL_PATTERN = /https?:\/\/[^\s),]+/g
+/** Matches ***bold-italic***, **bold**, and *italic* spans. */
+const MARKDOWN_INLINE_PATTERN = /(\*{3})(.+?)\*{3}|(\*{2})(.+?)\*{2}|(\*)(.+?)\*/g
+/** Matches a `•` bullet glyph at the start of a line (optionally indented). */
+const LIST_BULLET_PATTERN = /(^|\n)([ \t]*)•/g
+/** A list line's leading indentation; the lookahead keeps the prefix itself out of the
+ * capture, so only the indentation is wrapped. */
+const LIST_INDENT_PATTERN = /(^|\n)([ \t]+)(?=(?:[•\-*] |\d+\. ))/g
+
 // Type Guards
-// ---------------------------------------------------------------------------
 
 /**
  * Type guard: checks if a DOM node is an HTMLElement.
@@ -56,9 +64,7 @@ export function isLinkElement(node: Node): node is HTMLAnchorElement {
   return node instanceof HTMLAnchorElement && node.dataset.url === 'true'
 }
 
-// ---------------------------------------------------------------------------
 // Safe JSON
-// ---------------------------------------------------------------------------
 
 /**
  * Safely parses a JSON string, returning `unknown` instead of `any`.
@@ -86,9 +92,7 @@ export function safeJsonStringify(value: unknown): string | undefined {
   }
 }
 
-// ---------------------------------------------------------------------------
 // DOM reading helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Reads the chip trigger character from a chip element's dataset.
@@ -183,9 +187,7 @@ export function chipNodeToSegment(node: Node): ChipSegment | null {
   }
 }
 
-// ---------------------------------------------------------------------------
 // DOM manipulation helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Finds the index of a direct child node within a parent element.
@@ -270,12 +272,10 @@ export function getDirectChildContaining(ancestor: HTMLElement, descendant: Node
 export function unwrapBlockElement(parent: HTMLElement, block: HTMLElement): void {
   const fragment = document.createDocumentFragment()
 
-  // Move all children to fragment
   while (block.firstChild) {
     fragment.appendChild(block.firstChild)
   }
 
-  // Add a BR after the unwrapped content
   fragment.appendChild(document.createElement('br'))
 
   parent.replaceChild(fragment, block)
@@ -302,7 +302,6 @@ export function normalizeEditorDOM(editor: HTMLElement): boolean {
   for (let i = editor.childNodes.length - 1; i >= 0; i--) {
     const child = editor.childNodes[i]
 
-    // Skip non-element nodes, chip elements, and BR elements
     if (!(child instanceof HTMLElement)) {
       continue
     }
@@ -338,18 +337,12 @@ export function normalizeEditorDOM(editor: HTMLElement): boolean {
     }
   }
 
-  // Merge adjacent text nodes
   editor.normalize()
 
   return changed
 }
 
-// ---------------------------------------------------------------------------
 // URL decoration
-// ---------------------------------------------------------------------------
-
-/** URL pattern for detecting URLs in text content */
-const URL_PATTERN = /https?:\/\/[^\s),]+/g
 
 /**
  * Walks direct-child text nodes in the editor and wraps URL text in
@@ -422,12 +415,10 @@ export function decorateURLsInEditor(editor: HTMLElement): boolean {
     let lastIndex = 0
 
     for (const { url, href, index } of safeMatches) {
-      // Text before this URL
       if (index > lastIndex) {
         fragment.appendChild(document.createTextNode(text.slice(lastIndex, index)))
       }
 
-      // Create the link element
       const anchor = document.createElement('a')
       anchor.href = href
       anchor.target = '_blank'
@@ -440,7 +431,6 @@ export function decorateURLsInEditor(editor: HTMLElement): boolean {
       lastIndex = index + url.length
     }
 
-    // Text after the last URL
     if (lastIndex < text.length) {
       fragment.appendChild(document.createTextNode(text.slice(lastIndex)))
     }
@@ -451,12 +441,7 @@ export function decorateURLsInEditor(editor: HTMLElement): boolean {
   return decorated
 }
 
-// ---------------------------------------------------------------------------
 // Markdown inline decoration
-// ---------------------------------------------------------------------------
-
-/** Pattern to find ***bold-italic***, **bold**, and *italic* markdown spans */
-const MARKDOWN_INLINE_PATTERN = /(\*{3})(.+?)\*{3}|(\*{2})(.+?)\*{2}|(\*)(.+?)\*/g
 
 /**
  * Walks direct-child text nodes in the editor and wraps markdown-formatted
@@ -540,7 +525,6 @@ export function decorateMarkdownInEditor(editor: HTMLElement): boolean {
     let lastIndex = 0
 
     for (const { fullMatch, marker, content, index, className } of matches) {
-      // Text before this match
       if (index > lastIndex) {
         fragment.appendChild(document.createTextNode(text.slice(lastIndex, index)))
       }
@@ -554,7 +538,6 @@ export function decorateMarkdownInEditor(editor: HTMLElement): boolean {
       openMarker.className = 'prompt-area-md-marker'
       openMarker.textContent = marker
 
-      // Styled content
       const styledContent = document.createElement('span')
       styledContent.className = className
       styledContent.textContent = content
@@ -572,7 +555,6 @@ export function decorateMarkdownInEditor(editor: HTMLElement): boolean {
       lastIndex = index + fullMatch.length
     }
 
-    // Text after the last match
     if (lastIndex < text.length) {
       fragment.appendChild(document.createTextNode(text.slice(lastIndex)))
     }
@@ -582,9 +564,6 @@ export function decorateMarkdownInEditor(editor: HTMLElement): boolean {
 
   return decorated
 }
-
-/** Matches a `•` bullet glyph at the start of a line (optionally indented). */
-const LIST_BULLET_PATTERN = /(^|\n)([ \t]*)•/g
 
 /**
  * Walks direct-child text nodes and wraps each line-leading `•` bullet glyph in
@@ -652,13 +631,6 @@ export function decorateBulletsInEditor(editor: HTMLElement): boolean {
 
   return decorated
 }
-
-/**
- * Matches the line-leading whitespace run of an indented list line (bullet or
- * numbered). The lookahead keeps the list prefix itself out of the capture, so
- * only the indentation is wrapped.
- */
-const LIST_INDENT_PATTERN = /(^|\n)([ \t]+)(?=(?:[•\-*] |\d+\. ))/g
 
 /**
  * Wraps each list line's leading indentation in an inline-block
@@ -762,9 +734,7 @@ export function decorateEditor(editor: HTMLElement, markdownEnabled: boolean): v
   }
 }
 
-// ---------------------------------------------------------------------------
 // Selection helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Returns the first Range from the current window selection, or null if

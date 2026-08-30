@@ -34,6 +34,16 @@ const streamCall = (toolCallId: string, toolName: string, input: unknown) => ({
   ]),
 })
 
+const waitFor = async (predicate: () => boolean, ms = 5000): Promise<void> => {
+  const deadline = Date.now() + ms
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error('timed out waiting for condition')
+    }
+    await new Promise((r) => setTimeout(r, 5))
+  }
+}
+
 /**
  * The M1+M2 seam end to end: the model calls an execute-less `eval_script`
  * tool, which parks the loop; the host dispatches it through the sandbox
@@ -151,13 +161,3 @@ describe('agent loop + sandboxed tool execution', () => {
     expect(runner.info().status).toBe('idle')
   })
 })
-
-async function waitFor(predicate: () => boolean, ms = 5000): Promise<void> {
-  const deadline = Date.now() + ms
-  while (!predicate()) {
-    if (Date.now() > deadline) {
-      throw new Error('timed out waiting for condition')
-    }
-    await new Promise((r) => setTimeout(r, 5))
-  }
-}

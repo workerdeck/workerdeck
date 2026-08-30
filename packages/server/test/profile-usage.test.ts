@@ -89,7 +89,7 @@ afterEach(async () => {
   }
 })
 
-async function startGateway(): Promise<Gateway> {
+const startGateway = async (): Promise<Gateway> => {
   const built: ReportingRunner[] = []
   const server = createWorkerServer({
     allowUnauthenticated: true,

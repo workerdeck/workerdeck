@@ -25,7 +25,7 @@ import type { SessionInfo, SessionRow, SubagentInfo, ViewConfig, WorkspaceScope 
  * these are the rules, not one client's preferences.
  */
 
-function info(over: Partial<SessionInfo> = {}): SessionInfo {
+const info = (over: Partial<SessionInfo> = {}): SessionInfo => {
   return {
     id: 'sess-00000001',
     status: 'idle',
@@ -38,7 +38,7 @@ function info(over: Partial<SessionInfo> = {}): SessionInfo {
   } as SessionInfo
 }
 
-function row(over: Partial<SessionRow> = {}): SessionRow {
+const row = (over: Partial<SessionRow> = {}): SessionRow => {
   const inf = over.info ?? info()
   return {
     hostId: 'mac',

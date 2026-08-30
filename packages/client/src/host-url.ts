@@ -1,16 +1,13 @@
 /**
  * Pure URL logic for gateway hosts — what an operator types, turned into the
- * `baseUrl` a `WorkerDeckClient` takes.
- *
- * Here rather than in each client because there were already two copies (the iOS
- * `Host.apiURL` and the VS Code extension's port) and a third was coming. Every
- * host that lets someone type a gateway address has to normalize it the same
- * way, or the same gateway saved on two devices is two gateways.
+ * `baseUrl` a `WorkerDeckClient` takes. Every host that lets someone type a gateway
+ * address must normalize it identically, or the same gateway saved on two devices
+ * is two gateways.
  */
 export type HostUrl = { baseUrl: string }
 
 /** Normalized REST base for `WorkerDeckClient`, or undefined if unparseable. */
-export function apiUrl(host: HostUrl): string | undefined {
+export const apiUrl = (host: HostUrl): string | undefined => {
   let text = host.baseUrl.trim()
   while (text.endsWith('/')) {
     text = text.slice(0, -1)
@@ -19,7 +16,7 @@ export function apiUrl(host: HostUrl): string | undefined {
     return undefined
   }
   // A bare `mac.tailnet.ts.net:8787` is a host:port, not a scheme — tailnet
-  // gateways are plain http, so that is the sane default to assume.
+  // gateways are plain http, so that is the default to assume.
   if (!text.includes('://')) {
     text = 'http://' + text
   }
@@ -37,11 +34,9 @@ export function apiUrl(host: HostUrl): string | undefined {
 
 /**
  * Whether this gateway is the machine the caller runs on. Decided from the URL,
- * never by probing paths for existence — two checkouts of the same repo would
- * lie. In a remote development window the caller runs on the remote box, so
- * "loopback" correctly means *that* machine and its paths are real files there.
+ * never by probing paths for existence — two checkouts of the same repo would lie.
  */
-export function isLoopbackHost(host: HostUrl): boolean {
+export const isLoopbackHost = (host: HostUrl): boolean => {
   const api = apiUrl(host)
   if (!api) {
     return false

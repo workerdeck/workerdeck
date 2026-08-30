@@ -6,7 +6,7 @@ import { applyEvent, initialTranscriptState, seedFromSessionInfo, type Transcrip
 let seq = 0
 const ev = (body: SessionEventBody): SessionEvent => ({ ...body, seq: ++seq, ts: 0 })
 
-function run(state: TranscriptState, bodies: SessionEventBody[]): TranscriptState {
+const run = (state: TranscriptState, bodies: SessionEventBody[]): TranscriptState => {
   return bodies.reduce((s, body) => applyEvent(s, ev(body)), state)
 }
 

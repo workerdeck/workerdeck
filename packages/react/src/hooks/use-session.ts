@@ -16,7 +16,7 @@ type HydrateAction = { type: 'transcript_hydrate_result'; toolUseId: string; tex
 
 /** Session events drive the reducer; the attach snapshot seeds fields (permission
  * mode, model) that a promptless session's event stream doesn't carry yet. */
-function reduce(state: TranscriptState, action: SessionEvent | AttachedFrame | SeedAction | HydrateAction): TranscriptState {
+const reduce = (state: TranscriptState, action: SessionEvent | AttachedFrame | SeedAction | HydrateAction): TranscriptState => {
   if (action.type === 'transcript_seed') {
     return action.state
   }
@@ -43,60 +43,33 @@ const OFFLINE_AFTER_ATTEMPTS = 3
 
 /**
  * The seq the initial attach replay ends on, or undefined when there is nothing
- * to hold for.
- *
- * This is an exact signal, not a heuristic: the `attached` frame is sent before
- * any replayed `event` frame and carries the runner's seq at attach time
- * (`session.lastSeq`), so the moment the frame arrives the client knows
- * precisely which seq the replay ends on. Every runner keeps its full event log
- * and always delivers the highest-seq event on a fresh replay (the
- * `conversation_reset` skip is strictly-below-the-reset, and the reset's seq is
- * itself ≤ lastSeq), so `TranscriptState.lastSeq >= target` means the replay
- * has landed. No quiet window or other arrival heuristic belongs here.
- *
- * Only a FRESH attach yields a target (`replayingFrom === 0`): a reconnect
- * replays into a transcript the reader is already looking at, and blanking it
- * mid-turn would be a worse bug than the flicker the hold exists to fix. A
- * brand-new session (`lastSeq === 0`) has nothing to replay and never holds.
+ * to hold for. An exact signal, never a quiet-window or arrival heuristic: the
+ * `attached` frame precedes every replayed `event` frame and carries the
+ * runner's seq at attach time, and a fresh replay always delivers the
+ * highest-seq event, so `TranscriptState.lastSeq >= target` means the replay
+ * has landed. Only a FRESH attach (`replayingFrom === 0`) yields a target: a
+ * reconnect replays into a transcript the reader is already looking at, and
+ * blanking it mid-turn would be a worse bug than the flicker the hold fixes.
  */
-export function initialReplayTarget(frame: AttachedFrame): number | undefined {
-  return frame.replayingFrom === 0 && frame.session.lastSeq > 0 ? frame.session.lastSeq : undefined
-}
+export const initialReplayTarget = (frame: AttachedFrame): number | undefined =>
+  frame.replayingFrom === 0 && frame.session.lastSeq > 0 ? frame.session.lastSeq : undefined
 
 /**
  * Whether an attach frame describes a DIFFERENT event log than the transcript
- * `held` was built from — in which case attaching with `afterSeq: held.lastSeq`
- * has already gone wrong: every event in the new log has seq ≤ afterSeq, so
- * nothing will ever arrive and the stale rows would stand forever, with no
- * error. The only recovery is to forget the state and re-attach from seq 0.
- *
- * A log resets on routine paths, not corner cases: a dormant session
- * (claude/codex surviving a gateway restart) is rebuilt with a brand-new
- * runner whose log starts at 0 and refills from the engine's own store. Two
- * checks, each of which the other misses:
- *
- * - `session.lastSeq < held.lastSeq` — the server's log is shorter than what
- *   we hold. Within one log seq only grows, so this is proof of a reset. It
- *   catches a rebuilt runner that has not yet re-run far — but not one whose
- *   backfill already advanced past us.
- * - `session.createdAt !== held.session.createdAt` — a different runner
- *   incarnation. The claude and codex runners stamp `Date.now()` at
- *   construction, so a dormant rebuild always changes it; the provider runner
- *   restores `createdAt` from its snapshot precisely when it also restores
- *   the event log and seq counter (ai-sdk-runner's `#restore`), so equality
- *   truthfully means "same log" for every engine.
- *
- * A full replay (`replayingFrom === 0`) is never stale — it carries the whole
- * log, so the caller heals by resetting state and applying it — and holding
- * nothing (`held.lastSeq === 0`) has nothing to be stale about. That first
- * clause is also what makes the recovery loop-proof: the re-attach from 0 can
- * never re-trigger this predicate.
- *
- * Not cache-specific: a live handle reconnecting after a gateway restart
- * re-attaches with its own advanced `afterSeq` against the rebuilt log and
- * hits the identical silence, so the hook applies this to every attach frame.
+ * `held` was built from — in which case `afterSeq: held.lastSeq` delivers
+ * nothing, forever, with no error; the only recovery is to forget the state and
+ * re-attach from seq 0. Logs reset on routine paths (a dormant session is
+ * rebuilt with a runner whose log starts at 0). Two checks, each of which the
+ * other misses: `session.lastSeq < held.lastSeq` is proof of a reset (seq only
+ * grows within one log) but blind to a backfill that already advanced past us;
+ * a `createdAt` mismatch is a different runner incarnation — the provider
+ * runner restores `createdAt` exactly when it restores the event log, so
+ * equality truthfully means "same log" for every engine. A full replay
+ * (`replayingFrom === 0`) is never stale, which is also what makes the
+ * recovery loop-proof. Not cache-specific: a live handle reconnecting after a
+ * gateway restart hits the identical silence, so every attach frame is checked.
  */
-export function staleAttach(frame: AttachedFrame, held: TranscriptState): boolean {
+export const staleAttach = (frame: AttachedFrame, held: TranscriptState): boolean => {
   if (frame.replayingFrom === 0 || held.lastSeq === 0) {
     return false
   }
@@ -108,12 +81,9 @@ export function staleAttach(frame: AttachedFrame, held: TranscriptState): boolea
 
 /**
  * Backstop for the replay hold: if the target seq has not landed after this
- * long, reveal what has arrived. On a healthy attach the target is always
- * reached (see {@link initialReplayTarget}); the backstop exists because a
- * blank panel forever would be a much worse failure than a visible stream, so
- * the hold is bounded no matter what a future filter or a lossy path does. It
- * runs from the attach — a per-event re-arm would be a quiet-window heuristic
- * in a new costume.
+ * long, reveal what has arrived — a blank panel forever is a much worse failure
+ * than a visible stream. Runs from the attach; a per-event re-arm would be a
+ * quiet-window heuristic in a new costume.
  */
 export const REPLAY_HOLD_MAX_MS = 1500
 
@@ -206,11 +176,11 @@ export type UseClaudeSessionResult = {
 }
 
 /** Attach to a session and maintain live transcript state. Detaches on unmount. */
-export function useClaudeSession(
+export const useClaudeSession = (
   client: WorkerDeckClient,
   sessionId: string | undefined,
   options?: UseClaudeSessionOptions,
-): UseClaudeSessionResult {
+): UseClaudeSessionResult => {
   // Seeded from the transcript cache when this (client identity, session) was
   // viewed recently — the cached rows are the mount frame's paint, which is the
   // whole "switching back is instant" feature. A cold key starts blank as before.
@@ -255,11 +225,9 @@ export function useClaudeSession(
     }
     const cache = optionsRef.current?.cacheTranscript !== false
     const key = transcriptCacheKey(client, sessionId)
-    // Every decision — which state this attach holds, whether to re-seed the
-    // reducer, which afterSeq to request — is made in planAttach, pure and
-    // unit-tested (test/attach-plan.test.ts), because this hook itself never
-    // renders in a test: the package carries no jsdom, by design. This effect
-    // only reads its refs into inputs and applies the plan's instructions.
+    // Every decision lives in planAttach, pure and unit-tested — this hook
+    // never renders in a test (the package carries no jsdom, by design). The
+    // effect only reads its refs into inputs and applies the plan.
     const plan = planAttach({
       resyncSeq,
       key,
@@ -274,15 +242,10 @@ export function useClaudeSession(
       dispatch({ type: 'transcript_seed', state: plan.held })
       seededForRef.current = plan.seedToken
     }
-    // `truncateResults` is asked for **here**, and here only: this hook is the
-    // unit that renders, so it is the one that knows a head can be fetched back
-    // (see `AttachOptions.truncateResults`). An embedder holding `client`
-    // without `react` gets whole results, which is the safe default.
-    //
-    // `imageRefs` is asked for on the same grounds and in the same breath: the
-    // reducer knows how to hold an address and the panel knows how to fetch it,
-    // so this hook is the only place that may say so. Measured, it is 91% of
-    // the tool-result payload and none of what was ever drawn.
+    // `truncateResults` and `imageRefs` are asked for HERE, and here only: this
+    // hook is the unit that renders, so it is the one that knows a head can be
+    // fetched back and an address loaded. An embedder holding `client` without
+    // `react` gets whole results — the safe default.
     const handle = client.attach(sessionId, {
       truncateResults: true,
       imageRefs: true,
@@ -293,15 +256,12 @@ export function useClaudeSession(
     const offEvent = handle.on('event', (event: SessionEvent) => dispatch(event))
     const offAttached = handle.on('attached', (frame: AttachedFrame) => {
       if (staleAttach(frame, stateRef.current)) {
-        // The server's log is not the one this transcript came from (dormant
-        // rebuild, restart): we attached past events we never saw, so this
-        // socket delivers either nothing or another log's events — see
-        // staleAttach. Stop listening NOW (a rebuilt log that advanced past us
-        // replays new-log events in this same tick, and they must not compose
-        // into old-log state), forget everything, and re-attach from seq 0;
-        // the hold below then blanks the stale rows until the real replay
-        // lands. Cannot loop: the retry ignores the cache and attaches with
-        // afterSeq 0, for which staleAttach is false by definition.
+        // Wrong log (dormant rebuild, restart). Stop listening NOW — a rebuilt
+        // log that advanced past us replays new-log events in this same tick,
+        // and they must not compose into old-log state — forget everything,
+        // and re-attach from seq 0. Cannot loop: the retry ignores the cache
+        // and attaches with afterSeq 0, for which staleAttach is false by
+        // definition.
         offEvent()
         deleteTranscriptCache(key)
         skipCacheRef.current = true
@@ -372,12 +332,10 @@ export function useClaudeSession(
   const replaying = replayTarget !== undefined && state.lastSeq < replayTarget
   const reconnectNow = useCallback(() => handleRef.current?.reconnectNow(), [])
 
-  // The press's other half. The seq comes off the *item* (`result.sourceSeq`),
-  // never off anything the caller passes: the row is what a reader pressed, and
-  // making the caller carry a seq would invite a stale one from a cache. Read
-  // through `stateRef` so this identity is stable across every render — it is a
-  // prop on a virtualized row, and a new function each render is a new prop on
-  // every row in the transcript.
+  // The seq comes off the *item* (`result.sourceSeq`), never off anything the
+  // caller passes — a caller-carried seq invites a stale one from a cache.
+  // Reads through `stateRef` so the identity is stable: it is a prop on every
+  // virtualized row.
   const loadFullResult = useCallback(
     async (toolUseId: string): Promise<boolean> => {
       if (!sessionId) {
@@ -400,10 +358,9 @@ export function useClaudeSession(
         dispatch({ type: 'transcript_hydrate_result', toolUseId, text })
         return true
       } catch {
-        // A 404 here means the log this seq belonged to is gone (dormant
-        // rebuild, restart). The head stays, with its marker, and the row still
-        // says what it is — which is the honest state, and better than an error
-        // toast about a press.
+        // A 404 means the log this seq belonged to is gone (dormant rebuild,
+        // restart). The head stays with its marker — the honest state, and
+        // better than an error toast about a press.
         return false
       }
     },
@@ -436,15 +393,12 @@ export function useClaudeSession(
 }
 
 /**
- * The session's profile catalog, fetched once and only when it could matter —
- * i.e. when the engine has reported no models of its own.
- *
- * Fire-and-forget on purpose: an empty catalog is exactly the state a picker
- * already handles, so a failed or 404'd `/profiles` (a server predating them)
- * degrades to the old behaviour rather than raising an error about a list the
- * operator may never open.
+ * The session's profile catalog, fetched only when the engine has reported no
+ * models of its own. Fire-and-forget on purpose: an empty catalog is exactly
+ * the state a picker already handles, so a failed or 404'd `/profiles` (a
+ * server predating them) degrades rather than raising an error.
  */
-function useProfileModelFallback(client: WorkerDeckClient, sessionId: string | undefined, state: TranscriptState): ModelOption[] {
+const useProfileModelFallback = (client: WorkerDeckClient, sessionId: string | undefined, state: TranscriptState): ModelOption[] => {
   const [catalog, setCatalog] = useState<ModelOption[]>([])
   const profile = state.session?.profile
   const reported = state.models
