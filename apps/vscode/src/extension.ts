@@ -9,14 +9,7 @@ import { SessionPanelProvider } from './panel.ts'
 import { SectionViewProvider, type SectionKind } from './section-view.ts'
 import { SessionsModel } from './sessions-model.ts'
 import { SidebarProvider } from './sidebar.ts'
-import {
-  SessionStatusBar,
-  SubagentStatusItem,
-  UnreadStatusItem,
-  badgeEnabled,
-  currentModel,
-  modelLabel,
-} from './status-bar.ts'
+import { SessionStatusBar, SubagentStatusItem, UnreadStatusItem, badgeEnabled, currentModel, modelLabel } from './status-bar.ts'
 import { createWatermarks } from './watermarks.ts'
 
 /** Section view ids — each its OWN view, so VS Code owns collapse/placement. */
@@ -85,8 +78,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Either badge keeps it alive. They are computed in the same pass off the same
   // poll, so gating it on `unread` alone would leave someone who turned unread
   // off — and sub-agents on — watching a count that never moves.
-  const syncUnreadWatcher = () =>
-    model.setWatching(UNREAD_WATCHER, badgeEnabled('unread') || badgeEnabled('subagents'))
+  const syncUnreadWatcher = () => model.setWatching(UNREAD_WATCHER, badgeEnabled('unread') || badgeEnabled('subagents'))
   syncUnreadWatcher()
 
   /**
@@ -97,7 +89,9 @@ export function activate(context: vscode.ExtensionContext): void {
    */
   const markSeen = (force = false) => {
     const active = panel.active
-    if (!active || (!panel.visible && !force)) return
+    if (!active || (!panel.visible && !force)) {
+      return
+    }
     const info = model.sessionsOf(active.host.id).find((s) => s.id === active.sessionId)
     const moved = watermarks.mark(active.host.id, active.sessionId, {
       itemCount: vitals?.itemCount,
@@ -110,7 +104,9 @@ export function activate(context: vscode.ExtensionContext): void {
     // still says (2) until something unrelated happens to refresh it. (Guarded
     // because a poll can land before `sidebar` is assigned; that path fires
     // `#pushState` for itself a moment later.)
-    if (moved) sidebar?.refreshUnread()
+    if (moved) {
+      sidebar?.refreshUnread()
+    }
   }
 
   const feed = {
@@ -118,13 +114,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vitals: () => vitals,
   }
   const sections = Object.fromEntries(
-    (Object.keys(SECTION_VIEWS) as SectionKind[]).map((kind) => [
-      kind,
-      new SectionViewProvider(context.extensionUri, store, kind, feed),
-    ]),
+    (Object.keys(SECTION_VIEWS) as SectionKind[]).map((kind) => [kind, new SectionViewProvider(context.extensionUri, store, kind, feed)]),
   ) as Record<SectionKind, SectionViewProvider>
   const pushSections = () => {
-    for (const provider of Object.values(sections)) provider.push()
+    for (const provider of Object.values(sections)) {
+      provider.push()
+    }
   }
   // Gateways are their own view in the same container — configuration beside the
   // list, not a screen the list pushes over itself. It reads the same state the
@@ -152,12 +147,13 @@ export function activate(context: vscode.ExtensionContext): void {
     for (const [hostId, list] of Object.entries(sessions)) {
       for (const info of list) {
         const mark = watermarks.get(hostId, info.id)
-        if (!mark) continue
-        const fresh =
-          info.activityCount !== undefined
-            ? info.activityCount - mark.activity
-            : (info.numTurns ?? 0) - mark.turns
-        if (fresh > 0) unseen[`${hostId}:${info.id}`] = fresh
+        if (!mark) {
+          continue
+        }
+        const fresh = info.activityCount !== undefined ? info.activityCount - mark.activity : (info.numTurns ?? 0) - mark.turns
+        if (fresh > 0) {
+          unseen[`${hostId}:${info.id}`] = fresh
+        }
       }
     }
     return unseen
@@ -173,7 +169,9 @@ export function activate(context: vscode.ExtensionContext): void {
   const panel = new SessionPanelProvider(context.extensionUri, store, {
     openPanel: async (p) => {
       const viewId = p === 'files' || p === 'skills' ? undefined : SECTION_VIEWS[p]
-      if (!viewId) return
+      if (!viewId) {
+        return
+      }
       await vscode.commands.executeCommand(`${viewId}.focus`)
     },
     vitals: (v) => {
@@ -184,7 +182,9 @@ export function activate(context: vscode.ExtensionContext): void {
       // rather than every reading.
       const moved = v.status !== vitals?.status
       vitals = v
-      if (moved) model.nudge()
+      if (moved) {
+        model.nudge()
+      }
       markSeen()
       pushSections()
       pushStatusBar()
@@ -230,19 +230,18 @@ export function activate(context: vscode.ExtensionContext): void {
   // Show a session in the agent panel. Named, because both the list and the
   // new-session QuickPick end here — a session you just created should be the
   // one on screen.
-  const selectSession = async (
-    hostId: string,
-    sessionId: string,
-    subagentToolUseId?: string,
-    revealToolUseId?: string,
-  ) => {
+  const selectSession = async (hostId: string, sessionId: string, subagentToolUseId?: string, revealToolUseId?: string) => {
     const host = store.get(hostId)
-    if (!host) return
+    if (!host) {
+      return
+    }
     const info = model.sessionsOf(hostId).find((s) => s.id === sessionId)
     // Only a REAL change drops the readings. Re-clicking the session already
     // on screen doesn't remount the panel, so nothing would ever re-send them
     // — Context and Usage would sit empty until the next event moved one.
-    if (!panel.isShowing(hostId, sessionId)) vitals = undefined
+    if (!panel.isShowing(hostId, sessionId)) {
+      vitals = undefined
+    }
     // Seeded with the pick so the card answers the click in the same frame. The
     // panel will report the same value back a beat later (`wd-subagent-open`),
     // and `setSelectedSubagent` no-ops on an unchanged one — but a *session*
@@ -260,15 +259,16 @@ export function activate(context: vscode.ExtensionContext): void {
     // something, and the composer is at the other end of the panel from the row
     // about to be revealed. So the caret stays where it was and the jump is the
     // whole answer.
-    await panel.show(
-      { host, sessionId, cwd: info?.cwd },
-      { focus: !subagentToolUseId && !revealToolUseId },
-    )
-    if (subagentToolUseId) panel.openSubagent(subagentToolUseId)
+    await panel.show({ host, sessionId, cwd: info?.cwd }, { focus: !subagentToolUseId && !revealToolUseId })
+    if (subagentToolUseId) {
+      panel.openSubagent(subagentToolUseId)
+    }
     // A **task**: no agent to hand the body over to, so travel to the row where
     // that work was started and finished. Framing it instead selected no items
     // and drew an empty agent view.
-    else if (revealToolUseId) panel.reveal(revealToolUseId)
+    else if (revealToolUseId) {
+      panel.reveal(revealToolUseId)
+    }
   }
   sidebar = new SidebarProvider(context, context.extensionUri, store, model, {
     selectSession,
@@ -305,8 +305,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // The four section views exist only while there is a session for them to be
   // about. Seeded false, because a `when` clause reads an unset key as false
   // anyway and being explicit is what makes the sequence obvious.
-  const syncHasSession = (has: boolean) =>
-    void vscode.commands.executeCommand('setContext', HAS_SESSION_KEY, has)
+  const syncHasSession = (has: boolean) => void vscode.commands.executeCommand('setContext', HAS_SESSION_KEY, has)
   panel.onDidChangeActive((active) => syncHasSession(active !== undefined))
   syncHasSession(panel.active !== undefined)
 
@@ -438,7 +437,9 @@ export function activate(context: vscode.ExtensionContext): void {
         })),
         { title: 'WorkerDeck: model', placeHolder: modelLabel(vitals) },
       )
-      if (picked) panel.setModel(picked.value)
+      if (picked) {
+        panel.setModel(picked.value)
+      }
     }),
     vscode.commands.registerCommand('workerdeck.selectPermissionMode', async () => {
       const modes = vitals?.permissionModes ?? []
@@ -461,7 +462,9 @@ export function activate(context: vscode.ExtensionContext): void {
         })),
         { title: 'WorkerDeck: permission mode' },
       )
-      if (picked && !picked.disabled) panel.setPermissionMode(picked.mode)
+      if (picked && !picked.disabled) {
+        panel.setPermissionMode(picked.mode)
+      }
     }),
 
     vscode.commands.registerCommand('workerdeck.openProjectFolder', async () => {
@@ -478,9 +481,7 @@ export function activate(context: vscode.ExtensionContext): void {
             path: active.cwd,
           })
       const name =
-        uri.scheme === WorkerdeckFileSystem.scheme
-          ? `${active.host.name}: ${active.cwd.split('/').pop() ?? active.cwd}`
-          : undefined
+        uri.scheme === WorkerdeckFileSystem.scheme ? `${active.host.name}: ${active.cwd.split('/').pop() ?? active.cwd}` : undefined
       vscode.workspace.updateWorkspaceFolders(vscode.workspace.workspaceFolders?.length ?? 0, 0, {
         uri,
         name,

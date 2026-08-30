@@ -40,20 +40,30 @@ const COVERAGE = 0.6
 
 export function matchPath(text: string, inCode: boolean): PathHit | undefined {
   const trimmed = text.trim()
-  if (!trimmed || trimmed.endsWith('/')) return undefined
+  if (!trimmed || trimmed.endsWith('/')) {
+    return undefined
+  }
   const hit = PATH_RE.exec(trimmed) ?? (inCode ? FILE_RE.exec(trimmed) : null)
-  if (!hit) return undefined
+  if (!hit) {
+    return undefined
+  }
   return { path: hit[1]!, line: hit[2] ? Number(hit[2]) : undefined }
 }
 
 /** The path a click on this element means, if any. */
 function hitFor(element: HTMLElement | undefined): PathHit | undefined {
-  if (!element) return undefined
+  if (!element) {
+    return undefined
+  }
   const inCode = element.closest('code') !== null
   const text = element.textContent ?? ''
   const hit = matchPath(text, inCode)
-  if (!hit) return undefined
-  if (!inCode && hit.path.length < text.trim().length * COVERAGE) return undefined
+  if (!hit) {
+    return undefined
+  }
+  if (!inCode && hit.path.length < text.trim().length * COVERAGE) {
+    return undefined
+  }
   return hit
 }
 
@@ -78,7 +88,9 @@ export function usePathLinks({
 }) {
   useEffect(() => {
     const root = container.current
-    if (!root || !enabled) return
+    if (!root || !enabled) {
+      return
+    }
     const excluded = (element: HTMLElement | undefined) =>
       ignore !== undefined && element?.closest(ignore) !== null && element !== undefined
 
@@ -89,11 +101,17 @@ export function usePathLinks({
     }
 
     const onClick = (event: MouseEvent) => {
-      if (!event.metaKey && !event.ctrlKey) return
+      if (!event.metaKey && !event.ctrlKey) {
+        return
+      }
       const target = event.target instanceof HTMLElement ? event.target : undefined
-      if (excluded(target)) return
+      if (excluded(target)) {
+        return
+      }
       const hit = hitFor(target)
-      if (!hit) return
+      if (!hit) {
+        return
+      }
       // Capture phase and stopped here: the row underneath is usually pressable
       // (a tool call expands), and opening a file is not expanding it.
       event.preventDefault()
@@ -103,11 +121,17 @@ export function usePathLinks({
     }
 
     const onMove = (event: MouseEvent) => {
-      if (!event.metaKey && !event.ctrlKey) return unmark()
+      if (!event.metaKey && !event.ctrlKey) {
+        return unmark()
+      }
       const element = event.target instanceof HTMLElement ? event.target : undefined
-      if (element === marked) return
+      if (element === marked) {
+        return
+      }
       unmark()
-      if (!element || excluded(element) || !hitFor(element)) return
+      if (!element || excluded(element) || !hitFor(element)) {
+        return
+      }
       marked = element
       element.classList.add(LINKISH)
     }
@@ -115,7 +139,9 @@ export function usePathLinks({
     // Releasing the modifier has to clear it: an underline that outlives the key
     // promises a click that will not work.
     const onKey = (event: KeyboardEvent) => {
-      if (!event.metaKey && !event.ctrlKey) unmark()
+      if (!event.metaKey && !event.ctrlKey) {
+        unmark()
+      }
     }
 
     root.addEventListener('click', onClick, true)
@@ -141,7 +167,11 @@ export function usePathLinks({
  * working, which is the only root that makes `worker.mjs` mean anything.
  */
 export function resolveAgainstCwd(path: string, cwd: string | undefined): string {
-  if (path.startsWith('/')) return path
-  if (!cwd) return path
+  if (path.startsWith('/')) {
+    return path
+  }
+  if (!cwd) {
+    return path
+  }
   return `${cwd.replace(/\/$/, '')}/${path.replace(/^\.\//, '')}`
 }

@@ -1,12 +1,5 @@
 import type { McpServerStatus, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import type {
-  ApiMessage,
-  ContentBlock,
-  McpServerStatusInfo,
-  ModelOption,
-  SessionEventBody,
-  TextBlock,
-} from '@workerdeck/protocol'
+import type { ApiMessage, ContentBlock, McpServerStatusInfo, ModelOption, SessionEventBody, TextBlock } from '@workerdeck/protocol'
 import { filePatchFromToolResult } from './patch.ts'
 
 /** Does this message answer exactly one tool call? A patch is per-file-edit and
@@ -14,7 +7,9 @@ import { filePatchFromToolResult } from './patch.ts'
  * else gets no patch rather than a diff pinned to the wrong call. */
 function singleToolResult(message: ApiMessage): boolean {
   const content = message.content
-  if (!Array.isArray(content)) return false
+  if (!Array.isArray(content)) {
+    return false
+  }
   return content.filter((block) => block.type === 'tool_result').length === 1
 }
 
@@ -56,7 +51,9 @@ export function isSyntheticUserText(message: ApiMessage): boolean {
       : Array.isArray(content)
         ? content.find((block): block is TextBlock => block.type === 'text')?.text
         : undefined
-  if (typeof text !== 'string') return false
+  if (typeof text !== 'string') {
+    return false
+  }
   const head = text.trimStart()
   return SYNTHETIC_USER_PREFIXES.some((prefix) => head.startsWith(prefix))
 }
@@ -113,12 +110,16 @@ type UsageWindow = { utilization: number | null; resets_at?: string | null } | n
  * unknown, not zero, and is dropped rather than reported at 0%.
  */
 export function rateLimitEventsFromUsage(usage: UsageRateLimits): SessionEventBody[] {
-  if (!usage.rate_limits_available || !usage.rate_limits) return []
+  if (!usage.rate_limits_available || !usage.rate_limits) {
+    return []
+  }
   const limits = usage.rate_limits
   const events: SessionEventBody[] = []
   const seen = new Set<string>()
   const push = (rateLimitType: string, window: UsageWindow): void => {
-    if (!window || window.utilization === null || seen.has(rateLimitType)) return
+    if (!window || window.utilization === null || seen.has(rateLimitType)) {
+      return
+    }
     seen.add(rateLimitType)
     const resetsAt = window.resets_at ? Date.parse(window.resets_at) : NaN
     events.push({
@@ -139,8 +140,13 @@ export function rateLimitEventsFromUsage(usage: UsageRateLimits): SessionEventBo
   // Server-driven per-model buckets, keyed off their display name so a client that
   // groups on the `seven_day_` prefix keeps them with the other weekly windows.
   for (const bucket of limits.model_scoped ?? []) {
-    const slug = bucket.display_name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_')
-    if (slug) push(`seven_day_${slug}`, bucket)
+    const slug = bucket.display_name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+    if (slug) {
+      push(`seven_day_${slug}`, bucket)
+    }
   }
   return events
 }
@@ -155,9 +161,7 @@ export function rateLimitEventsFromUsage(usage: UsageRateLimits): SessionEventBo
  * credential dump. Only the connection's identity survives.
  */
 export function mcpStatusInfo(status: McpServerStatus): McpServerStatusInfo {
-  const config = status.config as
-    | { type?: string; command?: string; args?: string[]; url?: string }
-    | undefined
+  const config = status.config as { type?: string; command?: string; args?: string[]; url?: string } | undefined
   // stdio is the CLI's implicit default: a config with a command and no type.
   const transport = config?.type ?? (config?.command ? 'stdio' : undefined)
   return {
@@ -166,10 +170,7 @@ export function mcpStatusInfo(status: McpServerStatus): McpServerStatusInfo {
     scope: status.scope,
     error: status.error,
     serverInfo: status.serverInfo,
-    transport:
-      transport === 'stdio' || transport === 'http' || transport === 'sse' || transport === 'sdk'
-        ? transport
-        : undefined,
+    transport: transport === 'stdio' || transport === 'http' || transport === 'sse' || transport === 'sdk' ? transport : undefined,
     command: config?.command,
     args: config?.args,
     url: config?.url,
@@ -225,7 +226,9 @@ export function modelOptionsFromSdk(models: readonly SdkModelInfo[]): ModelOptio
   const derivedCounts = new Map<string, number>()
   for (const model of rows) {
     const derived = friendlyModelName(model.resolvedModel ?? model.value)
-    if (derived) derivedCounts.set(derived, (derivedCounts.get(derived) ?? 0) + 1)
+    if (derived) {
+      derivedCounts.set(derived, (derivedCounts.get(derived) ?? 0) + 1)
+    }
   }
 
   const seenFamilies = new Set<string>()
@@ -283,12 +286,18 @@ function familyRank(option: ModelOption): number {
 export function friendlyModelName(id: string): string | null {
   const withoutVariant = id.split('[')[0] ?? id
   const parts = withoutVariant.toLowerCase().split('-').filter(Boolean)
-  if (parts[0] === 'claude') parts.shift()
+  if (parts[0] === 'claude') {
+    parts.shift()
+  }
   const family = parts.shift()
-  if (!family) return null
+  if (!family) {
+    return null
+  }
   // Trailing snapshot date ('20251001') is a build, not a version.
   const version = parts.filter((part) => !/^\d{8}$/.test(part))
-  if (version.length === 0 || version.some((part) => !/^\d+$/.test(part))) return null
+  if (version.length === 0 || version.some((part) => !/^\d+$/.test(part))) {
+    return null
+  }
   return `${family.charAt(0).toUpperCase()}${family.slice(1)} ${version.join('.')}`
 }
 
@@ -299,7 +308,9 @@ export function friendlyModelName(id: string): string | null {
 function modelFamily(id: string): string {
   const withoutVariant = id.split('[')[0] ?? id
   const parts = withoutVariant.toLowerCase().split('-')
-  if (parts[0] === 'claude') parts.shift()
+  if (parts[0] === 'claude') {
+    parts.shift()
+  }
   return parts[0] ?? withoutVariant
 }
 
@@ -328,12 +339,7 @@ export function normalizeSdkMessage(msg: SDKMessage): SessionEventBody | null {
         // the message's origin says so (a background task reporting in is not
         // someone typing), or the text is one of the CLI's own wrappers — which
         // is the only one of the three a *resumed* transcript still carries.
-        synthetic:
-          msg.isSynthetic === true ||
-          msg.origin?.kind === 'task-notification' ||
-          isSyntheticUserText(message)
-            ? true
-            : undefined,
+        synthetic: msg.isSynthetic === true || msg.origin?.kind === 'task-notification' || isSyntheticUserText(message) ? true : undefined,
         // The engine's own line numbers, projected down to the hunks — see
         // `filePatchFromToolResult` for why the rest of `tool_use_result` stays
         // off the wire. Only with a single tool_result block, because nothing
@@ -379,7 +385,9 @@ export function normalizeSdkMessage(msg: SDKMessage): SessionEventBody | null {
       }
     case 'system':
       // init and session_state_changed are handled by the runner directly.
-      if (msg.subtype === 'init' || msg.subtype === 'session_state_changed') return null
+      if (msg.subtype === 'init' || msg.subtype === 'session_state_changed') {
+        return null
+      }
       return { type: 'sdk_event', payload: msg as unknown as { type: string } }
     default:
       return { type: 'sdk_event', payload: msg as unknown as { type: string } }

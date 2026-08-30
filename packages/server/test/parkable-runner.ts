@@ -1,10 +1,4 @@
-import type {
-  ParkedExecution,
-  Runner,
-  RunnerSnapshot,
-  SessionRunnerConfig,
-  ToolExecutionResult,
-} from '@workerdeck/core'
+import type { ParkedExecution, Runner, RunnerSnapshot, SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
 import type { SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
 
 /**
@@ -49,7 +43,9 @@ export class ParkableRunner implements Runner {
     if (restore) {
       this.#seq = restore.seq
       this.#events = [...restore.events]
-      for (const execution of restore.parked) this.#pending.set(execution.executionId, execution)
+      for (const execution of restore.parked) {
+        this.#pending.set(execution.executionId, execution)
+      }
       // Derived, exactly as the real runner derives it: a snapshot with nothing
       // pending is an *idle* session that was written through, not a parked one.
       // Hardcoding 'parked' here would have every restored live session come
@@ -67,7 +63,9 @@ export class ParkableRunner implements Runner {
   }
 
   park(): RunnerSnapshot | undefined {
-    if (this.#parked || this.#pending.size === 0) return undefined
+    if (this.#parked || this.#pending.size === 0) {
+      return undefined
+    }
     this.#parked = true
     this.#listeners.clear()
     return this.#buildSnapshot()
@@ -77,7 +75,9 @@ export class ParkableRunner implements Runner {
    * torn down, and allowed at rest with nothing pending — which is exactly the
    * case `park()` above refuses. */
   snapshot(): RunnerSnapshot | undefined {
-    if (this.#parked) return undefined
+    if (this.#parked) {
+      return undefined
+    }
     return this.#buildSnapshot()
   }
 
@@ -105,7 +105,9 @@ export class ParkableRunner implements Runner {
   }
 
   settleExecution(executionId: string, result: ToolExecutionResult): boolean {
-    if (this.#parked || !this.#pending.has(executionId)) return false
+    if (this.#parked || !this.#pending.has(executionId)) {
+      return false
+    }
     this.#pending.delete(executionId)
     this.settled.push({ executionId, result })
     this.#emit(
@@ -202,7 +204,11 @@ export class ParkableRunner implements Runner {
     }
   }
   subscribe(listener: (event: SessionEvent) => void, afterSeq = 0): () => void {
-    for (const event of this.#events) if (event.seq > afterSeq) listener(event)
+    for (const event of this.#events) {
+      if (event.seq > afterSeq) {
+        listener(event)
+      }
+    }
     this.#listeners.add(listener)
     return () => this.#listeners.delete(listener)
   }
@@ -218,13 +224,17 @@ export class ParkableRunner implements Runner {
   async setModel(): Promise<void> {}
   fail(): void {}
   close(): void {
-    if (this.#parked) return
+    if (this.#parked) {
+      return
+    }
     this.#emit({ type: 'session_closed', reason: 'server' })
   }
 
   #emit(body: SessionEventBody): void {
     const event = { ...body, seq: ++this.#seq, ts: Date.now() } as SessionEvent
     this.#events.push(event)
-    for (const listener of this.#listeners) listener(event)
+    for (const listener of this.#listeners) {
+      listener(event)
+    }
   }
 }

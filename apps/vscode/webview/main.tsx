@@ -9,7 +9,9 @@ syncVsCodeTheme()
 const bridge = new Bridge(['wd-show-session'])
 
 const root = document.getElementById('root')
-if (!root) throw new Error('Root element #root not found')
+if (!root) {
+  throw new Error('Root element #root not found')
+}
 
 // Stamped by the provider from settings, and read here rather than awaited over
 // the bridge: between them the variant and the density decide every row's shape

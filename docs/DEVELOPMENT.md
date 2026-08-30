@@ -11,7 +11,10 @@ count.
 
 pnpm workspace + turbo (`pnpm typecheck|test|build|lint`); typecheck is `tsgo` (TS 7 preview) and
 covers `smoke/` + `examples/` too via `typecheck:extras` (they have tsconfigs but aren't packages,
-so turbo never ran them); lint oxlint; `build/` via tsdown only on `prepack`/CI. Dev never builds
+so turbo never ran them); lint oxlint (`.oxlintrc.json` — it must keep that exact name or oxlint
+silently runs on defaults); format oxfmt (`.oxfmtrc.json`, `pnpm format`, format-on-save via the
+`oxc.oxc-vscode` extension — rules and rationale in `docs/CODE-STYLE.md`); `build/` via tsdown
+only on `prepack`/CI. Dev never builds
 — the `@workerdeck/source` export condition resolves packages to `src/index.ts` (Node runs with
 `--conditions=@workerdeck/source` + swc-node; Vite/vitest set `resolve.conditions`, vitest also
 aliases). `pnpm start:prod` is the other side of that coin and the surface to judge a release

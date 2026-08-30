@@ -1,14 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import {
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -55,7 +46,9 @@ beforeAll(() => {
   symlinkSync(join(base, 'outside-dir'), join(root, 'escape-dir'))
   symlinkSync(join(root, 'missing.txt'), join(root, 'dangling'))
   symlinkSync(root, join(base, 'rootlink'))
-  if (posix) execFileSync('mkfifo', [join(root, 'pipe')])
+  if (posix) {
+    execFileSync('mkfifo', [join(root, 'pipe')])
+  }
 
   canonicalRoot = realpathSync(root)
   roots = createHostFileRoots([root])
@@ -201,7 +194,9 @@ describe('resolveForWrite', () => {
   it('writes through a symlink that resolves inside the root', () => {
     const out = resolveForWrite(roots, join(root, 'real-link'))
     expect(out).toMatchObject({ ok: true, path: join(canonicalRoot, 'real.txt') })
-    if (!out.ok) return
+    if (!out.ok) {
+      return
+    }
     expect(writeContained(out.path, 'updated')).toEqual({ ok: true })
     expect(readFileSync(join(root, 'real.txt'), 'utf8')).toBe('updated')
   })
@@ -253,12 +248,16 @@ describe('readContained / writeContained', () => {
   it('round-trips a write and a read through resolved paths', () => {
     const target = resolveForWrite(roots, join(root, 'roundtrip.txt'))
     expect(target).toMatchObject({ ok: true })
-    if (!target.ok) return
+    if (!target.ok) {
+      return
+    }
     expect(writeContained(target.path, 'hello')).toEqual({ ok: true })
 
     const read = resolveExisting(roots, join(root, 'roundtrip.txt'))
     expect(read).toMatchObject({ ok: true, kind: 'file' })
-    if (!read.ok) return
+    if (!read.ok) {
+      return
+    }
     expect(readContained(read.path)).toEqual({ ok: true, data: Buffer.from('hello') })
   })
 
@@ -280,15 +279,15 @@ describe('readContained / writeContained', () => {
 
 describe('entryKind', () => {
   it('classifies with lstat semantics, never following links', () => {
-    const kinds = new Map(
-      readdirSync(root, { withFileTypes: true }).map((e) => [e.name, entryKind(e)]),
-    )
+    const kinds = new Map(readdirSync(root, { withFileTypes: true }).map((e) => [e.name, entryKind(e)]))
     expect(kinds.get('file.txt')).toBe('file')
     expect(kinds.get('sub')).toBe('dir')
     expect(kinds.get('inside-link')).toBe('symlink')
     expect(kinds.get('out-link')).toBe('symlink')
     expect(kinds.get('dangling')).toBe('symlink')
     expect(kinds.get('dir-link')).toBe('symlink')
-    if (posix) expect(kinds.get('pipe')).toBe('other')
+    if (posix) {
+      expect(kinds.get('pipe')).toBe('other')
+    }
   })
 })

@@ -22,10 +22,7 @@ import * as vscode from 'vscode'
  * not be a preference, it would be a broken grid.
  */
 export function fontMode(): 'editor' | 'sans' {
-  return vscode.workspace.getConfiguration('workerdeck').get<'editor' | 'sans'>('fontFamily') ===
-    'sans'
-    ? 'sans'
-    : 'editor'
+  return vscode.workspace.getConfiguration('workerdeck').get<'editor' | 'sans'>('fontFamily') === 'sans' ? 'sans' : 'editor'
 }
 
 /**
@@ -42,9 +39,7 @@ export function fontMode(): 'editor' | 'sans' {
  * and there is no density knob to turn. See `ROW_GAP` in `@workerdeck/ui`.
  */
 export function transcriptDensity(): 'comfortable' | 'compact' {
-  return vscode.workspace
-    .getConfiguration('workerdeck')
-    .get<'comfortable' | 'compact'>('transcriptDensity') === 'compact'
+  return vscode.workspace.getConfiguration('workerdeck').get<'comfortable' | 'compact'>('transcriptDensity') === 'compact'
     ? 'compact'
     : 'comfortable'
 }
@@ -66,11 +61,7 @@ export function transcriptDensity(): 'comfortable' | 'compact' {
  * into the one they turned off.
  */
 export function transcriptVariant(): 'terminal' | 'cards' {
-  return vscode.workspace
-    .getConfiguration('workerdeck')
-    .get<'terminal' | 'cards'>('transcriptVariant') === 'cards'
-    ? 'cards'
-    : 'terminal'
+  return vscode.workspace.getConfiguration('workerdeck').get<'terminal' | 'cards'>('transcriptVariant') === 'cards' ? 'cards' : 'terminal'
 }
 
 /**
@@ -107,8 +98,7 @@ export function terminalMetrics(): { fontSize: number; lineHeight: number } {
   const wd = vscode.workspace.getConfiguration('workerdeck')
   const editor = vscode.workspace.getConfiguration('editor')
   // Terminal-specific → panel-wide → editor → 13.
-  const fontSize =
-    wd.get<number>('terminal.fontSize') || panelFontSize()
+  const fontSize = wd.get<number>('terminal.fontSize') || panelFontSize()
   const configured = wd.get<number>('terminal.lineHeight') || editor.get<number>('lineHeight') || 0
   // VS Code's own rule, and its own automatic ratio.
   const lineHeight = configured === 0 ? fontSize * 1.5 : configured < 8 ? configured * fontSize : configured

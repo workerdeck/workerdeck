@@ -18,7 +18,9 @@ export const claudeAdapter: EngineAdapter = {
   catalog: CLAUDE_CATALOG,
   async checkAvailability(profile, env) {
     const status = await checkClaudeAuth(env)
-    if (status === 'logged_in') return { available: true }
+    if (status === 'logged_in') {
+      return { available: true }
+    }
     if (status === 'logged_out') {
       return {
         available: false,
@@ -31,7 +33,9 @@ export const claudeAdapter: EngineAdapter = {
     return { available: 'unknown' }
   },
   createRunner({ config, restore, id }) {
-    if (restore) throw new Error('the Claude engine cannot rebuild a parked session')
+    if (restore) {
+      throw new Error('the Claude engine cannot rebuild a parked session')
+    }
     return new SessionRunner(config, id)
   },
   /**

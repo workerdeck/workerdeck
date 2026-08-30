@@ -2,14 +2,7 @@
 
 import { cn } from '../../lib/utils.ts'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type {
-  Segment,
-  TriggerConfig,
-  ActiveTrigger,
-  TriggerSuggestion,
-  ChipSegment,
-  PromptAreaHandle,
-} from './types.ts'
+import type { Segment, TriggerConfig, ActiveTrigger, TriggerSuggestion, ChipSegment, PromptAreaHandle } from './types.ts'
 import {
   detectActiveTrigger,
   isValidTriggerPosition,
@@ -182,13 +175,7 @@ export function usePromptArea({
   // later, unrelated click on the same chip.
   const suppressReopenChip = useRef<HTMLElement | null>(null)
 
-  const {
-    suggestions,
-    suggestionsLoading,
-    suggestionsError,
-    search: runSearch,
-    reset: resetSearch,
-  } = useTriggerSearch()
+  const { suggestions, suggestionsLoading, suggestionsError, search: runSearch, reset: resetSearch } = useTriggerSearch()
 
   // Guard against circular DOM <-> model syncs
   const isSyncing = useRef(false)
@@ -204,7 +191,9 @@ export function usePromptArea({
 
   const readSegmentsFromDOM = useCallback((): Segment[] => {
     const editor = editorRef.current
-    if (!editor) return []
+    if (!editor) {
+      return []
+    }
 
     const segments: Segment[] = []
     // Track whether the editor holds any real content (text/chip) or a sentinel
@@ -251,7 +240,9 @@ export function usePromptArea({
     // A newline we actually rendered always carries surrounding text/chip
     // content or a trailing sentinel <br>, so when neither is present the only
     // <br> nodes are filler and the editor is genuinely empty.
-    if (!hasRealContent && !hasSentinel) return []
+    if (!hasRealContent && !hasSentinel) {
+      return []
+    }
 
     return segments
   }, [])
@@ -263,7 +254,9 @@ export function usePromptArea({
   const renderSegmentsToDOM = useCallback(
     (segments: Segment[]) => {
       const editor = editorRef.current
-      if (!editor) return
+      if (!editor) {
+        return
+      }
 
       isSyncing.current = true
 
@@ -304,11 +297,7 @@ export function usePromptArea({
           const triggerConfig = triggers.find((t) => t.char === seg.trigger)
           const chipStyle = triggerConfig?.chipStyle ?? 'pill'
           chip.dataset.chipStyle = chipStyle
-          chip.className = cn(
-            'prompt-area-chip',
-            chipStyle === 'inline' && 'prompt-area-chip--inline',
-            triggerConfig?.chipClassName,
-          )
+          chip.className = cn('prompt-area-chip', chipStyle === 'inline' && 'prompt-area-chip--inline', triggerConfig?.chipClassName)
           chip.textContent = `${seg.trigger}${seg.displayText}`
           chip.setAttribute('role', 'button')
           chip.setAttribute('tabindex', '-1')
@@ -359,20 +348,26 @@ export function usePromptArea({
         ...(chip.data !== undefined ? { data: chip.data } : {}),
       })
       const editor = editorRef.current
-      if (editor) setCursorAtOffset(editor, chipResult.cursorOffset)
+      if (editor) {
+        setCursorAtOffset(editor, chipResult.cursorOffset)
+      }
     },
     [onChange, renderSegmentsToDOM, onChipAdd],
   )
 
   const runTriggerDetection = useCallback(() => {
     const editor = editorRef.current
-    if (!editor) return
+    if (!editor) {
+      return
+    }
 
     const segments = readSegmentsFromDOM()
     const plainText = segmentsToPlainText(segments)
     const cursorPos = getCursorOffset(editor)
 
-    if (cursorPos === null) return
+    if (cursorPos === null) {
+      return
+    }
 
     const detected = detectActiveTrigger(plainText, cursorPos, triggers)
 
@@ -456,8 +451,12 @@ export function usePromptArea({
   // -----------------------------------------------------------------------
 
   useEffect(() => {
-    if (isSyncing.current) return
-    if (segmentsEqual(value, lastRenderedValue.current)) return
+    if (isSyncing.current) {
+      return
+    }
+    if (segmentsEqual(value, lastRenderedValue.current)) {
+      return
+    }
 
     // Normalize list prefixes (e.g., "- " → "• " when markdown is on)
     // so externally-provided segments render bullet characters correctly.
@@ -476,7 +475,9 @@ export function usePromptArea({
   // Also convert bullet characters: • ↔ - in text segments
   const prevMarkdown = useRef(markdownEnabled)
   useEffect(() => {
-    if (prevMarkdown.current === markdownEnabled) return
+    if (prevMarkdown.current === markdownEnabled) {
+      return
+    }
     prevMarkdown.current = markdownEnabled
 
     const converted = normalizeBullets ? normalizeListPrefixes(value, markdownEnabled) : value
@@ -490,7 +491,9 @@ export function usePromptArea({
   // Clean up undo debounce timer on unmount
   useEffect(() => {
     return () => {
-      if (undoTimer.current) clearTimeout(undoTimer.current)
+      if (undoTimer.current) {
+        clearTimeout(undoTimer.current)
+      }
     }
   }, [])
 
@@ -499,7 +502,9 @@ export function usePromptArea({
   // -----------------------------------------------------------------------
 
   const handleInput = useCallback(() => {
-    if (isSyncing.current) return
+    if (isSyncing.current) {
+      return
+    }
 
     // During IME composition, sync model but skip trigger detection
     if (events.isComposing.current) {
@@ -556,11 +561,7 @@ export function usePromptArea({
     // numeric prose ("1985. Born / 2020. Died") untouched.
     let nextSegments = segments
     let renumberedCursor: number | null = null
-    if (
-      markdownEnabled &&
-      savedCursorOffset !== null &&
-      hasOrderedListRun(segmentsToPlainText(segments))
-    ) {
+    if (markdownEnabled && savedCursorOffset !== null && hasOrderedListRun(segmentsToPlainText(segments))) {
       const renumbered = renumberOrderedListSegments(segments)
       if (renumbered.edits.length > 0) {
         nextSegments = renumbered.segments
@@ -576,7 +577,9 @@ export function usePromptArea({
 
     lastRenderedValue.current = nextSegments
     onChange(nextSegments)
-    if (undoTimer.current) clearTimeout(undoTimer.current)
+    if (undoTimer.current) {
+      clearTimeout(undoTimer.current)
+    }
     undoTimer.current = setTimeout(() => {
       if (undoBaseState.current) {
         events.pushUndo(undoBaseState.current)
@@ -601,16 +604,7 @@ export function usePromptArea({
     }
 
     runTriggerDetection()
-  }, [
-    onChange,
-    readSegmentsFromDOM,
-    runTriggerDetection,
-    renderSegmentsToDOM,
-    markdownEnabled,
-    normalizeBullets,
-    maxLength,
-    events,
-  ])
+  }, [onChange, readSegmentsFromDOM, runTriggerDetection, renderSegmentsToDOM, markdownEnabled, normalizeBullets, maxLength, events])
 
   // -----------------------------------------------------------------------
   // Chip click delegation
@@ -619,10 +613,14 @@ export function usePromptArea({
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const target = e.target
-      if (!(target instanceof Node)) return
+      if (!(target instanceof Node)) {
+        return
+      }
 
       const editor = editorRef.current
-      if (!editor) return
+      if (!editor) {
+        return
+      }
 
       // Walk from the click target up to find a link or chip element
       let node: Node | null = target
@@ -666,13 +664,7 @@ export function usePromptArea({
             // `handleMouseDown`) — treat that as a toggle-close, not a reopen.
             const wasOpenForThisChip = suppressReopenChip.current === node
             suppressReopenChip.current = null
-            if (
-              !disabled &&
-              !wasOpenForThisChip &&
-              config?.reopenOnChipClick &&
-              config.mode === 'dropdown' &&
-              config.onSearch
-            ) {
+            if (!disabled && !wasOpenForThisChip && config?.reopenOnChipClick && config.mode === 'dropdown' && config.onSearch) {
               const childIdx = indexOfChildNode(editor, node)
               editingChip.current = {
                 chip,
@@ -728,7 +720,9 @@ export function usePromptArea({
     (editor: HTMLElement, chipNode: HTMLElement): boolean => {
       const segments = readSegmentsFromDOM()
       const chipIdx = indexOfChildNode(editor, chipNode)
-      if (chipIdx === -1) return false
+      if (chipIdx === -1) {
+        return false
+      }
 
       const segIdx = domChildIndexToSegmentIndex(editor, chipIdx)
       const deletedChip = segments[segIdx]
@@ -753,12 +747,16 @@ export function usePromptArea({
     (editor: HTMLElement, chipNode: HTMLElement): boolean => {
       const segments = readSegmentsFromDOM()
       const chipIdx = indexOfChildNode(editor, chipNode)
-      if (chipIdx === -1) return false
+      if (chipIdx === -1) {
+        return false
+      }
 
       const segIdx = domChildIndexToSegmentIndex(editor, chipIdx)
       const revertedChip = segments[segIdx]
       const result = revertChipAtIndex(segments, segIdx)
-      if (!result) return false
+      if (!result) {
+        return false
+      }
 
       // Compute cursor target: plain text offset at end of reverted text
       let targetOffset = 0
@@ -791,10 +789,14 @@ export function usePromptArea({
 
   const handleChipBackspace = useCallback((): boolean => {
     const editor = editorRef.current
-    if (!editor) return false
+    if (!editor) {
+      return false
+    }
 
     const range = getSelectionRange()
-    if (!range || !range.collapsed) return false
+    if (!range || !range.collapsed) {
+      return false
+    }
 
     const node = range.startContainer
     const offset = range.startOffset
@@ -813,14 +815,12 @@ export function usePromptArea({
     // Case 2: cursor is at start of a text node, check previous sibling
     if (node.nodeType === Node.TEXT_NODE && offset === 0) {
       const directChild = getDirectChildContaining(editor, node)
-      if (!directChild) return false
+      if (!directChild) {
+        return false
+      }
 
       let prevSibling = directChild.previousSibling
-      while (
-        prevSibling &&
-        prevSibling.nodeType === Node.TEXT_NODE &&
-        prevSibling.textContent === ''
-      ) {
+      while (prevSibling && prevSibling.nodeType === Node.TEXT_NODE && prevSibling.textContent === '') {
         prevSibling = prevSibling.previousSibling
       }
       if (prevSibling && isChipElement(prevSibling)) {
@@ -840,10 +840,14 @@ export function usePromptArea({
 
   const handleChipForwardDelete = useCallback((): boolean => {
     const editor = editorRef.current
-    if (!editor) return false
+    if (!editor) {
+      return false
+    }
 
     const range = getSelectionRange()
-    if (!range || !range.collapsed) return false
+    if (!range || !range.collapsed) {
+      return false
+    }
 
     const node = range.startContainer
     const offset = range.startOffset
@@ -859,14 +863,12 @@ export function usePromptArea({
     // Case 2: cursor at end of a text node, check next sibling
     if (node.nodeType === Node.TEXT_NODE && offset === (node.textContent ?? '').length) {
       const directChild = getDirectChildContaining(editor, node)
-      if (!directChild) return false
+      if (!directChild) {
+        return false
+      }
 
       let nextSibling = directChild.nextSibling
-      while (
-        nextSibling &&
-        nextSibling.nodeType === Node.TEXT_NODE &&
-        nextSibling.textContent === ''
-      ) {
+      while (nextSibling && nextSibling.nodeType === Node.TEXT_NODE && nextSibling.textContent === '') {
         nextSibling = nextSibling.nextSibling
       }
       if (nextSibling && isChipElement(nextSibling)) {
@@ -927,7 +929,9 @@ export function usePromptArea({
 
   const selectSuggestionInternal = useCallback(
     (suggestion: TriggerSuggestion) => {
-      if (!activeTrigger) return
+      if (!activeTrigger) {
+        return
+      }
 
       const segments = readSegmentsFromDOM()
 
@@ -941,7 +945,9 @@ export function usePromptArea({
         onChange(inserted.segments)
         renderSegmentsToDOM(inserted.segments)
         const editor = editorRef.current
-        if (editor) setCursorAtOffset(editor, inserted.cursorOffset)
+        if (editor) {
+          setCursorAtOffset(editor, inserted.cursorOffset)
+        }
         dismissTrigger()
         setTimeout(() => {
           editorRef.current?.focus()
@@ -972,20 +978,13 @@ export function usePromptArea({
           // guessing risks silently editing the wrong instance, which is
           // worse than the no-op this falls back to.
           const atIndex = segments[editing.segIndex]
-          const stillThere =
-            atIndex?.type === 'chip' &&
-            atIndex.trigger === editing.chip.trigger &&
-            atIndex.value === editing.chip.value
+          const stillThere = atIndex?.type === 'chip' && atIndex.trigger === editing.chip.trigger && atIndex.value === editing.chip.value
           const segIdx = stillThere
             ? editing.segIndex
             : (() => {
                 const matches: number[] = []
                 segments.forEach((seg, i) => {
-                  if (
-                    seg.type === 'chip' &&
-                    seg.trigger === editing.chip.trigger &&
-                    seg.value === editing.chip.value
-                  ) {
+                  if (seg.type === 'chip' && seg.trigger === editing.chip.trigger && seg.value === editing.chip.value) {
                     matches.push(i)
                   }
                 })
@@ -1010,11 +1009,7 @@ export function usePromptArea({
             const nextSeg = newSegments[segIdx + 1]
             const insertedSpace = !nextSeg || nextSeg.type !== 'text' || nextSeg.text.length === 0
             if (insertedSpace) {
-              newSegments = [
-                ...newSegments.slice(0, segIdx + 1),
-                { type: 'text', text: ' ' },
-                ...newSegments.slice(segIdx + 1),
-              ]
+              newSegments = [...newSegments.slice(0, segIdx + 1), { type: 'text', text: ' ' }, ...newSegments.slice(segIdx + 1)]
             }
 
             events.pushUndo(segments)
@@ -1038,8 +1033,7 @@ export function usePromptArea({
             // "+1 accounts for the trailing space after the chip" placement —
             // landing exactly at the chip's end would put the caret at the
             // same bare element boundary the inserted space exists to avoid.
-            const caretOffset =
-              segmentsToPlainText(newSegments.slice(0, segIdx + 1)).length + (insertedSpace ? 1 : 0)
+            const caretOffset = segmentsToPlainText(newSegments.slice(0, segIdx + 1)).length + (insertedSpace ? 1 : 0)
             setCursorAtOffset(editor, caretOffset)
           }
         }
@@ -1075,17 +1069,7 @@ export function usePromptArea({
         editorRef.current?.focus()
       }, 0)
     },
-    [
-      activeTrigger,
-      readSegmentsFromDOM,
-      onChange,
-      renderSegmentsToDOM,
-      dismissTrigger,
-      onChipAdd,
-      onChipDelete,
-      events,
-      disabled,
-    ],
+    [activeTrigger, readSegmentsFromDOM, onChange, renderSegmentsToDOM, dismissTrigger, onChipAdd, onChipDelete, events, disabled],
   )
 
   const selectSuggestion = selectSuggestionInternal
@@ -1094,9 +1078,13 @@ export function usePromptArea({
   // the chip's current value so the list opens "on" the existing choice.
   useEffect(() => {
     const editing = editingChip.current
-    if (!editing || !activeTrigger?.config.reopenOnChipClick) return
+    if (!editing || !activeTrigger?.config.reopenOnChipClick) {
+      return
+    }
     const idx = suggestions.findIndex((s) => s.value === editing.chip.value)
-    if (idx > 0) setSelectedSuggestionIndex(idx)
+    if (idx > 0) {
+      setSelectedSuggestionIndex(idx)
+    }
   }, [suggestions, activeTrigger])
 
   // -----------------------------------------------------------------------
@@ -1105,10 +1093,7 @@ export function usePromptArea({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
-      const applyEditResult = (
-        editor: HTMLDivElement,
-        result: { segments: Segment[]; cursorOffset: number },
-      ) => {
+      const applyEditResult = (editor: HTMLDivElement, result: { segments: Segment[]; cursorOffset: number }) => {
         // Ordered-list numbers are a projection of position: rebuild them on
         // every structural edit and remap the caret across any digit-run width
         // changes. No-op (same reference) when there are no ordered lists.
@@ -1125,14 +1110,22 @@ export function usePromptArea({
       }
 
       const tryListContinuation = (editor: HTMLDivElement): boolean => {
-        if (!markdownEnabled) return false
+        if (!markdownEnabled) {
+          return false
+        }
         const segments = readSegmentsFromDOM()
         const cursorPos = getCursorOffset(editor)
-        if (cursorPos === null) return false
+        if (cursorPos === null) {
+          return false
+        }
         const plainText = segmentsToPlainText(segments)
-        if (!getListContext(plainText, cursorPos)) return false
+        if (!getListContext(plainText, cursorPos)) {
+          return false
+        }
         const result = insertListContinuation(segments, cursorPos)
-        if (result) applyEditResult(editor, result)
+        if (result) {
+          applyEditResult(editor, result)
+        }
         return true
       }
 
@@ -1147,28 +1140,31 @@ export function usePromptArea({
       }
 
       // 1a. Undo/redo intercept
-      if (events.handleKeyDownForUndoRedo(e)) return
+      if (events.handleKeyDownForUndoRedo(e)) {
+        return
+      }
 
       // 1.5 Markdown formatting shortcuts (Cmd+B bold, Cmd+I italic)
-      if (
-        markdownEnabled &&
-        (e.metaKey || e.ctrlKey) &&
-        !e.shiftKey &&
-        (e.key === 'b' || e.key === 'i')
-      ) {
+      if (markdownEnabled && (e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'b' || e.key === 'i')) {
         e.preventDefault()
         const editor = editorRef.current
-        if (!editor) return
+        if (!editor) {
+          return
+        }
 
         const offsets = getSelectionOffsets(editor)
-        if (!offsets || offsets.start === offsets.end) return
+        if (!offsets || offsets.start === offsets.end) {
+          return
+        }
 
         const marker = e.key === 'b' ? '**' : '*'
         const currentSegments = readSegmentsFromDOM()
         events.pushUndo(currentSegments)
 
         const result = toggleMarkdownWrap(currentSegments, offsets.start, offsets.end, marker)
-        if (!result) return
+        if (!result) {
+          return
+        }
 
         lastRenderedValue.current = result.segments
         onChange(result.segments)
@@ -1183,13 +1179,7 @@ export function usePromptArea({
       // the typed key actually matching a launch char, so it stays off the hot
       // path. insertChip still inserts a chip at the cursor if the consumer
       // wants one after the external selection.
-      if (
-        !e.metaKey &&
-        !e.ctrlKey &&
-        !e.altKey &&
-        !e.nativeEvent.isComposing &&
-        e.key.length === 1
-      ) {
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.nativeEvent.isComposing && e.key.length === 1) {
         const launcher = triggers.find((t) => t.mode === 'launch' && t.char === e.key)
         const editor = editorRef.current
         if (launcher?.onActivate && editor) {
@@ -1202,10 +1192,11 @@ export function usePromptArea({
               launcher.onActivate({
                 text: plainText,
                 cursorPosition: cursorPos,
-                insertChip: buildInsertChip(
-                  replaceTextRange(segments, cursorPos, cursorPos, launcher.char),
-                  { config: launcher, startOffset: cursorPos, query: '' },
-                ),
+                insertChip: buildInsertChip(replaceTextRange(segments, cursorPos, cursorPos, launcher.char), {
+                  config: launcher,
+                  startOffset: cursorPos,
+                  query: '',
+                }),
               })
               return
             }
@@ -1223,10 +1214,7 @@ export function usePromptArea({
       const dropdownVisible =
         activeTrigger &&
         activeTrigger.config.mode === 'dropdown' &&
-        (suggestions.length > 0 ||
-          suggestionsLoading ||
-          suggestionsError !== null ||
-          !!activeTrigger.config.emptyMessage)
+        (suggestions.length > 0 || suggestionsLoading || suggestionsError !== null || !!activeTrigger.config.emptyMessage)
       if (dropdownVisible) {
         if (e.key === 'ArrowDown') {
           e.preventDefault()
@@ -1278,10 +1266,10 @@ export function usePromptArea({
             const ctx = getListContext(plainText, cursorPos)
             if (ctx) {
               e.preventDefault()
-              const result = e.shiftKey
-                ? outdentListItem(segments, cursorPos)
-                : indentListItem(segments, cursorPos)
-              if (result) applyEditResult(editor, result)
+              const result = e.shiftKey ? outdentListItem(segments, cursorPos) : indentListItem(segments, cursorPos)
+              if (result) {
+                applyEditResult(editor, result)
+              }
               return
             }
           }
@@ -1292,7 +1280,9 @@ export function usePromptArea({
       // contentEditable behaviour near <a> elements).
       const insertPlainNewline = (editor: HTMLDivElement): void => {
         const offsets = getSelectionOffsets(editor)
-        if (!offsets) return
+        if (!offsets) {
+          return
+        }
         const currentSegments = readSegmentsFromDOM()
         events.pushUndo(currentSegments)
         const newSegments = replaceTextRange(currentSegments, offsets.start, offsets.end, '\n')
@@ -1303,7 +1293,9 @@ export function usePromptArea({
       if (e.key === 'Enter' && e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault()
         const editor = editorRef.current
-        if (editor && !tryListContinuation(editor)) insertPlainNewline(editor)
+        if (editor && !tryListContinuation(editor)) {
+          insertPlainNewline(editor)
+        }
         return
       }
 
@@ -1327,7 +1319,9 @@ export function usePromptArea({
           return
         }
         const editor = editorRef.current
-        if (editor && !tryListContinuation(editor)) insertPlainNewline(editor)
+        if (editor && !tryListContinuation(editor)) {
+          insertPlainNewline(editor)
+        }
         return
       }
 
@@ -1430,7 +1424,9 @@ export function usePromptArea({
         onChange([])
         const editor = editorRef.current
         if (editor) {
-          while (editor.firstChild) editor.removeChild(editor.firstChild)
+          while (editor.firstChild) {
+            editor.removeChild(editor.firstChild)
+          }
         }
         events.resetUndoHistory()
         if (undoTimer.current) {
@@ -1445,7 +1441,9 @@ export function usePromptArea({
         onChange(segments)
         renderSegmentsToDOM(segments)
         const editor = editorRef.current
-        if (editor) setCursorAtOffset(editor, text.length)
+        if (editor) {
+          setCursorAtOffset(editor, text.length)
+        }
       },
       appendText: (text) => {
         const segments = readSegmentsFromDOM()
@@ -1460,7 +1458,9 @@ export function usePromptArea({
         onChange(next)
         renderSegmentsToDOM(next)
         const editor = editorRef.current
-        if (editor) setCursorAtOffset(editor, segmentsToPlainText(next).length)
+        if (editor) {
+          setCursorAtOffset(editor, segmentsToPlainText(next).length)
+        }
       },
       getCursorPosition: () => {
         const editor = editorRef.current
@@ -1468,11 +1468,15 @@ export function usePromptArea({
       },
       setCursorPosition: (offset) => {
         const editor = editorRef.current
-        if (editor) setCursorAtOffset(editor, offset)
+        if (editor) {
+          setCursorAtOffset(editor, offset)
+        }
       },
       setCursorToEnd: () => {
         const editor = editorRef.current
-        if (editor) setCursorAtOffset(editor, segmentsToPlainText(readSegmentsFromDOM()).length)
+        if (editor) {
+          setCursorAtOffset(editor, segmentsToPlainText(readSegmentsFromDOM()).length)
+        }
       },
       getSelection: () => {
         const editor = editorRef.current
@@ -1480,7 +1484,9 @@ export function usePromptArea({
       },
       setSelection: (start, end) => {
         const editor = editorRef.current
-        if (editor) setSelectionAtOffsets(editor, start, end)
+        if (editor) {
+          setSelectionAtOffsets(editor, start, end)
+        }
       },
     }),
     [readSegmentsFromDOM, onChange, renderSegmentsToDOM, onChipAdd, events],

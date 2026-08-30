@@ -5,14 +5,7 @@ import { z } from 'zod'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
 import { createVfs, loadEngine, type SandboxEngine } from '@workerdeck/sandbox'
 import type { SessionEvent } from '@workerdeck/protocol'
-import {
-  AiSdkRunner,
-  QuickJsExecutor,
-  createToolContext,
-  withMcpTools,
-  type ToolExecutionResult,
-  type ToolExecutor,
-} from '../src/index.ts'
+import { AiSdkRunner, QuickJsExecutor, createToolContext, withMcpTools, type ToolExecutionResult, type ToolExecutor } from '../src/index.ts'
 
 let engine: SandboxEngine
 beforeAll(async () => {
@@ -44,12 +37,7 @@ const call = (id: string, name: string, input: unknown) => ({
 describe('capability-scoped tool set', () => {
   it('grants only what the host supplied a backend for', () => {
     const minimal = createToolContext({ executor: stubExecutor(), sessionId: 's' })
-    expect(Object.keys(minimal.tools).sort()).toEqual([
-      'eval_script',
-      'fs_list',
-      'fs_read',
-      'fs_write',
-    ])
+    expect(Object.keys(minimal.tools).sort()).toEqual(['eval_script', 'fs_list', 'fs_read', 'fs_write'])
     // No web_search or download: a model cannot be tempted by a capability the
     // operator never granted.
     const full = createToolContext({
@@ -71,13 +59,7 @@ describe('capability-scoped tool set', () => {
     })
     expect(context.sandboxedToolNames).toEqual(['eval_script'])
     const authoritative = context.definitions.filter((d) => d.trust === 'authoritative')
-    expect(authoritative.map((d) => d.name).sort()).toEqual([
-      'download',
-      'fs_list',
-      'fs_read',
-      'fs_write',
-      'web_search',
-    ])
+    expect(authoritative.map((d) => d.name).sort()).toEqual(['download', 'fs_list', 'fs_read', 'fs_write', 'web_search'])
   })
 
   it('declares sandboxed tools without execute so they ride the executor seam', () => {
@@ -96,9 +78,7 @@ describe('capability-scoped tool set', () => {
     // Still only eval_script may leave the server.
     expect(withMcp.sandboxedToolNames).toEqual(['eval_script'])
 
-    expect(() =>
-      withMcpTools(base, { eval_script: tool({ inputSchema: z.object({}) }) }),
-    ).toThrow(/collides/)
+    expect(() => withMcpTools(base, { eval_script: tool({ inputSchema: z.object({}) }) })).toThrow(/collides/)
   })
 
   it('keeps fs_* on the scratch VFS, never the host disk', async () => {
@@ -130,9 +110,7 @@ describe('capability-scoped tool set', () => {
       error: expect.stringContaining('no such file'),
     })
     expect(delivered).toEqual([])
-    expect(
-      await deliver({ path: '/SUMMARY.md', description: 'the summary' }, {} as never),
-    ).toMatchObject({ delivered: true, bytes: 9 })
+    expect(await deliver({ path: '/SUMMARY.md', description: 'the summary' }, {} as never)).toMatchObject({ delivered: true, bytes: 9 })
     expect(delivered).toEqual([{ path: '/SUMMARY.md', bytes: 9, description: 'the summary' }])
   })
 
@@ -148,10 +126,7 @@ describe('capability-scoped tool set', () => {
       },
     })
     expect(context.definitions.find((d) => d.name === 'web_fetch')?.trust).toBe('authoritative')
-    const result = await context.tools.web_fetch!.execute!(
-      { url: 'http://203.0.113.5/', prompt: 'what?' },
-      {} as never,
-    )
+    const result = await context.tools.web_fetch!.execute!({ url: 'http://203.0.113.5/', prompt: 'what?' }, {} as never)
     expect(result).toMatchObject({ error: 'boom' })
   })
 
@@ -163,10 +138,7 @@ describe('capability-scoped tool set', () => {
         throw new Error('404 not found')
       },
     })
-    const result = await context.tools.download!.execute!(
-      { url: 'https://x.example/doc', path: '/doc.txt' },
-      {} as never,
-    )
+    const result = await context.tools.download!.execute!({ url: 'https://x.example/doc', path: '/doc.txt' }, {} as never)
     expect(result).toMatchObject({ error: '404 not found' })
   })
 })
@@ -243,10 +215,7 @@ describe('runner-driven tool execution', () => {
   it('feeds a sandbox failure back as tool output instead of failing the session', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [
-        call('c1', 'eval_script', { script: 'while (true) {}' }),
-        text('That timed out; trying something simpler.'),
-      ],
+      doStream: [call('c1', 'eval_script', { script: 'while (true) {}' }), text('That timed out; trying something simpler.')],
     })
     const context = createToolContext({ executor: new QuickJsExecutor({ engine }), sessionId: 's' })
     const runner = new AiSdkRunner({

@@ -32,7 +32,9 @@ const listeners = new Set<() => void>()
 
 function emit(next: Partial<State>) {
   state = { ...state, ...next }
-  for (const listener of listeners) listener()
+  for (const listener of listeners) {
+    listener()
+  }
 }
 
 let inFlight: Promise<void> | undefined
@@ -42,15 +44,20 @@ export function refreshJobs(): Promise<void> {
   inFlight ??= (async () => {
     try {
       const gateway = client()
-      if (!gateway) return
+      if (!gateway) {
+        return
+      }
       const [jobs, stats] = await Promise.all([gateway.listJobs(), gateway.queueStats()])
       emit({ jobs, stats, enabled: true, error: undefined })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       // A queue-less server is a configuration, not a failure — saying so is
       // what lets the UI offer the option rather than an error.
-      if (/not configured/i.test(message)) emit({ enabled: false, error: undefined })
-      else emit({ error: message })
+      if (/not configured/i.test(message)) {
+        emit({ enabled: false, error: undefined })
+      } else {
+        emit({ error: message })
+      }
     } finally {
       inFlight = undefined
     }
@@ -87,9 +94,13 @@ function subscribe(listener: () => void) {
  * arrive after the first subscriber does.
  */
 function ensureAttached() {
-  if (detach || !state.enabled || state.stats === undefined || subscribers === 0) return
+  if (detach || !state.enabled || state.stats === undefined || subscribers === 0) {
+    return
+  }
   const gateway = client()
-  if (!gateway) return
+  if (!gateway) {
+    return
+  }
   const handle = gateway.attachQueue()
   const offs = [
     // Reconnects have no replay: re-list to catch anything missed while detached.
@@ -105,7 +116,9 @@ function ensureAttached() {
     }),
   ]
   detach = () => {
-    for (const off of offs) off()
+    for (const off of offs) {
+      off()
+    }
     handle.detach()
   }
 }

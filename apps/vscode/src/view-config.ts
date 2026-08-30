@@ -35,21 +35,14 @@ export {
   subagentLabel,
   subsetSummary,
 } from '@workerdeck/protocol'
-export type {
-  Facet,
-  GroupBy,
-  SessionGroup,
-  SessionRow,
-  SessionState,
-  SortBy,
-  SubsetSummary,
-  ViewConfig,
-} from '@workerdeck/protocol'
+export type { Facet, GroupBy, SessionGroup, SessionRow, SessionState, SortBy, SubsetSummary, ViewConfig } from '@workerdeck/protocol'
 
 /** Every connected gateway's sessions, flattened. Recency order is preserved
  * from the model, so it survives as the tiebreak through every sort. */
 export function buildRows(state: SidebarState | undefined): SessionRow[] {
-  if (!state) return []
+  if (!state) {
+    return []
+  }
   const rows: SessionRow[] = []
   for (const host of state.hosts) {
     for (const info of state.sessions[host.id] ?? []) {

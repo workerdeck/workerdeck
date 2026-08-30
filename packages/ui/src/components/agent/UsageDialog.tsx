@@ -48,13 +48,13 @@ export function UsageDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={className}>
         <DialogHeader
-          title='Usage'
+          title="Usage"
           description={engine === 'claude' ? 'Claude Code' : engine}
           actions={
             // The CLI reports a tier ('max'), never the multiplier a
             // subscription page shows — so this says "Max" and stops there.
             subscriptionType ? (
-              <Badge variant='accent' className='mt-0.5 shrink-0 capitalize'>
+              <Badge variant="accent" className="mt-0.5 shrink-0 capitalize">
                 {subscriptionType}
               </Badge>
             ) : null
@@ -62,7 +62,7 @@ export function UsageDialog({
         />
         <DialogBody>
           {rateLimits.length === 0 ? (
-            <p className='py-6 text-center text-body-sm text-fg-4'>
+            <p className="py-6 text-center text-body-sm text-fg-4">
               {engine === 'claude'
                 ? 'This session reports no plan windows — API-key sessions have none, and a subscription session reports them once a turn has run.'
                 : `Plan windows are a claude.ai subscription thing; this session runs on the ${engine} engine.`}
@@ -70,13 +70,11 @@ export function UsageDialog({
           ) : (
             <UsageMeters windows={rateLimits} now={now} />
           )}
-          <div className='mt-5 flex items-baseline justify-between gap-4 border-t border-border pt-3'>
-            <span className='text-label text-fg-3'>This session has cost</span>
-            <span className='font-mono text-body-sm text-fg-1'>{formatCost(totalCostUsd)}</span>
+          <div className="mt-5 flex items-baseline justify-between gap-4 border-t border-border pt-3">
+            <span className="text-label text-fg-3">This session has cost</span>
+            <span className="font-mono text-body-sm text-fg-1">{formatCost(totalCostUsd)}</span>
           </div>
-          {updatedAt ? (
-            <p className='mt-2 text-label text-fg-4'>Updated {formatAgoPrecise(updatedAt, now)}</p>
-          ) : null}
+          {updatedAt ? <p className="mt-2 text-label text-fg-4">Updated {formatAgoPrecise(updatedAt, now)}</p> : null}
         </DialogBody>
       </DialogContent>
     </Dialog>

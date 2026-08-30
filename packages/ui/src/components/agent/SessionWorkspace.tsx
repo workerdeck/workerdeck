@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import type { WorkerDeckClient } from '@workerdeck/client'
-import {
-  useHostFileRoots,
-  useHostFileSearch,
-  useHostFileTree,
-  useOpenFiles,
-  useSessionInfo,
-  isDirty,
-} from '@workerdeck/react'
+import { useHostFileRoots, useHostFileSearch, useHostFileTree, useOpenFiles, useSessionInfo, isDirty } from '@workerdeck/react'
 import { PanelLeftOpen } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
 import { Button } from '../ui/Button.tsx'
@@ -145,12 +138,13 @@ export function SessionWorkspace({
   // editor asks before it offers to save anything.
   const { canWrite } = useHostFileRoots(client)
 
-
   // Nothing here can save on the user's behalf when the tab is going away, so
   // the browser's own guard is the last line. Registered only while there is
   // something to lose — an unconditional handler makes every navigation prompt.
   useEffect(() => {
-    if (!files.hasUnsaved) return
+    if (!files.hasUnsaved) {
+      return
+    }
     const warn = (event: BeforeUnloadEvent) => event.preventDefault()
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
@@ -178,7 +172,9 @@ export function SessionWorkspace({
   const overlayRail = !wide
   const railOpen = tree.available && !railCollapsed
   useEffect(() => {
-    if (overlayRail) setRailCollapsed(true)
+    if (overlayRail) {
+      setRailCollapsed(true)
+    }
   }, [overlayRail])
 
   // Closing a dirty tab is the one destructive thing the strip can do, and the
@@ -191,7 +187,9 @@ export function SessionWorkspace({
       const file = files.files.find((f) => f.path === path)
       if (file && isDirty(file)) {
         const name = file.name
-        if (!window.confirm(`${name} has unsaved changes. Close it and lose them?`)) return
+        if (!window.confirm(`${name} has unsaved changes. Close it and lose them?`)) {
+          return
+        }
       }
       files.close(path)
     },
@@ -206,10 +204,7 @@ export function SessionWorkspace({
   // a host filesystem there is nothing to open, and a link that cannot resolve
   // is worse than plain text. Monaco is excluded because Cmd+click already
   // means go-to-definition in there, and every identifier would match.
-  const openPath = useCallback(
-    ({ path }: { path: string }) => files.open(resolveAgainstCwd(path, cwd)),
-    [files.open, cwd],
-  )
+  const openPath = useCallback(({ path }: { path: string }) => files.open(resolveAgainstCwd(path, cwd)), [files.open, cwd])
   usePathLinks({
     container: column,
     onOpen: openPath,
@@ -232,121 +227,108 @@ export function SessionWorkspace({
         : createPortal(header, topBar)
 
   return (
-    <div
-      data-slot='session-workspace'
-      className={cn('flex h-full min-h-0 w-full flex-col overflow-hidden bg-bg', className)}>
-      {header !== undefined ? <div ref={setTopBar} className='shrink-0' /> : null}
-      <div className='relative flex min-h-0 flex-1'>
-      {railOpen ? (
-        <FileTree
-          tree={tree}
-          search={search}
-          activePath={files.activePath}
-          onOpenFile={files.open}
-          onCollapse={() => setRailCollapsed(true)}
-          style={{ width: overlayRail ? Math.min(railWidth, 320) : railWidth }}
-          className={cn(
-            'shrink-0 border-r border-border',
-            overlayRail && 'absolute inset-y-0 left-0 z-20 shadow-lg',
-          )}
-        />
-      ) : tree.available ? (
-        // Collapsed: a slim strip that keeps the rail one click away. In flow
-        // rather than floating over the panel, so it can never land on top of an
-        // embedder's own header controls.
-        <div className='flex w-8 shrink-0 flex-col items-center border-r border-border bg-surface pt-1.5'>
-          <Button
-            variant='ghost'
-            size='icon-sm'
-            aria-label='Show project files'
-            onClick={() => setRailCollapsed(false)}>
-            <PanelLeftOpen className='size-4 text-fg-3' />
-          </Button>
-        </div>
-      ) : null}
-      {/* No splitter over an overlay rail — dragging a drawer's edge on a phone
-          fights the scroll it is sitting on top of. */}
-      {railOpen && !overlayRail ? (
-        <Splitter
-          orientation='vertical'
-          value={railWidth}
-          onValueChange={setRailWidth}
-          min={RAIL_MIN}
-          max={RAIL_MAX}
-          defaultValue={defaultRailWidth}
-          aria-label='Resize the file tree'
-        />
-      ) : null}
-
-      <div ref={column} className='flex min-h-0 min-w-0 flex-1 flex-col'>
-        {/* Slot 1 of 3. The `? :` leaves a null here when nothing is open, which
-            is what holds the agent's slot below and keeps it from remounting. */}
-        {hasFiles ? (
-          <div
-            className='flex min-h-0 shrink-0 flex-col overflow-hidden'
-            style={{ height: Math.min(editorHeight, editorMax || editorHeight) }}>
-            <EditorTabs
-              files={files.files}
-              activePath={files.activePath}
-              onActivate={files.activate}
-              onClose={closeTab}
-            />
-            <FileViewer
-              file={files.active}
-              canWrite={canWrite}
-              onChange={files.edit}
-              onSave={(path) => void files.save(path)}
-              onRevert={files.revert}
-              onReload={files.reload}
-              onOverwrite={(path) => void files.overwrite(path)}
-              onDismissConflict={files.dismissConflict}
-            />
+    <div data-slot="session-workspace" className={cn('flex h-full min-h-0 w-full flex-col overflow-hidden bg-bg', className)}>
+      {header !== undefined ? <div ref={setTopBar} className="shrink-0" /> : null}
+      <div className="relative flex min-h-0 flex-1">
+        {railOpen ? (
+          <FileTree
+            tree={tree}
+            search={search}
+            activePath={files.activePath}
+            onOpenFile={files.open}
+            onCollapse={() => setRailCollapsed(true)}
+            style={{ width: overlayRail ? Math.min(railWidth, 320) : railWidth }}
+            className={cn('shrink-0 border-r border-border', overlayRail && 'absolute inset-y-0 left-0 z-20 shadow-lg')}
+          />
+        ) : tree.available ? (
+          // Collapsed: a slim strip that keeps the rail one click away. In flow
+          // rather than floating over the panel, so it can never land on top of an
+          // embedder's own header controls.
+          <div className="flex w-8 shrink-0 flex-col items-center border-r border-border bg-surface pt-1.5">
+            <Button variant="ghost" size="icon-sm" aria-label="Show project files" onClick={() => setRailCollapsed(false)}>
+              <PanelLeftOpen className="size-4 text-fg-3" />
+            </Button>
           </div>
         ) : null}
-        {/* Slot 2 of 3. */}
-        {hasFiles ? (
+        {/* No splitter over an overlay rail — dragging a drawer's edge on a phone
+          fights the scroll it is sitting on top of. */}
+        {railOpen && !overlayRail ? (
           <Splitter
-            orientation='horizontal'
-            value={Math.min(editorHeight, editorMax || editorHeight)}
-            onValueChange={setEditorHeight}
-            min={EDITOR_MIN}
-            max={editorMax}
-            aria-label='Resize the open file'
+            orientation="vertical"
+            value={railWidth}
+            onValueChange={setRailWidth}
+            min={RAIL_MIN}
+            max={RAIL_MAX}
+            defaultValue={defaultRailWidth}
+            aria-label="Resize the file tree"
           />
         ) : null}
-        {/* Slot 3 of 3 — always here, always at this index. */}
-        <SessionPanel
-          client={client}
-          sessionId={sessionId}
-          header={hoisted}
-          transcriptVariant={transcriptVariant}
-          transcriptDensity={transcriptDensity}
-          transcriptFont={transcriptFont}
-          scrubber={scrubber}
-          scrubberMarks={scrubberMarks}
-          stickyPrompt={stickyPrompt}
-          openSubagent={openSubagent}
-          reveal={reveal}
-          onSubagentChange={onSubagentChange}
-          controlsSurface={controlsSurface}
-          fontSize={fontSize}
-          onLinkClick={onLinkClick}
-          statusPlacement={statusPlacement}
-          unseen={unseen}
-          readOnly={readOnly}
-          onVitals={onVitals}
-          className='min-h-0 flex-1'
-        />
-      </div>
+
+        <div ref={column} className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {/* Slot 1 of 3. The `? :` leaves a null here when nothing is open, which
+            is what holds the agent's slot below and keeps it from remounting. */}
+          {hasFiles ? (
+            <div
+              className="flex min-h-0 shrink-0 flex-col overflow-hidden"
+              style={{ height: Math.min(editorHeight, editorMax || editorHeight) }}
+            >
+              <EditorTabs files={files.files} activePath={files.activePath} onActivate={files.activate} onClose={closeTab} />
+              <FileViewer
+                file={files.active}
+                canWrite={canWrite}
+                onChange={files.edit}
+                onSave={(path) => void files.save(path)}
+                onRevert={files.revert}
+                onReload={files.reload}
+                onOverwrite={(path) => void files.overwrite(path)}
+                onDismissConflict={files.dismissConflict}
+              />
+            </div>
+          ) : null}
+          {/* Slot 2 of 3. */}
+          {hasFiles ? (
+            <Splitter
+              orientation="horizontal"
+              value={Math.min(editorHeight, editorMax || editorHeight)}
+              onValueChange={setEditorHeight}
+              min={EDITOR_MIN}
+              max={editorMax}
+              aria-label="Resize the open file"
+            />
+          ) : null}
+          {/* Slot 3 of 3 — always here, always at this index. */}
+          <SessionPanel
+            client={client}
+            sessionId={sessionId}
+            header={hoisted}
+            transcriptVariant={transcriptVariant}
+            transcriptDensity={transcriptDensity}
+            transcriptFont={transcriptFont}
+            scrubber={scrubber}
+            scrubberMarks={scrubberMarks}
+            stickyPrompt={stickyPrompt}
+            openSubagent={openSubagent}
+            reveal={reveal}
+            onSubagentChange={onSubagentChange}
+            controlsSurface={controlsSurface}
+            fontSize={fontSize}
+            onLinkClick={onLinkClick}
+            statusPlacement={statusPlacement}
+            unseen={unseen}
+            readOnly={readOnly}
+            onVitals={onVitals}
+            className="min-h-0 flex-1"
+          />
+        </div>
 
         {/* Tapping away closes the drawer, which is the only way back to the
             transcript on a narrow screen. */}
         {overlayRail && railOpen ? (
           <button
-            type='button'
-            aria-label='Close the file tree'
+            type="button"
+            aria-label="Close the file tree"
             onClick={() => setRailCollapsed(true)}
-            className='absolute inset-0 z-10 bg-black/30'
+            className="absolute inset-0 z-10 bg-black/30"
           />
         ) : null}
       </div>
@@ -361,9 +343,13 @@ function useElementHeight(ref: RefObject<HTMLElement | null>): number {
   const [height, setHeight] = useState(0)
   useLayoutEffect(() => {
     const element = ref.current
-    if (!element) return
+    if (!element) {
+      return
+    }
     const observer = new ResizeObserver(([entry]) => {
-      if (entry) setHeight(entry.contentRect.height)
+      if (entry) {
+        setHeight(entry.contentRect.height)
+      }
     })
     observer.observe(element)
     return () => observer.disconnect()

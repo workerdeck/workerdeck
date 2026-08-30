@@ -33,7 +33,9 @@ afterEach(async () => {
 async function startHost(auth: CliAuth): Promise<string> {
   const server = createServer((req, res) => {
     void (async () => {
-      if (await auth.handleAuthRequest(req, res)) return
+      if (await auth.handleAuthRequest(req, res)) {
+        return
+      }
       const pathname = new URL(req.url ?? '/', 'http://internal').pathname
       if (pathname.startsWith('/v1')) {
         const principal = await auth.authenticate(req)
@@ -46,7 +48,9 @@ async function startHost(auth: CliAuth): Promise<string> {
       }
       res.writeHead(200, { 'content-type': 'text/plain' }).end(auth.hasValidSession(req) ? 'SPA' : 'LOGIN')
     })().catch(() => {
-      if (!res.headersSent) res.writeHead(500).end()
+      if (!res.headersSent) {
+        res.writeHead(500).end()
+      }
     })
   })
   servers.push(server)
@@ -59,10 +63,7 @@ type RawResponse = { status: number; headers: IncomingMessage['headers']; setCoo
 
 // Raw node:http instead of fetch: the fetch spec marks Origin a forbidden
 // request header, and these tests exist to send arbitrary Origins.
-function request(
-  url: string,
-  init: { method?: string; headers?: Record<string, string>; body?: string } = {},
-): Promise<RawResponse> {
+function request(url: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<RawResponse> {
   return new Promise((resolve, reject) => {
     const req = httpRequest(url, { method: init.method ?? 'GET', headers: init.headers, agent: false }, (res) => {
       const chunks: Buffer[] = []
@@ -147,9 +148,7 @@ describe('header transport', () => {
   })
 
   it('works on a WS-upgrade-shaped request', async () => {
-    const principal = await auth.authenticate(
-      fakeReq({ headers: { 'x-workerdeck-key': SECRET, upgrade: 'websocket' } }),
-    )
+    const principal = await auth.authenticate(fakeReq({ headers: { 'x-workerdeck-key': SECRET, upgrade: 'websocket' } }))
     expect(principal).toBeTruthy()
   })
 })
@@ -159,9 +158,7 @@ describe('query-string transport (browser WS attach)', () => {
   const ws = (url: string) => fakeReq({ url, headers: { upgrade: 'websocket' } })
 
   it('accepts ?key= on a WebSocket upgrade', async () => {
-    const principal = (await auth.authenticate(
-      ws(`/v1/sessions/abc/ws?afterSeq=0&key=${encodeURIComponent(SECRET)}`),
-    )) as CliPrincipal
+    const principal = (await auth.authenticate(ws(`/v1/sessions/abc/ws?afterSeq=0&key=${encodeURIComponent(SECRET)}`))) as CliPrincipal
     expect(principal.via).toBe('header')
   })
 
@@ -169,14 +166,8 @@ describe('query-string transport (browser WS attach)', () => {
     // The whole point of confining it to upgrades: a credential in a URL is
     // logged by proxies, so what a leaked URL buys must be one attach — never
     // the run of the API.
-    expect(
-      await auth.authenticate(fakeReq({ url: `/v1/sessions?key=${encodeURIComponent(SECRET)}` })),
-    ).toBeNull()
-    expect(
-      await auth.authenticate(
-        fakeReq({ method: 'POST', url: `/v1/sessions?key=${encodeURIComponent(SECRET)}` }),
-      ),
-    ).toBeNull()
+    expect(await auth.authenticate(fakeReq({ url: `/v1/sessions?key=${encodeURIComponent(SECRET)}` }))).toBeNull()
+    expect(await auth.authenticate(fakeReq({ method: 'POST', url: `/v1/sessions?key=${encodeURIComponent(SECRET)}` }))).toBeNull()
   })
 
   it('rejects a wrong ?key= without falling through to the cookie', async () => {
@@ -189,9 +180,7 @@ describe('query-string transport (browser WS attach)', () => {
     // Embedded deployments never see this transport: `createCliAuth` is built
     // with `secret: undefined`, and `instance.ts` routes to the host's hook.
     const disabled = createCliAuth()
-    const principal = (await disabled.authenticate(
-      ws('/v1/sessions/abc/ws?key=anything'),
-    )) as CliPrincipal
+    const principal = (await disabled.authenticate(ws('/v1/sessions/abc/ws?key=anything'))) as CliPrincipal
     expect(principal.via).toBe('open')
   })
 })
@@ -289,15 +278,9 @@ describe('CSRF: the Origin policy', () => {
 
   it('requires a matching Origin on cookie-authenticated writes', async () => {
     const { auth, cookie, host } = await cookieAuth()
-    const ok = await auth.authenticate(
-      fakeReq({ method: 'POST', headers: { cookie, host, origin: `http://${host}` } }),
-    )
+    const ok = await auth.authenticate(fakeReq({ method: 'POST', headers: { cookie, host, origin: `http://${host}` } }))
     expect(ok).toBeTruthy()
-    expect(
-      await auth.authenticate(
-        fakeReq({ method: 'POST', headers: { cookie, host, origin: 'http://evil.example' } }),
-      ),
-    ).toBeNull()
+    expect(await auth.authenticate(fakeReq({ method: 'POST', headers: { cookie, host, origin: 'http://evil.example' } }))).toBeNull()
     // Browsers always send Origin on POST; absence means a non-browser client
     // replaying the cookie, which should use the header transport instead.
     expect(await auth.authenticate(fakeReq({ method: 'POST', headers: { cookie, host } }))).toBeNull()
@@ -306,21 +289,15 @@ describe('CSRF: the Origin policy', () => {
   it('requires a matching Origin on the WS upgrade — the CORS-exempt path', async () => {
     const { auth, cookie, host } = await cookieAuth()
     const upgrade = { cookie, host, upgrade: 'websocket' }
-    expect(
-      await auth.authenticate(fakeReq({ headers: { ...upgrade, origin: `http://${host}` } })),
-    ).toBeTruthy()
-    expect(
-      await auth.authenticate(fakeReq({ headers: { ...upgrade, origin: 'http://evil.example' } })),
-    ).toBeNull()
+    expect(await auth.authenticate(fakeReq({ headers: { ...upgrade, origin: `http://${host}` } }))).toBeTruthy()
+    expect(await auth.authenticate(fakeReq({ headers: { ...upgrade, origin: 'http://evil.example' } }))).toBeNull()
     expect(await auth.authenticate(fakeReq({ headers: upgrade }))).toBeNull()
   })
 
   it('allows plain GETs without Origin but never with a foreign one', async () => {
     const { auth, cookie, host } = await cookieAuth()
     expect(await auth.authenticate(fakeReq({ headers: { cookie, host } }))).toBeTruthy()
-    expect(
-      await auth.authenticate(fakeReq({ headers: { cookie, host, origin: 'http://evil.example' } })),
-    ).toBeNull()
+    expect(await auth.authenticate(fakeReq({ headers: { cookie, host, origin: 'http://evil.example' } }))).toBeNull()
     // 'Origin: null' (sandboxed iframe, data: URL) is foreign, not absent.
     expect(await auth.authenticate(fakeReq({ headers: { cookie, host, origin: 'null' } }))).toBeNull()
   })
@@ -329,13 +306,9 @@ describe('CSRF: the Origin policy', () => {
     const { auth, cookie, host } = await cookieAuth()
     // Same-site for SameSite purposes — which is exactly why Lax alone fails.
     expect(
-      await auth.authenticate(
-        fakeReq({ method: 'POST', headers: { cookie, host, origin: `http://${host.split(':')[0]}:9999` } }),
-      ),
+      await auth.authenticate(fakeReq({ method: 'POST', headers: { cookie, host, origin: `http://${host.split(':')[0]}:9999` } })),
     ).toBeNull()
-    expect(
-      await auth.authenticate(fakeReq({ method: 'POST', headers: { cookie, host, origin: `https://${host}` } })),
-    ).toBeNull()
+    expect(await auth.authenticate(fakeReq({ method: 'POST', headers: { cookie, host, origin: `https://${host}` } }))).toBeNull()
   })
 
   it('honors allowedOrigins, normalized', async () => {
@@ -418,9 +391,7 @@ describe('proxy trust', () => {
   })
 
   it('keys the throttle on the last x-forwarded-for hop — the proxy-written one', async () => {
-    const base = await startHost(
-      createCliAuth({ secret: SECRET, trustProxy: true, throttle: { maxFailuresPerIp: 1 } }),
-    )
+    const base = await startHost(createCliAuth({ secret: SECRET, trustProxy: true, throttle: { maxFailuresPerIp: 1 } }))
     const attempt = (xff: string) =>
       request(`${base}/auth/login`, {
         method: 'POST',
@@ -447,9 +418,7 @@ describe('throttling', () => {
     })
 
   it('locks an IP out after repeated failures — even for the right secret — until the window passes', async () => {
-    const base = await startHost(
-      createCliAuth({ secret: SECRET, throttle: { windowMs: 200, maxFailuresPerIp: 2 } }),
-    )
+    const base = await startHost(createCliAuth({ secret: SECRET, throttle: { windowMs: 200, maxFailuresPerIp: 2 } }))
     expect((await jsonAttempt(base, 'wrong-one-111')).status).toBe(401)
     expect((await jsonAttempt(base, 'wrong-two-222')).status).toBe(401)
     const blocked = await jsonAttempt(base, SECRET)
@@ -484,9 +453,7 @@ describe('throttling', () => {
   })
 
   it('redirect-mode throttling points back at the login page', async () => {
-    const base = await startHost(
-      createCliAuth({ secret: SECRET, throttle: { windowMs: 60_000, maxFailuresPerIp: 1 } }),
-    )
+    const base = await startHost(createCliAuth({ secret: SECRET, throttle: { windowMs: 60_000, maxFailuresPerIp: 1 } }))
     await login(base, 'wrong-wrong-wrong')
     const blocked = await login(base, SECRET)
     expect(blocked.res.status).toBe(303)

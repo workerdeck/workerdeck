@@ -45,16 +45,7 @@ import { TerminalSurface } from './surface.tsx'
  */
 
 type Lane = 'l' | 'r' | 'f'
-type MarkKind =
-  | 'user'
-  | 'subagent'
-  | 'turn'
-  | 'turnFailed'
-  | 'toolFailed'
-  | 'error'
-  | 'approval'
-  | 'recap'
-  | 'bookmark'
+type MarkKind = 'user' | 'subagent' | 'turn' | 'turnFailed' | 'toolFailed' | 'error' | 'approval' | 'recap' | 'bookmark'
 
 type Mark = {
   kind: MarkKind
@@ -76,8 +67,11 @@ type Cluster = { lane: Lane; kind: MarkKind; y: number; h: number; marks: { mark
  * cluster resolves to. */
 function nearestMember(cluster: Cluster, y: number): Mark | undefined {
   let best: { mark: Mark; y: number } | undefined
-  for (const member of cluster.marks)
-    if (!best || Math.abs(member.y - y) < Math.abs(best.y - y)) best = member
+  for (const member of cluster.marks) {
+    if (!best || Math.abs(member.y - y) < Math.abs(best.y - y)) {
+      best = member
+    }
+  }
   return best?.mark
 }
 
@@ -280,10 +274,7 @@ export interface TerminalScrubberProps {
  * only thing worth navigating to, and a replayed history — which carries no turn
  * rows at all — came back with an empty right lane.
  */
-export function buildClusters(
-  props: TerminalScrubberProps,
-  railH: number,
-): Cluster[] {
+export function buildClusters(props: TerminalScrubberProps, railH: number): Cluster[] {
   const {
     items,
     bookmarks,
@@ -306,7 +297,9 @@ export function buildClusters(
   const subagentParents = new Set<string>()
   for (const item of items) {
     const parent = parentOf(item)
-    if (parent !== undefined) subagentParents.add(parent)
+    if (parent !== undefined) {
+      subagentParents.add(parent)
+    }
   }
   // The **outcome** call of each row: the last top-level tool call the row
   // holds. A failed call is marked only when it is one of these — see the
@@ -314,7 +307,9 @@ export function buildClusters(
   // only `rowIndexFor`.
   const rowOutcome = new Map<number, number>()
   items.forEach((item, index) => {
-    if (item.kind !== 'tool_call' || parentOf(item) !== frameParentId) return
+    if (item.kind !== 'tool_call' || parentOf(item) !== frameParentId) {
+      return
+    }
     rowOutcome.set(rowIndexFor(index), index)
   })
   // One right-lane mark per segment, emitted when the segment closes. A segment
@@ -422,10 +417,14 @@ export function buildClusters(
   })
   // A history that ends mid-segment still has an answer in it.
   closeSegment()
-  for (const index of bookmarks)
-    if (index >= 0 && index < items.length)
+  for (const index of bookmarks) {
+    if (index >= 0 && index < items.length) {
       marks.push({ kind: 'bookmark', itemIndex: index, rowIndex: rowIndexFor(index) })
-  if (recapRow) marks.push({ kind: 'recap', itemIndex: -1, rowIndex: recapRow.rowIndex })
+    }
+  }
+  if (recapRow) {
+    marks.push({ kind: 'recap', itemIndex: -1, rowIndex: recapRow.rowIndex })
+  }
 
   const scale = railScale(railH, totalSize, viewportH)
   const lanes = new Map<Lane, { mark: Mark; y: number; h: number }[]>()
@@ -453,9 +452,7 @@ export function buildClusters(
     const h = within ? MIN_MARK : Math.max(MIN_MARK, Math.round(rowH * scale))
     const y = Math.min(
       Math.max(0, railH - h),
-      Math.round(
-        (offsetOfRow(mark.rowIndex) + (within ? (within.ordinal / within.count) * rowH : 0)) * scale,
-      ),
+      Math.round((offsetOfRow(mark.rowIndex) + (within ? (within.ordinal / within.count) * rowH : 0)) * scale),
     )
     const lane = LANE[mark.kind]
     const list = lanes.get(lane) ?? []
@@ -471,7 +468,9 @@ export function buildClusters(
       // the loudest member's colour.
       if (current && y <= current.y + current.h + 1) {
         current.h = Math.max(current.h, y + h - current.y)
-        if (LOUDNESS[mark.kind] > LOUDNESS[current.kind]) current.kind = mark.kind
+        if (LOUDNESS[mark.kind] > LOUDNESS[current.kind]) {
+          current.kind = mark.kind
+        }
         current.marks.push({ mark, y })
       } else {
         current = { lane, kind: mark.kind, y, h, marks: [{ mark, y }] }
@@ -481,7 +480,7 @@ export function buildClusters(
   }
   // The approval is not an item — the prompt renders below the transcript —
   // so its mark pins at the rail's foot, where the prompt is.
-  if (pendingApprovals.length > 0)
+  if (pendingApprovals.length > 0) {
     clusters.push({
       // `LANE.approval`, not a literal: this cluster is built by hand because it
       // has no item to derive a position from, and a hardcoded lane here is how
@@ -492,6 +491,7 @@ export function buildClusters(
       h: MIN_MARK,
       marks: [],
     })
+  }
   return clusters
 }
 
@@ -507,18 +507,18 @@ function peekContent(
     const request = pendingApprovals[0]
     body = request ? (
       <>
-        <div data-tone='bright'>{request.title ?? 'Permission required'}</div>
-        <div className='term-scrub-ex' data-tone='fg'>
+        <div data-tone="bright">{request.title ?? 'Permission required'}</div>
+        <div className="term-scrub-ex" data-tone="fg">
           {`${request.displayName ?? request.toolName}(${toolInputPreview(request.input)})`}
         </div>
       </>
     ) : null
   } else if (cluster.kind === 'recap' && !first) {
-    body = <div data-tone='faint'>※ {recapRow?.label}</div>
+    body = <div data-tone="faint">※ {recapRow?.label}</div>
   } else if (first) {
     const item = items[first.itemIndex]
     if (first.kind === 'recap') {
-      body = <div data-tone='faint'>※ {recapRow?.label}</div>
+      body = <div data-tone="faint">※ {recapRow?.label}</div>
     } else if (first.kind === 'turn' || first.kind === 'turnFailed') {
       // The merged mark's peek carries both halves: the message the turn ended
       // on, and the done-line (with its reasons, when it failed).
@@ -526,8 +526,8 @@ function peekContent(
       body = (
         <>
           {item?.kind === 'assistant_text' ? (
-            <div className='term-scrub-ex' data-tone='fg'>
-              <span data-tone='dim'>● </span>
+            <div className="term-scrub-ex" data-tone="fg">
+              <span data-tone="dim">● </span>
               {item.text}
             </div>
           ) : null}
@@ -535,7 +535,7 @@ function peekContent(
             <>
               <div data-tone={turn.isError ? 'red' : 'faint'}>{doneLine(turn)}</div>
               {turn.errors?.map((message, index) => (
-                <div key={index} data-tone='red'>
+                <div key={index} data-tone="red">
                   {message}
                 </div>
               ))}
@@ -550,17 +550,15 @@ function peekContent(
           : undefined
       body = (
         <>
-          <div
-            className='term-scrub-ex'
-            data-tone={first.kind === 'error' || first.kind === 'toolFailed' ? 'red' : 'fg'}>
-            {first.kind === 'user' ? <span data-tone='dim'>{'❯ '}</span> : null}
+          <div className="term-scrub-ex" data-tone={first.kind === 'error' || first.kind === 'toolFailed' ? 'red' : 'fg'}>
+            {first.kind === 'user' ? <span data-tone="dim">{'❯ '}</span> : null}
             {excerpt(item)}
           </div>
           {/* Which tool failed is rarely the question — `Bash(pnpm test)` is
               what you already expected to see. The first non-blank line of what
               it said back is the thing worth peeking at. */}
           {failure ? (
-            <div className='term-scrub-ex' data-tone='red'>
+            <div className="term-scrub-ex" data-tone="red">
               {failure}
             </div>
           ) : null}
@@ -570,7 +568,7 @@ function peekContent(
   }
   return (
     <>
-      <div data-tone='faint'>
+      <div data-tone="faint">
         {KIND_NAME[first?.kind ?? cluster.kind]}
         {more}
       </div>
@@ -580,27 +578,19 @@ function peekContent(
 }
 
 export function TerminalScrubber(props: TerminalScrubberProps) {
-  const {
-    scrollOffset,
-    viewportH,
-    totalSize,
-    onJumpToRow,
-    interactive,
-    fontSize,
-    lineHeight,
-  } = props
+  const { scrollOffset, viewportH, totalSize, onJumpToRow, interactive, fontSize, lineHeight } = props
   const stick = useStickToBottomContext()
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const peekRef = useRef<HTMLDivElement | null>(null)
   const [railH, setRailH] = useState(0)
-  const [peek, setPeek] = useState<{ cluster: Cluster; mark: Mark | undefined; y: number } | null>(
-    null,
-  )
+  const [peek, setPeek] = useState<{ cluster: Cluster; mark: Mark | undefined; y: number } | null>(null)
   const drag = useRef<{ y: number; moved: boolean; target: EventTarget | null } | null>(null)
 
   useEffect(() => {
     const element = bodyRef.current
-    if (!element) return
+    if (!element) {
+      return
+    }
     const observer = new ResizeObserver(() => setRailH(element.clientHeight))
     observer.observe(element)
     setRailH(element.clientHeight)
@@ -616,7 +606,9 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
   const [liveOffset, setLiveOffset] = useState(scrollOffset)
   useEffect(() => {
     const scroller = stick.scrollRef.current
-    if (!scroller) return
+    if (!scroller) {
+      return
+    }
     const onScroll = () => setLiveOffset(scroller.scrollTop)
     scroller.addEventListener('scroll', onScroll, { passive: true })
     setLiveOffset(scroller.scrollTop)
@@ -633,12 +625,18 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
   // Wheel over the rail scrolls the transcript. Manual listener because it
   // must preventDefault (React's root wheel listeners are passive).
   useEffect(() => {
-    if (!interactive) return
+    if (!interactive) {
+      return
+    }
     const element = bodyRef.current
-    if (!element) return
+    if (!element) {
+      return
+    }
     const onWheel = (event: WheelEvent) => {
       const scroller = stick.scrollRef.current
-      if (!scroller) return
+      if (!scroller) {
+        return
+      }
       scroller.scrollTop += event.deltaY
       event.preventDefault()
     }
@@ -650,7 +648,9 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
   // rail after it has a measured height.
   useLayoutEffect(() => {
     const element = peekRef.current
-    if (!element || !peek) return
+    if (!element || !peek) {
+      return
+    }
     const height = element.offsetHeight
     const railHeight = bodyRef.current?.clientHeight ?? 0
     element.style.top = `${Math.max(4, Math.min(railHeight - height - 4, peek.y - height / 2))}px`
@@ -669,15 +669,7 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
     // `viewportH` rides here because it is the scale's other term whenever the
     // transcript is shorter than the window — without it a resize in that
     // regime leaves every mark at the old scale.
-    [
-      props.items,
-      props.bookmarks,
-      props.recapRow,
-      props.pendingApprovals,
-      totalSize,
-      railH,
-      viewportH,
-    ],
+    [props.items, props.bookmarks, props.recapRow, props.pendingApprovals, totalSize, railH, viewportH],
   )
   const scale = railScale(railH, totalSize, viewportH)
   const bandH = Math.max(2, Math.min(railH, Math.round(viewportH * scale)))
@@ -689,15 +681,16 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
   const scrub = (clientY: number) => {
     const rail = bodyRef.current
     const scroller = stick.scrollRef.current
-    if (!rail || !scroller) return
+    if (!rail || !scroller) {
+      return
+    }
     const rect = rail.getBoundingClientRect()
     const fraction = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height))
     scroller.scrollTop = fraction * scroller.scrollHeight - scroller.clientHeight / 2
   }
 
   /** A pointer's y in rail space. */
-  const railY = (clientY: number): number =>
-    clientY - (bodyRef.current?.getBoundingClientRect().top ?? 0)
+  const railY = (clientY: number): number => clientY - (bodyRef.current?.getBoundingClientRect().top ?? 0)
 
   const activate = (cluster: Cluster, clientY: number) => {
     if (cluster.kind === 'approval' && cluster.marks.length === 0) {
@@ -705,7 +698,9 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
       return
     }
     const mark = nearestMember(cluster, railY(clientY))
-    if (mark) onJumpToRow(mark.rowIndex)
+    if (mark) {
+      onJumpToRow(mark.rowIndex)
+    }
   }
 
   const showPeek = (cluster: Cluster, clientY: number) => {
@@ -726,7 +721,7 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
     <TerminalSurface
       fontSize={fontSize}
       lineHeight={lineHeight}
-      className='term-scrubber'
+      className="term-scrubber"
       data-interactive={interactive || undefined}
       {...(interactive
         ? {
@@ -737,10 +732,11 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
             'aria-valuemax': 100,
             'aria-valuenow': Math.min(100, Math.max(0, Math.round((liveOffset / maxOffset) * 100))),
           }
-        : { 'aria-hidden': true })}>
+        : { 'aria-hidden': true })}
+    >
       <div
         ref={bodyRef}
-        className='term-scrubber-body'
+        className="term-scrubber-body"
         {...(interactive
           ? {
               onPointerDown: (event) => {
@@ -752,8 +748,12 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
               },
               onPointerMove: (event) => {
                 const state = drag.current
-                if (!state) return
-                if (!state.moved && Math.abs(event.clientY - state.y) < 3) return
+                if (!state) {
+                  return
+                }
+                if (!state.moved && Math.abs(event.clientY - state.y) < 3) {
+                  return
+                }
                 state.moved = true
                 setPeek(null)
                 scrub(event.clientY)
@@ -761,27 +761,32 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
               onPointerUp: (event) => {
                 const state = drag.current
                 drag.current = null
-                if (!state || state.moved) return
+                if (!state || state.moved) {
+                  return
+                }
                 // A clean press: on a mark it is a jump; on the ground it is a
                 // scrub to that spot — scrollbar semantics.
                 const mark = (state.target as HTMLElement | null)?.closest?.('[data-ci]')
                 const index = mark ? Number((mark as HTMLElement).dataset.ci) : Number.NaN
-                if (Number.isInteger(index) && clusters[index])
+                if (Number.isInteger(index) && clusters[index]) {
                   activate(clusters[index]!, event.clientY)
-                else scrub(event.clientY)
+                } else {
+                  scrub(event.clientY)
+                }
               },
             }
-          : null)}>
+          : null)}
+      >
         {/* The band is the whole "where am I" answer. It used to carry a 2px
             blue line on its top edge as well; with the band already outlined,
             that was a second indicator of one fact, and the loudest colour on
             the rail spent on it. */}
-        <div className='term-scrub-band' style={{ top: bandTop, height: bandH }} />
+        <div className="term-scrub-band" style={{ top: bandTop, height: bandH }} />
         {clusters.map((cluster, index) => (
           <div
             key={index}
             data-ci={index}
-            className='term-scrub-mark'
+            className="term-scrub-mark"
             data-lane={cluster.lane}
             data-kind={cluster.kind}
             style={{ top: cluster.y, height: cluster.h }}
@@ -791,7 +796,9 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
                   // A chain-merged bar can span the rail; sliding along it
                   // retargets the peek to the member under the pointer.
                   onPointerMove: (event) => {
-                    if (!drag.current) showPeek(cluster, event.clientY)
+                    if (!drag.current) {
+                      showPeek(cluster, event.clientY)
+                    }
                   },
                   onPointerLeave: () => setPeek(null),
                 }
@@ -799,7 +806,7 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
           />
         ))}
         {peek ? (
-          <div ref={peekRef} className='term-scrub-peek' style={{ top: peek.y }}>
+          <div ref={peekRef} className="term-scrub-peek" style={{ top: peek.y }}>
             {peekContent(peek.cluster, peek.mark, props)}
           </div>
         ) : null}

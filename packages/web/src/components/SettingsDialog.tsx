@@ -56,8 +56,9 @@ function PrefSelect<T extends string>({
         setValue(next as T)
         write(next as T)
         onChange?.(next as T)
-      }}>
-      <SelectTrigger aria-label={label} className='min-w-40'>
+      }}
+    >
+      <SelectTrigger aria-label={label} className="min-w-40">
         <SelectValue>{options.find((o) => o.value === value)?.label}</SelectValue>
       </SelectTrigger>
       <SelectContent>
@@ -82,8 +83,8 @@ function PrefSelect<T extends string>({
  */
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className='flex flex-col gap-3'>
-      <h3 className='text-label font-medium tracking-wide text-fg-3 uppercase'>{title}</h3>
+    <section className="flex flex-col gap-3">
+      <h3 className="text-label font-medium tracking-wide text-fg-3 uppercase">{title}</h3>
       {children}
     </section>
   )
@@ -99,13 +100,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
  * you were doing when you close it, which is the only thing anyone wants from
  * this screen.
  */
-export function SettingsDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
+export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   // Held here, not in the select, because two rows below it are only meaningful
   // under `cards` — the terminal theme has one line height and one (monospace)
   // face by construction. A control that changes nothing is worse than an absent
@@ -116,22 +111,22 @@ export function SettingsDialog({
       {/* A column of one-line rows, so it is sized to the widest control rather
           than to a reading measure. Wider than this and each label drifts a
           screen away from the select it names. */}
-      <DialogContent size='md' className='w-[min(30rem,calc(100vw-2rem))]'>
+      <DialogContent size="md" className="w-[min(30rem,calc(100vw-2rem))]">
         <DialogHeader
-          title='Settings'
-          description='Preferences held by this browser. What a run defaults to lives on its profile; server policy lives where the gateway runs.'
+          title="Settings"
+          description="Preferences held by this browser. What a run defaults to lives on its profile; server policy lives where the gateway runs."
         />
         <DialogBody>
-          <div className='flex flex-col gap-6'>
-            <Section title='Appearance'>
-              <div className='flex items-center justify-between'>
-                <span className='text-body-sm text-fg-2'>Theme</span>
+          <div className="flex flex-col gap-6">
+            <Section title="Appearance">
+              <div className="flex items-center justify-between">
+                <span className="text-body-sm text-fg-2">Theme</span>
                 <ThemeToggle />
               </div>
-              <div className='flex items-center justify-between'>
-                <span className='text-body-sm text-fg-2'>Agent view style</span>
+              <div className="flex items-center justify-between">
+                <span className="text-body-sm text-fg-2">Agent view style</span>
                 <PrefSelect<TranscriptVariant>
-                  label='Agent view style'
+                  label="Agent view style"
                   options={[
                     { value: 'cards', label: 'Cards' },
                     { value: 'terminal', label: 'Terminal' },
@@ -141,10 +136,10 @@ export function SettingsDialog({
                   onChange={setVariant}
                 />
               </div>
-              <div className='flex items-center justify-between'>
-                <span className='text-body-sm text-fg-2'>Font size</span>
+              <div className="flex items-center justify-between">
+                <span className="text-body-sm text-fg-2">Font size</span>
                 <PrefSelect<string>
-                  label='Font size'
+                  label="Font size"
                   options={[
                     { value: '', label: 'Default' },
                     { value: '11', label: '11 px' },
@@ -160,10 +155,10 @@ export function SettingsDialog({
               </div>
               {variant === 'cards' ? (
                 <>
-                  <div className='flex items-center justify-between'>
-                    <span className='text-body-sm text-fg-2'>Agent view density</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-body-sm text-fg-2">Agent view density</span>
                     <PrefSelect<TranscriptDensity>
-                      label='Agent view density'
+                      label="Agent view density"
                       options={[
                         { value: 'comfortable', label: 'Comfortable' },
                         { value: 'compact', label: 'Compact' },
@@ -172,10 +167,10 @@ export function SettingsDialog({
                       write={setTranscriptDensity}
                     />
                   </div>
-                  <div className='flex items-center justify-between'>
-                    <span className='text-body-sm text-fg-2'>Agent view font</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-body-sm text-fg-2">Agent view font</span>
                     <PrefSelect<TranscriptFont>
-                      label='Agent view font'
+                      label="Agent view font"
                       options={[
                         { value: 'sans', label: 'Regular' },
                         { value: 'mono', label: 'Monospace' },

@@ -1,16 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import type { JobInfo } from '@workerdeck/protocol'
-import {
-  Badge,
-  Button,
-  CopyButton,
-  Spinner,
-  formatCost,
-  formatRelativeTime,
-  formatTokens,
-  toast,
-} from '@workerdeck/ui'
+import { Badge, Button, CopyButton, Spinner, formatCost, formatRelativeTime, formatTokens, toast } from '@workerdeck/ui'
 import { SessionWorkspace } from '@workerdeck/ui/workspace'
 import { X } from 'lucide-react'
 import { DetailBar } from '@/components/shell/DetailBar.tsx'
@@ -48,18 +39,20 @@ export function JobView() {
   // job's session can be deleted from the Sessions view, and attaching to one
   // that is gone would render an empty transcript with no explanation.
   const live =
-    job?.sessionId !== undefined &&
-    (snapshots.find((s) => s.host.id === hostId)?.sessions.some((i) => i.id === job.sessionId) ??
-      false)
+    job?.sessionId !== undefined && (snapshots.find((s) => s.host.id === hostId)?.sessions.some((i) => i.id === job.sessionId) ?? false)
 
   // A job id from a bookmark can outlive the queue's retention window. Wait for
   // the first list before deciding it is gone, or every reload would bounce.
   const [settled, setSettled] = useState(false)
   useEffect(() => {
-    if (jobs.length > 0) setSettled(true)
+    if (jobs.length > 0) {
+      setSettled(true)
+    }
   }, [jobs.length])
   useEffect(() => {
-    if (!settled || job) return
+    if (!settled || job) {
+      return
+    }
     toast.error('That job is no longer in the queue')
     void navigate({ to: '/jobs' })
   }, [settled, job, navigate])
@@ -72,23 +65,23 @@ export function JobView() {
   // mid-view would yank the splitter out from under a drag.
   const [rail] = useState(getRail)
 
-  if (!job) return null
+  if (!job) {
+    return null
+  }
 
   const header = <JobHeader job={job} onChanged={() => void refresh()} />
 
   if (!gateway || !live || !job.sessionId) {
     return (
-      <div className='flex min-h-0 flex-1 flex-col'>
+      <div className="flex min-h-0 flex-1 flex-col">
         {header}
-        <div className='flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center'>
-          <p className='text-body-sm text-fg-3'>
-            {job.sessionId
-              ? 'This job’s session is no longer on the gateway.'
-              : 'This job never got as far as a session.'}
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+          <p className="text-body-sm text-fg-3">
+            {job.sessionId ? 'This job’s session is no longer on the gateway.' : 'This job never got as far as a session.'}
           </p>
-          <p className='max-w-md text-label text-fg-4'>
-            The queue keeps the job record — status, usage, error — but the transcript lives with
-            the session, and that one has been closed or swept.
+          <p className="max-w-md text-label text-fg-4">
+            The queue keeps the job record — status, usage, error — but the transcript lives with the session, and that one has been closed
+            or swept.
           </p>
         </div>
       </div>
@@ -111,7 +104,7 @@ export function JobView() {
       scrubber
       // And the prompt you are waiting on, held above the answer.
       stickyPrompt
-      statusPlacement='bottom'
+      statusPlacement="bottom"
       defaultRailWidth={rail.width}
       defaultRailCollapsed={rail.collapsed}
       onRailChange={setRail}
@@ -122,15 +115,7 @@ export function JobView() {
   )
 }
 
-function JobHeader({
-  job,
-  onChanged,
-  actions,
-}: {
-  job: JobInfo
-  onChanged: () => void
-  actions?: ReactNode
-}) {
+function JobHeader({ job, onChanged, actions }: { job: JobInfo; onChanged: () => void; actions?: ReactNode }) {
   const meta = JOB_STATUS_META[job.status]
   // Parked jobs are live too — cancelling one is how you abandon a wait.
   const cancellable = job.status === 'queued' || job.status === 'running' || job.status === 'parked'
@@ -149,44 +134,37 @@ function JobHeader({
         <>
           {/* Said rather than implied: the composer's absence is a decision, and
               a reader who expected to answer a prompt here deserves to know why. */}
-          <Badge variant='neutral' className='shrink-0'>
+          <Badge variant="neutral" className="shrink-0">
             read-only
           </Badge>
-          <CopyButton value={job.id} aria-label='Copy job id' />
+          <CopyButton value={job.id} aria-label="Copy job id" />
           {cancellable ? (
-            <Button variant='outline' size='xs' onClick={() => void cancel()}>
-              <X className='size-3' />
+            <Button variant="outline" size="xs" onClick={() => void cancel()}>
+              <X className="size-3" />
               Cancel
             </Button>
           ) : null}
           {actions}
         </>
-      }>
-      <Badge variant={meta.variant} dot={!meta.busy} className='shrink-0'>
-        {meta.busy ? <Spinner className='size-3 text-current' /> : null}
+      }
+    >
+      <Badge variant={meta.variant} dot={!meta.busy} className="shrink-0">
+        {meta.busy ? <Spinner className="size-3 text-current" /> : null}
         {meta.label}
       </Badge>
-      <div className='flex min-w-0 items-center gap-x-3 font-mono text-label text-fg-4'>
-        <span className='truncate'>{job.cwd}</span>
-        {job.profile ? <span className='shrink-0'>@{job.profile}</span> : null}
-        <span className='shrink-0'>
-          {formatRelativeTime(job.finishedAt ?? job.startedAt ?? job.createdAt)}
-        </span>
+      <div className="flex min-w-0 items-center gap-x-3 font-mono text-label text-fg-4">
+        <span className="truncate">{job.cwd}</span>
+        {job.profile ? <span className="shrink-0">@{job.profile}</span> : null}
+        <span className="shrink-0">{formatRelativeTime(job.finishedAt ?? job.startedAt ?? job.createdAt)}</span>
         {job.maxAttempts !== undefined && job.maxAttempts > 1 ? (
-          <span className='shrink-0'>
+          <span className="shrink-0">
             attempt {job.attempt ?? 1}/{job.maxAttempts}
-            {job.status === 'queued' && job.nextRunAt !== undefined && job.nextRunAt > Date.now()
-              ? ' — retry pending'
-              : ''}
+            {job.status === 'queued' && job.nextRunAt !== undefined && job.nextRunAt > Date.now() ? ' — retry pending' : ''}
           </span>
         ) : null}
-        {job.usage.tokens > 0 ? (
-          <span className='shrink-0'>{formatTokens(job.usage.tokens)} tok</span>
-        ) : null}
-        {job.usage.totalCostUsd > 0 ? (
-          <span className='shrink-0'>{formatCost(job.usage.totalCostUsd)}</span>
-        ) : null}
-        {job.error ? <span className='truncate text-danger'>{job.error}</span> : null}
+        {job.usage.tokens > 0 ? <span className="shrink-0">{formatTokens(job.usage.tokens)} tok</span> : null}
+        {job.usage.totalCostUsd > 0 ? <span className="shrink-0">{formatCost(job.usage.totalCostUsd)}</span> : null}
+        {job.error ? <span className="truncate text-danger">{job.error}</span> : null}
       </div>
     </DetailBar>
   )

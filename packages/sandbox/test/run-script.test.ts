@@ -126,13 +126,7 @@ describe('runScript', () => {
       ])`,
     })
     expect(result).toMatchObject({ ok: true })
-    expect(JSON.parse((result as { value: string }).value)).toEqual([
-      'undefined',
-      'undefined',
-      'undefined',
-      'undefined',
-      'undefined',
-    ])
+    expect(JSON.parse((result as { value: string }).value)).toEqual(['undefined', 'undefined', 'undefined', 'undefined', 'undefined'])
   })
 
   it('gated fetch: the host callback is the only path to the network', async () => {

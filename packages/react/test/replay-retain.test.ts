@@ -16,11 +16,9 @@ import { applyEvent, initialTranscriptState, type TranscriptState } from '../src
  * and the retained log through `applyEvent`; the states must be identical.
  */
 
-const seqd = (bodies: SessionEventBody[]): SessionEvent[] =>
-  bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
+const seqd = (bodies: SessionEventBody[]): SessionEvent[] => bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
 
-const fold = (events: SessionEvent[]): TranscriptState =>
-  events.reduce(applyEvent, initialTranscriptState)
+const fold = (events: SessionEvent[]): TranscriptState => events.reduce(applyEvent, initialTranscriptState)
 
 /** The gateway's rule as the runners apply it, including the guard that the
  * log's last event is delivered whatever the rule says. */
@@ -37,13 +35,11 @@ const delta = (event: Record<string, unknown>, uuid = 'u'): SessionEventBody => 
 })
 
 const text = (t: string) => delta({ type: 'content_block_delta', delta: { type: 'text_delta', text: t } })
-const thought = (t: string) =>
-  delta({ type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: t } })
+const thought = (t: string) => delta({ type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: t } })
 /** A tool call's arguments, streamed character by character. The single
  * biggest item in a real log's delta run — 383 KB of one measured session — and
  * the reducer does not model it at all. */
-const args = (t: string) =>
-  delta({ type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: t } })
+const args = (t: string) => delta({ type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: t } })
 
 describe('replay dropping is unobservable', () => {
   it('lands on the same state as the full log, over a turn with every delta kind', () => {

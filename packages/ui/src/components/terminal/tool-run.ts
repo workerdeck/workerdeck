@@ -51,9 +51,13 @@ export function foldsTogether(a: ToolCallItem, b: ToolCallItem): boolean {
  * prose rather than as identifiers.
  */
 export function toolFamily(name: string): string {
-  if (isShellTool(name)) return 'shell'
+  if (isShellTool(name)) {
+    return 'shell'
+  }
   const mcp = /^mcp__([^_]+(?:_[^_]+)*?)__/.exec(name)
-  if (mcp?.[1]) return mcp[1].replace(/_/g, '-')
+  if (mcp?.[1]) {
+    return mcp[1].replace(/_/g, '-')
+  }
   return name.toLowerCase()
 }
 
@@ -100,11 +104,9 @@ export function runSummary(items: readonly ToolCallItem[], busy: boolean): strin
  * two different heights.
  */
 
-const clip = (text: string, max = 80): string =>
-  text.length > max ? text.slice(0, max - 1) + '…' : text
+const clip = (text: string, max = 80): string => (text.length > max ? text.slice(0, max - 1) + '…' : text)
 
-const trimmed = (value: unknown): string | undefined =>
-  typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+const trimmed = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined)
 
 /**
  * The row's identity half: which task this is.
@@ -171,14 +173,12 @@ export function taskBrief(task: ToolCallItem): string | undefined {
   return trimmed(input?.prompt)
 }
 
-const callBusy = (call: ToolCallItem): boolean =>
-  call.status === 'running' || call.status === 'pending'
+const callBusy = (call: ToolCallItem): boolean => call.status === 'running' || call.status === 'pending'
 
 /** Did this one call fail? Both spellings are needed: an out-of-loop execution
  * failure sets `status` with no `is_error` block to read, and an engine can flag
  * `is_error` on a call the reducer has not settled yet. */
-export const callFailed = (call: ToolCallItem): boolean =>
-  call.status === 'failed' || call.result?.isError === true
+export const callFailed = (call: ToolCallItem): boolean => call.status === 'failed' || call.result?.isError === true
 
 /**
  * Does a folded run colour red? **Only when its last call failed.**
@@ -263,6 +263,8 @@ export function taskSummary(task: ToolCallItem, children: readonly TranscriptIte
   const busy = taskBusy(task, children)
   const calls = children.reduce((n, child) => n + (child.kind === 'tool_call' ? 1 : 0), 0)
   const label = taskLabel(task)
-  if (calls === 0) return busy ? `${label} · working…` : `${label} · done`
+  if (calls === 0) {
+    return busy ? `${label} · working…` : `${label} · done`
+  }
   return `${label} · ${calls} tool${calls === 1 ? '' : 's'}${busy ? '…' : ''}`
 }

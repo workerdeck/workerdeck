@@ -63,7 +63,9 @@ let running: WorkerServer | undefined
 let handles: SessionHandle[] = []
 
 afterEach(async () => {
-  for (const handle of handles) handle.detach()
+  for (const handle of handles) {
+    handle.detach()
+  }
   handles = []
   await running?.close()
   running = undefined
@@ -134,9 +136,7 @@ describe('the attach replay signal, over the wire', () => {
     // A re-attach from the tail (the reconnect shape): no target, no hold.
     const reattach = client.attach(session.id, { afterSeq: attached!.session.lastSeq })
     handles.push(reattach)
-    const refreshed = await new Promise<AttachedFrame>((resolve) =>
-      reattach.on('attached', (f: AttachedFrame) => resolve(f)),
-    )
+    const refreshed = await new Promise<AttachedFrame>((resolve) => reattach.on('attached', (f: AttachedFrame) => resolve(f)))
     expect(refreshed.replayingFrom).toBe(attached!.session.lastSeq)
     expect(initialReplayTarget(refreshed)).toBeUndefined()
   }, 15_000)

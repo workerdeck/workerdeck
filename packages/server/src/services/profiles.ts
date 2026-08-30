@@ -61,12 +61,11 @@ export class ProfileService {
     if (isProviderProfile(p)) {
       // Provider profiles have no config dir; they need an engine factory to
       // build a runner at all, so refuse up front rather than at create time.
-      if (!p.provider?.id) return `provider profile '${p.name}' is missing provider.id`
+      if (!p.provider?.id) {
+        return `provider profile '${p.name}' is missing provider.id`
+      }
       if (!hasEngineRunnerFactory) {
-        return (
-          `profile '${p.name}' uses engine 'provider' but no ` +
-          '`createEngineRunner` was provided to build one'
-        )
+        return `profile '${p.name}' uses engine 'provider' but no ` + '`createEngineRunner` was provided to build one'
       }
     } else if (p.engine === 'codex') {
       // The codexHome pin mirrors the claude configDir rule: a declared dir
@@ -104,9 +103,13 @@ export class ProfileService {
   /** Reload the in-memory mirror of the store — once at `listen()`, and after
    * each management-route mutation. Single-process, like the bundled queue. */
   async refreshStored(): Promise<void> {
-    if (!this.#opts.store) return
+    if (!this.#opts.store) {
+      return
+    }
     this.#stored.clear()
-    for (const p of await this.#opts.store.list()) this.#stored.set(p.name, p)
+    for (const p of await this.#opts.store.list()) {
+      this.#stored.set(p.name, p)
+    }
   }
 
   /** Response-only marker so a UI knows which rows it may edit. Declared profiles
@@ -134,29 +137,34 @@ export class ProfileService {
     }
     // Provider model ids are operator-declared (provider.models); an empty
     // catalog must not shadow them with an empty picker.
-    if (adapter.catalog.models.length > 0) base.models = adapter.catalog.models
+    if (adapter.catalog.models.length > 0) {
+      base.models = adapter.catalog.models
+    }
     const defaultModel = decorate.defaultModel(p.name)
-    if (defaultModel) base.defaultModel = defaultModel
+    if (defaultModel) {
+      base.defaultModel = defaultModel
+    }
     const probed = decorate.availability(p.name)
     if (probed && probed.available !== 'unknown') {
       base.available = probed.available
-      if (probed.available === false) base.unavailableReason = probed.reason
+      if (probed.available === false) {
+        base.unavailableReason = probed.reason
+      }
     }
     // Plan usage, learned like the default model and display-only like the
     // availability verdict. The 0%-after-elapsed-reset inference happens in
     // `usage()` per request, so it is computed against *this* moment's clock.
     const usage = decorate.usage(p.name)
-    if (usage) base.usage = usage
+    if (usage) {
+      base.usage = usage
+    }
     return base
   }
 
   /** Declared profiles first: a name collision means the code wins, and the stored
    * one is unreachable rather than silently overriding server options. */
   all(): ProfileInfo[] {
-    return [
-      ...this.#declared,
-      ...[...this.#stored.values()].filter((p) => !this.#declaredByName.has(p.name)),
-    ]
+    return [...this.#declared, ...[...this.#stored.values()].filter((p) => !this.#declaredByName.has(p.name))]
   }
 
   get(name: string): ProfileInfo | undefined {
@@ -194,14 +202,14 @@ export class ProfileService {
    * management routes create provider profiles only.
    */
   configDirGuard(profile: ProfileInfo): Refusal | null {
-    if (isProviderProfile(profile)) return null
+    if (isProviderProfile(profile)) {
+      return null
+    }
     const roots = this.#opts.allowedConfigDirRoots
     if (!roots || roots.length === 0) {
       return {
         status: 403,
-        error:
-          'managed Claude profiles are disabled: set `allowedConfigDirRoots` to the ' +
-          'directories they may point at',
+        error: 'managed Claude profiles are disabled: set `allowedConfigDirRoots` to the ' + 'directories they may point at',
       }
     }
     return profile.configDir && cwdAllowed(profile.configDir, roots)
@@ -212,15 +220,17 @@ export class ProfileService {
   /** Validate and persist a managed profile. Shared by create and update so a
    * PATCH can never leave behind a profile a POST would have refused. Returns
    * the saved profile (managed-flagged) or a refusal. */
-  async saveManaged(
-    incoming: ProfileInfo,
-  ): Promise<{ ok: true; profile: ProfileInfo } | ({ ok: false } & Refusal)> {
+  async saveManaged(incoming: ProfileInfo): Promise<{ ok: true; profile: ProfileInfo } | ({ ok: false } & Refusal)> {
     // `managed` is server-computed on every response; never persist a client's copy.
     const { managed: _clientClaim, ...profile } = incoming
     const refused = this.configDirGuard(profile)
-    if (refused) return { ok: false, ...refused }
+    if (refused) {
+      return { ok: false, ...refused }
+    }
     const invalid = this.validate(profile)
-    if (invalid) return { ok: false, status: 400, error: invalid }
+    if (invalid) {
+      return { ok: false, status: 400, error: invalid }
+    }
     await this.#opts.store!.save(profile)
     await this.refreshStored()
     return { ok: true, profile: this.withManagedFlag(profile) }

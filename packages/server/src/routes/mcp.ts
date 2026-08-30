@@ -45,9 +45,7 @@ export async function handleMcp(
     // an error. Clients hide these controls off
     // `ENGINE_CAPABILITIES[engine].mcpServerActions`; this is the door.
     const canAct =
-      body.action === 'reconnect'
-        ? typeof runner.reconnectMcpServer === 'function'
-        : typeof runner.setMcpServerEnabled === 'function'
+      body.action === 'reconnect' ? typeof runner.reconnectMcpServer === 'function' : typeof runner.setMcpServerEnabled === 'function'
     if (!canAct) {
       json(res, 501, {
         error: `this session's engine cannot ${body.action} an MCP server`,
@@ -55,8 +53,11 @@ export async function handleMcp(
       return
     }
     try {
-      if (body.action === 'reconnect') await runner.reconnectMcpServer?.(serverName)
-      else await runner.setMcpServerEnabled?.(serverName, body.action === 'enable')
+      if (body.action === 'reconnect') {
+        await runner.reconnectMcpServer?.(serverName)
+      } else {
+        await runner.setMcpServerEnabled?.(serverName, body.action === 'enable')
+      }
     } catch (error) {
       // The CLI's own message ("No MCP server found named x") is the useful one.
       json(res, 400, { error: error instanceof Error ? error.message : 'MCP action failed' })

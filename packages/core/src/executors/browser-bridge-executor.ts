@@ -1,16 +1,9 @@
 import type { ToolCallRequestFrame, ToolExecutionOutput } from '@workerdeck/protocol'
 import { PendingRequestRegistry, type PendingOutcome } from '../lib/pending-registry.ts'
-import type {
-  ToolExecutionCall,
-  ToolExecutionDispatch,
-  ToolExecutionResult,
-  ToolExecutor,
-} from './tool-executor.ts'
+import type { ToolExecutionCall, ToolExecutionDispatch, ToolExecutionResult, ToolExecutor } from './tool-executor.ts'
 
 /** Answer a bridged call, as delivered by the client over the wire. */
-export type BridgeAnswer =
-  | { output: ToolExecutionOutput; logs?: string[] }
-  | { reason: string; error: string; logs?: string[] }
+export type BridgeAnswer = { output: ToolExecutionOutput; logs?: string[] } | { reason: string; error: string; logs?: string[] }
 
 export type BrowserBridgeExecutorOptions = {
   /**

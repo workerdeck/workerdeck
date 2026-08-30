@@ -13,11 +13,7 @@
  */
 
 import type { TranscriptState } from '@workerdeck/react'
-import {
-  blockHeight,
-  measureCh,
-  type CellMetrics,
-} from '../src/components/terminal/height.ts'
+import { blockHeight, measureCh, type CellMetrics } from '../src/components/terminal/height.ts'
 import { terminalBlocks, type TerminalBlock } from '../src/components/terminal/items.tsx'
 
 export type HeightAuditRow = {
@@ -55,7 +51,9 @@ export type HeightAuditReport = {
  * swallowed.
  */
 function recapRowIndex(blocks: TerminalBlock[], from: number | undefined): number {
-  if (from === undefined) return Infinity
+  if (from === undefined) {
+    return Infinity
+  }
   const at = blocks.findIndex((block) => block.index >= from)
   return at < 0 ? Infinity : at
 }
@@ -67,7 +65,9 @@ export function auditHeights(
   catchUpFrom?: number,
 ): HeightAuditReport {
   const surface = root.querySelector<HTMLElement>('[data-terminal]')
-  if (!surface) throw new Error('no [data-terminal] surface mounted')
+  if (!surface) {
+    throw new Error('no [data-terminal] surface mounted')
+  }
   const style = getComputedStyle(surface)
   const line = Number.parseFloat(style.getPropertyValue('--term-line'))
   const ch = measureCh(surface)
@@ -95,9 +95,13 @@ export function auditHeights(
   let width = 0
   for (const el of wrappers) {
     const index = Number(el.dataset.index)
-    if (index === recapIndex) continue // a boundary, not a transcript block
+    if (index === recapIndex) {
+      continue
+    } // a boundary, not a transcript block
     const block = blocks[index > recapIndex ? index - 1 : index]
-    if (!block) continue
+    if (!block) {
+      continue
+    }
     width = el.clientWidth
     const gap = el.classList.contains('term-row-gap') ? line : 0
     const metrics: CellMetrics = { width, ch, line }
@@ -106,11 +110,7 @@ export function auditHeights(
     const computed = px + gap
     const kind = 'run' in block ? 'shell_run' : 'task' in block ? 'task' : block.item.kind
     const text = (
-      'run' in block
-        ? `${block.run.length} cmds`
-        : 'task' in block
-          ? `task ${block.childIndices.length} children`
-          : previewOf(block.item)
+      'run' in block ? `${block.run.length} cmds` : 'task' in block ? `task ${block.childIndices.length} children` : previewOf(block.item)
     ).slice(0, 40)
     rows.push({
       index,
@@ -127,13 +127,21 @@ export function auditHeights(
   const byKind: HeightAuditReport['byKind'] = {}
   for (const row of rows) {
     const abs = Math.abs(row.delta)
-    if (abs < 0.6) summary.exactRows += 1
-    else if (Math.abs(abs - line) < 0.6) summary.oneLine += 1
-    else summary.worse += 1
-    if (!row.exact) summary.flagged += 1
+    if (abs < 0.6) {
+      summary.exactRows += 1
+    } else if (Math.abs(abs - line) < 0.6) {
+      summary.oneLine += 1
+    } else {
+      summary.worse += 1
+    }
+    if (!row.exact) {
+      summary.flagged += 1
+    }
     const bucket = (byKind[row.kind] ??= { total: 0, exact: 0, maxDelta: 0 })
     bucket.total += 1
-    if (abs < 0.6) bucket.exact += 1
+    if (abs < 0.6) {
+      bucket.exact += 1
+    }
     bucket.maxDelta = Math.max(bucket.maxDelta, abs)
   }
   return { line, ch: round(ch), width, rows, summary, byKind }

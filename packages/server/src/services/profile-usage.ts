@@ -36,15 +36,25 @@ export class ProfileUsageTracker {
    * profile have no account to attribute usage to and are skipped. */
   watch(runner: Runner): void {
     const profile = runner.info().profile
-    if (!profile) return
+    if (!profile) {
+      return
+    }
     runner.subscribe((event) => {
-      if (event.type !== 'rate_limit') return
+      if (event.type !== 'rate_limit') {
+        return
+      }
       const type = event.info.rateLimitType
-      if (!type) return
+      if (!type) {
+        return
+      }
       let windows = this.#profiles.get(profile)
-      if (!windows) this.#profiles.set(profile, (windows = new Map()))
+      if (!windows) {
+        this.#profiles.set(profile, (windows = new Map()))
+      }
       const held = windows.get(type)
-      if (held && held.updatedAt > event.ts) return
+      if (held && held.updatedAt > event.ts) {
+        return
+      }
       // Whole-reading replacement, mirroring the transcript reducer — a newer
       // event is the newer truth even where it carries fewer fields.
       windows.set(type, { info: event.info, updatedAt: event.ts })
@@ -69,9 +79,13 @@ export class ProfileUsageTracker {
    */
   usage(profile: string, now = Date.now()): ProfileUsage | undefined {
     const windows = this.#profiles.get(profile)
-    if (!windows || windows.size === 0) return undefined
+    if (!windows || windows.size === 0) {
+      return undefined
+    }
     const out: ProfileUsage = {}
-    for (const [type, held] of windows) out[type] = serveWindow(held, now)
+    for (const [type, held] of windows) {
+      out[type] = serveWindow(held, now)
+    }
     return out
   }
 }

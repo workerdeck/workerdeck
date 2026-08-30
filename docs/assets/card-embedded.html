@@ -7,167 +7,368 @@
   contrast is the message: their app, your session panel.
 -->
 <html>
-<head>
-<meta charset="utf-8" />
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 800px; height: 500px; overflow: hidden; }
-  body {
-    font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background: #000;
-    position: relative;
-  }
-  .glow {
-    position: absolute; inset: 0;
-    background:
-      radial-gradient(ellipse 520px 300px at 30% 28%, rgba(237,237,237,0.07), transparent 60%),
-      radial-gradient(ellipse 420px 260px at 88% 85%, rgba(237,237,237,0.05), transparent 60%);
-  }
-  .grid {
-    position: absolute; inset: 0;
-    background-image:
-      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
-    background-size: 44px 44px;
-    mask-image: radial-gradient(ellipse 640px 400px at 50% 50%, black 30%, transparent 78%);
-    -webkit-mask-image: radial-gradient(ellipse 640px 400px at 50% 50%, black 30%, transparent 78%);
-  }
-  .window {
-    position: absolute; left: 46px; top: 44px; width: 708px; height: 412px;
-    background: #f5f5f6; border-radius: 14px;
-    box-shadow: 0 30px 80px rgba(0,0,0,0.8);
-    overflow: hidden; display: flex; flex-direction: column;
-  }
-  .nav {
-    flex: none; height: 50px; background: #fff; border-bottom: 1px solid #e4e4e7;
-    display: flex; align-items: center; gap: 14px; padding: 0 20px;
-  }
-  .logo { width: 22px; height: 22px; border-radius: 6px; background: #6366f1; }
-  .brand { height: 11px; width: 76px; border-radius: 5px; background: #3f3f46; }
-  .navitem { height: 9px; width: 44px; border-radius: 4px; background: #d4d4d8; }
-  .navitem.first { margin-left: 22px; }
-  .avatar { margin-left: auto; width: 24px; height: 24px; border-radius: 50%; background: #c7c7ce; }
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 800px;
+        height: 500px;
+        overflow: hidden;
+      }
+      body {
+        font-family:
+          'Inter',
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        background: #000;
+        position: relative;
+      }
+      .glow {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(ellipse 520px 300px at 30% 28%, rgba(237, 237, 237, 0.07), transparent 60%),
+          radial-gradient(ellipse 420px 260px at 88% 85%, rgba(237, 237, 237, 0.05), transparent 60%);
+      }
+      .grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+        background-size: 44px 44px;
+        mask-image: radial-gradient(ellipse 640px 400px at 50% 50%, black 30%, transparent 78%);
+        -webkit-mask-image: radial-gradient(ellipse 640px 400px at 50% 50%, black 30%, transparent 78%);
+      }
+      .window {
+        position: absolute;
+        left: 46px;
+        top: 44px;
+        width: 708px;
+        height: 412px;
+        background: #f5f5f6;
+        border-radius: 14px;
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.8);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .nav {
+        flex: none;
+        height: 50px;
+        background: #fff;
+        border-bottom: 1px solid #e4e4e7;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 20px;
+      }
+      .logo {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        background: #6366f1;
+      }
+      .brand {
+        height: 11px;
+        width: 76px;
+        border-radius: 5px;
+        background: #3f3f46;
+      }
+      .navitem {
+        height: 9px;
+        width: 44px;
+        border-radius: 4px;
+        background: #d4d4d8;
+      }
+      .navitem.first {
+        margin-left: 22px;
+      }
+      .avatar {
+        margin-left: auto;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #c7c7ce;
+      }
 
-  .body { flex: 1; display: flex; min-height: 0; }
-  .content { flex: 1; padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-  .stats { display: flex; gap: 14px; }
-  .stat {
-    flex: 1; background: #fff; border: 1px solid #e4e4e7; border-radius: 10px;
-    padding: 13px 14px; display: flex; flex-direction: column; gap: 9px;
-  }
-  .stat .k { height: 8px; width: 52px; border-radius: 4px; background: #d9d9de; }
-  .stat .v { height: 15px; width: 76px; border-radius: 6px; background: #52525b; }
-  .chart {
-    flex: 1; background: #fff; border: 1px solid #e4e4e7; border-radius: 10px;
-    padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; min-height: 0;
-  }
-  .chart .k { height: 8px; width: 88px; border-radius: 4px; background: #d9d9de; }
-  .bars { flex: 1; display: flex; align-items: flex-end; gap: 12px; }
-  .vbar { flex: 1; border-radius: 4px 4px 0 0; background: #e4e4e9; }
-  .vbar.hot { background: #6366f1; }
+      .body {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+      }
+      .content {
+        flex: 1;
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        min-width: 0;
+      }
+      .stats {
+        display: flex;
+        gap: 14px;
+      }
+      .stat {
+        flex: 1;
+        background: #fff;
+        border: 1px solid #e4e4e7;
+        border-radius: 10px;
+        padding: 13px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+      .stat .k {
+        height: 8px;
+        width: 52px;
+        border-radius: 4px;
+        background: #d9d9de;
+      }
+      .stat .v {
+        height: 15px;
+        width: 76px;
+        border-radius: 6px;
+        background: #52525b;
+      }
+      .chart {
+        flex: 1;
+        background: #fff;
+        border: 1px solid #e4e4e7;
+        border-radius: 10px;
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 0;
+      }
+      .chart .k {
+        height: 8px;
+        width: 88px;
+        border-radius: 4px;
+        background: #d9d9de;
+      }
+      .bars {
+        flex: 1;
+        display: flex;
+        align-items: flex-end;
+        gap: 12px;
+      }
+      .vbar {
+        flex: 1;
+        border-radius: 4px 4px 0 0;
+        background: #e4e4e9;
+      }
+      .vbar.hot {
+        background: #6366f1;
+      }
 
-  /* the docked WorkerDeck session panel */
-  .panel {
-    flex: none; width: 252px; margin: 14px; border-radius: 12px;
-    background: #0a0a0a; border: 1px solid #26262b;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.35);
-    display: flex; flex-direction: column; overflow: hidden;
-  }
-  .phead {
-    flex: none; height: 36px; display: flex; align-items: center; gap: 9px;
-    padding: 0 13px; border-bottom: 1px solid #1f1f1f;
-  }
-  .live {
-    width: 10px; height: 10px; border-radius: 50%; background: #2fbf71;
-    box-shadow: 0 0 12px rgba(47,191,113,0.55);
-  }
-  .ptitle { height: 10px; width: 88px; border-radius: 5px; background: #3a3a3a; }
-  .pbody { flex: 1; padding: 12px 13px; display: flex; flex-direction: column; gap: 9px; min-height: 0; }
-  .line { height: 10px; border-radius: 5px; background: #2c2c2c; }
-  .line.dim { background: #202020; }
-  .tool { border: 1px solid #303030; border-radius: 9px; background: #151515; padding: 10px 11px; display: flex; flex-direction: column; gap: 9px; }
-  .tool .thead { display: flex; align-items: center; gap: 7px; }
-  .tool .tname {
-    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
-    font-size: 12px; color: #d4d4d4;
-  }
-  .tool .targ { height: 8px; width: 66px; border-radius: 4px; background: #2b2b2b; }
-  .tool .actions { display: flex; gap: 8px; }
-  .btn {
-    flex: 1; height: 24px; border-radius: 7px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 12px; font-weight: 600;
-  }
-  .btn.allow { background: #ededed; color: #0a0a0a; }
-  .btn.deny { border: 1px solid #3d3d3d; color: #a1a1a1; }
-  .composer {
-    margin-top: auto; flex: none; height: 34px; border: 1px solid #2e2e2e; border-radius: 9px;
-    background: #0e0e0e; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 11px;
-  }
-  .composer .ph { height: 9px; width: 92px; border-radius: 4px; background: #232323; }
-  .composer .send {
-    margin-left: auto; width: 23px; height: 23px; border-radius: 6px; background: #222;
-    display: flex; align-items: center; justify-content: center; color: #8f8f8f; font-size: 12px;
-  }
-</style>
-</head>
-<body>
-  <div class="glow"></div>
-  <div class="grid"></div>
-  <div class="window">
-    <div class="nav">
-      <div class="logo"></div>
-      <div class="brand"></div>
-      <div class="navitem first"></div>
-      <div class="navitem"></div>
-      <div class="navitem" style="width: 34px"></div>
-      <div class="avatar"></div>
-    </div>
-    <div class="body">
-      <div class="content">
-        <div class="stats">
-          <div class="stat"><div class="k"></div><div class="v"></div></div>
-          <div class="stat"><div class="k" style="width: 64px"></div><div class="v" style="width: 58px"></div></div>
-        </div>
-        <div class="chart">
-          <div class="k"></div>
-          <div class="bars">
-            <div class="vbar" style="height: 36%"></div>
-            <div class="vbar" style="height: 58%"></div>
-            <div class="vbar" style="height: 44%"></div>
-            <div class="vbar hot" style="height: 82%"></div>
-            <div class="vbar" style="height: 64%"></div>
-            <div class="vbar" style="height: 50%"></div>
-            <div class="vbar" style="height: 72%"></div>
-          </div>
-        </div>
+      /* the docked WorkerDeck session panel */
+      .panel {
+        flex: none;
+        width: 252px;
+        margin: 14px;
+        border-radius: 12px;
+        background: #0a0a0a;
+        border: 1px solid #26262b;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .phead {
+        flex: none;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 13px;
+        border-bottom: 1px solid #1f1f1f;
+      }
+      .live {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #2fbf71;
+        box-shadow: 0 0 12px rgba(47, 191, 113, 0.55);
+      }
+      .ptitle {
+        height: 10px;
+        width: 88px;
+        border-radius: 5px;
+        background: #3a3a3a;
+      }
+      .pbody {
+        flex: 1;
+        padding: 12px 13px;
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        min-height: 0;
+      }
+      .line {
+        height: 10px;
+        border-radius: 5px;
+        background: #2c2c2c;
+      }
+      .line.dim {
+        background: #202020;
+      }
+      .tool {
+        border: 1px solid #303030;
+        border-radius: 9px;
+        background: #151515;
+        padding: 10px 11px;
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+      .tool .thead {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .tool .tname {
+        font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+        font-size: 12px;
+        color: #d4d4d4;
+      }
+      .tool .targ {
+        height: 8px;
+        width: 66px;
+        border-radius: 4px;
+        background: #2b2b2b;
+      }
+      .tool .actions {
+        display: flex;
+        gap: 8px;
+      }
+      .btn {
+        flex: 1;
+        height: 24px;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .btn.allow {
+        background: #ededed;
+        color: #0a0a0a;
+      }
+      .btn.deny {
+        border: 1px solid #3d3d3d;
+        color: #a1a1a1;
+      }
+      .composer {
+        margin-top: auto;
+        flex: none;
+        height: 34px;
+        border: 1px solid #2e2e2e;
+        border-radius: 9px;
+        background: #0e0e0e;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 6px 0 11px;
+      }
+      .composer .ph {
+        height: 9px;
+        width: 92px;
+        border-radius: 4px;
+        background: #232323;
+      }
+      .composer .send {
+        margin-left: auto;
+        width: 23px;
+        height: 23px;
+        border-radius: 6px;
+        background: #222;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #8f8f8f;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="glow"></div>
+    <div class="grid"></div>
+    <div class="window">
+      <div class="nav">
+        <div class="logo"></div>
+        <div class="brand"></div>
+        <div class="navitem first"></div>
+        <div class="navitem"></div>
+        <div class="navitem" style="width: 34px"></div>
+        <div class="avatar"></div>
       </div>
-      <div class="panel">
-        <div class="phead">
-          <div class="live"></div>
-          <div class="ptitle"></div>
-        </div>
-        <div class="pbody">
-          <div class="line" style="width: 92%"></div>
-          <div class="line" style="width: 64%"></div>
-          <div class="tool">
-            <div class="thead"><span class="tname">Bash</span><div class="targ"></div></div>
-            <div class="actions">
-              <div class="btn allow">Allow</div>
-              <div class="btn deny">Deny</div>
+      <div class="body">
+        <div class="content">
+          <div class="stats">
+            <div class="stat">
+              <div class="k"></div>
+              <div class="v"></div>
+            </div>
+            <div class="stat">
+              <div class="k" style="width: 64px"></div>
+              <div class="v" style="width: 58px"></div>
             </div>
           </div>
-          <div class="line dim" style="width: 74%"></div>
-          <div class="line" style="width: 88%"></div>
-          <div class="line" style="width: 56%"></div>
-          <div class="line dim" style="width: 38%"></div>
-          <div class="composer">
-            <div class="ph"></div>
-            <div class="send">&#8593;</div>
+          <div class="chart">
+            <div class="k"></div>
+            <div class="bars">
+              <div class="vbar" style="height: 36%"></div>
+              <div class="vbar" style="height: 58%"></div>
+              <div class="vbar" style="height: 44%"></div>
+              <div class="vbar hot" style="height: 82%"></div>
+              <div class="vbar" style="height: 64%"></div>
+              <div class="vbar" style="height: 50%"></div>
+              <div class="vbar" style="height: 72%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="phead">
+            <div class="live"></div>
+            <div class="ptitle"></div>
+          </div>
+          <div class="pbody">
+            <div class="line" style="width: 92%"></div>
+            <div class="line" style="width: 64%"></div>
+            <div class="tool">
+              <div class="thead">
+                <span class="tname">Bash</span>
+                <div class="targ"></div>
+              </div>
+              <div class="actions">
+                <div class="btn allow">Allow</div>
+                <div class="btn deny">Deny</div>
+              </div>
+            </div>
+            <div class="line dim" style="width: 74%"></div>
+            <div class="line" style="width: 88%"></div>
+            <div class="line" style="width: 56%"></div>
+            <div class="line dim" style="width: 38%"></div>
+            <div class="composer">
+              <div class="ph"></div>
+              <div class="send">&#8593;</div>
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
-</body>
+  </body>
 </html>

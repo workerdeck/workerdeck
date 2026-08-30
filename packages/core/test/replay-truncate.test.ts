@@ -27,17 +27,14 @@ const toolResult = (id: string, content: unknown) => ({
 describe('truncateResultBlocks', () => {
   it('keeps the head, and says how much there was', () => {
     const event = truncateResultBlocks(resultEvent(1, [toolResult('a', big)])) as never
-    const block = (event as { message: { content: Array<Record<string, unknown>> } }).message
-      .content[0]!
+    const block = (event as { message: { content: Array<Record<string, unknown>> } }).message.content[0]!
     expect(block.content).toBe(big.slice(0, TOOL_RESULT_HEAD_CHARS))
     expect(block.truncated).toBe(true)
     expect(block.total_chars).toBe(big.length)
   })
 
   it('cuts blocks individually — a big result beside two small ones', () => {
-    const event = truncateResultBlocks(
-      resultEvent(1, [toolResult('a', 'short'), toolResult('b', big), toolResult('c', 'also short')]),
-    )
+    const event = truncateResultBlocks(resultEvent(1, [toolResult('a', 'short'), toolResult('b', big), toolResult('c', 'also short')]))
     const blocks = (event as { message: { content: Array<Record<string, unknown>> } }).message.content
     expect(blocks[0]).toEqual(toolResult('a', 'short'))
     expect(blocks[1]!.truncated).toBe(true)
@@ -45,11 +42,8 @@ describe('truncateResultBlocks', () => {
   })
 
   it('preserves the content SHAPE — a block list stays a block list', () => {
-    const event = truncateResultBlocks(
-      resultEvent(1, [toolResult('a', [{ type: 'text', text: big }])]),
-    )
-    const block = (event as { message: { content: Array<Record<string, unknown>> } }).message
-      .content[0]!
+    const event = truncateResultBlocks(resultEvent(1, [toolResult('a', [{ type: 'text', text: big }])]))
+    const block = (event as { message: { content: Array<Record<string, unknown>> } }).message.content[0]!
     expect(Array.isArray(block.content)).toBe(true)
     expect((block.content as Array<{ text: string }>)[0]!.text.length).toBe(TOOL_RESULT_HEAD_CHARS)
     expect(block.total_chars).toBe(big.length)

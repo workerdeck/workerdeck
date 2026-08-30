@@ -1,10 +1,4 @@
-import type {
-  EngineCapabilities,
-  ModelOption,
-  ProfileEngine,
-  ProfileInfo,
-  SdkSessionSummary,
-} from '@workerdeck/protocol'
+import type { EngineCapabilities, ModelOption, ProfileEngine, ProfileInfo, SdkSessionSummary } from '@workerdeck/protocol'
 import type { Runner, RunnerSnapshot } from '../runner-interface.ts'
 import type { SessionRunnerConfig } from './claude/runner.ts'
 
@@ -13,10 +7,7 @@ import type { SessionRunnerConfig } from './claude/runner.ts'
  * could not run at all — which is NOT evidence of a missing login and must
  * never be surfaced as one (the `checkClaudeAuth` discipline, generalized).
  */
-export type EngineAvailability =
-  | { available: true }
-  | { available: false; reason: string }
-  | { available: 'unknown' }
+export type EngineAvailability = { available: true } | { available: false; reason: string } | { available: 'unknown' }
 
 /**
  * A model catalog shipped with the release — the answer to "what can a create
@@ -70,10 +61,7 @@ export interface EngineAdapter {
    * replaces the child env wholesale, and a delta would strand HOME/PATH and
    * the auth chain with it). Never rejects.
    */
-  checkAvailability(
-    profile: ProfileInfo,
-    env: Record<string, string | undefined>,
-  ): Promise<EngineAvailability>
+  checkAvailability(profile: ProfileInfo, env: Record<string, string | undefined>): Promise<EngineAvailability>
   /** Build a Runner. Throwing fails the create (session POST 500s, job fails). */
   createRunner(request: EngineRunnerRequest): Runner | Promise<Runner>
   /**

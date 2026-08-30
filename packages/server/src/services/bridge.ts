@@ -50,7 +50,9 @@ export class BridgeHub {
     bridge.sockets.push(send)
     return () => {
       const index = bridge.sockets.indexOf(send)
-      if (index >= 0) bridge.sockets.splice(index, 1)
+      if (index >= 0) {
+        bridge.sockets.splice(index, 1)
+      }
     }
   }
 
@@ -65,26 +67,34 @@ export class BridgeHub {
   /** Drop a session's bridge, failing anything still in flight. */
   remove(sessionId: string): void {
     const bridge = this.#sessions.get(sessionId)
-    if (!bridge) return
+    if (!bridge) {
+      return
+    }
     bridge.executor.registry.cancelAll('session_closed', 'the session was closed')
     this.#sessions.delete(sessionId)
   }
 
   #bridge(sessionId: string): SessionBridge {
     const existing = this.#sessions.get(sessionId)
-    if (existing) return existing
+    if (existing) {
+      return existing
+    }
     const bridge: SessionBridge = {
       sockets: [],
       executor: new BrowserBridgeExecutor({
         timeoutMs: this.#options.timeoutMs,
         send: (frame: ToolCallRequestFrame) => {
           const target = bridge.sockets[0]
-          if (!target) return false
+          if (!target) {
+            return false
+          }
           target(frame)
           return true
         },
         cancel: (executionId, reason) => {
-          for (const send of bridge.sockets) send({ type: 'tool_call_canceled', executionId, reason })
+          for (const send of bridge.sockets) {
+            send({ type: 'tool_call_canceled', executionId, reason })
+          }
         },
         onResult: (executionId, result) => {
           this.#options.onResult?.(sessionId, executionId, result)

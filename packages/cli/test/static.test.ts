@@ -8,9 +8,7 @@ describe('resolveWithinRoot', () => {
   const root = '/srv/web'
 
   it('resolves ordinary asset paths', () => {
-    expect(resolveWithinRoot(root, '/assets/index-abc123.js')).toBe(
-      resolve('/srv/web/assets/index-abc123.js'),
-    )
+    expect(resolveWithinRoot(root, '/assets/index-abc123.js')).toBe(resolve('/srv/web/assets/index-abc123.js'))
   })
 
   it('refuses to escape the root', () => {

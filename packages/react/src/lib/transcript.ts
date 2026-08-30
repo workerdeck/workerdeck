@@ -277,8 +277,12 @@ const isStreamingItem = (item: TranscriptItem): boolean =>
   (item.kind === 'thinking' && item.id.startsWith(STREAMING_THINKING_ID))
 
 function blockText(content: ToolResultBlock['content']): string {
-  if (content === undefined) return ''
-  if (typeof content === 'string') return content
+  if (content === undefined) {
+    return ''
+  }
+  if (typeof content === 'string') {
+    return content
+  }
   return content
     .map((part) => (typeof part.text === 'string' ? part.text : ''))
     .filter(Boolean)
@@ -292,7 +296,9 @@ function imageRefsOf(
   content: ToolResultBlock['content'],
   seq: number,
 ): ReadonlyArray<{ partIndex: number; mediaType: string; bytes: number; sourceSeq: number }> | undefined {
-  if (!Array.isArray(content)) return undefined
+  if (!Array.isArray(content)) {
+    return undefined
+  }
   const refs = content.flatMap((part) =>
     part.type === 'image_ref'
       ? [
@@ -314,7 +320,9 @@ function contentToBlocks(content: string | ContentBlock[]): ContentBlock[] {
 
 /** Render an execution's by-value output for the transcript. */
 function outputText(output: ToolExecutionOutput): string {
-  if (output.type === 'text') return output.value
+  if (output.type === 'text') {
+    return output.value
+  }
   try {
     return JSON.stringify(output.value)
   } catch {
@@ -343,14 +351,18 @@ const COMMAND_ARGS = /<command-args>([\s\S]*?)<\/command-args>/
 /** The typed command line, or undefined when this is ordinary prose. */
 function slashCommandText(text: string): string | undefined {
   const name = COMMAND_NAME.exec(text)?.[1]?.trim()
-  if (!name) return undefined
+  if (!name) {
+    return undefined
+  }
   const args = COMMAND_ARGS.exec(text)?.[1]?.trim()
   return args ? `${name} ${args}` : name
 }
 
 function upsert(items: TranscriptItem[], item: TranscriptItem): TranscriptItem[] {
   const index = items.findIndex((existing) => existing.id === item.id && existing.kind === item.kind)
-  if (index === -1) return [...items, item]
+  if (index === -1) {
+    return [...items, item]
+  }
   const next = [...items]
   next[index] = item
   return next
@@ -397,9 +409,7 @@ export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): 
  * described two ways. This stays as the transcript-shaped door to it.
  */
 export function rateLimitWindows(state: TranscriptState): UsageWindowRow[] {
-  return orderUsageWindows(
-    mergeUsage({ rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt }, undefined),
-  )
+  return orderUsageWindows(mergeUsage({ rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt }, undefined))
 }
 
 /**
@@ -417,14 +427,12 @@ export function rateLimitWindows(state: TranscriptState): UsageWindowRow[] {
  * *fetch* needed, not what the fold needs. Unknown id returns `state` unchanged
  * — a press answered after the session was cleared must not resurrect a row.
  */
-export function hydrateToolResult(
-  state: TranscriptState,
-  toolUseId: string,
-  text: string,
-): TranscriptState {
+export function hydrateToolResult(state: TranscriptState, toolUseId: string, text: string): TranscriptState {
   let changed = false
   const items = state.items.map((item) => {
-    if (item.kind !== 'tool_call' || item.id !== toolUseId || !item.result?.truncated) return item
+    if (item.kind !== 'tool_call' || item.id !== toolUseId || !item.result?.truncated) {
+      return item
+    }
     changed = true
     // `images` survives: hydration answers the *text* press, and clearing the
     // addresses beside it would leave the row's pictures unloadable forever.
@@ -441,7 +449,9 @@ export function hydrateToolResult(
 }
 
 export function applyEvent(state: TranscriptState, event: SessionEvent): TranscriptState {
-  if (event.seq <= state.lastSeq) return state
+  if (event.seq <= state.lastSeq) {
+    return state
+  }
   const base: TranscriptState = { ...state, lastSeq: event.seq }
 
   switch (event.type) {
@@ -498,7 +508,9 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
     case 'rate_limit': {
       // Keyed by window so five_hour and seven_day updates don't clobber each other.
       const key = event.info.rateLimitType
-      if (!key) return base
+      if (!key) {
+        return base
+      }
       return {
         ...base,
         rateLimits: { ...base.rateLimits, [key]: event.info },
@@ -600,16 +612,14 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
       const streamingThought = streamingThinkingId(event.parentToolUseId)
       let streamedThinking =
         base.items.find(
-          (item): item is Extract<TranscriptItem, { kind: 'thinking' }> =>
-            item.kind === 'thinking' && item.id === streamingThought,
+          (item): item is Extract<TranscriptItem, { kind: 'thinking' }> => item.kind === 'thinking' && item.id === streamingThought,
         )?.text ?? ''
       // The full message supersedes any in-flight streamed text/thinking — this
       // agent's, and only this agent's. A subagent's finished message must not
       // wipe the sentence its parent is still writing.
       let items = base.items.filter(
         (item) =>
-          !(item.kind === 'assistant_text' && item.id === streamingText) &&
-          !(item.kind === 'thinking' && item.id === streamingThought),
+          !(item.kind === 'assistant_text' && item.id === streamingText) && !(item.kind === 'thinking' && item.id === streamingThought),
       )
       const blocks = contentToBlocks(event.message.content)
       blocks.forEach((block, index) => {
@@ -629,7 +639,9 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
           streamedThinking = ''
           // No summary anywhere: drop the block instead of leaving a "Thought process" row
           // that expands to nothing (and, across consecutive messages, stacks up).
-          if (text.trim() === '') return
+          if (text.trim() === '') {
+            return
+          }
           items = upsert(items, {
             kind: 'thinking',
             id,
@@ -657,12 +669,13 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
         type: string
         delta?: { type?: string; text?: string; thinking?: string }
       }
-      if (delta.type !== 'content_block_delta') return base
+      if (delta.type !== 'content_block_delta') {
+        return base
+      }
       if (delta.delta?.type === 'text_delta') {
         const id = streamingTextId(event.parentToolUseId)
         const existing = base.items.find(
-          (item): item is Extract<TranscriptItem, { kind: 'assistant_text' }> =>
-            item.kind === 'assistant_text' && item.id === id,
+          (item): item is Extract<TranscriptItem, { kind: 'assistant_text' }> => item.kind === 'assistant_text' && item.id === id,
         )
         const item: TranscriptItem = {
           kind: 'assistant_text',
@@ -676,8 +689,7 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
       if (delta.delta?.type === 'thinking_delta') {
         const id = streamingThinkingId(event.parentToolUseId)
         const existing = base.items.find(
-          (item): item is Extract<TranscriptItem, { kind: 'thinking' }> =>
-            item.kind === 'thinking' && item.id === id,
+          (item): item is Extract<TranscriptItem, { kind: 'thinking' }> => item.kind === 'thinking' && item.id === id,
         )
         const text = (existing?.text ?? '') + (delta.delta.thinking ?? '')
         // The same guard the finalized block gets, and for the same reason: a
@@ -690,7 +702,9 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
         // Skipping it here costs nothing: the next delta that does carry text
         // creates the item, since the accumulated text is rebuilt from
         // `existing` each time.
-        if (text.trim() === '') return base
+        if (text.trim() === '') {
+          return base
+        }
         const item: TranscriptItem = {
           kind: 'thinking',
           id,
@@ -722,7 +736,9 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
           // streaming one does — two agents finalizing on one `turn_result`
           // would otherwise land on a single id, and `upsert` keys by id.
           ...base.items.map((item) => {
-            if (!isStreamingItem(item)) return item
+            if (!isStreamingItem(item)) {
+              return item
+            }
             const agent = 'parentToolUseId' in item && item.parentToolUseId ? `-${item.parentToolUseId}` : ''
             return item.kind === 'assistant_text'
               ? { ...item, id: `text-${event.seq}${agent}`, streaming: false }
@@ -819,10 +835,7 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
     case 'session_error':
       return {
         ...base,
-        items: [
-          ...base.items,
-          { kind: 'notice', id: `err-${event.seq}`, level: 'error', text: event.message },
-        ],
+        items: [...base.items, { kind: 'notice', id: `err-${event.seq}`, level: 'error', text: event.message }],
       }
 
     case 'session_closed':

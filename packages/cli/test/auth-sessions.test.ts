@@ -9,7 +9,9 @@ const SECRET = 'correct-horse-battery-staple'
 const dirs: string[] = []
 
 afterEach(async () => {
-  for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true })
+  for (const dir of dirs.splice(0)) {
+    await rm(dir, { recursive: true, force: true })
+  }
 })
 
 async function stateDir(): Promise<string> {
@@ -67,11 +69,9 @@ describe('createAuthSessionStore', () => {
   it('skips malformed rows but keeps the good ones', async () => {
     const dir = await stateDir()
     const expiresAt = Date.now() + 60_000
-    await writeFile(
-      file(dir),
-      JSON.stringify({ version: 1, sessions: [['', 1e15], ['ok', expiresAt], ['bad', 'soon'], ['short'], 7] }),
-      { mode: 0o600 },
-    )
+    await writeFile(file(dir), JSON.stringify({ version: 1, sessions: [['', 1e15], ['ok', expiresAt], ['bad', 'soon'], ['short'], 7] }), {
+      mode: 0o600,
+    })
     const store = await createAuthSessionStore({ stateDir: dir })
     expect([...(store.initial ?? [])]).toEqual([['ok', { expiresAt }]])
   })
@@ -112,8 +112,12 @@ describe('createAuthSessionStore', () => {
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       socket: { remoteAddress: '127.0.0.1' },
       on(event: string, handler: (chunk?: Buffer) => void) {
-        if (event === 'data') handler(Buffer.from(JSON.stringify({ secret: SECRET })))
-        if (event === 'end') handler()
+        if (event === 'data') {
+          handler(Buffer.from(JSON.stringify({ secret: SECRET })))
+        }
+        if (event === 'end') {
+          handler()
+        }
         return this
       },
     } as never

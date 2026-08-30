@@ -49,14 +49,28 @@ const PATHS: Record<string, { title: string; d: string }> = {
  * `kimi-k2`), and falling through to no mark rather than guessing wrong.
  */
 export function engineMark(engine: string, model?: string): string | undefined {
-  if (engine === 'claude') return 'claude'
-  if (engine === 'codex') return 'codex'
+  if (engine === 'claude') {
+    return 'claude'
+  }
+  if (engine === 'codex') {
+    return 'codex'
+  }
   const id = model?.toLowerCase() ?? ''
-  if (!id) return undefined
-  if (id.includes('gemini')) return 'gemini'
-  if (id.includes('deepseek')) return 'deepseek'
-  if (id.includes('moonshot') || id.includes('kimi')) return 'moonshot'
-  if (id.includes('claude')) return 'claude'
+  if (!id) {
+    return undefined
+  }
+  if (id.includes('gemini')) {
+    return 'gemini'
+  }
+  if (id.includes('deepseek')) {
+    return 'deepseek'
+  }
+  if (id.includes('moonshot') || id.includes('kimi')) {
+    return 'moonshot'
+  }
+  if (id.includes('claude')) {
+    return 'claude'
+  }
   if (id.startsWith('gpt') || id.startsWith('o1') || id.startsWith('o3') || id.includes('openai')) {
     return 'codex'
   }
@@ -103,15 +117,7 @@ export function vendorTextClass(engine: string, model?: string): string {
   return VENDOR_TEXT[engineMark(engine, model) ?? ''] ?? 'text-fg-3'
 }
 
-export function EngineIcon({
-  engine,
-  model,
-  className,
-}: {
-  engine: string
-  model?: string
-  className?: string
-}) {
+export function EngineIcon({ engine, model, className }: { engine: string; model?: string; className?: string }) {
   const mark = PATHS[engineMark(engine, model) ?? '']
   // An engine this build has never heard of still gets a slot, so the second
   // line doesn't reflow around a missing glyph.
@@ -124,12 +130,13 @@ export function EngineIcon({
   }
   return (
     <svg
-      viewBox='0 0 24 24'
-      fill='currentColor'
-      fillRule='evenodd'
-      role='img'
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      fillRule="evenodd"
+      role="img"
       aria-label={mark.title}
-      className={cn('size-3 shrink-0 text-fg-3', className)}>
+      className={cn('size-3 shrink-0 text-fg-3', className)}
+    >
       <title>{mark.title}</title>
       <path d={mark.d} />
     </svg>

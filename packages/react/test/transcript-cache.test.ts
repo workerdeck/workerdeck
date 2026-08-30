@@ -4,12 +4,7 @@ import { createWorkerServer, type WorkerServer } from '@workerdeck/server'
 import { WorkerDeckClient, type SessionHandle } from '@workerdeck/client'
 import type { AttachedFrame, SessionEvent, SessionInfo } from '@workerdeck/protocol'
 import { initialReplayTarget, staleAttach } from '../src/hooks/use-session.ts'
-import {
-  applyEvent,
-  initialTranscriptState,
-  seedFromSessionInfo,
-  type TranscriptState,
-} from '../src/lib/transcript.ts'
+import { applyEvent, initialTranscriptState, seedFromSessionInfo, type TranscriptState } from '../src/lib/transcript.ts'
 import {
   clearTranscriptCache,
   deleteTranscriptCache,
@@ -148,7 +143,9 @@ describe('a reset replayed above the cached afterSeq', () => {
         ts: 0,
       },
     ]
-    for (const event of replay) state = applyEvent(state, event)
+    for (const event of replay) {
+      state = applyEvent(state, event)
+    }
     expect(state.items).toEqual([{ kind: 'user', id: 'u-new', text: 'after the clear' }])
     expect(state.lastSeq).toBe(521)
   })
@@ -173,7 +170,9 @@ let running: WorkerServer | undefined
 let handles: SessionHandle[] = []
 
 afterEach(async () => {
-  for (const handle of handles) handle.detach()
+  for (const handle of handles) {
+    handle.detach()
+  }
   handles = []
   await running?.close()
   running = undefined
@@ -256,7 +255,9 @@ describe('warm attach over the wire', () => {
     expect(initialReplayTarget(warmFrame)).toBeUndefined()
     // The wire got smaller: every replayed event is strictly above afterSeq.
     expect(warm.events.length).toBeGreaterThan(0)
-    for (const event of warm.events) expect(event.seq).toBeGreaterThan(cached.lastSeq)
+    for (const event of warm.events) {
+      expect(event.seq).toBeGreaterThan(cached.lastSeq)
+    }
 
     // Equivalence: the composed state matches what a full replay builds.
     const full = reduceAttach(client, session.id, initialTranscriptState, 0)
@@ -296,9 +297,7 @@ describe('warm attach over the wire', () => {
     const recovered = reduceAttach(client, session.id, initialTranscriptState, 0)
     await vi.waitFor(() => {
       expect(recovered.frames.length).toBe(1)
-      expect(recovered.state().lastSeq).toBeGreaterThanOrEqual(
-        recovered.frames[0].session.lastSeq,
-      )
+      expect(recovered.state().lastSeq).toBeGreaterThanOrEqual(recovered.frames[0].session.lastSeq)
     })
     expect(staleAttach(recovered.frames[0], initialTranscriptState)).toBe(false)
     expect(recovered.state().items.length).toBeGreaterThanOrEqual(1)

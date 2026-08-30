@@ -35,8 +35,7 @@ import type { ModelCatalog } from '../adapter.ts'
  *   `max`/`ultra` beyond the SDK union; trust the binary, keep strings open.
  */
 export const CODEX_CATALOG: ModelCatalog = {
-  provenance:
-    'embedded model presets of @openai/codex@0.149.0 (darwin-arm64 binary), extracted 2026-08-22',
+  provenance: 'embedded model presets of @openai/codex@0.149.0 (darwin-arm64 binary), extracted 2026-08-22',
   models: [
     {
       value: 'gpt-5.6-sol',

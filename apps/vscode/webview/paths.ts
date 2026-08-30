@@ -18,12 +18,12 @@
 
 /** One path segment: no whitespace, no separator, none of the characters that
  * bracket a path in prose. `:` is out because it introduces `:line`. */
-const SEG = "[^\\s:'\"`()\\[\\]{}<>|]+"
+const SEG = '[^\\s:\'"`()\\[\\]{}<>|]+'
 
 /** The *first* segment of a relative path additionally cannot start with `@`:
  * an `@file` mention is written `@_docs/BACKLOG.md`, and the `@` is the
  * mention's sigil, not part of the name. */
-const HEAD = "[^\\s:'\"`()\\[\\]{}<>|@,]+"
+const HEAD = '[^\\s:\'"`()\\[\\]{}<>|@,]+'
 
 const PATH_PATTERN = new RegExp(
   // token boundary (or start) — never consumed into the path
@@ -51,11 +51,17 @@ export type PathMatch = {
 
 export function matchPath(text: string | null | undefined): PathMatch | undefined {
   const match = PATH_PATTERN.exec(text ?? '')
-  if (!match) return undefined
+  if (!match) {
+    return undefined
+  }
   const path = match[1].replace(TRAILING, '')
-  if (!path.includes('/')) return undefined
+  if (!path.includes('/')) {
+    return undefined
+  }
   const rooted = path.startsWith('/') || path.startsWith('./') || path.startsWith('../')
-  if (!rooted && !FILENAME.test(path)) return undefined
+  if (!rooted && !FILENAME.test(path)) {
+    return undefined
+  }
   const line = match[2] ? Number(match[2]) : undefined
   return { path, line, length: path.length + (match[2]?.length ?? -1) + 1 }
 }

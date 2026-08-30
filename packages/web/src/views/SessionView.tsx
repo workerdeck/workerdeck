@@ -40,24 +40,20 @@ export function SessionView() {
     // Not until the same-origin probe has answered: the implicit gateway does
     // not exist yet at first paint, and bouncing off it would break every
     // bookmark on the way in.
-    if (!ready || client) return
+    if (!ready || client) {
+      return
+    }
     toast.error('That gateway is not configured here')
     void navigate({ to: '/sessions' })
   }, [ready, client, navigate])
 
-  if (!client) return null
+  if (!client) {
+    return null
+  }
   return <SessionViewInner key={`${hostId}:${sessionId}`} hostId={hostId} sessionId={sessionId} client={client} />
 }
 
-function SessionViewInner({
-  hostId,
-  sessionId,
-  client,
-}: {
-  hostId: string
-  sessionId: string
-  client: WorkerDeckClient
-}) {
+function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessionId: string; client: WorkerDeckClient }) {
   const navigate = useNavigate()
   // The sub-agent takeover, addressed in the URL — see the route's
   // `validateSearch`. `sn` is the nonce; without one, clicking the same agent
@@ -81,7 +77,9 @@ function SessionViewInner({
   const [rail] = useState(getRail)
 
   useEffect(() => {
-    if (!error) return
+    if (!error) {
+      return
+    }
     toast.error('Session not found')
     void navigate({ to: '/sessions' })
   }, [error, navigate])
@@ -118,14 +116,13 @@ function SessionViewInner({
   // field, so a partial reading can never walk `itemCount` back.
   const { snapshots } = useSessions()
   const polled = useMemo(
-    () =>
-      snapshots
-        .find((s) => s.host.id === hostId)
-        ?.sessions.find((s) => s.id === sessionId),
+    () => snapshots.find((s) => s.host.id === hostId)?.sessions.find((s) => s.id === sessionId),
     [snapshots, hostId, sessionId],
   )
   useEffect(() => {
-    if (!polled || !visible) return
+    if (!polled || !visible) {
+      return
+    }
     markSeen({ activity: polled.activityCount, turns: polled.numTurns })
   }, [polled?.activityCount, polled?.numTurns, visible, markSeen])
 
@@ -184,7 +181,9 @@ function SessionViewInner({
       //    exits the page rather than the frame — the strip's Back and Escape
       //    are the frame's own way out.
       onSubagentChange={(toolUseId) => {
-        if (toolUseId === subagent) return
+        if (toolUseId === subagent) {
+          return
+        }
         void navigate({
           to: '/sessions/$hostId/$sessionId',
           params: { hostId, sessionId },
@@ -199,10 +198,10 @@ function SessionViewInner({
       // And the prompt you are waiting on, held above the answer.
       stickyPrompt
       // Along the foot of the editor area, as an editor puts it.
-      statusPlacement='bottom'
+      statusPlacement="bottom"
       // Model and mode ride that bar too, beside the readings they act on —
       // the VS Code arrangement, and it buys the composer its second row back.
-      controlsSurface='status'
+      controlsSurface="status"
       defaultRailWidth={rail.width}
       defaultRailCollapsed={rail.collapsed}
       onRailChange={setRail}
@@ -223,43 +222,41 @@ function SessionViewInner({
       // on the status bar: this app has a real top bar, and the session's
       // controls belong together there rather than split across two rows.
       header={({ actions }) => (
-        <div className='flex items-center gap-2 border-b border-border bg-surface px-3 py-2'>
+        <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2">
           {/* No back button: the sessions sidebar is always on screen, so there
               is nothing to go back *to*. */}
-          <span className='truncate text-body-sm font-medium text-fg-1'>
-            {info?.title ?? project ?? sessionId.slice(0, 8)}
-          </span>
+          <span className="truncate text-body-sm font-medium text-fg-1">{info?.title ?? project ?? sessionId.slice(0, 8)}</span>
           {/* Which engine is answering — the one session-level fact that changes
               what every other control means. */}
           {info?.engine && info.engine !== 'claude' ? (
-            <Badge variant='neutral' className='shrink-0'>
+            <Badge variant="neutral" className="shrink-0">
               {info.engine}
             </Badge>
           ) : null}
           {info?.cwd ? (
-            <span className='min-w-0 truncate font-mono text-label text-fg-4' title={info.cwd}>
+            <span className="min-w-0 truncate font-mono text-label text-fg-4" title={info.cwd}>
               {info.cwd}
             </span>
           ) : null}
-          <span className='flex-1' />
-          <CopyButton value={sessionId} aria-label='Copy session id' />
+          <span className="flex-1" />
+          <CopyButton value={sessionId} aria-label="Copy session id" />
           <AlertDialog>
             <AlertDialogTrigger
               render={
-                <Button variant='ghost' size='icon-sm' aria-label='Close session'>
-                  <Trash2 className='size-4 text-fg-3' />
+                <Button variant="ghost" size="icon-sm" aria-label="Close session">
+                  <Trash2 className="size-4 text-fg-3" />
                 </Button>
               }
             />
             <AlertDialogContent>
               <AlertDialogTitle>Close this session?</AlertDialogTitle>
               <AlertDialogDescription>
-                The run is terminated on the server. You can pick it up later from “Resume a
-                previous session” — the transcript is kept by the engine, not by the gateway.
+                The run is terminated on the server. You can pick it up later from “Resume a previous session” — the transcript is kept by
+                the engine, not by the gateway.
               </AlertDialogDescription>
-              <div className='mt-4 flex justify-end gap-2'>
-                <AlertDialogClose render={<Button variant='outline'>Cancel</Button>} />
-                <Button variant='destructive' onClick={() => void close()}>
+              <div className="mt-4 flex justify-end gap-2">
+                <AlertDialogClose render={<Button variant="outline">Cancel</Button>} />
+                <Button variant="destructive" onClick={() => void close()}>
                   Close session
                 </Button>
               </div>

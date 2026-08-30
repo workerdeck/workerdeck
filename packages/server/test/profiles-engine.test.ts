@@ -41,7 +41,9 @@ let configDir: string | undefined
 afterEach(async () => {
   await running?.close()
   running = undefined
-  if (configDir) rmSync(configDir, { recursive: true, force: true })
+  if (configDir) {
+    rmSync(configDir, { recursive: true, force: true })
+  }
   configDir = undefined
 })
 
@@ -59,9 +61,7 @@ const providerProfile = (): ProfileInfo => ({
 
 describe('provider profiles and engine selection', () => {
   it('refuses to start when a provider profile has no engine factory', () => {
-    expect(() =>
-      createWorkerServer({ allowUnauthenticated: true, profiles: [providerProfile()] }),
-    ).toThrow(/no `createEngineRunner`/)
+    expect(() => createWorkerServer({ allowUnauthenticated: true, profiles: [providerProfile()] })).toThrow(/no `createEngineRunner`/)
   })
 
   it('refuses a provider profile without a provider id', () => {
@@ -162,7 +162,9 @@ describe('provider profiles and engine selection', () => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/sessions/${session.id}/ws`)
     const attached = new Promise<void>((resolve) => {
       ws.on('message', (data) => {
-        if ((JSON.parse(String(data)) as { type: string }).type === 'attached') resolve()
+        if ((JSON.parse(String(data)) as { type: string }).type === 'attached') {
+          resolve()
+        }
       })
     })
     ws.on('message', (data) => {
@@ -328,9 +330,7 @@ describe('provider profiles and engine selection', () => {
   })
 
   it('rejects a CLI-only permission mode on a provider profile', async () => {
-    const createEngineRunner = vi.fn((ctx: EngineRunnerContext) =>
-      fakeRunner('engine-1', ctx.config),
-    )
+    const createEngineRunner = vi.fn((ctx: EngineRunnerContext) => fakeRunner('engine-1', ctx.config))
     running = createWorkerServer({
       allowUnauthenticated: true,
       allowedCwdRoots: ['/tmp'],
@@ -344,9 +344,7 @@ describe('provider profiles and engine selection', () => {
       body: JSON.stringify({ cwd: '/tmp/project', profile: 'kimi', permissionMode: 'plan' }),
     })
     expect(res.status).toBe(400)
-    expect(((await res.json()) as { error: string }).error).toMatch(
-      /'plan' is not supported by profile 'kimi'/,
-    )
+    expect(((await res.json()) as { error: string }).error).toMatch(/'plan' is not supported by profile 'kimi'/)
     // Refused at the gateway — the engine is never asked to make sense of it.
     expect(createEngineRunner).not.toHaveBeenCalled()
   })
@@ -421,9 +419,7 @@ describe('provider profiles and engine selection', () => {
   })
 
   it('refuses a session asking for a capability its profile does not grant', async () => {
-    const createEngineRunner = vi.fn((ctx: EngineRunnerContext) =>
-      fakeRunner('engine-1', ctx.config),
-    )
+    const createEngineRunner = vi.fn((ctx: EngineRunnerContext) => fakeRunner('engine-1', ctx.config))
     running = createWorkerServer({
       allowUnauthenticated: true,
       allowedCwdRoots: ['/tmp'],
@@ -446,15 +442,11 @@ describe('provider profiles and engine selection', () => {
   })
 
   it('passes a narrowing capability request through to the engine factory', async () => {
-    const createEngineRunner = vi.fn((ctx: EngineRunnerContext) =>
-      fakeRunner('engine-1', ctx.config),
-    )
+    const createEngineRunner = vi.fn((ctx: EngineRunnerContext) => fakeRunner('engine-1', ctx.config))
     running = createWorkerServer({
       allowUnauthenticated: true,
       allowedCwdRoots: ['/tmp'],
-      profiles: [
-        { ...providerProfile(), session: { capabilities: ['web_fetch', 'deliver_file'] } },
-      ],
+      profiles: [{ ...providerProfile(), session: { capabilities: ['web_fetch', 'deliver_file'] } }],
       createEngineRunner,
     })
     const { port } = await running.listen(0, '127.0.0.1')

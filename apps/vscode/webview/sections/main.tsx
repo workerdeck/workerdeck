@@ -11,7 +11,9 @@ syncVsCodeTheme()
 const bridge = new Bridge(['wd-sidebar-state', 'wd-vitals'])
 
 const root = document.getElementById('root')
-if (!root) throw new Error('Root element #root not found')
+if (!root) {
+  throw new Error('Root element #root not found')
+}
 
 // Which section this view is — stamped onto the root element by the provider.
 const kind = (root.dataset.view ?? 'info') as SectionKind

@@ -92,12 +92,10 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
    * the manifest gates the title actions on. */
   #setFormOpen(open: boolean, name?: string): void {
     // `undefined` restores the manifest's name.
-    if (this.#view) this.#view.title = open ? (name ? `Edit ${name}` : 'Add gateway') : undefined
-    void vscode.commands.executeCommand(
-      'setContext',
-      GatewaysViewProvider.formContextKey,
-      open,
-    )
+    if (this.#view) {
+      this.#view.title = open ? (name ? `Edit ${name}` : 'Add gateway') : undefined
+    }
+    void vscode.commands.executeCommand('setContext', GatewaysViewProvider.formContextKey, open)
   }
 
   /** The back chevron — it is a title-bar command, so this side presses it. */
@@ -113,24 +111,22 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
 
   /** Push the gateway list (a host change, a sessions poll, or `wd-ready`). */
   push(): void {
-    if (!this.#view) return
+    if (!this.#view) {
+      return
+    }
     const state = this.#feed.state()
     const connected = state.hosts.filter((h) => h.probe === 'connected').length
     // Said while collapsed, which is the point: whether anything is reachable is
     // the one fact about this view worth having without opening it.
     this.#view.description =
-      state.hosts.length === 0
-        ? 'none'
-        : connected === state.hosts.length
-          ? String(connected)
-          : `${connected}/${state.hosts.length}`
-    if (!this.#ready) return
+      state.hosts.length === 0 ? 'none' : connected === state.hosts.length ? String(connected) : `${connected}/${state.hosts.length}`
+    if (!this.#ready) {
+      return
+    }
     this.#post({
       kind: 'wd-gateways',
       hosts: state.hosts,
-      sessionCounts: Object.fromEntries(
-        state.hosts.map((h) => [h.id, (state.sessions[h.id] ?? []).length]),
-      ),
+      sessionCounts: Object.fromEntries(state.hosts.map((h) => [h.id, (state.sessions[h.id] ?? []).length])),
     })
   }
 
@@ -146,7 +142,9 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
   }
 
   #flushForm(): void {
-    if (!this.#pendingForm || !this.#ready) return
+    if (!this.#pendingForm || !this.#ready) {
+      return
+    }
     this.#post(this.#pendingForm)
     this.#pendingForm = undefined
   }
@@ -162,7 +160,9 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
         return this.#submit(msg)
       case 'wd-edit-gateway': {
         const host = this.#store.get(msg.hostId)
-        if (!host) return
+        if (!host) {
+          return
+        }
         // The key can only come from here — SecretStorage is not reachable from
         // a webview, which is the whole reason the form is filled by a message.
         this.#setFormOpen(true, host.name)
@@ -199,30 +199,33 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
       return
     }
     const id = msg.id || randomUUID()
-    await this.#store.save(
-      { id, name: msg.name.trim(), baseUrl: msg.baseUrl.trim() },
-      msg.authKey.trim() || undefined,
-    )
+    await this.#store.save({ id, name: msg.name.trim(), baseUrl: msg.baseUrl.trim() }, msg.authKey.trim() || undefined)
     this.#post({ kind: 'wd-form-result', ok: true })
     await this.#feed.refresh()
   }
 
   async #remove(hostId: string): Promise<void> {
     const host = this.#store.get(hostId)
-    if (!host) return
+    if (!host) {
+      return
+    }
     const confirmed = await vscode.window.showWarningMessage(
       `Remove gateway "${host.name}"? Its auth key is deleted from the keychain.`,
       { modal: true },
       'Remove',
     )
-    if (confirmed === 'Remove') await this.#store.remove(hostId)
+    if (confirmed === 'Remove') {
+      await this.#store.remove(hostId)
+    }
   }
 
   /** Re-render this webview from disk — the dev reloader after a rebuild. The
    * webview re-announces `wd-ready`, which is what re-pushes its state. */
   reloadWebview(): void {
     const view = this.#view
-    if (!view) return
+    if (!view) {
+      return
+    }
     this.#ready = false
     const dist = vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
     view.webview.html = webviewHtml(view.webview, dist, 'gateways.js', {}, ++this.#htmlVersion)

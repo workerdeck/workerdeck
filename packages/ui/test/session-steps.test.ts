@@ -43,14 +43,13 @@ describe('sessionSteps', () => {
    */
   it('tells the caller which kind was pressed', () => {
     const info = {
-      subagents: [
-        sub({ toolUseId: 'a', agentType: 'Explore' }),
-        sub({ toolUseId: 'b', description: 'check the deploy' }),
-      ],
+      subagents: [sub({ toolUseId: 'a', agentType: 'Explore' }), sub({ toolUseId: 'b', description: 'check the deploy' })],
     } as unknown as SessionInfo
     const pressed: Array<[string, string]> = []
     const steps = sessionSteps(info, (toolUseId, kind) => pressed.push([toolUseId, kind]))
-    for (const step of steps) step.onSelect()
+    for (const step of steps) {
+      step.onSelect()
+    }
     expect(pressed).toEqual([
       ['a', 'agent'],
       ['b', 'task'],
@@ -84,9 +83,6 @@ describe('sessionSteps', () => {
     } as unknown as SessionInfo
     const steps = sessionSteps(info, () => {})
     expect(steps.map((s) => s.kind)).toEqual(['agent', 'task'])
-    expect(steps.map((s) => s.label)).toEqual([
-      'Explore · find the auth check',
-      'check the deploy',
-    ])
+    expect(steps.map((s) => s.label)).toEqual(['Explore · find the auth check', 'check the deploy'])
   })
 })

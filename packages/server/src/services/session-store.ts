@@ -91,8 +91,7 @@ export type DormantSessionRecord = {
  * waiting to be asked for again. */
 export type StoredSessionRecord = ParkedSessionRecord | DormantSessionRecord
 
-export const isDormant = (record: StoredSessionRecord): record is DormantSessionRecord =>
-  record.kind === 'dormant'
+export const isDormant = (record: StoredSessionRecord): record is DormantSessionRecord => record.kind === 'dormant'
 
 /**
  * Where parked sessions live. Two implementations ship: {@link MemorySessionStore}
@@ -157,7 +156,9 @@ const EPHEMERAL_CONFIG_KEYS = ['queryFn', 'historyFn', 'extraOptions', 'env'] as
  * safe and meaningful to keep (see {@link EPHEMERAL_CONFIG_KEYS}). */
 export function toDurableRecord<T extends StoredSessionRecord>(record: T): T {
   const config: SessionRunnerConfig = { ...record.config }
-  for (const key of EPHEMERAL_CONFIG_KEYS) delete config[key]
+  for (const key of EPHEMERAL_CONFIG_KEYS) {
+    delete config[key]
+  }
   return { ...record, config }
 }
 
@@ -208,7 +209,9 @@ export function createFileSessionStore(options: FileSessionStoreOptions = {}): S
       // Absent is the ordinary case: nothing parked under that id. Anything else
       // (EACCES, EIO) is a session we cannot reach, and reporting it as "nothing
       // is parked" is how a restart guard ends up saying the coast is clear.
-      if (isMissing(error)) return null
+      if (isMissing(error)) {
+        return null
+      }
       options.onError?.(error, { path, op: 'read' })
       return null
     }
@@ -231,6 +234,7 @@ export function createFileSessionStore(options: FileSessionStoreOptions = {}): S
         throw new Error(
           `parked session '${record.id}' is not JSON-serializable — a host-injected value ` +
             `reached its config or snapshot: ${String(error)}`,
+          { cause: error },
         )
       }
       try {
@@ -253,7 +257,9 @@ export function createFileSessionStore(options: FileSessionStoreOptions = {}): S
       try {
         names = await readdir(dir)
       } catch (error) {
-        if (isMissing(error)) return [] // No directory yet: nothing has parked here.
+        if (isMissing(error)) {
+          return []
+        } // No directory yet: nothing has parked here.
         // An unreadable directory is not an empty one. `hydrate()` runs inside
         // `listen()`, so throwing here refuses the boot instead of coming up as a
         // server that has quietly forgotten every parked session.
@@ -265,15 +271,19 @@ export function createFileSessionStore(options: FileSessionStoreOptions = {}): S
           .filter((name) => name.endsWith('.json'))
           .map(async (name) => {
             const record = await read(join(dir, name))
-            if (!record) return null
+            if (!record) {
+              return null
+            }
             // A record only answers `get`/`delete` under the name its id encodes to.
             // One that got here some other way (a copy, an ops rename) would list
             // forever and be unreachable — better to say so than to serve a ghost.
-            if (`${encodeURIComponent(record.id)}.json` === name) return record
-            options.onError?.(
-              new Error(`parked record '${record.id}' is stored as '${name}' and cannot be read back by id`),
-              { path: join(dir, name), op: 'read' },
-            )
+            if (`${encodeURIComponent(record.id)}.json` === name) {
+              return record
+            }
+            options.onError?.(new Error(`parked record '${record.id}' is stored as '${name}' and cannot be read back by id`), {
+              path: join(dir, name),
+              op: 'read',
+            })
             return null
           }),
       )
@@ -287,7 +297,9 @@ export function createFileSessionStore(options: FileSessionStoreOptions = {}): S
         return true
       } catch (error) {
         // Missing is not an error — a discard racing a wake-up hits this.
-        if (isMissing(error)) return false
+        if (isMissing(error)) {
+          return false
+        }
         options.onError?.(error, { path, op: 'delete' })
         return false
       }
@@ -300,13 +312,23 @@ const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).
 /** Shape-check a parsed file. A record missing any of these could not be rebuilt,
  * and half-restoring one is worse than skipping it. */
 function parseRecord(value: unknown): StoredSessionRecord | null {
-  if (!value || typeof value !== 'object') return null
+  if (!value || typeof value !== 'object') {
+    return null
+  }
   const envelope = value as { version?: unknown; record?: unknown }
-  if (envelope.version !== FORMAT_VERSION) return null
+  if (envelope.version !== FORMAT_VERSION) {
+    return null
+  }
   const record = envelope.record as Partial<StoredSessionRecord> | null
-  if (!record || typeof record !== 'object') return null
-  if (typeof record.id !== 'string') return null
-  if (!record.info || !record.config) return null
+  if (!record || typeof record !== 'object') {
+    return null
+  }
+  if (typeof record.id !== 'string') {
+    return null
+  }
+  if (!record.info || !record.config) {
+    return null
+  }
   // The discriminator is optional on the wire: every record written before
   // dormant sessions existed is a park, and those files must keep working
   // across the upgrade that introduced this.
@@ -319,11 +341,17 @@ function parseRecord(value: unknown): StoredSessionRecord | null {
   // would lose the session.
   if (record.kind === 'dormant') {
     const dormant = record as Partial<DormantSessionRecord>
-    if (typeof dormant.sdkSessionId !== 'string' || typeof dormant.savedAt !== 'number') return null
+    if (typeof dormant.sdkSessionId !== 'string' || typeof dormant.savedAt !== 'number') {
+      return null
+    }
     return dormant as DormantSessionRecord
   }
   const parked = record as Partial<ParkedSessionRecord>
-  if (typeof parked.parkedAt !== 'number' || !parked.snapshot) return null
-  if (!Array.isArray(parked.executions)) return null
+  if (typeof parked.parkedAt !== 'number' || !parked.snapshot) {
+    return null
+  }
+  if (!Array.isArray(parked.executions)) {
+    return null
+  }
   return parked as ParkedSessionRecord
 }

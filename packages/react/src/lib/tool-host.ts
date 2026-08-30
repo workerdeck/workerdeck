@@ -25,9 +25,7 @@ export type ToolHostRunner = (request: {
  * JSON; return an object with `error` to fail the call with a reason the agent
  * can adapt to.
  */
-export type ClientToolResult =
-  | { value: unknown }
-  | { error: string; reason?: string }
+export type ClientToolResult = { value: unknown } | { error: string; reason?: string }
 
 /**
  * Handler for a client-registered tool. Receives the model's validated input
@@ -94,10 +92,7 @@ export type ToolCallHostOptions = {
  * evaluated here and never touch the server. The engine loads lazily, so a page
  * that never bridges a call never pays for the WASM guest.
  */
-export function createToolCallHost(
-  handle: SessionHandle,
-  options: ToolCallHostOptions = {},
-): { dispose: () => void } {
+export function createToolCallHost(handle: SessionHandle, options: ToolCallHostOptions = {}): { dispose: () => void } {
   const inFlight = new Map<string, AbortController>()
   let enginePromise: Promise<SandboxEngine> | undefined
   let disposed = false
@@ -116,10 +111,7 @@ export function createToolCallHost(
     })
   }
 
-  const runClientTool = async (
-    frame: ToolCallRequestFrame,
-    handler: ClientToolHandler,
-  ): Promise<void> => {
+  const runClientTool = async (frame: ToolCallRequestFrame, handler: ClientToolHandler): Promise<void> => {
     const startedAt = Date.now()
     const controller = new AbortController()
     inFlight.set(frame.executionId, controller)
@@ -130,7 +122,9 @@ export function createToolCallHost(
         executionId: frame.executionId,
         signal: controller.signal,
       })
-      if (disposed || !inFlight.has(frame.executionId)) return
+      if (disposed || !inFlight.has(frame.executionId)) {
+        return
+      }
       if ('error' in result) {
         handle.sendToolCallError(frame.executionId, result.reason ?? 'client_error', result.error)
         track({
@@ -152,7 +146,9 @@ export function createToolCallHost(
         })
       }
     } catch (error) {
-      if (disposed || !inFlight.has(frame.executionId)) return
+      if (disposed || !inFlight.has(frame.executionId)) {
+        return
+      }
       refuse(frame, 'host_error', error instanceof Error ? error.message : String(error), startedAt)
     } finally {
       inFlight.delete(frame.executionId)
@@ -186,10 +182,7 @@ export function createToolCallHost(
       const vfs = sandbox.createVfs(frame.vfsSeed)
       // Never exceed what the server asked for: it owns the deadline it will
       // give up at, and answering after that is wasted work.
-      const timeoutMs = Math.min(
-        frame.limits?.timeoutMs ?? Number.POSITIVE_INFINITY,
-        options.timeoutMs ?? 5000,
-      )
+      const timeoutMs = Math.min(frame.limits?.timeoutMs ?? Number.POSITIVE_INFINITY, options.timeoutMs ?? 5000)
       const memoryLimitBytes = Math.min(
         frame.limits?.memoryLimitBytes ?? Number.POSITIVE_INFINITY,
         options.memoryLimitBytes ?? 64 * 1024 * 1024,
@@ -210,7 +203,9 @@ export function createToolCallHost(
           })()
 
       // Cancelled or torn down while we worked: the server is no longer waiting.
-      if (disposed || !inFlight.has(frame.executionId)) return
+      if (disposed || !inFlight.has(frame.executionId)) {
+        return
+      }
       const logs = result.logs.map((l) => `[${l.level}] ${l.text}`)
       if (result.ok) {
         handle.sendToolCallResult(frame.executionId, { type: 'json', value: result.value }, logs)
@@ -233,7 +228,9 @@ export function createToolCallHost(
         })
       }
     } catch (error) {
-      if (disposed || !inFlight.has(frame.executionId)) return
+      if (disposed || !inFlight.has(frame.executionId)) {
+        return
+      }
       // Engine load failures land here �� tell the server so the agent can adapt
       // instead of waiting out the deadline.
       refuse(frame, 'host_error', error instanceof Error ? error.message : String(error), startedAt)
@@ -245,7 +242,9 @@ export function createToolCallHost(
   const offRequest = handle.on('toolCallRequest', (frame) => void run(frame))
   const offCancel = handle.on('toolCallCanceled', ({ executionId, reason }) => {
     const controller = inFlight.get(executionId)
-    if (!controller) return
+    if (!controller) {
+      return
+    }
     controller.abort()
     inFlight.delete(executionId)
     track({
@@ -263,7 +262,9 @@ export function createToolCallHost(
       disposed = true
       offRequest()
       offCancel()
-      for (const controller of inFlight.values()) controller.abort()
+      for (const controller of inFlight.values()) {
+        controller.abort()
+      }
       inFlight.clear()
     },
   }
@@ -272,9 +273,6 @@ export function createToolCallHost(
 /** The single-file browser build keeps this to one lazy chunk — no separate
  * .wasm fetch, and nothing at all until the first bridged call. */
 async function defaultLoadEngine(): Promise<SandboxEngine> {
-  const [sandbox, variant] = await Promise.all([
-    import('@workerdeck/sandbox'),
-    import('@jitl/quickjs-singlefile-browser-release-asyncify'),
-  ])
+  const [sandbox, variant] = await Promise.all([import('@workerdeck/sandbox'), import('@jitl/quickjs-singlefile-browser-release-asyncify')])
   return sandbox.loadEngine(variant as never)
 }

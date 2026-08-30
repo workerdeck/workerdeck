@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { listCodexSessions } from '../src/engines/codex/adapter.ts'
-import type {
-  AppServerConnectFn,
-  AppServerConnection,
-  AppServerThreadSummary,
-} from '../src/engines/codex/types.ts'
+import type { AppServerConnectFn, AppServerConnection, AppServerThreadSummary } from '../src/engines/codex/types.ts'
 
 /** A thread/list row as 0.146.0 returns it (timestamps in epoch SECONDS). */
 function row(over: Partial<AppServerThreadSummary> & { id: string }): AppServerThreadSummary {
@@ -32,8 +28,12 @@ function scriptedList(pages: Array<{ data: AppServerThreadSummary[]; nextCursor?
     const connection: AppServerConnection = {
       request: async (method, params) => {
         requests.push({ method, params })
-        if (method === 'initialize') return {}
-        if (method === 'thread/list') return pages[Math.min(page++, pages.length - 1)]
+        if (method === 'initialize') {
+          return {}
+        }
+        if (method === 'thread/list') {
+          return pages[Math.min(page++, pages.length - 1)]
+        }
         throw new Error(`unexpected request ${method}`)
       },
       notify: (method) => {
@@ -148,7 +148,9 @@ describe('listCodexSessions', () => {
       return {
         ...connection,
         request: async (method, params) => {
-          if (method === 'thread/list') throw new Error('boom')
+          if (method === 'thread/list') {
+            throw new Error('boom')
+          }
           return connection.request(method, params)
         },
       }

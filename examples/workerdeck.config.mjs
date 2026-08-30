@@ -22,7 +22,9 @@
 /** @type {import('workerdeck').WorkerDeckConfig['authenticate']} */
 const authenticate = (req) => {
   const key = req.headers['x-agent-proxy-key']
-  if (typeof key !== 'string' || key !== process.env.AGENT_PROXY_KEY) return null
+  if (typeof key !== 'string' || key !== process.env.AGENT_PROXY_KEY) {
+    return null
+  }
   // Any truthy value is a principal. `allowedProfiles` narrows which profiles
   // this caller may start sessions under; omit it to allow all of them.
   return { id: 'gtm' }
@@ -71,7 +73,9 @@ export default {
     // fails with "OAuth session expired and could not be refreshed" even with
     // fresh credentials in place; this sidesteps that path entirely.
     const token = { toby: 'CLAUDE_TOKEN_TOBY' }[req.profile ?? '']
-    if (token && process.env[token]) env.CLAUDE_CODE_OAUTH_TOKEN = process.env[token]
+    if (token && process.env[token]) {
+      env.CLAUDE_CODE_OAUTH_TOKEN = process.env[token]
+    }
 
     return { ...req, env }
   },

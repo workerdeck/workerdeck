@@ -4,13 +4,7 @@ import { MockLanguageModelV3, convertArrayToReadableStream } from 'ai/test'
 import { z } from 'zod'
 import { createVfs } from '@workerdeck/sandbox'
 import type { SessionEvent } from '@workerdeck/protocol'
-import {
-  AiSdkRunner,
-  DeferredExecutor,
-  type AiSdkRunnerConfig,
-  type DeferredDispatch,
-  type RunnerSnapshot,
-} from '../src/index.ts'
+import { AiSdkRunner, DeferredExecutor, type AiSdkRunnerConfig, type DeferredDispatch, type RunnerSnapshot } from '../src/index.ts'
 
 const USAGE = {
   inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
@@ -47,16 +41,18 @@ const streamCalls = (calls: Array<{ id: string; tool: string; input: unknown }>)
  * the turn forever, because aborting the runner's controller cannot cancel a
  * stream that was never wired to it.
  */
-const streamStalls = (text: string) => async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
-  stream: new ReadableStream({
-    start(controller) {
-      controller.enqueue({ type: 'stream-start' as const, warnings: [] })
-      controller.enqueue({ type: 'text-start' as const, id: 't1' })
-      controller.enqueue({ type: 'text-delta' as const, id: 't1', delta: text })
-      abortSignal?.addEventListener('abort', () => controller.error(new Error('interrupted')))
-    },
-  }),
-})
+const streamStalls =
+  (text: string) =>
+  async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
+    stream: new ReadableStream({
+      start(controller) {
+        controller.enqueue({ type: 'stream-start' as const, warnings: [] })
+        controller.enqueue({ type: 'text-start' as const, id: 't1' })
+        controller.enqueue({ type: 'text-delta' as const, id: 't1', delta: text })
+        abortSignal?.addEventListener('abort', () => controller.error(new Error('interrupted')))
+      },
+    }),
+  })
 
 const TOOLS = { remote_task: tool({ inputSchema: z.object({ task: z.string() }) }) }
 
@@ -69,7 +65,9 @@ function harness(config: Partial<AiSdkRunnerConfig> & Pick<AiSdkRunnerConfig, 'l
   const waitFor = async (predicate: () => boolean, ms = 2000): Promise<void> => {
     const deadline = Date.now() + ms
     while (!predicate()) {
-      if (Date.now() > deadline) throw new Error('timed out waiting for condition')
+      if (Date.now() > deadline) {
+        throw new Error('timed out waiting for condition')
+      }
       await new Promise((r) => setTimeout(r, 5))
     }
   }
@@ -116,10 +114,7 @@ describe('deferred execution: park and rehydrate', () => {
   it('parks, rehydrates under the same id, and completes the turn on the delivered result', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [
-        streamCalls([{ id: 'call-1', tool: 'remote_task', input: { task: 'crunch' } }]),
-        streamText('the remote worker said 42'),
-      ],
+      doStream: [streamCalls([{ id: 'call-1', tool: 'remote_task', input: { task: 'crunch' } }]), streamText('the remote worker said 42')],
     })
     const vfs = createVfs({ '/notes.txt': 'keep me' })
     const executor = new DeferredExecutor({ onDispatch: () => {} })
@@ -162,7 +157,9 @@ describe('deferred execution: park and rehydrate', () => {
 
     const deadline = Date.now() + 2000
     while (!after.some((e) => e.type === 'turn_result')) {
-      if (Date.now() > deadline) throw new Error('the resumed turn never finished')
+      if (Date.now() > deadline) {
+        throw new Error('the resumed turn never finished')
+      }
       await new Promise((r) => setTimeout(r, 5))
     }
     const result = after.find((e) => e.type === 'turn_result')!
@@ -247,7 +244,9 @@ describe('deferred execution: park and rehydrate', () => {
 
     const deadline = Date.now() + 2000
     while (!after.some((e) => e.type === 'turn_result')) {
-      if (Date.now() > deadline) throw new Error('the resumed turn never finished')
+      if (Date.now() > deadline) {
+        throw new Error('the resumed turn never finished')
+      }
       await new Promise((r) => setTimeout(r, 5))
     }
     expect(after.find((e) => e.type === 'execution_failed')).toMatchObject({ reason: 'timeout' })
@@ -314,9 +313,7 @@ describe('deferred execution: park and rehydrate', () => {
     // …and it changed nothing: still live, still attached, still usable.
     expect(h.runner.info().status).toBe('idle')
     expect(h.eventsOf('session_closed')).toHaveLength(0)
-    expect(
-      h.eventsOf('status_changed').some((e) => 'status' in e && e.status === 'parked'),
-    ).toBe(false)
+    expect(h.eventsOf('status_changed').some((e) => 'status' in e && e.status === 'parked')).toBe(false)
     const before = h.events.length
     h.runner.sendMessage('again')
     await h.waitFor(() => h.eventsOf('turn_result').length === 2)
@@ -333,9 +330,7 @@ describe('deferred execution: park and rehydrate', () => {
     expect(h.eventsOf('stream_delta').length).toBeGreaterThan(0)
     expect(snapshot.events.some((e) => e.type === 'stream_delta')).toBe(false)
     // Everything else survives, in order, with its seq intact…
-    expect(snapshot.events.map((e) => e.type)).toEqual(
-      h.events.filter((e) => e.type !== 'stream_delta').map((e) => e.type),
-    )
+    expect(snapshot.events.map((e) => e.type)).toEqual(h.events.filter((e) => e.type !== 'stream_delta').map((e) => e.type))
     // …and the last event still carries the snapshot's own seq, which the
     // client's replay hold waits to reach.
     expect(snapshot.events.at(-1)?.seq).toBe(snapshot.seq)
@@ -347,9 +342,7 @@ describe('deferred execution: park and rehydrate', () => {
   it('refuses to snapshot a turn in flight', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [
-        streamCalls([{ id: 'call-fast', tool: 'remote_task', input: { task: 'fast' } }]),
-      ],
+      doStream: [streamCalls([{ id: 'call-fast', tool: 'remote_task', input: { task: 'fast' } }])],
     })
     // An in-process execution: its result comes back to THIS runner and dies with
     // the process, so a restore would wait on it forever.
@@ -409,9 +402,7 @@ describe('deferred execution: park and rehydrate', () => {
     await new Promise((r) => setTimeout(r, 50))
 
     expect(after.filter((e) => e.type === 'turn_result')).toHaveLength(0)
-    expect(
-      after.some((e) => e.type === 'status_changed' && 'status' in e && e.status === 'running'),
-    ).toBe(false)
+    expect(after.some((e) => e.type === 'status_changed' && 'status' in e && e.status === 'running')).toBe(false)
     expect(resumed.info().status).not.toBe('running')
   })
 

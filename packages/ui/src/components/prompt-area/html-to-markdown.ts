@@ -26,7 +26,9 @@ function getStyleValue(style: string, prop: string): string {
 
 /** Whether a CSS font-weight value is bold (`bold`, `bolder`, or >= 600). */
 function isBoldWeight(value: string): boolean {
-  if (value === 'bold' || value === 'bolder') return true
+  if (value === 'bold' || value === 'bolder') {
+    return true
+  }
   const numeric = Number.parseInt(value, 10)
   return !Number.isNaN(numeric) && numeric >= 600
 }
@@ -45,13 +47,10 @@ function inlineEmphasis(node: HTMLElement): { prefix: string; suffix: string } {
   const bold = weight ? isBoldWeight(weight) : tag === 'B' || tag === 'STRONG'
 
   const fontStyle = getStyleValue(style, 'font-style')
-  const italic = fontStyle
-    ? fontStyle === 'italic' || fontStyle === 'oblique'
-    : tag === 'I' || tag === 'EM'
+  const italic = fontStyle ? fontStyle === 'italic' || fontStyle === 'oblique' : tag === 'I' || tag === 'EM'
 
   const decoration = getStyleValue(style, 'text-decoration')
-  const strike =
-    tag === 'S' || tag === 'DEL' || tag === 'STRIKE' || decoration.includes('line-through')
+  const strike = tag === 'S' || tag === 'DEL' || tag === 'STRIKE' || decoration.includes('line-through')
 
   const prefix = (strike ? '~~' : '') + (bold ? '**' : '') + (italic ? '*' : '')
   const suffix = (italic ? '*' : '') + (bold ? '**' : '') + (strike ? '~~' : '')
@@ -81,7 +80,9 @@ function detectCodeLang(pre: HTMLElement): string {
   const code = pre.querySelector('code')
   const classNames = `${pre.className} ${code?.className ?? ''}`
   const fromClass = /(?:language|lang)-([\w-]+)/.exec(classNames)
-  if (fromClass) return fromClass[1]
+  if (fromClass) {
+    return fromClass[1]
+  }
   return pre.getAttribute('lang') ?? code?.getAttribute('lang') ?? ''
 }
 
@@ -93,7 +94,9 @@ function serializePre(pre: HTMLElement): string {
 
 function serializeInlineCode(node: HTMLElement): string {
   const content = node.textContent ?? ''
-  if (content.includes('`')) return `\`\` ${content} \`\``
+  if (content.includes('`')) {
+    return `\`\` ${content} \`\``
+  }
   return `\`${content}\``
 }
 
@@ -105,8 +108,12 @@ function isSafeHref(href: string): boolean {
 function serializeAnchor(node: HTMLElement, depth: number): string {
   const href = node.getAttribute('href') ?? ''
   const label = serializeChildren(node, depth).trim()
-  if (!isSafeHref(href)) return label
-  if (!label || label === href) return href
+  if (!isSafeHref(href)) {
+    return label
+  }
+  if (!label || label === href) {
+    return href
+  }
   return `[${label}](${href})`
 }
 
@@ -115,7 +122,9 @@ function serializeImage(node: HTMLElement): string {
   // Gate the src through the same allow-list as anchors: only http(s)/mailto
   // survive, so a `javascript:`/`vbscript:`/`data:` src never reaches the
   // emitted markdown (defense-in-depth for consumers that render it as HTML).
-  if (!src || !isSafeHref(src)) return ''
+  if (!src || !isSafeHref(src)) {
+    return ''
+  }
   return `![${node.getAttribute('alt') ?? ''}](${src})`
 }
 
@@ -141,7 +150,9 @@ function serializeList(list: HTMLElement, depth: number): string {
   const lines: string[] = []
 
   for (const child of Array.from(list.childNodes)) {
-    if (!isHTMLElement(child) || child.tagName !== 'LI') continue
+    if (!isHTMLElement(child) || child.tagName !== 'LI') {
+      continue
+    }
 
     const marker = ordered ? `${index}. ` : '- '
     index++
@@ -163,14 +174,14 @@ function serializeList(list: HTMLElement, depth: number): string {
 
 function serializeTable(table: HTMLElement, depth: number): string {
   const rows = Array.from(table.querySelectorAll('tr'))
-  if (rows.length === 0) return ''
+  if (rows.length === 0) {
+    return ''
+  }
 
   const cells = rows.map((row) =>
     Array.from(row.children)
       .filter((cell) => cell.tagName === 'TD' || cell.tagName === 'TH')
-      .map((cell) =>
-        serializeChildren(cell, depth).replace(/\n+/g, ' ').replace(/\|/g, '\\|').trim(),
-      ),
+      .map((cell) => serializeChildren(cell, depth).replace(/\n+/g, ' ').replace(/\|/g, '\\|').trim()),
   )
 
   const header = cells[0]
@@ -193,8 +204,12 @@ function serializeChildren(node: Node, depth: number): string {
 }
 
 function serializeNode(node: Node, depth: number): string {
-  if (isTextNode(node)) return escapeText(collapseWhitespace(node.textContent ?? ''))
-  if (!isHTMLElement(node)) return ''
+  if (isTextNode(node)) {
+    return escapeText(collapseWhitespace(node.textContent ?? ''))
+  }
+  if (!isHTMLElement(node)) {
+    return ''
+  }
 
   const tag = node.tagName
   switch (tag) {
@@ -271,8 +286,12 @@ function normalizeOutput(markdown: string): string {
  * display; only `*`/`**`/`***` and bare URLs get visually decorated inline.
  */
 export function htmlToMarkdown(html: string): string {
-  if (!html) return ''
+  if (!html) {
+    return ''
+  }
   const doc = new DOMParser().parseFromString(html, 'text/html')
-  if (!doc.body) return ''
+  if (!doc.body) {
+    return ''
+  }
   return normalizeOutput(serializeChildren(doc.body, 0))
 }

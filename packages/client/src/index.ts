@@ -52,12 +52,7 @@ export type ClientOptions = {
    * `buildWsUrl` (ticket query param) or cookies for WS auth. */
   headers?: Record<string, string>
   /** Override WS URL construction (auth tickets, proxies). */
-  buildWsUrl?: (
-    sessionId: string,
-    afterSeq: number,
-    truncateResults?: boolean,
-    imageRefs?: boolean,
-  ) => string
+  buildWsUrl?: (sessionId: string, afterSeq: number, truncateResults?: boolean, imageRefs?: boolean) => string
   /** Override the queue WS URL (`{baseUrl}/queue/ws` by default). */
   buildQueueWsUrl?: () => string
   /** Injectable for non-browser environments/tests. Defaults to globalThis.WebSocket. */
@@ -181,10 +176,7 @@ export class SessionHandle {
     return this.#lastSeq
   }
 
-  on<K extends keyof SessionHandleEvents>(
-    kind: K,
-    listener: Listener<SessionHandleEvents[K]>,
-  ): () => void {
+  on<K extends keyof SessionHandleEvents>(kind: K, listener: Listener<SessionHandleEvents[K]>): () => void {
     let set = this.#listeners.get(kind)
     if (!set) {
       set = new Set()
@@ -260,7 +252,9 @@ export class SessionHandle {
    * foreground should do, rather than sitting out the remaining delay. No-op
    * while connected or after {@link SessionHandle.detach}. */
   reconnectNow(): void {
-    if (this.#closed || (this.#ws && this.#ws.readyState === 1)) return
+    if (this.#closed || (this.#ws && this.#ws.readyState === 1)) {
+      return
+    }
     clearTimeout(this.#connectTimer)
     this.#retries = 0
     this.#connect()
@@ -276,7 +270,9 @@ export class SessionHandle {
 
   #emit<K extends keyof SessionHandleEvents>(kind: K, payload: SessionHandleEvents[K]): void {
     const set = this.#listeners.get(kind)
-    if (!set) return
+    if (!set) {
+      return
+    }
     for (const listener of set) {
       try {
         ;(listener as Listener<SessionHandleEvents[K]>)(payload)
@@ -289,30 +285,34 @@ export class SessionHandle {
   #sendFrame(frame: ClientFrame): void {
     const payload = JSON.stringify(frame)
     // readyState 1 === OPEN (avoid touching the WebSocket global; impl may be injected)
-    if (this.#ws && this.#ws.readyState === 1) this.#ws.send(payload)
-    else this.#outbox.push(payload)
+    if (this.#ws && this.#ws.readyState === 1) {
+      this.#ws.send(payload)
+    } else {
+      this.#outbox.push(payload)
+    }
   }
 
   #connect(): void {
-    if (this.#closed) return
-    const ws = this.#client.openSocket(
-      this.sessionId,
-      this.#lastSeq,
-      this.#options.truncateResults,
-      this.#options.imageRefs,
-    )
+    if (this.#closed) {
+      return
+    }
+    const ws = this.#client.openSocket(this.sessionId, this.#lastSeq, this.#options.truncateResults, this.#options.imageRefs)
     this.#ws = ws
     ws.onopen = () => {
       this.#retries = 0
       this.#emit('connectionChange', true)
-      for (const payload of this.#outbox.splice(0)) ws.send(payload)
+      for (const payload of this.#outbox.splice(0)) {
+        ws.send(payload)
+      }
     }
     ws.onmessage = (msg: MessageEvent) => {
       const frame = JSON.parse(String(msg.data)) as ServerFrame
       if (frame.type === 'attached') {
         this.#emit('attached', frame)
       } else if (frame.type === 'event') {
-        if (frame.event.seq <= this.#lastSeq) return
+        if (frame.event.seq <= this.#lastSeq) {
+          return
+        }
         this.#lastSeq = frame.event.seq
         this.#emit('event', frame.event)
       } else if (frame.type === 'tool_call_request') {
@@ -325,7 +325,9 @@ export class SessionHandle {
     }
     ws.onclose = () => {
       this.#emit('connectionChange', false)
-      if (this.#closed || !this.#options.reconnect) return
+      if (this.#closed || !this.#options.reconnect) {
+        return
+      }
       const delay = Math.min(500 * 2 ** this.#retries++, 10_000)
       this.#emit('reconnectAttempt', this.#retries)
       this.#connectTimer = setTimeout(() => this.#connect(), delay)
@@ -368,10 +370,7 @@ export class QueueHandle {
     this.#connectTimer = setTimeout(() => this.#connect(), 0)
   }
 
-  on<K extends keyof QueueHandleEvents>(
-    kind: K,
-    listener: Listener<QueueHandleEvents[K]>,
-  ): () => void {
+  on<K extends keyof QueueHandleEvents>(kind: K, listener: Listener<QueueHandleEvents[K]>): () => void {
     let set = this.#listeners.get(kind)
     if (!set) {
       set = new Set()
@@ -390,7 +389,9 @@ export class QueueHandle {
 
   #emit<K extends keyof QueueHandleEvents>(kind: K, payload: QueueHandleEvents[K]): void {
     const set = this.#listeners.get(kind)
-    if (!set) return
+    if (!set) {
+      return
+    }
     for (const listener of set) {
       try {
         ;(listener as Listener<QueueHandleEvents[K]>)(payload)
@@ -401,7 +402,9 @@ export class QueueHandle {
   }
 
   #connect(): void {
-    if (this.#closed) return
+    if (this.#closed) {
+      return
+    }
     const ws = this.#client.openQueueSocket()
     this.#ws = ws
     ws.onopen = () => {
@@ -421,7 +424,9 @@ export class QueueHandle {
     }
     ws.onclose = () => {
       this.#emit('connectionChange', false)
-      if (this.#closed || !this.#reconnect) return
+      if (this.#closed || !this.#reconnect) {
+        return
+      }
       const delay = Math.min(500 * 2 ** this.#retries++, 10_000)
       this.#connectTimer = setTimeout(() => this.#connect(), delay)
     }
@@ -456,9 +461,7 @@ export class WorkerDeckClient {
    * one base URL should not key anything on this.
    */
   get identityKey(): string {
-    const headers = Object.entries(this.#options.headers ?? {}).map(
-      ([name, value]) => [name.toLowerCase(), value] as const,
-    )
+    const headers = Object.entries(this.#options.headers ?? {}).map(([name, value]) => [name.toLowerCase(), value] as const)
     headers.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     return JSON.stringify([this.#options.baseUrl, headers])
   }
@@ -517,10 +520,7 @@ export class WorkerDeckClient {
    * The body is the raw bytes — no multipart — so anything `fetch` accepts as a
    * body works: a `File`/`Blob` from a picker, a `Uint8Array`, a string.
    */
-  async uploadAttachment(
-    sessionId: string,
-    file: { name: string; mediaType: string; data: FetchBody },
-  ): Promise<MessageAttachment> {
+  async uploadAttachment(sessionId: string, file: { name: string; mediaType: string; data: FetchBody }): Promise<MessageAttachment> {
     const url = `${this.#options.baseUrl}/sessions/${encodeURIComponent(sessionId)}/attachments?name=${encodeURIComponent(file.name)}`
     const res = await this.#fetch(url, {
       method: 'POST',
@@ -562,10 +562,7 @@ export class WorkerDeckClient {
     })
     if (!res.ok) {
       const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      throw new WorkerDeckError(
-        payload.error ?? `produced file request failed with ${res.status}`,
-        res.status,
-      )
+      throw new WorkerDeckError(payload.error ?? `produced file request failed with ${res.status}`, res.status)
     }
     return await res.blob()
   }
@@ -604,10 +601,7 @@ export class WorkerDeckClient {
     })
     if (!res.ok) {
       const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      throw new WorkerDeckError(
-        payload.error ?? `project icon request failed with ${res.status}`,
-        res.status,
-      )
+      throw new WorkerDeckError(payload.error ?? `project icon request failed with ${res.status}`, res.status)
     }
     return await res.blob()
   }
@@ -620,27 +614,15 @@ export class WorkerDeckClient {
   }
 
   /** Reconnect, enable or disable one MCP server; answers with the refreshed list. */
-  async mcpServerAction(
-    sessionId: string,
-    serverName: string,
-    action: McpServerActionRequest['action'],
-  ): Promise<McpServerStatusInfo[]> {
-    const body = await this.#call(
-      'POST',
-      `/sessions/${encodeURIComponent(sessionId)}/mcp/${encodeURIComponent(serverName)}`,
-      { action },
-    )
+  async mcpServerAction(sessionId: string, serverName: string, action: McpServerActionRequest['action']): Promise<McpServerStatusInfo[]> {
+    const body = await this.#call('POST', `/sessions/${encodeURIComponent(sessionId)}/mcp/${encodeURIComponent(serverName)}`, { action })
     return (body as McpServersResponse).servers
   }
 
   /** Direct download URL for a session file (e.g. an <a download> href). Carries
    * no headers — on authenticated servers, use fetchSessionFile instead. */
   sessionFileUrl(sessionId: string, path: string): string {
-    const encoded = path
-      .split('/')
-      .filter(Boolean)
-      .map(encodeURIComponent)
-      .join('/')
+    const encoded = path.split('/').filter(Boolean).map(encodeURIComponent).join('/')
     return `${this.#options.baseUrl}/sessions/${encodeURIComponent(sessionId)}/files/${encoded}`
   }
 
@@ -648,16 +630,8 @@ export class WorkerDeckClient {
    * WS `permission_decision` command (e.g. answering a job's AskUserQuestion from a
    * webhook consumer; the request rides on job_progress deliveries). Throws if the
    * request is unknown, already resolved, or expired. */
-  async resolvePermission(
-    sessionId: string,
-    requestId: string,
-    decision: ResolvePermissionRequest,
-  ): Promise<void> {
-    await this.#call(
-      'POST',
-      `/sessions/${encodeURIComponent(sessionId)}/permissions/${encodeURIComponent(requestId)}`,
-      decision,
-    )
+  async resolvePermission(sessionId: string, requestId: string, decision: ResolvePermissionRequest): Promise<void> {
+    await this.#call('POST', `/sessions/${encodeURIComponent(sessionId)}/permissions/${encodeURIComponent(requestId)}`, decision)
   }
 
   /**
@@ -670,15 +644,8 @@ export class WorkerDeckClient {
    * execution watchdog, resolves with `applied: false` instead of applying twice.
    * Throws (404) when no session is waiting on that id.
    */
-  async submitExecutionResult(
-    executionId: string,
-    result: SubmitExecutionResultRequest,
-  ): Promise<SubmitExecutionResultResponse> {
-    return (await this.#call(
-      'POST',
-      `/executions/${encodeURIComponent(executionId)}/result`,
-      result,
-    )) as SubmitExecutionResultResponse
+  async submitExecutionResult(executionId: string, result: SubmitExecutionResultRequest): Promise<SubmitExecutionResultResponse> {
+    return (await this.#call('POST', `/executions/${encodeURIComponent(executionId)}/result`, result)) as SubmitExecutionResultResponse
   }
 
   /** List the profiles (named Claude Code config dirs) this server declares, filtered
@@ -726,17 +693,20 @@ export class WorkerDeckClient {
    * the Agent SDK store, codex profiles → CODEX_HOME threads); absent, the
    * server resolves it implicitly when it declares exactly one profile, else
    * lists the Claude engine's store. */
-  async listSdkSessions(params?: {
-    dir?: string
-    limit?: number
-    offset?: number
-    profile?: string
-  }): Promise<SdkSessionSummary[]> {
+  async listSdkSessions(params?: { dir?: string; limit?: number; offset?: number; profile?: string }): Promise<SdkSessionSummary[]> {
     const search = new URLSearchParams()
-    if (params?.dir) search.set('dir', params.dir)
-    if (params?.limit !== undefined) search.set('limit', String(params.limit))
-    if (params?.offset !== undefined) search.set('offset', String(params.offset))
-    if (params?.profile) search.set('profile', params.profile)
+    if (params?.dir) {
+      search.set('dir', params.dir)
+    }
+    if (params?.limit !== undefined) {
+      search.set('limit', String(params.limit))
+    }
+    if (params?.offset !== undefined) {
+      search.set('offset', String(params.offset))
+    }
+    if (params?.profile) {
+      search.set('profile', params.profile)
+    }
     const qs = search.size > 0 ? `?${search.toString()}` : ''
     const body = await this.#call('GET', `/sdk-sessions${qs}`)
     return (body as { sdkSessions: SdkSessionSummary[] }).sdkSessions
@@ -770,7 +740,9 @@ export class WorkerDeckClient {
    * the walk is bounded, truncating rather than erroring. */
   async findHostFiles(path: string, query = '', limit?: number): Promise<FindHostFilesResponse> {
     const search = new URLSearchParams({ path, q: query })
-    if (limit !== undefined) search.set('limit', String(limit))
+    if (limit !== undefined) {
+      search.set('limit', String(limit))
+    }
     return (await this.#call('GET', `/fs/find?${search.toString()}`)) as FindHostFilesResponse
   }
 
@@ -832,21 +804,13 @@ export class WorkerDeckClient {
   }
 
   /** @internal used by SessionHandle */
-  openSocket(
-    sessionId: string,
-    afterSeq: number,
-    truncateResults = false,
-    imageRefs = false,
-  ): WebSocket {
+  openSocket(sessionId: string, afterSeq: number, truncateResults = false, imageRefs = false): WebSocket {
     // A third *optional* parameter rather than an options object, so every
     // existing `buildWsUrl` implementation still typechecks. The hazard worth
     // naming: a custom one that ignores it yields a full replay — safe only
     // because every client keys its rendering off the server's own `truncated`
     // marker and never off what it asked for.
-    const query =
-      `afterSeq=${afterSeq}` +
-      (truncateResults ? '&truncateResults=1' : '') +
-      (imageRefs ? '&imageRefs=1' : '')
+    const query = `afterSeq=${afterSeq}` + (truncateResults ? '&truncateResults=1' : '') + (imageRefs ? '&imageRefs=1' : '')
     const url =
       this.#options.buildWsUrl?.(sessionId, afterSeq, truncateResults, imageRefs) ??
       `${this.#options.baseUrl.replace(/^http/, 'ws')}/sessions/${encodeURIComponent(sessionId)}/ws?${query}`
@@ -896,33 +860,22 @@ export class WorkerDeckClient {
    * fresh log with fresh seqs, and the gateway refuses a stale address rather
    * than serving another call's pixels under the row you are looking at.
    */
-  async toolResultImage(
-    sessionId: string,
-    seq: number,
-    toolUseId: string,
-    partIndex: number,
-  ): Promise<Blob> {
+  async toolResultImage(sessionId: string, seq: number, toolUseId: string, partIndex: number): Promise<Blob> {
     const path =
-      `/sessions/${encodeURIComponent(sessionId)}/events/${seq}/result` +
-      `?toolUseId=${encodeURIComponent(toolUseId)}&part=${partIndex}`
+      `/sessions/${encodeURIComponent(sessionId)}/events/${seq}/result` + `?toolUseId=${encodeURIComponent(toolUseId)}&part=${partIndex}`
     const res = await this.#fetch(`${this.#options.baseUrl}${path}`, {
       headers: { ...this.#options.headers },
     })
     if (!res.ok) {
       const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      throw new WorkerDeckError(
-        payload.error ?? `image part request failed with ${res.status}`,
-        res.status,
-      )
+      throw new WorkerDeckError(payload.error ?? `image part request failed with ${res.status}`, res.status)
     }
     return await res.blob()
   }
 
   /** @internal used by QueueHandle */
   openQueueSocket(): WebSocket {
-    const url =
-      this.#options.buildQueueWsUrl?.() ??
-      `${this.#options.baseUrl.replace(/^http/, 'ws')}/queue/ws`
+    const url = this.#options.buildQueueWsUrl?.() ?? `${this.#options.baseUrl.replace(/^http/, 'ws')}/queue/ws`
     return new this.#WebSocketImpl(url)
   }
 

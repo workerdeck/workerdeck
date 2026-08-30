@@ -58,18 +58,24 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
   // is explicit (`list`) rather than an effect on `path`, so walking into a
   // folder is one request and not two.
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      return
+    }
     setFile(undefined)
     setQuery('')
     setMatches(undefined)
     setError(undefined)
-    if (cwd) void list(cwd)
+    if (cwd) {
+      void list(cwd)
+    }
   }, [open, cwd, list])
 
   // Debounced, and only while there is something to search for; an empty box is
   // "show me the directory again", not "search for everything".
   useEffect(() => {
-    if (!open || !cwd) return
+    if (!open || !cwd) {
+      return
+    }
     const q = query.trim()
     if (!q) {
       setMatches(undefined)
@@ -92,10 +98,7 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
       setFile({
         path: response.path,
         bytes: response.bytes,
-        content:
-          response.encoding === 'utf8'
-            ? response.content
-            : '(binary file — not shown)',
+        content: response.encoding === 'utf8' ? response.content : '(binary file — not shown)',
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not read that file')
@@ -109,87 +112,79 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size='lg'>
+      <DialogContent size="lg">
         <DialogHeader
           title={file ? file.path.split('/').pop()! : 'Files'}
           description={file ? file.path : path}
           actions={
             file ? (
-              <Button variant='ghost' size='xs' onClick={() => setFile(undefined)}>
-                <ChevronLeft className='size-3.5' />
+              <Button variant="ghost" size="xs" onClick={() => setFile(undefined)}>
+                <ChevronLeft className="size-3.5" />
                 Back
               </Button>
             ) : parent ? (
-              <Button variant='ghost' size='xs' onClick={() => void list(parent)}>
-                <ChevronLeft className='size-3.5' />
+              <Button variant="ghost" size="xs" onClick={() => void list(parent)}>
+                <ChevronLeft className="size-3.5" />
                 Up
               </Button>
             ) : null
           }
         />
-        <DialogBody className='flex flex-col gap-3'>
-          {error ? (
-            <div className='rounded-md bg-danger-bg px-3 py-2 text-body-sm text-danger'>{error}</div>
-          ) : null}
+        <DialogBody className="flex flex-col gap-3">
+          {error ? <div className="rounded-md bg-danger-bg px-3 py-2 text-body-sm text-danger">{error}</div> : null}
 
           {file ? (
             <>
-              <p className='text-label text-fg-4'>{formatBytes(file.bytes)}</p>
+              <p className="text-label text-fg-4">{formatBytes(file.bytes)}</p>
               <CodeBlock code={file.content} label={file.path.split('/').pop()} />
             </>
           ) : (
             <>
-              <div className='relative'>
-                <Search className='absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-fg-4' />
+              <div className="relative">
+                <Search className="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-fg-4" />
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder='Search this project…'
-                  className='pl-7'
+                  placeholder="Search this project…"
+                  className="pl-7"
                   spellCheck={false}
                 />
               </div>
               {loading && shown.length === 0 ? (
-                <div className='py-6 text-center'>
-                  <Spinner className='size-4 text-fg-4' />
+                <div className="py-6 text-center">
+                  <Spinner className="size-4 text-fg-4" />
                 </div>
               ) : shown.length === 0 ? (
-                <p className='py-6 text-center text-body-sm text-fg-4'>
-                  {matches ? 'No matching files.' : 'This directory is empty.'}
-                </p>
+                <p className="py-6 text-center text-body-sm text-fg-4">{matches ? 'No matching files.' : 'This directory is empty.'}</p>
               ) : (
-                <ul className='flex flex-col'>
+                <ul className="flex flex-col">
                   {matches
                     ? matches.map((match) => (
                         <li key={match.path}>
                           <button
-                            type='button'
+                            type="button"
                             onClick={() => void openFile(match.path)}
-                            className='flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface-hover'>
-                            <File className='size-3.5 shrink-0 text-fg-4' />
-                            <span className='min-w-0 flex-1 truncate font-mono text-label text-fg-1'>
-                              {match.relative}
-                            </span>
+                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface-hover"
+                          >
+                            <File className="size-3.5 shrink-0 text-fg-4" />
+                            <span className="min-w-0 flex-1 truncate font-mono text-label text-fg-1">{match.relative}</span>
                           </button>
                         </li>
                       ))
                     : entries.map((entry) => (
                         <li key={entry.path}>
                           <button
-                            type='button'
-                            onClick={() =>
-                              entry.type === 'dir' ? void list(entry.path) : void openFile(entry.path)
-                            }
-                            className='flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface-hover'>
+                            type="button"
+                            onClick={() => (entry.type === 'dir' ? void list(entry.path) : void openFile(entry.path))}
+                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface-hover"
+                          >
                             <EntryIcon type={entry.type} />
-                            <span className='min-w-0 flex-1 truncate font-mono text-label text-fg-1'>
+                            <span className="min-w-0 flex-1 truncate font-mono text-label text-fg-1">
                               {entry.name}
                               {entry.type === 'dir' ? '/' : ''}
                             </span>
                             {entry.bytes !== undefined ? (
-                              <span className='shrink-0 text-label text-fg-4'>
-                                {formatBytes(entry.bytes)}
-                              </span>
+                              <span className="shrink-0 text-label text-fg-4">{formatBytes(entry.bytes)}</span>
                             ) : null}
                           </button>
                         </li>
@@ -197,9 +192,7 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
                 </ul>
               )}
               {truncated && !matches ? (
-                <p className='text-label text-fg-4'>
-                  More entries than the server will return — use the search box.
-                </p>
+                <p className="text-label text-fg-4">More entries than the server will return — use the search box.</p>
               ) : null}
             </>
           )}
@@ -212,7 +205,11 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
 /** A symlink is reported as itself and never silently resolved — following it is
  * the next request's problem, and that request is refused if it escapes the roots. */
 function EntryIcon({ type }: { type: HostDirEntry['type'] }) {
-  if (type === 'dir') return <Folder className='size-3.5 shrink-0 text-accent' />
-  if (type === 'symlink') return <Link2 className='size-3.5 shrink-0 text-fg-4' />
-  return <File className='size-3.5 shrink-0 text-fg-4' />
+  if (type === 'dir') {
+    return <Folder className="size-3.5 shrink-0 text-accent" />
+  }
+  if (type === 'symlink') {
+    return <Link2 className="size-3.5 shrink-0 text-fg-4" />
+  }
+  return <File className="size-3.5 shrink-0 text-fg-4" />
 }

@@ -44,8 +44,6 @@ describe('collapsedResult with a truncated head', () => {
   })
 
   it('is unchanged for a whole result', () => {
-    expect(collapsedResult(['a', 'b', 'c', 'd', 'e'])).toEqual(
-      collapsedResult(['a', 'b', 'c', 'd', 'e'], undefined),
-    )
+    expect(collapsedResult(['a', 'b', 'c', 'd', 'e'])).toEqual(collapsedResult(['a', 'b', 'c', 'd', 'e'], undefined))
   })
 })

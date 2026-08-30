@@ -93,15 +93,6 @@ export function planAttach(input: AttachInputs): AttachPlan {
  * finished attaching, and a state with no `session` never saw its attached
  * frame at all.
  */
-export function shouldWriteParting(input: {
-  cacheEnabled: boolean
-  skipCache: boolean
-  parting: TranscriptState
-}): boolean {
-  return (
-    input.cacheEnabled &&
-    !input.skipCache &&
-    input.parting.lastSeq > 0 &&
-    input.parting.session !== undefined
-  )
+export function shouldWriteParting(input: { cacheEnabled: boolean; skipCache: boolean; parting: TranscriptState }): boolean {
+  return input.cacheEnabled && !input.skipCache && input.parting.lastSeq > 0 && input.parting.session !== undefined
 }

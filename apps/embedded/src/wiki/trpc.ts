@@ -66,7 +66,9 @@ export function createWikiApi(db: WikiDb, state: AppState, auth: CookieAuth): Wi
      * request and explains nothing to whoever sent it.
      */
     authenticate: (req: IncomingMessage) => {
-      if (!sameOrigin(req)) return null
+      if (!sameOrigin(req)) {
+        return null
+      }
       const user = auth.resolve(req)
       return user ? { token: 'cookie', userId: user.id } : null
     },
@@ -79,4 +81,3 @@ export function createWikiApi(db: WikiDb, state: AppState, auth: CookieAuth): Wi
     },
   }
 }
-

@@ -60,9 +60,13 @@ export class ProjectIconCache {
     for (const [hostId, infos] of Object.entries(sessions)) {
       for (const info of infos) {
         const icon = info.project?.icon
-        if (icon?.type !== 'image') continue
+        if (icon?.type !== 'image') {
+          continue
+        }
         const { hash } = icon
-        if (this.#byHash.has(hash) || this.#inFlight.has(hash) || this.#failed.has(hash)) continue
+        if (this.#byHash.has(hash) || this.#inFlight.has(hash) || this.#failed.has(hash)) {
+          continue
+        }
         this.#inFlight.add(hash)
         void this.#fetch(hostId, info.id, hash, icon.mediaType)
       }
@@ -75,7 +79,9 @@ export class ProjectIconCache {
       const client = host ? await clientFor(this.#store, host) : undefined
       // An unreachable gateway is not an iconless one: fall out without
       // recording a failure, so the next poll tries again once it is back.
-      if (!client) return
+      if (!client) {
+        return
+      }
       const blob = await client.projectIcon(sessionId)
       const bytes = Buffer.from(await blob.arrayBuffer())
       // The gateway caps these at 512 KiB and re-checks at serve time; a data

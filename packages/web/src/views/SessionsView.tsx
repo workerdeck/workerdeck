@@ -17,13 +17,7 @@ import { RunFormFields, useRunForm } from '@/components/RunForm.tsx'
 import { BrandMark } from '@/components/shell/BrandMark.tsx'
 import { client } from '@/lib/client.ts'
 
-function CreateSessionForm({
-  sessions,
-  onCreated,
-}: {
-  sessions: SessionInfo[]
-  onCreated: (id: string) => void
-}) {
+function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; onCreated: (id: string) => void }) {
   const form = useRunForm('session')
   const [creating, setCreating] = useState(false)
   const [sdkSessions, setSdkSessions] = useState<SdkSessionSummary[] | undefined>()
@@ -82,17 +76,17 @@ function CreateSessionForm({
   }
 
   return (
-    <div className='flex flex-col gap-3'>
+    <div className="flex flex-col gap-3">
       <RunFormFields
         form={form}
         sessions={sessions}
-        promptLabel='Initial prompt (optional)'
+        promptLabel="Initial prompt (optional)"
         // The list is per-profile (per-engine store) — another profile's rows
         // would offer resumes this engine can't honor.
         onProfileChange={() => setSdkSessions(undefined)}
         actions={
-          <Button className='ml-auto' onClick={() => void create()} disabled={creating}>
-            {creating ? <Spinner className='size-3.5 text-current' /> : <Plus className='size-4' />}
+          <Button className="ml-auto" onClick={() => void create()} disabled={creating}>
+            {creating ? <Spinner className="size-3.5 text-current" /> : <Plus className="size-4" />}
             Create
           </Button>
         }
@@ -102,47 +96,29 @@ function CreateSessionForm({
           profile, diverging only at the last step. The engine needs a browsable
           session store for it to mean anything. */}
       {!engine.capabilities.listSessions ? null : (
-        <div className='mt-1 border-t border-border pt-3'>
-          <div className='flex items-center justify-between'>
-            <span className='text-label font-medium text-fg-3'>Resume a previous session</span>
-            <Button
-              variant='ghost'
-              size='xs'
-              onClick={() => void loadSdkSessions()}
-              disabled={loadingSdk}>
-              {loadingSdk ? (
-                <Spinner className='size-3 text-current' />
-              ) : (
-                <History className='size-3' />
-              )}
+        <div className="mt-1 border-t border-border pt-3">
+          <div className="flex items-center justify-between">
+            <span className="text-label font-medium text-fg-3">Resume a previous session</span>
+            <Button variant="ghost" size="xs" onClick={() => void loadSdkSessions()} disabled={loadingSdk}>
+              {loadingSdk ? <Spinner className="size-3 text-current" /> : <History className="size-3" />}
               {sdkSessions ? 'Reload' : 'Browse'}
             </Button>
           </div>
           {sdkSessions !== undefined ? (
             sdkSessions.length === 0 ? (
-              <div className='py-3 text-center text-body-sm text-fg-4'>
-                No stored sessions for this directory.
-              </div>
+              <div className="py-3 text-center text-body-sm text-fg-4">No stored sessions for this directory.</div>
             ) : (
-              <ul className='mt-2 flex flex-col gap-1'>
+              <ul className="mt-2 flex flex-col gap-1">
                 {sdkSessions.map((s) => (
-                  <li
-                    key={s.sessionId}
-                    className='flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-hover'>
-                    <div className='min-w-0 flex-1'>
-                      <div className='truncate text-body-sm text-fg-1'>
-                        {s.customTitle ?? s.summary}
-                      </div>
-                      <div className='flex gap-2 font-mono text-label text-fg-4'>
-                        {s.gitBranch ? <span className='truncate'>{s.gitBranch}</span> : null}
-                        <span className='shrink-0'>{formatRelativeTime(s.lastModified)}</span>
+                  <li key={s.sessionId} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-hover">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-body-sm text-fg-1">{s.customTitle ?? s.summary}</div>
+                      <div className="flex gap-2 font-mono text-label text-fg-4">
+                        {s.gitBranch ? <span className="truncate">{s.gitBranch}</span> : null}
+                        <span className="shrink-0">{formatRelativeTime(s.lastModified)}</span>
                       </div>
                     </div>
-                    <Button
-                      variant='outline'
-                      size='xs'
-                      onClick={() => void create(s)}
-                      disabled={creating}>
+                    <Button variant="outline" size="xs" onClick={() => void create(s)} disabled={creating}>
                       Resume
                     </Button>
                   </li>
@@ -176,8 +152,8 @@ export function CreateSessionDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size='lg'>
-        <DialogHeader title='New session' description='Pick a directory and an engine.' />
+      <DialogContent size="lg">
+        <DialogHeader title="New session" description="Pick a directory and an engine." />
         <DialogBody>
           <CreateSessionForm sessions={sessions} onCreated={onCreated} />
         </DialogBody>
@@ -195,10 +171,10 @@ export function CreateSessionDialog({
  */
 export function SessionsView() {
   return (
-    <div className='flex flex-1 items-center justify-center p-8'>
+    <div className="flex flex-1 items-center justify-center p-8">
       <Empty
         icon={<BrandMark />}
-        title='No session open'
+        title="No session open"
         description={
           <>
             Pick one on the left, or start a new one with <EmptyKey>+</EmptyKey> above.

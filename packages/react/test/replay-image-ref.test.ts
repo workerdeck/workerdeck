@@ -54,8 +54,7 @@ const log = (resultContent: unknown): SessionEvent[] =>
 
 const fold = (events: readonly SessionEvent[]) => events.reduce(applyEvent, initialTranscriptState)
 
-const foldOf = (events: SessionEvent[], options: Record<string, boolean>) =>
-  fold(replaySlice(events, { afterSeq: 0, ...options }))
+const foldOf = (events: SessionEvent[], options: Record<string, boolean>) => fold(replaySlice(events, { afterSeq: 0, ...options }))
 
 describe('image refs — the fold moves in exactly one field', () => {
   const events = log([
@@ -69,25 +68,20 @@ describe('image refs — the fold moves in exactly one field', () => {
     const refd = foldOf(events, { imageRefs: true })
 
     const call = refd.items.find((item) => item.kind === 'tool_call')!
-    expect(call.result?.images).toEqual([
-      { partIndex: 1, mediaType: 'image/png', bytes: 340_000, sourceSeq: 2 },
-    ])
+    expect(call.result?.images).toEqual([{ partIndex: 1, mediaType: 'image/png', bytes: 340_000, sourceSeq: 2 }])
 
     // Strip the one field that is allowed to move; everything else must match.
     const strip = (state: typeof refd) => ({
       ...state,
       items: state.items.map((item) =>
-        item.kind === 'tool_call' && item.result
-          ? { ...item, result: { ...item.result, images: undefined } }
-          : item,
+        item.kind === 'tool_call' && item.result ? { ...item, result: { ...item.result, images: undefined } } : item,
       ),
     })
     expect(strip(refd)).toEqual(strip(whole))
   })
 
   it('does not move the text — which is the whole measured justification', () => {
-    const textOf = (state: ReturnType<typeof fold>) =>
-      state.items.find((item) => item.kind === 'tool_call')!.result?.text
+    const textOf = (state: ReturnType<typeof fold>) => state.items.find((item) => item.kind === 'tool_call')!.result?.text
     expect(textOf(foldOf(events, { imageRefs: true }))).toBe('looked at the screenshot')
     expect(textOf(foldOf(events, { imageRefs: true }))).toBe(textOf(foldOf(events, {})))
   })
@@ -108,15 +102,11 @@ describe('image refs composed with truncation', () => {
   const events = log([{ type: 'text', text: big }, image(png(500_000), 'image/jpeg')])
 
   it('carries both rules’ markers and nothing more', () => {
-    const call = foldOf(events, { imageRefs: true, truncateResults: true }).items.find(
-      (i) => i.kind === 'tool_call',
-    )!
+    const call = foldOf(events, { imageRefs: true, truncateResults: true }).items.find((i) => i.kind === 'tool_call')!
     expect(call.result?.truncated).toBe(true)
     expect(call.result?.text.length).toBe(TOOL_RESULT_HEAD_CHARS)
     // The picture is still addressable even though the text was cut past it.
-    expect(call.result?.images).toEqual([
-      { partIndex: 1, mediaType: 'image/jpeg', bytes: 500_000, sourceSeq: 2 },
-    ])
+    expect(call.result?.images).toEqual([{ partIndex: 1, mediaType: 'image/jpeg', bytes: 500_000, sourceSeq: 2 }])
   })
 
   it('keeps images through text hydration — the press must not orphan the picture', () => {
@@ -128,8 +118,6 @@ describe('image refs composed with truncation', () => {
     // press and nothing else will re-deliver them.
     expect(call.result?.truncated).toBeUndefined()
     expect(call.result?.text).toBe(big)
-    expect(call.result?.images).toEqual([
-      { partIndex: 1, mediaType: 'image/jpeg', bytes: 500_000, sourceSeq: 2 },
-    ])
+    expect(call.result?.images).toEqual([{ partIndex: 1, mediaType: 'image/jpeg', bytes: 500_000, sourceSeq: 2 }])
   })
 })

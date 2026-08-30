@@ -29,7 +29,9 @@ const EMPTY: Selection = { labels: [], other: '', otherActive: false }
  * "Other" appended — the shape the CLI's own UI puts in `updatedInput.answers`. */
 function answerFor(selection: Selection): string {
   const parts = [...selection.labels]
-  if (selection.otherActive && selection.other.trim()) parts.push(selection.other.trim())
+  if (selection.otherActive && selection.other.trim()) {
+    parts.push(selection.other.trim())
+  }
   return parts.join(', ')
 }
 
@@ -43,12 +45,7 @@ export interface TerminalQuestionPromptProps {
   className?: string
 }
 
-export function TerminalQuestionPrompt({
-  request,
-  onAnswer,
-  onDismiss,
-  className,
-}: TerminalQuestionPromptProps) {
+export function TerminalQuestionPrompt({ request, onAnswer, onDismiss, className }: TerminalQuestionPromptProps) {
   const questions = parseUserQuestions(request.input)
   const [selections, setSelections] = useState<Selection[]>(() => questions.map(() => EMPTY))
   const [cursors, setCursors] = useState<number[]>(() => questions.map(() => 0))
@@ -71,13 +68,15 @@ export function TerminalQuestionPrompt({
   const toggle = (index: number, label: string, multiSelect: boolean) => {
     setSelections((prev) =>
       prev.map((current, i) => {
-        if (i !== index) return current
-        if (!multiSelect) return { ...current, labels: [label], otherActive: false }
+        if (i !== index) {
+          return current
+        }
+        if (!multiSelect) {
+          return { ...current, labels: [label], otherActive: false }
+        }
         return {
           ...current,
-          labels: current.labels.includes(label)
-            ? current.labels.filter((l) => l !== label)
-            : [...current.labels, label],
+          labels: current.labels.includes(label) ? current.labels.filter((l) => l !== label) : [...current.labels, label],
         }
       }),
     )
@@ -93,12 +92,11 @@ export function TerminalQuestionPrompt({
 
   const dismiss = () => onDismiss(request.id, 'Question dismissed by user')
 
-  const move = (delta: number) =>
-    setTab((current) => Math.min(questions.length, Math.max(0, current + delta)))
+  const move = (delta: number) => setTab((current) => Math.min(questions.length, Math.max(0, current + delta)))
 
   return (
     <div
-      data-slot='question-prompt'
+      data-slot="question-prompt"
       className={className}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
@@ -110,7 +108,8 @@ export function TerminalQuestionPrompt({
           event.preventDefault()
           move(event.shiftKey ? -1 : 1)
         }
-      }}>
+      }}
+    >
       <Rule />
       <TabStrip
         tabs={[
@@ -153,9 +152,7 @@ export function TerminalQuestionPrompt({
         />
       )}
       <Blank />
-      <Hint>
-        Enter to select · ↑/↓ to navigate · Tab to switch questions · Esc to cancel
-      </Hint>
+      <Hint>Enter to select · ↑/↓ to navigate · Tab to switch questions · Esc to cancel</Hint>
     </div>
   )
 }
@@ -202,7 +199,7 @@ function QuestionStep({
           option.preview && cursor === index ? (
             <Box>
               {option.preview.split('\n').map((line, row) => (
-                <Row key={row} columns={0} tone='dim'>
+                <Row key={row} columns={0} tone="dim">
                   {line || ' '}
                 </Row>
               ))}
@@ -223,7 +220,7 @@ function QuestionStep({
           onChange={(value) => onOther({ other: value })}
           onSubmit={onAdvance}
           onCancel={() => onOther({ otherActive: false, other: '' })}
-          placeholder='Type your own answer'
+          placeholder="Type your own answer"
         />
       ) : undefined,
     },
@@ -236,7 +233,7 @@ function QuestionStep({
 
   return (
     <>
-      <Row bold tone='bright'>
+      <Row bold tone="bright">
         {question.question}
       </Row>
       <Blank />
@@ -251,7 +248,9 @@ function QuestionStep({
             onToggle(question.options[index]!.label)
             // A one-of is finished the moment it is picked; making the reader
             // press Tab as well would be a keystroke that answers nothing.
-            if (!multiSelect) onAdvance()
+            if (!multiSelect) {
+              onAdvance()
+            }
             return
           }
           if (index === question.options.length) {
@@ -289,26 +288,24 @@ function ReviewStep({
 }) {
   return (
     <>
-      <Row bold tone='bright'>
+      <Row bold tone="bright">
         Review your answers
       </Row>
       <Blank />
       {questions.map((question, index) => (
         <div key={index}>
-          <Row glyph='●' glyphTone='dim'>
+          <Row glyph="●" glyphTone="dim">
             {question.question}
           </Row>
-          <Row indent={1} glyph='→' glyphTone='green'>
-            <Ink tone={answers[index] ? 'green' : 'faint'}>
-              {answers[index] || 'not answered'}
-            </Ink>
+          <Row indent={1} glyph="→" glyphTone="green">
+            <Ink tone={answers[index] ? 'green' : 'faint'}>{answers[index] || 'not answered'}</Ink>
           </Row>
         </div>
       ))}
       <Blank />
       <Row>{complete ? 'Ready to submit your answers?' : 'Some questions are unanswered.'}</Row>
       <Choices
-        label='Submit answers'
+        label="Submit answers"
         options={[
           // Offered even when incomplete: an unanswered question is a legitimate
           // answer to give, and the model is told which ones were skipped. What

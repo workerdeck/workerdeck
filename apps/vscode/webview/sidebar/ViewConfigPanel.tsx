@@ -1,21 +1,7 @@
-import {
-  Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectItemText,
-  SelectTrigger,
-  SelectValue,
-} from '@workerdeck/ui'
+import { Input, Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from '@workerdeck/ui'
 import { X } from 'lucide-react'
 import type { WireHost, WorkspaceScope } from '../../src/bridge-protocol.ts'
-import {
-  STATE_LABELS,
-  STATE_ORDER,
-  type GroupBy,
-  type SortBy,
-  type ViewConfig,
-} from '../../src/view-config.ts'
+import { STATE_LABELS, STATE_ORDER, type GroupBy, type SortBy, type ViewConfig } from '../../src/view-config.ts'
 
 const GROUP_LABELS: Record<GroupBy, string> = {
   none: 'None',
@@ -69,40 +55,40 @@ export function ViewConfigPanel({
   scope: WorkspaceScope | undefined
   onChange: (next: ViewConfig) => void
 }) {
-  const set = <K extends keyof ViewConfig>(key: K, value: ViewConfig[K]) =>
-    onChange({ ...config, [key]: value })
+  const set = <K extends keyof ViewConfig>(key: K, value: ViewConfig[K]) => onChange({ ...config, [key]: value })
 
   return (
-    <div className='shrink-0 border-b border-border'>
+    <div className="shrink-0 border-b border-border">
       {/* Search leads: it is what people reach for, and unlike the facets it
           needs no explaining. */}
-      <div className='px-2 pb-1 pt-1.5'>
-        <div className='relative'>
+      <div className="px-2 pb-1 pt-1.5">
+        <div className="relative">
           <Input
             value={config.search}
             onChange={(e) => set('search', e.target.value)}
-            placeholder='Search sessions'
-            className='h-6 w-full pr-6 text-body-sm'
+            placeholder="Search sessions"
+            className="h-6 w-full pr-6 text-body-sm"
             autoFocus
           />
           {config.search ? (
             <button
-              type='button'
-              aria-label='Clear search'
+              type="button"
+              aria-label="Clear search"
               onClick={() => set('search', '')}
-              className='absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-fg-4 hover:text-fg-1'>
-              <X className='size-3' />
+              className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-fg-4 hover:text-fg-1"
+            >
+              <X className="size-3" />
             </button>
           ) : null}
         </div>
       </div>
 
-      <div className='flex flex-col gap-1 px-2 pb-1.5'>
+      <div className="flex flex-col gap-1 px-2 pb-1.5">
         {/* Only where there is a folder to be inside of — an inert control in a
             folderless window would be one that does nothing. Single-select:
             the list is either scoped to this window or it isn't. */}
         {scope ? (
-          <Row label='Scope'>
+          <Row label="Scope">
             <OneOf
               value={config.scoped ? 'scoped' : 'all'}
               options={[
@@ -115,7 +101,7 @@ export function ViewConfigPanel({
         ) : null}
 
         {hosts.length > 1 ? (
-          <Row label='Gateway'>
+          <Row label="Gateway">
             <AnyOf
               values={config.gateways}
               options={hosts.map((host) => ({ value: host.id, label: host.name }))}
@@ -125,7 +111,7 @@ export function ViewConfigPanel({
         ) : null}
 
         {adapters.length > 1 ? (
-          <Row label='Adapter'>
+          <Row label="Adapter">
             <AnyOf
               values={config.adapters}
               options={adapters.map((adapter) => ({ value: adapter, label: adapter }))}
@@ -135,7 +121,7 @@ export function ViewConfigPanel({
         ) : null}
 
         {projects.length > 1 ? (
-          <Row label='Project'>
+          <Row label="Project">
             <AnyOf
               values={config.projects ?? []}
               options={projects.map((p) => ({ value: p.key, label: p.label }))}
@@ -144,7 +130,7 @@ export function ViewConfigPanel({
           </Row>
         ) : null}
 
-        <Row label='State'>
+        <Row label="State">
           <AnyOf
             values={config.states}
             options={STATE_ORDER.map((state) => ({ value: state, label: STATE_LABELS[state] }))}
@@ -152,19 +138,11 @@ export function ViewConfigPanel({
           />
         </Row>
 
-        <Row label='Group'>
-          <OneOf
-            value={config.groupBy}
-            options={labelledOptions(GROUP_LABELS)}
-            onChange={(v) => set('groupBy', v)}
-          />
+        <Row label="Group">
+          <OneOf value={config.groupBy} options={labelledOptions(GROUP_LABELS)} onChange={(v) => set('groupBy', v)} />
         </Row>
-        <Row label='Sort'>
-          <OneOf
-            value={config.sortBy}
-            options={labelledOptions(SORT_LABELS)}
-            onChange={(v) => set('sortBy', v)}
-          />
+        <Row label="Sort">
+          <OneOf value={config.sortBy} options={labelledOptions(SORT_LABELS)} onChange={(v) => set('sortBy', v)} />
         </Row>
         {/* No "clear filters" here: the subset line below already carries the
             one way out, and two of them is how the old design ended up with two
@@ -185,31 +163,21 @@ function labelledOptions<T extends string>(labels: Record<T, string>): Option<T>
  * drift. */
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className='flex items-center gap-2 py-0.5'>
-      <span className='w-12 shrink-0 text-label text-fg-4'>{label}</span>
-      <div className='min-w-0 flex-1'>{children}</div>
+    <div className="flex items-center gap-2 py-0.5">
+      <span className="w-12 shrink-0 text-label text-fg-4">{label}</span>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   )
 }
 
 /** Pick exactly one. */
-function OneOf<T extends string>({
-  value,
-  options,
-  onChange,
-}: {
-  value: T
-  options: readonly Option<T>[]
-  onChange: (value: T) => void
-}) {
+function OneOf<T extends string>({ value, options, onChange }: { value: T; options: readonly Option<T>[]; onChange: (value: T) => void }) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as T)}>
-      <SelectTrigger className='h-6 w-full min-w-0 text-body-sm'>
+      <SelectTrigger className="h-6 w-full min-w-0 text-body-sm">
         {/* The popup is portalled and mounted lazily, so Base UI has no item
             label to resolve the value against — name it explicitly. */}
-        <SelectValue className='truncate'>
-          {(v) => options.find((o) => o.value === v)?.label ?? String(v)}
-        </SelectValue>
+        <SelectValue className="truncate">{(v) => options.find((o) => o.value === v)?.label ?? String(v)}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => (
@@ -238,11 +206,13 @@ function AnyOf<T extends string>({
 }) {
   return (
     <Select multiple value={values as T[]} onValueChange={(v) => onChange(v as T[])}>
-      <SelectTrigger className='h-6 w-full min-w-0 text-body-sm'>
-        <SelectValue className='truncate'>
+      <SelectTrigger className="h-6 w-full min-w-0 text-body-sm">
+        <SelectValue className="truncate">
           {(v) => {
             const chosen = Array.isArray(v) ? (v as T[]) : []
-            if (chosen.length === 0) return 'All'
+            if (chosen.length === 0) {
+              return 'All'
+            }
             const labels = chosen.map((c) => options.find((o) => o.value === c)?.label ?? c)
             return labels.length <= 2 ? labels.join(', ') : `${labels.length} selected`
           }}

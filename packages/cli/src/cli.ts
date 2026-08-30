@@ -90,8 +90,7 @@ async function readVersion(): Promise<string> {
 
 /** Best-effort: a browser that won't open is a convenience missed, not a failure. */
 function openInBrowser(url: string): void {
-  const command =
-    process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open'
+  const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open'
   try {
     const child = spawn(command, [url], {
       stdio: 'ignore',
@@ -125,7 +124,9 @@ async function main(argv: string[]): Promise<number> {
   const config = resolveInstanceConfig(flags, loaded)
   const instance = await startInstance(config)
 
-  if (config.open) openInBrowser(instance.url)
+  if (config.open) {
+    openInBrowser(instance.url)
+  }
 
   const shutdown = (signal: string): void => {
     process.stdout.write(`\n[workerdeck] ${signal} — shutting down\n`)
@@ -146,15 +147,15 @@ async function main(argv: string[]): Promise<number> {
 
 main(process.argv.slice(2))
   .then((code) => {
-    if (code !== 0) process.exit(code)
+    if (code !== 0) {
+      process.exit(code)
+    }
   })
   .catch((error: unknown) => {
     if (error instanceof ConfigError) {
       process.stderr.write(`[workerdeck] ${error.message}\n`)
       process.exit(2)
     }
-    process.stderr.write(
-      `[workerdeck] ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
-    )
+    process.stderr.write(`[workerdeck] ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`)
     process.exit(1)
   })

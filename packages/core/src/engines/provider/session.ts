@@ -1,20 +1,8 @@
 import type { LanguageModel, ToolSet } from 'ai'
-import type {
-  McpServerConfigWire,
-  McpServerStatusInfo,
-  McpServerToolInfo,
-  ProfileInfo,
-  SessionCapability,
-} from '@workerdeck/protocol'
+import type { McpServerConfigWire, McpServerStatusInfo, McpServerToolInfo, ProfileInfo, SessionCapability } from '@workerdeck/protocol'
 import { createVfs } from '@workerdeck/sandbox'
 import { AiSdkRunner, type AiSdkRunnerConfig } from './runner.ts'
-import {
-  createToolContext,
-  withHostTools,
-  withMcpTools,
-  type HostToolDefinition,
-  type ToolContextOptions,
-} from './tools.ts'
+import { createToolContext, withHostTools, withMcpTools, type HostToolDefinition, type ToolContextOptions } from './tools.ts'
 import type { ToolExecutionCall, ToolExecutionProfile, ToolExecutor } from '../../executors/tool-executor.ts'
 import { createWebFetch, type WebFetchFn, type WebFetchOptions } from './web-fetch.ts'
 
@@ -47,9 +35,7 @@ export type EngineSessionOptions = {
    * When `selectExecutor` is per-call and `backend` is static, every call is
    * reported under one label. When omitted, falls back to `'server'`.
    */
-  backend?:
-    | 'server' | 'browser' | 'managed' | 'remote'
-    | ((call: ToolExecutionCall) => 'server' | 'browser' | 'managed' | 'remote')
+  backend?: 'server' | 'browser' | 'managed' | 'remote' | ((call: ToolExecutionCall) => 'server' | 'browser' | 'managed' | 'remote')
   /** Backends for the granted capabilities. Omitted ones are simply not granted. */
   capabilities?: {
     search?: ToolContextOptions['search']
@@ -164,8 +150,7 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
   // deliverables and working files the parked turn already produced. `seedVfs`
   // is for a *new* session only, which is the whole reason it exists here
   // rather than at each call site.
-  const vfs =
-    options.config.vfs ?? createVfs(options.config.restore ? options.config.restore.vfs : options.seedVfs)
+  const vfs = options.config.vfs ?? createVfs(options.config.restore ? options.config.restore.vfs : options.seedVfs)
   // Per-call executors: wrap the selector into a routing ToolExecutor so the
   // runner gets one interface. The selector's arity tells us which form it is:
   // 0-arg = the original "select once" call, 1-arg = per-call routing.
@@ -174,8 +159,7 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
     ? {
         describe(call: ToolExecutionCall): ToolExecutionProfile {
           const target = (options.selectExecutor as (call: ToolExecutionCall) => ToolExecutor)(call)
-          const backend =
-            typeof options.backend === 'function' ? options.backend(call) : options.backend
+          const backend = typeof options.backend === 'function' ? options.backend(call) : options.backend
           return { ...target.describe?.(call), ...(backend ? { backend } : {}) }
         },
         dispatch(call: ToolExecutionCall) {
@@ -187,8 +171,7 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
   // Narrowing only: the gateway has already refused a request naming a capability
   // its profile doesn't grant, so the request value wins when present.
   const granted = options.config.capabilities ?? options.profile?.session?.capabilities
-  const isGranted = (key: keyof typeof CAPABILITY_TOOLS): boolean =>
-    granted === undefined || granted.includes(CAPABILITY_TOOLS[key])
+  const isGranted = (key: keyof typeof CAPABILITY_TOOLS): boolean => granted === undefined || granted.includes(CAPABILITY_TOOLS[key])
   // The runner doesn't exist yet while the tools are being built; these
   // capabilities reach back into it lazily (they only ever run mid-turn).
   let runner: AiSdkRunner | undefined
@@ -218,9 +201,7 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
     download: isGranted('download') ? options.capabilities?.download : undefined,
     webFetch,
     onFileDelivered:
-      options.capabilities?.deliverFiles === false || !isGranted('deliverFiles')
-        ? undefined
-        : (file) => runner?.emitFileDelivered(file),
+      options.capabilities?.deliverFiles === false || !isGranted('deliverFiles') ? undefined : (file) => runner?.emitFileDelivered(file),
   })
   const declaredServers = options.profile?.session?.mcpServers
   const connected = options.mcp?.tools ?? options.mcpTools
@@ -229,30 +210,30 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
   const withMcp = mcpTools ? withMcpTools(base, mcpTools) : base
   const context = options.tools ? withHostTools(withMcp, options.tools) : withMcp
 
-  runner = new AiSdkRunner({
-    ...options.config,
-    languageModel: options.resolveModel(options.profile, options.config),
-    instructions:
-      options.profile?.session?.instructions ?? options.instructions ?? options.config.instructions,
-    tools: context.tools,
-    vfs,
-    executor,
-    executableTools: context.sandboxedToolNames,
-    executionBackend: typeof options.backend === 'function' ? undefined : (options.backend ?? 'server'),
-    executionLimits: options.executionLimits,
-    shouldApprove: options.shouldApprove,
-    approvalTimeoutMs: options.approvalTimeoutMs,
-    // Only the servers this profile was granted: the /mcp screen must not
-    // report a connection the session cannot actually reach.
-    reportMcpServers: options.mcp
-      ? () =>
-          Promise.resolve(
-            declaredServers === undefined
-              ? options.mcp!.servers
-              : options.mcp!.servers.filter((s) => declaredServers.includes(s.name)),
-          )
-      : undefined,
-  }, options.id)
+  runner = new AiSdkRunner(
+    {
+      ...options.config,
+      languageModel: options.resolveModel(options.profile, options.config),
+      instructions: options.profile?.session?.instructions ?? options.instructions ?? options.config.instructions,
+      tools: context.tools,
+      vfs,
+      executor,
+      executableTools: context.sandboxedToolNames,
+      executionBackend: typeof options.backend === 'function' ? undefined : (options.backend ?? 'server'),
+      executionLimits: options.executionLimits,
+      shouldApprove: options.shouldApprove,
+      approvalTimeoutMs: options.approvalTimeoutMs,
+      // Only the servers this profile was granted: the /mcp screen must not
+      // report a connection the session cannot actually reach.
+      reportMcpServers: options.mcp
+        ? () =>
+            Promise.resolve(
+              declaredServers === undefined ? options.mcp!.servers : options.mcp!.servers.filter((s) => declaredServers.includes(s.name)),
+            )
+        : undefined,
+    },
+    options.id,
+  )
   return runner
 }
 
@@ -276,7 +257,9 @@ function requireDeclaredServers(
   mcp: McpConnection | undefined,
   tools: ToolSet | undefined,
 ): void {
-  if (!declared || declared.length === 0) return
+  if (!declared || declared.length === 0) {
+    return
+  }
   const missing = declared.filter((name) => {
     if (mcp) {
       const server = mcp.servers.find((s) => s.name === name)
@@ -284,7 +267,9 @@ function requireDeclaredServers(
     }
     return !Object.keys(tools ?? {}).some((tool) => tool.split('__')[0] === name)
   })
-  if (missing.length === 0) return
+  if (missing.length === 0) {
+    return
+  }
   const reasons = missing
     .map((name) => {
       const error = mcp?.servers.find((s) => s.name === name)?.error
@@ -307,11 +292,11 @@ function requireDeclaredServers(
  * and any credentials in their headers — never leave the host for a profile.
  */
 function selectMcpTools(tools: ToolSet | undefined, servers: string[] | undefined): ToolSet | undefined {
-  if (!tools || servers === undefined) return tools
+  if (!tools || servers === undefined) {
+    return tools
+  }
   const allowed = new Set(servers)
-  return Object.fromEntries(
-    Object.entries(tools).filter(([name]) => allowed.has(name.split('__')[0]!)),
-  )
+  return Object.fromEntries(Object.entries(tools).filter(([name]) => allowed.has(name.split('__')[0]!)))
 }
 
 export type McpConnection = {
@@ -360,7 +345,9 @@ export async function connectMcpTools(
   } = {},
 ): Promise<McpConnection> {
   const entries = Object.entries(servers)
-  if (entries.length === 0) return { tools: {}, servers: [], close: async () => {} }
+  if (entries.length === 0) {
+    return { tools: {}, servers: [], close: async () => {} }
+  }
 
   const { createMCPClient } = await import('@ai-sdk/mcp')
   const clients: Array<{ close: () => Promise<void> }> = []
@@ -400,7 +387,7 @@ export async function connectMcpTools(
         // Nothing is half-open: the clients already connected are closed before
         // this leaves, or an embedder's failed create leaks a socket per attempt.
         await closeAll()
-        throw new Error(`MCP server '${name}' failed to connect: ${message}`)
+        throw new Error(`MCP server '${name}' failed to connect: ${message}`, { cause: error })
       }
       // Otherwise one unreachable server must not take down the session; the
       // agent simply does not get those tools.
@@ -411,10 +398,10 @@ export async function connectMcpTools(
 }
 
 /** The connection's identity, minus its secrets — `headers` never travel. */
-function describeServer(
-  server: McpServerConfigWire,
-): Pick<McpServerStatusInfo, 'transport' | 'url' | 'command' | 'args'> {
-  if ('url' in server) return { transport: server.type === 'sse' ? 'sse' : 'http', url: server.url }
+function describeServer(server: McpServerConfigWire): Pick<McpServerStatusInfo, 'transport' | 'url' | 'command' | 'args'> {
+  if ('url' in server) {
+    return { transport: server.type === 'sse' ? 'sse' : 'http', url: server.url }
+  }
   return { transport: 'stdio', command: server.command, args: server.args }
 }
 

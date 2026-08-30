@@ -5,10 +5,7 @@ import type { ServerFrame, SessionEvent, SessionInfo } from '@workerdeck/protoco
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 /** A 1x1 red PNG — small enough to inline, real enough to be a legal upload. */
-const PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-  'base64',
-)
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
 
 /** Minimal fake CLI: records what it was sent, answers nothing. */
 function fakeHarness() {
@@ -20,7 +17,9 @@ function fakeHarness() {
       return this
     },
     next(): Promise<IteratorResult<SDKMessage>> {
-      if (done) return Promise.resolve({ value: undefined, done: true })
+      if (done) {
+        return Promise.resolve({ value: undefined, done: true })
+      }
       return new Promise((resolve) => {
         waiter = resolve
       })
@@ -32,7 +31,9 @@ function fakeHarness() {
   } as unknown as Query
   const queryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }) => {
     void (async () => {
-      for await (const input of params.prompt) captured.push(input)
+      for await (const input of params.prompt) {
+        captured.push(input)
+      }
     })()
     return query
   }
@@ -64,13 +65,7 @@ async function createSession(base: string): Promise<string> {
   return ((await res.json()) as { session: SessionInfo }).session.id
 }
 
-async function upload(
-  base: string,
-  id: string,
-  name: string,
-  mediaType: string,
-  body: Buffer | string,
-): Promise<Response> {
+async function upload(base: string, id: string, name: string, mediaType: string, body: Buffer | string): Promise<Response> {
   return await fetch(`${base}/sessions/${id}/attachments?name=${encodeURIComponent(name)}`, {
     method: 'POST',
     headers: { 'content-type': mediaType },
@@ -79,16 +74,14 @@ async function upload(
 }
 
 /** Attach, run `fn`, and hand back every session event seen. */
-async function withSocket(
-  wsBase: string,
-  id: string,
-  fn: (ws: WebSocket, events: SessionEvent[]) => Promise<void>,
-): Promise<void> {
+async function withSocket(wsBase: string, id: string, fn: (ws: WebSocket, events: SessionEvent[]) => Promise<void>): Promise<void> {
   const ws = new WebSocket(`${wsBase}/sessions/${id}/ws`)
   const events: SessionEvent[] = []
   ws.on('message', (data) => {
     const frame = JSON.parse(String(data)) as ServerFrame
-    if (frame.type === 'event') events.push(frame.event)
+    if (frame.type === 'event') {
+      events.push(frame.event)
+    }
   })
   await new Promise<void>((resolve) => ws.on('open', () => resolve()))
   try {
@@ -139,9 +132,7 @@ describe('session attachments', () => {
       const logged = events.find((e) => e.type === 'user_message')
       expect(logged).toMatchObject({
         message: { role: 'user', content: 'what is this?' },
-        attachments: [
-          { id: uploaded.attachment.id, name: 'shot.png', mediaType: 'image/png', bytes: PNG.length },
-        ],
+        attachments: [{ id: uploaded.attachment.id, name: 'shot.png', mediaType: 'image/png', bytes: PNG.length }],
       })
       expect(JSON.stringify(logged)).not.toContain(PNG.toString('base64'))
     })
@@ -172,9 +163,9 @@ describe('session attachments', () => {
     const harness = fakeHarness()
     const { base, wsBase } = await start(harness)
     const id = await createSession(base)
-    const uploaded = (await (
-      await upload(base, id, 'notes.txt', 'text/plain; charset=utf-8', 'hello there')
-    ).json()) as { attachment: { id: string; mediaType: string } }
+    const uploaded = (await (await upload(base, id, 'notes.txt', 'text/plain; charset=utf-8', 'hello there')).json()) as {
+      attachment: { id: string; mediaType: string }
+    }
     // The charset parameter is normalized away.
     expect(uploaded.attachment.mediaType).toBe('text/plain')
 
@@ -237,7 +228,9 @@ describe('session attachments', () => {
       const errors: string[] = []
       ws.on('message', (data) => {
         const frame = JSON.parse(String(data)) as ServerFrame
-        if (frame.type === 'protocol_error') errors.push(frame.message)
+        if (frame.type === 'protocol_error') {
+          errors.push(frame.message)
+        }
       })
       ws.send(JSON.stringify({ type: 'user_message', text: 'look', attachmentIds: ['nope'] }))
       await settle()
@@ -270,7 +263,9 @@ describe('session MCP routes', () => {
         return this
       },
       next(): Promise<IteratorResult<SDKMessage>> {
-        if (done) return Promise.resolve({ value: undefined, done: true })
+        if (done) {
+          return Promise.resolve({ value: undefined, done: true })
+        }
         return new Promise((resolve) => {
           waiter = resolve
         })
@@ -302,7 +297,12 @@ describe('session MCP routes', () => {
         },
         tools: [{ name: 'TaskUpsert', description: 'Create or update a task' }],
       },
-      { name: 'remote', status: 'failed', error: 'connection refused', config: { type: 'http', url: 'https://x/mcp', headers: { authorization: 'Bearer nope' } } },
+      {
+        name: 'remote',
+        status: 'failed',
+        error: 'connection refused',
+        config: { type: 'http', url: 'https://x/mcp', headers: { authorization: 'Bearer nope' } },
+      },
     ])
     running = createWorkerServer({
       allowUnauthenticated: true,

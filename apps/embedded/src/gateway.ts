@@ -194,9 +194,13 @@ export async function createEmbeddedGateway(deps: GatewayDeps): Promise<Embedded
      * {@link sameOrigin} for why `SameSite=Lax` does not cover it.
      */
     authenticate: (req) => {
-      if (!sameOrigin(req)) return null
+      if (!sameOrigin(req)) {
+        return null
+      }
       const user = deps.auth.resolve(req)
-      if (!user) return null
+      if (!user) {
+        return null
+      }
       return {
         // The gateway's only scoping primitive, and the app's whole ownership
         // model. Opaque to WorkerDeck; `{ user }` is this app's vocabulary.
@@ -213,7 +217,9 @@ export async function createEmbeddedGateway(deps: GatewayDeps): Promise<Embedded
     checkCredentials: true,
 
     createEngineRunner: async (ctx) => {
-      if (!model.available) throw new Error(model.unavailableReason ?? 'no model credentials')
+      if (!model.available) {
+        throw new Error(model.unavailableReason ?? 'no model credentials')
+      }
       const userId = ctx.config.scope?.user
       if (!userId) {
         // Unreachable through the routes — `authenticate` stamps the scope on

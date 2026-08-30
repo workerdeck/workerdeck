@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import type { SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
-import {
-  applyEvent,
-  initialTranscriptState,
-  seedFromSessionInfo,
-  type TranscriptState,
-} from '../src/lib/transcript.ts'
+import { applyEvent, initialTranscriptState, seedFromSessionInfo, type TranscriptState } from '../src/lib/transcript.ts'
 
 let seq = 0
 const ev = (body: SessionEventBody): SessionEvent => ({ ...body, seq: ++seq, ts: 0 })
@@ -108,9 +103,7 @@ describe('transcript reducer', () => {
         uuid: 's2',
       },
     ])
-    expect(state.items).toEqual([
-      { kind: 'assistant_text', id: 'streaming', text: 'ab', streaming: true, parentToolUseId: null },
-    ])
+    expect(state.items).toEqual([{ kind: 'assistant_text', id: 'streaming', text: 'ab', streaming: true, parentToolUseId: null }])
   })
 
   it('finalizes an interrupted turn’s streamed text on turn_result', () => {
@@ -168,10 +161,7 @@ describe('transcript reducer', () => {
     expect(first.pendingApprovals).toHaveLength(1)
     // replay of the same seq is a no-op
     expect(applyEvent(first, { type: 'permission_requested', request, seq: 1, ts: 0 })).toBe(first)
-    const resolved = applyEvent(
-      first,
-      ev({ type: 'permission_resolved', requestId: 'req-1', behavior: 'deny', resolvedBy: 'timeout' }),
-    )
+    const resolved = applyEvent(first, ev({ type: 'permission_resolved', requestId: 'req-1', behavior: 'deny', resolvedBy: 'timeout' }))
     expect(resolved.pendingApprovals).toHaveLength(0)
   })
 
@@ -191,9 +181,7 @@ describe('transcript reducer', () => {
         uuid: 's2',
       },
     ])
-    expect(state.items).toEqual([
-      { kind: 'thinking', id: 'streaming-thinking', text: 'Hmm, ok.', parentToolUseId: null },
-    ])
+    expect(state.items).toEqual([{ kind: 'thinking', id: 'streaming-thinking', text: 'Hmm, ok.', parentToolUseId: null }])
 
     const done = applyEvent(
       state,
@@ -225,9 +213,7 @@ describe('transcript reducer', () => {
         uuid: 'a1',
       },
     ])
-    expect(state.items).toEqual([
-      { kind: 'thinking', id: 'a1-0', text: 'Weighing it.', parentToolUseId: null },
-    ])
+    expect(state.items).toEqual([{ kind: 'thinking', id: 'a1-0', text: 'Weighing it.', parentToolUseId: null }])
   })
 
   it('drops thinking blocks that carry no summary at all', () => {
@@ -252,9 +238,7 @@ describe('transcript reducer', () => {
         uuid: 'a3',
       },
     ])
-    expect(state.items).toEqual([
-      { kind: 'assistant_text', id: 'a3-0', text: 'Done.', streaming: false, parentToolUseId: null },
-    ])
+    expect(state.items).toEqual([{ kind: 'assistant_text', id: 'a3-0', text: 'Done.', streaming: false, parentToolUseId: null }])
   })
 
   it('drops streamed thinking that never carries visible text, even past turn_result', () => {
@@ -312,9 +296,7 @@ describe('transcript reducer', () => {
         uuid: 's2',
       },
     ])
-    expect(state.items).toEqual([
-      { kind: 'thinking', id: 'streaming-thinking', text: 'Weighing it.', parentToolUseId: null },
-    ])
+    expect(state.items).toEqual([{ kind: 'thinking', id: 'streaming-thinking', text: 'Weighing it.', parentToolUseId: null }])
   })
 
   it('treats turn_result cost as session-cumulative (last-seen, not summed)', () => {
@@ -365,9 +347,7 @@ describe('transcript reducer', () => {
 
   it('renders a delivered file as a download card item', () => {
     seq = 0
-    const state = run(initialTranscriptState, [
-      { type: 'file_delivered', path: '/SUMMARY.md', bytes: 42, description: 'the summary' },
-    ])
+    const state = run(initialTranscriptState, [{ type: 'file_delivered', path: '/SUMMARY.md', bytes: 42, description: 'the summary' }])
     expect(state.items).toEqual([
       {
         kind: 'file_delivered',
@@ -392,9 +372,7 @@ describe('transcript reducer', () => {
         uuid: 'lc-1',
       },
     ])
-    expect(state.items).toEqual([
-      { kind: 'notice', id: 'lc-1', level: 'info', text: 'Set model to sonnet' },
-    ])
+    expect(state.items).toEqual([{ kind: 'notice', id: 'lc-1', level: 'info', text: 'Set model to sonnet' }])
   })
 
   it('renders a slash command as the command line, not as the wrapper it is stored in', () => {
@@ -439,9 +417,7 @@ describe('transcript reducer', () => {
         uuid: 'u-att',
       },
     ])
-    expect(state.items).toEqual([
-      { kind: 'user', id: 'u-att', text: 'what is this?', attachments },
-    ])
+    expect(state.items).toEqual([{ kind: 'user', id: 'u-att', text: 'what is this?', attachments }])
   })
 
   it('keeps the user item for a message that is attachments alone', () => {
@@ -502,10 +478,7 @@ describe('transcript reducer', () => {
     expect(state.commands?.map((c) => c.name)).toEqual(['compact'])
 
     // Replaced, not merged — a skill deleted on disk has to disappear.
-    const after = applyEvent(
-      state,
-      ev({ type: 'skills', skills: [{ name: 'imagegen', enabled: true }] }),
-    )
+    const after = applyEvent(state, ev({ type: 'skills', skills: [{ name: 'imagegen', enabled: true }] }))
     expect(after.skills?.map((s) => s.name)).toEqual(['imagegen'])
   })
 
@@ -532,10 +505,7 @@ describe('transcript reducer', () => {
     ])
     // Keyed by path, because "here is the savedPath in my tool input — is there
     // anything to fetch?" is the lookup a tool card does.
-    expect(Object.keys(state.producedFiles ?? {})).toEqual([
-      '/home/me/.codex/generated_images/flower.png',
-      '/home/me/out/chart.png',
-    ])
+    expect(Object.keys(state.producedFiles ?? {})).toEqual(['/home/me/.codex/generated_images/flower.png', '/home/me/out/chart.png'])
     expect(state.producedFiles?.['/home/me/.codex/generated_images/flower.png']).toEqual({
       fileId: 'abc123',
       mediaType: 'image/png',
@@ -928,9 +898,7 @@ describe('transcript reducer', () => {
 
     it('ignores execution events for an unknown id instead of inventing an item', () => {
       seq = 0
-      const state = run(initialTranscriptState, [
-        { type: 'execution_result', executionId: 'ghost', output: { type: 'text', value: 'x' } },
-      ])
+      const state = run(initialTranscriptState, [{ type: 'execution_result', executionId: 'ghost', output: { type: 'text', value: 'x' } }])
       expect(state.items).toHaveLength(0)
     })
   })
@@ -947,9 +915,7 @@ describe('transcript reducer', () => {
       uuid: `d${seq}`,
     })
     const texts = (state: TranscriptState) =>
-      state.items
-        .filter((item) => item.kind === 'assistant_text')
-        .map((item) => (item as { text: string }).text)
+      state.items.filter((item) => item.kind === 'assistant_text').map((item) => (item as { text: string }).text)
 
     it('keeps two agents’ streamed text in separate rows', () => {
       seq = 0
@@ -991,10 +957,7 @@ describe('transcript reducer', () => {
         },
       ])
       const finalized = state.items.filter((item) => item.kind === 'assistant_text')
-      expect(finalized.map((item) => (item as { streaming: boolean }).streaming)).toEqual([
-        false,
-        false,
-      ])
+      expect(finalized.map((item) => (item as { streaming: boolean }).streaming)).toEqual([false, false])
       expect(new Set(finalized.map((item) => item.id)).size).toBe(2)
       expect(texts(state)).toEqual(['Main.', 'Sub.'])
     })

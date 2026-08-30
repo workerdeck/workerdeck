@@ -73,13 +73,7 @@ describe('summarizeSince', () => {
 
 describe('recapLine', () => {
   it('reads in the order a person needs it', () => {
-    const items = [
-      reply('a1'),
-      tool('c1', 'Read'),
-      tool('c2', 'Read'),
-      tool('c3', 'Bash', true),
-      turn('t1'),
-    ]
+    const items = [reply('a1'), tool('c1', 'Read'), tool('c2', 'Read'), tool('c3', 'Bash', true), turn('t1')]
     const line = recapLine(summarizeSince({ items, pendingApprovals: [{}] }, 0))
     expect(line).toBe('1 turn · 3 tool calls (Read, Bash) · 1 error · 1 approval waiting')
   })

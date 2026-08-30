@@ -10,8 +10,7 @@ import { staleReplaySeqs } from '../src/lib/replay.ts'
  * violate.
  */
 
-const seqd = (bodies: SessionEventBody[]): SessionEvent[] =>
-  bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
+const seqd = (bodies: SessionEventBody[]): SessionEvent[] => bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
 
 const usage = (total: number): SessionEventBody => ({
   type: 'context_usage',
@@ -32,11 +31,7 @@ describe('staleReplaySeqs', () => {
   })
 
   it('keys rate limits per window', () => {
-    const events = seqd([
-      limit('five_hour', 1),
-      limit('seven_day', 2),
-      limit('five_hour', 3),
-    ])
+    const events = seqd([limit('five_hour', 1), limit('seven_day', 2), limit('five_hour', 3)])
     // Only the superseded five_hour goes; seven_day is the last of its own key.
     expect(staleReplaySeqs(events, 0)).toEqual(new Set([1]))
   })

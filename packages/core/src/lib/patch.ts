@@ -63,13 +63,14 @@ function isHunk(value: unknown): value is PatchHunk {
  * (see `FilePatch`'s own note).
  */
 export function filePatchFromToolResult(result: unknown): FilePatch | undefined {
-  const output = result as
-    | { filePath?: unknown; structuredPatch?: unknown; originalFile?: unknown; type?: unknown }
-    | null
-    | undefined
-  if (!output || !Array.isArray(output.structuredPatch)) return undefined
+  const output = result as { filePath?: unknown; structuredPatch?: unknown; originalFile?: unknown; type?: unknown } | null | undefined
+  if (!output || !Array.isArray(output.structuredPatch)) {
+    return undefined
+  }
   const hunks = output.structuredPatch.filter(isHunk)
-  if (hunks.length === 0) return undefined
+  if (hunks.length === 0) {
+    return undefined
+  }
   const { hunks: kept, truncated } = capHunks(hunks)
   return {
     ...(typeof output.filePath === 'string' && { path: output.filePath }),
@@ -118,7 +119,9 @@ export function parseUnifiedDiff(diff: string, path?: string): FilePatch | undef
       hunks.push(current)
       continue
     }
-    if (!current) continue
+    if (!current) {
+      continue
+    }
     // Inside a hunk, a line belongs to it when it carries a diff prefix. A
     // '\' line ("\ No newline at end of file") is a note about the previous
     // line, not a line of the file, and is dropped.
@@ -133,7 +136,9 @@ export function parseUnifiedDiff(diff: string, path?: string): FilePatch | undef
       current = undefined
     }
   }
-  if (hunks.length === 0) return undefined
+  if (hunks.length === 0) {
+    return undefined
+  }
   const { hunks: kept, truncated } = capHunks(hunks)
   return { ...(path && { path }), hunks: kept, ...(truncated && { truncated }) }
 }

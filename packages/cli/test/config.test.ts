@@ -1,14 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import {
-  ConfigError,
-  defaultStateDir,
-  isLoopback,
-  loadConfigFile,
-  parseArgs,
-  resolveInstanceConfig,
-} from '../src/config.ts'
+import { ConfigError, defaultStateDir, isLoopback, loadConfigFile, parseArgs, resolveInstanceConfig } from '../src/config.ts'
 
 const noConfig = { path: null, options: {} }
 
@@ -95,19 +88,11 @@ describe('resolveInstanceConfig', () => {
   })
 
   it('never plans generation with a key, with --insecure, or on loopback', () => {
-    const withKey = resolveInstanceConfig(
-      parseArgs(['--host', '0.0.0.0', '--auth-key', 'k']),
-      noConfig,
-      {},
-    )
+    const withKey = resolveInstanceConfig(parseArgs(['--host', '0.0.0.0', '--auth-key', 'k']), noConfig, {})
     expect(withKey.generateAuthKey).toBe(false)
     expect(withKey.authKey).toBe('k')
 
-    const insecure = resolveInstanceConfig(
-      parseArgs(['--host', '0.0.0.0', '--insecure']),
-      noConfig,
-      {},
-    )
+    const insecure = resolveInstanceConfig(parseArgs(['--host', '0.0.0.0', '--insecure']), noConfig, {})
     expect(insecure.generateAuthKey).toBe(false)
     expect(insecure.allowedHosts).not.toBeNull()
 
@@ -157,11 +142,7 @@ describe('resolveInstanceConfig', () => {
   })
 
   it('takes fs roots from flags or a colon-separated env var, and --fs-write is its own switch', () => {
-    const flagged = resolveInstanceConfig(
-      parseArgs(['--fs-root', '/tmp/a', '--fs-root', '/tmp/b', '--fs-write']),
-      noConfig,
-      {},
-    )
+    const flagged = resolveInstanceConfig(parseArgs(['--fs-root', '/tmp/a', '--fs-root', '/tmp/b', '--fs-write']), noConfig, {})
     expect(flagged.options.hostFiles).toEqual({
       roots: [resolve('/tmp/a'), resolve('/tmp/b')],
       write: true,
@@ -203,11 +184,7 @@ describe('insecureHosts', () => {
   })
 
   it('works as a repeatable --insecure-host flag too', () => {
-    const config = resolveInstanceConfig(
-      parseArgs(['--host', 'toby', '--insecure-host', 'toby']),
-      noConfig,
-      {},
-    )
+    const config = resolveInstanceConfig(parseArgs(['--host', 'toby', '--insecure-host', 'toby']), noConfig, {})
     expect(config.generateAuthKey).toBe(false)
     expect(config.allowedHosts?.has('toby')).toBe(true)
   })
@@ -228,11 +205,7 @@ describe('insecureHosts', () => {
   })
 
   it('accepts 0.0.0.0 as "every interface", with the Host gate still fenced', () => {
-    const config = resolveInstanceConfig(
-      parseArgs(['--host', '0.0.0.0']),
-      withInsecure(['0.0.0.0', 'toby']),
-      {},
-    )
+    const config = resolveInstanceConfig(parseArgs(['--host', '0.0.0.0']), withInsecure(['0.0.0.0', 'toby']), {})
     expect(config.generateAuthKey).toBe(false)
     // The layered defence survives: loopback + declared names only, so a
     // rebound public name still bounces off the Host-header guard.
@@ -242,39 +215,23 @@ describe('insecureHosts', () => {
   })
 
   it('handles bare IPv6 entries', () => {
-    const config = resolveInstanceConfig(
-      parseArgs(['--host', 'fd7a::1234']),
-      withInsecure(['fd7a::1234']),
-      {},
-    )
+    const config = resolveInstanceConfig(parseArgs(['--host', 'fd7a::1234']), withInsecure(['fd7a::1234']), {})
     expect(config.generateAuthKey).toBe(false)
     expect(config.allowedHosts?.has('fd7a::1234')).toBe(true)
   })
 
   it('rejects an entry carrying a port rather than silently never matching', () => {
-    expect(() =>
-      resolveInstanceConfig(parseArgs(['--host', 'toby']), withInsecure(['toby:8787']), {}),
-    ).toThrow(/carries a port/)
-    expect(() =>
-      resolveInstanceConfig(parseArgs(['--host', '::1']), withInsecure(['[::1]:8787']), {}),
-    ).toThrow(/carries a port/)
+    expect(() => resolveInstanceConfig(parseArgs(['--host', 'toby']), withInsecure(['toby:8787']), {})).toThrow(/carries a port/)
+    expect(() => resolveInstanceConfig(parseArgs(['--host', '::1']), withInsecure(['[::1]:8787']), {})).toThrow(/carries a port/)
   })
 
   it('rejects an entry that is not a host at all', () => {
-    expect(() =>
-      resolveInstanceConfig(parseArgs([]), withInsecure(['a b c']), {}),
-    ).toThrow(ConfigError)
-    expect(() =>
-      resolveInstanceConfig(parseArgs([]), withInsecure(['http://toby']), {}),
-    ).toThrow(ConfigError)
+    expect(() => resolveInstanceConfig(parseArgs([]), withInsecure(['a b c']), {})).toThrow(ConfigError)
+    expect(() => resolveInstanceConfig(parseArgs([]), withInsecure(['http://toby']), {})).toThrow(ConfigError)
   })
 
   it('weakens nothing when auth is on', () => {
-    const config = resolveInstanceConfig(
-      parseArgs(['--host', 'toby', '--auth-key', 'long-enough-secret']),
-      withInsecure(['toby']),
-      {},
-    )
+    const config = resolveInstanceConfig(parseArgs(['--host', 'toby', '--auth-key', 'long-enough-secret']), withInsecure(['toby']), {})
     // A key wins: the instance authenticates, and allowedHosts stays null — a
     // rebound origin holds no cookie, so the Host gate has nothing to add.
     expect(config.authKey).toBe('long-enough-secret')
@@ -292,20 +249,14 @@ describe('loadConfigFile', () => {
 
   it('loads a default-exported object', async () => {
     const dir = await tempConfigDir()
-    await writeFile(
-      join(dir, 'workerdeck.config.mjs'),
-      'export default { basePath: "/api", allowUnauthenticated: true }\n',
-    )
+    await writeFile(join(dir, 'workerdeck.config.mjs'), 'export default { basePath: "/api", allowUnauthenticated: true }\n')
     const loaded = await loadConfigFile(undefined, dir)
     expect(loaded.options.basePath).toBe('/api')
   })
 
   it('loads a default-exported function, including an async one', async () => {
     const dir = await tempConfigDir()
-    await writeFile(
-      join(dir, 'workerdeck.config.mjs'),
-      'export default async () => ({ basePath: "/late" })\n',
-    )
+    await writeFile(join(dir, 'workerdeck.config.mjs'), 'export default async () => ({ basePath: "/late" })\n')
     const loaded = await loadConfigFile(undefined, dir)
     expect(loaded.options.basePath).toBe('/late')
   })

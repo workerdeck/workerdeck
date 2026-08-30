@@ -1,14 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { apiUrl } from '@workerdeck/client'
-import {
-  Button,
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogHeader,
-  Input,
-  toast,
-} from '@workerdeck/ui'
+import { Button, Dialog, DialogBody, DialogContent, DialogHeader, Input, toast } from '@workerdeck/ui'
 import { keyFor, newHostId, removeHost, saveHost, type GatewayHost } from '@/lib/hosts.ts'
 
 /**
@@ -53,38 +45,38 @@ export function GatewayFields({
   }
 
   return (
-    <div className='flex flex-col gap-3'>
-      <label className='flex flex-col gap-1'>
-        <span className='text-label text-fg-3'>Name</span>
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder='Mac mini' />
+    <div className="flex flex-col gap-3">
+      <label className="flex flex-col gap-1">
+        <span className="text-label text-fg-3">Name</span>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Mac mini" />
       </label>
-      <label className='flex flex-col gap-1'>
-        <span className='text-label text-fg-3'>Address</span>
+      <label className="flex flex-col gap-1">
+        <span className="text-label text-fg-3">Address</span>
         <Input
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder='http://toby.ts.net:8787'
+          placeholder="http://toby.ts.net:8787"
           spellCheck={false}
-          className='font-mono'
+          className="font-mono"
         />
       </label>
-      <label className='flex flex-col gap-1'>
-        <span className='text-label text-fg-3'>Auth key</span>
+      <label className="flex flex-col gap-1">
+        <span className="text-label text-fg-3">Auth key</span>
         <Input
-          type='password'
+          type="password"
           value={key}
           onChange={(e) => setKey(e.target.value)}
-          placeholder='Leave empty for an unauthenticated gateway'
+          placeholder="Leave empty for an unauthenticated gateway"
           spellCheck={false}
         />
         {/* Said plainly rather than buried in docs: a browser has no keychain,
             and the operator should know where this ends up. */}
-        <span className='text-label text-fg-4'>
-          Stored in this browser’s local storage, and sent on the WebSocket URL when attaching.
-          Use a gateway you control, over a network you trust.
+        <span className="text-label text-fg-4">
+          Stored in this browser’s local storage, and sent on the WebSocket URL when attaching. Use a gateway you control, over a network
+          you trust.
         </span>
       </label>
-      <div className='mt-1 flex justify-end gap-2'>
+      <div className="mt-1 flex justify-end gap-2">
         {actions}
         <Button onClick={submit}>{submitLabel}</Button>
       </div>
@@ -109,21 +101,21 @@ export function CreateGatewayDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (next) setDraft(newDraft())
+        if (next) {
+          setDraft(newDraft())
+        }
         onOpenChange(next)
-      }}>
+      }}
+    >
       <DialogContent>
-        <DialogHeader
-          title='Add gateway'
-          description='A workerdeck gateway you run — typically over Tailscale.'
-        />
+        <DialogHeader title="Add gateway" description="A workerdeck gateway you run — typically over Tailscale." />
         <DialogBody>
           <GatewayFields
             host={draft}
-            submitLabel='Add gateway'
+            submitLabel="Add gateway"
             onSaved={onCreated}
             actions={
-              <Button variant='outline' onClick={() => onOpenChange(false)}>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
             }
@@ -140,33 +132,26 @@ function newDraft(): GatewayHost {
 
 /** Removing one. Confirmed, because the key goes with it and this browser has
  * no other copy. */
-export function ConfirmRemoveGateway({
-  host,
-  onClose,
-  onRemoved,
-}: {
-  host: GatewayHost
-  onClose: () => void
-  onRemoved: () => void
-}) {
+export function ConfirmRemoveGateway({ host, onClose, onRemoved }: { host: GatewayHost; onClose: () => void; onRemoved: () => void }) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader
           title={`Remove ${host.name}?`}
-          description='Its auth key is deleted from this browser. The gateway itself keeps running.'
+          description="Its auth key is deleted from this browser. The gateway itself keeps running."
         />
         <DialogBody>
-          <div className='flex justify-end gap-2'>
-            <Button variant='outline' onClick={onClose}>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
             <Button
-              variant='destructive'
+              variant="destructive"
               onClick={() => {
                 removeHost(host.id)
                 onRemoved()
-              }}>
+              }}
+            >
               Remove
             </Button>
           </div>

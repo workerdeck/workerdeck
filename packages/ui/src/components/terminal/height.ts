@@ -1,11 +1,6 @@
 import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
-import {
-  formatBytes,
-  formatCost,
-  formatDuration,
-  toolInputPreview,
-} from '../../lib/format.ts'
+import { formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
 import { taskChildItems, type TerminalBlock, type ToolCallItem } from './blocks.ts'
 import { IMAGE_BOX_LINES } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
@@ -124,9 +119,13 @@ export function estimateBlockPx(block: TerminalBlock, epoch: HeightEpoch): numbe
   // reducer replaces the *child*), so a height cached against the task would
   // survive exactly the mutation that changes the summary line. Both are one
   // `wrapOne` over a short string (~2µs), so neither needs the cache.
-  if (!('item' in block)) return blockHeight(block, epoch).px
+  if (!('item' in block)) {
+    return blockHeight(block, epoch).px
+  }
   const hit = epoch.cache.get(block.item)
-  if (hit) return hit.px
+  if (hit) {
+    return hit.px
+  }
   const computed = itemHeight(block.item, epoch)
   epoch.cache.set(block.item, computed)
   return computed.px
@@ -199,11 +198,16 @@ const PICTOGRAPHIC = /\p{Extended_Pictographic}/u
  * counted as 2 but flagged: they render from a fallback face whose advance is
  * not a whole number of cells, and the flag is what keeps the model honest. */
 function clusterCells(cluster: string): { w: number; exact: boolean } {
-  if (PICTOGRAPHIC.test(cluster) || cluster.includes('‍') || cluster.includes('️'))
+  if (PICTOGRAPHIC.test(cluster) || cluster.includes('‍') || cluster.includes('️')) {
     return { w: 2, exact: false }
+  }
   const cp = cluster.codePointAt(0) ?? 0
-  if (isWide(cp)) return { w: 2, exact: false }
-  if (cp < 0x20) return { w: 0, exact: true }
+  if (isWide(cp)) {
+    return { w: 2, exact: false }
+  }
+  if (cp < 0x20) {
+    return { w: 0, exact: true }
+  }
   return { w: 1, exact: true }
 }
 
@@ -234,7 +238,9 @@ function tokenizeAscii(line: string): Token[] {
   const tokens: Token[] = []
   let wordW = 0
   const flushWord = () => {
-    if (wordW > 0) tokens.push({ kind: 'word', w: wordW, exact: true })
+    if (wordW > 0) {
+      tokens.push({ kind: 'word', w: wordW, exact: true })
+    }
     wordW = 0
   }
   for (let i = 0; i < line.length; i++) {
@@ -242,14 +248,19 @@ function tokenizeAscii(line: string): Token[] {
     if (code === 0x20) {
       flushWord()
       const last = tokens[tokens.length - 1]
-      if (last?.kind === 'space') last.w += 1
-      else tokens.push({ kind: 'space', w: 1, exact: true })
+      if (last?.kind === 'space') {
+        last.w += 1
+      } else {
+        tokens.push({ kind: 'space', w: 1, exact: true })
+      }
       continue
     }
     wordW += 1
     if (code === 0x2d /* - */ || code === 0x3f /* ? */) {
       const next = line.charCodeAt(i + 1)
-      if (!(next >= 0x30 && next <= 0x39)) flushWord()
+      if (!(next >= 0x30 && next <= 0x39)) {
+        flushWord()
+      }
     }
   }
   flushWord()
@@ -263,12 +274,16 @@ function tokenizeAscii(line: string): Token[] {
  * rare and the error is bounded by one tab stop.
  */
 function tokenize(line: string): Token[] {
-  if (PLAIN_ASCII.test(line)) return tokenizeAscii(line)
+  if (PLAIN_ASCII.test(line)) {
+    return tokenizeAscii(line)
+  }
   const tokens: Token[] = []
   let word = { w: 0, exact: true }
   let col = 0
   const flushWord = () => {
-    if (word.w > 0) tokens.push({ kind: 'word', w: word.w, exact: word.exact })
+    if (word.w > 0) {
+      tokens.push({ kind: 'word', w: word.w, exact: word.exact })
+    }
     word = { w: 0, exact: true }
   }
   const segments = [...segmenter.segment(line)].map((s) => s.segment)
@@ -276,8 +291,11 @@ function tokenize(line: string): Token[] {
     if (segment === ' ') {
       flushWord()
       const last = tokens.at(-1)
-      if (last?.kind === 'space') last.w += 1
-      else tokens.push({ kind: 'space', w: 1, exact: true })
+      if (last?.kind === 'space') {
+        last.w += 1
+      } else {
+        tokens.push({ kind: 'space', w: 1, exact: true })
+      }
       col += 1
       continue
     }
@@ -285,8 +303,11 @@ function tokenize(line: string): Token[] {
       flushWord()
       const advance = TAB_SIZE - (col % TAB_SIZE) || TAB_SIZE
       const last = tokens.at(-1)
-      if (last?.kind === 'space') last.w += advance
-      else tokens.push({ kind: 'space', w: advance, exact: true })
+      if (last?.kind === 'space') {
+        last.w += advance
+      } else {
+        tokens.push({ kind: 'space', w: advance, exact: true })
+      }
       col += advance
       continue
     }
@@ -312,7 +333,9 @@ function tokenize(line: string): Token[] {
 
 /** Visual lines one hard line occupies at `cols` columns. */
 function wrapOne(line: string, cols: number): { lines: number; exact: boolean } {
-  if (cols <= 0) return { lines: 1, exact: false }
+  if (cols <= 0) {
+    return { lines: 1, exact: false }
+  }
   const tokens = tokenize(line)
   let lines = 1
   let pos = 0
@@ -335,7 +358,9 @@ function wrapOne(line: string, cols: number): { lines: number; exact: boolean } 
       continue
     }
     // break-word: the token first moves to its own line, then fills whole lines.
-    if (pos > 0) lines += 1
+    if (pos > 0) {
+      lines += 1
+    }
     const full = Math.ceil(token.w / cols)
     lines += full - 1
     pos = token.w - (full - 1) * cols
@@ -374,11 +399,7 @@ const add = (a: Acc, b: Acc): Acc => ({ px: a.px + b.px, exact: a.exact && b.exa
  * override sets), `gutterCells` of gutter, the body wrapping in what is left.
  * `extraPx` is non-cell chrome around the row (the nested-run border+padding).
  */
-function rowH(
-  text: string,
-  m: CellMetrics,
-  { indentCells = 0, gutterCells = 2, extraPx = 0 } = {},
-): Acc {
+function rowH(text: string, m: CellMetrics, { indentCells = 0, gutterCells = 2, extraPx = 0 } = {}): Acc {
   const bodyPx = m.width - extraPx - (indentCells + gutterCells) * m.ch
   const cols = Math.floor(bodyPx / m.ch + EPS)
   const { lines, exact } = textLines(text, cols)
@@ -441,7 +462,9 @@ function hardLines(source: string[]): string[] {
       current = []
     }
   }
-  if (current.length) out.push(current.join(' '))
+  if (current.length) {
+    out.push(current.join(' '))
+  }
   return out
 }
 
@@ -490,17 +513,25 @@ function parseBlocks(md: string): MdBlock[] {
       let current: string[] = []
       for (const l of raw) {
         if (l.trim() === '') {
-          if (current.length) paras.push(hardLines(current))
+          if (current.length) {
+            paras.push(hardLines(current))
+          }
           current = []
-        } else current.push(l)
+        } else {
+          current.push(l)
+        }
       }
-      if (current.length) paras.push(hardLines(current))
+      if (current.length) {
+        paras.push(hardLines(current))
+      }
       blocks.push({ t: 'quote', paras })
       continue
     }
     const listMarker = (s: string) => {
       const m = /^(\s*)([-*+]|\d+\.)\s+(.*)$/.exec(s)
-      if (!m) return undefined
+      if (!m) {
+        return undefined
+      }
       const depth = Math.floor(m[1]!.length / 2)
       const ordered = /\d/.test(m[2]!)
       return { depth, ordered, text: m[3]! }
@@ -524,7 +555,9 @@ function parseBlocks(md: string): MdBlock[] {
         // A different marker type at the top level starts a *new* list — one
         // more block, one more inter-block margin.
         if (m.depth === 0) {
-          if (listOrdered !== undefined && m.ordered !== listOrdered) break
+          if (listOrdered !== undefined && m.ordered !== listOrdered) {
+            break
+          }
           listOrdered = m.ordered
         }
         gutters[m.depth] = m.ordered ? 3 : 2
@@ -551,13 +584,14 @@ function parseBlocks(md: string): MdBlock[] {
       // longer exists, and it was real work on every table.
       let rows = 0
       while (i < lines.length && lines[i]!.trimStart().startsWith('|')) {
-        const cells = lines[i]!
-          .trim()
+        const cells = lines[i]!.trim()
           .replace(/^\||\|$/g, '')
           .split('|')
           .map((cell) => cell.trim())
         // The `|---|:--:|` delimiter row is structure, not a rendered line.
-        if (!cells.every((cell) => /^:?-+:?$/.test(cell))) rows += 1
+        if (!cells.every((cell) => /^:?-+:?$/.test(cell))) {
+          rows += 1
+        }
         i += 1
       }
       blocks.push({ t: 'table', rows: Math.max(1, rows) })
@@ -592,7 +626,9 @@ export function markdownHeight(md: string, m: CellMetrics, extraPx = 0): Acc {
   const blocks = parseBlocks(md)
   let acc: Acc = { px: 0, exact: true }
   for (const [index, block] of blocks.entries()) {
-    if (index > 0) acc = add(acc, { px: m.line, exact: true })
+    if (index > 0) {
+      acc = add(acc, { px: m.line, exact: true })
+    }
     switch (block.t) {
       case 'p': {
         for (const line of block.lines) {
@@ -634,7 +670,9 @@ export function markdownHeight(md: string, m: CellMetrics, extraPx = 0): Acc {
         let px = 0
         let exact = true
         for (const [pi, para] of block.paras.entries()) {
-          if (pi > 0) px += m.line
+          if (pi > 0) {
+            px += m.line
+          }
           for (const line of para) {
             const r = textLines(line, cols - 2)
             px += r.lines * m.line
@@ -681,18 +719,20 @@ function diffHeight(patch: FilePatch, m: CellMetrics, extraPx = 0): Acc {
   }
   const hunks = patch.hunks.map(walk)
   const numbered = patch.hunks.some((hunk) => hunk.newStart > 0)
-  const width = numbered
-    ? String(Math.max(...hunks.flat().map((row) => row.number), 1)).length
-    : 0
+  const width = numbered ? String(Math.max(...hunks.flat().map((row) => row.number), 1)).length : 0
   const columns = numbered ? width + 3 : 2
   let acc: Acc = { px: 0, exact: true }
   for (const [index, hunk] of hunks.entries()) {
-    if (index > 0) acc = add(acc, { px: m.line, exact: true }) // the ⋮ separator row
+    if (index > 0) {
+      acc = add(acc, { px: m.line, exact: true })
+    } // the ⋮ separator row
     for (const row of hunk) {
       acc = add(acc, rowH(row.text || ' ', m, { indentCells: 2, gutterCells: columns, extraPx }))
     }
   }
-  if (patch.truncated) acc = add(acc, { px: m.line, exact: true })
+  if (patch.truncated) {
+    acc = add(acc, { px: m.line, exact: true })
+  }
   return acc
 }
 
@@ -710,12 +750,17 @@ function toolRowHeight(item: ToolCallItem, m: CellMetrics, extraPx: number): Acc
   // No wrap and no `exact: false`: the box is the constant, not the image (see
   // `image-box.ts`).
   const images = item.result?.images
-  if (images?.length)
+  if (images?.length) {
     acc = add(acc, { px: images.length * IMAGE_BOX_LINES * m.line, exact: true })
+  }
 
-  if (item.patch) return add(acc, diffHeight(item.patch, m, extraPx))
+  if (item.patch) {
+    return add(acc, diffHeight(item.patch, m, extraPx))
+  }
   const text = item.result?.text ?? ''
-  if (!text) return acc
+  if (!text) {
+    return acc
+  }
   // The renderer's own budget, not a copy of it: `collapsedResult` returns both
   // the lines and the exact trailing label, so this cannot drift from what
   // `items.tsx` draws — which it previously could, and which its own comment
@@ -726,14 +771,15 @@ function toolRowHeight(item: ToolCallItem, m: CellMetrics, extraPx: number): Acc
     // --term-cell: 3ch of padding + 3ch of gutter.
     acc = add(acc, rowH(line || ' ', m, { indentCells: 3, gutterCells: 3, extraPx }))
   }
-  if (more) acc = add(acc, rowH(more, m, { indentCells: 3, gutterCells: 3, extraPx }))
+  if (more) {
+    acc = add(acc, rowH(more, m, { indentCells: 3, gutterCells: 3, extraPx }))
+  }
   return acc
 }
 
 /** Rows produced inside a subagent are stepped in behind a rule —
  * `border-l-2` (2px) + `pl-3` (12px) on the wrapper in `agent/Transcript.tsx`. */
-const nestedExtraPx = (item: TranscriptItem): number =>
-  'parentToolUseId' in item && item.parentToolUseId != null ? 14 : 0
+const nestedExtraPx = (item: TranscriptItem): number => ('parentToolUseId' in item && item.parentToolUseId != null ? 14 : 0)
 
 /** One transcript item's height, in its default (collapsed, settled-or-not)
  * presentation. */
@@ -742,10 +788,14 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
   switch (item.kind) {
     case 'user': {
       let acc: Acc = { px: 0, exact: true }
-      if (item.attachments?.length)
+      if (item.attachments?.length) {
         acc = add(acc, rowH(item.attachments.map((a) => a.name).join(', '), m, { extraPx }))
-      if (item.text)
-        for (const line of item.text.split('\n')) acc = add(acc, rowH(line || ' ', m, { extraPx }))
+      }
+      if (item.text) {
+        for (const line of item.text.split('\n')) {
+          acc = add(acc, rowH(line || ' ', m, { extraPx }))
+        }
+      }
       return acc
     }
     case 'assistant_text':
@@ -755,20 +805,18 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
     case 'tool_call':
       return toolRowHeight(item, m, extraPx)
     case 'turn_result': {
-      let acc = rowH(
-        `${item.isError ? item.subtype : 'done'} · ${formatDuration(item.durationMs)} · ${formatCost(item.totalCostUsd)}`,
-        m,
-        { extraPx },
-      )
-      for (const message of item.errors ?? []) acc = add(acc, rowH(message, m, { extraPx }))
+      let acc = rowH(`${item.isError ? item.subtype : 'done'} · ${formatDuration(item.durationMs)} · ${formatCost(item.totalCostUsd)}`, m, {
+        extraPx,
+      })
+      for (const message of item.errors ?? []) {
+        acc = add(acc, rowH(message, m, { extraPx }))
+      }
       return acc
     }
     case 'notice':
       return rowH(item.text, m, { extraPx })
     case 'file_delivered': {
-      const text =
-        `${item.path} · ${formatBytes(item.bytes)}` +
-        (item.description ? ` · ${item.description}` : '')
+      const text = `${item.path} · ${formatBytes(item.bytes)}` + (item.description ? ` · ${item.description}` : '')
       return rowH(text, m, { extraPx })
     }
     default:

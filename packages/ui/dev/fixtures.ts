@@ -36,24 +36,22 @@ const base = (items: TranscriptItem[], status: TranscriptState['status']): Trans
 
 /** A run in progress: prose, a tool call, its output, and the working line. */
 const run: TranscriptItem[] = [
-  item({ kind: 'user',
-    text: 'Set up prettier for the repo, but only for code — markdown and JSON churn buys nothing.',
-  }),
-  item({ kind: 'assistant_text',
+  item({ kind: 'user', text: 'Set up prettier for the repo, but only for code — markdown and JSON churn buys nothing.' }),
+  item({
+    kind: 'assistant_text',
     text: 'Now applying the format and immediately verifying nothing broke:',
     streaming: false,
     parentToolUseId: null,
   }),
-  item({ kind: 'thinking',
-    text: 'Thought for 9s, ran 1 shell command',
-    parentToolUseId: null,
-  }),
-  item({ kind: 'assistant_text',
+  item({ kind: 'thinking', text: 'Thought for 9s, ran 1 shell command', parentToolUseId: null }),
+  item({
+    kind: 'assistant_text',
     text: 'Format applied. Now checking whether oxlint discovers the root config from a package subdirectory — that determines whether the per-package `lint` scripts can stay as-is:',
     streaming: false,
     parentToolUseId: null,
   }),
-  item({ kind: 'tool_call',
+  item({
+    kind: 'tool_call',
     name: 'Bash',
     input: { command: 'pnpm exec prettier --write .', description: 'Format the repo' },
     parentToolUseId: null,
@@ -63,16 +61,18 @@ const run: TranscriptItem[] = [
       isError: false,
     },
   }),
-  item({ kind: 'assistant_text',
+  item({
+    kind: 'assistant_text',
     text: "Exit 0 doesn't prove it found the config (defaults would also pass). Testing decisively:",
     streaming: false,
     parentToolUseId: null,
   }),
-  item({ kind: 'tool_call',
+  item({
+    kind: 'tool_call',
     name: 'Bash',
     input: {
       command:
-        'pwd && /Users/atomic/projects/silkweave/node_modules/.bin/oxlint --print-config 2>&1 | node -e "let s=\'\';process.stdin.on(\'data\',d=>s+=d).on(\'end\',()=>{try{const j=JSON.parse(s);console.log(\'categories:\',JSON.stringify(j.categories))}catch(e){console.log(\'parse failed\')}})"',
+        "pwd && /Users/atomic/projects/silkweave/node_modules/.bin/oxlint --print-config 2>&1 | node -e \"let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const j=JSON.parse(s);console.log('categories:',JSON.stringify(j.categories))}catch(e){console.log('parse failed')}})\"",
     },
     parentToolUseId: null,
     status: 'running',
@@ -130,7 +130,8 @@ const diff: TranscriptItem[] = [
 /** Everything a message can contain: the markdown map's whole surface. */
 const markdown: TranscriptItem[] = [
   item({ kind: 'user', text: 'Summarise the packaging rules.' }),
-  item({ kind: 'assistant_text',
+  item({
+    kind: 'assistant_text',
     streaming: false,
     parentToolUseId: null,
     text: `## Packaging
@@ -174,7 +175,8 @@ See [the workflow](https://github.com/workerdeck/workerdeck) for the gate it re-
   // join-always undershot the hard form by ~115 lines on a long poem,
   // break-always overshot the soft form by four here.
   item({ kind: 'user', text: 'now a short poem about releases' }),
-  item({ kind: 'assistant_text',
+  item({
+    kind: 'assistant_text',
     streaming: false,
     parentToolUseId: null,
     // Hard breaks: trailing double spaces, every line renders. Appended
@@ -183,19 +185,16 @@ See [the workflow](https://github.com/workerdeck/workerdeck) for the gate it re-
     text: [
       '**The Tag That Was Never Pushed**',
       '',
-      ...['It sat in the local dark,', 'a name without a wire,', 'while npm told the world'].map(
-        (l) => `${l}  `,
-      ),
+      ...['It sat in the local dark,', 'a name without a wire,', 'while npm told the world'].map((l) => `${l}  `),
       'the old truth, entire.',
       '',
-      ...['Check the registry,', 'check the remote refs too —', 'a release is what shipped,'].map(
-        (l) => `${l}  `,
-      ),
+      ...['Check the registry,', 'check the remote refs too —', 'a release is what shipped,'].map((l) => `${l}  `),
       'not what version:set knew.',
     ].join('\n'),
   }),
   item({ kind: 'user', text: 'again, without the trailing spaces' }),
-  item({ kind: 'assistant_text',
+  item({
+    kind: 'assistant_text',
     streaming: false,
     parentToolUseId: null,
     // Soft breaks: bare newlines, the stanza joins and wraps as prose.
@@ -211,7 +210,8 @@ the old truth, entire.`,
 /** The unhappy paths — a failure, a notice, and a turn that ended badly. */
 const failure: TranscriptItem[] = [
   item({ kind: 'user', text: 'Run the tests.' }),
-  item({ kind: 'tool_call',
+  item({
+    kind: 'tool_call',
     name: 'Bash',
     input: { command: 'pnpm test' },
     parentToolUseId: null,
@@ -222,7 +222,8 @@ const failure: TranscriptItem[] = [
     },
   }),
   item({ kind: 'notice', level: 'error', text: 'Session ended: the runner exited with code 1' }),
-  item({ kind: 'turn_result',
+  item({
+    kind: 'turn_result',
     subtype: 'error_during_execution',
     isError: true,
     durationMs: 42_000,
@@ -234,12 +235,14 @@ const failure: TranscriptItem[] = [
 /** A long, quiet run: enough rows to scroll, and the shape you skim. */
 const long: TranscriptItem[] = Array.from({ length: 40 }, (_, index) =>
   index % 3 === 0
-    ? item({ kind: 'assistant_text',
+    ? item({
+        kind: 'assistant_text',
         text: `Step ${index / 3 + 1}: checking the next package for the same pattern, then moving on if it is clean.`,
         streaming: false,
         parentToolUseId: null,
       })
-    : item({ kind: 'tool_call',
+    : item({
+        kind: 'tool_call',
         name: index % 3 === 1 ? 'Read' : 'Edit',
         input:
           index % 3 === 1
@@ -261,20 +264,23 @@ const long: TranscriptItem[] = Array.from({ length: 40 }, (_, index) =>
  * loop across ~300 unmeasured rows. */
 const huge: TranscriptItem[] = Array.from({ length: 600 }, (_, index) => {
   const step = index % 6
-  if (step === 0)
-    return item({ kind: 'user',
+  if (step === 0) {
+    return item({
+      kind: 'user',
       text: `Task ${index / 6 + 1}: tighten the next module, keep the diff small, and stop if anything looks structural rather than local.`,
     })
-  if (step === 1)
-    return item({ kind: 'assistant_text',
+  }
+  if (step === 1) {
+    return item({
+      kind: 'assistant_text',
       streaming: false,
       parentToolUseId: null,
-      text:
-        `Looking at module ${index}. ` +
-        'The pattern from the previous pass applies here too. '.repeat(1 + (index % 4)),
+      text: `Looking at module ${index}. ` + 'The pattern from the previous pass applies here too. '.repeat(1 + (index % 4)),
     })
-  if (step === 2 || step === 3)
-    return item({ kind: 'tool_call',
+  }
+  if (step === 2 || step === 3) {
+    return item({
+      kind: 'tool_call',
       name: 'Read',
       input: { file_path: `/repo/src/module-${index}/index.ts` },
       parentToolUseId: null,
@@ -284,20 +290,18 @@ const huge: TranscriptItem[] = Array.from({ length: 600 }, (_, index) => {
         isError: false,
       },
     })
-  if (step === 4)
-    return item({ kind: 'tool_call',
+  }
+  if (step === 4) {
+    return item({
+      kind: 'tool_call',
       name: 'Edit',
       input: { file_path: `/repo/src/module-${index}/index.ts`, old_string: 'a', new_string: 'b' },
       parentToolUseId: null,
       status: 'settled',
       result: { text: `module-${index}: updated`, isError: false },
     })
-  return item({ kind: 'turn_result',
-    subtype: 'success',
-    isError: false,
-    durationMs: 30_000 + index * 10,
-    totalCostUsd: 0.05,
-  })
+  }
+  return item({ kind: 'turn_result', subtype: 'success', isError: false, durationMs: 30_000 + index * 10, totalCostUsd: 0.05 })
 })
 
 /**
@@ -311,17 +315,20 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
   const turn = Math.floor(index / 10)
   switch (index % 10) {
     case 0:
-      return item({ kind: 'user',
+      return item({
+        kind: 'user',
         text: `Task ${turn}: review the module, refactor what you find, and summarise. ${'Keep the diff reviewable. '.repeat(1 + (turn % 3))}`,
       })
     case 1:
-      return item({ kind: 'thinking',
+      return item({
+        kind: 'thinking',
         text: `Thought for ${3 + (turn % 20)}s about module ${turn} and its ${1 + (turn % 7)} call sites`,
         parentToolUseId: null,
       })
     case 2:
       // Stanza text: hard line breaks, the calculator's hardest common case.
-      return item({ kind: 'assistant_text',
+      return item({
+        kind: 'assistant_text',
         streaming: false,
         parentToolUseId: null,
         text: Array.from({ length: 3 + (turn % 4) }, (_, s) =>
@@ -333,7 +340,8 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
     case 3:
     case 4:
       // Consecutive shell calls — folds into a ToolRunRow.
-      return item({ kind: 'tool_call',
+      return item({
+        kind: 'tool_call',
         name: 'Bash',
         input: { command: `pnpm --filter @workerdeck/mod-${index} test`, description: `Test module ${index}` },
         parentToolUseId: null,
@@ -344,7 +352,8 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
         },
       })
     case 5:
-      return item({ kind: 'tool_call',
+      return item({
+        kind: 'tool_call',
         name: 'Read',
         input: { file_path: `/repo/src/module-${turn}/index.ts` },
         parentToolUseId: null,
@@ -355,7 +364,8 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
         },
       })
     case 6:
-      return item({ kind: 'tool_call',
+      return item({
+        kind: 'tool_call',
         name: 'Edit',
         input: { file_path: `/repo/src/module-${turn}/index.ts` },
         parentToolUseId: null,
@@ -382,7 +392,8 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
         },
       })
     case 7:
-      return item({ kind: 'assistant_text',
+      return item({
+        kind: 'assistant_text',
         streaming: false,
         parentToolUseId: null,
         text: `## Module ${turn}
@@ -401,13 +412,10 @@ The refactor holds. ${'The call sites stay compatible and the tests agree. '.rep
     case 8:
       return turn % 7 === 3
         ? item({ kind: 'notice', level: 'error', text: `module ${turn}: transient watcher error, retried once` })
-        : item({ kind: 'assistant_text',
-            streaming: false,
-            parentToolUseId: null,
-            text: `Module ${turn} done; moving on.`,
-          })
+        : item({ kind: 'assistant_text', streaming: false, parentToolUseId: null, text: `Module ${turn} done; moving on.` })
     default:
-      return item({ kind: 'turn_result',
+      return item({
+        kind: 'turn_result',
         subtype: turn % 11 === 5 ? 'error_during_execution' : 'success',
         isError: turn % 11 === 5,
         durationMs: 20_000 + turn * 17,
@@ -439,10 +447,12 @@ const adversarial: TranscriptItem[] = [
       isError: false,
     },
   }),
-  item({ kind: 'user',
+  item({
+    kind: 'user',
     text: 'Wrap model against the wall: a token that cannot break anywhere, wide glyphs, tables.\n\n第二段是中文的，全部都是宽字符，还混了一个 emoji 🎉 以及组合字符 é（e + U+0301）。',
   }),
-  item({ kind: 'assistant_text',
+  item({
+    kind: 'assistant_text',
     streaming: false,
     parentToolUseId: null,
     text: `## What breaks a character-cell calculator
@@ -476,13 +486,14 @@ short
 
 漢字テキストの段落。カタカナとひらがなが混ざっていて、折り返し位置は全角文字の幅に依存する。`,
   }),
-  item({ kind: 'thinking',
-    text: 'Considering 👩‍💻 a ZWJ sequence and a naïve café — combining marks résumé…',
-    parentToolUseId: null,
-  }),
-  item({ kind: 'tool_call',
+  item({ kind: 'thinking', text: 'Considering 👩‍💻 a ZWJ sequence and a naïve café — combining marks résumé…', parentToolUseId: null }),
+  item({
+    kind: 'tool_call',
     name: 'Read',
-    input: { file_path: '/Users/atomic/projects/silkweave/packages/deeply/nested/with-a-very-long-single-component-file-name-that-cannot-break-anywhere-at-all.generated.ts' },
+    input: {
+      file_path:
+        '/Users/atomic/projects/silkweave/packages/deeply/nested/with-a-very-long-single-component-file-name-that-cannot-break-anywhere-at-all.generated.ts',
+    },
     parentToolUseId: null,
     status: 'settled',
     result: {
@@ -490,7 +501,8 @@ short
       isError: false,
     },
   }),
-  item({ kind: 'tool_call',
+  item({
+    kind: 'tool_call',
     name: 'Edit',
     input: { file_path: '/Users/atomic/projects/silkweave/packages/server/src/http.ts' },
     parentToolUseId: null,
@@ -517,30 +529,35 @@ short
       ],
     },
   }),
-  item({ kind: 'tool_call',
+  item({
+    kind: 'tool_call',
     name: 'Bash',
     input: { command: 'pnpm typecheck' },
     parentToolUseId: null,
     status: 'settled',
     result: { text: 'done in 4.2s', isError: false },
   }),
-  item({ kind: 'tool_call',
+  item({
+    kind: 'tool_call',
     name: 'Bash',
     input: { command: 'pnpm lint' },
     parentToolUseId: null,
     status: 'settled',
     result: { text: 'ok', isError: false },
   }),
-  item({ kind: 'notice',
+  item({
+    kind: 'notice',
     level: 'info',
     text: 'Long notice with an unbreakable middle: /var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/workerdeck-attachments-4f6a2c1e9b7d filled the line.',
   }),
-  item({ kind: 'file_delivered',
+  item({
+    kind: 'file_delivered',
     path: 'reports/quarterly-summary-with-a-longer-than-usual-name.pdf',
     bytes: 2_400_000,
     description: 'Generated from the fixture data',
   }),
-  item({ kind: 'turn_result',
+  item({
+    kind: 'turn_result',
     subtype: 'error_during_execution',
     isError: true,
     durationMs: 63_000,
@@ -627,8 +644,7 @@ export const QUESTIONS: PermissionRequest = {
  * compaction leaves behind, and which must stay a visible row rather than
  * disappear into a block above it.
  */
-const withId = (id: string, draft: ItemDraft): TranscriptItem =>
-  ({ ...draft, id }) as TranscriptItem
+const withId = (id: string, draft: ItemDraft): TranscriptItem => ({ ...draft, id }) as TranscriptItem
 
 const subagents: TranscriptItem[] = [
   item({ kind: 'user', text: 'Find every place we parse a permission mode, and check the docs match.' }),

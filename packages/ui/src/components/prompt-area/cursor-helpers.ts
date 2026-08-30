@@ -28,8 +28,12 @@ export type SavedCursor = {
 
 export function saveCursorPosition(editor: HTMLElement): SavedCursor | null {
   const range = getSelectionRange()
-  if (!range) return null
-  if (!editor.contains(range.startContainer)) return null
+  if (!range) {
+    return null
+  }
+  if (!editor.contains(range.startContainer)) {
+    return null
+  }
 
   const node = range.startContainer
   if (node === editor) {
@@ -38,7 +42,9 @@ export function saveCursorPosition(editor: HTMLElement): SavedCursor | null {
 
   // Walk up to find the direct child of editor using type-safe helper
   const directChild = getDirectChildContaining(editor, node)
-  if (!directChild) return null
+  if (!directChild) {
+    return null
+  }
 
   const nodeIndex = indexOfChildNode(editor, directChild)
   return { nodeIndex, offset: range.startOffset }
@@ -46,10 +52,14 @@ export function saveCursorPosition(editor: HTMLElement): SavedCursor | null {
 
 export function restoreCursorPosition(editor: HTMLElement, saved: SavedCursor): void {
   const sel = window.getSelection()
-  if (!sel) return
+  if (!sel) {
+    return
+  }
 
   const childNodes = editor.childNodes
-  if (childNodes.length === 0) return
+  if (childNodes.length === 0) {
+    return
+  }
 
   const range = document.createRange()
 
@@ -77,8 +87,12 @@ export function restoreCursorPosition(editor: HTMLElement, saved: SavedCursor): 
 
 export function getCursorOffset(editor: HTMLElement): number | null {
   const range = getSelectionRange()
-  if (!range) return null
-  if (!editor.contains(range.startContainer)) return null
+  if (!range) {
+    return null
+  }
+  if (!editor.contains(range.startContainer)) {
+    return null
+  }
 
   const preRange = document.createRange()
   preRange.selectNodeContents(editor)
@@ -93,7 +107,9 @@ export function getCursorOffset(editor: HTMLElement): number | null {
  */
 export function createRangeAtOffset(editor: HTMLElement, targetOffset: number): Range | null {
   const pos = findDOMPosition(editor, targetOffset)
-  if (!pos) return null
+  if (!pos) {
+    return null
+  }
 
   const range = document.createRange()
   range.setStart(pos.node, pos.offset)
@@ -118,18 +134,26 @@ export function createRangeAtOffset(editor: HTMLElement, targetOffset: number): 
  */
 function caretRect(range: Range): DOMRect | null {
   const direct = range.getBoundingClientRect()
-  if (direct.height > 0) return direct
+  if (direct.height > 0) {
+    return direct
+  }
 
   const node = range.startContainer
-  if (node.nodeType !== Node.ELEMENT_NODE) return null
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return null
+  }
   const children = (node as Element).childNodes
   const neighbours = [children[range.startOffset], children[range.startOffset - 1]]
   for (const neighbour of neighbours) {
-    if (!neighbour) continue
+    if (!neighbour) {
+      continue
+    }
     const probe = document.createRange()
     probe.selectNode(neighbour)
     const rect = probe.getBoundingClientRect()
-    if (rect.height > 0) return rect
+    if (rect.height > 0) {
+      return rect
+    }
   }
   return null
 }
@@ -152,21 +176,32 @@ function caretRect(range: Range): DOMRect | null {
  */
 export function scrollCaretIntoView(editor: HTMLElement): void {
   const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0) return
+  if (!sel || sel.rangeCount === 0) {
+    return
+  }
   const range = sel.getRangeAt(0)
-  if (!editor.contains(range.startContainer)) return
+  if (!editor.contains(range.startContainer)) {
+    return
+  }
 
   const rect = caretRect(range)
-  if (!rect) return
+  if (!rect) {
+    return
+  }
 
   const box = editor.getBoundingClientRect()
-  if (rect.bottom > box.bottom) editor.scrollTop += rect.bottom - box.bottom
-  else if (rect.top < box.top) editor.scrollTop -= box.top - rect.top
+  if (rect.bottom > box.bottom) {
+    editor.scrollTop += rect.bottom - box.bottom
+  } else if (rect.top < box.top) {
+    editor.scrollTop -= box.top - rect.top
+  }
 }
 
 export function setCursorAtOffset(editor: HTMLElement, targetOffset: number): void {
   const sel = window.getSelection()
-  if (!sel) return
+  if (!sel) {
+    return
+  }
 
   const pos = findDOMPosition(editor, targetOffset)
   if (pos) {
@@ -198,7 +233,9 @@ export function getTextLengthInRange(range: Range): number {
     } else if (isChipElement(node)) {
       length += chipNodeTextLength(node)
     } else if (isHTMLElement(node) && node.tagName === 'BR') {
-      if (node.dataset.sentinel) return // skip sentinel <br>
+      if (node.dataset.sentinel) {
+        return
+      } // skip sentinel <br>
       length += 1
     } else if (isHTMLElement(node)) {
       node.childNodes.forEach(walk)
@@ -215,15 +252,21 @@ export function getTextLengthInRange(range: Range): number {
  */
 export function getSelectionOffsets(editor: HTMLElement): { start: number; end: number } | null {
   const range = getSelectionRange()
-  if (!range) return null
-  if (!editor.contains(range.startContainer)) return null
+  if (!range) {
+    return null
+  }
+  if (!editor.contains(range.startContainer)) {
+    return null
+  }
 
   const startRange = document.createRange()
   startRange.selectNodeContents(editor)
   startRange.setEnd(range.startContainer, range.startOffset)
   const start = getTextLengthInRange(startRange)
 
-  if (range.collapsed) return { start, end: start }
+  if (range.collapsed) {
+    return { start, end: start }
+  }
 
   const endRange = document.createRange()
   endRange.selectNodeContents(editor)
@@ -237,13 +280,11 @@ export function getSelectionOffsets(editor: HTMLElement): { start: number; end: 
  * Sets a (potentially non-collapsed) selection at the given plain-text offsets.
  * Used to restore selection after markdown wrap/unwrap operations.
  */
-export function setSelectionAtOffsets(
-  editor: HTMLElement,
-  startOffset: number,
-  endOffset: number,
-): void {
+export function setSelectionAtOffsets(editor: HTMLElement, startOffset: number, endOffset: number): void {
   const sel = window.getSelection()
-  if (!sel) return
+  if (!sel) {
+    return
+  }
 
   if (startOffset === endOffset) {
     setCursorAtOffset(editor, startOffset)
@@ -252,7 +293,9 @@ export function setSelectionAtOffsets(
 
   const startPos = findDOMPosition(editor, startOffset)
   const endPos = findDOMPosition(editor, endOffset)
-  if (!startPos || !endPos) return
+  if (!startPos || !endPos) {
+    return
+  }
 
   const range = document.createRange()
   range.setStart(startPos.node, startPos.offset)
@@ -265,10 +308,7 @@ export function setSelectionAtOffsets(
  * Maps a plain-text offset to a DOM node + offset pair.
  * Recurses into decoration elements (markdown spans, URL anchors).
  */
-export function findDOMPosition(
-  container: HTMLElement,
-  targetOffset: number,
-): { node: Node; offset: number } | null {
+export function findDOMPosition(container: HTMLElement, targetOffset: number): { node: Node; offset: number } | null {
   let remaining = targetOffset
 
   for (let i = 0; i < container.childNodes.length; i++) {
@@ -288,7 +328,9 @@ export function findDOMPosition(
       }
       remaining -= chipLen
     } else if (isBRElement(child)) {
-      if (child.dataset.sentinel) continue // skip sentinel <br>
+      if (child.dataset.sentinel) {
+        continue
+      } // skip sentinel <br>
       if (remaining <= 1) {
         return { node: container, offset: i + 1 }
       }
@@ -298,7 +340,9 @@ export function findDOMPosition(
       const textLen = (child.textContent ?? '').length
       if (remaining <= textLen) {
         const result = findDOMPosition(child, remaining)
-        if (result) return result
+        if (result) {
+          return result
+        }
       }
       remaining -= textLen
     }

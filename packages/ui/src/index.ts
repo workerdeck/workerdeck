@@ -4,14 +4,7 @@ export { Badge, badgeVariants, type BadgeProps } from './components/ui/Badge.tsx
 export { Card, CardContent, CardHeader, CardTitle } from './components/ui/Card.tsx'
 export { Input } from './components/ui/Input.tsx'
 export { Textarea } from './components/ui/Textarea.tsx'
-export {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectItemText,
-  SelectTrigger,
-  SelectValue,
-} from './components/ui/Select.tsx'
+export { Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from './components/ui/Select.tsx'
 export {
   AlertDialog,
   AlertDialogClose,
@@ -20,22 +13,8 @@ export {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from './components/ui/AlertDialog.tsx'
-export {
-  Menu,
-  MenuContent,
-  MenuItem,
-  MenuSeparator,
-  MenuTrigger,
-} from './components/ui/Menu.tsx'
-export {
-  Dialog,
-  DialogBody,
-  DialogClose,
-  DialogContent,
-  DialogHeader,
-  DialogRow,
-  DialogTrigger,
-} from './components/ui/Dialog.tsx'
+export { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from './components/ui/Menu.tsx'
+export { Dialog, DialogBody, DialogClose, DialogContent, DialogHeader, DialogRow, DialogTrigger } from './components/ui/Dialog.tsx'
 export { Tip, TooltipContent, TooltipProvider } from './components/ui/Tooltip.tsx'
 export { Toaster, toast } from './components/ui/Sonner.tsx'
 export { CopyButton, type CopyButtonProps } from './components/ui/CopyButton.tsx'
@@ -82,39 +61,16 @@ export { Transcript, type TranscriptProps } from './components/agent/Transcript.
 // host composing the surface by hand (a prompt outside the panel, a status line
 // in its own chrome) and for the primitives, so a host's own row lands on the
 // same character cell as ours.
-export {
-  TerminalSurface,
-  type TerminalSurfaceProps,
-} from './components/terminal/surface.tsx'
-export {
-  TerminalTranscript,
-  TerminalItemView,
-  type TerminalTranscriptProps,
-} from './components/terminal/TerminalTranscript.tsx'
+export { TerminalSurface, type TerminalSurfaceProps } from './components/terminal/surface.tsx'
+export { TerminalTranscript, TerminalItemView, type TerminalTranscriptProps } from './components/terminal/TerminalTranscript.tsx'
 export { TerminalStatusLine, type TerminalStatusLineProps } from './components/terminal/StatusLine.tsx'
-export {
-  TerminalPermissionPrompt,
-  type TerminalPermissionPromptProps,
-} from './components/terminal/PermissionPrompt.tsx'
-export {
-  TerminalQuestionPrompt,
-  type TerminalQuestionPromptProps,
-} from './components/terminal/QuestionPrompt.tsx'
+export { TerminalPermissionPrompt, type TerminalPermissionPromptProps } from './components/terminal/PermissionPrompt.tsx'
+export { TerminalQuestionPrompt, type TerminalQuestionPromptProps } from './components/terminal/QuestionPrompt.tsx'
 export { TerminalDiff, previewPatch } from './components/terminal/diff.tsx'
 export { TerminalMarkdown, type TerminalMarkdownProps } from './components/terminal/markdown.tsx'
 export { Band, Blank, Ink, Row, type RowProps, type Tone } from './components/terminal/row.tsx'
-export {
-  CopyAction,
-  WithActions,
-  useAffordances,
-  type TerminalAffordances,
-} from './components/terminal/affordances.tsx'
-export {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
-  type ConversationProps,
-} from './components/agent/Conversation.tsx'
+export { CopyAction, WithActions, useAffordances, type TerminalAffordances } from './components/terminal/affordances.tsx'
+export { Conversation, ConversationContent, ConversationScrollButton, type ConversationProps } from './components/agent/Conversation.tsx'
 export { Message, MessageContent, type MessageProps } from './components/agent/Message.tsx'
 export {
   TranscriptDensityProvider,
@@ -138,13 +94,7 @@ export {
   type QuestionPromptProps,
   type QuestionBehaviorMeta,
 } from './components/agent/QuestionPrompt.tsx'
-export {
-  Composer,
-  skillPrompt,
-  type ComposerFileMatch,
-  type ComposerHandle,
-  type ComposerProps,
-} from './components/agent/Composer.tsx'
+export { Composer, skillPrompt, type ComposerFileMatch, type ComposerHandle, type ComposerProps } from './components/agent/Composer.tsx'
 export { ModelSelect, type ModelSelectProps } from './components/agent/ModelSelect.tsx'
 export {
   PERMISSION_MODES,
@@ -159,24 +109,12 @@ export { StatusBar, type StatusBarProps } from './components/agent/StatusBar.tsx
 export { ContextDialog, type ContextDialogProps } from './components/agent/ContextDialog.tsx'
 export { UsageDialog, type UsageDialogProps } from './components/agent/UsageDialog.tsx'
 export { UsageMeters, useMinuteClock } from './components/agent/UsageMeters.tsx'
-export {
-  SessionInfoDialog,
-  type SessionInfoDialogProps,
-} from './components/agent/SessionInfoDialog.tsx'
+export { SessionInfoDialog, type SessionInfoDialogProps } from './components/agent/SessionInfoDialog.tsx'
 export { McpDialog, type McpDialogProps } from './components/agent/McpDialog.tsx'
 export { SkillsDialog, type SkillsDialogProps } from './components/agent/SkillsDialog.tsx'
 export { HostFilesDialog, type HostFilesDialogProps } from './components/agent/HostFilesDialog.tsx'
-export {
-  SessionList,
-  SessionListItem,
-  type SessionListItemProps,
-  type SessionListProps,
-} from './components/agent/SessionList.tsx'
-export {
-  SessionBrowser,
-  rowShapeClass,
-  type SessionBrowserProps,
-} from './components/agent/SessionBrowser.tsx'
+export { SessionList, SessionListItem, type SessionListItemProps, type SessionListProps } from './components/agent/SessionList.tsx'
+export { SessionBrowser, rowShapeClass, type SessionBrowserProps } from './components/agent/SessionBrowser.tsx'
 // The session card itself — one component, every client. `SessionBrowser` is the
 // dashboard's list *around* it; a host that wants only the card (the VS Code
 // sidebar does, because the filtering chrome above it is native) takes this.
@@ -184,29 +122,15 @@ export { SessionItem, type SessionItemProps } from './components/agent/SessionIt
 export { SessionStatusIcon } from './components/agent/SessionStatusIcon.tsx'
 // Lifted out of the VS Code sidebar once the dashboard grew a collapsed rail
 // that needs the same glyph — two copies of a trademark set is one too many.
-export {
-  EngineIcon,
-  engineMark,
-  vendorMarkClass,
-  vendorTextClass,
-} from './components/agent/EngineIcon.tsx'
+export { EngineIcon, engineMark, vendorMarkClass, vendorTextClass } from './components/agent/EngineIcon.tsx'
 // Lifted out of the sidebar for the same reason: the work under a row is a
 // protocol fact, so every list annotates it with one component.
-export {
-  type Step,
-  StepRow,
-  StepToggle,
-  runningSteps,
-  sessionSteps,
-} from './components/agent/SessionSteps.tsx'
+export { type Step, StepRow, StepToggle, runningSteps, sessionSteps } from './components/agent/SessionSteps.tsx'
 // The sub-agent takeover's one line. Exported for hosts that draw their own
 // panel chrome; the panel raises it itself.
 export { SubagentStrip } from './components/agent/SubagentStrip.tsx'
 export { ProjectIcon } from './components/agent/ProjectIcon.tsx'
-export {
-  SessionEmptyState,
-  type SessionEmptyStateProps,
-} from './components/agent/SessionEmptyState.tsx'
+export { SessionEmptyState, type SessionEmptyStateProps } from './components/agent/SessionEmptyState.tsx'
 export { PromptTokenText } from './components/agent/PromptTokenText.tsx'
 export { STATUS_META } from './components/agent/status.ts'
 export { ContextRing } from './components/agent/ContextRing.tsx'

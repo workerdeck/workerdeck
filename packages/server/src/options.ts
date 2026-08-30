@@ -4,22 +4,9 @@
  * behaviour in `routes/`; the stateful pieces in `services/`.
  */
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
-import type {
-  ClaudeAuthProbe,
-  EngineAdapter,
-  Runner,
-  RunnerSnapshot,
-  SessionRunnerConfig,
-} from '@workerdeck/core'
+import type { ClaudeAuthProbe, EngineAdapter, Runner, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
 import type { JobQueue, QueueAdapter } from '@workerdeck/queue'
-import type {
-  CreateSessionRequest,
-  JobEvent,
-  ProfileEngine,
-  ProfileInfo,
-  SdkSessionSummary,
-  SessionInfo,
-} from '@workerdeck/protocol'
+import type { CreateSessionRequest, JobEvent, ProfileEngine, ProfileInfo, SdkSessionSummary, SessionInfo } from '@workerdeck/protocol'
 import type { BridgeHub, BridgeHubOptions } from './services/bridge.ts'
 import type { SessionNotificationOptions } from './services/notifications.ts'
 import type { SessionParkManager } from './services/parking.ts'
@@ -27,11 +14,7 @@ import type { ProfileStore } from './services/profile-store.ts'
 import type { SessionRegistry } from './services/registry.ts'
 import type { SessionStore } from './services/session-store.ts'
 
-export type SdkSessionLister = (options: {
-  dir?: string
-  limit?: number
-  offset?: number
-}) => Promise<SdkSessionSummary[]>
+export type SdkSessionLister = (options: { dir?: string; limit?: number; offset?: number }) => Promise<SdkSessionSummary[]>
 
 /**
  * Return a principal (any truthy value) to accept the request, or null/undefined to
@@ -54,9 +37,7 @@ export type SdkSessionLister = (options: {
  * landing its answer on the principal. The visibility check itself is
  * synchronous by design: it runs on every route and every row of every list.
  */
-export type Authenticator = (
-  req: IncomingMessage,
-) => unknown | Promise<unknown>
+export type Authenticator = (req: IncomingMessage) => unknown | Promise<unknown>
 
 export type WorkerServerOptions = {
   /** Required unless `allowUnauthenticated: true` — the worker must never be exposed bare. */
@@ -350,10 +331,7 @@ export type WorkerServerOptions = {
     /** Park/remember/resume failures — storage or engine-assembly problems, not
      * session errors. 'remember' is the write that lets a live session survive a
      * restart; losing one costs that session its way back and nothing else. */
-    onError?: (
-      error: unknown,
-      context: { sessionId: string; phase: 'park' | 'remember' | 'resume' },
-    ) => void
+    onError?: (error: unknown, context: { sessionId: string; phase: 'park' | 'remember' | 'resume' }) => void
   }
   /**
    * Build a runner for a `provider` profile (the model-agnostic engine).

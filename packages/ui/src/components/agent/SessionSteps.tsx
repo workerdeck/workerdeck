@@ -1,12 +1,4 @@
-import {
-  ArrowRight,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  CircleAlert,
-  Dot,
-  PauseCircle,
-} from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, ChevronRight, CircleAlert, Dot, PauseCircle } from 'lucide-react'
 import { isAgentRecord, subagentLabel } from '@workerdeck/protocol'
 import type { SessionInfo, SubagentInfo } from '@workerdeck/protocol'
 import { Spinner } from '../ui/Spinner.tsx'
@@ -84,10 +76,7 @@ export type Step = {
  * only the id is what let a task be opened as if it were an agent, and a framed
  * task id matches no items, so the panel drew an **empty agent view**.
  */
-export function sessionSteps(
-  info: SessionInfo,
-  onSelect: (toolUseId: string, kind: Step['kind']) => void,
-): Step[] {
+export function sessionSteps(info: SessionInfo, onSelect: (toolUseId: string, kind: Step['kind']) => void): Step[] {
   // The label is protocol's `subagentLabel`, not a spelling of its own: the
   // dashboard and the phone render the same rows from the same records, and two
   // spellings would be two different answers to "which agent is this".
@@ -152,14 +141,11 @@ export function StepToggle({
   // and `1 of 6 agents` truncated the folder name away to say something the row
   // could say in three characters.
   const label = running > 0 && running < total ? `${running}/${total}` : String(total)
-  const words =
-    running > 0 && running < total
-      ? `${running} of ${total} ${noun}s running`
-      : `${total} ${noun}${total === 1 ? '' : 's'}`
+  const words = running > 0 && running < total ? `${running} of ${total} ${noun}s running` : `${total} ${noun}${total === 1 ? '' : 's'}`
   const Chevron = expanded ? ChevronDown : ChevronRight
   return (
     <button
-      type='button'
+      type="button"
       aria-expanded={expanded}
       aria-label={`${expanded ? 'Hide' : 'Show'} ${words}`}
       title={`${expanded ? 'Hide' : 'Show'} ${words}`}
@@ -174,9 +160,10 @@ export function StepToggle({
         'flex shrink-0 items-center gap-0.5 rounded-[4px] py-0.5 pr-1 pl-0.5 outline-none',
         'text-[0.75rem] leading-3 hover:bg-row-hover hover:text-fg-2',
         running > 0 ? 'text-info' : 'text-fg-4',
-      )}>
-      <Chevron className='size-3' />
-      <span className='tabular-nums'>{label}</span>
+      )}
+    >
+      <Chevron className="size-3" />
+      <span className="tabular-nums">{label}</span>
     </button>
   )
 }
@@ -243,7 +230,7 @@ export function StepRow({
   const body = step.state === 'failed' ? 'text-danger' : agent ? 'text-success' : 'text-fg-4'
   return (
     <button
-      type='button'
+      type="button"
       title={step.title}
       aria-current={selected || undefined}
       onClick={(e) => {
@@ -259,14 +246,15 @@ export function StepRow({
         'text-left text-micro outline-none',
         selected ? 'bg-row-selected' : 'hover:bg-row-active',
         body,
-      )}>
+      )}
+    >
       <StepIcon state={step.state} kind={step.kind} />
-      <span className='min-w-0 flex-1 truncate'>{step.label}</span>
+      <span className="min-w-0 flex-1 truncate">{step.label}</span>
       {/* The progress reading while it works, and what it cost when it is done.
           Zero draws nothing: `0 tools` beside a thinking agent reads as a stall,
           which is the same call `taskSummary` makes one surface over. */}
-      {step.detail ? <span className='shrink-0 tabular-nums text-fg-4'>{step.detail}</span> : null}
-      {agent ? <ArrowRight className='size-3.5 shrink-0 text-fg-4' /> : null}
+      {step.detail ? <span className="shrink-0 tabular-nums text-fg-4">{step.detail}</span> : null}
+      {agent ? <ArrowRight className="size-3.5 shrink-0 text-fg-4" /> : null}
     </button>
   )
 }
@@ -275,16 +263,16 @@ function StepIcon({ state, kind }: { state: Step['state']; kind: Step['kind'] })
   // A task that is neither running nor failed gets a neutral dot rather than a
   // tick: `done` is a claim about work, and nothing here did any.
   if (kind === 'task' && state !== 'running' && state !== 'failed') {
-    return <Dot className='size-[11px] shrink-0' />
+    return <Dot className="size-[11px] shrink-0" />
   }
   switch (state) {
     case 'running':
-      return <Spinner className='size-[11px] shrink-0' />
+      return <Spinner className="size-[11px] shrink-0" />
     case 'failed':
-      return <CircleAlert className='size-[11px] shrink-0' />
+      return <CircleAlert className="size-[11px] shrink-0" />
     case 'pending':
-      return <PauseCircle className='size-[11px] shrink-0' />
+      return <PauseCircle className="size-[11px] shrink-0" />
     default:
-      return <Check className='size-[11px] shrink-0' />
+      return <Check className="size-[11px] shrink-0" />
   }
 }

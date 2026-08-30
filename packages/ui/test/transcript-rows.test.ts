@@ -1,25 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { TranscriptItem } from '@workerdeck/react'
-import {
-  taskChildItems,
-  terminalBlocks,
-  type TaskBlock,
-  type ToolCallItem,
-} from '../src/components/terminal/blocks.ts'
-import {
-  blockHeight,
-  createHeightEpoch,
-  estimateBlockPx,
-  textLines,
-} from '../src/components/terminal/height.ts'
+import { taskChildItems, terminalBlocks, type TaskBlock, type ToolCallItem } from '../src/components/terminal/blocks.ts'
+import { blockHeight, createHeightEpoch, estimateBlockPx, textLines } from '../src/components/terminal/height.ts'
 import { taskSummary } from '../src/components/terminal/tool-run.ts'
-import {
-  gapBefore,
-  positionInRow,
-  rowIndexForItem,
-  rowItem,
-  type TranscriptRow,
-} from '../src/components/agent/transcript-rows.ts'
+import { gapBefore, positionInRow, rowIndexForItem, rowItem, type TranscriptRow } from '../src/components/agent/transcript-rows.ts'
 
 /**
  * The item-index → row-index mapping under the task-block model — the
@@ -31,11 +15,7 @@ import {
  */
 
 let seq = 0
-const tool = (
-  name: string,
-  parentToolUseId: string | null = null,
-  id = `t${++seq}`,
-): TranscriptItem => ({
+const tool = (name: string, parentToolUseId: string | null = null, id = `t${++seq}`): TranscriptItem => ({
   kind: 'tool_call',
   id,
   name,
@@ -99,9 +79,15 @@ const buildRows = (items: TranscriptItem[], boundary?: number): TranscriptRow[] 
 
 /** Does this row literally contain the item? Identity, not index arithmetic. */
 const contains = (row: TranscriptRow, item: TranscriptItem): boolean => {
-  if ('run' in row) return (row.run as TranscriptItem[]).includes(item)
-  if ('task' in row) return row.task === item || taskChildItems(row).includes(item)
-  if ('item' in row) return row.item === item
+  if ('run' in row) {
+    return (row.run as TranscriptItem[]).includes(item)
+  }
+  if ('task' in row) {
+    return row.task === item || taskChildItems(row).includes(item)
+  }
+  if ('item' in row) {
+    return row.item === item
+  }
   return false
 }
 
@@ -117,10 +103,7 @@ describe('rowIndexForItem', () => {
           // ALSO stand as top-level rows.
           expect(owners, `${name} boundary=${String(boundary)} item=${i} owners`).toHaveLength(1)
           const got = rows[rowIndexForItem(rows, i)]!
-          expect(
-            contains(got, items[i]!),
-            `${name} boundary=${String(boundary)} item=${i} → ${got.key}`,
-          ).toBe(true)
+          expect(contains(got, items[i]!), `${name} boundary=${String(boundary)} item=${i} → ${got.key}`).toBe(true)
         }
       }
     }
@@ -208,7 +191,9 @@ describe('positionInRow', () => {
       const rows = buildRows(items, boundary)
       for (let i = 0; i < items.length; i++) {
         const within = positionInRow(rows, i)
-        if (!within) continue
+        if (!within) {
+          continue
+        }
         expect(within.ordinal, `boundary=${boundary} item=${i}`).toBeGreaterThanOrEqual(0)
         expect(within.ordinal, `boundary=${boundary} item=${i}`).toBeLessThan(within.count)
       }
@@ -231,7 +216,9 @@ describe('task block height', () => {
   const m = { width: 400, ch: 8, line: 18 } // 48 columns for a 2-cell gutter
   const taskBlockOf = (items: TranscriptItem[]): TaskBlock => {
     const block = terminalBlocks(items)[0]!
-    if (!('task' in block)) throw new Error('expected a task block')
+    if (!('task' in block)) {
+      throw new Error('expected a task block')
+    }
     return block
   }
 
@@ -268,10 +255,7 @@ describe('task block height', () => {
     const narrow = createHeightEpoch(152, 8, 18) // 17 columns
     const call = task('A', { description: 'x' })
     const one = taskBlockOf([call, tool('Read', 'A')])
-    const grown = taskBlockOf([
-      call,
-      ...Array.from({ length: 10 }, () => tool('Read', 'A')),
-    ])
+    const grown = taskBlockOf([call, ...Array.from({ length: 10 }, () => tool('Read', 'A'))])
     expect(narrow.cache.get(call)).toBeUndefined()
     const before = estimateBlockPx(one, narrow) // `Task(x) · 1 tool` — one line
     const after = estimateBlockPx(grown, narrow) // `Task(x) · 10 tools` — wraps

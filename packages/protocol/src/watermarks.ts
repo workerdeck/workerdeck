@@ -73,12 +73,7 @@ export class Watermarks {
    * sessions poll, so a caller that doesn't hear about this has no other way to
    * learn the count is now wrong.
    */
-  mark(
-    hostId: string,
-    sessionId: string,
-    seen: { itemCount?: number; activity?: number; turns?: number },
-    now = Date.now(),
-  ): boolean {
+  mark(hostId: string, sessionId: string, seen: { itemCount?: number; activity?: number; turns?: number }, now = Date.now()): boolean {
     const id = watermarkKey(hostId, sessionId)
     const previous = this.#cache[id]
     const next: Watermark = {
@@ -106,7 +101,9 @@ export class Watermarks {
   /** Forget a session — it was deleted, and its mark is now noise. */
   forget(hostId: string, sessionId: string): void {
     const id = watermarkKey(hostId, sessionId)
-    if (!(id in this.#cache)) return
+    if (!(id in this.#cache)) {
+      return
+    }
     delete this.#cache[id]
     this.#store.write(this.#cache)
   }
@@ -114,7 +111,9 @@ export class Watermarks {
   #prune(now: number): Record<string, Watermark> {
     const cutoff = now - MAX_AGE_MS
     for (const [id, mark] of Object.entries(this.#cache)) {
-      if (mark.seenAt < cutoff) delete this.#cache[id]
+      if (mark.seenAt < cutoff) {
+        delete this.#cache[id]
+      }
     }
     return this.#cache
   }
@@ -132,11 +131,12 @@ export class Watermarks {
  * badge that counted every session's whole history on first launch would be
  * noise on the one day it should be quiet.
  */
-export function unseenCount(
-  mark: Watermark | undefined,
-  info: { activityCount?: number; turns?: number },
-): number {
-  if (!mark) return 0
-  if (info.activityCount !== undefined) return Math.max(0, info.activityCount - mark.activity)
+export function unseenCount(mark: Watermark | undefined, info: { activityCount?: number; turns?: number }): number {
+  if (!mark) {
+    return 0
+  }
+  if (info.activityCount !== undefined) {
+    return Math.max(0, info.activityCount - mark.activity)
+  }
   return Math.max(0, (info.turns ?? 0) - mark.turns)
 }

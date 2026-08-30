@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 140,
+  "semi": false,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/build/**",
+    "**/node_modules/**",
+    "**/*.md",
+    "**/package.json",
+    "**/*.yml",
+    "**/*.yaml",
+    "apps/ios/App/Assets.xcassets/**"
+  ]
+}

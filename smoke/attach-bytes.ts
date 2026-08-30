@@ -31,9 +31,7 @@ const rest = captureAt === -1 ? argv : [...argv.slice(0, captureAt), ...argv.sli
 const [host, id, ...flags] = rest
 
 if (!host || !id) {
-  console.error(
-    'usage: pnpm smoke:attach <host> <sessionId> [truncate] [refs] [--capture <file>]',
-  )
+  console.error('usage: pnpm smoke:attach <host> <sessionId> [truncate] [refs] [--capture <file>]')
   process.exit(2)
 }
 if (captureAt !== -1 && !capture) {
@@ -63,13 +61,17 @@ let done = false
 ws.on('message', (buf: Buffer) => {
   const line = buf.toString()
   const envelope = JSON.parse(line)
-  if (capture) raw.push(line)
+  if (capture) {
+    raw.push(line)
+  }
   if (envelope.type === 'attached') {
     target = envelope.session.lastSeq
     return
   }
   const event = envelope.event
-  if (!event) return
+  if (!event) {
+    return
+  }
 
   total += buf.length
   frames++
@@ -80,7 +82,9 @@ ws.on('message', (buf: Buffer) => {
   // string or an array of parts, only some of which are text.
   if (event.type === 'user_message' && Array.isArray(event.message?.content)) {
     for (const block of event.message.content) {
-      if (block.type !== 'tool_result') continue
+      if (block.type !== 'tool_result') {
+        continue
+      }
       blocks++
       let text = 0
       let other = 0
@@ -88,8 +92,11 @@ ws.on('message', (buf: Buffer) => {
         text = block.content.length
       } else if (Array.isArray(block.content)) {
         for (const part of block.content) {
-          if (typeof part.text === 'string') text += part.text.length
-          else other += JSON.stringify(part).length
+          if (typeof part.text === 'string') {
+            text += part.text.length
+          } else {
+            other += JSON.stringify(part).length
+          }
         }
       }
       textChars += text
@@ -102,7 +109,9 @@ ws.on('message', (buf: Buffer) => {
     }
   }
 
-  if (event.seq >= target) finish()
+  if (event.seq >= target) {
+    finish()
+  }
 })
 
 ws.on('error', (err: Error) => {
@@ -113,7 +122,9 @@ ws.on('error', (err: Error) => {
 const KB = (bytes: number) => `${(bytes / 1024).toFixed(0)} KB`
 
 function finish() {
-  if (done) return
+  if (done) {
+    return
+  }
   done = true
   ws.close()
 
@@ -125,8 +136,9 @@ function finish() {
 
   const applied = [trunc && 'truncateResults=1', refs && 'imageRefs=1'].filter(Boolean).join(' ')
   console.log(`attach ${KB(total)} in ${frames} frames${applied ? ` (${applied})` : ''}`)
-  for (const [type, bytes] of [...byType].sort((a, b) => b[1] - a[1]))
+  for (const [type, bytes] of [...byType].sort((a, b) => b[1] - a[1])) {
     console.log(`  ${type.padEnd(18)} ${KB(bytes).padStart(9)}`)
+  }
 
   console.log(`tool_result blocks: ${blocks}`)
   console.log(`  text          ${textChars.toLocaleString()} chars`)

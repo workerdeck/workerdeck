@@ -20,15 +20,9 @@ export function RemoveButton({ onClick, label, className }: RemoveButtonProps) {
         'transition-colors',
         className,
       )}
-      aria-label={label}>
-      <svg
-        width="8"
-        height="8"
-        viewBox="0 0 10 10"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round">
+      aria-label={label}
+    >
+      <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
         <line x1="2.75" y1="2.75" x2="7.25" y2="7.25" />
         <line x1="7.25" y1="2.75" x2="2.75" y2="7.25" />
       </svg>

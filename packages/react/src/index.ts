@@ -1,25 +1,12 @@
 export { initialReplayTarget, REPLAY_HOLD_MAX_MS, staleAttach, useClaudeSession } from './hooks/use-session.ts'
-export type {
-  ConnectionState,
-  UseClaudeSessionOptions,
-  UseClaudeSessionResult,
-} from './hooks/use-session.ts'
+export type { ConnectionState, UseClaudeSessionOptions, UseClaudeSessionResult } from './hooks/use-session.ts'
 export { clearTranscriptCache } from './lib/transcript-cache.ts'
 export { attachmentKind, useAttachments } from './hooks/use-attachments.ts'
-export type {
-  AttachmentKind,
-  StagedAttachment,
-  UseAttachmentsOptions,
-  UseAttachmentsResult,
-} from './hooks/use-attachments.ts'
+export type { AttachmentKind, StagedAttachment, UseAttachmentsOptions, UseAttachmentsResult } from './hooks/use-attachments.ts'
 export { scanPromptTokens } from './lib/prompt-tokens.ts'
 export type { PromptToken } from './lib/prompt-tokens.ts'
 export { useHostFileRoots, useHostFileSearch, useHostFileTree } from './hooks/use-host-files.ts'
-export type {
-  UseHostFileRootsResult,
-  UseHostFileSearchResult,
-  UseHostFileTreeResult,
-} from './hooks/use-host-files.ts'
+export type { UseHostFileRootsResult, UseHostFileSearchResult, UseHostFileTreeResult } from './hooks/use-host-files.ts'
 export { ancestorsWithin, flattenHostTree } from './lib/host-tree.ts'
 export type { HostDirState, HostTreeRow } from './lib/host-tree.ts'
 export { useProjectIcons } from './hooks/use-project-icons.ts'
@@ -36,12 +23,6 @@ export { useToolCallHost } from './hooks/use-tool-host.ts'
 export type { UseToolCallHostOptions } from './hooks/use-tool-host.ts'
 export { createToolCallHost } from './lib/tool-host.ts'
 export type { ClientToolHandler, ClientToolResult, ToolCallHostOptions, ToolHostExecution, ToolHostRunner } from './lib/tool-host.ts'
-export {
-  applyEvent,
-  hydrateToolResult,
-  initialTranscriptState,
-  rateLimitWindows,
-  seedFromSessionInfo,
-} from './lib/transcript.ts'
+export { applyEvent, hydrateToolResult, initialTranscriptState, rateLimitWindows, seedFromSessionInfo } from './lib/transcript.ts'
 export type { ProducedFileRef, TranscriptItem, TranscriptState } from './lib/transcript.ts'
 export { recapLine, summarizeSince, type RecapInput, type RecapSummary } from './lib/recap.ts'

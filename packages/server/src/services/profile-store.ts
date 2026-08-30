@@ -47,7 +47,9 @@ export function createFileProfileStore(path = join(process.cwd(), '.workerdeck',
   const read = (): Map<string, ProfileInfo> => {
     try {
       const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown
-      if (!Array.isArray(parsed)) return new Map()
+      if (!Array.isArray(parsed)) {
+        return new Map()
+      }
       const profiles = parsed as ProfileInfo[]
       return new Map(profiles.filter((p) => p && typeof p.name === 'string').map((p) => [p.name, p]))
     } catch {
@@ -71,7 +73,9 @@ export function createFileProfileStore(path = join(process.cwd(), '.workerdeck',
     },
     delete: (name) => {
       const profiles = read()
-      if (profiles.delete(name)) write(profiles)
+      if (profiles.delete(name)) {
+        write(profiles)
+      }
     },
   }
 }

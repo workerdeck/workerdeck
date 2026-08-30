@@ -18,12 +18,7 @@ import type { SdkSessionLister } from '../options.ts'
 import type { AuthContext } from '../services/auth.ts'
 import type { ServerContext } from '../context.ts'
 
-export async function handleSdkSessions(
-  ctx: ServerContext,
-  req: IncomingMessage,
-  res: ServerResponse,
-  auth: AuthContext,
-): Promise<void> {
+export async function handleSdkSessions(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, auth: AuthContext): Promise<void> {
   const { adapterFor, factory, profiles } = ctx
   if (req.method !== 'GET') {
     json(res, 405, { error: 'method not allowed' })
@@ -55,9 +50,7 @@ export async function handleSdkSessions(
   const adapter = adapterFor(profile?.engine)
   if (!adapter.capabilities.listSessions) {
     json(res, 400, {
-      error:
-        `profile '${profile?.name ?? 'default'}' runs the ${engineOf(profile)} engine, ` +
-        'which has no browsable session store',
+      error: `profile '${profile?.name ?? 'default'}' runs the ${engineOf(profile)} engine, ` + 'which has no browsable session store',
     })
     return
   }
@@ -106,14 +99,7 @@ export async function handleSdkSessions(
 
 /** The sessions whose `cwd` is inside the roots, newest first, then paged. A
  * summary with no `cwd` cannot be shown to be inside them, so it is dropped. */
-function withinRoots(
-  sessions: SdkSessionSummary[],
-  roots: string[],
-  limit?: number,
-  offset = 0,
-): SdkSessionSummary[] {
-  const allowed = sessions
-    .filter((s) => s.cwd !== undefined && cwdAllowed(s.cwd, roots))
-    .sort((a, b) => b.lastModified - a.lastModified)
+function withinRoots(sessions: SdkSessionSummary[], roots: string[], limit?: number, offset = 0): SdkSessionSummary[] {
+  const allowed = sessions.filter((s) => s.cwd !== undefined && cwdAllowed(s.cwd, roots)).sort((a, b) => b.lastModified - a.lastModified)
   return limit === undefined ? allowed.slice(offset) : allowed.slice(offset, offset + limit)
 }

@@ -18,7 +18,9 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { 'content-type': 'application/json', ...init?.headers },
   })
-  if (!res.ok) throw new ApiError(res.status, await errorText(res))
+  if (!res.ok) {
+    throw new ApiError(res.status, await errorText(res))
+  }
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T)
 }
 
@@ -45,20 +47,16 @@ export class ApiError extends Error {
 export const api = {
   users: () => call<{ users: User[] }>('/api/users'),
   me: () => call<MeResponse>('/api/me'),
-  login: (userId: string) =>
-    call<MeResponse>('/api/login', { method: 'POST', body: JSON.stringify({ userId }) }),
+  login: (userId: string) => call<MeResponse>('/api/login', { method: 'POST', body: JSON.stringify({ userId }) }),
   logout: () => call<MeResponse>('/api/logout', { method: 'POST' }),
 
   agent: () => call<AgentConfigResponse>('/api/agent'),
 
   /** Tell the server what is on screen, so the agent's `whoami` can answer. */
-  setUiState: (openDocId: string | undefined) =>
-    call<void>('/api/ui-state', { method: 'PUT', body: JSON.stringify({ openDocId }) }),
+  setUiState: (openDocId: string | undefined) => call<void>('/api/ui-state', { method: 'PUT', body: JSON.stringify({ openDocId }) }),
 }
 
 /** What the agent asks the app to do, streamed from `/api/ui-events`. */
-export type UiIntent =
-  | { type: 'open_doc'; docId: string }
-  | { type: 'doc_deleted'; docId: string }
+export type UiIntent = { type: 'open_doc'; docId: string } | { type: 'doc_deleted'; docId: string }
 
 export type { Doc, User }

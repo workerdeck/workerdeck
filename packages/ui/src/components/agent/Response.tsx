@@ -22,11 +22,11 @@ export const Response = memo(
         // webview handler, the browser's `target="_blank"`, or the
         // embedder's `onLinkClick` prop — not by Streamdown's own modal.
         linkSafety={{ enabled: false }}
-        className={cn('size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0', className)}>
+        className={cn('size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0', className)}
+      >
         {children}
       </Streamdown>
     )
   },
-  (prev, next) =>
-    prev.children === next.children && prev.streaming === next.streaming && prev.className === next.className,
+  (prev, next) => prev.children === next.children && prev.streaming === next.streaming && prev.className === next.className,
 )

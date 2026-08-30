@@ -124,10 +124,7 @@ export const initialOpenFilesState: OpenFilesState = { files: [] }
  * Late results are addressed by path and dropped if that tab is gone, so a slow
  * read of a closed file cannot resurrect it.
  */
-export function openFilesReducer(
-  state: OpenFilesState,
-  action: OpenFilesAction,
-): OpenFilesState {
+export function openFilesReducer(state: OpenFilesState, action: OpenFilesAction): OpenFilesState {
   switch (action.type) {
     case 'open': {
       if (state.files.some((f) => f.path === action.path)) {
@@ -139,9 +136,13 @@ export function openFilesReducer(
 
     case 'close': {
       const index = state.files.findIndex((f) => f.path === action.path)
-      if (index === -1) return state
+      if (index === -1) {
+        return state
+      }
       const files = state.files.filter((f) => f.path !== action.path)
-      if (state.activePath !== action.path) return { ...state, files }
+      if (state.activePath !== action.path) {
+        return { ...state, files }
+      }
       // The neighbour that was to the right has slid into this index; if the
       // closed tab was last, take the one now at the end.
       const next = files[index] ?? files[index - 1]
@@ -152,7 +153,9 @@ export function openFilesReducer(
       return initialOpenFilesState
 
     case 'activate':
-      if (!state.files.some((f) => f.path === action.path)) return state
+      if (!state.files.some((f) => f.path === action.path)) {
+        return state
+      }
       return state.activePath === action.path ? state : { ...state, activePath: action.path }
 
     case 'loaded':
@@ -178,9 +181,7 @@ export function openFilesReducer(
     case 'edit':
       // Only a readable text file can be edited; a binary or errored tab has no
       // content the editor could have been showing.
-      return patch(state, action.path, (file) =>
-        file.status === 'ready' ? { ...file, draft: action.content } : file,
-      )
+      return patch(state, action.path, (file) => (file.status === 'ready' ? { ...file, draft: action.content } : file))
 
     case 'revert':
       return patch(state, action.path, (file) => ({
@@ -232,16 +233,16 @@ export function openFilesReducer(
 
 /** Replace one file in place, preserving tab order; a no-op if it was closed
  * while the request was in flight. */
-function patch(
-  state: OpenFilesState,
-  path: string,
-  next: (file: OpenFile) => OpenFile,
-): OpenFilesState {
+function patch(state: OpenFilesState, path: string, next: (file: OpenFile) => OpenFile): OpenFilesState {
   const index = state.files.findIndex((f) => f.path === path)
-  if (index === -1) return state
+  if (index === -1) {
+    return state
+  }
   const current = state.files[index]!
   const updated = next(current)
-  if (updated === current) return state
+  if (updated === current) {
+    return state
+  }
   const files = state.files.slice()
   files[index] = updated
   return { ...state, files }

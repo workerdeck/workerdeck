@@ -61,23 +61,33 @@ export function useProfileUsage(
   }, [])
 
   useEffect(() => {
-    if (!profile || !enabled || unsupported) return
+    if (!profile || !enabled || unsupported) {
+      return
+    }
     let cancelled = false
     const load = () => {
       // A hidden tab's meters are not being read; skip the tick rather than
       // keep a background timer talking to the gateway. Read off `globalThis`
       // rather than the global `document`, because this package is typechecked
       // without the DOM lib in the extras project (smoke/, examples/).
-      if ((globalThis as { document?: { hidden?: boolean } }).document?.hidden) return
+      if ((globalThis as { document?: { hidden?: boolean } }).document?.hidden) {
+        return
+      }
       client
         .listProfiles()
         .then((res) => {
-          if (cancelled || !alive.current) return
+          if (cancelled || !alive.current) {
+            return
+          }
           setUsage(res.profiles.find((p) => p.name === profile)?.usage)
         })
         .catch((e: unknown) => {
-          if (cancelled || !alive.current) return
-          if (e instanceof WorkerDeckError && e.status === 404) setUnsupported(true)
+          if (cancelled || !alive.current) {
+            return
+          }
+          if (e instanceof WorkerDeckError && e.status === 404) {
+            setUnsupported(true)
+          }
           // Anything else is a blip: keep the last reading, which is dated, and
           // try again on the next tick. Dropping it would replace a known-old
           // number with nothing at all.

@@ -1,10 +1,6 @@
 import type { CSSProperties, HTMLAttributes } from 'react'
 import { cn } from '../../lib/utils.ts'
-import {
-  AffordanceProvider,
-  resolveAffordances,
-  type TerminalAffordances,
-} from './affordances.tsx'
+import { AffordanceProvider, resolveAffordances, type TerminalAffordances } from './affordances.tsx'
 
 /**
  * The root of the terminal theme: the element that establishes the character
@@ -43,27 +39,15 @@ export interface TerminalSurfaceProps extends HTMLAttributes<HTMLDivElement> {
   affordances?: TerminalAffordances | boolean
 }
 
-export function TerminalSurface({
-  fontSize,
-  lineHeight,
-  bleed,
-  affordances,
-  className,
-  style,
-  children,
-  ...props
-}: TerminalSurfaceProps) {
+export function TerminalSurface({ fontSize, lineHeight, bleed, affordances, className, style, children, ...props }: TerminalSurfaceProps) {
   const resolved = resolveAffordances(affordances)
   return (
     <div
-      data-terminal=''
+      data-terminal=""
       // A space-separated list so CSS can ask for one with `~=` — the styling
       // half of the switch, where the JS half (whether a button exists at all)
       // rides the context.
-      data-affordances={
-        [resolved.hover && 'hover', resolved.actions && 'actions'].filter(Boolean).join(' ') ||
-        undefined
-      }
+      data-affordances={[resolved.hover && 'hover', resolved.actions && 'actions'].filter(Boolean).join(' ') || undefined}
       className={cn('min-w-0', className)}
       style={
         {
@@ -73,7 +57,8 @@ export function TerminalSurface({
           ...style,
         } as CSSProperties
       }
-      {...props}>
+      {...props}
+    >
       <AffordanceProvider value={resolved}>{children}</AffordanceProvider>
     </div>
   )

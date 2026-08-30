@@ -35,13 +35,12 @@ beforeEach(() => {
 afterEach(async () => {
   await running?.close()
   running = undefined
-  if (root) rmSync(join(root, '..'), { recursive: true, force: true })
+  if (root) {
+    rmSync(join(root, '..'), { recursive: true, force: true })
+  }
 })
 
-async function start(
-  hostFiles?: { roots?: string[]; write?: boolean; maxFileBytes?: number },
-  allowedCwdRoots?: string[],
-) {
+async function start(hostFiles?: { roots?: string[]; write?: boolean; maxFileBytes?: number }, allowedCwdRoots?: string[]) {
   running = createWorkerServer({ allowUnauthenticated: true, hostFiles, allowedCwdRoots })
   const { port } = await running.listen(0, '127.0.0.1')
   return `http://127.0.0.1:${port}/v1`
@@ -77,8 +76,7 @@ describe('host file routes', () => {
     const [status, body] = await get(base, '/fs/roots')
     expect(status).toBe(200)
     expect(body.roots).toEqual([{ path: root, name: 'project' }])
-    expect((await get(base, `/fs/read?path=${encodeURIComponent(join(root, 'README.md'))}`))[0])
-      .toBe(200)
+    expect((await get(base, `/fs/read?path=${encodeURIComponent(join(root, 'README.md'))}`))[0]).toBe(200)
     // Read follows the cwd policy; write is still its own switch.
     expect(body.canWrite).toBe(false)
   })
@@ -88,8 +86,7 @@ describe('host file routes', () => {
     const [, body] = await get(base, '/fs/roots')
     expect(body.roots).toEqual([{ path: join(root, 'src'), name: 'src' }])
     // README.md is inside a *cwd* root but outside the narrower file root.
-    expect((await get(base, `/fs/read?path=${encodeURIComponent(join(root, 'README.md'))}`))[0])
-      .toBe(404)
+    expect((await get(base, `/fs/read?path=${encodeURIComponent(join(root, 'README.md'))}`))[0]).toBe(404)
   })
 
   it('an empty roots array is a policy, not an absence', async () => {
@@ -132,33 +129,21 @@ describe('host file routes', () => {
     // Listed, and listed as a link — never silently resolved into the tree.
     expect(link.type).toBe('symlink')
 
-    const [status] = await get(
-      base,
-      `/fs/list?path=${encodeURIComponent(join(root, 'escape'))}`,
-    )
+    const [status] = await get(base, `/fs/list?path=${encodeURIComponent(join(root, 'escape'))}`)
     expect(status).toBeGreaterThanOrEqual(400)
-    const [readStatus] = await get(
-      base,
-      `/fs/read?path=${encodeURIComponent(join(root, 'escape', 'id_rsa'))}`,
-    )
+    const [readStatus] = await get(base, `/fs/read?path=${encodeURIComponent(join(root, 'escape', 'id_rsa'))}`)
     expect(readStatus).toBeGreaterThanOrEqual(400)
   })
 
   it('refuses a path outside the roots, and `..` that climbs out', async () => {
     const base = await start({ roots: [root] })
-    expect((await get(base, `/fs/read?path=${encodeURIComponent(join(outside, 'id_rsa'))}`))[0])
-      .toBeGreaterThanOrEqual(400)
-    expect(
-      (await get(base, `/fs/read?path=${encodeURIComponent(join(root, '..', 'secrets', 'id_rsa'))}`))[0],
-    ).toBeGreaterThanOrEqual(400)
+    expect((await get(base, `/fs/read?path=${encodeURIComponent(join(outside, 'id_rsa'))}`))[0]).toBeGreaterThanOrEqual(400)
+    expect((await get(base, `/fs/read?path=${encodeURIComponent(join(root, '..', 'secrets', 'id_rsa'))}`))[0]).toBeGreaterThanOrEqual(400)
   })
 
   it('reads a text file with the hash a write will need', async () => {
     const base = await start({ roots: [root] })
-    const [status, body] = await get(
-      base,
-      `/fs/read?path=${encodeURIComponent(join(root, 'README.md'))}`,
-    )
+    const [status, body] = await get(base, `/fs/read?path=${encodeURIComponent(join(root, 'README.md'))}`)
     expect(status).toBe(200)
     expect(body).toMatchObject({
       path: join(root, 'README.md'),
@@ -187,7 +172,9 @@ describe('host file routes', () => {
   describe('find', () => {
     const find = async (base: string, dir: string, q = '', limit?: number) => {
       const search = new URLSearchParams({ path: dir, q })
-      if (limit !== undefined) search.set('limit', String(limit))
+      if (limit !== undefined) {
+        search.set('limit', String(limit))
+      }
       const [status, body] = await get(base, `/fs/find?${search.toString()}`)
       expect(status).toBe(200)
       return body
@@ -230,7 +217,9 @@ describe('host file routes', () => {
     })
 
     it('truncates rather than erroring, and clamps an absurd limit', async () => {
-      for (let i = 0; i < 12; i++) writeFileSync(join(root, `f${i}.txt`), 'x')
+      for (let i = 0; i < 12; i++) {
+        writeFileSync(join(root, `f${i}.txt`), 'x')
+      }
       const base = await start({ roots: [root] })
 
       const body = await find(base, root, '', 5)
@@ -241,12 +230,8 @@ describe('host file routes', () => {
 
     it('refuses a directory outside the roots, and a file as the search base', async () => {
       const base = await start({ roots: [root] })
-      expect((await get(base, `/fs/find?path=${encodeURIComponent(outside)}`))[0])
-        .toBeGreaterThanOrEqual(400)
-      const [status, body] = await get(
-        base,
-        `/fs/find?path=${encodeURIComponent(join(root, 'README.md'))}`,
-      )
+      expect((await get(base, `/fs/find?path=${encodeURIComponent(outside)}`))[0]).toBeGreaterThanOrEqual(400)
+      const [status, body] = await get(base, `/fs/find?path=${encodeURIComponent(join(root, 'README.md'))}`)
       expect(status).toBe(400)
       expect(body.error).toBe('not a directory')
     })
@@ -300,9 +285,7 @@ describe('host file routes', () => {
 
     it('409s a hash offered for a file that is gone, and 404s a missing parent', async () => {
       const base = await start({ roots: [root], write: true })
-      expect(
-        (await write(base, { path: join(root, 'ghost.md'), content: 'x', expectedHash: sha256('x') }))[0],
-      ).toBe(409)
+      expect((await write(base, { path: join(root, 'ghost.md'), content: 'x', expectedHash: sha256('x') }))[0]).toBe(409)
       expect((await write(base, { path: join(root, 'nodir', 'x.md'), content: 'x' }))[0]).toBe(404)
     })
 

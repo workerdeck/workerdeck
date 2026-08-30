@@ -1,13 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { SessionInfo, SessionNotification } from '@workerdeck/protocol'
-import {
-  type ApnsClient,
-  type ApnsConfig,
-  createApnsClient,
-  loadApnsKey,
-  type ApnsRequest,
-} from './client.ts'
+import { type ApnsClient, type ApnsConfig, createApnsClient, loadApnsKey, type ApnsRequest } from './client.ts'
 import { createDeviceRegistry, createDeviceRoute, type DeviceRegistry } from './devices.ts'
 
 /**
@@ -46,7 +40,9 @@ const CATEGORY = {
 
 const label = (session: SessionInfo): string => {
   const title = session.title?.trim()
-  if (title !== undefined && title !== '') return title
+  if (title !== undefined && title !== '') {
+    return title
+  }
   const leaf = session.cwd.split('/').filter(Boolean).at(-1)
   return leaf !== undefined && leaf !== '' ? leaf : session.id
 }
@@ -59,8 +55,7 @@ const oneLine = (text: string | undefined, limit = BODY_LIMIT): string => {
 /** A collapse id is capped at 64 bytes and a session id has no such bound, so
  * hash rather than truncate — two sessions sharing a prefix must not collapse
  * into each other. */
-const collapseKey = (sessionId: string): string =>
-  createHash('sha256').update(sessionId).digest('base64url').slice(0, 32)
+const collapseKey = (sessionId: string): string => createHash('sha256').update(sessionId).digest('base64url').slice(0, 32)
 
 const titleFor = (notification: SessionNotification, name: string): string => {
   switch (notification.type) {
@@ -79,7 +74,9 @@ const titleFor = (notification: SessionNotification, name: string): string => {
 
 const bodyFor = (notification: SessionNotification): string => {
   const preview = oneLine(notification.preview)
-  if (preview !== '') return preview
+  if (preview !== '') {
+    return preview
+  }
   switch (notification.type) {
     case 'permission_requested':
       return 'The agent is waiting for your approval.'
@@ -101,10 +98,7 @@ const bodyFor = (notification: SessionNotification): string => {
  * Everything else the app fetches over REST the moment it opens; a transcript
  * has no business in a 4 KB envelope.
  */
-export function buildPush(
-  notification: SessionNotification,
-  hostId: string | undefined,
-): Omit<ApnsRequest, 'deviceToken' | 'environment'> {
+export function buildPush(notification: SessionNotification, hostId: string | undefined): Omit<ApnsRequest, 'deviceToken' | 'environment'> {
   const permission = notification.type === 'permission_requested'
   const name = label(notification.session)
   let body = bodyFor(notification)
@@ -148,9 +142,7 @@ export function buildPush(
     // not ten. Permission requests are never collapsed: each one is a distinct
     // question with its own `requestId`, and replacing one with the next would
     // silently drop a decision the operator still owes.
-    ...(notification.type === 'turn_completed'
-      ? { collapseId: `t:${collapseKey(notification.sessionId)}` }
-      : {}),
+    ...(notification.type === 'turn_completed' ? { collapseId: `t:${collapseKey(notification.sessionId)}` } : {}),
   }
 }
 
@@ -162,17 +154,13 @@ export async function createApnsForwarder(options: {
   authenticate: (req: IncomingMessage) => unknown
   warn?: (message: string) => void
 }): Promise<ApnsForwarder> {
-  const warn =
-    options.warn ?? ((message: string) => process.stderr.write(`[workerdeck] apns: ${message}\n`))
+  const warn = options.warn ?? ((message: string) => process.stderr.write(`[workerdeck] apns: ${message}\n`))
   const key = await loadApnsKey(options.config.keyFile)
   const client: ApnsClient = createApnsClient(options.config, key)
   const registry: DeviceRegistry = await createDeviceRegistry({
     dir: options.stateDir,
     onError: (error, context) =>
-      warn(
-        `device registry ${context.op} failed for ${context.path}: ` +
-          `${error instanceof Error ? error.message : String(error)}`,
-      ),
+      warn(`device registry ${context.op} failed for ${context.path}: ` + `${error instanceof Error ? error.message : String(error)}`),
   })
   const handleRequest = createDeviceRoute(registry, options.authenticate)
   const fallbackEnvironment = options.config.production === false ? 'development' : 'production'
@@ -184,7 +172,9 @@ export async function createApnsForwarder(options: {
 
   const deliver = async (notification: SessionNotification): Promise<void> => {
     const devices = registry.list()
-    if (devices.length === 0) return
+    if (devices.length === 0) {
+      return
+    }
     await Promise.all(
       devices.map(async (device) => {
         const push = buildPush(notification, device.hostId)
@@ -193,7 +183,9 @@ export async function createApnsForwarder(options: {
           deviceToken: device.token,
           environment: device.environment ?? fallbackEnvironment,
         })
-        if (result.ok) return
+        if (result.ok) {
+          return
+        }
         if (result.unregistered) {
           await registry.remove(device.token)
           return
@@ -215,7 +207,9 @@ export async function createApnsForwarder(options: {
       // Drop the chain once it drains, so a long-lived gateway does not keep one
       // resolved promise per session it ever ran.
       void next.then(() => {
-        if (chains.get(notification.sessionId) === next) chains.delete(notification.sessionId)
+        if (chains.get(notification.sessionId) === next) {
+          chains.delete(notification.sessionId)
+        }
       })
     },
     handleRequest,

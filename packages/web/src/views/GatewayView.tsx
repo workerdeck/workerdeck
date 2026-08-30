@@ -9,9 +9,9 @@ import { useSessions } from '@/hooks/useSessions.ts'
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className='flex items-baseline justify-between gap-4 py-1.5'>
-      <span className='shrink-0 text-label font-medium text-fg-3'>{label}</span>
-      <span className='min-w-0 text-right text-body-sm text-fg-1'>{children}</span>
+    <div className="flex items-baseline justify-between gap-4 py-1.5">
+      <span className="shrink-0 text-label font-medium text-fg-3">{label}</span>
+      <span className="min-w-0 text-right text-body-sm text-fg-1">{children}</span>
     </div>
   )
 }
@@ -37,27 +37,32 @@ export function GatewayView() {
   useEffect(() => {
     // Not until the same-origin probe has answered: the implicit gateway does
     // not exist yet at first paint, and bouncing off it would break its links.
-    if (!ready || host) return
+    if (!ready || host) {
+      return
+    }
     void navigate({ to: '/gateways' })
   }, [ready, host, navigate])
 
-  if (!host) return null
+  if (!host) {
+    return null
+  }
 
   const state = snapshot === undefined ? 'pending' : snapshot.error ? 'error' : 'ok'
 
   return (
-    <div className='flex min-h-0 flex-1 flex-col'>
+    <div className="flex min-h-0 flex-1 flex-col">
       <DetailBar
         crumbs={[{ label: 'Gateways', to: '/gateways' }, { label: host.name }]}
         actions={
           host.implicit ? null : (
-            <Button variant='outline' size='xs' onClick={() => setRemoving(true)}>
-              <Trash2 className='size-3' />
+            <Button variant="outline" size="xs" onClick={() => setRemoving(true)}>
+              <Trash2 className="size-3" />
               Remove
             </Button>
           )
-        }>
-        <span className='min-w-0 truncate font-mono text-label text-fg-4' title={host.baseUrl}>
+        }
+      >
+        <span className="min-w-0 truncate font-mono text-label text-fg-4" title={host.baseUrl}>
           {host.baseUrl}
         </span>
       </DetailBar>
@@ -67,50 +72,45 @@ export function GatewayView() {
           <CardHeader>
             <CardTitle>Connection</CardTitle>
           </CardHeader>
-          <CardContent className='flex flex-col divide-y divide-border'>
-            <Row label='Status'>
+          <CardContent className="flex flex-col divide-y divide-border">
+            <Row label="Status">
               {state === 'ok' ? (
-                <Badge variant='success' dot>
+                <Badge variant="success" dot>
                   Connected
                 </Badge>
               ) : state === 'error' ? (
-                <Badge variant='danger' dot>
+                <Badge variant="danger" dot>
                   Unreachable
                 </Badge>
               ) : (
-                <Badge variant='neutral' dot>
+                <Badge variant="neutral" dot>
                   Connecting…
                 </Badge>
               )}
             </Row>
             {snapshot?.error ? (
-              <Row label='Last error'>
-                <span className='text-danger'>{snapshot.error}</span>
+              <Row label="Last error">
+                <span className="text-danger">{snapshot.error}</span>
               </Row>
             ) : null}
-            <Row label='Live sessions'>
-              {snapshot ? snapshot.sessions.length : <span className='text-fg-4'>—</span>}
-            </Row>
+            <Row label="Live sessions">{snapshot ? snapshot.sessions.length : <span className="text-fg-4">—</span>}</Row>
             {/* Decided from the URL, never by probing paths — the rule
                 `isLoopbackHost` exists to keep identical across clients. */}
-            <Row label='Reachability'>
-              {isLocal(host) ? 'This machine (loopback)' : 'Remote'}
-            </Row>
-            <Row label='Credential'>
+            <Row label="Reachability">{isLocal(host) ? 'This machine (loopback)' : 'Remote'}</Row>
+            <Row label="Credential">
               {host.implicit ? (
-                <span className='text-fg-4'>the login cookie it set — same origin</span>
+                <span className="text-fg-4">the login cookie it set — same origin</span>
               ) : (
-                <span className='text-fg-4'>an auth key held in this browser</span>
+                <span className="text-fg-4">an auth key held in this browser</span>
               )}
             </Row>
           </CardContent>
         </Card>
 
         {host.implicit ? (
-          <p className='text-label text-fg-4'>
-            This is the gateway that served the page. Its address is this origin and its
-            credential is the cookie it already set, so there is nothing here to change — and
-            nothing to remove, since removing it would just be closing the tab.
+          <p className="text-label text-fg-4">
+            This is the gateway that served the page. Its address is this origin and its credential is the cookie it already set, so there
+            is nothing here to change — and nothing to remove, since removing it would just be closing the tab.
           </p>
         ) : (
           <Card>

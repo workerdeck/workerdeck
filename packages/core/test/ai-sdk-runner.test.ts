@@ -44,7 +44,9 @@ function makeRunner(config: Partial<AiSdkRunnerConfig> & { languageModel: AiSdkR
   const waitFor = async (predicate: () => boolean, ms = 2000) => {
     const deadline = Date.now() + ms
     while (!predicate()) {
-      if (Date.now() > deadline) throw new Error('timed out waiting for condition')
+      if (Date.now() > deadline) {
+        throw new Error('timed out waiting for condition')
+      }
       await new Promise((r) => setTimeout(r, 5))
     }
   }
@@ -82,10 +84,7 @@ describe('AiSdkRunner', () => {
   it('executes local tools inside the loop and emits tool_use + synthetic tool_result', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [
-        toolCallResponse('call-1', 'lookup', { key: 'k' }),
-        textResponse('found it'),
-      ],
+      doStream: [toolCallResponse('call-1', 'lookup', { key: 'k' }), textResponse('found it')],
     })
     const tools = {
       lookup: tool({
@@ -99,7 +98,7 @@ describe('AiSdkRunner', () => {
 
     const assistantEvents = harness.eventsOf('assistant_message')
     const toolUse = assistantEvents
-      .flatMap((e) => ((e as { message: { content: unknown } }).message.content as Array<{ type: string }>))
+      .flatMap((e) => (e as { message: { content: unknown } }).message.content as Array<{ type: string }>)
       .find((b) => b.type === 'tool_use')
     expect(toolUse).toMatchObject({ type: 'tool_use', name: 'lookup' })
     const synthetic = harness.eventsOf('user_message').filter((e) => (e as { synthetic?: boolean }).synthetic)
@@ -136,15 +135,17 @@ describe('AiSdkRunner', () => {
     // Step messages arrive AS the turn progresses: the tool call and its
     // result are both emitted before the final text message, not in one blob
     // after the loop ends.
-    const toolUseSeq = h.eventsOf('assistant_message').find((e) =>
-      (e as { message: { content: Array<{ type: string }> } }).message.content.some((b) => b.type === 'tool_use'),
-    )!.seq
+    const toolUseSeq = h
+      .eventsOf('assistant_message')
+      .find((e) => (e as { message: { content: Array<{ type: string }> } }).message.content.some((b) => b.type === 'tool_use'))!.seq
     const toolResultSeq = h.eventsOf('user_message').find((e) => (e as { synthetic?: boolean }).synthetic)!.seq
-    const finalTextSeq = h.eventsOf('assistant_message').find((e) =>
-      (e as { message: { content: Array<{ type: string; text?: string }> } }).message.content.some(
-        (b) => b.type === 'text' && b.text === 'found it',
-      ),
-    )!.seq
+    const finalTextSeq = h
+      .eventsOf('assistant_message')
+      .find((e) =>
+        (e as { message: { content: Array<{ type: string; text?: string }> } }).message.content.some(
+          (b) => b.type === 'text' && b.text === 'found it',
+        ),
+      )!.seq
     expect(toolUseSeq).toBeLessThan(toolResultSeq)
     expect(toolResultSeq).toBeLessThan(finalTextSeq)
   })
@@ -161,10 +162,7 @@ describe('AiSdkRunner', () => {
   it('parks on an execute-less tool call and resumes via resolveToolCall (message-state replay)', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [
-        toolCallResponse('call-9', 'eval_script', { script: '1+1' }),
-        textResponse('the answer is 2'),
-      ],
+      doStream: [toolCallResponse('call-9', 'eval_script', { script: '1+1' }), textResponse('the answer is 2')],
     })
     const tools = {
       // No execute: the loop halts and the call surfaces as a pending execution.
@@ -228,10 +226,7 @@ describe('AiSdkRunner', () => {
     // (hit live: a deepwiki MCP call failing at transport level hung the turn).
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [
-        toolCallResponse('c1', 'flaky', {}),
-        textResponse('recovered from the tool failure'),
-      ],
+      doStream: [toolCallResponse('c1', 'flaky', {}), textResponse('recovered from the tool failure')],
     })
     const { runner, eventsOf, waitFor } = makeRunner({
       languageModel: model,
@@ -312,9 +307,7 @@ describe('AiSdkRunner', () => {
 
   it('rejects unsupported permission modes at construction and via setPermissionMode', async () => {
     const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: textResponse('x') })
-    expect(() => new AiSdkRunner({ languageModel: model, permissionMode: 'plan' })).toThrow(
-      /not supported/,
-    )
+    expect(() => new AiSdkRunner({ languageModel: model, permissionMode: 'plan' })).toThrow(/not supported/)
     const h = makeRunner({ languageModel: model })
     await expect(h.runner.setPermissionMode('acceptEdits')).rejects.toThrow(/not supported/)
     await expect(h.runner.setPermissionMode('dontAsk')).resolves.toBeUndefined()

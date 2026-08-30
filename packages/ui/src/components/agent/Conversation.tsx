@@ -21,27 +21,25 @@ export interface ConversationProps extends Omit<HTMLAttributes<HTMLDivElement>, 
 export function Conversation({ className, children, ...props }: ConversationProps) {
   return (
     <StickToBottom
-      data-slot='conversation'
+      data-slot="conversation"
       className={cn('relative flex-1 overflow-y-auto', className)}
-      initial='instant'
-      resize='instant'
-      role='log'
-      {...props}>
+      initial="instant"
+      resize="instant"
+      role="log"
+      {...props}
+    >
       {children}
     </StickToBottom>
   )
 }
 
-export function ConversationContent({
-  className,
-  children,
-  ...props
-}: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
+export function ConversationContent({ className, children, ...props }: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
   return (
     <StickToBottom.Content
-      data-slot='conversation-content'
+      data-slot="conversation-content"
       className={cn('mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] flex-col gap-4 px-4 py-4', className)}
-      {...props}>
+      {...props}
+    >
       {children}
     </StickToBottom.Content>
   )
@@ -49,19 +47,19 @@ export function ConversationContent({
 
 export function ConversationScrollButton({ className }: { className?: string }) {
   const { isAtBottom, scrollToBottom } = useStickToBottomContext()
-  if (isAtBottom) return null
+  if (isAtBottom) {
+    return null
+  }
   return (
     <Button
-      variant='outline'
-      size='icon'
-      aria-label='Scroll to bottom'
-      data-slot='conversation-scroll-button'
-      className={cn(
-        'absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full shadow-(--shadow-md)',
-        className,
-      )}
-      onClick={() => void scrollToBottom('instant')}>
-      <ArrowDown className='size-4' />
+      variant="outline"
+      size="icon"
+      aria-label="Scroll to bottom"
+      data-slot="conversation-scroll-button"
+      className={cn('absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full shadow-(--shadow-md)', className)}
+      onClick={() => void scrollToBottom('instant')}
+    >
+      <ArrowDown className="size-4" />
     </Button>
   )
 }

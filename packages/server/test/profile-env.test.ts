@@ -57,7 +57,9 @@ beforeEach(() => {
 afterEach(async () => {
   await running?.close()
   running = undefined
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
+  for (const dir of dirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true })
+  }
   vi.unstubAllEnvs()
   vi.restoreAllMocks()
 })
@@ -208,7 +210,9 @@ describe('credential preflight', () => {
       checkCredentials: {
         probe: async (env) => {
           const name = Object.keys(statuses).find((n) => env.CLAUDE_CONFIG_DIR?.includes(`cw-${n}-`))
-          if (!name) throw new Error('probe exploded')
+          if (!name) {
+            throw new Error('probe exploded')
+          }
           return statuses[name]!
         },
       },
@@ -249,10 +253,7 @@ describe('credential preflight', () => {
  * worse than a refusal that says what is wrong.
  */
 describe('requireAvailableProfile', () => {
-  const withProbe = (
-    requireAvailableProfile: boolean,
-    status: ClaudeAuthStatus,
-  ): WorkerServer => {
+  const withProbe = (requireAvailableProfile: boolean, status: ClaudeAuthStatus): WorkerServer => {
     const harness = captureHarness()
     return createWorkerServer({
       allowUnauthenticated: true,

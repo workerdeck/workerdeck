@@ -1,10 +1,5 @@
 import type { ToolExecutionBackend } from '@workerdeck/protocol'
-import type {
-  ToolExecutionCall,
-  ToolExecutionDispatch,
-  ToolExecutionProfile,
-  ToolExecutor,
-} from './tool-executor.ts'
+import type { ToolExecutionCall, ToolExecutionDispatch, ToolExecutionProfile, ToolExecutor } from './tool-executor.ts'
 
 /** A dispatched execution, as handed to the backend that will run it. */
 export type DeferredDispatch = {

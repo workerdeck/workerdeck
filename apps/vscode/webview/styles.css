@@ -42,14 +42,7 @@
  * pointing both at the same stack is what makes the two indistinguishable.
  */
 html[data-font='editor'] {
-  --cw-font-sans: var(
-    --vscode-editor-font-family,
-    ui-monospace,
-    'SF Mono',
-    Menlo,
-    Consolas,
-    monospace
-  );
+  --cw-font-sans: var(--vscode-editor-font-family, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
 }
 
 /*
@@ -193,4 +186,3 @@ a:hover {
   text-underline-offset: 2px;
   cursor: pointer;
 }
-

@@ -71,25 +71,88 @@ const wd = {
 }
 
 const rows = [
-  mk({ id: '1', title: 'Continue session load optimization', status: 'running', model: 'claude-opus-5-20260101[1m]', subagents: agents, project: wd }),
+  mk({
+    id: '1',
+    title: 'Continue session load optimization',
+    status: 'running',
+    model: 'claude-opus-5-20260101[1m]',
+    subagents: agents,
+    project: wd,
+  }),
   // Same project, deep in a package — the row that used to read `ui`.
-  mk({ id: '6', title: 'Terminal fold audit', status: 'idle', model: 'claude-opus-5', cwd: '/Users/atomic/projects/ai/workerdeck/packages/ui', project: wd, lastActivityAt: Date.now() - 900_000 }),
+  mk({
+    id: '6',
+    title: 'Terminal fold audit',
+    status: 'idle',
+    model: 'claude-opus-5',
+    cwd: '/Users/atomic/projects/ai/workerdeck/packages/ui',
+    project: wd,
+    lastActivityAt: Date.now() - 900_000,
+  }),
   // Bytes not in yet: name, no picture, no reserved hole.
-  mk({ id: '7', title: 'Waiting on its icon', status: 'idle', model: 'claude-opus-5', project: { ...wd, icon: { type: 'image', mediaType: 'image/png', hash: 'notyet' } }, lastActivityAt: Date.now() - 1_200_000 }),
-  mk({ id: '2', title: 'Theme design rework', status: 'idle', model: 'claude-fable-5', cwd: '/x/silktree', project: { name: 'Silktree', root: '/x/silktree', icon: { type: 'glyph', name: 'tree-pine' } }, lastActivityAt: Date.now() - 2_700_000 }),
+  mk({
+    id: '7',
+    title: 'Waiting on its icon',
+    status: 'idle',
+    model: 'claude-opus-5',
+    project: { ...wd, icon: { type: 'image', mediaType: 'image/png', hash: 'notyet' } },
+    lastActivityAt: Date.now() - 1_200_000,
+  }),
+  mk({
+    id: '2',
+    title: 'Theme design rework',
+    status: 'idle',
+    model: 'claude-fable-5',
+    cwd: '/x/silktree',
+    project: { name: 'Silktree', root: '/x/silktree', icon: { type: 'glyph', name: 'tree-pine' } },
+    lastActivityAt: Date.now() - 2_700_000,
+  }),
   // A well-formed glyph name this build has never heard of → the folder.
-  mk({ id: '3', title: 'Grid layout exploration', status: 'idle', model: 'claude-opus-5', cwd: '/x/zigby', project: { name: 'Zigby', root: '/x/zigby', icon: { type: 'glyph', name: 'some-icon-shipped-last-tuesday' } }, lastActivityAt: Date.now() - 7_200_000 }),
+  mk({
+    id: '3',
+    title: 'Grid layout exploration',
+    status: 'idle',
+    model: 'claude-opus-5',
+    cwd: '/x/zigby',
+    project: { name: 'Zigby', root: '/x/zigby', icon: { type: 'glyph', name: 'some-icon-shipped-last-tuesday' } },
+    lastActivityAt: Date.now() - 7_200_000,
+  }),
   // No `.workerdeck.json` anywhere above it: the basename, exactly as before.
-  mk({ id: '4', title: 'Launch preparation', status: 'idle', model: 'claude-opus-5', cwd: '/x/atomic', lastActivityAt: Date.now() - 21_600_000 }),
-  mk({ id: '8', title: 'Codex spawn options', status: 'idle', engine: 'codex', model: 'gpt-5-codex', cwd: '/x/wd', project: { name: 'WorkerDeck', root: '/x/wd', icon: { type: 'glyph', name: 'layers' } }, lastActivityAt: Date.now() - 300_000 }),
-  mk({ id: '5', title: 'Codex parity sweep', status: 'awaiting_approval', engine: 'codex', model: 'gpt-5-codex', cwd: '/x/wd', project: { name: 'WorkerDeck', root: '/x/wd', icon: { type: 'glyph', name: 'layers' } }, pendingPermissionCount: 1 }),
+  mk({
+    id: '4',
+    title: 'Launch preparation',
+    status: 'idle',
+    model: 'claude-opus-5',
+    cwd: '/x/atomic',
+    lastActivityAt: Date.now() - 21_600_000,
+  }),
+  mk({
+    id: '8',
+    title: 'Codex spawn options',
+    status: 'idle',
+    engine: 'codex',
+    model: 'gpt-5-codex',
+    cwd: '/x/wd',
+    project: { name: 'WorkerDeck', root: '/x/wd', icon: { type: 'glyph', name: 'layers' } },
+    lastActivityAt: Date.now() - 300_000,
+  }),
+  mk({
+    id: '5',
+    title: 'Codex parity sweep',
+    status: 'awaiting_approval',
+    engine: 'codex',
+    model: 'gpt-5-codex',
+    cwd: '/x/wd',
+    project: { name: 'WorkerDeck', root: '/x/wd', icon: { type: 'glyph', name: 'layers' } },
+    pendingPermissionCount: 1,
+  }),
 ]
 
 const unseen: Record<string, number> = { '2': 12, '3': 33 }
 
 createRoot(document.getElementById('root')!).render(
-  <div className='flex flex-col text-body-sm'>
-    <div className='flex flex-col gap-1 p-1'>
+  <div className="flex flex-col text-body-sm">
+    <div className="flex flex-col gap-1 p-1">
       {rows.map((r: never, i) => (
         <SessionCard
           key={i}

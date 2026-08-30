@@ -153,7 +153,9 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
   }
   const cookieName = options.cookieName ?? DEFAULT_COOKIE_NAME
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS
-  if (!(ttlMs > 0)) throw new Error('createCliAuth: ttlMs must be positive')
+  if (!(ttlMs > 0)) {
+    throw new Error('createCliAuth: ttlMs must be positive')
+  }
   const trustProxy = options.trustProxy === true
   const windowMs = options.throttle?.windowMs ?? DEFAULT_THROTTLE_WINDOW_MS
   const maxFailuresPerIp = options.throttle?.maxFailuresPerIp ?? DEFAULT_MAX_FAILURES_PER_IP
@@ -173,8 +175,7 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
    * secret material byte-by-byte with early exit — and unequal input lengths
    * leak nothing either. */
   const secretDigest = secret === undefined ? undefined : sha256(secret)
-  const secretMatches = (candidate: string): boolean =>
-    secretDigest !== undefined && timingSafeEqual(sha256(candidate), secretDigest)
+  const secretMatches = (candidate: string): boolean => secretDigest !== undefined && timingSafeEqual(sha256(candidate), secretDigest)
 
   /**
    * Browser sessions are a server-side table, not signed tokens: logout must
@@ -198,7 +199,9 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
 
   if (store?.initial !== undefined) {
     for (const [key, entry] of store.initial) {
-      if (sessions.size >= MAX_SESSIONS) break
+      if (sessions.size >= MAX_SESSIONS) {
+        break
+      }
       sessions.set(key, { expiresAt: entry.expiresAt })
     }
   }
@@ -210,7 +213,9 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
   const createSession = (): string => {
     if (sessions.size >= MAX_SESSIONS) {
       const oldest = sessions.keys().next().value
-      if (oldest !== undefined) sessions.delete(oldest)
+      if (oldest !== undefined) {
+        sessions.delete(oldest)
+      }
     }
     const token = randomBytes(32).toString('base64url')
     sessions.set(tokenKey(token), { expiresAt: Date.now() + ttlMs })
@@ -220,21 +225,31 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
 
   const cookieToken = (req: IncomingMessage): string | undefined => {
     const header = req.headers.cookie
-    if (typeof header !== 'string') return undefined
+    if (typeof header !== 'string') {
+      return undefined
+    }
     for (const part of header.split(';')) {
       const eq = part.indexOf('=')
-      if (eq === -1) continue
-      if (part.slice(0, eq).trim() === cookieName) return part.slice(eq + 1).trim()
+      if (eq === -1) {
+        continue
+      }
+      if (part.slice(0, eq).trim() === cookieName) {
+        return part.slice(eq + 1).trim()
+      }
     }
     return undefined
   }
 
   const hasSession = (req: IncomingMessage): boolean => {
     const token = cookieToken(req)
-    if (token === undefined || token === '') return false
+    if (token === undefined || token === '') {
+      return false
+    }
     const key = tokenKey(token)
     const entry = sessions.get(key)
-    if (entry === undefined) return false
+    if (entry === undefined) {
+      return false
+    }
     if (entry.expiresAt <= Date.now()) {
       sessions.delete(key)
       persist()
@@ -246,14 +261,18 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
   /** Last value of a possibly comma-joined forwarded header — the one appended
    * (or set) by the trusted proxy; every earlier position is client-writable. */
   const forwardedLast = (value: string | string[] | undefined): string | undefined => {
-    if (value === undefined) return undefined
+    if (value === undefined) {
+      return undefined
+    }
     const joined = Array.isArray(value) ? value.join(',') : value
     const last = joined.split(',').at(-1)?.trim()
     return last === '' ? undefined : last
   }
 
   const isSecure = (req: IncomingMessage): boolean => {
-    if ((req.socket as { encrypted?: boolean }).encrypted === true) return true
+    if ((req.socket as { encrypted?: boolean }).encrypted === true) {
+      return true
+    }
     return trustProxy && forwardedLast(req.headers['x-forwarded-proto'])?.toLowerCase() === 'https'
   }
 
@@ -261,7 +280,9 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
    * own Host (or the proxy's forwarded host) — the only self-knowledge we have. */
   const expectedOrigin = (req: IncomingMessage): string | null => {
     const host = (trustProxy ? forwardedLast(req.headers['x-forwarded-host']) : undefined) ?? req.headers.host
-    if (host === undefined || host === '') return null
+    if (host === undefined || host === '') {
+      return null
+    }
     try {
       return new URL(`${isSecure(req) ? 'https' : 'http'}://${host}`).origin
     } catch {
@@ -285,25 +306,33 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
    */
   const originVerdict = (req: IncomingMessage): 'absent' | 'ok' | 'foreign' => {
     const raw = req.headers.origin
-    if (raw === undefined) return 'absent'
+    if (raw === undefined) {
+      return 'absent'
+    }
     let origin: string
     try {
       origin = new URL(raw).origin
     } catch {
       return 'foreign'
     }
-    if (allowedOrigins.has(origin)) return 'ok'
+    if (allowedOrigins.has(origin)) {
+      return 'ok'
+    }
     const expected = expectedOrigin(req)
     return expected !== null && origin === expected ? 'ok' : 'foreign'
   }
 
   const headerSecret = (req: IncomingMessage): string | undefined => {
     const key = req.headers['x-workerdeck-key']
-    if (typeof key === 'string' && key !== '') return key
+    if (typeof key === 'string' && key !== '') {
+      return key
+    }
     const authorization = req.headers.authorization
     if (typeof authorization === 'string') {
       const match = /^Bearer\s+(.+)$/i.exec(authorization)
-      if (match !== null) return match[1]
+      if (match !== null) {
+        return match[1]
+      }
     }
     return undefined
   }
@@ -328,13 +357,17 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
    * A REST call with `?key=` is therefore *not* authenticated by it.
    */
   const querySecret = (req: IncomingMessage): string | undefined => {
-    if (!isUpgradeRequest(req)) return undefined
+    if (!isUpgradeRequest(req)) {
+      return undefined
+    }
     const key = new URL(req.url ?? '/', 'http://internal').searchParams.get('key')
     return key !== null && key !== '' ? key : undefined
   }
 
   const authenticate: Authenticator = (req) => {
-    if (!enabled) return openPrincipal
+    if (!enabled) {
+      return openPrincipal
+    }
     // Header first: the secret itself is not ambient — the sender chose to
     // attach it — so no Origin check applies. A present-but-wrong header is a
     // rejection, never a fall-through to the cookie.
@@ -342,18 +375,24 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
     if (provided !== undefined) {
       return secretMatches(provided) ? ({ via: 'header', canManageProfiles: true } satisfies CliPrincipal) : null
     }
-    if (!hasSession(req)) return null
+    if (!hasSession(req)) {
+      return null
+    }
     const verdict = originVerdict(req)
     // A cookie-authenticated request must never carry a foreign Origin, no
     // matter the method — there is no legitimate cross-origin use of this API
     // from a browser (no CORS headers are ever served).
-    if (verdict === 'foreign') return null
+    if (verdict === 'foreign') {
+      return null
+    }
     // State-changing methods and WS upgrades additionally require Origin to be
     // present: browsers always send it there, so absence means a non-browser
     // client replaying the cookie — which should be using the header transport.
     const isUpgrade = isUpgradeRequest(req)
     const unsafe = !SAFE_METHODS.has((req.method ?? 'GET').toUpperCase())
-    if ((isUpgrade || unsafe) && verdict !== 'ok') return null
+    if ((isUpgrade || unsafe) && verdict !== 'ok') {
+      return null
+    }
     return { via: 'cookie', canManageProfiles: true } satisfies CliPrincipal
   }
 
@@ -371,14 +410,10 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
   const globalFailures = { count: 0, windowStart: 0 }
 
   const clientIp = (req: IncomingMessage): string =>
-    (trustProxy ? forwardedLast(req.headers['x-forwarded-for']) : undefined) ??
-    req.socket.remoteAddress ??
-    'unknown'
+    (trustProxy ? forwardedLast(req.headers['x-forwarded-for']) : undefined) ?? req.socket.remoteAddress ?? 'unknown'
 
   const blockedMs = (entry: { count: number; windowStart: number } | undefined, max: number, now: number): number =>
-    entry !== undefined && entry.count >= max && now - entry.windowStart < windowMs
-      ? entry.windowStart + windowMs - now
-      : 0
+    entry !== undefined && entry.count >= max && now - entry.windowStart < windowMs ? entry.windowStart + windowMs - now : 0
 
   const loginBlockedMs = (ip: string, now: number): number =>
     Math.max(blockedMs(failures.get(ip), maxFailuresPerIp, now), blockedMs(globalFailures, maxFailuresGlobal, now))
@@ -386,7 +421,9 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
   const recordFailure = (ip: string, now: number): void => {
     if (failures.size > 256) {
       for (const [key, entry] of failures) {
-        if (now - entry.windowStart >= windowMs) failures.delete(key)
+        if (now - entry.windowStart >= windowMs) {
+          failures.delete(key)
+        }
       }
     }
     const entry = failures.get(ip)
@@ -411,25 +448,19 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
     // real CSRF surfaces — same-site-different-port and the WS handshake —
     // need the Origin check regardless of SameSite value.
     const attrs = ['Path=/', 'HttpOnly', 'SameSite=Lax']
-    if (isSecure(req)) attrs.push('Secure')
+    if (isSecure(req)) {
+      attrs.push('Secure')
+    }
     return attrs
   }
 
   const setCookieValue = (token: string, req: IncomingMessage): string =>
     [`${cookieName}=${token}`, `Max-Age=${Math.ceil(ttlMs / 1000)}`, ...cookieAttributes(req)].join('; ')
 
-  const clearCookieValue = (req: IncomingMessage): string =>
-    [`${cookieName}=`, 'Max-Age=0', ...cookieAttributes(req)].join('; ')
+  const clearCookieValue = (req: IncomingMessage): string => [`${cookieName}=`, 'Max-Age=0', ...cookieAttributes(req)].join('; ')
 
-  const respondJson = (
-    res: ServerResponse,
-    status: number,
-    body: Record<string, unknown>,
-    headers?: Record<string, string>,
-  ): void => {
-    res
-      .writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers })
-      .end(JSON.stringify(body))
+  const respondJson = (res: ServerResponse, status: number, body: Record<string, unknown>, headers?: Record<string, string>): void => {
+    res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers }).end(JSON.stringify(body))
   }
 
   const respondRedirect = (res: ServerResponse, location: string, headers?: Record<string, string>): void => {
@@ -482,8 +513,11 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
     const blocked = loginBlockedMs(ip, Date.now())
     if (blocked > 0) {
       const retryAfter = String(Math.ceil(blocked / 1000))
-      if (json) respondJson(res, 429, { error: 'too many failed attempts' }, { 'retry-after': retryAfter })
-      else respondRedirect(res, '/?auth=throttled', { 'retry-after': retryAfter })
+      if (json) {
+        respondJson(res, 429, { error: 'too many failed attempts' }, { 'retry-after': retryAfter })
+      } else {
+        respondRedirect(res, '/?auth=throttled', { 'retry-after': retryAfter })
+      }
       return
     }
     const body = await readBody(req, MAX_LOGIN_BODY_BYTES)
@@ -516,14 +550,20 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
     }
     if (!secretMatches(candidate)) {
       recordFailure(ip, Date.now())
-      if (json) respondJson(res, 401, { error: 'invalid secret' })
-      else respondRedirect(res, '/?auth=failed')
+      if (json) {
+        respondJson(res, 401, { error: 'invalid secret' })
+      } else {
+        respondRedirect(res, '/?auth=failed')
+      }
       return
     }
     failures.delete(ip)
     const cookie = setCookieValue(createSession(), req)
-    if (json) res.writeHead(204, { 'set-cookie': cookie, 'cache-control': 'no-store' }).end()
-    else respondRedirect(res, '/', { 'set-cookie': cookie })
+    if (json) {
+      res.writeHead(204, { 'set-cookie': cookie, 'cache-control': 'no-store' }).end()
+    } else {
+      respondRedirect(res, '/', { 'set-cookie': cookie })
+    }
   }
 
   const handleLogout = (req: IncomingMessage, res: ServerResponse): void => {
@@ -538,27 +578,41 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
       const token = cookieToken(req)
       // Deleting the table entry is the invalidation; clearing the cookie is
       // just tidiness. A stale copy of the token is dead either way.
-      if (token !== undefined && token !== '' && sessions.delete(tokenKey(token))) persist()
+      if (token !== undefined && token !== '' && sessions.delete(tokenKey(token))) {
+        persist()
+      }
     }
     const cookie = clearCookieValue(req)
-    if (json) res.writeHead(204, { 'set-cookie': cookie, 'cache-control': 'no-store' }).end()
-    else respondRedirect(res, '/', { 'set-cookie': cookie })
+    if (json) {
+      res.writeHead(204, { 'set-cookie': cookie, 'cache-control': 'no-store' }).end()
+    } else {
+      respondRedirect(res, '/', { 'set-cookie': cookie })
+    }
   }
 
   const handleAuthRoute = async (pathname: string, req: IncomingMessage, res: ServerResponse): Promise<void> => {
     if (pathname === '/auth/status') {
-      if (req.method !== 'GET') respondJson(res, 405, { error: 'method not allowed' }, { allow: 'GET' })
-      else respondJson(res, 200, { enabled, authenticated: enabled ? hasSession(req) : true })
+      if (req.method !== 'GET') {
+        respondJson(res, 405, { error: 'method not allowed' }, { allow: 'GET' })
+      } else {
+        respondJson(res, 200, { enabled, authenticated: enabled ? hasSession(req) : true })
+      }
       return
     }
     if (pathname === '/auth/login') {
-      if (req.method !== 'POST') respondJson(res, 405, { error: 'method not allowed' }, { allow: 'POST' })
-      else await handleLogin(req, res)
+      if (req.method !== 'POST') {
+        respondJson(res, 405, { error: 'method not allowed' }, { allow: 'POST' })
+      } else {
+        await handleLogin(req, res)
+      }
       return
     }
     if (pathname === '/auth/logout') {
-      if (req.method !== 'POST') respondJson(res, 405, { error: 'method not allowed' }, { allow: 'POST' })
-      else handleLogout(req, res)
+      if (req.method !== 'POST') {
+        respondJson(res, 405, { error: 'method not allowed' }, { allow: 'POST' })
+      } else {
+        handleLogout(req, res)
+      }
       return
     }
     respondJson(res, 404, { error: 'not found' })
@@ -573,7 +627,9 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
     }
     // Claim the whole /auth prefix (unknown subpaths 404 here) so nothing under
     // it ever falls through to the SPA's catch-all.
-    if (pathname !== '/auth' && !pathname.startsWith('/auth/')) return false
+    if (pathname !== '/auth' && !pathname.startsWith('/auth/')) {
+      return false
+    }
     return handleAuthRoute(pathname, req, res).then(() => true)
   }
 

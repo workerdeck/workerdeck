@@ -10,9 +10,9 @@ export const TooltipContent: FunctionComponent<
 > = ({ className, side = 'top', sideOffset = 6, ...props }) => (
   <TooltipPrimitive.Portal>
     <PortalScope>
-      <TooltipPrimitive.Positioner side={side} sideOffset={sideOffset} className='isolate z-90'>
+      <TooltipPrimitive.Positioner side={side} sideOffset={sideOffset} className="isolate z-90">
         <TooltipPrimitive.Popup
-          data-slot='tooltip-content'
+          data-slot="tooltip-content"
           className={cn(
             'rounded-md border border-border bg-surface px-2 py-1 text-label text-fg-2 shadow-(--shadow-md) outline-none',
             className,
@@ -45,9 +45,7 @@ export function Tip({
 }) {
   return (
     <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger render={render ?? <span className='inline-flex' />}>
-        {children}
-      </TooltipPrimitive.Trigger>
+      <TooltipPrimitive.Trigger render={render ?? <span className="inline-flex" />}>{children}</TooltipPrimitive.Trigger>
       <TooltipContent side={side}>{content}</TooltipContent>
     </TooltipPrimitive.Root>
   )

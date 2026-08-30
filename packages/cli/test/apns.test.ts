@@ -4,12 +4,7 @@ import { constants, createServer, type Http2Server, type ServerHttp2Stream } fro
 import { join } from 'node:path'
 import type { SessionNotification } from '@workerdeck/protocol'
 import { afterAll, describe, expect, it } from 'vitest'
-import {
-  type ApnsConfig,
-  type ApnsEnvironment,
-  createApnsClient,
-  createProviderToken,
-} from '../src/apns/client.ts'
+import { type ApnsConfig, type ApnsEnvironment, createApnsClient, createProviderToken } from '../src/apns/client.ts'
 import { createDeviceRegistry, createDeviceRoute } from '../src/apns/devices.ts'
 import { buildPush } from '../src/apns/forwarder.ts'
 
@@ -52,9 +47,7 @@ describe('provider token', () => {
     expect(decoded.iss).toBe(CONFIG.teamId)
     const raw = Buffer.from(signature!, 'base64url')
     expect(raw.byteLength).toBe(64)
-    expect(
-      verify('sha256', Buffer.from(`${header}.${claims}`), { key: publicKey, dsaEncoding: 'ieee-p1363' }, raw),
-    ).toBe(true)
+    expect(verify('sha256', Buffer.from(`${header}.${claims}`), { key: publicKey, dsaEncoding: 'ieee-p1363' }, raw)).toBe(true)
   })
 
   it('reuses one token rather than re-signing per push', () => {
@@ -145,7 +138,9 @@ describe('apns client', () => {
     const result = await client.send({ deviceToken: TOKEN, environment: 'production', payload: {} })
     client.close()
     expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.unregistered).toBe(true)
+    if (!result.ok) {
+      expect(result.unregistered).toBe(true)
+    }
     await new Promise((resolve) => fake.server.close(resolve))
   })
 
@@ -426,9 +421,13 @@ const call = async (
   // Feed the body after the handler has subscribed.
   await Promise.resolve()
   if (body !== undefined) {
-    for (const handler of listeners.get('data') ?? []) handler(Buffer.from(JSON.stringify(body)))
+    for (const handler of listeners.get('data') ?? []) {
+      handler(Buffer.from(JSON.stringify(body)))
+    }
   }
-  for (const handler of listeners.get('end') ?? []) handler()
+  for (const handler of listeners.get('end') ?? []) {
+    handler()
+  }
   const consumed = await pending
   return { consumed, status, json: payload === '' ? undefined : JSON.parse(payload) }
 }
@@ -471,13 +470,8 @@ describe('device route', () => {
   it('rejects a token that is not hex and an unknown environment', async () => {
     const registry = await createDeviceRegistry({ dir: null })
     const route = createDeviceRoute(registry, allow)
-    expect(
-      (await call(route, 'POST', '/apns/devices', { token: 'nope', environment: 'development' }))
-        .status,
-    ).toBe(400)
-    expect(
-      (await call(route, 'POST', '/apns/devices', { token: TOKEN, environment: 'staging' })).status,
-    ).toBe(400)
+    expect((await call(route, 'POST', '/apns/devices', { token: 'nope', environment: 'development' })).status).toBe(400)
+    expect((await call(route, 'POST', '/apns/devices', { token: TOKEN, environment: 'staging' })).status).toBe(400)
     expect(registry.list()).toEqual([])
   })
 })

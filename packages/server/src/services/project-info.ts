@@ -90,7 +90,9 @@ export class ProjectInfoService {
    * poll, so no allocation for it (replaySlice's same-object rule).
    */
   withProject(info: SessionInfo): SessionInfo {
-    if (!info.cwd) return info
+    if (!info.cwd) {
+      return info
+    }
     const project = this.#resolve(info.cwd).project
     return project ? { ...info, project } : info
   }
@@ -99,17 +101,23 @@ export class ProjectInfoService {
    * session's cwd — resolved from the gateway's own cache, never from anything
    * the client named. Undefined = no project, no icon, or an icon refused. */
   iconFor(cwd: string): ResolvedProjectIcon | undefined {
-    if (!cwd) return undefined
+    if (!cwd) {
+      return undefined
+    }
     return this.#resolve(cwd).icon
   }
 
   #resolve(cwd: string): Resolution {
     const now = Date.now()
     const held = this.#byCwd.get(cwd)
-    if (held && held.expiresAt > now) return held
+    if (held && held.expiresAt > now) {
+      return held
+    }
     if (this.#byCwd.size > SWEEP_ABOVE) {
       for (const [key, entry] of this.#byCwd) {
-        if (entry.expiresAt <= now) this.#byCwd.delete(key)
+        if (entry.expiresAt <= now) {
+          this.#byCwd.delete(key)
+        }
       }
     }
     const fresh = { ...discover(cwd), expiresAt: now + this.#ttlMs }
@@ -125,7 +133,9 @@ export class ProjectInfoService {
 function discover(cwd: string): Omit<Resolution, 'expiresAt'> {
   // A relative cwd would realpath against the gateway process's own cwd and
   // walk *its* ancestry — refused outright, like host-files' invalidRequest.
-  if (!isAbsolute(cwd) || cwd.includes('\0')) return {}
+  if (!isAbsolute(cwd) || cwd.includes('\0')) {
+    return {}
+  }
   let dir: string
   try {
     dir = realpathSync(cwd)
@@ -134,9 +144,13 @@ function discover(cwd: string): Omit<Resolution, 'expiresAt'> {
   }
   for (;;) {
     const found = tryLoad(join(dir, PROJECT_FILE), dir)
-    if (found) return found
+    if (found) {
+      return found
+    }
     const parent = dirname(dir)
-    if (parent === dir) return {}
+    if (parent === dir) {
+      return {}
+    }
     dir = parent
   }
 }
@@ -153,23 +167,26 @@ function tryLoad(file: string, root: string): Omit<Resolution, 'expiresAt'> | un
   // A symlinked project file is skipped, not followed — the agent writes this
   // tree, and `readContained`'s O_NOFOLLOW would refuse it below anyway; a
   // directory of that name is nothing either.
-  if (!stat.isFile() || stat.size > MAX_PROJECT_FILE_BYTES) return undefined
+  if (!stat.isFile() || stat.size > MAX_PROJECT_FILE_BYTES) {
+    return undefined
+  }
   const read = readContained(file)
-  if (!read.ok) return undefined
+  if (!read.ok) {
+    return undefined
+  }
   let parsed: unknown
   try {
     parsed = JSON.parse(read.data.toString('utf8'))
   } catch {
     return undefined // Malformed JSON: cannot even tell it is ours — walk on.
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return undefined
+  }
   const raw = parsed as { name?: unknown; icon?: unknown }
   // A parsed object IS the project marker, whatever its fields hold: `{}` is a
   // valid declaration of "this directory is the root", named by its basename.
-  const name =
-    typeof raw.name === 'string' && raw.name.trim()
-      ? raw.name.trim().slice(0, MAX_NAME_CHARS)
-      : basename(root)
+  const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, MAX_NAME_CHARS) : basename(root)
   const icon = classifyIcon(raw.icon, root)
   return {
     project: { name, root, ...(icon ? { icon: icon.wire } : {}) },
@@ -182,28 +199,29 @@ function tryLoad(file: string, root: string): Omit<Resolution, 'expiresAt'> | un
  * `.png`/`.svg` → repo-relative image path, else lucide-shaped glyph name,
  * else ignored. Total and collision-free — a glyph name contains no dot.
  */
-function classifyIcon(
-  value: unknown,
-  root: string,
-): { wire: ProjectIcon; resolved?: ResolvedProjectIcon } | undefined {
-  if (typeof value !== 'string') return undefined
+function classifyIcon(value: unknown, root: string): { wire: ProjectIcon; resolved?: ResolvedProjectIcon } | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
   const declared = value.trim()
-  if (!declared || declared.includes('\0') || declared.length > 512) return undefined
+  if (!declared || declared.includes('\0') || declared.length > 512) {
+    return undefined
+  }
   const lower = declared.toLowerCase()
-  const mediaType: IconMediaType | undefined = lower.endsWith('.png')
-    ? 'image/png'
-    : lower.endsWith('.svg')
-      ? 'image/svg+xml'
-      : undefined
+  const mediaType: IconMediaType | undefined = lower.endsWith('.png') ? 'image/png' : lower.endsWith('.svg') ? 'image/svg+xml' : undefined
   if (!mediaType) {
-    if (!GLYPH_RE.test(declared) || declared.length > 64) return undefined
+    if (!GLYPH_RE.test(declared) || declared.length > 64) {
+      return undefined
+    }
     return { wire: { type: 'glyph', name: declared } }
   }
   // An image path. Relative only — the file is checked into a repo that clones
   // onto other machines, so an absolute path is wrong by construction (and
   // refusing it early keeps the containment check from ever seeing one).
   // Backslashes are refused rather than translated: repo paths are posix.
-  if (isAbsolute(declared) || declared.includes('\\')) return undefined
+  if (isAbsolute(declared) || declared.includes('\\')) {
+    return undefined
+  }
   let canonical: string
   try {
     canonical = realpathSync(resolve(root, declared))
@@ -213,18 +231,24 @@ function classifyIcon(
   // Containment on the canonical form only: this refuses `..` escapes and
   // planted symlinks by the same one check. `root` is realpath output by
   // construction (the walk starts from a realpath'd cwd).
-  if (!contained(root, canonical)) return undefined
+  if (!contained(root, canonical)) {
+    return undefined
+  }
   let stat
   try {
     stat = lstatSync(canonical)
   } catch {
     return undefined
   }
-  if (!stat.isFile() || stat.size === 0 || stat.size > MAX_PROJECT_ICON_BYTES) return undefined
+  if (!stat.isFile() || stat.size === 0 || stat.size > MAX_PROJECT_ICON_BYTES) {
+    return undefined
+  }
   // Hashed at discovery because the wire carries it: the client's cross-session
   // cache key and the route's ETag. One bounded read per project per TTL.
   const read = readContained(canonical)
-  if (!read.ok || read.data.length > MAX_PROJECT_ICON_BYTES) return undefined
+  if (!read.ok || read.data.length > MAX_PROJECT_ICON_BYTES) {
+    return undefined
+  }
   const hash = createHash('sha256').update(read.data).digest('hex')
   return {
     wire: { type: 'image', mediaType, hash },

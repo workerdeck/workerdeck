@@ -38,34 +38,37 @@ const failed = new Set<string>()
 
 export type ClientForHost = (hostId: string) => WorkerDeckClient | undefined
 
-export function useProjectIcons(
-  rows: readonly SessionRow[],
-  clientFor: ClientForHost,
-): Record<string, string> {
+export function useProjectIcons(rows: readonly SessionRow[], clientFor: ClientForHost): Record<string, string> {
   // Held as state rather than read from the map, so a resolution re-renders.
   // The value is a snapshot of the module cache, which is why every consumer
   // sees an icon the moment any of them fetched it.
-  const [resolved, setResolved] = useState<Record<string, string>>(() =>
-    Object.fromEntries(byHash),
-  )
+  const [resolved, setResolved] = useState<Record<string, string>>(() => Object.fromEntries(byHash))
 
   useEffect(() => {
     let alive = true
     for (const row of rows) {
       const icon = row.info.project?.icon
-      if (icon?.type !== 'image') continue
+      if (icon?.type !== 'image') {
+        continue
+      }
       const { hash } = icon
-      if (byHash.has(hash) || inFlight.has(hash) || failed.has(hash)) continue
+      if (byHash.has(hash) || inFlight.has(hash) || failed.has(hash)) {
+        continue
+      }
       const client = clientFor(row.hostId)
       // An unreachable gateway is not an iconless one: fall out without
       // recording a failure, so a later render tries again once it is back.
-      if (!client) continue
+      if (!client) {
+        continue
+      }
       inFlight.add(hash)
       void client
         .projectIcon(row.info.id)
         .then((blob) => {
           byHash.set(hash, URL.createObjectURL(blob))
-          if (alive) setResolved(Object.fromEntries(byHash))
+          if (alive) {
+            setResolved(Object.fromEntries(byHash))
+          }
         })
         .catch(() => {
           // Any refusal is the uniform "no icon" — never retried, never surfaced.

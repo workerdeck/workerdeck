@@ -312,9 +312,7 @@ export type AppServerMcpStatusUpdate = {
   failureReason?: string | null
 }
 
-export type AppServerUserInput =
-  | { type: 'text'; text: string }
-  | { type: 'localImage'; path: string }
+export type AppServerUserInput = { type: 'text'; text: string } | { type: 'localImage'; path: string }
 
 /** `turn/plan/updated` params (v2's todo list). */
 export type AppServerPlanUpdate = {

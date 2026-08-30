@@ -33,13 +33,7 @@ describe('flattenHostTree', () => {
   })
 
   it('splices an expanded directory’s children in at the next depth', () => {
-    expect(shape(flattenHostTree('/p', dirs, new Set(['/p/src'])))).toEqual([
-      'src/',
-      '  lib/',
-      '  main.ts',
-      'docs/',
-      'README.md',
-    ])
+    expect(shape(flattenHostTree('/p', dirs, new Set(['/p/src'])))).toEqual(['src/', '  lib/', '  main.ts', 'docs/', 'README.md'])
   })
 
   it('nests several levels in tree order, not listing order', () => {
@@ -80,11 +74,7 @@ describe('flattenHostTree', () => {
 
   it('ignores expansion state for directories that are not visible', () => {
     // /p/src/lib is expanded but its parent is not — it must not leak in.
-    expect(shape(flattenHostTree('/p', dirs, new Set(['/p/src/lib'])))).toEqual([
-      'src/',
-      'docs/',
-      'README.md',
-    ])
+    expect(shape(flattenHostTree('/p', dirs, new Set(['/p/src/lib'])))).toEqual(['src/', 'docs/', 'README.md'])
   })
 })
 

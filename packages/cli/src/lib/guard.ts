@@ -94,7 +94,9 @@ export async function runGuard(argv: string[]): Promise<number> {
   // The token covers the common `Authorization: Bearer` case, including this
   // CLI's own --auth-key; --header covers hosts whose `authenticate` hook reads
   // something else.
-  if (values.token) headers.authorization = `Bearer ${values.token}`
+  if (values.token) {
+    headers.authorization = `Bearer ${values.token}`
+  }
 
   const seconds = (flag: string, raw: string): number => {
     const value = Number(raw)
@@ -109,7 +111,9 @@ export async function runGuard(argv: string[]): Promise<number> {
   try {
     for (const entry of values.header) {
       const at = entry.indexOf('=')
-      if (at < 1) throw new GuardError(`--header must be name=value, got '${entry}'`)
+      if (at < 1) {
+        throw new GuardError(`--header must be name=value, got '${entry}'`)
+      }
       headers[entry.slice(0, at).trim()] = entry.slice(at + 1).trim()
     }
     waitMs = seconds('--wait', values.wait) * 1000
@@ -126,10 +130,14 @@ export async function runGuard(argv: string[]): Promise<number> {
     } catch (error) {
       // Nothing listening on the URL we were pointed at: there is no session to lose.
       const code = (error as { cause?: { code?: string } })?.cause?.code
-      if (code === 'ECONNREFUSED') return { ok: false, status: 'unreachable' }
+      if (code === 'ECONNREFUSED') {
+        return { ok: false, status: 'unreachable' }
+      }
       return { ok: false, detail: String(error instanceof Error ? error.message : error) }
     }
-    if (!res.ok) return { ok: false, code: res.status, detail: `HTTP ${res.status}` }
+    if (!res.ok) {
+      return { ok: false, code: res.status, detail: `HTTP ${res.status}` }
+    }
     try {
       return { ok: true, body: (await res.json()) as Record<string, unknown> }
     } catch {
@@ -140,8 +148,12 @@ export async function runGuard(argv: string[]): Promise<number> {
   /** One look at the server. Returns the reasons a restart would cost something. */
   const inspect = async (): Promise<Verdict> => {
     const sessions = await get('/sessions')
-    if (!sessions.ok && 'status' in sessions) return { unreachable: true, reasons: [], notes: [] }
-    if (!sessions.ok) return { error: `GET ${base}/sessions → ${sessions.detail}`, reasons: [], notes: [] }
+    if (!sessions.ok && 'status' in sessions) {
+      return { unreachable: true, reasons: [], notes: [] }
+    }
+    if (!sessions.ok) {
+      return { error: `GET ${base}/sessions → ${sessions.detail}`, reasons: [], notes: [] }
+    }
     const listed = sessions.body.sessions
     if (!Array.isArray(listed)) {
       return { error: `GET ${base}/sessions returned no session list`, reasons: [], notes: [] }
@@ -167,10 +179,10 @@ export async function runGuard(argv: string[]): Promise<number> {
     if (!queue.ok && !('status' in queue) && queue.code !== 404) {
       return { error: `GET ${base}/queue → ${queue.detail}`, reasons: [], notes: [] }
     }
-    const stats = queue.ok
-      ? (queue.body.stats as { running?: number; queued?: number; parked?: number } | undefined)
-      : undefined
-    if ((stats?.running ?? 0) > 0) reasons.push(`${stats!.running} job(s) running`)
+    const stats = queue.ok ? (queue.body.stats as { running?: number; queued?: number; parked?: number } | undefined) : undefined
+    if ((stats?.running ?? 0) > 0) {
+      reasons.push(`${stats!.running} job(s) running`)
+    }
     if ((stats?.queued ?? 0) > 0 && !values['allow-queued']) {
       reasons.push(
         `${stats!.queued} job(s) queued — pass --allow-queued once the server runs a ` +
@@ -193,10 +205,7 @@ export async function runGuard(argv: string[]): Promise<number> {
       process.stdout.write(`${JSON.stringify({ verdict, ...detail })}\n`)
       return
     }
-    const lines = [
-      ...detail.reasons.map((reason) => `  - ${reason}`),
-      ...detail.notes.map((note) => `  note: ${note}`),
-    ].join('\n')
+    const lines = [...detail.reasons.map((reason) => `  - ${reason}`), ...detail.notes.map((note) => `  note: ${note}`)].join('\n')
     process.stdout.write(`guard: ${verdict}${lines ? `\n${lines}` : ''}\n`)
   }
 

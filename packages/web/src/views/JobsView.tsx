@@ -31,44 +31,42 @@ import { useSessions } from '@/hooks/useSessions.ts'
 
 export function QueueStatsStrip({ stats }: { stats: QueueStats }) {
   const dailyPct =
-    stats.dailyTokenLimit !== undefined && stats.dailyTokenLimit > 0
-      ? (stats.dailyTokensUsed / stats.dailyTokenLimit) * 100
-      : undefined
+    stats.dailyTokenLimit !== undefined && stats.dailyTokenLimit > 0 ? (stats.dailyTokensUsed / stats.dailyTokenLimit) * 100 : undefined
   return (
-    <div className='flex flex-wrap items-center justify-center gap-x-5 gap-y-2 rounded-md border border-border bg-surface px-3 py-2 text-body-sm text-fg-2'>
+    <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 rounded-md border border-border bg-surface px-3 py-2 text-body-sm text-fg-2">
       <span>
-        Running <span className='font-mono text-fg-1'>{stats.running}/{stats.maxConcurrency}</span>
+        Running{' '}
+        <span className="font-mono text-fg-1">
+          {stats.running}/{stats.maxConcurrency}
+        </span>
       </span>
       <span>
-        Queued <span className='font-mono text-fg-1'>{stats.queued}</span>
+        Queued <span className="font-mono text-fg-1">{stats.queued}</span>
       </span>
       {/* Only worth the space once something is actually waiting on an external
           execution — most deployments never defer at all. */}
       {stats.parked > 0 ? (
         <span>
-          Parked <span className='font-mono text-fg-1'>{stats.parked}</span>
+          Parked <span className="font-mono text-fg-1">{stats.parked}</span>
         </span>
       ) : null}
-      <span className='inline-flex items-center gap-1.5'>
+      <span className="inline-flex items-center gap-1.5">
         {dailyPct !== undefined ? (
-          <ProgressRing
-            value={dailyPct}
-            className={dailyPct >= 95 ? 'text-danger' : dailyPct >= 80 ? 'text-warning' : 'text-fg-3'}
-          />
+          <ProgressRing value={dailyPct} className={dailyPct >= 95 ? 'text-danger' : dailyPct >= 80 ? 'text-warning' : 'text-fg-3'} />
         ) : null}
         Daily tokens{' '}
-        <span className='font-mono text-fg-1'>
+        <span className="font-mono text-fg-1">
           {formatTokens(stats.dailyTokensUsed)}
           {stats.dailyTokenLimit !== undefined ? ` / ${formatTokens(stats.dailyTokenLimit)}` : ''}
         </span>
       </span>
       {stats.sessionTokenLimit !== undefined ? (
         <span>
-          Per-job cap <span className='font-mono text-fg-1'>{formatTokens(stats.sessionTokenLimit)}</span>
+          Per-job cap <span className="font-mono text-fg-1">{formatTokens(stats.sessionTokenLimit)}</span>
         </span>
       ) : null}
       {stats.paused ? (
-        <Badge variant='warning' dot>
+        <Badge variant="warning" dot>
           Paused — daily budget exhausted
         </Badge>
       ) : null}
@@ -136,22 +134,23 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
   }
 
   return (
-    <div className='flex flex-col gap-3'>
+    <div className="flex flex-col gap-3">
       <RunFormFields
         form={form}
         sessions={sessions}
-        promptLabel='Prompt (the task — runs unattended)'
+        promptLabel="Prompt (the task — runs unattended)"
         extras={
           // Questions ride the approval channel; without one there is nothing
           // to configure.
           engine.capabilities.interactiveApprovals ? (
-            <label className='flex min-w-0 flex-col gap-1'>
-              <span className='text-label font-medium text-fg-3'>Questions</span>
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className="text-label font-medium text-fg-3">Questions</span>
               <Select
                 items={QUESTION_BEHAVIORS.map((b) => ({ value: b.value, label: b.label }))}
                 value={questions}
-                onValueChange={(value) => setQuestions(value as QuestionBehavior)}>
-                <SelectTrigger className='min-w-36'>
+                onValueChange={(value) => setQuestions(value as QuestionBehavior)}
+              >
+                <SelectTrigger className="min-w-36">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -167,38 +166,38 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
         }
         actions={
           <>
-            <label className='flex min-w-0 flex-col gap-1'>
-              <span className='text-label font-medium text-fg-3'>Max tokens (optional)</span>
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className="text-label font-medium text-fg-3">Max tokens (optional)</span>
               <Input
                 value={maxTokens}
                 onChange={(e) => setMaxTokens(e.target.value)}
-                placeholder='per-job cap'
-                inputMode='numeric'
-                className='min-w-28 font-mono'
+                placeholder="per-job cap"
+                inputMode="numeric"
+                className="min-w-28 font-mono"
               />
             </label>
-            <label className='flex min-w-0 flex-col gap-1'>
-              <span className='text-label font-medium text-fg-3'>Attempts (optional)</span>
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className="text-label font-medium text-fg-3">Attempts (optional)</span>
               <Input
                 value={attempts}
                 onChange={(e) => setAttempts(e.target.value)}
-                placeholder='1'
-                inputMode='numeric'
-                className='min-w-20 font-mono'
+                placeholder="1"
+                inputMode="numeric"
+                className="min-w-20 font-mono"
               />
             </label>
-            <label className='flex min-w-0 flex-1 flex-col gap-1'>
-              <span className='text-label font-medium text-fg-3'>Webhook URL (optional)</span>
+            <label className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-label font-medium text-fg-3">Webhook URL (optional)</span>
               <Input
                 value={webhookUrl}
                 onChange={(e) => setWebhookUrl(e.target.value)}
-                placeholder='https://…/hook'
+                placeholder="https://…/hook"
                 spellCheck={false}
-                className='min-w-44 font-mono'
+                className="min-w-44 font-mono"
               />
             </label>
-            <Button className='ml-auto' onClick={() => void schedule()} disabled={creating}>
-              {creating ? <Spinner className='size-3.5 text-current' /> : <Plus className='size-4' />}
+            <Button className="ml-auto" onClick={() => void schedule()} disabled={creating}>
+              {creating ? <Spinner className="size-3.5 text-current" /> : <Plus className="size-4" />}
               Schedule
             </Button>
           </>
@@ -207,24 +206,23 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
       {/* The capability is a CLI spawn flag; the record says where it applies. */}
       {!engine.capabilities.settingSources ? null : (
         <label
-          className='flex w-fit cursor-pointer items-center gap-2 text-body-sm text-fg-2'
-          title='Spawns the CLI with --dangerously-skip-permissions available, so the mode can be switched on while watching the run. The job still starts in the mode selected above.'>
+          className="flex w-fit cursor-pointer items-center gap-2 text-body-sm text-fg-2"
+          title="Spawns the CLI with --dangerously-skip-permissions available, so the mode can be switched on while watching the run. The job still starts in the mode selected above."
+        >
           <input
-            type='checkbox'
+            type="checkbox"
             checked={allowBypass}
             onChange={(e) => setAllowBypass(e.target.checked)}
-            className='size-3.5 accent-(--color-fg-1)'
+            className="size-3.5 accent-(--color-fg-1)"
           />
-          Allow switching to <code className='font-mono'>bypassPermissions</code> mid-run
-          <span className='text-label text-fg-4'>(dangerous)</span>
+          Allow switching to <code className="font-mono">bypassPermissions</code> mid-run
+          <span className="text-label text-fg-4">(dangerous)</span>
         </label>
       )}
-      <p className='text-label text-fg-4'>
-        Unattended runs still surface permission prompts — the job&apos;s page is read-only, so
-        answer them from the session itself, or pick a mode that doesn&apos;t ask. Unanswered
-        prompts deny after the server&apos;s timeout. With Questions set to Ask, webhook
-        deliveries carry the full question so a controller can answer via{' '}
-        <code className='font-mono'>POST /sessions/:id/permissions/:requestId</code>.
+      <p className="text-label text-fg-4">
+        Unattended runs still surface permission prompts — the job&apos;s page is read-only, so answer them from the session itself, or pick
+        a mode that doesn&apos;t ask. Unanswered prompts deny after the server&apos;s timeout. With Questions set to Ask, webhook deliveries
+        carry the full question so a controller can answer via <code className="font-mono">POST /sessions/:id/permissions/:requestId</code>.
       </p>
     </div>
   )
@@ -242,11 +240,8 @@ export function ScheduleJobDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size='lg'>
-        <DialogHeader
-          title='Schedule a job'
-          description='A one-shot run the queue executes unattended.'
-        />
+      <DialogContent size="lg">
+        <DialogHeader title="Schedule a job" description="A one-shot run the queue executes unattended." />
         <DialogBody>{open ? <ScheduleJobForm onScheduled={onScheduled} /> : null}</DialogBody>
       </DialogContent>
     </Dialog>
@@ -261,28 +256,26 @@ export function ScheduleJobDialog({
 export function JobsView() {
   const { stats, enabled, error } = useJobs()
   return (
-    <div className='flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center'>
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
       {error ? (
-        <div className='rounded-md bg-danger-bg px-3 py-2 text-body-sm text-danger'>
-          Can&apos;t reach the worker server: {error}. Start it with{' '}
-          <code className='font-mono'>pnpm server</code>.
+        <div className="rounded-md bg-danger-bg px-3 py-2 text-body-sm text-danger">
+          Can&apos;t reach the worker server: {error}. Start it with <code className="font-mono">pnpm server</code>.
         </div>
       ) : null}
       {!enabled ? (
         <>
-          <CalendarClock className='size-8 text-fg-4' />
-          <p className='text-body-sm text-fg-3'>The server has no job queue configured.</p>
-          <p className='max-w-md text-label text-fg-4'>
-            Pass <code className='font-mono'>queue: {'{ maxConcurrency, … }'}</code> to{' '}
-            <code className='font-mono'>createWorkerServer</code> — the dev server enables it by
-            default.
+          <CalendarClock className="size-8 text-fg-4" />
+          <p className="text-body-sm text-fg-3">The server has no job queue configured.</p>
+          <p className="max-w-md text-label text-fg-4">
+            Pass <code className="font-mono">queue: {'{ maxConcurrency, … }'}</code> to{' '}
+            <code className="font-mono">createWorkerServer</code> — the dev server enables it by default.
           </p>
         </>
       ) : (
         <>
           <Empty
             icon={<ListChecks />}
-            title='No job selected'
+            title="No job selected"
             description={
               <>
                 Pick one on the left, or schedule one with <EmptyKey>+</EmptyKey> above.
@@ -290,7 +283,7 @@ export function JobsView() {
             }
           />
           {stats ? (
-            <div className='mt-2 w-full max-w-xl'>
+            <div className="mt-2 w-full max-w-xl">
               <QueueStatsStrip stats={stats} />
             </div>
           ) : null}

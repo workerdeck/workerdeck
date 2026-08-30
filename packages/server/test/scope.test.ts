@@ -4,12 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
-import type {
-  CreateSessionRequest,
-  JobInfo,
-  ProfileInfo,
-  SessionInfo,
-} from '@workerdeck/protocol'
+import type { CreateSessionRequest, JobInfo, ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import { ParkableRunner } from './parkable-runner.ts'
 import {
   createFileSessionStore,
@@ -33,7 +28,9 @@ const tempDirs: string[] = []
 afterEach(async () => {
   await running?.close()
   running = undefined
-  while (tempDirs.length) rmSync(tempDirs.pop()!, { recursive: true, force: true })
+  while (tempDirs.length) {
+    rmSync(tempDirs.pop()!, { recursive: true, force: true })
+  }
 })
 
 const tempDir = (prefix: string): string => {
@@ -76,8 +73,7 @@ function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
   }
 }
 
-const sandboxed = (): ProfileInfo =>
-  sandboxedProviderProfile('sandboxed', { id: 'openai-compatible', model: 'test-model' })
+const sandboxed = (): ProfileInfo => sandboxedProviderProfile('sandboxed', { id: 'openai-compatible', model: 'test-model' })
 
 /** Principals by bearer token, the shape an embedder's proxy would produce. */
 const PRINCIPALS: Record<string, unknown> = {
@@ -87,9 +83,7 @@ const PRINCIPALS: Record<string, unknown> = {
   operator: {},
 }
 
-const startServer = async (
-  extra: Parameters<typeof createWorkerServer>[0] = {},
-): Promise<string> => {
+const startServer = async (extra: Parameters<typeof createWorkerServer>[0] = {}): Promise<string> => {
   let n = 0
   running = createWorkerServer({
     authenticate: (req) => {
@@ -109,15 +103,10 @@ const as = (token: string): { headers: Record<string, string> } => ({
   headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
 })
 
-const createSession = async (
-  base: string,
-  token: string,
-  body: Record<string, unknown> = {},
-): Promise<Response> =>
+const createSession = async (base: string, token: string, body: Record<string, unknown> = {}): Promise<Response> =>
   fetch(`${base}/sessions`, { method: 'POST', ...as(token), body: JSON.stringify(body) })
 
-const sessionIdOf = async (res: Response): Promise<string> =>
-  ((await res.json()) as { session: SessionInfo }).session.id
+const sessionIdOf = async (res: Response): Promise<string> => ((await res.json()) as { session: SessionInfo }).session.id
 
 describe('session scope', () => {
   it('stamps the principal scope at create and echoes it on SessionInfo', async () => {
@@ -161,8 +150,7 @@ describe('session scope', () => {
     await createSession(base, 'carol-b')
 
     const listAs = async (token: string): Promise<SessionInfo[]> =>
-      ((await (await fetch(`${base}/sessions`, as(token))).json()) as { sessions: SessionInfo[] })
-        .sessions
+      ((await (await fetch(`${base}/sessions`, as(token))).json()) as { sessions: SessionInfo[] }).sessions
 
     expect((await listAs('alice-a')).map((s) => s.scope?.user)).toEqual(['alice'])
     expect((await listAs('carol-b')).map((s) => s.scope?.user)).toEqual(['carol'])
@@ -215,8 +203,7 @@ describe('session scope', () => {
     // Custom policy: same space is enough. This is the whole point of the seam —
     // "private to the starter" vs "readable by the space" is the app's call.
     const spaceWide = await startServer({
-      authorizeSession: (principal, session) =>
-        (principal as { scope?: Record<string, string> }).scope?.space === session.scope?.space,
+      authorizeSession: (principal, session) => (principal as { scope?: Record<string, string> }).scope?.space === session.scope?.space,
     })
     const id2 = await sessionIdOf(await createSession(spaceWide, 'alice-a'))
     expect((await fetch(`${spaceWide}/sessions/${id2}`, as('bob-a'))).status).toBe(200)
@@ -330,9 +317,11 @@ describe('session scope', () => {
 
     const revived = await startServer({ parking: { store: createFileSessionStore({ dir }) } })
     const listAs = async (token: string): Promise<SessionInfo[]> =>
-      ((await (await fetch(`${revived}/sessions`, as(token))).json()) as {
-        sessions: SessionInfo[]
-      }).sessions
+      (
+        (await (await fetch(`${revived}/sessions`, as(token))).json()) as {
+          sessions: SessionInfo[]
+        }
+      ).sessions
     expect((await listAs('carol-b')).map((s) => s.id)).toContain('restarted-1')
     expect((await listAs('alice-a')).map((s) => s.id)).not.toContain('restarted-1')
     expect(base).toBeTruthy()
@@ -386,9 +375,7 @@ describe('session scope', () => {
 
     expect((await fetch(`${base}/jobs/${mine.id}`, as('carol-b'))).status).toBe(404)
     // …and the refusal must not have canceled it on the way out.
-    expect(
-      (await fetch(`${base}/jobs/${mine.id}`, { method: 'DELETE', ...as('carol-b') })).status,
-    ).toBe(404)
+    expect((await fetch(`${base}/jobs/${mine.id}`, { method: 'DELETE', ...as('carol-b') })).status).toBe(404)
     const still = await fetch(`${base}/jobs/${mine.id}`, as('alice-a'))
     expect(((await still.json()) as { job: JobInfo }).job.status).toBe('queued')
   })
@@ -400,8 +387,8 @@ describe('session scope', () => {
     // whose sessions the policy correctly walls off.
     const roots = tempDir('cw-scope-tenant-')
     const TENANTS: Record<string, unknown> = {
-      't1': { tenant: 'one' },
-      't2': { tenant: 'two' },
+      t1: { tenant: 'one' },
+      t2: { tenant: 'two' },
       admin: { tenant: 'one', operator: true },
     }
     running = createWorkerServer({
@@ -410,8 +397,7 @@ describe('session scope', () => {
         const url = new URL(req.url ?? '/', 'http://internal')
         return TENANTS[token || (url.searchParams.get('key') ?? '')] ?? null
       },
-      authorizeSession: (principal, session) =>
-        (principal as { tenant?: string }).tenant === session.scope?.tenant,
+      authorizeSession: (principal, session) => (principal as { tenant?: string }).tenant === session.scope?.tenant,
       profiles: [sandboxed()],
       createEngineRunner: (ctx: EngineRunnerContext) => fakeRunner('t-1', ctx.config),
       allowedCwdRoots: [roots],
@@ -435,25 +421,23 @@ describe('session scope', () => {
     // principal carrying a `scope` field at all.
     for (const token of ['t1', 't2']) {
       for (const path of ['/fs/list?path=' + encodeURIComponent(roots), '/sdk-sessions', '/queue']) {
-        expect(`${token} ${path} → ${(await fetch(`${base}${path}`, as(token))).status}`).toBe(
-          `${token} ${path} → 404`,
-        )
+        expect(`${token} ${path} → ${(await fetch(`${base}${path}`, as(token))).status}`).toBe(`${token} ${path} → 404`)
       }
     }
     // An explicitly declared operator still gets them.
     expect((await fetch(`${base}/queue`, as('admin'))).status).toBe(200)
-    expect(
-      (await fetch(`${base}/fs/list?path=${encodeURIComponent(roots)}`, as('admin'))).status,
-    ).toBe(200)
+    expect((await fetch(`${base}/fs/list?path=${encodeURIComponent(roots)}`, as('admin'))).status).toBe(200)
 
     // The profile config snapshot is an operator read too.
     const asTenant = await fetch(`${base}/profiles/sandboxed`, as('t1'))
     expect(asTenant.status).toBe(200)
     expect(((await asTenant.json()) as { config?: unknown }).config).toBeUndefined()
     expect(
-      ((await (await fetch(`${base}/profiles/sandboxed`, as('admin'))).json()) as {
-        config?: unknown
-      }).config,
+      (
+        (await (await fetch(`${base}/profiles/sandboxed`, as('admin'))).json()) as {
+          config?: unknown
+        }
+      ).config,
     ).toBeDefined()
   })
 
@@ -490,12 +474,8 @@ describe('session scope', () => {
     expect(job.scope).toEqual({ space: 'a', user: 'bob' })
 
     expect((await fetch(`${base}/jobs/${job.id}`, as('bob-a'))).status).toBe(404)
-    expect(
-      ((await (await fetch(`${base}/jobs`, as('bob-a'))).json()) as { jobs: JobInfo[] }).jobs,
-    ).toEqual([])
-    expect(
-      (await fetch(`${base}/jobs/${job.id}`, { method: 'DELETE', ...as('bob-a') })).status,
-    ).toBe(404)
+    expect(((await (await fetch(`${base}/jobs`, as('bob-a'))).json()) as { jobs: JobInfo[] }).jobs).toEqual([])
+    expect((await fetch(`${base}/jobs/${job.id}`, { method: 'DELETE', ...as('bob-a') })).status).toBe(404)
     // …and the same predicate admits alice to bob's job, because this policy is
     // space-wide *for her*. Both directions come from the one rule; neither
     // comes from the tags.
@@ -505,7 +485,9 @@ describe('session scope', () => {
   it('treats a policy that throws as a refusal rather than a 500', async () => {
     const base = await startServer({
       authorizeSession: (_principal, session) => {
-        if (session.scope?.user === 'carol') throw new Error('policy exploded')
+        if (session.scope?.user === 'carol') {
+          throw new Error('policy exploded')
+        }
         return true
       },
     })
@@ -523,8 +505,7 @@ describe('session scope', () => {
     // execution, not just an unknown id.
     const parkable: ParkableRunner[] = []
     running = createWorkerServer({
-      authenticate: (req) =>
-        PRINCIPALS[(req.headers.authorization ?? '').replace(/^Bearer /, '')] ?? null,
+      authenticate: (req) => PRINCIPALS[(req.headers.authorization ?? '').replace(/^Bearer /, '')] ?? null,
       profiles: [sandboxed()],
       parking: { parkDelayMs: 10 },
       createEngineRunner: ({ config, restore }) => {
@@ -563,8 +544,7 @@ describe('session scope', () => {
     // A host-built runner that dropped `scope` would be invisible to every check
     // above and therefore visible to everyone — so the build asserts it.
     const base = await startServer({
-      createEngineRunner: (ctx: EngineRunnerContext) =>
-        fakeRunner('forgetful', { ...ctx.config, scope: undefined }),
+      createEngineRunner: (ctx: EngineRunnerContext) => fakeRunner('forgetful', { ...ctx.config, scope: undefined }),
     })
     const res = await createSession(base, 'alice-a')
     expect(res.status).toBe(500)
@@ -588,12 +568,8 @@ describe('cwd for a filesystem-less engine', () => {
   it('still validates a cwd the caller went out of its way to name', async () => {
     const roots = tempDir('cw-scope-roots-')
     const base = await startServer({ allowedCwdRoots: [roots] })
-    expect(
-      (await createSession(base, 'operator', { profile: 'sandboxed', cwd: '/etc' })).status,
-    ).toBe(403)
-    expect(
-      (await createSession(base, 'operator', { profile: 'sandboxed', cwd: roots })).status,
-    ).toBe(201)
+    expect((await createSession(base, 'operator', { profile: 'sandboxed', cwd: '/etc' })).status).toBe(403)
+    expect((await createSession(base, 'operator', { profile: 'sandboxed', cwd: roots })).status).toBe(201)
   })
 })
 

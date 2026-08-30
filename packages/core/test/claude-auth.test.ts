@@ -22,18 +22,12 @@ function fixture(name: string, script: string): string {
 
 describe('checkClaudeAuth', () => {
   it('reads only the loggedIn boolean from a logged-in verdict', async () => {
-    const executable = fixture(
-      'logged-in.sh',
-      `echo '{"loggedIn": true, "authMethod": "claude.ai", "email": "x@y.z", "orgId": "123"}'`,
-    )
+    const executable = fixture('logged-in.sh', `echo '{"loggedIn": true, "authMethod": "claude.ai", "email": "x@y.z", "orgId": "123"}'`)
     await expect(checkClaudeAuth({}, { executable })).resolves.toBe('logged_in')
   })
 
   it('trusts the JSON over the exit code — 2.1.217 exits 1 on logged out', async () => {
-    const executable = fixture(
-      'logged-out.sh',
-      `echo '{"loggedIn": false, "authMethod": "none"}'\nexit 1`,
-    )
+    const executable = fixture('logged-out.sh', `echo '{"loggedIn": false, "authMethod": "none"}'\nexit 1`)
     await expect(checkClaudeAuth({}, { executable })).resolves.toBe('logged_out')
   })
 
@@ -44,9 +38,7 @@ describe('checkClaudeAuth', () => {
       'env-keyed.sh',
       `if [ -n "$CW_TEST_CREDS" ]; then echo '{"loggedIn": true}'; else echo '{"loggedIn": false}'; fi`,
     )
-    await expect(
-      checkClaudeAuth({ CW_TEST_CREDS: '1' }, { executable }),
-    ).resolves.toBe('logged_in')
+    await expect(checkClaudeAuth({ CW_TEST_CREDS: '1' }, { executable })).resolves.toBe('logged_in')
     await expect(checkClaudeAuth({}, { executable })).resolves.toBe('logged_out')
   })
 
@@ -59,16 +51,12 @@ describe('checkClaudeAuth', () => {
   })
 
   it("is 'unknown' when the executable cannot be spawned", async () => {
-    await expect(
-      checkClaudeAuth({}, { executable: join(dir, 'no-such-binary') }),
-    ).resolves.toBe('unknown')
+    await expect(checkClaudeAuth({}, { executable: join(dir, 'no-such-binary') })).resolves.toBe('unknown')
   })
 
   it("is 'unknown' when the CLI hangs past the timeout", async () => {
     const executable = fixture('hang.sh', `sleep 30`)
-    await expect(
-      checkClaudeAuth({}, { executable, timeoutMs: 200 }),
-    ).resolves.toBe('unknown')
+    await expect(checkClaudeAuth({}, { executable, timeoutMs: 200 })).resolves.toBe('unknown')
   })
 })
 

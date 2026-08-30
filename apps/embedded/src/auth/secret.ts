@@ -20,10 +20,14 @@ import { randomBytes } from 'node:crypto'
  */
 export function resolveSecret(path: string): string {
   const fromEnv = process.env.EMBEDDED_SECRET
-  if (fromEnv) return fromEnv
+  if (fromEnv) {
+    return fromEnv
+  }
   try {
     const existing = readFileSync(path, 'utf8').trim()
-    if (existing) return existing
+    if (existing) {
+      return existing
+    }
   } catch {
     // Absent is the ordinary case on a first run; anything else falls through to
     // a write that will report the real problem.

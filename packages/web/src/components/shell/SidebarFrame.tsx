@@ -47,15 +47,7 @@ export interface SidebarFrameProps {
  * each section's rows, filtering and empty state are its own business, since
  * they have nothing in common beyond sitting in this box.
  */
-export function SidebarFrame({
-  section,
-  title,
-  badge,
-  actions,
-  children,
-  rail,
-  railActions,
-}: SidebarFrameProps) {
+export function SidebarFrame({ section, title, badge, actions, children, rail, railActions }: SidebarFrameProps) {
   const [width, setWidth] = useState(() => getSidebarWidth(section))
   const [collapsed, setCollapsed] = useState(() => getSidebarCollapsed(section))
 
@@ -66,43 +58,27 @@ export function SidebarFrame({
 
   if (collapsed) {
     return (
-      <div className='flex min-h-0 w-11 shrink-0 flex-col items-center gap-1 border-r border-border bg-sidebar py-1.5'>
-        <Button
-          variant='ghost'
-          size='icon-sm'
-          aria-label={`Expand ${title.toLowerCase()}`}
-          onClick={() => toggle(false)}>
-          <PanelLeftOpen className='size-4' />
+      <div className="flex min-h-0 w-11 shrink-0 flex-col items-center gap-1 border-r border-border bg-sidebar py-1.5">
+        <Button variant="ghost" size="icon-sm" aria-label={`Expand ${title.toLowerCase()}`} onClick={() => toggle(false)}>
+          <PanelLeftOpen className="size-4" />
         </Button>
         {railActions}
-        {rail ? (
-          <div className='flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto pt-1'>
-            {rail}
-          </div>
-        ) : null}
+        {rail ? <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto pt-1">{rail}</div> : null}
       </div>
     )
   }
 
   return (
     <>
-      <div
-        style={{ width }}
-        className='flex min-h-0 shrink-0 flex-col border-r border-border bg-sidebar'>
+      <div style={{ width }} className="flex min-h-0 shrink-0 flex-col border-r border-border bg-sidebar">
         {/* VS Code's view header: a small-caps title and the actions that belong
             to the view, not a page heading. */}
-        <header className='flex h-9 shrink-0 items-center gap-1 pr-1 pl-3'>
-          <span className='truncate text-label font-medium tracking-wide text-fg-3 uppercase'>
-            {title}
-          </span>
+        <header className="flex h-9 shrink-0 items-center gap-1 pr-1 pl-3">
+          <span className="truncate text-label font-medium tracking-wide text-fg-3 uppercase">{title}</span>
           {badge}
-          <span className='flex-1' />
-          <Button
-            variant='ghost'
-            size='icon-sm'
-            aria-label={`Collapse ${title.toLowerCase()}`}
-            onClick={() => toggle(true)}>
-            <PanelLeftClose className='size-3.5' />
+          <span className="flex-1" />
+          <Button variant="ghost" size="icon-sm" aria-label={`Collapse ${title.toLowerCase()}`} onClick={() => toggle(true)}>
+            <PanelLeftClose className="size-3.5" />
           </Button>
           {actions}
         </header>
@@ -110,7 +86,7 @@ export function SidebarFrame({
       </div>
 
       <Splitter
-        orientation='vertical'
+        orientation="vertical"
         value={width}
         onValueChange={(next) => {
           setWidth(next)
@@ -126,15 +102,6 @@ export function SidebarFrame({
 }
 
 /** The scrolling body most sidebars want under the header. */
-export function SidebarBody({
-  children,
-  className,
-}: {
-  children: ReactNode
-  className?: string
-}) {
-  return (
-    <div className={cn('min-h-0 flex-1 overflow-y-auto pb-2', className)}>{children}</div>
-  )
+export function SidebarBody({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn('min-h-0 flex-1 overflow-y-auto pb-2', className)}>{children}</div>
 }
-

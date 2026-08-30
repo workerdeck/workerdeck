@@ -42,7 +42,9 @@ export function mergeUsage(session: SessionUsage, profile: ProfileUsage | undefi
   for (const [key, info] of Object.entries(session.rateLimits ?? {})) {
     out[key] = { info, updatedAt: session.updatedAt ?? 0 }
   }
-  for (const [key, window] of Object.entries(profile ?? {})) out[key] = window
+  for (const [key, window] of Object.entries(profile ?? {})) {
+    out[key] = window
+  }
   return out
 }
 
@@ -76,20 +78,20 @@ export function orderUsageWindows(usage: ProfileUsage | undefined): UsageWindowR
     .filter(([, w]) => w.info.utilization !== undefined)
     .map(([key, w]) => ({ key, info: w.info, updatedAt: w.updatedAt, inferredReset: w.inferredReset }))
   const named = ['five_hour', 'seven_day'].flatMap((key) => all.filter((w) => w.key === key))
-  const perModel = all
-    .filter((w) => w.key.startsWith('seven_day_'))
-    .sort((a, b) => a.key.localeCompare(b.key))
+  const perModel = all.filter((w) => w.key.startsWith('seven_day_')).sort((a, b) => a.key.localeCompare(b.key))
   return [...named, ...perModel]
 }
 
 /** The flat `rateLimitType → reading` map every existing renderer takes, out of
  * the dated form. Undefined in, undefined out — so a surface can keep telling
  * "no reading" apart from "an empty one". */
-export function usageInfos(
-  usage: ProfileUsage | undefined,
-): Record<string, RateLimitInfo> | undefined {
-  if (!usage) return undefined
+export function usageInfos(usage: ProfileUsage | undefined): Record<string, RateLimitInfo> | undefined {
+  if (!usage) {
+    return undefined
+  }
   const out: Record<string, RateLimitInfo> = {}
-  for (const [key, window] of Object.entries(usage)) out[key] = window.info
+  for (const [key, window] of Object.entries(usage)) {
+    out[key] = window.info
+  }
   return out
 }

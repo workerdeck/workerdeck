@@ -34,16 +34,7 @@
  * Costs real tokens: two short turns per engine.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
-import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-  existsSync,
-  readdirSync,
-  unlinkSync,
-  realpathSync,
-} from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync, readdirSync, unlinkSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import WebSocket from 'ws'
@@ -82,9 +73,7 @@ const step = (what: string) => console.log(`\n[1m${what}[0m`)
 function writeConfig(profiles: string[]): void {
   const decls = profiles
     .map((name) =>
-      name === 'codex'
-        ? `{ name: 'codex', engine: 'codex' }`
-        : `{ name: 'claude', configDir: \`\${process.env.HOME}/.claude\` }`,
+      name === 'codex' ? `{ name: 'codex', engine: 'codex' }` : `{ name: 'claude', configDir: \`\${process.env.HOME}/.claude\` }`,
     )
     .join(',\n    ')
   writeFileSync(
@@ -120,14 +109,20 @@ async function startGateway(): Promise<void> {
   )
   child.stderr?.on('data', (d) => {
     const line = String(d).trim()
-    if (line) console.log(`    [2m[gateway] ${line}[0m`)
+    if (line) {
+      console.log(`    [2m[gateway] ${line}[0m`)
+    }
   })
   const deadline = Date.now() + 30_000
   for (;;) {
-    if (Date.now() > deadline) throw new Error('gateway did not come up within 30s')
+    if (Date.now() > deadline) {
+      throw new Error('gateway did not come up within 30s')
+    }
     try {
       const res = await fetch(`${base}/sessions`)
-      if (res.ok) return
+      if (res.ok) {
+        return
+      }
     } catch {
       // not listening yet
     }
@@ -138,11 +133,15 @@ async function startGateway(): Promise<void> {
 /** SIGINT and wait for the process to actually be gone — not merely signalled.
  * Returning early would race the next `listen` onto a port still held. */
 async function stopGateway(): Promise<void> {
-  if (!child) return
+  if (!child) {
+    return
+  }
   const dead = new Promise<void>((resolve) => child!.once('exit', () => resolve()))
   child.kill('SIGINT')
   await Promise.race([dead, sleep(10_000)])
-  if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+  if (child.exitCode === null && child.signalCode === null) {
+    child.kill('SIGKILL')
+  }
   child = undefined
   await sleep(500)
 }
@@ -154,7 +153,9 @@ const api = async <T>(path: string, init?: RequestInit): Promise<T> => {
     ...init,
     headers: { 'content-type': 'application/json', ...init?.headers },
   })
-  if (!res.ok) throw new Error(`${init?.method ?? 'GET'} ${path} → ${res.status}`)
+  if (!res.ok) {
+    throw new Error(`${init?.method ?? 'GET'} ${path} → ${res.status}`)
+  }
   return (await res.json()) as T
 }
 
@@ -189,7 +190,9 @@ async function attach(
     // Swallowed unless asked for: two variants *expect* the attach to fail, so
     // an unconditional error line reads as a broken run rather than a passing one.
     ws.on('error', (e) => {
-      if (process.env.WD_SMOKE_DEBUG) console.log(`    \u001b[2m— ws error: ${(e as Error).message}\u001b[0m`)
+      if (process.env.WD_SMOKE_DEBUG) {
+        console.log(`    \u001b[2m— ws error: ${(e as Error).message}\u001b[0m`)
+      }
     })
     ws.on('message', (data) => {
       const frame = JSON.parse(String(data)) as ServerFrame
@@ -197,13 +200,21 @@ async function attach(
         replayingFrom = frame.replayingFrom
         return
       }
-      if (frame.type !== 'event') return
+      if (frame.type !== 'event') {
+        return
+      }
       events.push(frame.event)
-      if (!live) replayed++
+      if (!live) {
+        replayed++
+      }
       if (live && frame.event.type === 'assistant_message') {
         const content = frame.event.message.content
         if (Array.isArray(content)) {
-          for (const part of content) if (part.type === 'text') text += part.text
+          for (const part of content) {
+            if (part.type === 'text') {
+              text += part.text
+            }
+          }
         }
       }
       if (live && frame.event.type === 'turn_result') {
@@ -270,8 +281,11 @@ async function main(): Promise<void> {
   ok('session created', id)
 
   const first = await attach(id, `Remember the word ${WORD}. Reply with just: ok`)
-  if (first.text) ok('the engine answered a turn', JSON.stringify(first.text.slice(0, 40)))
-  else bad('the engine answered a turn', 'no assistant text — is the profile logged in?')
+  if (first.text) {
+    ok('the engine answered a turn', JSON.stringify(first.text.slice(0, 40)))
+  } else {
+    bad('the engine answered a turn', 'no assistant text — is the profile logged in?')
+  }
 
   step('2. ctrl-c, and back')
   // **The dormant write is asynchronous, and it is not instant.** Claude also
@@ -290,11 +304,15 @@ async function main(): Promise<void> {
   step('3. The row survives, and reads idle')
   const listed = await api<{ sessions: SessionInfo[] }>('/sessions')
   const row = listed.sessions.find((s) => s.id === id)
-  if (!row) bad('the session is still listed', 'the row is gone entirely')
-  else {
+  if (!row) {
+    bad('the session is still listed', 'the row is gone entirely')
+  } else {
     ok('the session is still listed')
-    if (row.status === 'idle') ok('it reads idle', row.status)
-    else bad('it reads idle', `reads ${row.status}`)
+    if (row.status === 'idle') {
+      ok('it reads idle', row.status)
+    } else {
+      bad('it reads idle', `reads ${row.status}`)
+    }
   }
 
   step('4. The attach replays, and the thread continues')
@@ -305,16 +323,16 @@ async function main(): Promise<void> {
   const priorPrompt = second.events.some(
     (e) => e.type === 'user_message' && JSON.stringify(e.message.content).includes('Remember the word'),
   )
-  if (priorPrompt) ok('history arrived as replay', `${second.replayed} events before this turn`)
-  else bad('history arrived as replay', 'the pre-restart prompt was not replayed')
+  if (priorPrompt) {
+    ok('history arrived as replay', `${second.replayed} events before this turn`)
+  } else {
+    bad('history arrived as replay', 'the pre-restart prompt was not replayed')
+  }
 
   if (second.text.toUpperCase().includes(WORD)) {
     ok('the engine resumed the SAME thread', JSON.stringify(second.text.slice(0, 40)))
   } else {
-    bad(
-      'the engine resumed the SAME thread',
-      `expected ${WORD}, got ${JSON.stringify(second.text.slice(0, 60))}`,
-    )
+    bad('the engine resumed the SAME thread', `expected ${WORD}, got ${JSON.stringify(second.text.slice(0, 60))}`)
   }
 
   // Order matters: sweeping the engine store leaves the session unusable (and
@@ -323,9 +341,15 @@ async function main(): Promise<void> {
   // them the other way round and watching step 6 fail for step 5's reasons.
   // Before the two destructive variants: this one needs the session's dormant
   // record to be real and current, and both of those leave it otherwise.
-  if (wants('clear')) await clearNoChild(id)
-  if (wants('noprofile')) await deletedProfile(id)
-  if (wants('swept')) await sweptStore(id)
+  if (wants('clear')) {
+    await clearNoChild(id)
+  }
+  if (wants('noprofile')) {
+    await deletedProfile(id)
+  }
+  if (wants('swept')) {
+    await sweptStore(id)
+  }
 
   await stopGateway()
 }
@@ -360,13 +384,18 @@ async function sweptStore(id: string): Promise<void> {
     return
   }
   const files = readdirSync(dir).filter((f) => f.endsWith('.jsonl'))
-  for (const f of files) unlinkSync(join(dir, f))
+  for (const f of files) {
+    unlinkSync(join(dir, f))
+  }
   ok('swept the engine store', `${files.length} transcript(s) under ${slug}`)
 
   await startGateway()
   const listed = await api<{ sessions: SessionInfo[] }>('/sessions')
-  if (listed.sessions.some((s) => s.id === id)) ok('the record deliberately stays')
-  else bad('the record deliberately stays', 'the row removed itself')
+  if (listed.sessions.some((s) => s.id === id)) {
+    ok('the record deliberately stays')
+  } else {
+    bad('the record deliberately stays', 'the row removed itself')
+  }
 
   // What actually happens is NOT what this was predicted to do, so the step
   // reports rather than asserts a guess. The gateway's own event log lives in
@@ -380,9 +409,7 @@ async function sweptStore(id: string): Promise<void> {
   console.log(`  [2m— attach succeeded; history replayed: ${replayedHistory}[0m`)
   console.log(`  [2m— the engine's answer: ${JSON.stringify(after.text.slice(0, 60))}[0m`)
   if (after.text.toUpperCase().includes(WORD)) {
-    console.log(
-      `  [33m![0m the engine still recalled the word — the CLI rebuilt the thread from somewhere`,
-    )
+    console.log(`  [33m![0m the engine still recalled the word — the CLI rebuilt the thread from somewhere`)
   } else {
     ok('the engine thread is gone (the word is not recalled)')
   }
@@ -416,8 +443,10 @@ async function sweptStore(id: string): Promise<void> {
 async function clearNoChild(id: string): Promise<void> {
   step('5. A clear with no live child, across a restart')
   if (engine !== 'codex') {
-    console.log('  \u001b[2m— skipped: only codex can be cleared with its child dead ' +
-      "(claude's reset comes back from the CLI, which needs one)\u001b[0m")
+    console.log(
+      '  \u001b[2m— skipped: only codex can be cleared with its child dead ' +
+        "(claude's reset comes back from the CLI, which needs one)\u001b[0m",
+    )
     return
   }
   const recordPath = () => {
@@ -442,39 +471,51 @@ async function clearNoChild(id: string): Promise<void> {
     ps.stdout.on('data', (d) => (out += String(d)))
     ps.on('close', () => resolve(out))
   })
-  const pids = kids.split('\n').map((l) => l.trim()).filter(Boolean)
-  for (const pid of pids) process.kill(Number(pid), 'SIGKILL')
-  if (pids.length > 0) ok('the codex child killed', `pid ${pids.join(', ')}`)
-  else bad('the codex child killed', 'the gateway had no child process to kill')
+  const pids = kids
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+  for (const pid of pids) {
+    process.kill(Number(pid), 'SIGKILL')
+  }
+  if (pids.length > 0) {
+    ok('the codex child killed', `pid ${pids.join(', ')}`)
+  } else {
+    bad('the codex child killed', 'the gateway had no child process to kill')
+  }
   await sleep(1_000)
 
   const reset = await clearOverWs(id)
-  if (reset) ok('the clear landed with no child', 'conversation_reset emitted')
-  else bad('the clear landed with no child', 'no conversation_reset within 20s')
+  if (reset) {
+    ok('the clear landed with no child', 'conversation_reset emitted')
+  } else {
+    bad('the clear landed with no child', 'no conversation_reset within 20s')
+  }
 
   // Give the (asynchronous, queued) store delete a moment to land.
   await sleep(1_500)
-  if (!recordPath()) ok('the stale dormant record is gone', 'it named the cleared conversation')
-  else bad('the stale dormant record is gone', 'it survived, still naming the cleared thread')
+  if (!recordPath()) {
+    ok('the stale dormant record is gone', 'it named the cleared conversation')
+  } else {
+    bad('the stale dormant record is gone', 'it survived, still naming the cleared thread')
+  }
 
   await stopGateway()
   await startGateway()
   const listed = await api<{ sessions: SessionInfo[] }>('/sessions')
   const row = listed.sessions.find((s) => s.id === id)
   if (!row) {
-    ok(
-      'the cleared session is NOT resurrected',
-      'the row is gone — for codex the dormant record is the way back, and the clear removed it',
-    )
+    ok('the cleared session is NOT resurrected', 'the row is gone — for codex the dormant record is the way back, and the clear removed it')
     return
   }
   console.log(`  \u001b[2m— the row came back (status ${row.status}); checking it came back empty\u001b[0m`)
   const after = await attach(id, undefined, 8_000)
-  const priorPrompt = after.events.some(
-    (e) => e.type === 'user_message' && JSON.stringify(e.message.content).includes('Remember the word'),
-  )
-  if (priorPrompt) bad('the cleared session is NOT resurrected', 'the pre-clear conversation replayed')
-  else ok('the cleared session is NOT resurrected', 'it came back with none of the cleared history')
+  const priorPrompt = after.events.some((e) => e.type === 'user_message' && JSON.stringify(e.message.content).includes('Remember the word'))
+  if (priorPrompt) {
+    bad('the cleared session is NOT resurrected', 'the pre-clear conversation replayed')
+  } else {
+    ok('the cleared session is NOT resurrected', 'it came back with none of the cleared history')
+  }
 }
 
 /**
@@ -494,7 +535,9 @@ async function clearOverWs(id: string): Promise<boolean> {
     ws.on('error', () => resolve())
     ws.on('message', (data) => {
       const frame = JSON.parse(String(data)) as ServerFrame
-      if (frame.type !== 'event' || frame.event.type !== 'conversation_reset') return
+      if (frame.type !== 'event' || frame.event.type !== 'conversation_reset') {
+        return
+      }
       sawReset = true
       clearTimeout(timer)
       resolve()
@@ -521,8 +564,11 @@ async function deletedProfile(id: string): Promise<void> {
   await startGateway()
 
   const listed = await api<{ sessions: SessionInfo[] }>('/sessions')
-  if (listed.sessions.some((s) => s.id === id)) ok('the row stays')
-  else bad('the row stays', 'the row vanished')
+  if (listed.sessions.some((s) => s.id === id)) {
+    ok('the row stays')
+  } else {
+    bad('the row stays', 'the row vanished')
+  }
 
   try {
     await attach(id, undefined, 8_000)

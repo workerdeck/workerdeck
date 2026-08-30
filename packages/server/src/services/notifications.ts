@@ -55,7 +55,9 @@ export class SessionNotifier {
    * re-announce every permission request it ever made.
    */
   watch(runner: Runner, afterSeq = runner.info().lastSeq): void {
-    if (this.idle) return
+    if (this.idle) {
+      return
+    }
     runner.subscribe((event) => {
       switch (event.type) {
         case 'permission_requested':
@@ -95,12 +97,7 @@ export class SessionNotifier {
     }, afterSeq)
   }
 
-  #emit(
-    runner: Runner,
-    seq: number,
-    ts: number,
-    body: Omit<SessionNotification, 'sessionId' | 'session' | 'seq' | 'ts'>,
-  ): void {
+  #emit(runner: Runner, seq: number, ts: number, body: Omit<SessionNotification, 'sessionId' | 'session' | 'seq' | 'ts'>): void {
     // A microtask late, deliberately. Listeners run *inside* the emit, before the
     // runner has applied what the event means — `session_closed` is delivered
     // while the status still says 'starting', `session_error` before 'failed'.
@@ -109,15 +106,12 @@ export class SessionNotifier {
     queueMicrotask(() => this.#send(runner, seq, ts, body))
   }
 
-  #send(
-    runner: Runner,
-    seq: number,
-    ts: number,
-    body: Omit<SessionNotification, 'sessionId' | 'session' | 'seq' | 'ts'>,
-  ): void {
+  #send(runner: Runner, seq: number, ts: number, body: Omit<SessionNotification, 'sessionId' | 'session' | 'seq' | 'ts'>): void {
     const webhook = this.#options.webhook
     const wanted = !webhook?.events || webhook.events.includes(body.type)
-    if (!webhook && !this.#options.onNotification) return
+    if (!webhook && !this.#options.onNotification) {
+      return
+    }
 
     // `info()` is read here, not at delivery time: the snapshot must describe the
     // session as the event left it, not as it is after three retries.
@@ -135,14 +129,18 @@ export class SessionNotifier {
       // An observer that throws must not take the session down with it.
     }
 
-    if (!webhook || !wanted) return
+    if (!webhook || !wanted) {
+      return
+    }
     const previous = this.#chains.get(runner.id) ?? Promise.resolve()
     const next = previous.then(() => this.#deliver(webhook, notification))
     this.#chains.set(runner.id, next)
     // Drop the chain once it drains, so a long-lived server doesn't accumulate one
     // resolved promise per session it ever ran.
     void next.then(() => {
-      if (this.#chains.get(runner.id) === next) this.#chains.delete(runner.id)
+      if (this.#chains.get(runner.id) === next) {
+        this.#chains.delete(runner.id)
+      }
     })
   }
 
@@ -162,7 +160,9 @@ export class SessionNotifier {
           headers: { 'content-type': 'application/json', ...webhook.headers },
           body: JSON.stringify(notification),
         })
-        if (res.ok) return
+        if (res.ok) {
+          return
+        }
       } catch {
         // network error — retry below
       }

@@ -9,7 +9,9 @@ import type { AppServerConnectFn } from '../src/engines/codex/types.ts'
 
 const roots: string[] = []
 afterAll(() => {
-  for (const dir of roots) rmSync(dir, { recursive: true, force: true })
+  for (const dir of roots) {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 /** A fresh sandbox dir. `mkdtemp` under macOS's tmpdir returns a symlinked
@@ -35,25 +37,20 @@ function projectConfig(dir: string): string {
 function codexHome(entries: Array<{ path: string; level: string }> = []): string {
   const home = join(tempDir(), 'home')
   mkdirSync(home, { recursive: true })
-  const body = entries
-    .map((e) => `[projects."${e.path}"]\ntrust_level = "${e.level}"\n`)
-    .join('\n')
+  const body = entries.map((e) => `[projects."${e.path}"]\ntrust_level = "${e.level}"\n`).join('\n')
   writeFileSync(join(home, 'config.toml'), body)
   return home
 }
 
 describe('parseProjectTrustEntries', () => {
   it('reads the form codex itself writes', () => {
-    const entries = parseProjectTrustEntries(
-      '[projects."/Users/me/proj"]\ntrust_level = "trusted"\n',
-    )
+    const entries = parseProjectTrustEntries('[projects."/Users/me/proj"]\ntrust_level = "trusted"\n')
     expect(entries?.get('/Users/me/proj')).toBe('trusted')
   })
 
   it('tolerates comments, blank lines, CRLF and whitespace around dots', () => {
     const entries = parseProjectTrustEntries(
-      '# header\r\n\r\n[ projects . "/a/b" ]  # trailing\r\n' +
-        '  trust_level = "trusted"  # yes\r\n',
+      '# header\r\n\r\n[ projects . "/a/b" ]  # trailing\r\n' + '  trust_level = "trusted"  # yes\r\n',
     )
     expect(entries?.get('/a/b')).toBe('trusted')
   })
@@ -72,9 +69,7 @@ describe('parseProjectTrustEntries', () => {
   })
 
   it('reads dotted-key forms: [projects] sections and top-level assignments', () => {
-    const entries = parseProjectTrustEntries(
-      '[projects]\n"/a".trust_level = "trusted"\n',
-    )
+    const entries = parseProjectTrustEntries('[projects]\n"/a".trust_level = "trusted"\n')
     expect(entries?.get('/a')).toBe('trusted')
     const topLevel = parseProjectTrustEntries('projects."/b".trust_level = "untrusted"\n')
     expect(topLevel?.get('/b')).toBe('untrusted')
@@ -101,13 +96,9 @@ describe('parseProjectTrustEntries', () => {
   })
 
   it('tolerates duplicate agreeing entries and refuses conflicting ones', () => {
-    const agree = parseProjectTrustEntries(
-      'projects."/a".trust_level = "trusted"\nprojects."/a".trust_level = "trusted"\n',
-    )
+    const agree = parseProjectTrustEntries('projects."/a".trust_level = "trusted"\nprojects."/a".trust_level = "trusted"\n')
     expect(agree?.get('/a')).toBe('trusted')
-    const conflict = parseProjectTrustEntries(
-      'projects."/a".trust_level = "trusted"\nprojects."/a".trust_level = "untrusted"\n',
-    )
+    const conflict = parseProjectTrustEntries('projects."/a".trust_level = "trusted"\nprojects."/a".trust_level = "untrusted"\n')
     expect(conflict).toBeUndefined()
   })
 
@@ -125,9 +116,7 @@ describe('parseProjectTrustEntries', () => {
   it('refuses multi-line strings anywhere — where a line reader starts lying', () => {
     // The body of a multi-line string could be misread as sections and
     // entries, flipping a real verdict; the file is refused instead.
-    expect(
-      parseProjectTrustEntries('[mcp_servers.x]\nnote = """\n[projects."/a"]\n"""\n'),
-    ).toBeUndefined()
+    expect(parseProjectTrustEntries('[mcp_servers.x]\nnote = """\n[projects."/a"]\n"""\n')).toBeUndefined()
     expect(parseProjectTrustEntries("[a]\nnote = '''\ntext\n'''\n")).toBeUndefined()
   })
 
@@ -281,12 +270,8 @@ describe('untrustedProjectNotice', () => {
     projectConfig(proj)
     // cwd = the directory whose .codex is CODEX_HOME itself: that config.toml
     // is the base config and always loads — nothing is being ignored.
-    expect(
-      untrustedProjectNotice({ cwd: proj, codexHome: join(proj, '.codex') }),
-    ).toBeUndefined()
-    expect(
-      untrustedProjectNotice({ cwd: join(proj, 'gone'), codexHome: codexHome() }),
-    ).toBeUndefined()
+    expect(untrustedProjectNotice({ cwd: proj, codexHome: join(proj, '.codex') })).toBeUndefined()
+    expect(untrustedProjectNotice({ cwd: join(proj, 'gone'), codexHome: codexHome() })).toBeUndefined()
   })
 })
 

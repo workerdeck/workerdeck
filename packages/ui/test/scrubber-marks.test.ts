@@ -32,11 +32,7 @@ const errorNotice = (text: string): TranscriptItem => ({
   level: 'error',
   text,
 })
-const toolCall = (
-  status: 'running' | 'settled' | 'failed',
-  parentToolUseId: string | null = null,
-  id = `t${++seq}`,
-): TranscriptItem => ({
+const toolCall = (status: 'running' | 'settled' | 'failed', parentToolUseId: string | null = null, id = `t${++seq}`): TranscriptItem => ({
   kind: 'tool_call',
   id,
   name: 'Bash',
@@ -60,20 +56,11 @@ describe('buildMarks', () => {
   })
 
   it('marks a replayed history that carries no turn rows at all', () => {
-    expect(kinds([user('a'), assistant('one'), user('b'), assistant('two')])).toEqual([
-      'user@0',
-      'turn@1',
-      'user@2',
-      'turn@3',
-    ])
+    expect(kinds([user('a'), assistant('one'), user('b'), assistant('two')])).toEqual(['user@0', 'turn@1', 'user@2', 'turn@3'])
   })
 
   it('flags a failed turn and a failed top-level call, red', () => {
-    expect(kinds([user('x'), toolCall('failed'), assistant('sorry'), turn(true)])).toEqual([
-      'user@0',
-      'toolFailed@1',
-      'turnFailed@2',
-    ])
+    expect(kinds([user('x'), toolCall('failed'), assistant('sorry'), turn(true)])).toEqual(['user@0', 'toolFailed@1', 'turnFailed@2'])
   })
 
   it("marks a sub-agent dispatch in the input lane and ignores the sub-agent's own rows", () => {
@@ -97,10 +84,7 @@ describe('buildMarks', () => {
 
   it('inside a frame, every narration step is its own mark', () => {
     const items = [assistant('step one', 'task-1'), assistant('step two', 'task-1')]
-    expect(buildMarks(items, { frameParentId: 'task-1' }).map((m) => m.kind)).toEqual([
-      'turn',
-      'turn',
-    ])
+    expect(buildMarks(items, { frameParentId: 'task-1' }).map((m) => m.kind)).toEqual(['turn', 'turn'])
   })
 
   it('injects bookmarks (bounds-checked) and the recap boundary', () => {
@@ -108,12 +92,7 @@ describe('buildMarks', () => {
       bookmarks: [1, 99],
       recapItemIndex: 1,
     })
-    expect(marks.map((m) => `${m.kind}@${m.itemIndex}`)).toEqual([
-      'user@0',
-      'turn@1',
-      'bookmark@1',
-      'recap@1',
-    ])
+    expect(marks.map((m) => `${m.kind}@${m.itemIndex}`)).toEqual(['user@0', 'turn@1', 'bookmark@1', 'recap@1'])
   })
 })
 
@@ -126,11 +105,7 @@ describe('clusterMarks', () => {
     const clusters = clusterMarks(buildMarks(items), RAIL, items.length)
     // Ten items over 100px: the prompts at items 0 and 8 sit at 0 and 80.
     expect(clusters.filter((c) => c.lane === 'l').map((c) => c.y)).toEqual([0, 80])
-    expect(
-      clusters
-        .filter((c) => c.lane === 'r')
-        .map((c) => c.y),
-    ).toEqual([10, 90])
+    expect(clusters.filter((c) => c.lane === 'r').map((c) => c.y)).toEqual([10, 90])
   })
 
   it('merges adjacent marks per lane, loudest colour winning', () => {
@@ -158,6 +133,8 @@ describe('clusterMarks', () => {
   it('clamps the last mark inside the rail', () => {
     const items = [user('a'), assistant('b')]
     const clusters = clusterMarks(buildMarks(items), RAIL, items.length)
-    for (const cluster of clusters) expect(cluster.y + cluster.h).toBeLessThanOrEqual(RAIL)
+    for (const cluster of clusters) {
+      expect(cluster.y + cluster.h).toBeLessThanOrEqual(RAIL)
+    }
   })
 })

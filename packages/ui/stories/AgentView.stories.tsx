@@ -25,13 +25,17 @@ function richItems(): TranscriptItem[] {
 
   // Turn 1 — user prompt with a skill chip
   items.push({
-    kind: 'user', id: 'u1',
+    kind: 'user',
+    id: 'u1',
     text: 'Can you give me a complete overview of the data model? Include tables, code examples, and architecture notes.',
   })
 
   // Turn 1 — assistant response with headings, lists, bold, inline code
   items.push({
-    kind: 'assistant_text', id: 'a1', streaming: false, parentToolUseId: null,
+    kind: 'assistant_text',
+    id: 'a1',
+    streaming: false,
+    parentToolUseId: null,
     text: `# Data Model Overview
 
 The system uses three core entities. Each is stored in its own table and linked by foreign keys.
@@ -105,7 +109,10 @@ interface SessionEvent {
 
   // Turn 2 — tool call
   items.push({
-    kind: 'tool_call', id: 'tc1', name: 'Read', parentToolUseId: null,
+    kind: 'tool_call',
+    id: 'tc1',
+    name: 'Read',
+    parentToolUseId: null,
     input: { file_path: '/packages/server/src/lib/registry.ts' },
     status: 'settled',
     result: {
@@ -115,7 +122,10 @@ interface SessionEvent {
 
   // Turn 2 — response with blockquote, inline code
   items.push({
-    kind: 'assistant_text', id: 'a2', streaming: false, parentToolUseId: null,
+    kind: 'assistant_text',
+    id: 'a2',
+    streaming: false,
+    parentToolUseId: null,
     text: `Looking at the registry, a few things stand out:
 
 - \`#sessions\` is a private \`Map\`, so iteration order is insertion order
@@ -137,13 +147,17 @@ This is safe online because the default is not volatile and the column is nullab
 
   // Turn 3 — another user turn
   items.push({
-    kind: 'user', id: 'u3',
+    kind: 'user',
+    id: 'u3',
     text: 'What about the relationship between sessions and the queue? How do jobs fit in?',
   })
 
   // Turn 3 — response with a comparison table
   items.push({
-    kind: 'assistant_text', id: 'a3', streaming: false, parentToolUseId: null,
+    kind: 'assistant_text',
+    id: 'a3',
+    streaming: false,
+    parentToolUseId: null,
     text: `## Sessions vs Jobs
 
 They serve different purposes but share the same transcript infrastructure:
@@ -188,12 +202,16 @@ The key constraint: **\`claimNext\` must be atomic.** Two workers calling it sim
 
   // Turn 4 — short follow-up
   items.push({
-    kind: 'user', id: 'u4',
+    kind: 'user',
+    id: 'u4',
     text: 'Perfect, thanks. One more — are there any known gotchas with the event log?',
   })
 
   items.push({
-    kind: 'assistant_text', id: 'a4', streaming: false, parentToolUseId: null,
+    kind: 'assistant_text',
+    id: 'a4',
+    streaming: false,
+    parentToolUseId: null,
     text: `Yes, a few that have cost debugging time:
 
 1. **Sequence numbers are session-scoped, not global.** Two sessions can both have \`seq: 1\`. The unique key is \`(session_id, seq)\`, not \`seq\` alone.
@@ -243,15 +261,17 @@ function AgentViewShell({
     <TranscriptVariantProvider value={variant}>
       <TranscriptDensityProvider value={density}>
         <div
-          data-slot='session-panel'
-          data-theme='dark'
-          style={{
-            height: '100vh',
-            display: 'flex',
-            flexDirection: 'column',
-            background: 'var(--bg)',
-            ...(fontSize ? { '--wd-font-size': `${fontSize}px` } : {}),
-          } as React.CSSProperties}
+          data-slot="session-panel"
+          data-theme="dark"
+          style={
+            {
+              height: '100vh',
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'var(--bg)',
+              ...(fontSize ? { '--wd-font-size': `${fontSize}px` } : {}),
+            } as React.CSSProperties
+          }
         >
           {children}
         </div>

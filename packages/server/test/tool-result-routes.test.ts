@@ -11,13 +11,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import {
-  TOOL_RESULT_HEAD_CHARS,
-  type ServerFrame,
-  type SessionEvent,
-  type SessionInfo,
-  type ToolResultBlock,
-} from '@workerdeck/protocol'
+import { TOOL_RESULT_HEAD_CHARS, type ServerFrame, type SessionEvent, type SessionInfo, type ToolResultBlock } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 const BIG = 'x'.repeat(TOOL_RESULT_HEAD_CHARS + 12_000)
@@ -31,7 +25,9 @@ function fakeHarness() {
       const resolve = waiter
       waiter = null
       resolve({ value: msg, done: false })
-    } else buffered.push(msg)
+    } else {
+      buffered.push(msg)
+    }
   }
   const query = {
     [Symbol.asyncIterator]() {
@@ -39,8 +35,12 @@ function fakeHarness() {
     },
     next(): Promise<IteratorResult<SDKMessage>> {
       const next = buffered.shift()
-      if (next !== undefined) return Promise.resolve({ value: next, done: false })
-      if (done) return Promise.resolve({ value: undefined, done: true })
+      if (next !== undefined) {
+        return Promise.resolve({ value: next, done: false })
+      }
+      if (done) {
+        return Promise.resolve({ value: undefined, done: true })
+      }
       return new Promise((resolve) => {
         waiter = resolve
       })
@@ -92,7 +92,9 @@ async function replay(wsBase: string, id: string, query = ''): Promise<SessionEv
   const events: SessionEvent[] = []
   ws.on('message', (data) => {
     const frame = JSON.parse(String(data)) as ServerFrame
-    if (frame.type === 'event') events.push(frame.event)
+    if (frame.type === 'event') {
+      events.push(frame.event)
+    }
   })
   await new Promise<void>((resolve) => ws.on('open', () => resolve()))
   await new Promise((resolve) => setTimeout(resolve, 80))
@@ -101,7 +103,9 @@ async function replay(wsBase: string, id: string, query = ''): Promise<SessionEv
 }
 
 const resultBlock = (event: SessionEvent | undefined): ToolResultBlock | undefined => {
-  if (event?.type !== 'user_message' || !Array.isArray(event.message.content)) return undefined
+  if (event?.type !== 'user_message' || !Array.isArray(event.message.content)) {
+    return undefined
+  }
   return event.message.content.find((b) => b.type === 'tool_result') as ToolResultBlock | undefined
 }
 
@@ -165,8 +169,7 @@ describe('truncated replay', () => {
 })
 
 describe('GET /sessions/:id/events/:seq/result', () => {
-  const seqOf = (events: SessionEvent[]) =>
-    events.find((e) => e.type === 'user_message' && resultBlock(e))!.seq
+  const seqOf = (events: SessionEvent[]) => events.find((e) => e.type === 'user_message' && resultBlock(e))!.seq
 
   it('serves the whole result the replay cut', async () => {
     const harness = fakeHarness()
@@ -194,13 +197,9 @@ describe('GET /sessions/:id/events/:seq/result', () => {
     const id = await seed(harness, base)
     const seq = seqOf(await replay(wsBase, id, '?truncateResults=1'))
 
-    expect((await fetch(`${base}/sessions/${id}/events/${seq}/result?toolUseId=other`)).status).toBe(
-      404,
-    )
+    expect((await fetch(`${base}/sessions/${id}/events/${seq}/result?toolUseId=other`)).status).toBe(404)
     expect((await fetch(`${base}/sessions/${id}/events/${seq}/result`)).status).toBe(400)
-    expect(
-      (await fetch(`${base}/sessions/${id}/events/99999/result?toolUseId=call-1`)).status,
-    ).toBe(404)
+    expect((await fetch(`${base}/sessions/${id}/events/99999/result?toolUseId=call-1`)).status).toBe(404)
   })
 
   it('404s for an unknown session, like every other session route', async () => {
@@ -253,8 +252,7 @@ async function seedImage(harness: ReturnType<typeof fakeHarness>, base: string) 
 }
 
 describe('image-ref replay', () => {
-  const partsOf = (event: SessionEvent | undefined) =>
-    resultBlock(event)?.content as Array<Record<string, unknown>> | undefined
+  const partsOf = (event: SessionEvent | undefined) => resultBlock(event)?.content as Array<Record<string, unknown>> | undefined
 
   it('sends the base64 whole when nobody asked — byte-identical to before this rule', async () => {
     const harness = fakeHarness()
@@ -270,9 +268,7 @@ describe('image-ref replay', () => {
     const { base, wsBase } = await start(harness)
     const id = await seedImage(harness, base)
 
-    const parts = partsOf(
-      (await replay(wsBase, id, '?imageRefs=1')).find((e) => e.type === 'user_message'),
-    )
+    const parts = partsOf((await replay(wsBase, id, '?imageRefs=1')).find((e) => e.type === 'user_message'))
     expect(parts?.[0]).toEqual({ type: 'text', text: 'read the screenshot' })
     expect(parts?.[1]).toEqual({
       type: 'image_ref',
@@ -293,8 +289,7 @@ describe('image-ref replay', () => {
   })
 
   describe('?part=N', () => {
-    const seqOfImage = (events: SessionEvent[]) =>
-      events.find((e) => e.type === 'user_message' && resultBlock(e))!.seq
+    const seqOfImage = (events: SessionEvent[]) => events.find((e) => e.type === 'user_message' && resultBlock(e))!.seq
 
     it('round-trips the exact bytes, with the stored media type', async () => {
       const harness = fakeHarness()
@@ -316,9 +311,7 @@ describe('image-ref replay', () => {
 
       // index 0 is the text part; index 9 is off the end.
       for (const part of [0, 9]) {
-        const res = await fetch(
-          `${base}/sessions/${id}/events/${seq}/result?toolUseId=call-img&part=${part}`,
-        )
+        const res = await fetch(`${base}/sessions/${id}/events/${seq}/result?toolUseId=call-img&part=${part}`)
         expect(res.status).toBe(404)
       }
     })
@@ -340,14 +333,14 @@ describe('image-ref replay', () => {
     const id = await seedImage(harness, base)
     const seq = (await replay(wsBase, id)).find((e) => e.type === 'user_message')!.seq
 
-    const whole = (await (
-      await fetch(`${base}/sessions/${id}/events/${seq}/result?toolUseId=call-img`)
-    ).json()) as { content: Array<Record<string, unknown>> }
+    const whole = (await (await fetch(`${base}/sessions/${id}/events/${seq}/result?toolUseId=call-img`)).json()) as {
+      content: Array<Record<string, unknown>>
+    }
     expect(whole.content[1]).toEqual(imagePart)
 
-    const refd = (await (
-      await fetch(`${base}/sessions/${id}/events/${seq}/result?toolUseId=call-img&imageRefs=1`)
-    ).json()) as { content: Array<Record<string, unknown>> }
+    const refd = (await (await fetch(`${base}/sessions/${id}/events/${seq}/result?toolUseId=call-img&imageRefs=1`)).json()) as {
+      content: Array<Record<string, unknown>>
+    }
     expect(refd.content[1]).toEqual({
       type: 'image_ref',
       media_type: 'image/png',

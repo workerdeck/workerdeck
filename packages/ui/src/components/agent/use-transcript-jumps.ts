@@ -45,19 +45,7 @@ export function useTranscriptJumps(options: {
   jumpToRecapRef?: RefObject<(() => void) | null>
   repinRef?: RefObject<(() => void) | null>
 }): (rowIndex: number, align?: 'start' | 'center') => void {
-  const {
-    rows,
-    terminal,
-    stickyPrompt,
-    epoch,
-    promptRows,
-    scrollElement,
-    rowsRef,
-    virtualizer,
-    stick,
-    jumpToRecapRef,
-    repinRef,
-  } = options
+  const { rows, terminal, stickyPrompt, epoch, promptRows, scrollElement, rowsRef, virtualizer, stick, jumpToRecapRef, repinRef } = options
 
   // The pending re-aim lives in a ref, and this is the whole reason: the
   // closure is rebuilt every render to keep `rows` fresh, so anything held in
@@ -92,20 +80,19 @@ export function useTranscriptJumps(options: {
   // writer and this is the library's own switch for "the user is leaving the
   // bottom".
   const jumpToRow = (rowIndex: number, align: 'start' | 'center' = 'center') => {
-    if (rowIndex < 0 || rowIndex >= rows.length || !scrollElement) return
+    if (rowIndex < 0 || rowIndex >= rows.length || !scrollElement) {
+      return
+    }
     stick.stopScroll()
     clearTimeout(aimTimer.current)
     if (align === 'start') {
       // The gap padding a row's *line* sits below — the target is the line,
       // not its air.
-      const linePad = (index: number) =>
-        terminal && epoch && index > 0 && gapBefore(rows, index) ? epoch.line : 0
+      const linePad = (index: number) => (terminal && epoch && index > 0 && gapBefore(rows, index) ? epoch.line : 0)
       const target = () => {
         const start = virtualizer.measurementsCache[rowIndex]?.start ?? 0
         const spacer = rowsRef.current
-          ? rowsRef.current.getBoundingClientRect().top -
-            scrollElement.getBoundingClientRect().top +
-            scrollElement.scrollTop
+          ? rowsRef.current.getBoundingClientRect().top - scrollElement.getBoundingClientRect().top + scrollElement.scrollTop
           : 0
         let top = start + spacer + linePad(rowIndex)
         // A non-prompt target lands *below* the pinned prompt, not under it:
@@ -116,18 +103,24 @@ export function useTranscriptJumps(options: {
         // becomes the pinned row itself.
         if (terminal && stickyPrompt && epoch && !promptRows.includes(rowIndex)) {
           const pinned = promptRows.some((index) => index < rowIndex)
-          if (pinned) top -= epoch.line
+          if (pinned) {
+            top -= epoch.line
+          }
         }
         return Math.round(top)
       }
       const aim = (attempt: number) => {
         const top = target()
         scrollElement.scrollTo({ top, behavior: 'instant' })
-        if (attempt >= AIM_PASSES) return
+        if (attempt >= AIM_PASSES) {
+          return
+        }
         aimTimer.current = setTimeout(() => {
           // Off target: a row that measured under the jump moved it. (It can no
           // longer be "still travelling" — that was the smooth era.)
-          if (Math.abs(scrollElement.scrollTop - target()) > 1) aim(attempt + 1)
+          if (Math.abs(scrollElement.scrollTop - target()) > 1) {
+            aim(attempt + 1)
+          }
         }, AIM_SETTLE_MS)
       }
       aim(0)
@@ -139,7 +132,9 @@ export function useTranscriptJumps(options: {
         row.scrollIntoView({ behavior: 'instant', block: align })
         return
       }
-      if (attempt >= AIM_PASSES) return
+      if (attempt >= AIM_PASSES) {
+        return
+      }
       virtualizer.scrollToIndex(rowIndex, { align, behavior: 'auto' })
       // A frame or two, not a journey: the aim is only better once the rows
       // crossed have mounted *and* been measured, and that is a layout pass
@@ -150,7 +145,9 @@ export function useTranscriptJumps(options: {
   }
 
   useEffect(() => {
-    if (!jumpToRecapRef) return
+    if (!jumpToRecapRef) {
+      return
+    }
     jumpToRecapRef.current = () => {
       // `'start'`, like the scrubber's marks. The seam is a place to *start
       // reading* — everything you missed runs downward from it — so it belongs
@@ -177,7 +174,9 @@ export function useTranscriptJumps(options: {
   // makes exact — unlike a mid-list row, which is why `jumpToRow` needs its
   // aim/re-aim loop and this needs none.
   useEffect(() => {
-    if (!repinRef) return
+    if (!repinRef) {
+      return
+    }
     repinRef.current = () => {
       void stick.scrollToBottom('instant')
     }

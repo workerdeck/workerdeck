@@ -16,17 +16,25 @@ class FakeRunner {
   emit(body: SessionEventBody): void {
     const event = { ...body, seq: ++this.#seq, ts: 0 } as SessionEvent
     this.#events.push(event)
-    for (const listener of this.#listeners) listener(event)
+    for (const listener of this.#listeners) {
+      listener(event)
+    }
   }
 
   subscribe(listener: (e: SessionEvent) => void, afterSeq = 0): () => void {
-    for (const event of this.#events) if (event.seq > afterSeq) listener(event)
+    for (const event of this.#events) {
+      if (event.seq > afterSeq) {
+        listener(event)
+      }
+    }
     this.#listeners.add(listener)
     return () => this.#listeners.delete(listener)
   }
 
   close(reason: 'client' | 'server' | 'error' = 'client'): void {
-    if (this.closed) return
+    if (this.closed) {
+      return
+    }
     this.closed = true
     this.emit({ type: 'session_closed', reason })
   }
@@ -50,8 +58,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
  * milliseconds. It only spends time when something is genuinely broken, which
  * is when waiting is worth it.
  */
-const settles = <T>(assertion: () => T | Promise<T>): Promise<T> =>
-  vi.waitFor(assertion, { timeout: 15_000, interval: 10 })
+const settles = <T>(assertion: () => T | Promise<T>): Promise<T> => vi.waitFor(assertion, { timeout: 15_000, interval: 10 })
 
 const jobRequest = (overrides: Partial<CreateJobRequest> = {}): CreateJobRequest => ({
   session: { cwd: '/tmp/project', prompt: 'do the thing' },
@@ -110,9 +117,7 @@ describe('JobQueue', () => {
   it('validates submissions', async () => {
     const { queue } = makeQueue()
     await expect(queue.submit({ session: { cwd: '/tmp', prompt: ' ' } })).rejects.toThrow(/prompt/)
-    await expect(
-      queue.submit({ session: { cwd: '/tmp', prompt: 'x', resume: 'sdk-1' } }),
-    ).rejects.toThrow(/resume/)
+    await expect(queue.submit({ session: { cwd: '/tmp', prompt: 'x', resume: 'sdk-1' } })).rejects.toThrow(/resume/)
   })
 
   it('runs jobs FIFO within maxConcurrency and completes with the run result', async () => {
@@ -192,9 +197,7 @@ describe('JobQueue', () => {
     const canceled = await queue.cancel(waiting.id)
     expect(canceled?.status).toBe('canceled')
     expect(runners).toHaveLength(1)
-    expect(
-      events.some((e) => e.type === 'job_completed' && e.job.id === waiting.id),
-    ).toBe(true)
+    expect(events.some((e) => e.type === 'job_completed' && e.job.id === waiting.id)).toBe(true)
   })
 
   it('cancels running jobs by closing their session', async () => {
@@ -282,11 +285,7 @@ describe('JobQueue', () => {
     runners[0]!.emit(assistantWithUsage(10, 'first I will look around'))
     runners[0]!.emit(successResult())
     await settles(() => {
-      expect(calls.map((c) => c.event.type)).toEqual([
-        'job_started',
-        'job_progress',
-        'job_completed',
-      ])
+      expect(calls.map((c) => c.event.type)).toEqual(['job_started', 'job_progress', 'job_completed'])
     })
     expect(calls.every((c) => c.auth === 'Bearer x')).toBe(true)
     expect(calls.every((c) => c.url === 'https://example.test/hook')).toBe(true)
@@ -421,9 +420,7 @@ describe('JobQueue', () => {
       return { ok: true, status: 200 } as Response
     })
     const { queue, runners, events } = makeQueue({ fetchImpl })
-    await queue.submit(
-      jobRequest({ webhook: { url: 'https://example.test/hook', progress: 'completion' } }),
-    )
+    await queue.submit(jobRequest({ webhook: { url: 'https://example.test/hook', progress: 'completion' } }))
     await tick()
     runners[0]!.emit(assistantWithUsage(10))
     runners[0]!.emit(successResult())

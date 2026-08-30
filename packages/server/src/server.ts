@@ -10,13 +10,7 @@ import { WebSocketServer, type WebSocket } from 'ws'
 import { getEngineAdapter } from '@workerdeck/core'
 import type { EngineAdapter } from '@workerdeck/core'
 import { JobQueue } from '@workerdeck/queue'
-import {
-  PROTOCOL_VERSION,
-  type CreateSessionRequest,
-  type JobEvent,
-  type ProfileEngine,
-  type QueueServerFrame,
-} from '@workerdeck/protocol'
+import { PROTOCOL_VERSION, type CreateSessionRequest, type JobEvent, type ProfileEngine, type QueueServerFrame } from '@workerdeck/protocol'
 import type { SessionRunnerConfig } from '@workerdeck/core'
 import type { ServerContext } from './context.ts'
 import { json } from './lib/http.ts'
@@ -58,20 +52,16 @@ export type {
 
 export function createWorkerServer(options: WorkerServerOptions = {}): WorkerServer {
   if (!options.authenticate && !options.allowUnauthenticated) {
-    throw new Error(
-      'createWorkerServer: provide `authenticate` or explicitly set `allowUnauthenticated: true`',
-    )
+    throw new Error('createWorkerServer: provide `authenticate` or explicitly set `allowUnauthenticated: true`')
   }
   const basePath = options.basePath ?? '/v1'
   const fallback = options.fallback
   // Exact origins only — a `Set` because the check runs on every request, and
   // exactness is the whole guarantee (no wildcards, no suffix matching).
-  const corsOrigins =
-    options.cors?.origins.length ? new Set(options.cors.origins) : undefined
+  const corsOrigins = options.cors?.origins.length ? new Set(options.cors.origins) : undefined
   const maxBodyBytes = options.maxBodyBytes ?? 1024 * 1024
   /** The engine's adapter, honoring the test-only `engines` override. */
-  const adapterFor = (engine: ProfileEngine | undefined): EngineAdapter =>
-    options.engines?.[engine ?? 'claude'] ?? getEngineAdapter(engine)
+  const adapterFor = (engine: ProfileEngine | undefined): EngineAdapter => options.engines?.[engine ?? 'claude'] ?? getEngineAdapter(engine)
 
   // ---- Profiles, decorated at response time from the trackers below.
   /**
@@ -104,7 +94,9 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   })
   for (const p of options.profiles ?? []) {
     const invalid = profiles.validate(p)
-    if (invalid) throw new Error(`createWorkerServer: ${invalid}`)
+    if (invalid) {
+      throw new Error(`createWorkerServer: ${invalid}`)
+    }
   }
 
   // ---- The create pipeline. Registry/parking/bridge are late-bound refs,
@@ -114,8 +106,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const factory = createSessionFactory({
     adapterFor,
     profiles,
-    hostBuildRunnerConfig:
-      options.buildRunnerConfig ?? ((req: CreateSessionRequest): SessionRunnerConfig => req),
+    hostBuildRunnerConfig: options.buildRunnerConfig ?? ((req: CreateSessionRequest): SessionRunnerConfig => req),
     createEngineRunner: options.createEngineRunner,
     allowedCwdRoots: options.allowedCwdRoots,
     disableBypassPermissions: options.disableBypassPermissions,
@@ -152,9 +143,13 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       // Also from 0 — replay is guarded by the events' own timestamps there.
       profileUsage.watch(runner)
       const profile = runner.info().profile
-      if (!profile) return
+      if (!profile) {
+        return
+      }
       runner.subscribe((event) => {
-        if (event.type !== 'capabilities' || !event.defaultModel) return
+        if (event.type !== 'capabilities' || !event.defaultModel) {
+          return
+        }
         profileDefaultModels.set(profile, event.defaultModel)
       })
     },
@@ -208,9 +203,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
               // `meta.title` is unset. `record.info.title` has already resolved
               // that precedence, so freezing it into `meta` keeps a derived name
               // through the wake and is a no-op when the session was renamed.
-              meta: record.info.title
-                ? { ...record.config.meta, title: record.info.title }
-                : record.config.meta,
+              meta: record.info.title ? { ...record.config.meta, title: record.info.title } : record.config.meta,
               resume: record.sdkSessionId,
             }),
             undefined,
@@ -235,16 +228,24 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   // lifecycle changes push refreshed stats so dashboards stay current without polling.
   const queueSockets = new Set<WebSocket>()
   const sendQueueFrame = (ws: WebSocket, frame: QueueServerFrame): void => {
-    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(frame))
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify(frame))
+    }
   }
   const broadcastJobEvent = (event: JobEvent): void => {
-    if (queueSockets.size === 0) return
-    for (const ws of queueSockets) sendQueueFrame(ws, { type: 'job_event', event })
+    if (queueSockets.size === 0) {
+      return
+    }
+    for (const ws of queueSockets) {
+      sendQueueFrame(ws, { type: 'job_event', event })
+    }
     if (event.type !== 'job_progress') {
       void queue
         ?.stats()
         .then((stats) => {
-          for (const ws of queueSockets) sendQueueFrame(ws, { type: 'queue_stats', stats })
+          for (const ws of queueSockets) {
+            sendQueueFrame(ws, { type: 'queue_stats', stats })
+          }
         })
         .catch(() => {})
     }
@@ -318,8 +319,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     // never sent — that is what keeps the cookie transport same-origin-only, so
     // opening this up cannot turn an ambient cookie into cross-origin authority.
     const origin = req.headers.origin
-    const originAllowed =
-      typeof origin === 'string' && corsOrigins !== undefined && corsOrigins.has(origin)
+    const originAllowed = typeof origin === 'string' && corsOrigins !== undefined && corsOrigins.has(origin)
     if (originAllowed) {
       res.setHeader('access-control-allow-origin', origin)
       res.setHeader('vary', 'origin')
@@ -353,11 +353,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       await fallback(req, res)
       return
     }
-    if (
-      pathname === basePath + '/jobs' ||
-      pathname.startsWith(basePath + '/jobs/') ||
-      pathname === basePath + '/queue'
-    ) {
+    if (pathname === basePath + '/jobs' || pathname.startsWith(basePath + '/jobs/') || pathname === basePath + '/queue') {
       const authCtx = await auth.authenticate(req)
       if (!authCtx.ok) {
         json(res, 401, { error: 'unauthorized' })
@@ -433,8 +429,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const server = createServer((req, res) => {
     handleRequest(req, res).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : 'internal error'
-      if (!res.headersSent) json(res, error instanceof SyntaxError ? 400 : 500, { error: message })
-      else res.end()
+      if (!res.headersSent) {
+        json(res, error instanceof SyntaxError ? 400 : 500, { error: message })
+      } else {
+        res.end()
+      }
     })
   })
 
@@ -468,9 +467,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           ws.on('close', () => queueSockets.delete(ws))
           void queue
             .stats()
-            .then((stats) =>
-              sendQueueFrame(ws, { type: 'queue_attached', protocolVersion: PROTOCOL_VERSION, stats }),
-            )
+            .then((stats) => sendQueueFrame(ws, { type: 'queue_attached', protocolVersion: PROTOCOL_VERSION, stats }))
             .catch(() => {})
         })
         return
@@ -541,7 +538,9 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         queue?.close()
         parking.close()
         registry.closeAll()
-        for (const ws of queueSockets) ws.close()
+        for (const ws of queueSockets) {
+          ws.close()
+        }
         queueSockets.clear()
         wss.close()
         server.close(() => resolve())

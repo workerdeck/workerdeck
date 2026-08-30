@@ -24,16 +24,14 @@ if (custom) {
 
 let failures = 0
 
-async function scenario(
-  title: string,
-  proves: string,
-  run: () => Promise<{ ok: boolean; detail: string }>,
-): Promise<void> {
+async function scenario(title: string, proves: string, run: () => Promise<{ ok: boolean; detail: string }>): Promise<void> {
   process.stdout.write(`\n▸ ${title}\n  proves: ${proves}\n`)
   const started = Date.now()
   try {
     const { ok, detail } = await run()
-    if (!ok) failures += 1
+    if (!ok) {
+      failures += 1
+    }
     console.log(`  ${ok ? '✅' : '❌'} ${detail}  (${Date.now() - started}ms)`)
   } catch (error) {
     failures += 1
@@ -42,9 +40,14 @@ async function scenario(
 }
 
 function report(result: RunScriptResult): void {
-  if (result.ok) console.log('  value:', JSON.stringify(result.value))
-  else console.log(`  failed (${result.reason}):`, result.error)
-  for (const log of result.logs) console.log(`  guest ${log.level}:`, log.text)
+  if (result.ok) {
+    console.log('  value:', JSON.stringify(result.value))
+  } else {
+    console.log(`  failed (${result.reason}):`, result.error)
+  }
+  for (const log of result.logs) {
+    console.log(`  guest ${log.level}:`, log.text)
+  }
 }
 
 console.log('QuickJS sandbox smoke — untrusted script boundary\n' + '='.repeat(50))
@@ -137,7 +140,9 @@ await scenario('Network: granted, but host-gated', 'the allowlist is enforced ho
     // credential here that the guest never sees.
     fetchText: async (url) => {
       seen.push(url)
-      if (!url.startsWith('https://allowed.example/')) throw new Error(`host not allowed: ${url}`)
+      if (!url.startsWith('https://allowed.example/')) {
+        throw new Error(`host not allowed: ${url}`)
+      }
       return 'document body'
     },
     script: `
@@ -171,4 +176,4 @@ if (failures > 0) {
   console.error(`\n❌ ${failures} scenario(s) failed — the sandbox boundary is NOT holding.\n`)
   process.exit(1)
 }
-console.log('\n✅ All scenarios held. Try your own: pnpm smoke:sandbox \'<your script>\'\n')
+console.log("\n✅ All scenarios held. Try your own: pnpm smoke:sandbox '<your script>'\n")

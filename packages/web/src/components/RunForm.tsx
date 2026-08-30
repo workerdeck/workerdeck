@@ -55,9 +55,7 @@ function useCwdCandidates(sessions: SessionInfo[]): string[] {
     const last = localStorage.getItem(CWD_KEY)
     const ordered = [
       ...(last ? [last] : []),
-      ...[...sessions]
-        .sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt))
-        .map((s) => s.cwd),
+      ...[...sessions].sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt)).map((s) => s.cwd),
       ...roots,
     ]
     return [...new Set(ordered)].slice(0, 12)
@@ -104,11 +102,7 @@ export function useRunForm(kind: DefaultsKind) {
    * CLI refuses the switch mid-session otherwise, while an unattended job makes
    * it an explicit opt-in.
    */
-  const sessionFields = (options: {
-    prompt?: string
-    resume?: string
-    allowBypass?: boolean
-  }): CreateSessionRequest => ({
+  const sessionFields = (options: { prompt?: string; resume?: string; allowBypass?: boolean }): CreateSessionRequest => ({
     // Omitted entirely for an engine with no host filesystem: the gateway takes
     // no cwd there, and sending one would put a path on a session that never
     // opens a directory (and drag it through `allowedCwdRoots` for nothing).
@@ -182,15 +176,15 @@ export function RunFormFields({
   return (
     <>
       {engine.capabilities.hostCwd !== false && (
-        <label className='flex flex-col gap-1'>
-          <span className='text-label font-medium text-fg-3'>Working directory</span>
+        <label className="flex flex-col gap-1">
+          <span className="text-label font-medium text-fg-3">Working directory</span>
           <Input
             value={form.cwd}
             list={listId}
             onChange={(e) => form.setCwd(e.target.value)}
-            placeholder='/path/to/project'
+            placeholder="/path/to/project"
             spellCheck={false}
-            className='font-mono'
+            className="font-mono"
           />
           <datalist id={listId}>
             {candidates.map((path) => (
@@ -199,16 +193,11 @@ export function RunFormFields({
           </datalist>
         </label>
       )}
-      <label className='flex flex-col gap-1'>
-        <span className='text-label font-medium text-fg-3'>{promptLabel}</span>
-        <Textarea
-          value={form.prompt}
-          onChange={(e) => form.setPrompt(e.target.value)}
-          rows={2}
-          placeholder={promptPlaceholder}
-        />
+      <label className="flex flex-col gap-1">
+        <span className="text-label font-medium text-fg-3">{promptLabel}</span>
+        <Textarea value={form.prompt} onChange={(e) => form.setPrompt(e.target.value)} rows={2} placeholder={promptPlaceholder} />
       </label>
-      <div className='flex flex-wrap items-end gap-3'>
+      <div className="flex flex-wrap items-end gap-3">
         <ProfileSelect
           profiles={form.profiles}
           value={form.profile}
@@ -216,41 +205,28 @@ export function RunFormFields({
             form.selectProfile(name)
             onProfileChange?.(name)
           }}
-          className='min-w-32'
+          className="min-w-32"
         />
-        <label className='flex min-w-0 flex-col gap-1'>
-          <span className='text-label font-medium text-fg-3'>Permission mode</span>
-          <PermissionModeSelect
-            variant='form'
-            mode={engine.mode}
-            onModeChange={form.setMode}
-            modes={engine.modes}
-            className='min-w-44'
-          />
+        <label className="flex min-w-0 flex-col gap-1">
+          <span className="text-label font-medium text-fg-3">Permission mode</span>
+          <PermissionModeSelect variant="form" mode={engine.mode} onModeChange={form.setMode} modes={engine.modes} className="min-w-44" />
         </label>
         {extras}
-        <label className='flex min-w-0 flex-col gap-1'>
-          <span className='text-label font-medium text-fg-3'>Model</span>
-          <ModelPicker
-            value={engine.model}
-            onChange={form.setModel}
-            models={engine.models}
-            className='min-w-40'
-          />
+        <label className="flex min-w-0 flex-col gap-1">
+          <span className="text-label font-medium text-fg-3">Model</span>
+          <ModelPicker value={engine.model} onChange={form.setModel} models={engine.models} className="min-w-40" />
         </label>
         {/* Present exactly when the record (or the chosen model's catalog row)
             declares efforts — never a control that does nothing. */}
         {engine.reasoningEfforts.length > 0 ? (
-          <label className='flex min-w-0 flex-col gap-1'>
-            <span className='text-label font-medium text-fg-3'>Effort</span>
+          <label className="flex min-w-0 flex-col gap-1">
+            <span className="text-label font-medium text-fg-3">Effort</span>
             <Select
-              items={[
-                { value: 'default', label: 'Default' },
-                ...engine.reasoningEfforts.map((e) => ({ value: e, label: e })),
-              ]}
+              items={[{ value: 'default', label: 'Default' }, ...engine.reasoningEfforts.map((e) => ({ value: e, label: e }))]}
               value={form.effort || 'default'}
-              onValueChange={(value) => form.setEffort(value === 'default' ? '' : String(value))}>
-              <SelectTrigger className='min-w-28'>
+              onValueChange={(value) => form.setEffort(value === 'default' ? '' : String(value))}
+            >
+              <SelectTrigger className="min-w-28">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

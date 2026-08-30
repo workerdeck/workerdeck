@@ -27,10 +27,7 @@ type Persisted = { config?: ViewConfig }
 /** The resolved bytes for a session's project icon, if it has an image one and
  * the host has fetched it yet. Shared by the row and its group header so the
  * two cannot draw different pictures for one project. */
-function iconSrcOf(
-  info: SessionInfo | undefined,
-  icons: Record<string, string>,
-): string | undefined {
+function iconSrcOf(info: SessionInfo | undefined, icons: Record<string, string>): string | undefined {
   const icon = info?.project?.icon
   return icon?.type === 'image' ? icons[icon.hash] : undefined
 }
@@ -116,38 +113,28 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
    * and it was invisible with one gateway attached, which is how it survived.
    */
   const selectedIs = (row: SessionRow) =>
-    state?.selected?.hostId === row.hostId && state.selected.sessionId === row.info.id
-      ? state.selected
-      : undefined
+    state?.selected?.hostId === row.hostId && state.selected.sessionId === row.info.id ? state.selected : undefined
 
   return (
-    <div className='flex h-screen flex-col text-body-sm'>
+    <div className="flex h-screen flex-col text-body-sm">
       {/* Behind the title bar's filter toggle. Hidden by default, which is the
           whole reason the subset line below is unconditional: a list that is
           quietly hiding rows must say so even when the control doing it is not
           on screen. */}
       {filterOpen ? (
-        <ViewConfigPanel
-          config={config}
-          hosts={hosts}
-          adapters={adapters}
-          projects={projects}
-          scope={scope}
-          onChange={setConfig}
-        />
+        <ViewConfigPanel config={config} hosts={hosts} adapters={adapters} projects={projects} scope={scope} onChange={setConfig} />
       ) : null}
 
       {subset ? <SubsetLine subset={subset} onClear={() => setConfig(clearFilters(config))} /> : null}
 
-      <div className='min-h-0 flex-1 overflow-y-auto p-1'>
+      <div className="min-h-0 flex-1 overflow-y-auto p-1">
         {hosts.length === 0 ? (
           <Empty
             icon={<Plug />}
-            title='No gateways yet'
+            title="No gateways yet"
             description={
               <>
-                Start one with <code className='font-mono'>npx workerdeck</code>, then add it in the
-                Gateways view below.
+                Start one with <code className="font-mono">npx workerdeck</code>, then add it in the Gateways view below.
               </>
             }
           />
@@ -176,24 +163,24 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             scoping && !hasFacetFilter(config) ? (
               <Empty
                 icon={<FolderOpen />}
-                title='Nothing in this folder'
+                title="Nothing in this folder"
                 description={`No session is running in ${scope?.label ?? 'this project'}.`}
-                action='Show all folders'
+                action="Show all folders"
                 onAction={() => setConfig({ ...config, scoped: false })}
               />
             ) : (
               <Empty
                 icon={<SearchX />}
-                title='No matches'
-                description='No session matches the current search and filters.'
-                action='Clear filters'
+                title="No matches"
+                description="No session matches the current search and filters."
+                action="Clear filters"
                 onAction={() => setConfig(clearFilters(config))}
               />
             )
           ) : (
             <Empty
               icon={<Layers />}
-              title='No sessions yet'
+              title="No sessions yet"
               description={
                 <>
                   Start one with <Key>+</Key> above.
@@ -203,9 +190,9 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
           )
         ) : (
           groups.map((group) => (
-            <div key={group.key} className='flex flex-col gap-1'>
+            <div key={group.key} className="flex flex-col gap-1">
               {group.label ? (
-                <div className='flex items-center gap-1.5 px-1.5 pb-0.5 pt-1.5 text-label font-semibold uppercase tracking-wide text-fg-4'>
+                <div className="flex items-center gap-1.5 px-1.5 pb-0.5 pt-1.5 text-label font-semibold uppercase tracking-wide text-fg-4">
                   {/* Only the project facet has a mark of its own, and every
                       row in the group shares it by construction (a group IS one
                       project root), so the first row is a fair source. */}

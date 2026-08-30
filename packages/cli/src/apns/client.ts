@@ -1,11 +1,6 @@
 import { createPrivateKey, type KeyObject, sign } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import {
-  type ClientHttp2Session,
-  connect,
-  constants,
-  type SecureClientSessionOptions,
-} from 'node:http2'
+import { type ClientHttp2Session, connect, constants, type SecureClientSessionOptions } from 'node:http2'
 
 /**
  * A minimal APNs provider client: an HTTP/2 POST carrying an ES256 JWT.
@@ -108,20 +103,15 @@ export async function loadApnsKey(keyFile: string): Promise<KeyObject> {
   try {
     pem = await readFile(keyFile, 'utf8')
   } catch (error) {
-    throw new Error(
-      `apns: cannot read the auth key at ${keyFile}: ` +
-        `${error instanceof Error ? error.message : String(error)}`,
-    )
+    throw new Error(`apns: cannot read the auth key at ${keyFile}: ` + `${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    })
   }
   let key: KeyObject
   try {
     key = createPrivateKey(pem)
   } catch (error) {
-    throw new Error(
-      `apns: ${keyFile} is not a private key (${
-        error instanceof Error ? error.message : String(error)
-      })`,
-    )
+    throw new Error(`apns: ${keyFile} is not a private key (${error instanceof Error ? error.message : String(error)})`, { cause: error })
   }
   if (key.asymmetricKeyType !== 'ec') {
     throw new Error(
@@ -137,14 +127,20 @@ export async function loadApnsKey(keyFile: string): Promise<KeyObject> {
  * and JWS wants the raw `r||s` pair — `sign()` produces a DER SEQUENCE unless
  * told otherwise, which Apple rejects with a bare 403 and no explanation.
  */
-export function createProviderToken(key: KeyObject, keyId: string, teamId: string): {
+export function createProviderToken(
+  key: KeyObject,
+  keyId: string,
+  teamId: string,
+): {
   get(now?: number): string
   invalidate(): void
 } {
   let cached: { token: string; issuedAt: number } | null = null
   return {
     get(now = Date.now()) {
-      if (cached !== null && now - cached.issuedAt < TOKEN_TTL_MS) return cached.token
+      if (cached !== null && now - cached.issuedAt < TOKEN_TTL_MS) {
+        return cached.token
+      }
       const header = base64url(JSON.stringify({ alg: 'ES256', kid: keyId }))
       const claims = base64url(JSON.stringify({ iss: teamId, iat: Math.floor(now / 1000) }))
       const signingInput = `${header}.${claims}`
@@ -189,12 +185,16 @@ function createSessionPool(hosts: Record<ApnsEnvironment, string>): {
   const sessions = new Map<ApnsEnvironment, ClientHttp2Session>()
   const failures = new Map<ApnsEnvironment, string>()
   const drop = (environment: ApnsEnvironment, session: ClientHttp2Session): void => {
-    if (sessions.get(environment) === session) sessions.delete(environment)
+    if (sessions.get(environment) === session) {
+      sessions.delete(environment)
+    }
   }
   return {
     get(environment) {
       const existing = sessions.get(environment)
-      if (existing !== undefined && !existing.closed && !existing.destroyed) return existing
+      if (existing !== undefined && !existing.closed && !existing.destroyed) {
+        return existing
+      }
       const session = connect(hosts[environment], {
         // Node's Happy Eyeballs (`autoSelectFamily`, default-on since v20) gives
         // each candidate address `autoSelectFamilyAttemptTimeout` — **250ms** by
@@ -241,10 +241,14 @@ function createSessionPool(hosts: Record<ApnsEnvironment, string>): {
     lastFailure: (environment) => failures.get(environment),
     discard(environment, session) {
       drop(environment, session)
-      if (!session.destroyed) session.destroy()
+      if (!session.destroyed) {
+        session.destroy()
+      }
     },
     close() {
-      for (const session of sessions.values()) session.close()
+      for (const session of sessions.values()) {
+        session.close()
+      }
       sessions.clear()
     },
   }
@@ -260,11 +264,13 @@ function createSessionPool(hosts: Record<ApnsEnvironment, string>): {
  */
 const describeStreamError = (error: Error): string => {
   const cause = (error as Error & { cause?: unknown }).cause
-  if (!(cause instanceof AggregateError)) return error.message
-  const parts = cause.errors
-    .map((inner) => (inner instanceof Error ? inner.message : String(inner)))
-    .filter((message) => message !== '')
-  if (parts.length === 0) return error.message
+  if (!(cause instanceof AggregateError)) {
+    return error.message
+  }
+  const parts = cause.errors.map((inner) => (inner instanceof Error ? inner.message : String(inner))).filter((message) => message !== '')
+  if (parts.length === 0) {
+    return error.message
+  }
   return `${error.message.replace(' (caused by: )', '')} (caused by: ${parts.join('; ')})`
 }
 
@@ -336,7 +342,9 @@ export function createApnsClient(
       const chunks: Buffer[] = []
       let settled = false
       const settle = (result: ApnsResult, retry: Retry = 'never'): void => {
-        if (settled) return
+        if (settled) {
+          return
+        }
         settled = true
         resolve({ result, retry })
       }
@@ -346,15 +354,21 @@ export function createApnsClient(
        * retry cannot duplicate anything. REFUSED_STREAM is Apple's explicit
        * "received but not processed", defined by the RFC as safe to retry. */
       const transportRetry = (): Retry => {
-        if (stream.pending) return 'redial'
-        if (stream.rstCode === constants.NGHTTP2_REFUSED_STREAM) return 'now'
+        if (stream.pending) {
+          return 'redial'
+        }
+        if (stream.rstCode === constants.NGHTTP2_REFUSED_STREAM) {
+          return 'now'
+        }
         return 'never'
       }
       /** A stream still pending when its attempt dies marks a connect that is
        * failing or hanging; without this, every later push (and the retry)
        * would queue behind the same doomed dial until the OS gave up on it. */
       const dropDoomedDial = (): void => {
-        if (stream.pending && session.connecting) pool.discard(request.environment, session)
+        if (stream.pending && session.connecting) {
+          pool.discard(request.environment, session)
+        }
       }
 
       stream.setTimeout(REQUEST_TIMEOUT_MS, () => {
@@ -398,7 +412,9 @@ export function createApnsClient(
         let reason = `HTTP ${status}`
         try {
           const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { reason?: string }
-          if (typeof parsed.reason === 'string') reason = parsed.reason
+          if (typeof parsed.reason === 'string') {
+            reason = parsed.reason
+          }
         } catch {
           // A non-JSON body from APNs is exotic; the status still classifies it.
         }
@@ -422,9 +438,7 @@ export function createApnsClient(
           {
             ok: false,
             status,
-            reason:
-              pool.lastFailure(request.environment) ??
-              `connection closed (RST code ${stream.rstCode})`,
+            reason: pool.lastFailure(request.environment) ?? `connection closed (RST code ${stream.rstCode})`,
             unregistered: false,
           },
           retry,
@@ -444,7 +458,9 @@ export function createApnsClient(
       // reached Apple, and a duplicated notification is a real harm here
       // (permission requests carry no collapse id on purpose).
       if (!attempt.result.ok && attempt.retry !== 'never') {
-        if (attempt.retry === 'redial') await wait(retryDelayMs)
+        if (attempt.retry === 'redial') {
+          await wait(retryDelayMs)
+        }
         attempt = await post(request, providerToken.get())
       }
       const first = attempt.result

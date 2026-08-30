@@ -40,18 +40,16 @@ export type HostTreeRow = {
  * `loading: true` and no children: expansion is a request the user already made,
  * so the row must say the answer is coming rather than look like an empty folder.
  */
-export function flattenHostTree(
-  root: string,
-  dirs: ReadonlyMap<string, HostDirState>,
-  expanded: ReadonlySet<string>,
-): HostTreeRow[] {
+export function flattenHostTree(root: string, dirs: ReadonlyMap<string, HostDirState>, expanded: ReadonlySet<string>): HostTreeRow[] {
   const rows: HostTreeRow[] = []
   // Iterative rather than recursive: a deep tree is a user's checkout, not a
   // bounded structure, and blowing the stack on someone's monorepo would be a
   // silly way to fail.
   const walk = (dir: string, depth: number) => {
     const state = dirs.get(dir)
-    if (!state) return
+    if (!state) {
+      return
+    }
     for (const entry of state.entries) {
       if (entry.type !== 'dir') {
         rows.push({ entry, depth })
@@ -66,7 +64,9 @@ export function flattenHostTree(
         loading: isExpanded && !childState,
         truncated: isExpanded ? childState?.truncated : undefined,
       })
-      if (isExpanded && childState) walk(entry.path, depth + 1)
+      if (isExpanded && childState) {
+        walk(entry.path, depth + 1)
+      }
     }
   }
   walk(root, 0)
@@ -86,7 +86,9 @@ export function flattenHostTree(
  */
 export function ancestorsWithin(root: string, path: string): string[] {
   const base = root.endsWith('/') ? root.slice(0, -1) : root
-  if (path === base || !path.startsWith(`${base}/`)) return []
+  if (path === base || !path.startsWith(`${base}/`)) {
+    return []
+  }
   const rest = path.slice(base.length + 1).split('/')
   // The last segment is the file itself, which is not a directory to expand.
   const out: string[] = []

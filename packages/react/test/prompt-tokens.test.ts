@@ -5,10 +5,7 @@ const texts = (input: string) => scanPromptTokens(input).map((t) => t.text)
 
 describe('scanPromptTokens', () => {
   it('finds file and command tokens at word boundaries', () => {
-    expect(texts('look at @src/main.ts then run /commit-message')).toEqual([
-      '@src/main.ts',
-      '/commit-message',
-    ])
+    expect(texts('look at @src/main.ts then run /commit-message')).toEqual(['@src/main.ts', '/commit-message'])
   })
 
   it('reports each token’s kind and offsets', () => {

@@ -23,21 +23,13 @@ export type LoginPageOptions = {
 }
 
 const escapeHtml = (value: string): string =>
-  value.replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c,
-  )
+  value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
 
 export function renderLoginPage(options: LoginPageOptions): string {
   const { action, field, error, redirectTo, redirectField } = options
   const hidden =
-    redirectField && redirectTo
-      ? `<input type="hidden" name="${escapeHtml(redirectField)}" value="${escapeHtml(redirectTo)}">`
-      : ''
-  const alert = error
-    ? `<p class="error" role="alert">${escapeHtml(error)}</p>`
-    : ''
+    redirectField && redirectTo ? `<input type="hidden" name="${escapeHtml(redirectField)}" value="${escapeHtml(redirectTo)}">` : ''
+  const alert = error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : ''
 
   return `<!doctype html>
 <html lang="en">

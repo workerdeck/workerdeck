@@ -216,14 +216,14 @@ export function SessionItem({
     parts.push(
       // The model id as a person says it — `claude-opus-5[1m]` is a wire value,
       // and a card line has no room for a context-window suffix.
-      <span key='model' className={vendorTextClass(engine, info.model)}>
+      <span key="model" className={vendorTextClass(engine, info.model)}>
         {model}
       </span>,
     )
   }
   if (project !== undefined) {
     parts.push(
-      <span key='project'>
+      <span key="project">
         <ProjectIcon
           icon={projectIcon}
           src={iconSrc}
@@ -231,20 +231,24 @@ export function SessionItem({
           /* 16px, the same box as the engine mark in the gutter, and nudged onto
              the text baseline: the box is taller than the line, so it sits a
              hair proud without this. */
-          className='mr-1.5 size-4 align-[-0.3em]'
+          className="mr-1.5 size-4 align-[-0.3em]"
         />
         {project}
       </span>,
     )
   }
-  for (const extra of extras) parts.push(<span key={extra}>{extra}</span>)
+  for (const extra of extras) {
+    parts.push(<span key={extra}>{extra}</span>)
+  }
   // Where a step press goes, by kind. An **agent** has work of its own and gets
   // the frame; a **task** is a marker and gets travelled to. Both fall back to
   // plainly opening the session, which is the whole of what a host that can do
   // neither has to offer — and is still better than a destination that renders
   // empty.
   const steps = sessionSteps(info, (toolUseId, kind) => {
-    if (kind === 'agent') return onSelectSubagent ? onSelectSubagent(toolUseId) : onSelect?.()
+    if (kind === 'agent') {
+      return onSelectSubagent ? onSelectSubagent(toolUseId) : onSelect?.()
+    }
     return onRevealStep ? onRevealStep(toolUseId) : onSelect?.()
   })
   // Whether the thing on screen is one of THIS card's sub-agents. Matched
@@ -257,9 +261,9 @@ export function SessionItem({
 
   return (
     <div
-      data-slot='session-item'
+      data-slot="session-item"
       data-active={active || undefined}
-      role='button'
+      role="button"
       tabIndex={0}
       /* Only the FIRST click of a click-streak selects. Selecting reveals the
          session and focuses its composer, so the second click of a double-click
@@ -268,7 +272,9 @@ export function SessionItem({
          streak; anything past the first is the double-click the title is
          listening for. */
       onClick={(e) => {
-        if (e.detail > 1 || isEditing) return
+        if (e.detail > 1 || isEditing) {
+          return
+        }
         onSelect?.()
       }}
       onKeyDown={(e) => {
@@ -277,7 +283,9 @@ export function SessionItem({
         // own click, and `stopPropagation` there cannot help: the keydown is a
         // separate event travelling the same path, so an unguarded handler ran
         // the control's action AND selected the session.
-        if (e.target !== e.currentTarget) return
+        if (e.target !== e.currentTarget) {
+          return
+        }
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           onSelect?.()
@@ -293,14 +301,11 @@ export function SessionItem({
         // one in grey. A filled card does not also answer hover: the fill is
         // already spent, and a selected row that lightened under the pointer
         // read as a third state nobody could name.
-        holdsOpenAgent
-          ? 'bg-row-selected-weak'
-          : active
-            ? 'bg-row-selected'
-            : 'hover:bg-row-hover',
+        holdsOpenAgent ? 'bg-row-selected-weak' : active ? 'bg-row-selected' : 'hover:bg-row-hover',
         className,
-      )}>
-      <div className='flex flex-col gap-1 py-0.5 pr-0.5 pl-1.5'>
+      )}
+    >
+      <div className="flex flex-col gap-1 py-0.5 pr-0.5 pl-1.5">
         {/* Line one — state, name, and the two readings that keep moving.
 
             **6px between cells, where the column between the lines is 4px.**
@@ -310,7 +315,7 @@ export function SessionItem({
             separated by their own leading, so it needs less. The design was
             redrawn to this once the vendor marks lost the transparent padding
             that had been standing in for the missing space. */}
-        <div className='flex h-5 items-center gap-1.5 overflow-hidden'>
+        <div className="flex h-5 items-center gap-1.5 overflow-hidden">
           <Gutter>
             <SessionStatusIcon row={row} />
           </Gutter>
@@ -322,7 +327,9 @@ export function SessionItem({
               initial={info.title ?? ''}
               onCommit={(title) => {
                 setEditing(false)
-                if (title !== (info.title ?? '')) onRename(title)
+                if (title !== (info.title ?? '')) {
+                  onRename(title)
+                }
               }}
               onCancel={() => setEditing(false)}
             />
@@ -336,7 +343,8 @@ export function SessionItem({
                     }
                   : undefined
               }
-              className='min-w-0 flex-1 truncate text-body-sm font-medium tracking-[-0.005em] text-fg-1'>
+              className="min-w-0 flex-1 truncate text-body-sm font-medium tracking-[-0.005em] text-fg-1"
+            >
               {sessionLabel(info)}
             </span>
           )}
@@ -357,31 +365,26 @@ export function SessionItem({
               className={cn(
                 'flex h-4 min-w-6 shrink-0 items-center justify-center rounded-full px-2',
                 'text-[0.75rem] leading-none tracking-[-0.005em] tabular-nums',
-                row.state === 'working' || row.state === 'attention'
-                  ? 'bg-accent text-accent-fg'
-                  : 'bg-badge text-badge-fg',
-              )}>
+                row.state === 'working' || row.state === 'attention' ? 'bg-accent text-accent-fg' : 'bg-badge text-badge-fg',
+              )}
+            >
               {row.unseen}
             </span>
           ) : null}
           {/* How full the window is, at a glance and across the whole list — the
               question you cannot ask from inside one session. Absent draws
               nothing, and absent is not zero. */}
-          <ContextRing usage={info.contextUsage} size={16} className='p-0.5' />
+          <ContextRing usage={info.contextUsage} size={16} className="p-0.5" />
         </div>
 
         {/* Line two — what it is, where it runs, what it cost, how old it is. */}
-        <div className='flex h-5 items-center gap-1.5 overflow-hidden text-body-sm tracking-[-0.005em]'>
+        <div className="flex h-5 items-center gap-1.5 overflow-hidden text-body-sm tracking-[-0.005em]">
           <Gutter>
             {/* The colour goes ON the icon, not on a parent: the svg ships its
                 own `text-fg-3` and only a class on the element itself merges
                 over it. `cn` is tailwind-merge, so passing one replaces the
                 default rather than losing to it. */}
-            <EngineIcon
-              engine={engine}
-              model={info.model}
-              className={cn('size-4', vendorMarkClass(engine, info.model))}
-            />
+            <EngineIcon engine={engine} model={info.model} className={cn('size-4', vendorMarkClass(engine, info.model))} />
           </Gutter>
           {/* **One truncating run and one atom, not five cells and not one
               span**, and both halves of that are load-bearing.
@@ -404,7 +407,7 @@ export function SessionItem({
               truncated project name still says which repo. So it is its own
               shrink-0 cell and the run yields to it. That is one ellipsis in
               one place, which is the whole reason not to use five cells. */}
-          <span className='min-w-0 truncate text-fg-4'>
+          <span className="min-w-0 truncate text-fg-4">
             {/* Separators live BETWEEN parts and are never attached to one.
                 Attached, a part that turned out to be absent left its own
                 separator behind — which is what a session with no model
@@ -418,7 +421,7 @@ export function SessionItem({
               </Fragment>
             ))}
           </span>
-          <span className='shrink-0 text-fg-4'>
+          <span className="shrink-0 text-fg-4">
             {parts.length > 0 ? '· ' : ''}
             {formatRelativeTime(info.lastActivityAt ?? info.createdAt)}
           </span>
@@ -430,7 +433,7 @@ export function SessionItem({
               run and the age are one reading, and what floats is the gap before
               the controls. Basis 0, so it only ever takes *surplus* — under a
               deficit it is worth nothing and the run truncates instead. */}
-          <span className='min-w-0 flex-1' />
+          <span className="min-w-0 flex-1" />
           {steps.length > 0 ? (
             <StepToggle
               expanded={open}
@@ -445,14 +448,9 @@ export function SessionItem({
       </div>
 
       {open && steps.length > 0 ? (
-        <div className='flex flex-col'>
+        <div className="flex flex-col">
           {steps.map((step: Step) => (
-            <StepRow
-              key={step.key}
-              step={step}
-              active={step.key === activeStepKey}
-              onSelect={step.onSelect}
-            />
+            <StepRow key={step.key} step={step} active={step.key === activeStepKey} onSelect={step.onSelect} />
           ))}
         </div>
       ) : null}
@@ -468,7 +466,7 @@ export function SessionItem({
  * different x. Centring inside a fixed cell is what makes them agree.
  */
 function Gutter({ children }: { children: ReactNode }) {
-  return <span className='flex size-4 shrink-0 items-center justify-center'>{children}</span>
+  return <span className="flex size-4 shrink-0 items-center justify-center">{children}</span>
 }
 
 /**
@@ -484,15 +482,7 @@ function Gutter({ children }: { children: ReactNode }) {
  * document is the user leaving the field; the whole view losing focus is not.
  * When the window comes back, so does the caret.
  */
-function NameEditor({
-  initial,
-  onCommit,
-  onCancel,
-}: {
-  initial: string
-  onCommit: (title: string) => void
-  onCancel: () => void
-}) {
+function NameEditor({ initial, onCommit, onCancel }: { initial: string; onCommit: (title: string) => void; onCancel: () => void }) {
   const [value, setValue] = useState(initial)
   const ref = useRef<HTMLInputElement>(null)
   useEffect(() => {
@@ -512,18 +502,23 @@ function NameEditor({
       ref={ref}
       value={value}
       spellCheck={false}
-      placeholder='Session name'
-      aria-label='Session name'
+      placeholder="Session name"
+      aria-label="Session name"
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
       onChange={(e) => setValue(e.target.value)}
       onBlur={() => {
-        if (document.hasFocus()) onCommit(value.trim())
+        if (document.hasFocus()) {
+          onCommit(value.trim())
+        }
       }}
       onKeyDown={(e) => {
         e.stopPropagation()
-        if (e.key === 'Enter') onCommit(value.trim())
-        else if (e.key === 'Escape') onCancel()
+        if (e.key === 'Enter') {
+          onCommit(value.trim())
+        } else if (e.key === 'Escape') {
+          onCancel()
+        }
       }}
       /* The negative margin is load-bearing: the border (1px) and padding (1px)
          make the input taller than the label it replaces, and the card would

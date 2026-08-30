@@ -14,9 +14,7 @@ function htmlResponse(body: string, init: ResponseInit = {}): Response {
 
 describe('createWebFetch', () => {
   it('fetches a page and returns it as markdown', async () => {
-    const fetchImpl = vi.fn(async () =>
-      htmlResponse('<html><body><h1>Title</h1><p>Hello <b>world</b></p></body></html>'),
-    )
+    const fetchImpl = vi.fn(async () => htmlResponse('<html><body><h1>Title</h1><p>Hello <b>world</b></p></body></html>'))
     const webFetch = createWebFetch({ fetchImpl: fetchImpl as unknown as typeof fetch })
     const result = await webFetch(PAGE, 'what is this?')
     expect(result.markdown).toContain('# Title')
@@ -51,9 +49,7 @@ describe('createWebFetch', () => {
   })
 
   it('surfaces a cross-host redirect instead of following it', async () => {
-    const fetchImpl = vi.fn(async () =>
-      new Response(null, { status: 302, headers: { location: 'http://198.51.100.7/moved' } }),
-    )
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 302, headers: { location: 'http://198.51.100.7/moved' } }))
     const webFetch = createWebFetch({ fetchImpl: fetchImpl as unknown as typeof fetch })
     const result = await webFetch(PAGE, 'x')
     expect(result.notice).toMatch(/different host/)
@@ -64,9 +60,7 @@ describe('createWebFetch', () => {
   it('follows same-host redirects and re-checks each hop', async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValueOnce(
-        new Response(null, { status: 301, headers: { location: '/final' } }),
-      )
+      .mockResolvedValueOnce(new Response(null, { status: 301, headers: { location: '/final' } }))
       .mockResolvedValueOnce(htmlResponse('<p>landed</p>'))
     const webFetch = createWebFetch({ fetchImpl: fetchImpl as unknown as typeof fetch })
     const result = await webFetch(PAGE, 'x')

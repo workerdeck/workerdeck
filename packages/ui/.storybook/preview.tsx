@@ -50,8 +50,7 @@ const withTheme: Decorator = (Story, context) => {
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
-  const fill =
-    surface === 'sidebar' ? 'var(--sidebar)' : surface === 'bg' ? 'var(--bg)' : 'var(--bg-surface)'
+  const fill = surface === 'sidebar' ? 'var(--sidebar)' : surface === 'bg' ? 'var(--bg)' : 'var(--bg-surface)'
   return (
     <div style={{ background: fill, color: 'var(--fg-1)', minHeight: '100vh', padding: 8 }}>
       <Story />

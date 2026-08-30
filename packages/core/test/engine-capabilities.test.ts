@@ -15,14 +15,7 @@ import { CODEX_CATALOG } from '../src/engines/codex/catalog.ts'
 import { modelOptionsFromSdk, type SdkModelInfo } from '../src/lib/normalize.ts'
 
 const ENGINES = Object.keys(ENGINE_CAPABILITIES) as ProfileEngine[]
-const ALL_MODES: PermissionMode[] = [
-  'default',
-  'acceptEdits',
-  'bypassPermissions',
-  'plan',
-  'dontAsk',
-  'auto',
-]
+const ALL_MODES: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk', 'auto']
 
 describe('ENGINE_CAPABILITIES invariants', () => {
   it('keeps defaultPermissionMode inside permissionModes for every engine', () => {
@@ -66,7 +59,9 @@ describe('ENGINE_CAPABILITIES invariants', () => {
     expect(ENGINE_CAPABILITIES.codex.hostCwd).toBe(true)
     expect(ENGINE_CAPABILITIES.provider.hostCwd).toBe(false)
     // Absent must read as true (an older wire copy), never as "no filesystem".
-    for (const engine of ENGINES) expect(ENGINE_CAPABILITIES[engine].hostCwd).toBeDefined()
+    for (const engine of ENGINES) {
+      expect(ENGINE_CAPABILITIES[engine].hostCwd).toBeDefined()
+    }
   })
 
   it('declares approvals for claude and codex, and token streaming for codex', () => {
@@ -170,20 +165,13 @@ describe('model catalogs', () => {
     const shaped = modelOptionsFromSdk(RAW_CLAUDE)
     // The catalog adds hand-maintained older rows; the rows that came from the
     // extraction must be exactly what the runtime shaping produces.
-    const currentRows = CLAUDE_CATALOG.models.filter((m) =>
-      RAW_CLAUDE.some((raw) => raw.value === m.value),
-    )
+    const currentRows = CLAUDE_CATALOG.models.filter((m) => RAW_CLAUDE.some((raw) => raw.value === m.value))
     expect(currentRows).toEqual(shaped)
   })
 
   it('claude catalog marks exactly one primary row per family', () => {
     const primaries = CLAUDE_CATALOG.models.filter((m) => m.primary)
-    expect(primaries.map((m) => m.displayName)).toEqual([
-      'Fable 5',
-      'Opus 5',
-      'Sonnet 5',
-      'Haiku 4.5',
-    ])
+    expect(primaries.map((m) => m.displayName)).toEqual(['Fable 5', 'Opus 5', 'Sonnet 5', 'Haiku 4.5'])
   })
 
   it('codex catalog drops the internal auto-review row and keeps efforts open', () => {
@@ -203,9 +191,7 @@ describe('model catalogs', () => {
 
   it('provider pseudo-adapter ships an empty catalog and a hook-refusing factory', () => {
     expect(providerAdapter.catalog.models).toEqual([])
-    expect(() => providerAdapter.createRunner({ config: { cwd: '/tmp' } })).toThrow(
-      /createEngineRunner/,
-    )
+    expect(() => providerAdapter.createRunner({ config: { cwd: '/tmp' } })).toThrow(/createEngineRunner/)
   })
 })
 
@@ -218,11 +204,8 @@ describe('provider availability probe', () => {
     expect(await providerAdapter.checkAvailability(profile, {})).toMatchObject({
       available: false,
     })
-    expect(
-      await providerAdapter.checkAvailability(
-        { name: 'p', engine: 'provider', provider: { id: 'x' } },
-        {},
-      ),
-    ).toEqual({ available: 'unknown' })
+    expect(await providerAdapter.checkAvailability({ name: 'p', engine: 'provider', provider: { id: 'x' } }, {})).toEqual({
+      available: 'unknown',
+    })
   })
 })

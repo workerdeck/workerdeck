@@ -6,7 +6,10 @@ import { createToolCallHost, type ToolCallHostOptions } from '../src/lib/tool-ho
 
 /** Drives the framework-free host through a fake handle — no renderer needed. */
 function fakeHandle() {
-  const listeners = { toolCallRequest: [] as Array<(f: ToolCallRequestFrame) => void>, toolCallCanceled: [] as Array<(p: { executionId: string; reason: string }) => void> }
+  const listeners = {
+    toolCallRequest: [] as Array<(f: ToolCallRequestFrame) => void>,
+    toolCallCanceled: [] as Array<(p: { executionId: string; reason: string }) => void>,
+  }
   const results: Array<{ executionId: string; output: unknown; logs?: string[] }> = []
   const errors: Array<{ executionId: string; reason: string; error: string; logs?: string[] }> = []
   const handle = {
@@ -15,7 +18,9 @@ function fakeHandle() {
       return () => {
         const list = listeners[kind] as unknown[]
         const i = list.indexOf(listener)
-        if (i >= 0) list.splice(i, 1)
+        if (i >= 0) {
+          list.splice(i, 1)
+        }
       }
     },
     sendToolCallResult: (executionId: string, output: { type: string; value: unknown }, logs?: string[]) => {
@@ -33,10 +38,14 @@ function fakeHandle() {
       input: { script: '1+1' },
       ...frame,
     }
-    for (const listener of listeners.toolCallRequest) listener(full)
+    for (const listener of listeners.toolCallRequest) {
+      listener(full)
+    }
   }
   const cancel = (executionId: string, reason = 'timeout') => {
-    for (const listener of listeners.toolCallCanceled) listener({ executionId, reason })
+    for (const listener of listeners.toolCallCanceled) {
+      listener({ executionId, reason })
+    }
   }
   return { handle, results, errors, request, cancel }
 }
@@ -84,9 +93,7 @@ describe('tool-call host', () => {
 
   it('reports a guest failure so the agent can adapt', async () => {
     const h = fakeHandle()
-    const execute = vi.fn(
-      async (): Promise<RunScriptResult> => ({ ok: false, reason: 'timeout', error: 'deadline', logs: [] }),
-    )
+    const execute = vi.fn(async (): Promise<RunScriptResult> => ({ ok: false, reason: 'timeout', error: 'deadline', logs: [] }))
     const { cleanup } = mount(h.handle, { execute })
     h.request()
     await vi.waitFor(() => expect(h.errors).toHaveLength(1))

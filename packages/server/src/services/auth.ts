@@ -35,9 +35,13 @@ export function createAuthService(deps: {
   const { options, refs } = deps
 
   const authenticate = async (req: IncomingMessage): Promise<AuthContext> => {
-    if (!options.authenticate) return { ok: true }
+    if (!options.authenticate) {
+      return { ok: true }
+    }
     const principal = await options.authenticate(req)
-    if (principal === null || principal === undefined || principal === false) return { ok: false }
+    if (principal === null || principal === undefined || principal === false) {
+      return { ok: false }
+    }
     const allowed = (principal as { allowedProfiles?: unknown }).allowedProfiles
     const scope = readScope((principal as { scope?: unknown }).scope)
     return {
@@ -49,23 +53,19 @@ export function createAuthService(deps: {
       // Three-state on purpose: absent lets `isOperator` infer, and only an
       // actual boolean overrides the inference in either direction.
       operator:
-        typeof (principal as { operator?: unknown }).operator === 'boolean'
-          ? ((principal as { operator: boolean }).operator)
-          : undefined,
-      allowedProfiles:
-        Array.isArray(allowed) && allowed.every((p) => typeof p === 'string')
-          ? (allowed as string[])
-          : undefined,
+        typeof (principal as { operator?: unknown }).operator === 'boolean' ? (principal as { operator: boolean }).operator : undefined,
+      allowedProfiles: Array.isArray(allowed) && allowed.every((p) => typeof p === 'string') ? (allowed as string[]) : undefined,
       // Opt-in, and only ever true when the host says so: an unauthenticated dev
       // server (no `authenticate`) returns early above and manages nothing.
-      canManageProfiles:
-        (principal as { canManageProfiles?: unknown }).canManageProfiles === true,
+      canManageProfiles: (principal as { canManageProfiles?: unknown }).canManageProfiles === true,
     }
   }
 
   /** May this caller see — and therefore drive — this session? */
   const canSee = (auth: AuthContext, session: SessionInfo): boolean => {
-    if (!options.authorizeSession) return scopeMatches(auth.scope, session.scope)
+    if (!options.authorizeSession) {
+      return scopeMatches(auth.scope, session.scope)
+    }
     try {
       return options.authorizeSession(auth.principal, session) === true
     } catch {
@@ -92,18 +92,15 @@ export function createAuthService(deps: {
    */
   const canSeeJob = (auth: AuthContext, job: JobInfo): boolean => {
     const live = job.sessionId ? refs.registry!.get(job.sessionId)?.info() : undefined
-    if (live) return canSee(auth, live)
-    if (!options.authorizeSession) return scopeMatches(auth.scope, job.scope)
+    if (live) {
+      return canSee(auth, live)
+    }
+    if (!options.authorizeSession) {
+      return scopeMatches(auth.scope, job.scope)
+    }
     return canSee(auth, {
       id: job.sessionId ?? job.id,
-      status:
-        job.status === 'running'
-          ? 'running'
-          : job.status === 'parked'
-            ? 'parked'
-            : job.status === 'queued'
-              ? 'starting'
-              : 'closed',
+      status: job.status === 'running' ? 'running' : job.status === 'parked' ? 'parked' : job.status === 'queued' ? 'starting' : 'closed',
       cwd: job.cwd,
       profile: job.profile,
       createdAt: job.createdAt,
@@ -132,8 +129,7 @@ export function createAuthService(deps: {
    * and such a host marks its operator principals explicitly with
    * `operator: true` (`operator: false` forces the other way, at any time).
    */
-  const isOperator = (auth: AuthContext): boolean =>
-    auth.operator ?? (auth.scope === undefined && !options.authorizeSession)
+  const isOperator = (auth: AuthContext): boolean => auth.operator ?? (auth.scope === undefined && !options.authorizeSession)
 
   return { authenticate, canSee, canSeeJob, isOperator }
 }

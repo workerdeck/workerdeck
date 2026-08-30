@@ -1,15 +1,5 @@
 import type { Dirent } from 'node:fs'
-import {
-  closeSync,
-  constants,
-  fstatSync,
-  ftruncateSync,
-  lstatSync,
-  openSync,
-  readFileSync,
-  realpathSync,
-  writeFileSync,
-} from 'node:fs'
+import { closeSync, constants, fstatSync, ftruncateSync, lstatSync, openSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 
 /**
@@ -67,9 +57,7 @@ export function createHostFileRoots(roots: string[]): HostFileRoots {
   return {
     roots: roots.map((configured) => {
       if (invalidRequest(configured)) {
-        throw new Error(
-          `createHostFileRoots: root must be an absolute path: ${JSON.stringify(configured)}`,
-        )
+        throw new Error(`createHostFileRoots: root must be an absolute path: ${JSON.stringify(configured)}`)
       }
       let canonical: string
       try {
@@ -133,7 +121,9 @@ function rootContaining(roots: HostFileRoots, canonical: string): HostFileRoot |
  * the operator granted the whole subtree, so nothing new becomes reachable.
  */
 export function resolveExisting(roots: HostFileRoots, requested: string): ResolveOutcome {
-  if (invalidRequest(requested)) return refuse(403, 'invalid path')
+  if (invalidRequest(requested)) {
+    return refuse(403, 'invalid path')
+  }
   let canonical: string
   try {
     canonical = realpathSync(requested)
@@ -142,7 +132,9 @@ export function resolveExisting(roots: HostFileRoots, requested: string): Resolv
     return notFound()
   }
   const root = rootContaining(roots, canonical)
-  if (!root) return notFound()
+  if (!root) {
+    return notFound()
+  }
   let target
   try {
     // realpath output cannot name a symlink, so lstat === stat here modulo a
@@ -152,8 +144,12 @@ export function resolveExisting(roots: HostFileRoots, requested: string): Resolv
   } catch {
     return notFound()
   }
-  if (target.isFile()) return { ok: true, path: canonical, root: root.canonical, kind: 'file' }
-  if (target.isDirectory()) return { ok: true, path: canonical, root: root.canonical, kind: 'dir' }
+  if (target.isFile()) {
+    return { ok: true, path: canonical, root: root.canonical, kind: 'file' }
+  }
+  if (target.isDirectory()) {
+    return { ok: true, path: canonical, root: root.canonical, kind: 'dir' }
+  }
   // In-root fifo/device/socket: a 403 here reveals nothing beyond the roots
   // (the operator can list the entry anyway), and reading one would hang the
   // request or stream zeros forever.
@@ -174,20 +170,30 @@ export function resolveExisting(roots: HostFileRoots, requested: string): Resolv
  * existence bit the uniform 404 exists to withhold.
  */
 export function resolveForWrite(roots: HostFileRoots, requested: string): ResolveOutcome {
-  if (invalidRequest(requested)) return refuse(403, 'invalid path')
+  if (invalidRequest(requested)) {
+    return refuse(403, 'invalid path')
+  }
   try {
     const canonical = realpathSync(requested)
     const root = rootContaining(roots, canonical)
-    if (!root) return notFound()
+    if (!root) {
+      return notFound()
+    }
     const target = lstatSync(canonical)
-    if (target.isDirectory()) return refuse(403, 'is a directory')
-    if (!target.isFile()) return refuse(403, 'not a regular file')
+    if (target.isDirectory()) {
+      return refuse(403, 'is a directory')
+    }
+    if (!target.isFile()) {
+      return refuse(403, 'not a regular file')
+    }
     return { ok: true, path: canonical, root: root.canonical, kind: 'file' }
   } catch {
     // Target absent or unresolvable — fall through and try it as a create.
   }
   const base = basename(requested)
-  if (base === '' || base === '.' || base === '..') return refuse(403, 'invalid path')
+  if (base === '' || base === '.' || base === '..') {
+    return refuse(403, 'invalid path')
+  }
   let parent: string
   try {
     parent = realpathSync(dirname(requested))
@@ -195,18 +201,24 @@ export function resolveForWrite(roots: HostFileRoots, requested: string): Resolv
     return notFound()
   }
   const root = rootContaining(roots, parent)
-  if (!root) return notFound()
+  if (!root) {
+    return notFound()
+  }
   try {
     // Parent exists but is not a directory (`root/file.txt/x`): no such
     // location, same answer as a missing parent.
-    if (!lstatSync(parent).isDirectory()) return notFound()
+    if (!lstatSync(parent).isDirectory()) {
+      return notFound()
+    }
   } catch {
     return notFound()
   }
   const path = join(parent, base)
   // basename() cannot smuggle a separator, so this re-check is redundant by
   // construction — kept because this is the line an escape would have to cross.
-  if (!contained(root.canonical, path)) return notFound()
+  if (!contained(root.canonical, path)) {
+    return notFound()
+  }
   try {
     lstatSync(path)
   } catch (err) {
@@ -228,9 +240,15 @@ export type HostEntryKind = 'file' | 'dir' | 'symlink' | 'other'
  * refuses it if it escapes. `readdir(withFileTypes)` already answers without
  * following, so this is classification, not I/O. */
 export function entryKind(entry: Dirent): HostEntryKind {
-  if (entry.isSymbolicLink()) return 'symlink'
-  if (entry.isFile()) return 'file'
-  if (entry.isDirectory()) return 'dir'
+  if (entry.isSymbolicLink()) {
+    return 'symlink'
+  }
+  if (entry.isFile()) {
+    return 'file'
+  }
+  if (entry.isDirectory()) {
+    return 'dir'
+  }
   return 'other'
 }
 
@@ -258,7 +276,9 @@ export function readContained(path: string): ReadOutcome {
     return (err as NodeJS.ErrnoException).code === 'ENOENT' ? notFound() : refuse(403, 'refused')
   }
   try {
-    if (!fstatSync(fd).isFile()) return refuse(403, 'not a regular file')
+    if (!fstatSync(fd).isFile()) {
+      return refuse(403, 'not a regular file')
+    }
     return { ok: true, data: readFileSync(fd) }
   } catch {
     return refuse(403, 'refused')
@@ -284,7 +304,9 @@ export function writeContained(path: string, data: string | Uint8Array): WriteOu
     return (err as NodeJS.ErrnoException).code === 'ENOENT' ? notFound() : refuse(403, 'refused')
   }
   try {
-    if (!fstatSync(fd).isFile()) return refuse(403, 'not a regular file')
+    if (!fstatSync(fd).isFile()) {
+      return refuse(403, 'not a regular file')
+    }
     ftruncateSync(fd)
     writeFileSync(fd, data)
     return { ok: true }

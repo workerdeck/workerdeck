@@ -78,9 +78,13 @@ const stringify = (nodes) => nodes.map((n) => String(n)).join('')
 
 /** `[data-theme='x']` (exactly, alone in its compound) → the theme value. */
 function themeAttrValue(compound) {
-  if (compound.length !== 1) return null
+  if (compound.length !== 1) {
+    return null
+  }
   const node = compound[0]
-  if (node.type !== 'attribute' || node.attribute !== 'data-theme') return null
+  if (node.type !== 'attribute' || node.attribute !== 'data-theme') {
+    return null
+  }
   return node.value?.replace(/^['"]|['"]$/g, '') ?? null
 }
 
@@ -94,10 +98,7 @@ function themeAttrValue(compound) {
  */
 function mapThemeTokenBlock(value) {
   if (value === 'dark') {
-    return [
-      `${SCOPE}:where([data-theme='dark'], [data-theme='dark'] *)`,
-      `${SCOPE} [data-theme='dark']`,
-    ]
+    return [`${SCOPE}:where([data-theme='dark'], [data-theme='dark'] *)`, `${SCOPE} [data-theme='dark']`]
   }
   return [`${SCOPE}[data-theme='${value}']`, `${SCOPE} [data-theme='${value}']`]
 }
@@ -135,9 +136,7 @@ function transformSelectors(selectorText) {
         // on ancestor-or-self instead of nesting the attribute inside.
         const restSel = selectorParser().astSync(restText, { lossless: false }).nodes[0]
         const { first: restFirst, rest: restRest } = splitFirstCompound(restSel)
-        out.push(
-          `${SCOPE} ${stringify(restFirst)}:where([data-theme='${theme}'], [data-theme='${theme}'] *)${stringify(restRest)}`,
-        )
+        out.push(`${SCOPE} ${stringify(restFirst)}:where([data-theme='${theme}'], [data-theme='${theme}'] *)${stringify(restRest)}`)
       }
       continue
     }
@@ -163,7 +162,9 @@ const SKIP_ATRULES = /^(-\w+-)?(keyframes|font-face|property|page|counter-style)
 
 function insideSkippedAtRule(rule) {
   for (let parent = rule.parent; parent; parent = parent.parent) {
-    if (parent.type === 'atrule' && SKIP_ATRULES.test(parent.name)) return true
+    if (parent.type === 'atrule' && SKIP_ATRULES.test(parent.name)) {
+      return true
+    }
   }
   return false
 }
@@ -194,19 +195,25 @@ const scopePlugin = {
   postcssPlugin: 'wd-scope',
   Once(cssRoot) {
     cssRoot.walkRules((rule) => {
-      if (insideSkippedAtRule(rule)) return
+      if (insideSkippedAtRule(rule)) {
+        return
+      }
       rule.selector = transformSelectors(rule.selector)
     })
 
     const used = new Set()
     cssRoot.walkRules((rule) => {
       for (const name of TEXT_SCALE_NAMES) {
-        if (rule.selector.includes(`.text-${name}`)) used.add(name)
+        if (rule.selector.includes(`.text-${name}`)) {
+          used.add(name)
+        }
       }
     })
     if (used.size > 0) {
       cssRoot.walkAtRules('layer', (atRule) => {
-        if (atRule.params !== 'utilities' || atRule.nodes === undefined) return
+        if (atRule.params !== 'utilities' || atRule.nodes === undefined) {
+          return
+        }
         const guard = postcss.rule({
           selector: [...used].map((name) => `${SCOPE} .text-${name}`).join(', '),
         })
@@ -253,16 +260,22 @@ writeFileSync(OUT, banner + result.css)
 const verify = postcss.parse(result.css)
 const offenders = []
 verify.walkRules((rule) => {
-  if (insideSkippedAtRule(rule)) return
+  if (insideSkippedAtRule(rule)) {
+    return
+  }
   for (const sel of rule.selectors) {
     const s = sel.trim()
-    if (!s.includes('.wd-root')) offenders.push(s)
+    if (!s.includes('.wd-root')) {
+      offenders.push(s)
+    }
   }
 })
 if (offenders.length > 0) {
   rmSync(OUT)
   console.error('scoped.css: unscoped selectors survived the rewrite:')
-  for (const s of offenders.slice(0, 20)) console.error(`  ${s}`)
+  for (const s of offenders.slice(0, 20)) {
+    console.error(`  ${s}`)
+  }
   process.exit(1)
 }
 

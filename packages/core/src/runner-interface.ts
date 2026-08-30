@@ -1,11 +1,4 @@
-import type {
-  McpServerStatusInfo,
-  PermissionMode,
-  PermissionRequest,
-  ProfileEngine,
-  SessionEvent,
-  SessionInfo,
-} from '@workerdeck/protocol'
+import type { McpServerStatusInfo, PermissionMode, PermissionRequest, ProfileEngine, SessionEvent, SessionInfo } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import type { AttachmentInput } from './lib/attachments.ts'
 import type { ToolExecutionResult } from './executors/tool-executor.ts'

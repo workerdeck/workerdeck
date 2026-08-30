@@ -53,27 +53,35 @@ export function App() {
   // Selecting the first document once the list arrives, without clobbering a
   // selection the user (or the agent) has since made.
   useEffect(() => {
-    if (!openId && docList.length > 0) setOpenId(docList[0]!.id)
+    if (!openId && docList.length > 0) {
+      setOpenId(docList[0]!.id)
+    }
   }, [openId, docList])
 
   // The agent (or another tab) may have deleted what we are showing. `readDoc`
   // answers NOT_FOUND rather than an empty document, which is the signal to let
   // the list pick the next one.
   useEffect(() => {
-    if (openDoc.error && isNotFound(openDoc.error)) setOpenId(undefined)
+    if (openDoc.error && isNotFound(openDoc.error)) {
+      setOpenId(undefined)
+    }
   }, [openDoc.error])
 
   // Push what is on screen up to the server, so the agent's `whoami` can answer
   // "the document I'm looking at" without being able to see the screen.
   useEffect(() => {
-    if (!user) return
+    if (!user) {
+      return
+    }
     void api.setUiState(openId).catch(() => {})
   }, [user, openId])
 
   // …and take navigation the other way. `EventSource` handles its own
   // reconnect, which is most of why this is SSE rather than a second socket.
   useEffect(() => {
-    if (!user) return
+    if (!user) {
+      return
+    }
     const source = new EventSource('/api/ui-events')
     source.onmessage = (event) => {
       const intent = JSON.parse(event.data) as UiIntent
@@ -94,8 +102,12 @@ export function App() {
     return () => source.close()
   }, [user, refresh])
 
-  if (user === undefined) return <div className='h-full bg-bg' />
-  if (user === null) return <LoginView onSignedIn={setUser} />
+  if (user === undefined) {
+    return <div className="h-full bg-bg" />
+  }
+  if (user === null) {
+    return <LoginView onSignedIn={setUser} />
+  }
 
   const newDoc = async () => {
     const doc = await createDoc.mutateAsync({ title: 'Untitled', body: '' })
@@ -111,7 +123,7 @@ export function App() {
   }
 
   return (
-    <div className='flex h-full w-full overflow-hidden bg-bg text-text'>
+    <div className="flex h-full w-full overflow-hidden bg-bg text-text">
       <DocList
         docs={docList}
         selectedId={openId}
@@ -137,18 +149,14 @@ export function App() {
               title: patch.title,
               body: patch.body ?? openDoc.data.body,
             })
-            const fresh = await queryClient.fetchQuery(
-              trpc.readDoc.queryOptions({ id: openDoc.data.id }),
-            )
+            const fresh = await queryClient.fetchQuery(trpc.readDoc.queryOptions({ id: openDoc.data.id }))
             return fresh
           }}
           onReload={() => void openDoc.refetch()}
         />
       ) : (
-        <section className='flex flex-1 items-center justify-center bg-bg'>
-          <p className='text-sm text-fg-3'>
-            {docList.length === 0 ? 'Create a document to get started.' : 'Pick a document.'}
-          </p>
+        <section className="flex flex-1 items-center justify-center bg-bg">
+          <p className="text-sm text-fg-3">{docList.length === 0 ? 'Create a document to get started.' : 'Pick a document.'}</p>
         </section>
       )}
 

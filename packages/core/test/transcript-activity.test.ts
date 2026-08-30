@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  contextReading,
-  transcriptActivity,
-  transcriptContent,
-  type SessionEventBody,
-} from '@workerdeck/protocol'
+import { contextReading, transcriptActivity, transcriptContent, type SessionEventBody } from '@workerdeck/protocol'
 
 /**
  * `activityCount` is what a client diffs to answer "how much happened while I
@@ -38,9 +33,7 @@ describe('transcriptActivity', () => {
 
   it('counts a thinking block, and ignores tool results (they live in the call row)', () => {
     expect(transcriptActivity(assistant([{ type: 'thinking', thinking: 'hmm' }]))).toBe(1)
-    expect(
-      transcriptActivity(assistant([{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }])),
-    ).toBe(0)
+    expect(transcriptActivity(assistant([{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }]))).toBe(0)
   })
 
   it('treats a string body as the one row it renders as', () => {
@@ -187,12 +180,8 @@ describe('transcriptContent', () => {
     expect(transcriptContent({ type: 'model_changed', model: 'opus' })).toBe(false)
     expect(transcriptContent({ type: 'permission_mode_changed', mode: 'default' })).toBe(false)
     expect(transcriptContent({ type: 'plan_info', subscriptionType: 'max' })).toBe(false)
-    expect(
-      transcriptContent({ type: 'file_produced', fileId: 'f1', path: '/tmp/x.png' }),
-    ).toBe(false)
-    expect(
-      transcriptContent({ type: 'rate_limit', info: { status: 'allowed' } }),
-    ).toBe(false)
+    expect(transcriptContent({ type: 'file_produced', fileId: 'f1', path: '/tmp/x.png' })).toBe(false)
+    expect(transcriptContent({ type: 'rate_limit', info: { status: 'allowed' } })).toBe(false)
     // Permission bookkeeping survives a reset: a still-pending request is the
     // runner's, and skipping the `requested` half would hide it forever.
     expect(
@@ -236,8 +225,6 @@ describe('contextReading', () => {
     // The reset's clearing is the caller's half of the rule — this function
     // says what an event claims the reading *is*, and a reset claims nothing.
     expect(contextReading({ type: 'conversation_reset' } as SessionEventBody)).toBeUndefined()
-    expect(
-      contextReading({ type: 'status_changed', status: 'idle' } as SessionEventBody),
-    ).toBeUndefined()
+    expect(contextReading({ type: 'status_changed', status: 'idle' } as SessionEventBody)).toBeUndefined()
   })
 })

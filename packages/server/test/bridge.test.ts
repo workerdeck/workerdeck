@@ -37,7 +37,9 @@ function frameCollector(ws: WebSocket) {
   })
   const waitFor = (match: (f: ServerFrame) => boolean, timeoutMs = 2000): Promise<ServerFrame> => {
     const existing = frames.find(match)
-    if (existing) return Promise.resolve(existing)
+    if (existing) {
+      return Promise.resolve(existing)
+    }
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('timed out waiting for frame')), timeoutMs)
       waiters.push({ match, resolve: (f) => (clearTimeout(timer), resolve(f)) })

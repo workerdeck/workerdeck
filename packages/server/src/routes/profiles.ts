@@ -17,15 +17,16 @@ export async function handleProfiles(
   const { auth: authSvc, availability, basePath, profiles } = ctx
   const saveManaged = async (incoming: ProfileInfo): Promise<void> => {
     const saved = await profiles.saveManaged(incoming)
-    if (!saved.ok) json(res, saved.status, { error: saved.error })
-    else json(res, 200, { profile: saved.profile })
+    if (!saved.ok) {
+      json(res, saved.status, { error: saved.error })
+    } else {
+      json(res, 200, { profile: saved.profile })
+    }
   }
   const rest = pathname.slice((basePath + '/profiles').length).replace(/^\//, '')
   if (rest === '') {
     if (req.method === 'GET') {
-      const visible = auth.allowedProfiles
-        ? profiles.all().filter((p) => auth.allowedProfiles!.includes(p.name))
-        : profiles.all()
+      const visible = auth.allowedProfiles ? profiles.all().filter((p) => auth.allowedProfiles!.includes(p.name)) : profiles.all()
       // Stale-while-revalidate: answer from the cache, re-probe anything
       // older than the TTL so the next read reflects a fresh login.
       availability.refresh(visible)

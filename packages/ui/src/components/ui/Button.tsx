@@ -15,11 +15,11 @@ const buttonVariants = cva(
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {
-        'default': 'h-8 gap-1.5 px-3',
-        'xs': "h-6 gap-1 px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
-        'sm': 'h-7 gap-1 px-2.5 text-xs',
-        'lg': 'h-9 gap-1.5 px-3.5',
-        'icon': 'size-8',
+        default: 'h-8 gap-1.5 px-3',
+        xs: "h-6 gap-1 px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
+        sm: 'h-7 gap-1 px-2.5 text-xs',
+        lg: 'h-9 gap-1.5 px-3.5',
+        icon: 'size-8',
         'icon-sm': 'size-7',
       },
     },
@@ -27,19 +27,11 @@ const buttonVariants = cva(
   },
 )
 
-export interface ButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {}
+export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {}
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'default', size = 'default', type = 'button', ...props }, ref) => (
-    <button
-      ref={ref}
-      type={type}
-      data-slot='button'
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
-    />
+    <button ref={ref} type={type} data-slot="button" className={cn(buttonVariants({ variant, size, className }))} {...props} />
   ),
 )
 Button.displayName = 'Button'

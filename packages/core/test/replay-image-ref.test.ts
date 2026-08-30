@@ -27,8 +27,7 @@ const resultEvent = (seq: number, blocks: unknown[]): SessionEvent =>
 const toolResult = (id: string, content: unknown) => ({ type: 'tool_result', tool_use_id: id, content })
 
 const partsOf = (event: SessionEvent, block = 0) =>
-  (event as unknown as { message: { content: Array<{ content: Array<Record<string, unknown>> }> } })
-    .message.content[block]!.content
+  (event as unknown as { message: { content: Array<{ content: Array<Record<string, unknown>> }> } }).message.content[block]!.content
 
 describe('refImageParts', () => {
   it('replaces a base64 image with its address, and says how big it was', () => {
@@ -62,17 +61,17 @@ describe('refImageParts', () => {
 
   it('addresses each image by its index in the STORED array', () => {
     const event = refImageParts(
-      resultEvent(1, [
-        toolResult('a', [{ type: 'text', text: 'x' }, image(png(300)), { type: 'text', text: 'y' }, image(png(300))]),
-      ]),
+      resultEvent(1, [toolResult('a', [{ type: 'text', text: 'x' }, image(png(300)), { type: 'text', text: 'y' }, image(png(300))])]),
     )
-    expect(partsOf(event).filter((p) => p.type === 'image_ref').map((p) => p.part_index)).toEqual([1, 3])
+    expect(
+      partsOf(event)
+        .filter((p) => p.type === 'image_ref')
+        .map((p) => p.part_index),
+    ).toEqual([1, 3])
   })
 
   it('refs blocks individually — an image beside a plain result', () => {
-    const event = refImageParts(
-      resultEvent(1, [toolResult('a', 'plain'), toolResult('b', [image(png(500))])]),
-    )
+    const event = refImageParts(resultEvent(1, [toolResult('a', 'plain'), toolResult('b', [image(png(500))])]))
     const blocks = (event as unknown as { message: { content: Array<Record<string, unknown>> } }).message.content
     expect(blocks[0]).toEqual(toolResult('a', 'plain'))
     expect((blocks[1]!.content as Array<{ type: string }>)[0]!.type).toBe('image_ref')
@@ -95,16 +94,13 @@ describe('refImageParts', () => {
   })
 
   it('ignores a non-base64 image source rather than minting an address for it', () => {
-    const event = resultEvent(1, [
-      toolResult('a', [{ type: 'image', source: { type: 'url', url: 'https://example/x.png' } }]),
-    ])
+    const event = resultEvent(1, [toolResult('a', [{ type: 'image', source: { type: 'url', url: 'https://example/x.png' } }])])
     expect(refImageParts(event)).toBe(event)
   })
 })
 
 describe('replaySlice — the two rules composed', () => {
-  const composed = (blocks: unknown[]) =>
-    replaySlice([resultEvent(1, blocks)], { afterSeq: 0, imageRefs: true, truncateResults: true })[0]!
+  const composed = (blocks: unknown[]) => replaySlice([resultEvent(1, blocks)], { afterSeq: 0, imageRefs: true, truncateResults: true })[0]!
 
   it('keeps the image address even when the text is truncated away past it', () => {
     // The bug this ordering exists to prevent: `headOf` drops every non-text
@@ -119,9 +115,7 @@ describe('replaySlice — the two rules composed', () => {
   it('addresses by the stored index, not the delivered position', () => {
     // Stored: [image, text(big), image]. Truncation renumbers what is delivered;
     // the stamped addresses must still name 0 and 2.
-    const parts = partsOf(
-      composed([toolResult('a', [image(png(100)), { type: 'text', text: big }, image(png(200))])]),
-    )
+    const parts = partsOf(composed([toolResult('a', [image(png(100)), { type: 'text', text: big }, image(png(200))])]))
     expect(parts.filter((p) => p.type === 'image_ref').map((p) => p.part_index)).toEqual([0, 2])
   })
 

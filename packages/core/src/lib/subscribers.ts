@@ -63,7 +63,9 @@ export class SubscriberSet {
     resetSeq = 0,
   ): () => void {
     const asked = options ?? {}
-    for (const event of replaySlice(events, { ...asked, afterSeq, resetSeq })) listener(event)
+    for (const event of replaySlice(events, { ...asked, afterSeq, resetSeq })) {
+      listener(event)
+    }
     this.#listeners.set(listener, asked)
     return () => {
       this.#listeners.delete(listener)

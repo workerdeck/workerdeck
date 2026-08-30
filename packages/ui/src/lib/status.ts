@@ -45,7 +45,9 @@ const STATUS_META: Record<SessionStatus, StatusPresentation> = {
  * rather than letting "Running" imply a turn is still streaming.
  */
 export function statusPresentation(vitals: StatusReadings | undefined): StatusPresentation {
-  if (!vitals) return { icon: 'hubot', label: 'Connecting…', severity: 'none' }
+  if (!vitals) {
+    return { icon: 'hubot', label: 'Connecting…', severity: 'none' }
+  }
   if (vitals.connection === 'offline') {
     return { icon: 'debug-disconnect', label: 'Offline', severity: 'error' }
   }
@@ -57,9 +59,15 @@ export function statusPresentation(vitals: StatusReadings | undefined): StatusPr
 
 /** 0–100 → the colour a meter wears. One pair of thresholds for every surface. */
 export function meterSeverity(pct: number | undefined): StatusSeverity {
-  if (pct === undefined) return 'none'
-  if (pct >= 95) return 'error'
-  if (pct >= 80) return 'warning'
+  if (pct === undefined) {
+    return 'none'
+  }
+  if (pct >= 95) {
+    return 'error'
+  }
+  if (pct >= 80) {
+    return 'warning'
+  }
   return 'none'
 }
 
@@ -94,7 +102,9 @@ export function usageWindow(
   rateLimits: Record<string, RateLimitInfo> | undefined,
   lane: UsageLane,
 ): { key: string; info: RateLimitInfo } | undefined {
-  if (!rateLimits) return undefined
+  if (!rateLimits) {
+    return undefined
+  }
   if (lane === 'session') {
     const info = rateLimits.five_hour
     return info ? { key: 'five_hour', info } : undefined
@@ -105,9 +115,7 @@ export function usageWindow(
   }
   // Model-scoped: same "fullest wins" rule as the single slot, over the subset.
   const scoped = Object.fromEntries(
-    Object.entries(rateLimits).filter(
-      ([key]) => key.startsWith('seven_day_') && key !== 'seven_day_oauth_apps',
-    ),
+    Object.entries(rateLimits).filter(([key]) => key.startsWith('seven_day_') && key !== 'seven_day_oauth_apps'),
   )
   return tightestWindow(scoped)
 }
@@ -116,11 +124,11 @@ export function usageWindow(
  * since the binding constraint is the one worth glancing at. Still the right
  * rule for a surface with exactly one slot; {@link usageWindow} is for one with
  * three. */
-export function tightestWindow(
-  rateLimits: Record<string, RateLimitInfo> | undefined,
-): { key: string; info: RateLimitInfo } | undefined {
+export function tightestWindow(rateLimits: Record<string, RateLimitInfo> | undefined): { key: string; info: RateLimitInfo } | undefined {
   const entries = Object.entries(rateLimits ?? {})
-  if (entries.length === 0) return undefined
+  if (entries.length === 0) {
+    return undefined
+  }
   let best: { key: string; info: RateLimitInfo } | undefined
   for (const [key, info] of entries) {
     // A rejected window outranks any utilization: it is the one actually blocking.
@@ -131,7 +139,9 @@ export function tightestWindow(
         : best.info.status === 'rejected'
           ? Number.POSITIVE_INFINITY
           : (best.info.utilization ?? -1)
-    if (rank > bestRank) best = { key, info }
+    if (rank > bestRank) {
+      best = { key, info }
+    }
   }
   return best
 }
@@ -141,8 +151,12 @@ export function tightestWindow(
  * already says weekly, and "Seven day fable" in a status bar is three words to
  * say one. */
 export function windowLabel(key: string): string {
-  if (key === 'five_hour') return 'Session'
-  if (key === 'seven_day') return 'Weekly'
+  if (key === 'five_hour') {
+    return 'Session'
+  }
+  if (key === 'seven_day') {
+    return 'Weekly'
+  }
   const scoped = key.startsWith('seven_day_') ? key.slice('seven_day_'.length) : key
   const words = scoped.replaceAll('_', ' ')
   return words.charAt(0).toUpperCase() + words.slice(1)
@@ -158,18 +172,20 @@ export type ModelReadings = { model?: string; models: readonly ModelOption[] }
  */
 export function currentModel(vitals: ModelReadings | undefined): ModelOption | undefined {
   const id = vitals?.model
-  if (!id) return undefined
+  if (!id) {
+    return undefined
+  }
   const bare = (value: string) => value.replace(/\[.*\]$/, '')
   const wanted = bare(id)
-  return vitals.models.find(
-    (m) => bare(m.value) === wanted || (m.resolvedModel && bare(m.resolvedModel) === wanted),
-  )
+  return vitals.models.find((m) => bare(m.value) === wanted || (m.resolvedModel && bare(m.resolvedModel) === wanted))
 }
 
 /** A session's model, named the way the picker names it. Falls back to the raw
  * id, and to "Default" while the session is on the CLI's own pick. */
 export function modelLabel(vitals: ModelReadings | undefined): string {
-  if (!vitals?.model) return 'Default'
+  if (!vitals?.model) {
+    return 'Default'
+  }
   return currentModel(vitals)?.displayName ?? vitals.model
 }
 

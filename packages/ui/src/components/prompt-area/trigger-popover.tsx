@@ -55,8 +55,12 @@ export function TriggerPopover({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [onDismiss])
 
-  if (!triggerRect) return null
-  if (suggestions.length === 0 && !loading && !error && !emptyMessage) return null
+  if (!triggerRect) {
+    return null
+  }
+  if (suggestions.length === 0 && !loading && !error && !emptyMessage) {
+    return null
+  }
 
   // Position the popover relative to the trigger character, clamped to the
   // viewport. Flip above the trigger when there isn't enough room below, so the
@@ -71,27 +75,19 @@ export function TriggerPopover({
     zIndex: 50,
     maxWidth: `${popoverMaxWidth}px`,
     maxHeight: `${POPOVER_MAX_HEIGHT}px`,
-    ...(positionAbove
-      ? { bottom: `${window.innerHeight - triggerRect.top + 4}px` }
-      : { top: `${triggerRect.bottom + 4}px` }),
+    ...(positionAbove ? { bottom: `${window.innerHeight - triggerRect.top + 4}px` } : { top: `${triggerRect.bottom + 4}px` }),
   }
 
   return (
     <div
       ref={popoverRef}
-      className={cn(
-        'min-w-[200px] overflow-y-auto',
-        'bg-surface rounded-xl border p-2 shadow-md',
-        'animate-in fade-in-0 zoom-in-95',
-      )}
+      className={cn('min-w-[200px] overflow-y-auto', 'bg-surface rounded-xl border p-2 shadow-md', 'animate-in fade-in-0 zoom-in-95')}
       style={style}
       role="listbox"
-      aria-label={`${triggerChar} suggestions`}>
+      aria-label={`${triggerChar} suggestions`}
+    >
       {loading ? (
-        <div
-          role="option"
-          aria-selected={false}
-          className="text-muted-foreground px-3 py-2 text-sm">
+        <div role="option" aria-selected={false} className="text-muted-foreground px-3 py-2 text-sm">
           Loading suggestions...
         </div>
       ) : error ? (
@@ -99,10 +95,7 @@ export function TriggerPopover({
           {error}
         </div>
       ) : suggestions.length === 0 && emptyMessage ? (
-        <div
-          role="option"
-          aria-selected={false}
-          className="text-muted-foreground px-3 py-2 text-sm">
+        <div role="option" aria-selected={false} className="text-muted-foreground px-3 py-2 text-sm">
           {emptyMessage}
         </div>
       ) : (
@@ -121,15 +114,12 @@ export function TriggerPopover({
             onMouseDown={(e) => {
               e.preventDefault() // Prevent blur on the editor
               onSelect(suggestion)
-            }}>
+            }}
+          >
             {suggestion.icon && <span className="mt-0.5 shrink-0">{suggestion.icon}</span>}
             <div className="min-w-0 flex-1">
               <div className="truncate font-medium">{suggestion.label}</div>
-              {suggestion.description && (
-                <div className="text-muted-foreground truncate text-xs">
-                  {suggestion.description}
-                </div>
-              )}
+              {suggestion.description && <div className="text-muted-foreground truncate text-xs">{suggestion.description}</div>}
             </div>
           </button>
         ))

@@ -34,7 +34,9 @@ function queryFn(params: { prompt: AsyncIterable<SDKUserMessage>; options?: Opti
       return this
     },
     next(): Promise<IteratorResult<SDKMessage>> {
-      if (done) return Promise.resolve({ value: undefined, done: true })
+      if (done) {
+        return Promise.resolve({ value: undefined, done: true })
+      }
       return new Promise((resolve) => {
         waiter = resolve
       })
@@ -51,7 +53,9 @@ const tempDirs: string[] = []
 afterEach(async () => {
   await running?.close()
   running = undefined
-  while (tempDirs.length) rmSync(tempDirs.pop()!, { recursive: true, force: true })
+  while (tempDirs.length) {
+    rmSync(tempDirs.pop()!, { recursive: true, force: true })
+  }
 })
 
 const tempRoot = (): string => {
@@ -60,10 +64,7 @@ const tempRoot = (): string => {
   return dir
 }
 
-async function startServer(
-  root: string,
-  extra: Parameters<typeof createWorkerServer>[0] = {},
-): Promise<string> {
+async function startServer(root: string, extra: Parameters<typeof createWorkerServer>[0] = {}): Promise<string> {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: [root],
@@ -74,11 +75,7 @@ async function startServer(
   return `http://127.0.0.1:${port}/v1`
 }
 
-async function createSession(
-  base: string,
-  cwd: string,
-  headers: Record<string, string> = {},
-): Promise<SessionInfo> {
+async function createSession(base: string, cwd: string, headers: Record<string, string> = {}): Promise<SessionInfo> {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...headers },
@@ -88,8 +85,7 @@ async function createSession(
   return ((await res.json()) as { session: SessionInfo }).session
 }
 
-const sha256 = (bytes: Buffer | string): string =>
-  createHash('sha256').update(bytes).digest('hex')
+const sha256 = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('hex')
 
 // Anything at all decodes as a PNG here — the gateway types by declared
 // extension and never sniffs, which the media-type assertion below relies on.
@@ -114,10 +110,7 @@ describe('project discovery', () => {
     // Nearest wins: a file closer to the cwd shadows the repo root's. A fresh
     // cwd on purpose — the resolver caches per cwd for its TTL, so re-resolving
     // the first one here would (correctly) serve the cached answer.
-    writeFileSync(
-      join(repo, 'packages', '.workerdeck.json'),
-      JSON.stringify({ name: 'UI Kit' }),
-    )
+    writeFileSync(join(repo, 'packages', '.workerdeck.json'), JSON.stringify({ name: 'UI Kit' }))
     const cwd2 = join(repo, 'packages', 'react')
     mkdirSync(cwd2, { recursive: true })
     const nearer = await createSession(base, cwd2)
@@ -164,10 +157,7 @@ describe('project discovery', () => {
     mkdirSync(bare, { recursive: true })
     mkdirSync(junk, { recursive: true })
     writeFileSync(join(bare, '.workerdeck.json'), '{}')
-    writeFileSync(
-      join(junk, '.workerdeck.json'),
-      JSON.stringify({ name: 42, icon: 'Not A Glyph!', unknownKey: true }),
-    )
+    writeFileSync(join(junk, '.workerdeck.json'), JSON.stringify({ name: 42, icon: 'Not A Glyph!', unknownKey: true }))
 
     const base = await startServer(root)
     const bareSession = await createSession(base, bare)
@@ -180,10 +170,7 @@ describe('project discovery', () => {
     const root = tempRoot()
     const repo = join(root, 'repo')
     mkdirSync(repo, { recursive: true })
-    writeFileSync(
-      join(repo, '.workerdeck.json'),
-      JSON.stringify({ name: 'Deck', icon: 'layers-3' }),
-    )
+    writeFileSync(join(repo, '.workerdeck.json'), JSON.stringify({ name: 'Deck', icon: 'layers-3' }))
     const base = await startServer(root)
     const session = await createSession(base, repo)
     expect(session.project?.icon).toEqual({ type: 'glyph', name: 'layers-3' })
@@ -198,10 +185,7 @@ describe('project icon route', () => {
     const repo = join(root, 'repo')
     mkdirSync(join(repo, 'assets'), { recursive: true })
     writeFileSync(join(repo, 'assets', 'icon.png'), PNG_BYTES)
-    writeFileSync(
-      join(repo, '.workerdeck.json'),
-      JSON.stringify({ name: 'Deck', icon: './assets/icon.png' }),
-    )
+    writeFileSync(join(repo, '.workerdeck.json'), JSON.stringify({ name: 'Deck', icon: './assets/icon.png' }))
 
     const base = await startServer(root)
     const session = await createSession(base, repo)
@@ -255,11 +239,10 @@ describe('project icon route', () => {
     for (const [dir, declared] of cases) {
       const repo = join(root, dir)
       mkdirSync(repo, { recursive: true })
-      if (declared === './planted.png') symlinkSync(secret, join(repo, 'planted.png'))
-      writeFileSync(
-        join(repo, '.workerdeck.json'),
-        JSON.stringify({ name: 'Deck', icon: declared }),
-      )
+      if (declared === './planted.png') {
+        symlinkSync(secret, join(repo, 'planted.png'))
+      }
+      writeFileSync(join(repo, '.workerdeck.json'), JSON.stringify({ name: 'Deck', icon: declared }))
       const session = await createSession(base, repo)
       // Refused at discovery: the wire carries no icon, as if never declared…
       expect(session.project).toEqual({ name: 'Deck', root: realpathSync(repo) })
@@ -301,8 +284,7 @@ describe('project icon route', () => {
     }
     const base = await startServer(root, {
       allowUnauthenticated: undefined,
-      authenticate: (req) =>
-        principals[(req.headers.authorization ?? '').replace(/^Bearer /, '')] ?? null,
+      authenticate: (req) => principals[(req.headers.authorization ?? '').replace(/^Bearer /, '')] ?? null,
     })
     const session = await createSession(base, repo, { authorization: 'Bearer alice' })
 

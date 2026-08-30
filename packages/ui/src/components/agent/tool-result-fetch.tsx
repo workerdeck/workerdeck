@@ -19,13 +19,7 @@ export type ToolResultFetcher = (toolUseId: string) => Promise<boolean>
 
 const FetchContext = createContext<ToolResultFetcher>(async () => false)
 
-export function ToolResultFetchProvider({
-  value,
-  children,
-}: {
-  value: ToolResultFetcher | undefined
-  children: ReactNode
-}) {
+export function ToolResultFetchProvider({ value, children }: { value: ToolResultFetcher | undefined; children: ReactNode }) {
   return <FetchContext.Provider value={value ?? noop}>{children}</FetchContext.Provider>
 }
 

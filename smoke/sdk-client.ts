@@ -153,11 +153,15 @@ handle.on('event', (event) => {
   events.push(event)
   if (event.type === 'assistant_message') {
     for (const block of event.message.content as Array<Record<string, unknown>>) {
-      if (block.type === 'text') console.log(`\n💬 ${String(block.text).trim()}`)
+      if (block.type === 'text') {
+        console.log(`\n💬 ${String(block.text).trim()}`)
+      }
       if (block.type === 'tool_use') {
         console.log(`\n🔧 tool call: ${String(block.name)}`)
         const input = block.input as { script?: string }
-        if (input?.script) console.log(indent(input.script.trim()))
+        if (input?.script) {
+          console.log(indent(input.script.trim()))
+        }
       }
     }
   }
@@ -166,7 +170,9 @@ handle.on('event', (event) => {
   }
   if (event.type === 'execution_result') {
     console.log(`   ✅ execution_result: ${JSON.stringify(event.output.value)}`)
-    for (const log of event.logs ?? []) console.log(`   guest ${log}`)
+    for (const log of event.logs ?? []) {
+      console.log(`   guest ${log}`)
+    }
   }
   if (event.type === 'execution_failed') {
     console.log(`   ⚠️  execution_failed (${event.reason}): ${event.error}`)
@@ -177,12 +183,16 @@ handle.on('event', (event) => {
       `\n🏁 turn_result: ${event.subtype} (${event.durationMs}ms, turn ${event.numTurns})` +
         (event.usage ? `  usage: ${JSON.stringify(event.usage)}` : ''),
     )
-    if (event.errors?.length) console.log('   errors:', event.errors.join('; '))
+    if (event.errors?.length) {
+      console.log('   errors:', event.errors.join('; '))
+    }
   }
   if (event.type === 'file_delivered') {
     console.log(`\n📦 file_delivered: ${event.path} (${event.bytes} bytes)`)
   }
-  if (event.type === 'session_error') console.error('\n❗ session_error:', event.message)
+  if (event.type === 'session_error') {
+    console.error('\n❗ session_error:', event.message)
+  }
 })
 
 handle.send(
@@ -192,7 +202,9 @@ handle.send(
 )
 
 const deadline = Date.now() + 180_000
-while (!completed && Date.now() < deadline) await sleep(100)
+while (!completed && Date.now() < deadline) {
+  await sleep(100)
+}
 
 // ---------------------------------------------------------------- verdict ----
 
@@ -203,7 +215,9 @@ const fail = (message: string): never => {
   process.exit(1)
 }
 
-if (!completed) fail('Timed out before the turn completed.')
+if (!completed) {
+  fail('Timed out before the turn completed.')
+}
 
 const turn = events.find((e) => e.type === 'turn_result')!
 if (turn.type === 'turn_result' && turn.subtype !== 'success') {
@@ -228,10 +242,7 @@ if (!finalText.includes('348')) {
 }
 
 // Usage must cover every leg of the parked turn.
-const usage =
-  turn.type === 'turn_result'
-    ? (turn.usage as { input_tokens?: number; output_tokens?: number } | undefined)
-    : undefined
+const usage = turn.type === 'turn_result' ? (turn.usage as { input_tokens?: number; output_tokens?: number } | undefined) : undefined
 if (!usage || (usage.input_tokens ?? 0) === 0 || (usage.output_tokens ?? 0) === 0) {
   fail(`turn_result usage is empty: ${JSON.stringify(usage)}`)
 }
@@ -245,10 +256,7 @@ const report = vfs.read('/out/report.json')
 if (report?.includes('348')) {
   console.log(`\n✅ Server-side fs_write landed: /out/report.json = ${report.trim()}`)
 } else {
-  console.log(
-    `\n⚠️  /out/report.json not found on the server VFS (model skipped fs_write). ` +
-      `VFS: ${JSON.stringify(vfs.snapshot())}`,
-  )
+  console.log(`\n⚠️  /out/report.json not found on the server VFS (model skipped fs_write). ` + `VFS: ${JSON.stringify(vfs.snapshot())}`)
 }
 
 // File delivery, end to end: the deliver_file tool emitted file_delivered over

@@ -34,9 +34,15 @@ import { Band } from './row.tsx'
 
 /** Pull the text out of a fenced block's React children (`<code>…</code>`). */
 function codeText(node: ReactNode): string {
-  if (node === null || node === undefined || typeof node === 'boolean') return ''
-  if (typeof node === 'string' || typeof node === 'number') return String(node)
-  if (Array.isArray(node)) return node.map(codeText).join('')
+  if (node === null || node === undefined || typeof node === 'boolean') {
+    return ''
+  }
+  if (typeof node === 'string' || typeof node === 'number') {
+    return String(node)
+  }
+  if (Array.isArray(node)) {
+    return node.map(codeText).join('')
+  }
   const element = node as { props?: { children?: ReactNode } }
   return element.props ? codeText(element.props.children) : ''
 }
@@ -63,9 +69,9 @@ function fenceLanguage(node: ReactNode): string | undefined {
  */
 function CodeBand({ code, language }: { code: string; language?: string }) {
   return (
-    <WithActions className='term-block' actions={<CopyAction text={code} label='Copy code' />}>
-      <Band className='term-code' data-language={language}>
-        <pre className='term-pre'>{code}</pre>
+    <WithActions className="term-block" actions={<CopyAction text={code} label="Copy code" />}>
+      <Band className="term-code" data-language={language}>
+        <pre className="term-pre">{code}</pre>
       </Band>
     </WithActions>
   )
@@ -77,14 +83,14 @@ function CodeBand({ code, language }: { code: string; language?: string }) {
 const heading = (tone: 'bright' | 'fg'): Components['h1'] =>
   function Heading({ children }) {
     return (
-      <div className='term-block' data-tone={tone} data-weight='bold'>
+      <div className="term-block" data-tone={tone} data-weight="bold">
         {children}
       </div>
     )
   }
 
 const TERMINAL_COMPONENTS: Components = {
-  p: ({ children }) => <div className='term-block'>{children}</div>,
+  p: ({ children }) => <div className="term-block">{children}</div>,
 
   h1: heading('bright'),
   h2: heading('bright'),
@@ -97,44 +103,44 @@ const TERMINAL_COMPONENTS: Components = {
   // one-blank-line-between-blocks rule keys on, and a block that forgets it butts
   // straight up against its neighbour (a list running into the paragraph after
   // it, which is exactly how this was found).
-  ul: ({ children }) => <ul className='term-block term-list'>{children}</ul>,
-  ol: ({ children }) => <ol className='term-block term-list term-list-ordered'>{children}</ol>,
+  ul: ({ children }) => <ul className="term-block term-list">{children}</ul>,
+  ol: ({ children }) => <ol className="term-block term-list term-list-ordered">{children}</ol>,
   // The marker is the gutter's `::before` (a CSS counter for the ordered case),
   // so a list item is literally a Row: same two columns, same hanging indent,
   // and a nested list inside the body indents by exactly one marker width.
   li: ({ children }) => (
-    <li className='term-row term-li'>
-      <span className='term-gutter' aria-hidden />
-      <div className='term-body'>{children}</div>
+    <li className="term-row term-li">
+      <span className="term-gutter" aria-hidden />
+      <div className="term-body">{children}</div>
     </li>
   ),
 
   blockquote: ({ children }) => (
-    <blockquote className='term-block term-quote' data-tone='dim'>
+    <blockquote className="term-block term-quote" data-tone="dim">
       {children}
     </blockquote>
   ),
 
-  hr: () => <div className='term-block term-rule' aria-hidden />,
+  hr: () => <div className="term-block term-rule" aria-hidden />,
 
   // Fenced code. `pre` owns the whole block — the inner `<code>` is only where
   // the text and the language live — so the band is built here and `code` never
   // sees a fence.
   pre: ({ children }) => <CodeBand code={codeText(children)} language={fenceLanguage(children)} />,
   code: ({ children }) => (
-    <code className='term-inline-code' data-tone='blue'>
+    <code className="term-inline-code" data-tone="blue">
       {children}
     </code>
   ),
 
   strong: ({ children }) => (
-    <strong data-tone='bright' data-weight='bold'>
+    <strong data-tone="bright" data-weight="bold">
       {children}
     </strong>
   ),
-  em: ({ children }) => <em className='term-em'>{children}</em>,
+  em: ({ children }) => <em className="term-em">{children}</em>,
   a: ({ children, href }) => (
-    <a className='term-link' data-tone='blue' href={href} target='_blank' rel='noreferrer'>
+    <a className="term-link" data-tone="blue" href={href} target="_blank" rel="noreferrer">
       {children}
     </a>
   ),
@@ -142,19 +148,19 @@ const TERMINAL_COMPONENTS: Components = {
   // Tables keep the grid by being a grid: monospace cells, one line per row, and
   // dim box-drawing rules instead of borders that would land between cells.
   table: ({ children }) => (
-    <div className='term-block term-table-wrap'>
-      <table className='term-table'>{children}</table>
+    <div className="term-block term-table-wrap">
+      <table className="term-table">{children}</table>
     </div>
   ),
   // Every table element, and not just the ones that looked wrong: any element
   // left unmapped keeps the renderer's own padded, bordered default, and a
   // single one of those puts its rows off the line grid (`td`'s `py-2` was
   // making table rows 23px in an 18px theme).
-  thead: ({ children }) => <thead className='term-thead'>{children}</thead>,
+  thead: ({ children }) => <thead className="term-thead">{children}</thead>,
   tbody: ({ children }) => <tbody>{children}</tbody>,
   tr: ({ children }) => <tr>{children}</tr>,
   th: ({ children }) => (
-    <th data-tone='bright' data-weight='bold'>
+    <th data-tone="bright" data-weight="bold">
       {children}
     </th>
   ),
@@ -179,13 +185,11 @@ export const TerminalMarkdown = memo(
         // is how you copy from one.
         controls={false}
         components={TERMINAL_COMPONENTS}
-        className={cn('term-md', className)}>
+        className={cn('term-md', className)}
+      >
         {children}
       </Streamdown>
     )
   },
-  (prev, next) =>
-    prev.children === next.children &&
-    prev.streaming === next.streaming &&
-    prev.className === next.className,
+  (prev, next) => prev.children === next.children && prev.streaming === next.streaming && prev.className === next.className,
 )

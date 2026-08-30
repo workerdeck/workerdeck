@@ -86,7 +86,9 @@ export function getListContext(text: string, cursorPos: number): ListContext | n
   const line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd)
 
   const parsed = parseListLine(line)
-  if (!parsed) return null
+  if (!parsed) {
+    return null
+  }
 
   return {
     lineStart,
@@ -102,16 +104,15 @@ export function getListContext(text: string, cursorPos: number): ListContext | n
  * Detects if the user just typed a list trigger pattern (e.g., "- " or "* ")
  * and returns the segments with the replacement applied.
  */
-export function autoFormatListPrefix(
-  segments: Segment[],
-  cursorPos: number,
-): { segments: Segment[]; cursorOffset: number } | null {
+export function autoFormatListPrefix(segments: Segment[], cursorPos: number): { segments: Segment[]; cursorOffset: number } | null {
   const plainText = segmentsToPlainText(segments)
   const lineStart = plainText.lastIndexOf('\n', cursorPos - 1) + 1
   const lineText = plainText.slice(lineStart, cursorPos)
 
   const match = lineText.match(/^(\s*)[-*] $/)
-  if (!match) return null
+  if (!match) {
+    return null
+  }
 
   const indent = match[1]
   const replacement = `${indent}• `
@@ -128,13 +129,12 @@ export function autoFormatListPrefix(
 /**
  * Handles Enter key in a list line — continues the list or exits.
  */
-export function insertListContinuation(
-  segments: Segment[],
-  cursorPos: number,
-): { segments: Segment[]; cursorOffset: number } | null {
+export function insertListContinuation(segments: Segment[], cursorPos: number): { segments: Segment[]; cursorOffset: number } | null {
   const plainText = segmentsToPlainText(segments)
   const ctx = getListContext(plainText, cursorPos)
-  if (!ctx) return null
+  if (!ctx) {
+    return null
+  }
 
   const lineEnd = plainText.indexOf('\n', cursorPos)
   const lineContent = plainText.slice(ctx.contentStart, lineEnd === -1 ? plainText.length : lineEnd)
@@ -149,12 +149,7 @@ export function insertListContinuation(
         cursorOffset: Math.max(ctx.lineStart, cursorPos - 2),
       }
     }
-    const newSegments = replaceTextRange(
-      segments,
-      ctx.lineStart,
-      ctx.lineStart + ctx.prefix.length,
-      '',
-    )
+    const newSegments = replaceTextRange(segments, ctx.lineStart, ctx.lineStart + ctx.prefix.length, '')
     return {
       segments: newSegments,
       cursorOffset: ctx.lineStart,
@@ -180,7 +175,9 @@ export function insertListContinuation(
 
 /** Returns the indent level of the list line directly above `lineStart`, or null. */
 function getPrevListLineLevel(text: string, lineStart: number): number | null {
-  if (lineStart === 0) return null
+  if (lineStart === 0) {
+    return null
+  }
   const prevLineStart = text.lastIndexOf('\n', lineStart - 2) + 1
   const parsed = parseListLine(text.slice(prevLineStart, lineStart - 1))
   return parsed ? parsed.indent : null
@@ -193,17 +190,18 @@ function getPrevListLineLevel(text: string, lineStart: number): number | null {
  * parent — cannot indent further (returns null). This keeps sub-items visually
  * connected to a parent instead of drifting arbitrarily deep.
  */
-export function indentListItem(
-  segments: Segment[],
-  cursorPos: number,
-): { segments: Segment[]; cursorOffset: number } | null {
+export function indentListItem(segments: Segment[], cursorPos: number): { segments: Segment[]; cursorOffset: number } | null {
   const plainText = segmentsToPlainText(segments)
   const ctx = getListContext(plainText, cursorPos)
-  if (!ctx) return null
+  if (!ctx) {
+    return null
+  }
 
   const prevLevel = getPrevListLineLevel(plainText, ctx.lineStart)
   const maxLevel = prevLevel === null ? 0 : prevLevel + 1
-  if (ctx.indent >= maxLevel) return null
+  if (ctx.indent >= maxLevel) {
+    return null
+  }
 
   const newSegments = replaceTextRange(segments, ctx.lineStart, ctx.lineStart, '  ')
   return {
@@ -215,13 +213,12 @@ export function indentListItem(
 /**
  * Outdents a list item by one level (removes 2 spaces from before the prefix).
  */
-export function outdentListItem(
-  segments: Segment[],
-  cursorPos: number,
-): { segments: Segment[]; cursorOffset: number } | null {
+export function outdentListItem(segments: Segment[], cursorPos: number): { segments: Segment[]; cursorOffset: number } | null {
   const plainText = segmentsToPlainText(segments)
   const ctx = getListContext(plainText, cursorPos)
-  if (!ctx || ctx.indent === 0) return null
+  if (!ctx || ctx.indent === 0) {
+    return null
+  }
 
   const newSegments = replaceTextRange(segments, ctx.lineStart, ctx.lineStart + 2, '')
   return {
@@ -233,22 +230,18 @@ export function outdentListItem(
 /**
  * Removes the list prefix from the current line (e.g., on Backspace).
  */
-export function removeListPrefix(
-  segments: Segment[],
-  cursorPos: number,
-): { segments: Segment[]; cursorOffset: number } | null {
+export function removeListPrefix(segments: Segment[], cursorPos: number): { segments: Segment[]; cursorOffset: number } | null {
   const plainText = segmentsToPlainText(segments)
   const ctx = getListContext(plainText, cursorPos)
-  if (!ctx) return null
+  if (!ctx) {
+    return null
+  }
 
-  if (cursorPos > ctx.contentStart) return null
+  if (cursorPos > ctx.contentStart) {
+    return null
+  }
 
-  const newSegments = replaceTextRange(
-    segments,
-    ctx.lineStart,
-    ctx.contentStart,
-    '  '.repeat(ctx.indent),
-  )
+  const newSegments = replaceTextRange(segments, ctx.lineStart, ctx.contentStart, '  '.repeat(ctx.indent))
   return {
     segments: newSegments,
     cursorOffset: ctx.lineStart + ctx.indent * 2,
@@ -274,11 +267,15 @@ function fenceProtectedLineIndices(lines: string[]): Set<number> {
   const protectedLines = new Set<number>()
   let openIndex = -1
   lines.forEach((line, i) => {
-    if (!FENCE_LINE.test(line)) return
+    if (!FENCE_LINE.test(line)) {
+      return
+    }
     if (openIndex === -1) {
       openIndex = i
     } else {
-      for (let k = openIndex; k <= i; k++) protectedLines.add(k)
+      for (let k = openIndex; k <= i; k++) {
+        protectedLines.add(k)
+      }
       openIndex = -1
     }
   })
@@ -296,9 +293,7 @@ function fenceProtectedLineIndices(lines: string[]): Set<number> {
 export function normalizeListPrefixText(text: string, markdownEnabled: boolean): string {
   const lines = text.split('\n')
   const protectedLines = fenceProtectedLineIndices(lines)
-  return lines
-    .map((line, i) => (protectedLines.has(i) ? line : swapListPrefixLine(line, markdownEnabled)))
-    .join('\n')
+  return lines.map((line, i) => (protectedLines.has(i) ? line : swapListPrefixLine(line, markdownEnabled))).join('\n')
 }
 
 /**
@@ -311,25 +306,29 @@ export function normalizeListPrefixText(text: string, markdownEnabled: boolean):
 export function normalizeListPrefixes(segments: Segment[], markdownEnabled: boolean): Segment[] {
   const globalLines: string[] = []
   segments.forEach((seg) => {
-    if (seg.type === 'text') globalLines.push(...seg.text.split('\n'))
+    if (seg.type === 'text') {
+      globalLines.push(...seg.text.split('\n'))
+    }
   })
   const protectedLines = fenceProtectedLineIndices(globalLines)
 
   let globalIndex = 0
   let changed = false
   const result = segments.map((seg) => {
-    if (seg.type !== 'text') return seg
+    if (seg.type !== 'text') {
+      return seg
+    }
     const newText = seg.text
       .split('\n')
       .map((line) => {
-        const out = protectedLines.has(globalIndex)
-          ? line
-          : swapListPrefixLine(line, markdownEnabled)
+        const out = protectedLines.has(globalIndex) ? line : swapListPrefixLine(line, markdownEnabled)
         globalIndex++
         return out
       })
       .join('\n')
-    if (newText === seg.text) return seg
+    if (newText === seg.text) {
+      return seg
+    }
     changed = true
     return { ...seg, text: newText }
   })
@@ -375,7 +374,9 @@ export function hasOrderedListRun(text: string): boolean {
       sequential = sequential && parsed.number === prevNumber + 1
       prevNumber = parsed.number
       runLength++
-      if (runLength >= 2 && (runStart === 1 || sequential)) return true
+      if (runLength >= 2 && (runStart === 1 || sequential)) {
+        return true
+      }
     } else if (parsed?.kind === 'numbered') {
       // Start a fresh run at this line's level.
       runLevel = parsed.indent
@@ -403,7 +404,9 @@ export function renumberOrderedListLines(text: string): { text: string; edits: N
   // skip the per-line scan and throwaway rebuild. This runs on every structural
   // edit (Enter, Tab, bold/italic wrap) and each paste, most of which never
   // touch a numbered list.
-  if (!/^[ \t]*\d+\. /m.test(text)) return { text, edits: [] }
+  if (!/^[ \t]*\d+\. /m.test(text)) {
+    return { text, edits: [] }
+  }
 
   const counters = new Map<number, number>()
   const edits: NumberEdit[] = []
@@ -413,7 +416,9 @@ export function renumberOrderedListLines(text: string): { text: string; edits: N
 
   const clearDeeperThan = (level: number, inclusive: boolean) => {
     for (const key of counters.keys()) {
-      if (inclusive ? key >= level : key > level) counters.delete(key)
+      if (inclusive ? key >= level : key > level) {
+        counters.delete(key)
+      }
     }
   }
 
@@ -450,7 +455,9 @@ export function renumberOrderedListLines(text: string): { text: string; edits: N
       }
     }
 
-    if (i < lines.length - 1) out += '\n'
+    if (i < lines.length - 1) {
+      out += '\n'
+    }
     lineStart += line.length + 1 // + 1 for the consumed '\n'
   }
 
@@ -488,7 +495,9 @@ export function renumberOrderedListSegments(segments: Segment[]): {
   edits: NumberEdit[]
 } {
   const { edits } = renumberOrderedListLines(segmentsToPlainText(segments))
-  if (edits.length === 0) return { segments, edits }
+  if (edits.length === 0) {
+    return { segments, edits }
+  }
 
   let result = segments
   for (let i = edits.length - 1; i >= 0; i--) {

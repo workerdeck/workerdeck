@@ -45,7 +45,9 @@ const store: WatermarkStore = {
       /* quota or private mode — the in-memory cache still serves this session */
     }
     version += 1
-    for (const listener of listeners) listener()
+    for (const listener of listeners) {
+      listener()
+    }
   },
 }
 
@@ -85,10 +87,7 @@ export function useUnseen() {
  * `undefined` for one opened for the first time, which has nothing to catch up
  * on.
  */
-export function unseenSince(
-  hostId: string,
-  sessionId: string,
-): { itemCount: number; since: number } | undefined {
+export function unseenSince(hostId: string, sessionId: string): { itemCount: number; since: number } | undefined {
   const mark = watermarks.get(hostId, sessionId)
   return mark ? { itemCount: mark.itemCount, since: mark.seenAt } : undefined
 }
@@ -105,7 +104,9 @@ export function useMarkSeen(hostId: string, sessionId: string | undefined) {
   const seen = useRef<{ itemCount?: number; activity?: number; turns?: number }>({})
   return useCallback(
     (reading: { itemCount?: number; activity?: number; turns?: number }) => {
-      if (!sessionId || document.hidden) return
+      if (!sessionId || document.hidden) {
+        return
+      }
       seen.current = { ...seen.current, ...reading }
       watermarks.mark(hostId, sessionId, seen.current)
     },
@@ -116,8 +117,5 @@ export function useMarkSeen(hostId: string, sessionId: string | undefined) {
 /** The unread total across every gateway, for a caller that wants one number. */
 export function useUnseenTotal(rows: { hostId: string; info: SessionInfo }[]): number {
   const { unseenFor } = useUnseen()
-  return useMemo(
-    () => rows.reduce((total, r) => total + unseenFor(r.hostId, r.info), 0),
-    [rows, unseenFor],
-  )
+  return useMemo(() => rows.reduce((total, r) => total + unseenFor(r.hostId, r.info), 0), [rows, unseenFor])
 }

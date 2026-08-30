@@ -4,10 +4,7 @@ import type { SessionEvent } from '@workerdeck/protocol'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
 import { JsonRpcError } from '../src/engines/codex/jsonrpc.ts'
 import type { Runner } from '../src/runner-interface.ts'
-import type {
-  AppServerConnectFn,
-  AppServerConnection,
-} from '../src/engines/codex/types.ts'
+import type { AppServerConnectFn, AppServerConnection } from '../src/engines/codex/types.ts'
 
 const THREAD_RESULT = {
   thread: { id: 'thread-1' },
@@ -67,9 +64,7 @@ function scriptedPeer() {
   let connectCount = 0
   let closedCount = 0
   let notificationHandler: ((method: string, params: unknown) => void) | undefined
-  let requestHandler:
-    | ((method: string, params: unknown, id: string | number) => Promise<unknown>)
-    | undefined
+  let requestHandler: ((method: string, params: unknown, id: string | number) => Promise<unknown>) | undefined
   let closeHandler: ((message: string) => void) | undefined
 
   responders.set('initialize', () => ({ codexHome: '/tmp/.codex' }))
@@ -83,7 +78,9 @@ function scriptedPeer() {
       request: async (method, params) => {
         requests.push({ method, params, connection })
         const responder = responders.get(method)
-        if (!responder) return {}
+        if (!responder) {
+          return {}
+        }
         return responder(params)
       },
       notify: (method) => {
@@ -110,11 +107,9 @@ function scriptedPeer() {
     requests,
     notifies,
     envs,
-    respond: (method: string, responder: (params: unknown) => unknown) =>
-      responders.set(method, responder),
+    respond: (method: string, responder: (params: unknown) => unknown) => responders.set(method, responder),
     emit: (method: string, params: unknown) => notificationHandler!(method, params),
-    serverRequest: (method: string, params: unknown, id: string | number = 'wire-1') =>
-      requestHandler!(method, params, id),
+    serverRequest: (method: string, params: unknown, id: string | number = 'wire-1') => requestHandler!(method, params, id),
     die: (message: string) => closeHandler!(message),
     connections: () => connectCount,
     closed: () => closedCount,
@@ -141,10 +136,7 @@ function collect(runner: CodexRunner): SessionEvent[] {
   return events
 }
 
-function ofType<T extends SessionEvent['type']>(
-  events: SessionEvent[],
-  type: T,
-): Array<Extract<SessionEvent, { type: T }>> {
+function ofType<T extends SessionEvent['type']>(events: SessionEvent[], type: T): Array<Extract<SessionEvent, { type: T }>> {
   return events.filter((e): e is Extract<SessionEvent, { type: T }> => e.type === type)
 }
 
@@ -243,9 +235,7 @@ describe('CodexRunner', () => {
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: on.connectFn })
     const events = collect(runner)
     await runner.start()
-    const deltas = ofType(events, 'stream_delta').map(
-      (e) => e.event.delta as { text?: string; thinking?: string },
-    )
+    const deltas = ofType(events, 'stream_delta').map((e) => e.event.delta as { text?: string; thinking?: string })
     expect(deltas.map((d) => d.thinking ?? d.text)).toEqual([
       'First',
       ' part',
@@ -360,13 +350,7 @@ describe('CodexRunner', () => {
     // skills/list → turn/start. skills/list rides the same thread-load seam
     // (it needs a live child and nothing else), and being fire-and-forget it
     // must not delay the turn — which is why it lands before it, not instead.
-    expect(peer.requests.map((r) => r.method)).toEqual([
-      'initialize',
-      'config/read',
-      'thread/start',
-      'skills/list',
-      'turn/start',
-    ])
+    expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'config/read', 'thread/start', 'skills/list', 'turn/start'])
     expect(peer.notifies).toEqual(['initialized'])
     // experimentalApi is unconditional — granular approval policies are
     // rejected without it, and there is no non-experimental fallback.
@@ -407,32 +391,26 @@ describe('CodexRunner', () => {
 
     const assistants = ofType(events, 'assistant_message')
     // Reasoning: its own thinking message, sections joined as paragraphs.
-    expect(assistants.some((e) =>
-      (e.message.content as Array<{ type: string; thinking?: string }>).some(
-        (b) => b.type === 'thinking' && b.thinking === 'thought one\n\nthought two',
+    expect(
+      assistants.some((e) =>
+        (e.message.content as Array<{ type: string; thinking?: string }>).some(
+          (b) => b.type === 'thinking' && b.thinking === 'thought one\n\nthought two',
+        ),
       ),
-    )).toBe(true)
+    ).toBe(true)
     // Command execution: tool_use at item/started, paired tool_result at completion,
     // ids per-turn-namespaced with the raw id surviving as the suffix.
     const commandUse = assistants.find(
-      (e) =>
-        Array.isArray(e.message.content) &&
-        (e.message.content[0] as { name?: string }).name === 'CodexCommand',
+      (e) => Array.isArray(e.message.content) && (e.message.content[0] as { name?: string }).name === 'CodexCommand',
     )!
-    const commandBlock = (e => (e.message.content as Array<{ id: string }>)[0]!)(commandUse)
+    const commandBlock = ((e) => (e.message.content as Array<{ id: string }>)[0]!)(commandUse)
     expect(commandBlock.id).toMatch(/:c1$/)
     const results = ofType(events, 'user_message').filter((e) => e.synthetic)
     expect(
-      results.some(
-        (e) =>
-          (e.message.content as Array<{ tool_use_id?: string; content?: string }>)[0]!
-            .tool_use_id === commandBlock.id,
-      ),
+      results.some((e) => (e.message.content as Array<{ tool_use_id?: string; content?: string }>)[0]!.tool_use_id === commandBlock.id),
     ).toBe(true)
     // v2's object kind renders like exec's string kind did.
-    const fileResult = results.find((e) =>
-      String((e.message.content as Array<{ content?: string }>)[0]!.content).includes('update: a.ts'),
-    )
+    const fileResult = results.find((e) => String((e.message.content as Array<{ content?: string }>)[0]!.content).includes('update: a.ts'))
     expect(fileResult).toBeDefined()
     // The user's own echoed item is dropped: exactly one non-synthetic user message.
     expect(ofType(events, 'user_message').filter((e) => !e.synthetic)).toHaveLength(1)
@@ -513,41 +491,36 @@ describe('CodexRunner', () => {
     // The finished card carries the path as a *field*, which is what a client
     // keys an inline preview off — not a sentence it would have to parse.
     const uses = ofType(events, 'assistant_message').flatMap((e) =>
-      (e.message.content as Array<{ type: string; id?: string; name?: string; input?: unknown }>)
-        .filter((b) => b.type === 'tool_use' && b.name === 'CodexImageGeneration'),
+      (e.message.content as Array<{ type: string; id?: string; name?: string; input?: unknown }>).filter(
+        (b) => b.type === 'tool_use' && b.name === 'CodexImageGeneration',
+      ),
     )
     expect(uses.length).toBeGreaterThanOrEqual(2)
     expect(uses.at(0)!.input).toEqual({ prompt: 'a pink flower, golden hour' })
-    expect(uses.find((u) => u.id?.endsWith(':g1') && (u.input as { savedPath?: string }).savedPath))
-      .toMatchObject({
-        input: {
-          prompt: 'a pink flower, golden hour',
-          savedPath: '/Users/me/.codex/generated_images/flower.png',
-        },
-      })
+    expect(uses.find((u) => u.id?.endsWith(':g1') && (u.input as { savedPath?: string }).savedPath)).toMatchObject({
+      input: {
+        prompt: 'a pink flower, golden hour',
+        savedPath: '/Users/me/.codex/generated_images/flower.png',
+      },
+    })
 
     const results = ofType(events, 'user_message')
       .filter((e) => e.synthetic)
       .map((e) => (e.message.content as Array<{ content?: string }>)[0]!.content ?? '')
-    expect(results.some((r) => r.includes('Saved to /Users/me/.codex/generated_images/flower.png')))
-      .toBe(true)
+    expect(results.some((r) => r.includes('Saved to /Users/me/.codex/generated_images/flower.png'))).toBe(true)
     // Never a 4000-character blob: an undocumented free-form field is not a
     // licence to put an encoded image in the event log.
     expect(results.some((r) => r.includes('xxxx'))).toBe(false)
     expect(results.some((r) => r.includes('No saved path reported'))).toBe(true)
     // It is not swallowed into the unknown-item channel any more.
-    expect(ofType(events, 'sdk_event').map((e) => e.payload.type)).not.toContain(
-      'codex.imageGeneration',
-    )
+    expect(ofType(events, 'sdk_event').map((e) => e.payload.type)).not.toContain('codex.imageGeneration')
 
     // …and the path is announced as a produced file, which is what makes the
     // bytes fetchable without the operator declaring `$CODEX_HOME` as a
     // host-file root. ONE announcement despite the path being reported on both
     // the progress and completed item: the id derives from the path.
     const produced = ofType(events, 'file_produced')
-    expect(produced.map((e) => e.path)).toEqual([
-      '/Users/me/.codex/generated_images/flower.png',
-    ])
+    expect(produced.map((e) => e.path)).toEqual(['/Users/me/.codex/generated_images/flower.png'])
     expect(produced[0]).toMatchObject({
       mediaType: 'image/png',
       toolUseId: expect.stringMatching(/:g1$/),
@@ -677,9 +650,7 @@ describe('CodexRunner', () => {
               // Second page, same skill: codex can report one skill under
               // several cwds and the first wins.
               { name: 'imagegen', description: 'duplicate', scope: 'repo' },
-              ...(listCalls > 1
-                ? [{ name: 'pdf-fill', description: 'Fill PDF forms', enabled: false }]
-                : []),
+              ...(listCalls > 1 ? [{ name: 'pdf-fill', description: 'Fill PDF forms', enabled: false }] : []),
             ],
             errors: [],
           },
@@ -1063,12 +1034,11 @@ describe('CodexRunner', () => {
     const answers = ofType(events, 'assistant_message').filter(
       (e) => Array.isArray(e.message.content) && e.message.content[0]!.type === 'text',
     )
-    expect(answers.map((e) => (e.message.content as Array<{ text: string }>)[0]!.text)).toEqual([
-      'four',
-      'six',
-    ])
+    expect(answers.map((e) => (e.message.content as Array<{ text: string }>)[0]!.text)).toEqual(['four', 'six'])
     expect(answers[0]!.uuid).not.toBe(answers[1]!.uuid)
-    for (const a of answers) expect(a.uuid).toMatch(/:item_1$/)
+    for (const a of answers) {
+      expect(a.uuid).toMatch(/:item_1$/)
+    }
 
     const uses = ofType(events, 'assistant_message')
       .map((e) => (e.message.content as Array<{ type: string; id?: string }>)[0]!)
@@ -1148,11 +1118,7 @@ describe('CodexRunner', () => {
           command: 'printf x > /tmp/p.txt',
           cwd: '/tmp',
           reason: 'command failed; retry without sandbox?',
-          availableDecisions: [
-            'accept',
-            { acceptWithExecpolicyAmendment: { execpolicy_amendment: ['printf'] } },
-            'cancel',
-          ],
+          availableDecisions: ['accept', { acceptWithExecpolicyAmendment: { execpolicy_amendment: ['printf'] } }, 'cancel'],
         })
         .then((response) => {
           approvalResponse = response
@@ -1257,11 +1223,7 @@ describe('CodexRunner', () => {
       threadId: 'thread-1',
       itemId: 'c3',
       command: 'echo hi',
-      availableDecisions: [
-        'acceptForSession',
-        { acceptWithExecpolicyAmendment: { execpolicy_amendment: ['echo'] } },
-        'cancel',
-      ],
+      availableDecisions: ['acceptForSession', { acceptWithExecpolicyAmendment: { execpolicy_amendment: ['echo'] } }, 'cancel'],
     })
     await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
     runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'allow' })
@@ -1314,9 +1276,13 @@ describe('CodexRunner', () => {
     })
     expect(runner.status).toBe('idle')
     // The runner stays usable after the timeout.
-    scriptTurn(peer, (emit, turnId) => {
-      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
-    }, 't2')
+    scriptTurn(
+      peer,
+      (emit, turnId) => {
+        emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+      },
+      't2',
+    )
     runner.sendMessage('again')
     await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
   })
@@ -1546,8 +1512,7 @@ describe('CodexRunner', () => {
     })
     const runner = new CodexRunner({ cwd: '/tmp', connectFn: peer.connectFn })
     void runner.start()
-    const pixel =
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+    const pixel = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
     runner.sendMessage('what is this?', [
       { id: 'att-1', name: 'pixel.png', mediaType: 'image/png', bytes: 68, data: pixel },
       {
@@ -1558,12 +1523,12 @@ describe('CodexRunner', () => {
         data: Buffer.from('hello').toString('base64'),
       },
     ])
-    await vi.waitFor(() =>
-      expect(peer.requests.some((r) => r.method === 'turn/start')).toBe(true),
-    )
-    const input = (peer.requests.find((r) => r.method === 'turn/start')!.params as {
-      input: Array<{ type: string; path?: string; text?: string }>
-    }).input
+    await vi.waitFor(() => expect(peer.requests.some((r) => r.method === 'turn/start')).toBe(true))
+    const input = (
+      peer.requests.find((r) => r.method === 'turn/start')!.params as {
+        input: Array<{ type: string; path?: string; text?: string }>
+      }
+    ).input
     const image = input.find((p) => p.type === 'localImage')!
     expect(image.path).toMatch(/att-1\.png$/)
     expect(existsSync(image.path!)).toBe(true)
@@ -1586,9 +1551,7 @@ describe('CodexRunner', () => {
     const pdfRunner = new CodexRunner({ cwd: '/tmp', connectFn: pdfPeer.connectFn })
     void pdfRunner.start()
     expect(() =>
-      pdfRunner.sendMessage('read this', [
-        { id: 'a', name: 'doc.pdf', mediaType: 'application/pdf', bytes: 4, data: 'JVBERg==' },
-      ]),
+      pdfRunner.sendMessage('read this', [{ id: 'a', name: 'doc.pdf', mediaType: 'application/pdf', bytes: 4, data: 'JVBERg==' }]),
     ).toThrow(/unsupported attachment/)
   })
 
@@ -1673,11 +1636,7 @@ describe('CodexRunner', () => {
     // deliberately so: it is billing, not occupancy.
     const [result] = ofType(events, 'turn_result')
     expect(result!.usage).toMatchObject({
-      output_tokens:
-        USAGE_A.outputTokens +
-        USAGE_A.reasoningOutputTokens +
-        USAGE_B.outputTokens +
-        USAGE_B.reasoningOutputTokens,
+      output_tokens: USAGE_A.outputTokens + USAGE_A.reasoningOutputTokens + USAGE_B.outputTokens + USAGE_B.reasoningOutputTokens,
     })
   })
 
@@ -1736,20 +1695,17 @@ describe('CodexRunner', () => {
 
   it('refuses forkSession and CLI-only permission modes at construction', () => {
     const peer = scriptedPeer()
-    expect(
-      () =>
-        new CodexRunner({ cwd: '/tmp', resume: 't', forkSession: true, connectFn: peer.connectFn }),
-    ).toThrow(/fork/)
-    expect(
-      () => new CodexRunner({ cwd: '/tmp', permissionMode: 'plan', connectFn: peer.connectFn }),
-    ).toThrow(/not supported/)
+    expect(() => new CodexRunner({ cwd: '/tmp', resume: 't', forkSession: true, connectFn: peer.connectFn })).toThrow(/fork/)
+    expect(() => new CodexRunner({ cwd: '/tmp', permissionMode: 'plan', connectFn: peer.connectFn })).toThrow(/not supported/)
   })
 
   it('fails the turn when turn/start itself is rejected, and stays usable', async () => {
     const peer = scriptedPeer()
     let attempts = 0
     peer.respond('turn/start', () => {
-      if (++attempts === 1) throw new Error('invalid params: input')
+      if (++attempts === 1) {
+        throw new Error('invalid params: input')
+      }
       peer.emit('turn/completed', { threadId: 'thread-1', turn: { id: 't2', status: 'completed' } })
       return { turn: { id: 't2', status: 'inProgress' } }
     })
@@ -1820,7 +1776,9 @@ describe('CodexRunner resume backfill', () => {
     )
     const texts = messages.map((e) => {
       const content = e.message.content
-      if (typeof content === 'string') return content
+      if (typeof content === 'string') {
+        return content
+      }
       const block = (content as Array<Record<string, unknown>>)[0]!
       return (block.text ?? block.content ?? block.name) as string
     })
@@ -1844,12 +1802,7 @@ describe('CodexRunner resume backfill', () => {
     expect(toolResult[0]!.tool_use_id).toBe(toolUse[0]!.id)
 
     // History was one page and complete: no thread/read, no turn ran, no notice.
-    expect(peer.requests.map((r) => r.method)).toEqual([
-      'initialize',
-      'config/read',
-      'thread/resume',
-      'skills/list',
-    ])
+    expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'config/read', 'thread/resume', 'skills/list'])
     expect(events.some((e) => e.type === 'session_error')).toBe(false)
     expect(events.some((e) => e.type === 'turn_result')).toBe(false)
     expect(runner.status).toBe('idle')
@@ -1872,7 +1825,10 @@ describe('CodexRunner resume backfill', () => {
               {
                 id: 'item-1',
                 type: 'userMessage',
-                content: [{ type: 'image', imageUrl: 'data:…' }, { type: 'localImage', path: '/x' }],
+                content: [
+                  { type: 'image', imageUrl: 'data:…' },
+                  { type: 'localImage', path: '/x' },
+                ],
               },
               { id: 'item-2', type: 'agentMessage', text: 'Two pictures.' },
             ],
@@ -1885,9 +1841,7 @@ describe('CodexRunner resume backfill', () => {
     const events = collect(runner)
     await runner.start()
 
-    const user = events.find(
-      (e): e is Extract<SessionEvent, { type: 'user_message' }> => e.type === 'user_message',
-    )
+    const user = events.find((e): e is Extract<SessionEvent, { type: 'user_message' }> => e.type === 'user_message')
     expect(user?.message.content).toBe('[2 images]')
   })
 
@@ -1922,9 +1876,7 @@ describe('CodexRunner resume backfill', () => {
         e.type === 'user_message' || e.type === 'assistant_message',
     )
     const texts = messages.map((e) =>
-      typeof e.message.content === 'string'
-        ? e.message.content
-        : ((e.message.content as Array<{ text?: string }>)[0]!.text ?? ''),
+      typeof e.message.content === 'string' ? e.message.content : ((e.message.content as Array<{ text?: string }>)[0]!.text ?? ''),
     )
     // Replay first, then the new turn's echo, then its answer — never interleaved.
     expect(texts).toEqual(['now delete it', 'Deleted.', 'continue', 'Live answer.'])
@@ -1951,13 +1903,7 @@ describe('CodexRunner resume backfill', () => {
     const events = collect(runner)
     await runner.start()
 
-    expect(peer.requests.map((r) => r.method)).toEqual([
-      'initialize',
-      'config/read',
-      'thread/resume',
-      'skills/list',
-      'thread/read',
-    ])
+    expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'config/read', 'thread/resume', 'skills/list', 'thread/read'])
     expect(peer.requests[4]).toMatchObject({
       params: { threadId: 'thread-1', includeTurns: true },
     })
@@ -1983,9 +1929,7 @@ describe('CodexRunner resume backfill', () => {
     // The notice precedes the partial replay it qualifies, and the session
     // stays alive and idle — incomplete history is not a failed resume.
     const errorIndex = events.findIndex((e) => e.type === 'session_error')
-    const firstReplay = events.findIndex(
-      (e) => (e.type === 'user_message' || e.type === 'assistant_message') && e.replay,
-    )
+    const firstReplay = events.findIndex((e) => (e.type === 'user_message' || e.type === 'assistant_message') && e.replay)
     expect(errorIndex).toBeGreaterThanOrEqual(0)
     expect(events[errorIndex]).toMatchObject({
       message: expect.stringContaining('incomplete'),
@@ -2033,9 +1977,7 @@ describe('CodexRunner resume backfill', () => {
     const runner = new CodexRunner({ cwd: '/tmp', resume: 'prior', connectFn: peer.connectFn })
     const events = collect(runner)
     await runner.start()
-    const replayCount = () =>
-      events.filter((e) => (e.type === 'user_message' || e.type === 'assistant_message') && e.replay)
-        .length
+    const replayCount = () => events.filter((e) => (e.type === 'user_message' || e.type === 'assistant_message') && e.replay).length
     expect(replayCount()).toBe(2)
 
     peer.die('codex app-server exited (code 1): gone')
@@ -2097,10 +2039,24 @@ describe('CodexRunner sub-agents', () => {
       emit('item/agentMessage/delta', { threadId: 'thread-a', turnId: 'turn-a', itemId: 'm-a', delta: 'alpha ' })
       emit('item/agentMessage/delta', { threadId: 'thread-b', turnId: 'turn-b', itemId: 'm-b', delta: 'beta ' })
       emit('item/agentMessage/delta', { threadId: 'thread-a', turnId: 'turn-a', itemId: 'm-a', delta: 'two' })
-      emit('item/reasoning/summaryTextDelta', { threadId: 'thread-b', turnId: 'turn-b', itemId: 'rs-b', summaryIndex: 0, delta: 'weighing' })
+      emit('item/reasoning/summaryTextDelta', {
+        threadId: 'thread-b',
+        turnId: 'turn-b',
+        itemId: 'rs-b',
+        summaryIndex: 0,
+        delta: 'weighing',
+      })
       // An agent's tool call, started and completed on ITS thread.
-      emit('item/started', { threadId: 'thread-a', turnId: 'turn-a', item: { id: 'exec-a', type: 'commandExecution', command: 'date', status: 'inProgress' } })
-      emit('item/completed', { threadId: 'thread-a', turnId: 'turn-a', item: { id: 'exec-a', type: 'commandExecution', command: 'date', aggregatedOutput: 'Fri\n', exitCode: 0, status: 'completed' } })
+      emit('item/started', {
+        threadId: 'thread-a',
+        turnId: 'turn-a',
+        item: { id: 'exec-a', type: 'commandExecution', command: 'date', status: 'inProgress' },
+      })
+      emit('item/completed', {
+        threadId: 'thread-a',
+        turnId: 'turn-a',
+        item: { id: 'exec-a', type: 'commandExecution', command: 'date', aggregatedOutput: 'Fri\n', exitCode: 0, status: 'completed' },
+      })
       emit('item/completed', { ...root, item: { id: 'm-root', type: 'agentMessage', text: 'root answer' } })
       emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
     })
@@ -2162,7 +2118,10 @@ describe('CodexRunner sub-agents', () => {
       emit('item/completed', { ...root, item: spawnItem('call_b', 'thread-b', '/root/beta') })
       // The root blocks on its agents: the collab `wait` card exists while it
       // does (the trace's one observed collab verb, rich fields empty).
-      emit('item/started', { ...root, item: { id: 'call_w', type: 'collabAgentToolCall', tool: 'wait', status: 'inProgress', receiverThreadIds: [], agentsStates: {} } })
+      emit('item/started', {
+        ...root,
+        item: { id: 'call_w', type: 'collabAgentToolCall', tool: 'wait', status: 'inProgress', receiverThreadIds: [], agentsStates: {} },
+      })
       // Alpha reports and its thread's turn completes — the agent's one true
       // completion signal (`subAgentActivity` has no 'completed' kind).
       emit('turn/completed', {
@@ -2175,7 +2134,10 @@ describe('CodexRunner sub-agents', () => {
         turn: { id: 'turn-b', status: 'failed', error: { message: 'model refused' } },
       })
       mid = runner!.info().subagents
-      emit('item/completed', { ...root, item: { id: 'call_w', type: 'collabAgentToolCall', tool: 'wait', status: 'completed', receiverThreadIds: [], agentsStates: {} } })
+      emit('item/completed', {
+        ...root,
+        item: { id: 'call_w', type: 'collabAgentToolCall', tool: 'wait', status: 'completed', receiverThreadIds: [], agentsStates: {} },
+      })
       emit('item/completed', { ...root, item: { id: 'm-root', type: 'agentMessage', text: 'both done' } })
       emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
     })
@@ -2420,12 +2382,14 @@ describe('CodexRunner clearContext', () => {
       const turnId = `turn-${prompts.length}`
       const threadId = (params as { threadId: string }).threadId
       peer.emit('turn/started', { threadId, turn: { id: turnId, status: 'inProgress' } })
-      const finish = () =>
-        peer.emit('turn/completed', { threadId, turn: { id: turnId, status: 'completed' } })
+      const finish = () => peer.emit('turn/completed', { threadId, turn: { id: turnId, status: 'completed' } })
       // The FIRST turn is held open, so the clear and the message after it are
       // both issued while it is still running.
-      if (prompts.length === 1) firstTurn = finish
-      else finish()
+      if (prompts.length === 1) {
+        firstTurn = finish
+      } else {
+        finish()
+      }
       return { turn: { id: turnId, status: 'inProgress' } }
     })
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'first', connectFn: peer.connectFn })
@@ -2446,7 +2410,9 @@ describe('CodexRunner clearContext', () => {
     expect(ofType(events, 'conversation_reset')).toHaveLength(1)
     // The message typed after the clear ran, on the new thread.
     expect(prompts[1]).toBe('after the clear')
-    const second = peer.requests.find((r) => r.method === 'turn/start' && (r.params as { input: Array<{ text?: string }> }).input[0]?.text === 'after the clear')
+    const second = peer.requests.find(
+      (r) => r.method === 'turn/start' && (r.params as { input: Array<{ text?: string }> }).input[0]?.text === 'after the clear',
+    )
     expect((second!.params as { threadId: string }).threadId).toBe('thread-2')
   })
 
@@ -2458,7 +2424,9 @@ describe('CodexRunner clearContext', () => {
     const peer = scriptedPeer()
     let threads = 0
     peer.respond('thread/start', () => {
-      if (++threads > 1) throw new JsonRpcError(-32000, 'no')
+      if (++threads > 1) {
+        throw new JsonRpcError(-32000, 'no')
+      }
       return THREAD_RESULT
     })
     scriptTurn(peer, (emit, turnId) => {

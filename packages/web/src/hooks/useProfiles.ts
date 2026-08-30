@@ -14,9 +14,13 @@ async function load(): Promise<ListProfilesResponse> {
   // No gateway yet (the same-origin probe is still out, or a standalone build
   // with none configured) — answer empty rather than throw, and let the caller
   // refresh when one appears.
-  const loaded = await (client()?.listProfiles().catch(() => EMPTY) ?? Promise.resolve(EMPTY))
+  const loaded = await (client()
+    ?.listProfiles()
+    .catch(() => EMPTY) ?? Promise.resolve(EMPTY))
   cache = loaded
-  for (const notify of subscribers) notify(loaded)
+  for (const notify of subscribers) {
+    notify(loaded)
+  }
   return loaded
 }
 
@@ -27,7 +31,9 @@ export function useProfileList(): ListProfilesResponse & { refresh: () => Promis
 
   useEffect(() => {
     subscribers.add(setValue)
-    if (!cache) void (inflight ??= load())
+    if (!cache) {
+      void (inflight ??= load())
+    }
     return () => {
       subscribers.delete(setValue)
     }

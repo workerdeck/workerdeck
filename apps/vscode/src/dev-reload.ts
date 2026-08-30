@@ -18,14 +18,13 @@ export type ReloadableView = { reloadWebview: () => void }
  * Off outside development mode: a real install's `dist/` never changes, and a
  * self-triggered window reload is the last thing a user's editor should do.
  */
-export function startDevReload(
-  context: vscode.ExtensionContext,
-  views: readonly ReloadableView[],
-): vscode.Disposable {
+export function startDevReload(context: vscode.ExtensionContext, views: readonly ReloadableView[]): vscode.Disposable {
   const enabled =
     context.extensionMode === vscode.ExtensionMode.Development &&
     vscode.workspace.getConfiguration('workerdeck').get<boolean>('dev.autoReload', true)
-  if (!enabled || context.extensionUri.scheme !== 'file') return new vscode.Disposable(() => {})
+  if (!enabled || context.extensionUri.scheme !== 'file') {
+    return new vscode.Disposable(() => {})
+  }
 
   const dist = join(context.extensionUri.fsPath, 'dist')
   const output = vscode.window.createOutputChannel('WorkerDeck Dev')
@@ -42,12 +41,18 @@ export function startDevReload(
       return
     }
     output.appendLine('webview bundle changed — re-rendering webviews')
-    for (const view of views) view.reloadWebview()
+    for (const view of views) {
+      view.reloadWebview()
+    }
   }
 
   const onChange = (file: string | null, hostSide: boolean) => {
-    if (!file) return
-    if (!/\.(js|cjs|css)$/.test(file)) return
+    if (!file) {
+      return
+    }
+    if (!/\.(js|cjs|css)$/.test(file)) {
+      return
+    }
     pendingHostReload ||= hostSide
     // A build writes many files; settle before acting on any of them.
     clearTimeout(timer)
@@ -67,7 +72,9 @@ export function startDevReload(
 
   return new vscode.Disposable(() => {
     clearTimeout(timer)
-    for (const watcher of watchers) watcher.close()
+    for (const watcher of watchers) {
+      watcher.close()
+    }
     output.dispose()
   })
 }

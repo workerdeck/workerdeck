@@ -1,14 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import type { PermissionMode } from '@workerdeck/protocol'
 import { ClipboardList, Code, Hand, ShieldCheck, TriangleAlert, Zap } from 'lucide-react'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectItemText,
-  SelectTrigger,
-  SelectValue,
-} from '../ui/Select.tsx'
+import { Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from '../ui/Select.tsx'
 import { cn } from '../../lib/utils.ts'
 
 export type PermissionModeMeta = {
@@ -86,8 +79,7 @@ export const PERMISSION_MODES: PermissionModeMeta[] = [
   },
 ]
 
-export const permissionModeMeta = (mode: PermissionMode): PermissionModeMeta | undefined =>
-  PERMISSION_MODES.find((m) => m.value === mode)
+export const permissionModeMeta = (mode: PermissionMode): PermissionModeMeta | undefined => PERMISSION_MODES.find((m) => m.value === mode)
 
 /** One offered mode as plain data — no icon, no React. What a host chrome
  * outside the panel (a VS Code QuickPick) needs to draw the same list. */
@@ -106,18 +98,13 @@ export type PermissionModeChoice = {
  * in — the same filtering {@link PermissionModeSelect} applies, so an embedder
  * rendering its own picker cannot drift from the panel's.
  */
-export function permissionModeChoices(
-  modes?: readonly PermissionMode[],
-  canBypass?: boolean,
-): PermissionModeChoice[] {
+export function permissionModeChoices(modes?: readonly PermissionMode[], canBypass?: boolean): PermissionModeChoice[] {
   const offered = modes ? PERMISSION_MODES.filter((m) => modes.includes(m.value)) : PERMISSION_MODES
   return offered.map((m) => ({
     value: m.value,
     label: m.label,
     description:
-      m.value === 'bypassPermissions' && canBypass === false
-        ? 'Only available to a session started in this mode'
-        : m.description,
+      m.value === 'bypassPermissions' && canBypass === false ? 'Only available to a session started in this mode' : m.description,
     dangerous: m.dangerous,
     disabled: m.value === 'bypassPermissions' && canBypass === false,
   }))
@@ -158,46 +145,42 @@ export function PermissionModeSelect({
 }: PermissionModeSelectProps) {
   const dangerous = mode === 'bypassPermissions'
   const offered = modes ? PERMISSION_MODES.filter((m) => modes.includes(m.value)) : PERMISSION_MODES
-  const unavailable = (meta: PermissionModeMeta) =>
-    meta.value === 'bypassPermissions' && canBypass === false
+  const unavailable = (meta: PermissionModeMeta) => meta.value === 'bypassPermissions' && canBypass === false
   return (
     <Select
       items={offered.map((m) => ({ value: m.value, label: m.label }))}
       value={mode ?? null}
       onValueChange={(value) => {
-        if (typeof value === 'string' && value !== mode) onModeChange(value as PermissionMode)
+        if (typeof value === 'string' && value !== mode) {
+          onModeChange(value as PermissionMode)
+        }
       }}
-      disabled={disabled}>
+      disabled={disabled}
+    >
       <SelectTrigger
-        aria-label='Permission mode'
+        aria-label="Permission mode"
         className={cn(
-          variant === 'toolbar' &&
-            'h-6 max-w-44 border-transparent bg-transparent hover:bg-surface-hover',
+          variant === 'toolbar' && 'h-6 max-w-44 border-transparent bg-transparent hover:bg-surface-hover',
           dangerous ? 'text-danger' : variant === 'toolbar' ? 'text-fg-3' : undefined,
           className,
-        )}>
+        )}
+      >
         <span className={cn('truncate', variant === 'toolbar' && 'text-label')}>
-          <SelectValue placeholder='permissions' />
+          <SelectValue placeholder="permissions" />
         </span>
       </SelectTrigger>
-      <SelectContent className='min-w-64'>
+      <SelectContent className="min-w-64">
         {offered.map((m) => {
           const blocked = unavailable(m)
           return (
             <SelectItem key={m.value} value={m.value} disabled={blocked}>
               <SelectItemText>
-                <span className='flex items-center gap-2'>
-                  <m.icon
-                    className={cn('size-3.5 shrink-0', m.dangerous ? 'text-danger' : 'text-fg-3')}
-                  />
+                <span className="flex items-center gap-2">
+                  <m.icon className={cn('size-3.5 shrink-0', m.dangerous ? 'text-danger' : 'text-fg-3')} />
                   <span className={cn('font-medium', m.dangerous && 'text-danger')}>{m.label}</span>
                 </span>
               </SelectItemText>
-              <span
-                className={cn(
-                  'pl-5.5 text-label',
-                  blocked ? 'text-fg-4' : m.dangerous ? 'text-danger/80' : 'text-fg-4',
-                )}>
+              <span className={cn('pl-5.5 text-label', blocked ? 'text-fg-4' : m.dangerous ? 'text-danger/80' : 'text-fg-4')}>
                 {blocked ? 'Only available to a session started in this mode' : m.description}
               </span>
             </SelectItem>

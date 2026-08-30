@@ -15,8 +15,9 @@ doc for whatever you are about to touch:
 - `docs/CLIENTS.md` — the VS Code extension, `apps/embedded` (the reference embedding) and the
   iOS app; same shape, one `##` section each.
 - `docs/ARCHITECTURE.md` — package map, dependency rule, session/job/parking lifecycles.
-- `docs/DEVELOPMENT.md` — tooling (pnpm/turbo/tsgo/oxlint, the `@workerdeck/source` condition),
-  and what each package's tests actually cover.
+- `docs/DEVELOPMENT.md` — tooling (pnpm/turbo/tsgo/oxlint/oxfmt, the `@workerdeck/source`
+  condition), and what each package's tests actually cover.
+- `docs/CODE-STYLE.md` — the code style rules and what enforces each (oxfmt, oxlint, convention).
 - `docs/RELEASING.md` — the wrapup checklist, the publish flow, and the release ledger.
 - `docs/ROADMAP.md` — shipped / next / open questions. Non-goals (don't relitigate): serverless
   hosting, multi-tenant SaaS, claude.ai auth.
@@ -52,7 +53,7 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
 - **Always `roam index --force` before reading roam's output.** ~4s on this repo; a stale index
   reports against a tree that no longer exists. This is a library monorepo, so `dead_exports` is
   not a defect count — public exports have no in-repo caller.
-- `pnpm typecheck|test|build|lint`. In-package imports use explicit `.ts` extensions. Dev never
+- `pnpm typecheck|test|build|lint|format`. In-package imports use explicit `.ts` extensions. Dev never
   builds. Releases go through **pnpm only**. Details in `docs/DEVELOPMENT.md`.
 - Real-SDK smokes cost tokens and never run in `pnpm test`, but permission-path,
   CLI-control-request and codex process-contract changes need one. See `docs/DEVELOPMENT.md`.

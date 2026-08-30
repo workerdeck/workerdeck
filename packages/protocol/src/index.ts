@@ -28,22 +28,9 @@ export const PROTOCOL_VERSION = 7
  * - `failed` — the underlying query errored; terminal
  * - `closed` — closed by a client or the host; terminal
  */
-export type SessionStatus =
-  | 'starting'
-  | 'running'
-  | 'awaiting_approval'
-  | 'idle'
-  | 'parked'
-  | 'failed'
-  | 'closed'
+export type SessionStatus = 'starting' | 'running' | 'awaiting_approval' | 'idle' | 'parked' | 'failed' | 'closed'
 
-export type PermissionMode =
-  | 'default'
-  | 'acceptEdits'
-  | 'bypassPermissions'
-  | 'plan'
-  | 'dontAsk'
-  | 'auto'
+export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk' | 'auto'
 
 // ---------------------------------------------------------------------------
 // API message content (structural mirror of Anthropic message shapes)
@@ -183,17 +170,17 @@ function base64Bytes(data: string): number {
  * sessions totals 122 KB. A "drop non-text parts" rule would sweep those in for
  * no measurable gain, and narrowness is this family's standing habit.
  */
-export function imagePartRef(
-  part: { type?: string; [key: string]: unknown },
-  index: number,
-): ImageRefPart | undefined {
-  if (part.type !== 'image') return undefined
+export function imagePartRef(part: { type?: string; [key: string]: unknown }, index: number): ImageRefPart | undefined {
+  if (part.type !== 'image') {
+    return undefined
+  }
   const source = part.source as { type?: string; data?: unknown; media_type?: unknown } | undefined
-  if (!source || source.type !== 'base64' || typeof source.data !== 'string') return undefined
+  if (!source || source.type !== 'base64' || typeof source.data !== 'string') {
+    return undefined
+  }
   return {
     type: 'image_ref',
-    media_type:
-      typeof source.media_type === 'string' ? source.media_type : 'application/octet-stream',
+    media_type: typeof source.media_type === 'string' ? source.media_type : 'application/octet-stream',
     bytes: base64Bytes(source.data),
     part_index: index,
   }
@@ -514,9 +501,7 @@ export type ToolExecutionStatus = 'pending' | 'deferred' | 'settled' | 'failed'
 export type ToolExecutionBackend = 'server' | 'browser' | 'managed' | 'remote'
 
 /** Result payload of a tool execution, by value — never a live host reference. */
-export type ToolExecutionOutput =
-  | { type: 'text'; value: string }
-  | { type: 'json'; value: unknown }
+export type ToolExecutionOutput = { type: 'text'; value: string } | { type: 'json'; value: unknown }
 
 // ---------------------------------------------------------------------------
 // Session events (server -> client)
@@ -676,12 +661,7 @@ export type SessionEventBody =
     }
   | {
       type: 'turn_result'
-      subtype:
-        | 'success'
-        | 'error_during_execution'
-        | 'error_max_turns'
-        | 'error_max_budget_usd'
-        | 'error_max_structured_output_retries'
+      subtype: 'success' | 'error_during_execution' | 'error_max_turns' | 'error_max_budget_usd' | 'error_max_structured_output_retries'
       isError: boolean
       durationMs: number
       numTurns: number
@@ -1164,18 +1144,14 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
  * @deprecated Read `ENGINE_CAPABILITIES.provider.permissionModes` (this is an
  * alias of it, kept for protocol-5 consumers).
  */
-export const PROVIDER_PERMISSION_MODES: readonly PermissionMode[] =
-  ENGINE_CAPABILITIES.provider.permissionModes
+export const PROVIDER_PERMISSION_MODES: readonly PermissionMode[] = ENGINE_CAPABILITIES.provider.permissionModes
 
 /**
  * Whether a profile's engine can run a permission mode. The single source of
  * truth for the restriction: create forms filter what they offer with it, the
  * gateway rejects with it. An absent `engine` means 'claude' (every mode).
  */
-export function supportsPermissionMode(
-  engine: ProfileEngine | undefined,
-  mode: PermissionMode,
-): boolean {
+export function supportsPermissionMode(engine: ProfileEngine | undefined, mode: PermissionMode): boolean {
   return ENGINE_CAPABILITIES[engine ?? 'claude'].permissionModes.includes(mode)
 }
 
@@ -1591,9 +1567,7 @@ export const SUBAGENT_HISTORY = 8
  * session. The route answers with `ETag: "<hash>"` and honors
  * `If-None-Match`.
  */
-export type ProjectIcon =
-  | { type: 'glyph'; name: string }
-  | { type: 'image'; mediaType: 'image/png' | 'image/svg+xml'; hash: string }
+export type ProjectIcon = { type: 'glyph'; name: string } | { type: 'image'; mediaType: 'image/png' | 'image/svg+xml'; hash: string }
 
 /**
  * Project identity for a session — what a `.workerdeck.json` in the session's
@@ -1791,7 +1765,9 @@ export type SessionInfo = {
  * described.
  */
 export function contextReading(body: SessionEventBody): ContextReading | undefined {
-  if (body.type !== 'context_usage') return undefined
+  if (body.type !== 'context_usage') {
+    return undefined
+  }
   const { totalTokens, maxTokens, percentage } = body.usage
   return { totalTokens, maxTokens, percentage }
 }
@@ -1819,16 +1795,18 @@ export function transcriptActivity(body: SessionEventBody): number {
   // about what is on screen. The claim is the same one `transcriptContent`
   // declines to make: nested items still *mutate* items, so they must still
   // replay; they merely do not add to the count.
-  if ('parentToolUseId' in body && body.parentToolUseId != null) return 0
+  if ('parentToolUseId' in body && body.parentToolUseId != null) {
+    return 0
+  }
   switch (body.type) {
     case 'assistant_message': {
       const content = body.message.content
       // A string body is one text row. Blocks are one row each, except tool
       // results (which land inside the call's own row) and unknown blocks.
-      if (typeof content === 'string') return content.trim() === '' ? 0 : 1
-      const rows = content.filter(
-        (block) => block.type === 'text' || block.type === 'thinking' || block.type === 'tool_use',
-      ).length
+      if (typeof content === 'string') {
+        return content.trim() === '' ? 0 : 1
+      }
+      const rows = content.filter((block) => block.type === 'text' || block.type === 'thinking' || block.type === 'tool_use').length
       return rows
     }
     case 'user_message':
@@ -1962,9 +1940,7 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
       // the safe failure is replaying a stale row rather than withholding state
       // — so a compaction boundary or an auth notice keeps arriving in full, and
       // only the one payload that is *by nature* transient is folded.
-      return body.payload.type === 'system' && body.payload.subtype === 'status'
-        ? 'sdk_event:system:status'
-        : undefined
+      return body.payload.type === 'system' && body.payload.subtype === 'status' ? 'sdk_event:system:status' : undefined
     default:
       return undefined
   }
@@ -2014,9 +1990,13 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
  * identical state (`packages/react/test/replay-retain.test.ts`).
  */
 export function replayRetains(body: SessionEventBody): boolean {
-  if (body.type !== 'stream_delta') return true
+  if (body.type !== 'stream_delta') {
+    return true
+  }
   const delta = body.event as { type?: string; delta?: { type?: string } }
-  if (delta.type !== 'content_block_delta') return false
+  if (delta.type !== 'content_block_delta') {
+    return false
+  }
   return delta.delta?.type === 'text_delta' || delta.delta?.type === 'thinking_delta'
 }
 

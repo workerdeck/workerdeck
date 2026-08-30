@@ -42,18 +42,24 @@ export function useTriggerSearch(): UseTriggerSearchReturn {
 
   const reset = useCallback(() => {
     abortController.current?.abort()
-    if (debounceTimer.current) clearTimeout(debounceTimer.current)
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current)
+    }
     setSuggestions([])
     setSuggestionsLoading(false)
     setSuggestionsError(null)
   }, [])
 
   const search = useCallback((query: string, config: TriggerConfig) => {
-    if (!config.onSearch) return
+    if (!config.onSearch) {
+      return
+    }
 
     // Cancel any previous in-flight request and pending debounce
     abortController.current?.abort()
-    if (debounceTimer.current) clearTimeout(debounceTimer.current)
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current)
+    }
 
     setSuggestionsLoading(true)
     setSuggestionsError(null)
@@ -70,14 +76,20 @@ export function useTriggerSearch(): UseTriggerSearchReturn {
       if (result instanceof Promise) {
         void result.then(
           (items) => {
-            if (controller.signal.aborted || searchVersion.current !== version) return
+            if (controller.signal.aborted || searchVersion.current !== version) {
+              return
+            }
             setSuggestions(items)
             setSuggestionsLoading(false)
           },
           (error: unknown) => {
-            if (controller.signal.aborted || searchVersion.current !== version) return
+            if (controller.signal.aborted || searchVersion.current !== version) {
+              return
+            }
             // Silently ignore AbortError (expected when superseded)
-            if (error instanceof DOMException && error.name === 'AbortError') return
+            if (error instanceof DOMException && error.name === 'AbortError') {
+              return
+            }
             setSuggestionsError(error instanceof Error ? error.message : 'Search failed')
             setSuggestionsLoading(false)
             onSearchError?.(error)
@@ -101,7 +113,9 @@ export function useTriggerSearch(): UseTriggerSearchReturn {
   useEffect(() => {
     return () => {
       abortController.current?.abort()
-      if (debounceTimer.current) clearTimeout(debounceTimer.current)
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current)
+      }
     }
   }, [])
 

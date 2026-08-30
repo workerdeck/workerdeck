@@ -26,16 +26,7 @@ import { parentOf } from '../terminal/blocks.ts'
  */
 
 export type Lane = 'l' | 'r' | 'f'
-export type MarkKind =
-  | 'user'
-  | 'subagent'
-  | 'turn'
-  | 'turnFailed'
-  | 'toolFailed'
-  | 'error'
-  | 'approval'
-  | 'recap'
-  | 'bookmark'
+export type MarkKind = 'user' | 'subagent' | 'turn' | 'turnFailed' | 'toolFailed' | 'error' | 'approval' | 'recap' | 'bookmark'
 
 export type Mark = {
   kind: MarkKind
@@ -61,8 +52,11 @@ export type Cluster = {
  * cluster resolves to. */
 export function nearestMember(cluster: Cluster, y: number): Mark | undefined {
   let best: { mark: Mark; y: number } | undefined
-  for (const member of cluster.marks)
-    if (!best || Math.abs(member.y - y) < Math.abs(best.y - y)) best = member
+  for (const member of cluster.marks) {
+    if (!best || Math.abs(member.y - y) < Math.abs(best.y - y)) {
+      best = member
+    }
+  }
   return best?.mark
 }
 
@@ -165,7 +159,9 @@ export function buildMarks(
   const subagentParents = new Set<string>()
   for (const item of items) {
     const parent = parentOf(item)
-    if (parent !== undefined) subagentParents.add(parent)
+    if (parent !== undefined) {
+      subagentParents.add(parent)
+    }
   }
   let segment: Segment = {}
   const closeSegment = () => {
@@ -220,9 +216,14 @@ export function buildMarks(
   })
   // A history that ends mid-segment still has an answer in it.
   closeSegment()
-  for (const index of bookmarks)
-    if (index >= 0 && index < items.length) marks.push({ kind: 'bookmark', itemIndex: index })
-  if (recapItemIndex !== undefined) marks.push({ kind: 'recap', itemIndex: recapItemIndex })
+  for (const index of bookmarks) {
+    if (index >= 0 && index < items.length) {
+      marks.push({ kind: 'bookmark', itemIndex: index })
+    }
+  }
+  if (recapItemIndex !== undefined) {
+    marks.push({ kind: 'recap', itemIndex: recapItemIndex })
+  }
   return marks
 }
 
@@ -252,7 +253,9 @@ export function clusterMarks(marks: readonly Mark[], railH: number, itemCount: n
       // the loudest member's colour.
       if (current && y <= current.y + current.h + 1) {
         current.h = Math.max(current.h, y + h - current.y)
-        if (LOUDNESS[mark.kind] > LOUDNESS[current.kind]) current.kind = mark.kind
+        if (LOUDNESS[mark.kind] > LOUDNESS[current.kind]) {
+          current.kind = mark.kind
+        }
         current.marks.push({ mark, y })
       } else {
         current = { lane, kind: mark.kind, y, h, marks: [{ mark, y }] }

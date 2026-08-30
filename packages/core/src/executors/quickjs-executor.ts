@@ -1,10 +1,5 @@
 import { runScript, type SandboxEngine } from '@workerdeck/sandbox'
-import type {
-  ToolExecutionCall,
-  ToolExecutionDispatch,
-  ToolExecutionResult,
-  ToolExecutor,
-} from './tool-executor.ts'
+import type { ToolExecutionCall, ToolExecutionDispatch, ToolExecutionResult, ToolExecutor } from './tool-executor.ts'
 
 /** Resolve a URL to text for the guest. Runs host-side with host authority —
  * this is where a credential may be attached, never inside the sandbox. */
@@ -73,14 +68,11 @@ export class QuickJsExecutor implements ToolExecutor {
       vfs: call.vfs,
       signal: call.signal,
       timeoutMs: call.limits?.timeoutMs ?? this.#options.defaultTimeoutMs ?? 5000,
-      memoryLimitBytes:
-        call.limits?.memoryLimitBytes ?? this.#options.defaultMemoryLimitBytes ?? 64 * 1024 * 1024,
+      memoryLimitBytes: call.limits?.memoryLimitBytes ?? this.#options.defaultMemoryLimitBytes ?? 64 * 1024 * 1024,
       fetchText: this.#allowsNetwork() ? (url) => this.#fetchText(url, call.signal) : undefined,
     })
     const logs = result.logs.map((l) => `[${l.level}] ${l.text}`)
-    return result.ok
-      ? { status: 'ok', output: result.value, logs }
-      : { status: 'failed', reason: result.reason, error: result.error, logs }
+    return result.ok ? { status: 'ok', output: result.value, logs } : { status: 'failed', reason: result.reason, error: result.error, logs }
   }
 
   #allowsNetwork(): boolean {
@@ -108,7 +100,9 @@ export class QuickJsExecutor implements ToolExecutor {
 
 async function defaultHostFetch(url: string, signal: AbortSignal): Promise<string> {
   const response = await fetch(url, { signal })
-  if (!response.ok) throw new Error(`request failed: ${response.status}`)
+  if (!response.ok) {
+    throw new Error(`request failed: ${response.status}`)
+  }
   return await response.text()
 }
 
@@ -129,12 +123,18 @@ export function isHostAllowed(url: string, allowedHosts: string[]): boolean {
   } catch {
     return false
   }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return false
+  }
   const host = parsed.hostname.toLowerCase()
   return allowedHosts.some((entry) => {
     const pattern = entry.trim().toLowerCase()
-    if (!pattern) return false
-    if (pattern.startsWith('*.')) return host.endsWith(pattern.slice(1))
+    if (!pattern) {
+      return false
+    }
+    if (pattern.startsWith('*.')) {
+      return host.endsWith(pattern.slice(1))
+    }
     return host === pattern
   })
 }

@@ -52,8 +52,11 @@ export function GatewaysApp({ bridge }: { bridge: Bridge }) {
             return
           case 'wd-form-result':
             setBusy(false)
-            if (msg.ok) setForm(undefined)
-            else setError(msg.error ?? 'failed')
+            if (msg.ok) {
+              setForm(undefined)
+            } else {
+              setError(msg.error ?? 'failed')
+            }
             return
         }
       }),

@@ -91,7 +91,9 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
       inputSchema: z.object({ path: z.string() }),
       execute: async ({ path }) => {
         const content = vfs.read(path)
-        if (content === undefined) return { error: `no such file: ${path}` }
+        if (content === undefined) {
+          return { error: `no such file: ${path}` }
+        }
         return { content: truncate(content) }
       },
     }),
@@ -117,15 +119,16 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
       trust: 'authoritative',
       tool: tool({
         description:
-          'Hand a file from the scratch filesystem over to the user as a deliverable. ' +
-          'Write it with fs_write first, then deliver it.',
+          'Hand a file from the scratch filesystem over to the user as a deliverable. ' + 'Write it with fs_write first, then deliver it.',
         inputSchema: z.object({
           path: z.string().describe('Path of an existing file in the scratch filesystem'),
           description: z.string().optional().describe('What this file is, for the recipient'),
         }),
         execute: async ({ path, description }) => {
           const content = vfs.read(path)
-          if (content === undefined) return { error: `no such file: ${path}` }
+          if (content === undefined) {
+            return { error: `no such file: ${path}` }
+          }
           const file = { path, bytes: content.length, description }
           onFileDelivered(file)
           return { delivered: true, ...file }
@@ -156,8 +159,7 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
       name: 'download',
       trust: 'authoritative',
       tool: tool({
-        description:
-          'Fetch a URL and store its text in the scratch filesystem for later evaluation.',
+        description: 'Fetch a URL and store its text in the scratch filesystem for later evaluation.',
         inputSchema: z.object({
           url: z.string().describe('Absolute http(s) URL'),
           path: z.string().describe('Where to store it in the scratch filesystem'),
@@ -217,7 +219,9 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
   })
 
   const tools: ToolSet = {}
-  for (const definition of definitions) tools[definition.name] = definition.tool
+  for (const definition of definitions) {
+    tools[definition.name] = definition.tool
+  }
 
   return {
     vfs,
@@ -232,12 +236,7 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
 export function withMcpTools(context: ToolContext, mcpTools: ToolSet): ToolContext {
   return withHostTools(
     context,
-    Object.fromEntries(
-      Object.entries(mcpTools).map(([name, mcpTool]) => [
-        name,
-        { tool: mcpTool, trust: 'authoritative' as const },
-      ]),
-    ),
+    Object.fromEntries(Object.entries(mcpTools).map(([name, mcpTool]) => [name, { tool: mcpTool, trust: 'authoritative' as const }])),
     'MCP tool',
   )
 }
@@ -276,7 +275,9 @@ export function withHostTools(
   kind = 'host tool',
 ): ToolContext {
   const entries = Object.entries(hostTools)
-  if (entries.length === 0) return context
+  if (entries.length === 0) {
+    return context
+  }
   const definitions = [...context.definitions]
   const tools: ToolSet = { ...context.tools }
   const sandboxedToolNames = [...context.sandboxedToolNames]
@@ -301,7 +302,9 @@ export function withHostTools(
     }
     definitions.push({ name, trust, tool: hostTool })
     tools[name] = hostTool
-    if (trust === 'sandboxed') sandboxedToolNames.push(name)
+    if (trust === 'sandboxed') {
+      sandboxedToolNames.push(name)
+    }
   }
   return { ...context, tools, definitions, sandboxedToolNames }
 }

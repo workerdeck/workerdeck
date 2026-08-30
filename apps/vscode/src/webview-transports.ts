@@ -19,11 +19,7 @@ export class WebviewTransportHost {
   readonly #sockets = new Map<number, InstanceType<typeof NodeWebSocket>>()
   readonly #aborts = new Map<number, AbortController>()
 
-  constructor(
-    store: HostStore,
-    post: (msg: TransportToWebview) => void,
-    onFrame?: (text: string) => void,
-  ) {
+  constructor(store: HostStore, post: (msg: TransportToWebview) => void, onFrame?: (text: string) => void) {
     this.#store = store
     this.#post = post
     this.#onFrame = onFrame
@@ -52,12 +48,12 @@ export class WebviewTransportHost {
     }
   }
 
-  async #gatewayFor(
-    url: string,
-  ): Promise<{ host: GatewayHost; headers: Record<string, string> } | undefined> {
+  async #gatewayFor(url: string): Promise<{ host: GatewayHost; headers: Record<string, string> } | undefined> {
     for (const host of this.#store.all()) {
       const base = apiUrl(host)
-      if (!base) continue
+      if (!base) {
+        continue
+      }
       const wsBase = base.replace(/^http/, 'ws')
       if (url.startsWith(base + '/') || url === base || url.startsWith(wsBase + '/')) {
         return { host, headers: await this.#store.authHeaders(host.id) }
@@ -128,9 +124,13 @@ export class WebviewTransportHost {
   }
 
   dispose(): void {
-    for (const socket of this.#sockets.values()) socket.close()
+    for (const socket of this.#sockets.values()) {
+      socket.close()
+    }
     this.#sockets.clear()
-    for (const abort of this.#aborts.values()) abort.abort()
+    for (const abort of this.#aborts.values()) {
+      abort.abort()
+    }
     this.#aborts.clear()
   }
 }

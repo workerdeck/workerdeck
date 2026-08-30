@@ -1,24 +1,7 @@
-import {
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-  type DragEvent,
-  type ReactNode,
-  type Ref,
-} from 'react'
+import { useImperativeHandle, useMemo, useRef, useState, type DragEvent, type ReactNode, type Ref } from 'react'
 import type { SkillInfo, SlashCommandInfo } from '@workerdeck/protocol'
 import type { StagedAttachment, UseAttachmentsResult } from '@workerdeck/react'
-import {
-  ArrowUp,
-  FileText,
-  Paperclip,
-  RotateCw,
-  Sparkles,
-  Square,
-  TriangleAlert,
-  X,
-} from 'lucide-react'
+import { ArrowUp, FileText, Paperclip, RotateCw, Sparkles, Square, TriangleAlert, X } from 'lucide-react'
 import { Button } from '../ui/Button.tsx'
 import { Spinner } from '../ui/Spinner.tsx'
 import { PromptArea } from '../prompt-area/prompt-area.tsx'
@@ -125,7 +108,9 @@ export function skillPrompt(skill: SkillInfo): string {
 function matchScore(query: string, haystacks: string[]): number {
   const needle = query.toLowerCase()
   const lowered = haystacks.map((s) => s.toLowerCase())
-  if (lowered.some((h) => h.startsWith(needle))) return 2
+  if (lowered.some((h) => h.startsWith(needle))) {
+    return 2
+  }
   return lowered.some((h) => h.includes(needle)) ? 1 : 0
 }
 
@@ -198,7 +183,9 @@ export function Composer({
       const seen = new Set<string>()
       const unique = commands.flatMap((c) => {
         const name = cleanName(c.name)
-        if (seen.has(name)) return []
+        if (seen.has(name)) {
+          return []
+        }
         seen.add(name)
         return [{ ...c, name }]
       })
@@ -210,7 +197,9 @@ export function Composer({
               // "wrapup" should find "dev:wrapup" — the bare half of a
               // namespaced name is what people type.
               const score = matchScore(query, [c.name, ...(c.aliases ?? []), ...c.name.split(':')])
-              if (score === 0) continue
+              if (score === 0) {
+                continue
+              }
               scored.push({
                 score,
                 suggestion: {
@@ -244,17 +233,17 @@ export function Composer({
             const scored: Array<{ score: number; suggestion: TriggerSuggestion }> = []
             for (const skill of usableSkills) {
               const score = matchScore(query, [skill.name, ...skill.name.split(/[-:_]/)])
-              if (score === 0) continue
+              if (score === 0) {
+                continue
+              }
               const summary = skill.shortDescription ?? skill.description
               scored.push({
                 score,
                 suggestion: {
                   value: skill.name,
                   label: skill.displayName ?? skill.name,
-                  description: summary
-                    ? `Skill · ${summary}`
-                    : 'Skill · inserts a message you can edit',
-                  icon: <Sparkles className='size-3.5 text-fg-3' />,
+                  description: summary ? `Skill · ${summary}` : 'Skill · inserts a message you can edit',
+                  icon: <Sparkles className="size-3.5 text-fg-3" />,
                 },
               })
             }
@@ -299,14 +288,12 @@ export function Composer({
   const staged = attachments?.items ?? []
   // A photo on its own is a message — send doesn't wait for text. It does wait
   // for the upload, since an id that hasn't landed can't be named.
-  const canSend =
-    !disabled &&
-    (!isEmpty || staged.length > 0) &&
-    !attachments?.uploading &&
-    !attachments?.hasFailure
+  const canSend = !disabled && (!isEmpty || staged.length > 0) && !attachments?.uploading && !attachments?.hasFailure
 
   const submit = () => {
-    if (!canSend) return
+    if (!canSend) {
+      return
+    }
     onSend(plainText.trim(), attachments?.readyIds ?? [])
     attachments?.clear()
     clear()
@@ -314,7 +301,9 @@ export function Composer({
   }
 
   const pick = (files: FileList | null) => {
-    if (files && files.length > 0) attachments?.add(files)
+    if (files && files.length > 0) {
+      attachments?.add(files)
+    }
   }
 
   // Built once, placed twice: the stacked layout gives these a toolbar row, the
@@ -325,10 +314,10 @@ export function Composer({
     attachments && !attachments.disabled ? (
       <input
         ref={fileInput}
-        type='file'
+        type="file"
         multiple
         accept={attachments.accept || undefined}
-        className='hidden'
+        className="hidden"
         onChange={(e) => {
           pick(e.target.files)
           // Re-picking the same file must fire `change` again.
@@ -341,13 +330,8 @@ export function Composer({
   const attach = canAttach ? (
     <>
       {fileField}
-      <Button
-        variant='ghost'
-        size='icon-sm'
-        aria-label='Attach files'
-        disabled={disabled}
-        onClick={() => fileInput.current?.click()}>
-        <Paperclip className='size-4' />
+      <Button variant="ghost" size="icon-sm" aria-label="Attach files" disabled={disabled} onClick={() => fileInput.current?.click()}>
+        <Paperclip className="size-4" />
       </Button>
     </>
   ) : null
@@ -379,19 +363,15 @@ export function Composer({
    * a prompt waiting for you is not the session working.
    */
   const gutter = busy ? (
-    <GlyphButton gutter label='Interrupt' tone='yellow' onClick={onInterrupt}>
+    <GlyphButton gutter label="Interrupt" tone="yellow" onClick={onInterrupt}>
       ✕
     </GlyphButton>
   ) : canAttach ? (
-    <GlyphButton
-      gutter
-      label='Attach files'
-      disabled={disabled}
-      onClick={() => fileInput.current?.click()}>
+    <GlyphButton gutter label="Attach files" disabled={disabled} onClick={() => fileInput.current?.click()}>
       +
     </GlyphButton>
   ) : (
-    <span aria-hidden className='term-gutter' data-tone='blue'>
+    <span aria-hidden className="term-gutter" data-tone="blue">
       {PROMPT_GLYPH}
     </span>
   )
@@ -402,26 +382,16 @@ export function Composer({
     // hover/focus instead of a filled pill. `↵` is the only thing on this side
     // now — stop moved to the gutter — so it means one thing at all times, and
     // a reader never has to check which symbol is currently under their cursor.
-    <GlyphButton label='Send' disabled={!canSend} onClick={submit} tone={canSend ? 'blue' : undefined}>
+    <GlyphButton label="Send" disabled={!canSend} onClick={submit} tone={canSend ? 'blue' : undefined}>
       ↵
     </GlyphButton>
   ) : interrupting ? (
-    <Button
-      variant='outline'
-      size='icon-sm'
-      aria-label='Interrupt'
-      className='rounded-full'
-      onClick={onInterrupt}>
-      <Square className='size-3' />
+    <Button variant="outline" size="icon-sm" aria-label="Interrupt" className="rounded-full" onClick={onInterrupt}>
+      <Square className="size-3" />
     </Button>
   ) : (
-    <Button
-      size='icon-sm'
-      aria-label='Send'
-      className='rounded-full'
-      disabled={!canSend}
-      onClick={submit}>
-      <ArrowUp className='size-4' />
+    <Button size="icon-sm" aria-label="Send" className="rounded-full" disabled={!canSend} onClick={submit}>
+      <ArrowUp className="size-4" />
     </Button>
   )
 
@@ -434,7 +404,9 @@ export function Composer({
     },
     onDragLeave: () => setDragging(false),
     onDrop: (e: DragEvent) => {
-      if (!attachments || attachments.disabled) return
+      if (!attachments || attachments.disabled) {
+        return
+      }
       e.preventDefault()
       setDragging(false)
       pick(e.dataTransfer.files)
@@ -442,18 +414,11 @@ export function Composer({
   }
 
   const errorRow = attachments?.error ? (
-    <div
-      className={cn(
-        'mx-auto mt-1 flex w-full max-w-[var(--wd-transcript-max-width)] items-center gap-2 text-label text-danger',
-      )}>
-      <TriangleAlert className='size-3 shrink-0' />
-      <span className='min-w-0 flex-1'>{attachments.error}</span>
-      <button
-        type='button'
-        onClick={attachments.dismissError}
-        aria-label='Dismiss'
-        className='shrink-0 opacity-70 hover:opacity-100'>
-        <X className='size-3' />
+    <div className={cn('mx-auto mt-1 flex w-full max-w-[var(--wd-transcript-max-width)] items-center gap-2 text-label text-danger')}>
+      <TriangleAlert className="size-3 shrink-0" />
+      <span className="min-w-0 flex-1">{attachments.error}</span>
+      <button type="button" onClick={attachments.dismissError} aria-label="Dismiss" className="shrink-0 opacity-70 hover:opacity-100">
+        <X className="size-3" />
       </button>
     </div>
   ) : null
@@ -467,24 +432,23 @@ export function Composer({
     // of its own, at the same metrics.
     const line = lineHeight ?? 18
     return (
-      <div data-slot='composer' className={cn('shrink-0', className)}>
+      <div data-slot="composer" className={cn('shrink-0', className)}>
         <TerminalSurface
           {...dropHandlers}
           fontSize={fontSize}
           lineHeight={lineHeight}
           affordances={affordances}
-          bleed='1ch'
+          bleed="1ch"
           data-dragging={dragging || undefined}
-          className={cn('term-composer', disabled && 'opacity-60')}>
-          <div className='term-composer-body'>
-            {staged.length > 0 && attachments ? (
-              <AttachmentStrip attachments={attachments} />
-            ) : null}
-            <div className='term-row'>
+          className={cn('term-composer', disabled && 'opacity-60')}
+        >
+          <div className="term-composer-body">
+            {staged.length > 0 && attachments ? <AttachmentStrip attachments={attachments} /> : null}
+            <div className="term-row">
               {/* The hidden input only — its trigger lives in the gutter. */}
               {canAttach ? fileField : null}
               {gutter}
-              <div className='flex min-w-0 items-start'>
+              <div className="flex min-w-0 items-start">
                 <PromptArea
                   {...bind}
                   triggers={triggers}
@@ -506,8 +470,8 @@ export function Composer({
                   // and it grows in whole lines from there.
                   minHeight={line}
                   maxHeight={line * 10}
-                  aria-label='Message the agent'
-                  className='term-composer-field min-w-0 flex-1'
+                  aria-label="Message the agent"
+                  className="term-composer-field min-w-0 flex-1"
                   onImagePaste={(file) => attachments?.add([file])}
                 />
                 {submitButton}
@@ -517,9 +481,9 @@ export function Composer({
                 as a continuation of the line rather than new chrome. Absent
                 under `controlsSurface: 'external'`. */}
             {toolbar ? (
-              <div className='term-row'>
-                <span aria-hidden className='term-gutter' />
-                <div className='flex min-w-0 items-center gap-[1ch]'>{toolbar}</div>
+              <div className="term-row">
+                <span aria-hidden className="term-gutter" />
+                <div className="flex min-w-0 items-center gap-[1ch]">{toolbar}</div>
               </div>
             ) : null}
           </div>
@@ -530,7 +494,7 @@ export function Composer({
   }
 
   return (
-    <div data-slot='composer' className={cn('px-[var(--wd-composer-padding)] pb-[var(--wd-composer-padding)]', className)}>
+    <div data-slot="composer" className={cn('px-[var(--wd-composer-padding)] pb-[var(--wd-composer-padding)]', className)}>
       <div
         {...dropHandlers}
         className={cn(
@@ -539,18 +503,17 @@ export function Composer({
           'focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30',
           dragging && 'border-ring ring-2 ring-ring/30',
           disabled && 'opacity-60',
-        )}>
+        )}
+      >
         {/* Above the field, like the picture you are talking about should be. */}
-        {staged.length > 0 && attachments ? (
-          <AttachmentStrip attachments={attachments} />
-        ) : null}
+        {staged.length > 0 && attachments ? <AttachmentStrip attachments={attachments} /> : null}
         {inline ? (
           // One row until the message needs more: the field grows and the
           // buttons stay bottom-aligned as it does (`items-end`). On a single
           // line, the 28px buttons and the 20px line-height text need matching
           // vertical padding so their visual centres land on the same line:
           // 4px above + 4px below the 20px text = 28px, the button height.
-          <div className='flex items-end gap-1 p-1'>
+          <div className="flex items-end gap-1 p-1">
             {attach}
             <PromptArea
               {...bind}
@@ -563,8 +526,8 @@ export function Composer({
               placeholder={disabled ? 'Session ended' : placeholder}
               minHeight={20}
               maxHeight={192}
-              aria-label='Message the agent'
-              className='min-w-0 flex-1 py-1 text-body-sm text-text'
+              aria-label="Message the agent"
+              className="min-w-0 flex-1 py-1 text-body-sm text-text"
               onImagePaste={(file) => attachments?.add([file])}
             />
             {submitButton}
@@ -582,12 +545,12 @@ export function Composer({
               placeholder={disabled ? 'Session ended' : placeholder}
               minHeight={28}
               maxHeight={192}
-              aria-label='Message the agent'
-              className='px-3 pt-2.5 pb-0 text-body-sm text-text'
+              aria-label="Message the agent"
+              className="px-3 pt-2.5 pb-0 text-body-sm text-text"
               onImagePaste={(file) => attachments?.add([file])}
             />
-            <div className='flex items-center justify-between gap-2 px-2 pb-2'>
-              <div className='flex min-w-0 items-center gap-1'>
+            <div className="flex items-center justify-between gap-2 px-2 pb-2">
+              <div className="flex min-w-0 items-center gap-1">
                 {attach}
                 {toolbar}
               </div>
@@ -631,14 +594,15 @@ function GlyphButton({
 }) {
   return (
     <button
-      type='button'
+      type="button"
       aria-label={label}
       title={label}
       disabled={disabled}
       onClick={onClick}
       data-tone={tone}
       data-gutter={gutter || undefined}
-      className={cn('term-glyph', className)}>
+      className={cn('term-glyph', className)}
+    >
       {children}
     </button>
   )
@@ -657,7 +621,8 @@ function AttachmentStrip({ attachments }: { attachments: UseAttachmentsResult })
         // already directly below this strip, and two rules a few pixels apart
         // is the box the theme has none of. Geometry in `terminal.css`.
         terminal ? 'term-attachments' : 'border-b border-border px-2 py-2',
-      )}>
+      )}
+    >
       {attachments.items.map((item) => (
         <AttachmentChip
           key={item.key}
@@ -670,15 +635,7 @@ function AttachmentStrip({ attachments }: { attachments: UseAttachmentsResult })
   )
 }
 
-function AttachmentChip({
-  item,
-  onRetry,
-  onRemove,
-}: {
-  item: StagedAttachment
-  onRetry: () => void
-  onRemove: () => void
-}) {
+function AttachmentChip({ item, onRetry, onRemove }: { item: StagedAttachment; onRetry: () => void; onRemove: () => void }) {
   const failed = item.status === 'failed'
   const terminal = useTranscriptVariant() === 'terminal'
   // Corners are the whole difference: rounded and floating in `cards`, square
@@ -686,9 +643,7 @@ function AttachmentChip({
   // and the overlays stacked on it cannot disagree about their own shape.
   const round = terminal ? '' : 'rounded-md'
   return (
-    <div
-      className='group relative shrink-0'
-      title={failed ? `${item.name} — ${item.error}` : `${item.name} · ${formatBytes(item.bytes)}`}>
+    <div className="group relative shrink-0" title={failed ? `${item.name} — ${item.error}` : `${item.name} · ${formatBytes(item.bytes)}`}>
       <div
         className={cn(
           'flex size-14 items-center justify-center overflow-hidden bg-surface',
@@ -696,48 +651,44 @@ function AttachmentChip({
           terminal ? 'term-attachment' : 'border border-border',
           failed && 'border-danger/50',
         )}
-        data-failed={terminal && failed ? '' : undefined}>
+        data-failed={terminal && failed ? '' : undefined}
+      >
         {item.previewUrl ? (
-          <img src={item.previewUrl} alt={item.name} className='size-full object-cover' />
+          <img src={item.previewUrl} alt={item.name} className="size-full object-cover" />
         ) : (
-          <div className='flex flex-col items-center gap-0.5 text-fg-3'>
-            <FileText className='size-4' />
-            <span className='max-w-12 truncate text-[9px] font-semibold uppercase'>
-              {extensionOf(item.name)}
-            </span>
+          <div className="flex flex-col items-center gap-0.5 text-fg-3">
+            <FileText className="size-4" />
+            <span className="max-w-12 truncate text-[9px] font-semibold uppercase">{extensionOf(item.name)}</span>
           </div>
         )}
       </div>
       {item.status === 'uploading' ? (
         <div className={cn('absolute inset-0 flex items-center justify-center bg-black/35', round)}>
-          <Spinner className='size-4 text-white' />
+          <Spinner className="size-4 text-white" />
         </div>
       ) : null}
       {failed ? (
         <button
-          type='button'
+          type="button"
           onClick={onRetry}
           aria-label={`Retry ${item.name}`}
-          className={cn(
-            'absolute inset-0 flex items-center justify-center bg-black/45 text-warning',
-            round,
-          )}>
-          <RotateCw className='size-4' />
+          className={cn('absolute inset-0 flex items-center justify-center bg-black/45 text-warning', round)}
+        >
+          <RotateCw className="size-4" />
         </button>
       ) : null}
       <button
-        type='button'
+        type="button"
         onClick={onRemove}
         aria-label={`Remove ${item.name}`}
         className={cn(
           'absolute flex size-4 items-center justify-center bg-surface text-fg-3 hover:text-fg-1',
           // Cards hang it off the corner as a round badge; the terminal tucks it
           // inside, squared, with two rules for its corner (`terminal.css`).
-          terminal
-            ? 'term-attachment-remove'
-            : '-top-1 -right-1 rounded-full border border-border shadow-(--shadow-xs)',
-        )}>
-        <X className='size-2.5' />
+          terminal ? 'term-attachment-remove' : '-top-1 -right-1 rounded-full border border-border shadow-(--shadow-xs)',
+        )}
+      >
+        <X className="size-2.5" />
       </button>
     </div>
   )

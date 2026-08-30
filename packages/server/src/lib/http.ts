@@ -10,18 +10,19 @@ export function json(res: ServerResponse, status: number, body: unknown): void {
   res.end(payload)
 }
 
-export async function readJsonBody(
-  req: IncomingMessage,
-  maxBytes: number,
-): Promise<Record<string, unknown>> {
+export async function readJsonBody(req: IncomingMessage, maxBytes: number): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of req) {
     size += (chunk as Buffer).length
-    if (size > maxBytes) throw new Error('request body too large')
+    if (size > maxBytes) {
+      throw new Error('request body too large')
+    }
     chunks.push(chunk as Buffer)
   }
-  if (size === 0) return {}
+  if (size === 0) {
+    return {}
+  }
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>
 }
 
@@ -32,7 +33,9 @@ export async function readRawBody(req: IncomingMessage, maxBytes: number): Promi
   let size = 0
   for await (const chunk of req) {
     size += (chunk as Buffer).length
-    if (size > maxBytes) throw new Error('request body too large')
+    if (size > maxBytes) {
+      throw new Error('request body too large')
+    }
     chunks.push(chunk as Buffer)
   }
   return Buffer.concat(chunks)

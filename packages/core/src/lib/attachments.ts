@@ -47,9 +47,15 @@ export function normalizeMediaType(mediaType: string): string {
 /** How this media type can be sent, or null if it can't be. */
 export function attachmentKind(mediaType: string): AttachmentKind | null {
   const type = normalizeMediaType(mediaType)
-  if (IMAGE_TYPES.has(type)) return 'image'
-  if (type === 'application/pdf') return 'document'
-  if (type.startsWith('text/') || TEXT_TYPES.has(type)) return 'text'
+  if (IMAGE_TYPES.has(type)) {
+    return 'image'
+  }
+  if (type === 'application/pdf') {
+    return 'document'
+  }
+  if (type.startsWith('text/') || TEXT_TYPES.has(type)) {
+    return 'text'
+  }
   return null
 }
 
@@ -67,9 +73,7 @@ export const SUPPORTED_ATTACHMENT_TYPES = [...IMAGE_TYPES, 'application/pdf', 't
  * Structurally typed — `packages/core` models Anthropic content the way
  * `packages/protocol` does, and the caller casts into the SDK's own param type.
  */
-export function attachmentContentBlocks(
-  attachments: readonly AttachmentInput[],
-): Array<Record<string, unknown>> {
+export function attachmentContentBlocks(attachments: readonly AttachmentInput[]): Array<Record<string, unknown>> {
   return attachments.map((attachment) => {
     const mediaType = normalizeMediaType(attachment.mediaType)
     switch (attachmentKind(mediaType)) {

@@ -62,7 +62,9 @@ export function summarizeSince(state: RecapInput, fromIndex: number): RecapSumma
     switch (item.kind) {
       case 'turn_result':
         turns += 1
-        if (item.isError) errors += 1
+        if (item.isError) {
+          errors += 1
+        }
         break
       case 'assistant_text':
         replies += 1
@@ -70,22 +72,24 @@ export function summarizeSince(state: RecapInput, fromIndex: number): RecapSumma
       case 'tool_call':
         tools += 1
         toolCounts.set(item.name, (toolCounts.get(item.name) ?? 0) + 1)
-        if (item.status === 'failed' || item.result?.isError) errors += 1
+        if (item.status === 'failed' || item.result?.isError) {
+          errors += 1
+        }
         break
       case 'file_delivered':
         files += 1
         break
       case 'notice':
-        if (item.level === 'error') errors += 1
+        if (item.level === 'error') {
+          errors += 1
+        }
         break
       default:
         break
     }
   }
 
-  const toolNames = [...toolCounts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([name]) => name)
+  const toolNames = [...toolCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name]) => name)
   const pending = state.pendingApprovals?.length ?? 0
   return {
     turns,
@@ -107,10 +111,15 @@ export function summarizeSince(state: RecapInput, fromIndex: number): RecapSumma
  * row or not on the value alone.
  */
 export function recapLine(summary: RecapSummary): string | undefined {
-  if (!summary.any) return undefined
+  if (!summary.any) {
+    return undefined
+  }
   const parts: string[] = []
-  if (summary.turns > 0) parts.push(plural(summary.turns, 'turn'))
-  else if (summary.replies > 0) parts.push(plural(summary.replies, 'reply', 'replies'))
+  if (summary.turns > 0) {
+    parts.push(plural(summary.turns, 'turn'))
+  } else if (summary.replies > 0) {
+    parts.push(plural(summary.replies, 'reply', 'replies'))
+  }
   if (summary.tools > 0) {
     // Three names is enough to recognise what it was doing; beyond that the
     // count carries more than the list.
@@ -118,9 +127,15 @@ export function recapLine(summary: RecapSummary): string | undefined {
     const rest = summary.toolNames.length - 3
     parts.push(`${plural(summary.tools, 'tool call')}${named ? ` (${named}${rest > 0 ? `, +${rest}` : ''})` : ''}`)
   }
-  if (summary.files > 0) parts.push(plural(summary.files, 'file'))
-  if (summary.errors > 0) parts.push(plural(summary.errors, 'error'))
-  if (summary.pending > 0) parts.push(`${plural(summary.pending, 'approval')} waiting`)
+  if (summary.files > 0) {
+    parts.push(plural(summary.files, 'file'))
+  }
+  if (summary.errors > 0) {
+    parts.push(plural(summary.errors, 'error'))
+  }
+  if (summary.pending > 0) {
+    parts.push(`${plural(summary.pending, 'approval')} waiting`)
+  }
   return parts.join(' · ')
 }
 

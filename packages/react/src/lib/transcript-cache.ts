@@ -55,7 +55,9 @@ export function writeTranscriptCache(key: string, state: TranscriptState): void 
   entries.set(key, state)
   if (entries.size > MAX_ENTRIES) {
     const oldest = entries.keys().next().value
-    if (oldest !== undefined) entries.delete(oldest)
+    if (oldest !== undefined) {
+      entries.delete(oldest)
+    }
   }
 }
 

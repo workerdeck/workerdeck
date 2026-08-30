@@ -13,7 +13,9 @@ import { apiUrl } from './hosts.ts'
  */
 export async function clientFor(store: HostStore, host: GatewayHost): Promise<WorkerDeckClient | undefined> {
   const base = apiUrl(host)
-  if (!base) return undefined
+  if (!base) {
+    return undefined
+  }
   const headers = await store.authHeaders(host.id)
   return new WorkerDeckClient({
     baseUrl: base,
@@ -32,7 +34,9 @@ export async function probe(client: WorkerDeckClient): Promise<ProbeResult> {
     return 'connected'
   } catch (err) {
     const status = (err as { status?: number }).status
-    if (status === 401 || status === 403) return 'unauthorized'
+    if (status === 401 || status === 403) {
+      return 'unauthorized'
+    }
     return 'unreachable'
   }
 }

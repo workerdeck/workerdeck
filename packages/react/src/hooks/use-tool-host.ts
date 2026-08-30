@@ -1,10 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SessionHandle } from '@workerdeck/client'
-import {
-  createToolCallHost,
-  type ToolCallHostOptions,
-  type ToolHostExecution,
-} from '../lib/tool-host.ts'
+import { createToolCallHost, type ToolCallHostOptions, type ToolHostExecution } from '../lib/tool-host.ts'
 
 export type UseToolCallHostOptions = ToolCallHostOptions & {
   /** Turn the host off without unmounting. Default true. */
@@ -28,7 +24,9 @@ export function useToolCallHost(
   optionsRef.current = options
 
   useEffect(() => {
-    if (!handle || options.enabled === false) return
+    if (!handle || options.enabled === false) {
+      return
+    }
     const host = createToolCallHost(handle, {
       // Delegate every option through the ref, so a caller passing inline
       // objects/closures (the common case) doesn't resubscribe each render.
@@ -37,7 +35,9 @@ export function useToolCallHost(
         // accepts calls for both sandbox-executed and client-handled tools.
         const base = optionsRef.current.tools
         const client = optionsRef.current.clientTools
-        if (!client) return base
+        if (!client) {
+          return base
+        }
         const clientNames = Object.keys(client)
         return base ? [...new Set([...base, ...clientNames])] : clientNames
       },
@@ -62,10 +62,7 @@ export function useToolCallHost(
       onExecution: (execution) => {
         optionsRef.current.onExecution?.(execution)
         const limit = optionsRef.current.historyLimit ?? 50
-        setExecutions((prev) => [
-          ...prev.filter((e) => e.executionId !== execution.executionId),
-          execution,
-        ].slice(-limit))
+        setExecutions((prev) => [...prev.filter((e) => e.executionId !== execution.executionId), execution].slice(-limit))
       },
     })
     return () => host.dispose()

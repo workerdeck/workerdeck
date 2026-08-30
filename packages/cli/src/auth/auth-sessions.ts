@@ -45,15 +45,23 @@ const parseSessions = (raw: string, now: number): [string, StoredSession][] => {
     return []
   }
   const file = parsed as Partial<FileShape>
-  if (file?.version !== FORMAT_VERSION || !Array.isArray(file.sessions)) return []
+  if (file?.version !== FORMAT_VERSION || !Array.isArray(file.sessions)) {
+    return []
+  }
   const entries: [string, StoredSession][] = []
   for (const entry of file.sessions) {
-    if (!Array.isArray(entry) || entry.length !== 2) continue
+    if (!Array.isArray(entry) || entry.length !== 2) {
+      continue
+    }
     const [key, expiresAt] = entry
     // Expired entries are dropped on load rather than carried and swept later:
     // the cap they would otherwise occupy is the operator's own login budget.
-    if (typeof key !== 'string' || key === '') continue
-    if (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt) || expiresAt <= now) continue
+    if (typeof key !== 'string' || key === '') {
+      continue
+    }
+    if (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt) || expiresAt <= now) {
+      continue
+    }
     entries.push([key, { expiresAt }])
   }
   return entries
@@ -71,10 +79,7 @@ export async function createAuthSessionStore(options: AuthSessionStoreOptions): 
     try {
       const { mode } = await stat(path)
       if ((mode & 0o077) !== 0) {
-        warn(
-          `session file ${path} is readable by other users ` +
-            `(mode ${(mode & 0o777).toString(8)}) — run: chmod 600 ${path}`,
-        )
+        warn(`session file ${path} is readable by other users ` + `(mode ${(mode & 0o777).toString(8)}) — run: chmod 600 ${path}`)
       }
     } catch {
       // stat failing after a successful read is exotic; the table still works.

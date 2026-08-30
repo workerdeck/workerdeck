@@ -33,14 +33,18 @@ const CONTENT_TYPES: Record<string, string> = {
 
 export function contentTypeFor(pathname: string): string {
   const dot = pathname.lastIndexOf('.')
-  if (dot < 0) return 'application/octet-stream'
+  if (dot < 0) {
+    return 'application/octet-stream'
+  }
   return CONTENT_TYPES[pathname.slice(dot).toLowerCase()] ?? 'application/octet-stream'
 }
 
 /** A request for a file rather than an app route: anything with a known extension. */
 export function looksLikeAsset(pathname: string): boolean {
   const dot = pathname.lastIndexOf('.')
-  if (dot < 0) return false
+  if (dot < 0) {
+    return false
+  }
   return pathname.slice(dot).toLowerCase() in CONTENT_TYPES
 }
 
@@ -57,24 +61,22 @@ export function resolveWithinRoot(root: string, pathname: string): string | null
   } catch {
     return null // malformed percent-encoding
   }
-  if (decoded.includes('\0')) return null
+  if (decoded.includes('\0')) {
+    return null
+  }
   // Joined *without* normalising `decoded` first: normalising an absolute
   // pathname collapses its leading `..` segments, which quietly rebases an
   // escape attempt inside the root and leaves the containment check below with
   // nothing to catch. Let `join` resolve the traversal for real, then reject it.
   const candidate = resolve(join(root, decoded))
   const base = resolve(root)
-  if (candidate !== base && !candidate.startsWith(base + sep)) return null
+  if (candidate !== base && !candidate.startsWith(base + sep)) {
+    return null
+  }
   return candidate
 }
 
-export function sendHtml(
-  req: IncomingMessage,
-  res: ServerResponse,
-  status: number,
-  html: string,
-  cache: string,
-): void {
+export function sendHtml(req: IncomingMessage, res: ServerResponse, status: number, html: string, cache: string): void {
   const body = Buffer.from(html, 'utf8')
   res.writeHead(status, {
     'content-type': 'text/html; charset=utf-8',
@@ -103,12 +105,16 @@ export async function serveFile(
   filePath: string,
   options: { immutable?: boolean } = {},
 ): Promise<ServeResult> {
-  if (req.method !== 'GET' && req.method !== 'HEAD') return 'method-not-allowed'
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    return 'method-not-allowed'
+  }
 
   let size: number
   try {
     const info = await stat(filePath)
-    if (!info.isFile()) return 'not-found'
+    if (!info.isFile()) {
+      return 'not-found'
+    }
     size = info.size
   } catch {
     return 'not-found'
@@ -117,9 +123,7 @@ export async function serveFile(
   res.writeHead(200, {
     'content-type': contentTypeFor(filePath),
     'content-length': size,
-    'cache-control': options.immutable
-      ? 'public, max-age=31536000, immutable'
-      : 'no-cache, must-revalidate',
+    'cache-control': options.immutable ? 'public, max-age=31536000, immutable' : 'no-cache, must-revalidate',
     'x-content-type-options': 'nosniff',
   })
   if (req.method === 'HEAD') {

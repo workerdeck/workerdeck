@@ -36,8 +36,7 @@ export async function handleAttachments(
     // The engine's capability record names the kinds its sendMessage can
     // deliver ('document' is the record's 'pdf'). Refusing here keeps the
     // contract at the door: an upload that succeeds is one the message can use.
-    const accepted = (session.capabilities ?? ENGINE_CAPABILITIES[session.engine ?? 'claude'])
-      .attachments
+    const accepted = (session.capabilities ?? ENGINE_CAPABILITIES[session.engine ?? 'claude']).attachments
     const kind = attachmentKind(mediaType)
     if (kind && !accepted.includes(kind === 'document' ? 'pdf' : kind)) {
       json(res, 415, {
@@ -52,19 +51,9 @@ export async function handleAttachments(
       json(res, 413, { error: 'attachment is larger than the limit' })
       return
     }
-    const result = attachmentStore.put(
-      sessionId,
-      url.searchParams.get('name') ?? 'attachment',
-      mediaType,
-      body,
-    )
+    const result = attachmentStore.put(sessionId, url.searchParams.get('name') ?? 'attachment', mediaType, body)
     if (!result.ok) {
-      const status =
-        result.error.code === 'unsupported_type'
-          ? 415
-          : result.error.code === 'empty'
-            ? 400
-            : 413
+      const status = result.error.code === 'unsupported_type' ? 415 : result.error.code === 'empty' ? 400 : 413
       json(res, status, { error: result.error.message })
       return
     }

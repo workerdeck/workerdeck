@@ -1,11 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { TranscriptItem } from '@workerdeck/react'
-import {
-  IMAGE_BOX_LINES,
-  IMAGE_UNAVAILABLE,
-  imagePlaceholder,
-} from '../src/components/terminal/image-box.ts'
+import { IMAGE_BOX_LINES, IMAGE_UNAVAILABLE, imagePlaceholder } from '../src/components/terminal/image-box.ts'
 import { itemHeight, type CellMetrics } from '../src/components/terminal/height.ts'
 
 /**
@@ -72,8 +68,7 @@ describe('the box in the height calculator', () => {
     // Every branch of the tool row — a bare call, one carrying result text, one
     // carrying a diff instead — must reserve it, because the box is drawn in
     // all three and the early returns are where this is easy to lose.
-    const withText = (images?: ReturnType<typeof image>[]) =>
-      itemHeight(call(images, 'first line\nsecond line'), m).px
+    const withText = (images?: ReturnType<typeof image>[]) => itemHeight(call(images, 'first line\nsecond line'), m).px
     expect(withText([image(0)])).toBe(withText() + IMAGE_BOX_LINES * m.line)
 
     const patched = (images?: ReturnType<typeof image>[]): number => {
@@ -108,9 +103,7 @@ describe('one spelling', () => {
     // constant in the other, which typechecks perfectly and puts every
     // image-bearing row a few lines off. Both sides import the constant, and
     // the renderer spells its CSS height *from* it.
-    expect(source('../src/components/terminal/height.ts')).toContain(
-      "import { IMAGE_BOX_LINES } from './image-box.ts'",
-    )
+    expect(source('../src/components/terminal/height.ts')).toContain("import { IMAGE_BOX_LINES } from './image-box.ts'")
     const items = source('../src/components/terminal/items.tsx')
     expect(items).toContain("from './image-box.ts'")
     expect(items).toContain('`calc(var(--term-line) * ${IMAGE_BOX_LINES})`')
@@ -119,8 +112,6 @@ describe('one spelling', () => {
   it('is what the cards theme labels its frame with', () => {
     // Cards has no calculator, so it takes only the strings — but it takes them
     // from the same module rather than restating them.
-    expect(source('../src/components/agent/ToolCallCard.tsx')).toContain(
-      "from '../terminal/image-box.ts'",
-    )
+    expect(source('../src/components/agent/ToolCallCard.tsx')).toContain("from '../terminal/image-box.ts'")
   })
 })

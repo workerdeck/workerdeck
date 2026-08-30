@@ -16,10 +16,7 @@ const STDERR_TAIL_BYTES = 4096
  * that doesn't exist should fail the *turn* with codex's own error, not the
  * spawn.
  */
-export function connectAppServer(options: {
-  executable: string
-  env: Record<string, string>
-}): AppServerConnection {
+export function connectAppServer(options: { executable: string; env: Record<string, string> }): AppServerConnection {
   const child = spawn(options.executable, ['app-server'], {
     env: options.env,
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -34,7 +31,9 @@ export function connectAppServer(options: {
   let closeHandler: ((message: string) => void) | undefined
   let done = false
   const settle = (message: string) => {
-    if (done) return
+    if (done) {
+      return
+    }
     done = true
     rpc.fail(message)
     closeHandler?.(message)
@@ -42,10 +41,7 @@ export function connectAppServer(options: {
   child.on('error', (error) => settle(`codex app-server failed to start: ${error.message}`))
   child.on('exit', (code, signal) => {
     const tail = stderrTail.trim()
-    settle(
-      `codex app-server exited (${signal ?? `code ${code}`})` +
-        (tail ? `: ${tail.slice(-500)}` : ''),
-    )
+    settle(`codex app-server exited (${signal ?? `code ${code}`})` + (tail ? `: ${tail.slice(-500)}` : ''))
   })
 
   return {

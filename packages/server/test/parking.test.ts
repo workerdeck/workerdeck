@@ -11,12 +11,7 @@ import {
   type SessionEvent,
   type SessionInfo,
 } from '@workerdeck/protocol'
-import {
-  createFileSessionStore,
-  createWorkerServer,
-  type SessionStore,
-  type WorkerServer,
-} from '../src/index.ts'
+import { createFileSessionStore, createWorkerServer, type SessionStore, type WorkerServer } from '../src/index.ts'
 import { ParkableRunner } from './parkable-runner.ts'
 
 const providerProfile = (name = 'kimi'): ProfileInfo => ({
@@ -37,9 +32,7 @@ type Harness = {
   base: string
 }
 
-async function startServer(
-  options: Partial<Parameters<typeof createWorkerServer>[0]> = {},
-): Promise<Harness> {
+async function startServer(options: Partial<Parameters<typeof createWorkerServer>[0]> = {}): Promise<Harness> {
   const runners: ParkableRunner[] = []
   running = createWorkerServer({
     allowUnauthenticated: true,
@@ -120,9 +113,7 @@ describe('deferred execution: parking and result ingestion', () => {
     const resumed = h.runners[1]!
     expect(resumed.id).toBe(session.id)
     expect(running!.registry.get(session.id)).toBe(resumed)
-    expect(resumed.settled).toEqual([
-      { executionId: 'exec-1', result: { status: 'ok', output: { answer: 42 }, logs: undefined } },
-    ])
+    expect(resumed.settled).toEqual([{ executionId: 'exec-1', result: { status: 'ok', output: { answer: 42 }, logs: undefined } }])
     // The parked record is gone; the session is live again.
     expect(await running!.parking.get(session.id)).toBeNull()
 
@@ -287,24 +278,16 @@ describe('deferred execution: parking and result ingestion', () => {
     const record = (await running!.parking.get(session.id)) as {
       snapshot: { events: SessionEvent[] }
     }
-    const seq = record.snapshot.events.find(
-      (event) => event.type === 'user_message' && Array.isArray(event.message.content),
-    )!.seq
+    const seq = record.snapshot.events.find((event) => event.type === 'user_message' && Array.isArray(event.message.content))!.seq
 
-    const res = await fetch(
-      `${h.base}/sessions/${session.id}/events/${seq}/result?toolUseId=call-1`,
-    )
+    const res = await fetch(`${h.base}/sessions/${session.id}/events/${seq}/result?toolUseId=call-1`)
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ seq, toolUseId: 'call-1', content: big, isError: false })
 
     // The same guards, on the same arm: a seq the caller cached can name a
     // different call after a rebuild, so the id is verified against the block.
-    expect(
-      (await fetch(`${h.base}/sessions/${session.id}/events/${seq}/result?toolUseId=other`)).status,
-    ).toBe(404)
-    expect(
-      (await fetch(`${h.base}/sessions/${session.id}/events/99999/result?toolUseId=call-1`)).status,
-    ).toBe(404)
+    expect((await fetch(`${h.base}/sessions/${session.id}/events/${seq}/result?toolUseId=other`)).status).toBe(404)
+    expect((await fetch(`${h.base}/sessions/${session.id}/events/99999/result?toolUseId=call-1`)).status).toBe(404)
   })
 
   it('parks a queued job: the slot frees, and the result resumes and completes it', async () => {
@@ -375,8 +358,12 @@ describe('deferred execution: durability across a restart', () => {
       record: { executions: Array<{ expiresAt?: number }>; snapshot: { parked: Array<{ expiresAt?: number }> } }
     }
     const expiresAt = Date.now() - 1000
-    for (const execution of file.record.executions) execution.expiresAt = expiresAt
-    for (const execution of file.record.snapshot.parked) execution.expiresAt = expiresAt
+    for (const execution of file.record.executions) {
+      execution.expiresAt = expiresAt
+    }
+    for (const execution of file.record.snapshot.parked) {
+      execution.expiresAt = expiresAt
+    }
     await writeFile(path, JSON.stringify(file))
   }
 
@@ -410,9 +397,7 @@ describe('deferred execution: durability across a restart', () => {
     expect(await res.json()).toEqual({ applied: true, sessionId: session.id })
     const resumed = second.runners[0]!
     expect(resumed.id).toBe(session.id)
-    expect(resumed.settled).toEqual([
-      { executionId: 'exec-1', result: { status: 'ok', output: 42, logs: undefined } },
-    ])
+    expect(resumed.settled).toEqual([{ executionId: 'exec-1', result: { status: 'ok', output: 42, logs: undefined } }])
     // Seq numbering continues from the snapshot: a client reattaching with the
     // afterSeq it had before the restart sees one unbroken stream.
     expect(resumed.info().lastSeq).toBeGreaterThan(2)

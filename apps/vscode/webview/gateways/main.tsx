@@ -12,7 +12,9 @@ syncVsCodeTheme()
 const bridge = new Bridge(['wd-gateways'])
 
 const root = document.getElementById('root')
-if (!root) throw new Error('Root element #root not found')
+if (!root) {
+  throw new Error('Root element #root not found')
+}
 
 createRoot(root).render(
   <StrictMode>

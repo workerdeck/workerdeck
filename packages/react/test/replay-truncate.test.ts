@@ -60,7 +60,9 @@ describe('a truncated replay', () => {
 
   it('carries a prefix plus the three markers, and nothing else changes', () => {
     const item = cut.items[0]
-    if (item?.kind !== 'tool_call') throw new Error('expected a tool call')
+    if (item?.kind !== 'tool_call') {
+      throw new Error('expected a tool call')
+    }
     expect(item.result?.text).toBe(big.slice(0, TOOL_RESULT_HEAD_CHARS))
     expect(item.result?.truncated).toBe(true)
     expect(item.result?.totalChars).toBe(big.length)
@@ -73,7 +75,9 @@ describe('a truncated replay', () => {
   it('sets no marker on a result that was never cut', () => {
     // Byte-identical, which is what keeps iOS's Equatable plan cache honest.
     const item = cut.items[1]
-    if (item?.kind !== 'tool_call') throw new Error('expected a tool call')
+    if (item?.kind !== 'tool_call') {
+      throw new Error('expected a tool call')
+    }
     expect(item.result).toEqual({ text: 'export const a = 1', isError: false })
   })
 })
@@ -99,7 +103,9 @@ describe('hydration', () => {
       status: 'idle',
     } as unknown as SessionEvent)
     const item = after.items[0]
-    if (item?.kind !== 'tool_call') throw new Error('expected a tool call')
+    if (item?.kind !== 'tool_call') {
+      throw new Error('expected a tool call')
+    }
     expect(item.result?.text).toBe(big)
     expect(item.result?.truncated).toBeUndefined()
   })

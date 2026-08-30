@@ -42,36 +42,34 @@ export function FileViewer({
   onDismissConflict,
   className,
 }: FileViewerProps) {
-  if (!file) return null
+  if (!file) {
+    return null
+  }
 
   return (
-    <div
-      data-slot='file-viewer'
-      className={cn('flex min-h-0 min-w-0 flex-1 flex-col bg-bg', className)}>
+    <div data-slot="file-viewer" className={cn('flex min-h-0 min-w-0 flex-1 flex-col bg-bg', className)}>
       {/* The one failure with a choice attached, so it gets a bar rather than a
           toast: the agent rewrote this file while it was open, and which
           version wins is not something to decide on the user's behalf. */}
       {file.conflict ? (
-        <div className='flex shrink-0 flex-wrap items-center gap-2 border-b border-warning/40 bg-warning-bg px-3 py-2'>
-          <TriangleAlert className='size-3.5 shrink-0 text-warning' />
-          <span className='min-w-0 flex-1 text-body-sm text-warning'>
-            This file changed on disk since you opened it.
-          </span>
-          <Button variant='outline' size='xs' onClick={() => onReload?.(file.path)}>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-warning/40 bg-warning-bg px-3 py-2">
+          <TriangleAlert className="size-3.5 shrink-0 text-warning" />
+          <span className="min-w-0 flex-1 text-body-sm text-warning">This file changed on disk since you opened it.</span>
+          <Button variant="outline" size="xs" onClick={() => onReload?.(file.path)}>
             Use the version on disk
           </Button>
-          <Button variant='outline' size='xs' onClick={() => onOverwrite?.(file.path)}>
+          <Button variant="outline" size="xs" onClick={() => onOverwrite?.(file.path)}>
             Keep mine
           </Button>
-          <Button variant='ghost' size='xs' onClick={() => onDismissConflict?.(file.path)}>
+          <Button variant="ghost" size="xs" onClick={() => onDismissConflict?.(file.path)}>
             Dismiss
           </Button>
         </div>
       ) : file.saveError ? (
-        <div className='flex shrink-0 items-center gap-2 border-b border-danger/40 bg-danger-bg px-3 py-2'>
-          <TriangleAlert className='size-3.5 shrink-0 text-danger' />
-          <span className='min-w-0 flex-1 text-body-sm text-danger'>{file.saveError}</span>
-          <Button variant='ghost' size='xs' onClick={() => onDismissConflict?.(file.path)}>
+        <div className="flex shrink-0 items-center gap-2 border-b border-danger/40 bg-danger-bg px-3 py-2">
+          <TriangleAlert className="size-3.5 shrink-0 text-danger" />
+          <span className="min-w-0 flex-1 text-body-sm text-danger">{file.saveError}</span>
+          <Button variant="ghost" size="xs" onClick={() => onDismissConflict?.(file.path)}>
             Dismiss
           </Button>
         </div>
@@ -79,20 +77,20 @@ export function FileViewer({
 
       {file.status === 'loading' ? (
         <Centred>
-          <Spinner className='size-4 text-fg-4' />
+          <Spinner className="size-4 text-fg-4" />
         </Centred>
       ) : file.status === 'error' ? (
         <Centred>
-          <TriangleAlert className='size-4 text-danger' />
-          <p className='text-body-sm text-danger'>{file.error}</p>
+          <TriangleAlert className="size-4 text-danger" />
+          <p className="text-body-sm text-danger">{file.error}</p>
         </Centred>
       ) : file.status === 'binary' ? (
         <Centred>
-          <FileWarning className='size-4 text-fg-4' />
-          <p className='text-body-sm text-fg-4'>This file isn’t text.</p>
+          <FileWarning className="size-4 text-fg-4" />
+          <p className="text-body-sm text-fg-4">This file isn’t text.</p>
           {/* Said out loud, because "can't show it" and "editing it here would
               destroy it" are different reassurances. */}
-          <p className='text-label text-fg-4'>It can’t be edited here without corrupting it.</p>
+          <p className="text-label text-fg-4">It can’t be edited here without corrupting it.</p>
         </Centred>
       ) : (
         <CodeEditor
@@ -107,29 +105,27 @@ export function FileViewer({
       {/* A status strip only while there is something to say. Saving is fast
           enough that a permanent row would mostly be blank. */}
       {file.status === 'ready' && (file.saving || isDirty(file) || !canWrite) ? (
-        <div className='flex shrink-0 items-center gap-2 border-t border-border px-3 py-1'>
+        <div className="flex shrink-0 items-center gap-2 border-t border-border px-3 py-1">
           {file.saving ? (
             <>
-              <Spinner className='size-3 text-fg-4' />
-              <span className='text-label text-fg-4'>Saving…</span>
+              <Spinner className="size-3 text-fg-4" />
+              <span className="text-label text-fg-4">Saving…</span>
             </>
           ) : !canWrite ? (
-            <span className='text-label text-fg-4'>
-              Read-only — this gateway doesn’t allow writes.
-            </span>
+            <span className="text-label text-fg-4">Read-only — this gateway doesn’t allow writes.</span>
           ) : (
             <>
-              <span className='text-label text-fg-3'>Unsaved changes</span>
-              <span className='flex-1' />
+              <span className="text-label text-fg-3">Unsaved changes</span>
+              <span className="flex-1" />
               {/* Revert, not reload: discard *my* edits and go back to what
                   this tab read. Re-reading is the conflict bar's job, and it is
                   a different question. */}
-              <Button variant='ghost' size='xs' onClick={() => onRevert?.(file.path)}>
+              <Button variant="ghost" size="xs" onClick={() => onRevert?.(file.path)}>
                 Revert
               </Button>
-              <Button variant='outline' size='xs' onClick={() => onSave?.(file.path)}>
+              <Button variant="outline" size="xs" onClick={() => onSave?.(file.path)}>
                 Save
-                <span className='ml-1 text-fg-4'>⌘S</span>
+                <span className="ml-1 text-fg-4">⌘S</span>
               </Button>
             </>
           )}
@@ -140,9 +136,5 @@ export function FileViewer({
 }
 
 function Centred({ children }: { children: ReactNode }) {
-  return (
-    <div className='flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6'>
-      {children}
-    </div>
-  )
+  return <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6">{children}</div>
 }

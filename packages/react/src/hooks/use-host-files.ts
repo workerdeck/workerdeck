@@ -32,10 +32,7 @@ export type UseHostFileSearchResult = {
  * holds. Asking again on every character would be a request per keystroke for a
  * feature that does not exist here.
  */
-export function useHostFileSearch(
-  client: WorkerDeckClient,
-  cwd: string | undefined,
-): UseHostFileSearchResult {
+export function useHostFileSearch(client: WorkerDeckClient, cwd: string | undefined): UseHostFileSearchResult {
   const [unsupported, setUnsupported] = useState(false)
   // A resume into a different directory invalidates the verdict as well as the
   // results — the new cwd may well be under a configured root.
@@ -49,13 +46,17 @@ export function useHostFileSearch(
 
   const search = useCallback(
     async (query: string, options?: { limit?: number; signal?: AbortSignal }) => {
-      if (!cwd || unsupported) return []
+      if (!cwd || unsupported) {
+        return []
+      }
       try {
         const response = await client.findHostFiles(cwd, query, options?.limit ?? 8)
         return options?.signal?.aborted ? [] : response.matches
       } catch (e) {
         // No host files on this gateway (or the cwd isn't under a root).
-        if (e instanceof WorkerDeckError && e.status === 404) setUnsupported(true)
+        if (e instanceof WorkerDeckError && e.status === 404) {
+          setUnsupported(true)
+        }
         return []
       }
     },
@@ -96,13 +97,17 @@ export function useHostFileRoots(client: WorkerDeckClient): UseHostFileRootsResu
     client
       .listHostRoots()
       .then((response) => {
-        if (!cancelled) setResult({ available: true, canWrite: response.canWrite })
+        if (!cancelled) {
+          setResult({ available: true, canWrite: response.canWrite })
+        }
       })
       // A 404 means no host files here; anything else means we could not find
       // out. Both answer the same way, because the safe default for "may I
       // write to the operator's disk?" is no.
       .catch(() => {
-        if (!cancelled) setResult({ available: false, canWrite: false })
+        if (!cancelled) {
+          setResult({ available: false, canWrite: false })
+        }
       })
     return () => {
       cancelled = true
@@ -152,10 +157,7 @@ export type UseHostFileTreeResult = {
  * Like the search hook, a 404 is answered once for the session: host files are
  * either configured here or they are not.
  */
-export function useHostFileTree(
-  client: WorkerDeckClient,
-  cwd: string | undefined,
-): UseHostFileTreeResult {
+export function useHostFileTree(client: WorkerDeckClient, cwd: string | undefined): UseHostFileTreeResult {
   const [dirs, setDirs] = useState<Map<string, HostDirState>>(() => new Map())
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [unsupported, setUnsupported] = useState(false)
@@ -165,7 +167,9 @@ export function useHostFileTree(
   // 404 verdict — the new cwd may well be under a configured root.
   const lastCwd = useRef(cwd)
   useEffect(() => {
-    if (lastCwd.current === cwd) return
+    if (lastCwd.current === cwd) {
+      return
+    }
     lastCwd.current = cwd
     setDirs(new Map())
     setExpanded(new Set())
@@ -188,13 +192,19 @@ export function useHostFileTree(
 
   const list = useCallback(
     (target: string, { force = false } = {}) => {
-      if (unsupported) return
-      if (!force && requested.current.has(target)) return
+      if (unsupported) {
+        return
+      }
+      if (!force && requested.current.has(target)) {
+        return
+      }
       requested.current.add(target)
       client
         .listHostDir(target)
         .then((response) => {
-          if (!alive.current) return
+          if (!alive.current) {
+            return
+          }
           setDirs((previous) => {
             const next = new Map(previous)
             // Keyed on the requested path, not the canonical one the server
@@ -205,7 +215,9 @@ export function useHostFileTree(
           })
         })
         .catch((e: unknown) => {
-          if (!alive.current) return
+          if (!alive.current) {
+            return
+          }
           requested.current.delete(target)
           if (e instanceof WorkerDeckError && e.status === 404) {
             // No host files on this gateway, or the cwd is not under a root.
@@ -221,15 +233,20 @@ export function useHostFileTree(
 
   // The root lists itself; everything below is listed on expand.
   useEffect(() => {
-    if (cwd) list(cwd)
+    if (cwd) {
+      list(cwd)
+    }
   }, [cwd, list])
 
   const toggle = useCallback(
     (path: string) => {
       setExpanded((previous) => {
         const next = new Set(previous)
-        if (next.has(path)) next.delete(path)
-        else next.add(path)
+        if (next.has(path)) {
+          next.delete(path)
+        } else {
+          next.add(path)
+        }
         return next
       })
       // Outside the updater on purpose — React may run an updater twice, and a
@@ -244,13 +261,21 @@ export function useHostFileTree(
 
   const reveal = useCallback(
     (path: string) => {
-      if (!cwd) return
+      if (!cwd) {
+        return
+      }
       const ancestors = ancestorsWithin(cwd, path)
-      if (ancestors.length === 0) return
-      for (const dir of ancestors) list(dir)
+      if (ancestors.length === 0) {
+        return
+      }
+      for (const dir of ancestors) {
+        list(dir)
+      }
       setExpanded((previous) => {
         const next = new Set(previous)
-        for (const dir of ancestors) next.add(dir)
+        for (const dir of ancestors) {
+          next.add(dir)
+        }
         return next
       })
     },
@@ -260,17 +285,16 @@ export function useHostFileTree(
   const refresh = useCallback(
     (path?: string) => {
       const target = path ?? cwd
-      if (!target) return
+      if (!target) {
+        return
+      }
       setError(undefined)
       list(target, { force: true })
     },
     [cwd, list],
   )
 
-  const rows = useMemo(
-    () => (cwd ? flattenHostTree(cwd, dirs, expanded) : []),
-    [cwd, dirs, expanded],
-  )
+  const rows = useMemo(() => (cwd ? flattenHostTree(cwd, dirs, expanded) : []), [cwd, dirs, expanded])
 
   return {
     available: !!cwd && !unsupported,

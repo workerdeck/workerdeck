@@ -16,17 +16,7 @@ import { cn } from '../../lib/utils.ts'
  */
 
 /** The palette, as a name. See the `[data-tone]` rules in `terminal.css`. */
-export type Tone =
-  | 'fg'
-  | 'bright'
-  | 'dim'
-  | 'faint'
-  | 'mark'
-  | 'blue'
-  | 'green'
-  | 'red'
-  | 'yellow'
-  | 'magenta'
+export type Tone = 'fg' | 'bright' | 'dim' | 'faint' | 'mark' | 'blue' | 'green' | 'red' | 'yellow' | 'magenta'
 
 export interface RowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
   /**
@@ -55,18 +45,7 @@ export interface RowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children
   children?: ReactNode
 }
 
-export function Row({
-  glyph,
-  glyphTone,
-  tone,
-  bold,
-  indent,
-  columns,
-  className,
-  children,
-  style,
-  ...props
-}: RowProps) {
+export function Row({ glyph, glyphTone, tone, bold, indent, columns, className, children, style, ...props }: RowProps) {
   return (
     <div
       className={cn('term-row', className)}
@@ -75,18 +54,15 @@ export function Row({
       data-weight={bold ? 'bold' : undefined}
       // `!== undefined`, not truthiness: `columns={0}` is a real request for a
       // gutterless row (a framed payload) and must not fall back to the default.
-      style={
-        columns === undefined
-          ? style
-          : ({ ...style, '--term-cell': `${columns}ch` } as CSSProperties)
-      }
-      {...props}>
-      <span className='term-gutter' data-tone={glyphTone} aria-hidden>
+      style={columns === undefined ? style : ({ ...style, '--term-cell': `${columns}ch` } as CSSProperties)}
+      {...props}
+    >
+      <span className="term-gutter" data-tone={glyphTone} aria-hidden>
         {glyph ?? ' '}
       </span>
       {/* A div, not a span: a body holds block content (a markdown message, a
           band of output) as often as it holds a line of text. */}
-      <div className='term-body'>{children}</div>
+      <div className="term-body">{children}</div>
     </div>
   )
 }
@@ -101,7 +77,7 @@ export function Row({
  * rule that cannot tell them apart.
  */
 export function Blank() {
-  return <div className='term-blank' aria-hidden />
+  return <div className="term-blank" aria-hidden />
 }
 
 /**
@@ -115,18 +91,6 @@ export function Band({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
 }
 
 /** Inline colour/weight inside a row's body. */
-export function Ink({
-  tone,
-  bold,
-  className,
-  ...props
-}: HTMLAttributes<HTMLSpanElement> & { tone?: Tone; bold?: boolean }) {
-  return (
-    <span
-      data-tone={tone}
-      data-weight={bold ? 'bold' : undefined}
-      className={className}
-      {...props}
-    />
-  )
+export function Ink({ tone, bold, className, ...props }: HTMLAttributes<HTMLSpanElement> & { tone?: Tone; bold?: boolean }) {
+  return <span data-tone={tone} data-weight={bold ? 'bold' : undefined} className={className} {...props} />
 }

@@ -88,10 +88,7 @@ export function parentOf(item: TranscriptItem): string | undefined {
  * than on absence of one. Row indices are internally consistent because the rows
  * and the `items` they came from are the same array.
  */
-export function subagentItems(
-  items: readonly TranscriptItem[],
-  parentToolUseId: string,
-): TranscriptItem[] {
+export function subagentItems(items: readonly TranscriptItem[], parentToolUseId: string): TranscriptItem[] {
   return items.filter((item) => parentOf(item) === parentToolUseId)
 }
 
@@ -185,11 +182,7 @@ function pushLeaf(out: LeafBlock[], item: TranscriptItem, index: number): void {
  *   renders: this is the terminal theme's rule and must not silently reshape
  *   another renderer's row list.
  */
-export function terminalBlocks(
-  items: readonly TranscriptItem[],
-  offset = 0,
-  fold = true,
-): TerminalBlock[] {
+export function terminalBlocks(items: readonly TranscriptItem[], offset = 0, fold = true): TerminalBlock[] {
   if (!fold) {
     return items.map((item, position) => ({
       key: `${item.kind}:${item.id}`,
@@ -204,15 +197,20 @@ export function terminalBlocks(
   // task until every item has been seen.
   const topLevelCalls = new Set<string>()
   for (const item of items) {
-    if (item.kind === 'tool_call' && parentOf(item) === undefined) topLevelCalls.add(item.id)
+    if (item.kind === 'tool_call' && parentOf(item) === undefined) {
+      topLevelCalls.add(item.id)
+    }
   }
   const childrenOf = new Map<string, { item: TranscriptItem; index: number }[]>()
   items.forEach((item, position) => {
     const parent = parentOf(item)
     if (parent !== undefined && topLevelCalls.has(parent)) {
       const list = childrenOf.get(parent)
-      if (list) list.push({ item, index: offset + position })
-      else childrenOf.set(parent, [{ item, index: offset + position }])
+      if (list) {
+        list.push({ item, index: offset + position })
+      } else {
+        childrenOf.set(parent, [{ item, index: offset + position }])
+      }
     }
   })
 
@@ -221,12 +219,16 @@ export function terminalBlocks(
     const index = offset + position
     const parent = parentOf(item)
     // Absorbed into its task's row — it must not also appear as its own.
-    if (parent !== undefined && childrenOf.has(parent)) continue
+    if (parent !== undefined && childrenOf.has(parent)) {
+      continue
+    }
     if (item.kind === 'tool_call') {
       const children = childrenOf.get(item.id)
       if (children) {
         const folded: LeafBlock[] = []
-        for (const child of children) pushLeaf(folded, child.item, child.index)
+        for (const child of children) {
+          pushLeaf(folded, child.item, child.index)
+        }
         out.push({
           key: `task:${item.id}`,
           task: item,
@@ -246,7 +248,9 @@ export function terminalBlocks(
  * Tool output already sits under its call, and a run of tool calls reads as one
  * block — the CLI leaves no blank line inside either. */
 export function needsBlank(previous: TranscriptItem, next: TranscriptItem): boolean {
-  if (previous.kind === 'tool_call' && next.kind === 'tool_call') return false
+  if (previous.kind === 'tool_call' && next.kind === 'tool_call') {
+    return false
+  }
   return true
 }
 

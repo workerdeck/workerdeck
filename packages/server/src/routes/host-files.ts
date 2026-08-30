@@ -14,21 +14,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { WriteHostFileRequest } from '@workerdeck/protocol'
 import { asUtf8, hashBytes, json, readJsonBody } from '../lib/http.ts'
 import { searchFiles } from '../services/host-file-search.ts'
-import {
-  entryKind,
-  readContained,
-  resolveExisting,
-  resolveForWrite,
-  writeContained,
-} from '../services/host-files.ts'
+import { entryKind, readContained, resolveExisting, resolveForWrite, writeContained } from '../services/host-files.ts'
 import type { ServerContext } from '../context.ts'
 
-export async function handleHostFiles(
-  ctx: ServerContext,
-  req: IncomingMessage,
-  res: ServerResponse,
-  pathname: string,
-): Promise<void> {
+export async function handleHostFiles(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
   const { basePath, hostFiles, hostFilesWritable, maxHostFileBytes, maxHostDirEntries } = ctx
   if (!hostFiles) {
     json(res, 404, { error: 'host file access is not configured on this server' })

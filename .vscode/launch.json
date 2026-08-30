@@ -1,12 +1,14 @@
 {
   "version": "0.2.0",
-  "configurations": [{
-    "name": "Run WorkerDeck Extension",
-    "type": "extensionHost",
-    "request": "launch",
-    "cwd": "${workspaceFolder}/apps/vscode",
-    "args": ["--extensionDevelopmentPath=${workspaceFolder}/apps/vscode"],
-    "outFiles": ["${workspaceFolder}/apps/vscode/dist/**/*.js", "${workspaceFolder}/apps/vscode/dist/**/*.cjs"],
-    "preLaunchTask": "workerdeck-vscode: build"
-  }]
+  "configurations": [
+    {
+      "name": "Run WorkerDeck Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/apps/vscode",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/apps/vscode"],
+      "outFiles": ["${workspaceFolder}/apps/vscode/dist/**/*.js", "${workspaceFolder}/apps/vscode/dist/**/*.cjs"],
+      "preLaunchTask": "workerdeck-vscode: build"
+    }
+  ]
 }

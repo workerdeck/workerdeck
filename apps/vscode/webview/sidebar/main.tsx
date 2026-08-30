@@ -11,7 +11,9 @@ syncVsCodeTheme()
 const bridge = new Bridge(['wd-sidebar-state', 'wd-vitals'])
 
 const root = document.getElementById('root')
-if (!root) throw new Error('Root element #root not found')
+if (!root) {
+  throw new Error('Root element #root not found')
+}
 
 createRoot(root).render(
   <StrictMode>

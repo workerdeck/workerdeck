@@ -41,14 +41,7 @@ export interface CodeEditorProps {
  * survive clicking away and back — which is most of what makes tabs feel like
  * tabs rather than like re-opening a file.
  */
-export function CodeEditor({
-  path,
-  value,
-  onChange,
-  onSave,
-  readOnly,
-  className,
-}: CodeEditorProps) {
+export function CodeEditor({ path, value, onChange, onSave, readOnly, className }: CodeEditorProps) {
   const host = useRef<HTMLDivElement>(null)
   const editor = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
   const monaco = useRef<typeof Monaco | null>(null)
@@ -64,7 +57,9 @@ export function CodeEditor({
   useEffect(() => {
     let disposed = false
     void loadMonaco().then((api) => {
-      if (disposed || !host.current) return
+      if (disposed || !host.current) {
+        return
+      }
       monaco.current = api
       const instance = api.editor.create(host.current, {
         value,
@@ -76,8 +71,7 @@ export function CodeEditor({
         scrollBeyondLastLine: false,
         fontSize: 12,
         lineHeight: 20,
-        fontFamily:
-          'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+        fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
         renderLineHighlight: 'line',
         smoothScrolling: true,
         padding: { top: 8, bottom: 8 },
@@ -115,10 +109,14 @@ export function CodeEditor({
   useEffect(() => {
     const api = monaco.current
     const instance = editor.current
-    if (!api || !instance || !ready) return
+    if (!api || !instance || !ready) {
+      return
+    }
     const uri = api.Uri.parse(`workerdeck://host${path}`)
     const model = api.editor.getModel(uri) ?? api.editor.createModel(value, languageOf(path), uri)
-    if (instance.getModel() !== model) instance.setModel(model)
+    if (instance.getModel() !== model) {
+      instance.setModel(model)
+    }
   }, [path, ready, value])
 
   // Apply an external change — a reload from disk, a revert — without
@@ -126,34 +124,38 @@ export function CodeEditor({
   // because most changes to `value` are echoes of the user's own typing.
   useEffect(() => {
     const instance = editor.current
-    if (!instance || !ready) return
+    if (!instance || !ready) {
+      return
+    }
     const model = instance.getModel()
-    if (!model || model.getValue() === value) return
+    if (!model || model.getValue() === value) {
+      return
+    }
     // `pushEditOperations` rather than `setValue` so the replacement joins the
     // undo stack instead of clearing it.
-    model.pushEditOperations(
-      [],
-      [{ range: model.getFullModelRange(), text: value }],
-      () => null,
-    )
+    model.pushEditOperations([], [{ range: model.getFullModelRange(), text: value }], () => null)
   }, [value, ready])
 
   useEffect(() => {
-    if (ready) editor.current?.updateOptions({ readOnly })
+    if (ready) {
+      editor.current?.updateOptions({ readOnly })
+    }
   }, [readOnly, ready])
 
   // The theme is global to Monaco, not per-editor — `setTheme` is on the
   // namespace for that reason.
   useEffect(() => {
-    if (ready) monaco.current?.editor.setTheme(monacoTheme(theme))
+    if (ready) {
+      monaco.current?.editor.setTheme(monacoTheme(theme))
+    }
   }, [theme, ready])
 
   return (
     <div className={cn('relative min-h-0 min-w-0 flex-1', className)}>
-      <div ref={host} className='absolute inset-0' />
+      <div ref={host} className="absolute inset-0" />
       {!ready ? (
-        <div className='absolute inset-0 flex items-center justify-center bg-bg'>
-          <Spinner className='size-4 text-fg-4' />
+        <div className="absolute inset-0 flex items-center justify-center bg-bg">
+          <Spinner className="size-4 text-fg-4" />
         </div>
       ) : null}
     </div>
@@ -228,7 +230,9 @@ function loadMonaco(): Promise<typeof Monaco> {
 function languageOf(path: string): string {
   const name = path.slice(path.lastIndexOf('/') + 1)
   const byName = FILENAME_LANGUAGES[name.toLowerCase()]
-  if (byName) return byName
+  if (byName) {
+    return byName
+  }
   const extension = name.slice(name.lastIndexOf('.') + 1).toLowerCase()
   return EXTENSION_LANGUAGES[extension] ?? 'plaintext'
 }

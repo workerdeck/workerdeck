@@ -18,7 +18,9 @@ export function AnimatedPlaceholder({ texts, interval = 3000 }: AnimatedPlacehol
   const [index, setIndex] = useState(0)
 
   useEffect(() => {
-    if (texts.length <= 1) return
+    if (texts.length <= 1) {
+      return
+    }
 
     const id = setInterval(() => {
       setIndex((prev) => (prev + 1) % texts.length)
@@ -31,10 +33,9 @@ export function AnimatedPlaceholder({ texts, interval = 3000 }: AnimatedPlacehol
     <div
       className="pointer-events-none absolute top-0 left-0 overflow-hidden select-none"
       style={{ color: 'var(--prompt-area-placeholder, var(--muted-foreground))' }}
-      aria-hidden="true">
-      <div
-        key={index}
-        className="animate-in fade-in-0 slide-in-from-top-4 duration-300 ease-in-out">
+      aria-hidden="true"
+    >
+      <div key={index} className="animate-in fade-in-0 slide-in-from-top-4 duration-300 ease-in-out">
         {texts[index]}
       </div>
     </div>

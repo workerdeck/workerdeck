@@ -52,10 +52,6 @@
   pointer-events: none;
   background-image:
     repeating-linear-gradient(to right, rgb(255 0 128 / 0.14) 0 1px, transparent 1px 1ch),
-    repeating-linear-gradient(
-      to bottom,
-      rgb(0 200 255 / 0.16) 0 1px,
-      transparent 1px var(--term-line)
-    );
+    repeating-linear-gradient(to bottom, rgb(0 200 255 / 0.16) 0 1px, transparent 1px var(--term-line));
   background-position: var(--term-bleed, 0px) var(--term-line);
 }

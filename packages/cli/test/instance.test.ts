@@ -32,7 +32,9 @@ function fakeQueryFn() {
       const resolve = waiter
       waiter = null
       resolve({ value: msg, done: false })
-    } else messages.push(msg)
+    } else {
+      messages.push(msg)
+    }
   }
   const query = {
     [Symbol.asyncIterator]() {
@@ -40,8 +42,12 @@ function fakeQueryFn() {
     },
     next(): Promise<IteratorResult<SDKMessage>> {
       const buffered = messages.shift()
-      if (buffered !== undefined) return Promise.resolve({ value: buffered, done: false })
-      if (done) return Promise.resolve({ value: undefined, done: true })
+      if (buffered !== undefined) {
+        return Promise.resolve({ value: buffered, done: false })
+      }
+      if (done) {
+        return Promise.resolve({ value: undefined, done: true })
+      }
       return new Promise((resolve) => {
         waiter = resolve
       })
@@ -112,13 +118,10 @@ async function start(
 /** A GET with a Host header of our choosing — see the rebinding test. */
 function rawGet(port: number, path: string, host: string): Promise<{ status: number }> {
   return new Promise((resolve, reject) => {
-    const req = request(
-      { host: '127.0.0.1', port, path, method: 'GET', headers: { host } },
-      (res) => {
-        res.resume()
-        res.on('end', () => resolve({ status: res.statusCode ?? 0 }))
-      },
-    )
+    const req = request({ host: '127.0.0.1', port, path, method: 'GET', headers: { host } }, (res) => {
+      res.resume()
+      res.on('end', () => resolve({ status: res.statusCode ?? 0 }))
+    })
     req.on('error', reject)
     req.end()
   })
@@ -263,9 +266,7 @@ describe('an instance that generates its own key', () => {
     expect((await fetch(`${base}/`)).status).toBe(401)
     expect((await fetch(`${base}/v1/sessions`)).status).toBe(401)
     // The stored key is the live secret on both transports.
-    expect(
-      (await fetch(`${base}/v1/sessions`, { headers: { 'x-workerdeck-key': key } })).status,
-    ).toBe(200)
+    expect((await fetch(`${base}/v1/sessions`, { headers: { 'x-workerdeck-key': key } })).status).toBe(200)
   })
 
   it('reuses the stored key across restarts — clients stay paired', async () => {
@@ -421,11 +422,7 @@ describe('apns device route', () => {
 
   it('registers a device with the same key the app already holds', async () => {
     const { base, stateDir } = await start(['--auth-key', SECRET], { apns: await apnsConfig() })
-    const res = await register(
-      base,
-      { token: TOKEN, environment: 'development', hostId: 'host-a' },
-      { authorization: `Bearer ${SECRET}` },
-    )
+    const res = await register(base, { token: TOKEN, environment: 'development', hostId: 'host-a' }, { authorization: `Bearer ${SECRET}` })
     expect(res.status).toBe(200)
     // The environment is echoed because it is the one fact that is expensive to
     // get wrong and invisible from the client otherwise.
@@ -442,11 +439,7 @@ describe('apns device route', () => {
 
   it('404s when the instance has no forwarder — how the app learns not to ask', async () => {
     const { base } = await start(['--auth-key', SECRET])
-    const res = await register(
-      base,
-      { token: TOKEN, environment: 'development' },
-      { authorization: `Bearer ${SECRET}` },
-    )
+    const res = await register(base, { token: TOKEN, environment: 'development' }, { authorization: `Bearer ${SECRET}` })
     // Exactly 404, not merely "not 200". The app reads 404 as `unsupported` and
     // stops asking; anything else it treats as a broken gateway, so it throws,
     // never marks the host synced, and retries on every foreground. This
@@ -458,11 +451,7 @@ describe('apns device route', () => {
 
   it('404s the same way with the dashboard off, and never serves a document there', async () => {
     const { base } = await start(['--auth-key', SECRET, '--no-web'])
-    const res = await register(
-      base,
-      { token: TOKEN, environment: 'development' },
-      { authorization: `Bearer ${SECRET}` },
-    )
+    const res = await register(base, { token: TOKEN, environment: 'development' }, { authorization: `Bearer ${SECRET}` })
     expect(res.status).toBe(404)
     expect(res.headers.get('content-type') ?? '').not.toContain('text/html')
   })

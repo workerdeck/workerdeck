@@ -7,18 +7,13 @@ export const Menu = MenuPrimitive.Root
 export const MenuTrigger = MenuPrimitive.Trigger
 
 export const MenuContent: FunctionComponent<
-  MenuPrimitive.Popup.Props &
-    Pick<MenuPrimitive.Positioner.Props, 'align' | 'side' | 'sideOffset'>
+  MenuPrimitive.Popup.Props & Pick<MenuPrimitive.Positioner.Props, 'align' | 'side' | 'sideOffset'>
 > = ({ className, align = 'end', side = 'bottom', sideOffset = 6, ...props }) => (
   <MenuPrimitive.Portal>
     <PortalScope>
-      <MenuPrimitive.Positioner
-        align={align}
-        side={side}
-        sideOffset={sideOffset}
-        className='isolate z-80 outline-none'>
+      <MenuPrimitive.Positioner align={align} side={side} sideOffset={sideOffset} className="isolate z-80 outline-none">
         <MenuPrimitive.Popup
-          data-slot='menu-content'
+          data-slot="menu-content"
           className={cn(
             'min-w-48 rounded-md border border-border bg-surface p-1 text-fg-1 shadow-(--shadow-lg) outline-none',
             'transition-[opacity,transform] duration-(--motion-base)',
@@ -33,13 +28,9 @@ export const MenuContent: FunctionComponent<
   </MenuPrimitive.Portal>
 )
 
-export const MenuItem: FunctionComponent<MenuPrimitive.Item.Props & { destructive?: boolean }> = ({
-  className,
-  destructive,
-  ...props
-}) => (
+export const MenuItem: FunctionComponent<MenuPrimitive.Item.Props & { destructive?: boolean }> = ({ className, destructive, ...props }) => (
   <MenuPrimitive.Item
-    data-slot='menu-item'
+    data-slot="menu-item"
     className={cn(
       'flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-body-sm outline-none select-none',
       'data-highlighted:bg-surface-hover',
@@ -50,9 +41,6 @@ export const MenuItem: FunctionComponent<MenuPrimitive.Item.Props & { destructiv
   />
 )
 
-export const MenuSeparator: FunctionComponent<MenuPrimitive.Separator.Props> = ({
-  className,
-  ...props
-}) => (
+export const MenuSeparator: FunctionComponent<MenuPrimitive.Separator.Props> = ({ className, ...props }) => (
   <MenuPrimitive.Separator className={cn('my-1 h-px bg-border', className)} {...props} />
 )

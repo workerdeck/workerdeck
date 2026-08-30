@@ -32,13 +32,11 @@ export function EditorTabs({ files, activePath, onActivate, onClose, className }
     // instead of re-serving the open delay on every tab.
     <TooltipProvider delay={500} closeDelay={0}>
       <div
-        data-slot='editor-tabs'
-        role='tablist'
-        aria-label='Open files'
-        className={cn(
-          'flex shrink-0 items-stretch overflow-x-auto border-b border-border bg-surface',
-          className,
-        )}>
+        data-slot="editor-tabs"
+        role="tablist"
+        aria-label="Open files"
+        className={cn('flex shrink-0 items-stretch overflow-x-auto border-b border-border bg-surface', className)}
+      >
         {files.map((file) => (
           <Tab
             key={file.path}
@@ -49,7 +47,9 @@ export function EditorTabs({ files, activePath, onActivate, onClose, className }
             onArrow={(direction) => {
               const index = files.findIndex((f) => f.path === file.path)
               const next = files[index + direction]
-              if (next) onActivate(next.path)
+              if (next) {
+                onActivate(next.path)
+              }
             }}
           />
         ))}
@@ -77,13 +77,17 @@ function Tab({
   // the point of opening it was to look at it. `nearest` scrolls the minimum, so
   // a tab already on screen stays exactly where it is.
   useEffect(() => {
-    if (active) ref.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    if (active) {
+      ref.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    }
   }, [active])
 
   const onAuxClick = (event: ReactMouseEvent) => {
     // Middle click. `auxclick` rather than `mousedown` so it matches how every
     // other middle-click target on the platform behaves.
-    if (event.button !== 1) return
+    if (event.button !== 1) {
+      return
+    }
     event.preventDefault()
     onClose()
   }
@@ -94,20 +98,25 @@ function Tab({
     // nobody reads. No `title` alongside it: the browser's native tooltip would
     // show up underneath this one.
     <Tip
-      side='bottom'
+      side="bottom"
       render={
         <div
           ref={ref}
-          role='tab'
+          role="tab"
           tabIndex={active ? 0 : -1}
           aria-selected={active}
           onClick={onActivate}
           onAuxClick={onAuxClick}
           onKeyDown={(event) => {
-            if (event.key === 'ArrowRight') onArrow(1)
-            else if (event.key === 'ArrowLeft') onArrow(-1)
-            else if (event.key === 'Enter' || event.key === ' ') onActivate()
-            else return
+            if (event.key === 'ArrowRight') {
+              onArrow(1)
+            } else if (event.key === 'ArrowLeft') {
+              onArrow(-1)
+            } else if (event.key === 'Enter' || event.key === ' ') {
+              onActivate()
+            } else {
+              return
+            }
             event.preventDefault()
           }}
           className={cn(
@@ -118,21 +127,18 @@ function Tab({
         />
       }
       content={
-        <span className='flex flex-col gap-0.5'>
-          <span className='font-mono break-all'>{file.path}</span>
-          {file.bytes !== undefined ? (
-            <span className='text-fg-4'>{formatBytes(file.bytes)}</span>
-          ) : null}
+        <span className="flex flex-col gap-0.5">
+          <span className="font-mono break-all">{file.path}</span>
+          {file.bytes !== undefined ? <span className="text-fg-4">{formatBytes(file.bytes)}</span> : null}
         </span>
-      }>
-      <span className={cn('max-w-40 truncate font-mono text-label', dirty && 'italic')}>
-        {file.name}
-      </span>
+      }
+    >
+      <span className={cn('max-w-40 truncate font-mono text-label', dirty && 'italic')}>{file.name}</span>
       {/* Errors are the one state the strip shows, because a failed tab
           otherwise looks identical to a loaded one until you focus it. */}
-      {file.status === 'error' ? <span className='shrink-0 text-danger'>!</span> : null}
+      {file.status === 'error' ? <span className="shrink-0 text-danger">!</span> : null}
       <button
-        type='button'
+        type="button"
         aria-label={dirty ? `Close ${file.name} (unsaved changes)` : `Close ${file.name}`}
         onClick={(event) => {
           // Without this the click also activates the tab being closed, which
@@ -144,19 +150,18 @@ function Tab({
           'shrink-0 rounded p-0.5 text-fg-4 transition-opacity hover:bg-surface-hover hover:text-fg-1',
           // Always reachable by keyboard and on touch; only *shown* on hover for
           // the tab you are pointing at, as VS Code does.
-          active || dirty
-            ? 'opacity-70'
-            : 'opacity-0 group-hover:opacity-70 focus-visible:opacity-100',
-        )}>
+          active || dirty ? 'opacity-70' : 'opacity-0 group-hover:opacity-70 focus-visible:opacity-100',
+        )}
+      >
         {/* VS Code's move: a dirty tab shows a dot where the ✕ goes, and the ✕
             comes back when you point at it — so unsaved work is visible at rest
             without taking away the way to close it. */}
         <span className={cn('block', dirty && 'group-hover:hidden')}>
-          {dirty ? <span className='block size-3 rounded-full bg-fg-2' /> : <X className='size-3' />}
+          {dirty ? <span className="block size-3 rounded-full bg-fg-2" /> : <X className="size-3" />}
         </span>
         {dirty ? (
-          <span className='hidden group-hover:block'>
-            <X className='size-3' />
+          <span className="hidden group-hover:block">
+            <X className="size-3" />
           </span>
         ) : null}
       </button>

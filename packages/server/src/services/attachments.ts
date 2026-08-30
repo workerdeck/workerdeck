@@ -15,9 +15,7 @@ export type AttachmentRejection =
   | { code: 'unsupported_type'; message: string }
   | { code: 'empty'; message: string }
 
-export type PutResult =
-  | { ok: true; attachment: MessageAttachment }
-  | { ok: false; error: AttachmentRejection }
+export type PutResult = { ok: true; attachment: MessageAttachment } | { ok: false; error: AttachmentRejection }
 
 const DEFAULT_MAX_FILE_BYTES = 10 * 1024 * 1024
 const DEFAULT_MAX_SESSION_BYTES = 64 * 1024 * 1024
@@ -112,8 +110,11 @@ export class AttachmentStore {
     const missing: string[] = []
     for (const id of ids) {
       const found = held?.get(id)
-      if (found) attachments.push(found)
-      else missing.push(id)
+      if (found) {
+        attachments.push(found)
+      } else {
+        missing.push(id)
+      }
     }
     return missing.length ? { ok: false, missing } : { ok: true, attachments }
   }
@@ -144,6 +145,8 @@ function safeName(name: string): string {
   // client-supplied and ends up both in a response header and in front of a model.
   // oxlint-disable-next-line no-control-regex
   const cleaned = leaf.replace(/[\u0000-\u001f\u007f"<>]/g, '').trim()
-  if (cleaned === '' || cleaned === '.' || cleaned === '..') return 'attachment'
+  if (cleaned === '' || cleaned === '.' || cleaned === '..') {
+    return 'attachment'
+  }
   return cleaned.length > 120 ? cleaned.slice(0, 120) : cleaned
 }

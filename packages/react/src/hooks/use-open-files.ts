@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { WorkerDeckError, type WorkerDeckClient } from '@workerdeck/client'
-import {
-  currentText,
-  initialOpenFilesState,
-  isDirty,
-  openFilesReducer,
-  type OpenFile,
-  type OpenFilesState,
-} from '../lib/open-files.ts'
+import { currentText, initialOpenFilesState, isDirty, openFilesReducer, type OpenFile, type OpenFilesState } from '../lib/open-files.ts'
 
 export type UseOpenFilesResult = OpenFilesState & {
   /** The focused file, resolved — what the editor renders. */
@@ -82,7 +75,9 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
   const read = useCallback(
     (path: string) =>
       client.readHostFile(path).then((response) => {
-        if (!alive.current) return undefined
+        if (!alive.current) {
+          return undefined
+        }
         dispatch({
           type: 'loaded',
           // The gateway answers with the canonical path; the tab is keyed on
@@ -102,10 +97,14 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
 
   useEffect(() => {
     for (const path of pending ? pending.split('\n') : []) {
-      if (requested.current.has(path)) continue
+      if (requested.current.has(path)) {
+        continue
+      }
       requested.current.add(path)
       read(path).catch((e: unknown) => {
-        if (!alive.current) return
+        if (!alive.current) {
+          return
+        }
         dispatch({
           type: 'failed',
           path,
@@ -127,21 +126,17 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
     dispatch({ type: 'closeAll' })
   }, [])
   const activate = useCallback((path: string) => dispatch({ type: 'activate', path }), [])
-  const edit = useCallback(
-    (path: string, content: string) => dispatch({ type: 'edit', path, content }),
-    [],
-  )
+  const edit = useCallback((path: string, content: string) => dispatch({ type: 'edit', path, content }), [])
   const revert = useCallback((path: string) => dispatch({ type: 'revert', path }), [])
-  const dismissConflict = useCallback(
-    (path: string) => dispatch({ type: 'dismissConflict', path }),
-    [],
-  )
+  const dismissConflict = useCallback((path: string) => dispatch({ type: 'dismissConflict', path }), [])
 
   const reload = useCallback(
     (path: string) => {
       requested.current.add(path)
       read(path).catch((e: unknown) => {
-        if (!alive.current) return
+        if (!alive.current) {
+          return
+        }
         dispatch({
           type: 'failed',
           path,
@@ -158,7 +153,9 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
     async (path: string, text: string, expectedHash: string | undefined) => {
       try {
         const response = await client.writeHostFile({ path, content: text, expectedHash })
-        if (!alive.current) return
+        if (!alive.current) {
+          return
+        }
         dispatch({
           type: 'saved',
           path,
@@ -168,7 +165,9 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
           modifiedAt: response.modifiedAt,
         })
       } catch (e) {
-        if (!alive.current) return
+        if (!alive.current) {
+          return
+        }
         // 409 is the whole point of the conditional write: the file moved under
         // this tab. It is a choice to offer, not a message to print.
         const conflict = e instanceof WorkerDeckError && e.status === 409
@@ -176,11 +175,7 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
           type: 'saveFailed',
           path,
           conflict,
-          error: conflict
-            ? 'This file changed on disk since you opened it.'
-            : e instanceof Error
-              ? e.message
-              : 'Could not save that file',
+          error: conflict ? 'This file changed on disk since you opened it.' : e instanceof Error ? e.message : 'Could not save that file',
         })
       }
     },
@@ -190,7 +185,9 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
   const save = useCallback(
     async (path: string) => {
       const file = latest.current.files.find((f) => f.path === path)
-      if (!file || file.saving || !isDirty(file)) return
+      if (!file || file.saving || !isDirty(file)) {
+        return
+      }
       dispatch({ type: 'saveStart', path })
       await write(path, currentText(file), file.hash)
     },
@@ -200,7 +197,9 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
   const overwrite = useCallback(
     async (path: string) => {
       const file = latest.current.files.find((f) => f.path === path)
-      if (!file || file.saving) return
+      if (!file || file.saving) {
+        return
+      }
       // The text to keep, captured before the re-read — `loaded` would clear the
       // draft, which is exactly what "take mine" must not do.
       const mine = currentText(file)
@@ -211,10 +210,14 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
         // window between this read and the write is small but real; a second 409
         // is the correct answer if the agent writes inside it.
         const fresh = await client.readHostFile(path)
-        if (!alive.current) return
+        if (!alive.current) {
+          return
+        }
         await write(path, mine, fresh.hash)
       } catch (e) {
-        if (!alive.current) return
+        if (!alive.current) {
+          return
+        }
         dispatch({
           type: 'saveFailed',
           path,
@@ -225,10 +228,7 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
     [client, write],
   )
 
-  const active = useMemo(
-    () => state.files.find((f) => f.path === state.activePath),
-    [state.files, state.activePath],
-  )
+  const active = useMemo(() => state.files.find((f) => f.path === state.activePath), [state.files, state.activePath])
   const hasUnsaved = useMemo(() => state.files.some(isDirty), [state.files])
 
   return {

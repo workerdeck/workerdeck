@@ -1,12 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
-import type {
-  ProfileInfo,
-  RateLimitInfo,
-  SessionEvent,
-  SessionEventBody,
-  SessionInfo,
-} from '@workerdeck/protocol'
+import type { ProfileInfo, RateLimitInfo, SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 /**
@@ -50,7 +44,11 @@ class ReportingRunner implements Runner {
   }
 
   subscribe(listener: (event: SessionEvent) => void, afterSeq = 0): () => void {
-    for (const event of this.#events) if (event.seq > afterSeq) listener(event)
+    for (const event of this.#events) {
+      if (event.seq > afterSeq) {
+        listener(event)
+      }
+    }
     this.#listeners.add(listener)
     return () => this.#listeners.delete(listener)
   }
@@ -70,7 +68,9 @@ class ReportingRunner implements Runner {
   #emit(body: SessionEventBody, ts: number): void {
     const event = { ...body, seq: ++this.#seq, ts } as SessionEvent
     this.#events.push(event)
-    for (const listener of this.#listeners) listener(event)
+    for (const listener of this.#listeners) {
+      listener(event)
+    }
   }
 }
 
@@ -84,7 +84,9 @@ type Gateway = { server: WorkerServer; base: string; built: ReportingRunner[] }
 
 const servers: WorkerServer[] = []
 afterEach(async () => {
-  for (const server of servers.splice(0)) await server.close()
+  for (const server of servers.splice(0)) {
+    await server.close()
+  }
 })
 
 async function startGateway(): Promise<Gateway> {
@@ -127,7 +129,7 @@ const getProfile = async (base: string, name: string): Promise<ProfileInfo> => {
 const resetsAtIn = (offsetMs: number): number => (Date.now() + offsetMs) / 1000
 
 describe('per-profile plan usage on GET /profiles', () => {
-  it('serves the newest reading per window, last-write-wins across the profile\'s sessions', async () => {
+  it("serves the newest reading per window, last-write-wins across the profile's sessions", async () => {
     const gateway = await startGateway()
     await create(gateway.base, 'plan-a')
 
@@ -137,14 +139,8 @@ describe('per-profile plan usage on GET /profiles', () => {
     const first = gateway.built[0]!
     const t1 = Date.now() - 5_000
     const fiveHourResets = resetsAtIn(60 * 60_000)
-    first.emitRateLimit(
-      { status: 'allowed', rateLimitType: 'five_hour', utilization: 42, resetsAt: fiveHourResets },
-      t1,
-    )
-    first.emitRateLimit(
-      { status: 'allowed', rateLimitType: 'seven_day', utilization: 10, resetsAt: resetsAtIn(3 * 86_400_000) },
-      t1,
-    )
+    first.emitRateLimit({ status: 'allowed', rateLimitType: 'five_hour', utilization: 42, resetsAt: fiveHourResets }, t1)
+    first.emitRateLimit({ status: 'allowed', rateLimitType: 'seven_day', utilization: 10, resetsAt: resetsAtIn(3 * 86_400_000) }, t1)
 
     let usage = (await getProfile(gateway.base, 'plan-a')).usage
     expect(usage?.five_hour).toEqual({
@@ -155,10 +151,7 @@ describe('per-profile plan usage on GET /profiles', () => {
 
     // A newer reading from the same session replaces only its own window.
     const t2 = t1 + 2_000
-    first.emitRateLimit(
-      { status: 'allowed', rateLimitType: 'five_hour', utilization: 63, resetsAt: fiveHourResets },
-      t2,
-    )
+    first.emitRateLimit({ status: 'allowed', rateLimitType: 'five_hour', utilization: 63, resetsAt: fiveHourResets }, t2)
     usage = (await getProfile(gateway.base, 'plan-a')).usage
     expect(usage?.five_hour?.info.utilization).toBe(63)
     expect(usage?.five_hour?.updatedAt).toBe(t2)
@@ -169,20 +162,14 @@ describe('per-profile plan usage on GET /profiles', () => {
     await create(gateway.base, 'plan-a')
     const second = gateway.built[1]!
     const t3 = t2 + 2_000
-    second.emitRateLimit(
-      { status: 'allowed', rateLimitType: 'five_hour', utilization: 70, resetsAt: fiveHourResets },
-      t3,
-    )
+    second.emitRateLimit({ status: 'allowed', rateLimitType: 'five_hour', utilization: 70, resetsAt: fiveHourResets }, t3)
     usage = (await getProfile(gateway.base, 'plan-a')).usage
     expect(usage?.five_hour?.info.utilization).toBe(70)
 
     // The stale case this feature exists for: a reading with an *older* event
     // timestamp arriving later (a replayed idle session's log) must not clobber
     // the fresher truth another session already reported.
-    first.emitRateLimit(
-      { status: 'allowed', rateLimitType: 'five_hour', utilization: 55, resetsAt: fiveHourResets },
-      t1,
-    )
+    first.emitRateLimit({ status: 'allowed', rateLimitType: 'five_hour', utilization: 55, resetsAt: fiveHourResets }, t1)
     usage = (await getProfile(gateway.base, 'plan-a')).usage
     expect(usage?.five_hour?.info.utilization).toBe(70)
     expect(usage?.five_hour?.updatedAt).toBe(t3)
@@ -221,10 +208,7 @@ describe('per-profile plan usage on GET /profiles', () => {
       reportedAt,
     )
     // An engine-reported 0 with a live reset time, for contrast.
-    runner.emitRateLimit(
-      { status: 'allowed', rateLimitType: 'seven_day', utilization: 0, resetsAt: resetsAtIn(86_400_000) },
-      reportedAt,
-    )
+    runner.emitRateLimit({ status: 'allowed', rateLimitType: 'seven_day', utilization: 0, resetsAt: resetsAtIn(86_400_000) }, reportedAt)
 
     const usage = (await getProfile(gateway.base, 'plan-a')).usage
     // Inferred: utilization 0 as a floor, elapsed resetsAt (and the previous
@@ -254,10 +238,7 @@ describe('per-profile plan usage on GET /profiles', () => {
     const gateway = await startGateway()
     await create(gateway.base, 'plan-a')
     const reportedAt = Date.now() - 3 * 86_400_000
-    gateway.built[0]!.emitRateLimit(
-      { status: 'allowed', rateLimitType: 'seven_day_opus', utilization: 44 },
-      reportedAt,
-    )
+    gateway.built[0]!.emitRateLimit({ status: 'allowed', rateLimitType: 'seven_day_opus', utilization: 44 }, reportedAt)
 
     const usage = (await getProfile(gateway.base, 'plan-a')).usage
     // Days old and served as-is: without `resetsAt` the server cannot know the

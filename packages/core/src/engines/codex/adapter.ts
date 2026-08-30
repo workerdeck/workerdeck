@@ -1,20 +1,14 @@
 import { execFile } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import {
-  ENGINE_CAPABILITIES,
-  PROTOCOL_VERSION,
-  type ProfileInfo,
-  type SdkSessionSummary,
-} from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, PROTOCOL_VERSION, type ProfileInfo, type SdkSessionSummary } from '@workerdeck/protocol'
 import type { EngineAdapter, EngineAvailability } from '../adapter.ts'
 import { CodexRunner } from './runner.ts'
 import { CODEX_CATALOG } from './catalog.ts'
 import { connectAppServer } from './process.ts'
 import type { AppServerConnectFn, AppServerThreadListResponse, AppServerThreadSummary } from './types.ts'
 
-const NOT_INSTALLED =
-  '@openai/codex is not installed — add it (an optional peer of @workerdeck/core) to run codex profiles'
+const NOT_INSTALLED = '@openai/codex is not installed — add it (an optional peer of @workerdeck/core) to run codex profiles'
 
 /**
  * The codex binary sessions will run: the per-platform package installed next
@@ -26,7 +20,9 @@ const NOT_INSTALLED =
  */
 export function resolveBundledCodexExecutable(): string | undefined {
   const triple = targetTriple()
-  if (!triple) return undefined
+  if (!triple) {
+    return undefined
+  }
   try {
     // Two hops on purpose (the claude-auth pattern): the platform package is a
     // dependency of @openai/codex, so under pnpm's strict layout it only
@@ -37,7 +33,9 @@ export function resolveBundledCodexExecutable(): string | undefined {
     const fromWrapper = createRequire(wrapper)
     const platformPackage = fromWrapper.resolve(`@openai/codex-${platformPackageSuffix()}/package.json`)
     const path = platformPackage.replace(/package\.json$/, `vendor/${triple}/bin/codex`)
-    if (existsSync(path)) return path
+    if (existsSync(path)) {
+      return path
+    }
   } catch {
     // not installed — nothing to probe
   }
@@ -46,11 +44,15 @@ export function resolveBundledCodexExecutable(): string | undefined {
 
 function targetTriple(): string | undefined {
   const { platform, arch } = process
-  if (platform === 'darwin') return arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin'
+  if (platform === 'darwin') {
+    return arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin'
+  }
   if (platform === 'linux') {
     return arch === 'arm64' ? 'aarch64-unknown-linux-musl' : 'x86_64-unknown-linux-musl'
   }
-  if (platform === 'win32') return 'x86_64-pc-windows-msvc'
+  if (platform === 'win32') {
+    return 'x86_64-pc-windows-msvc'
+  }
   return undefined
 }
 
@@ -83,46 +85,46 @@ async function checkCodexAvailability(
   options: { timeoutMs?: number } = {},
 ): Promise<EngineAvailability> {
   const executable = resolveBundledCodexExecutable()
-  if (!executable) return { available: false, reason: NOT_INSTALLED }
+  if (!executable) {
+    return { available: false, reason: NOT_INSTALLED }
+  }
   const childEnv: Record<string, string> = {}
   for (const [key, value] of Object.entries(env)) {
-    if (value !== undefined) childEnv[key] = value
+    if (value !== undefined) {
+      childEnv[key] = value
+    }
   }
-  if (profile.codexHome) childEnv.CODEX_HOME = profile.codexHome
+  if (profile.codexHome) {
+    childEnv.CODEX_HOME = profile.codexHome
+  }
   return new Promise((resolve) => {
-    execFile(
-      executable,
-      ['login', 'status'],
-      { env: childEnv, timeout: options.timeoutMs ?? 10_000 },
-      (error, stdout, stderr) => {
-        if (!error) {
-          resolve({ available: true })
-          return
-        }
-        // The verdict line lands on stderr (0.146.0); check both streams so a
-        // future move doesn't silently degrade every verdict to 'unknown'.
-        if (`${stdout}\n${stderr}`.includes('Not logged in')) {
-          // Presence checks on the NAMES only; values are never read.
-          const hint = childEnv.CODEX_API_KEY
-            ? ' CODEX_API_KEY is read only by `codex exec`, never by the app-server — run ' +
-              '`codex login --with-api-key` under this profile’s CODEX_HOME to persist it.'
-            : childEnv.OPENAI_API_KEY
-              ? ' OPENAI_API_KEY is not used by codex — run `codex login --with-api-key` ' +
-                'under this profile’s CODEX_HOME.'
-              : ''
-          resolve({
-            available: false,
-            reason:
-              `codex is not logged in for this profile's environment — run \`codex login\`` +
-              (profile.codexHome ? ` with CODEX_HOME=${profile.codexHome}` : '') +
-              `.${hint}`,
-          })
-          return
-        }
-        // An errored probe (not a verdict) is not evidence of a missing login.
-        resolve({ available: 'unknown' })
-      },
-    )
+    execFile(executable, ['login', 'status'], { env: childEnv, timeout: options.timeoutMs ?? 10_000 }, (error, stdout, stderr) => {
+      if (!error) {
+        resolve({ available: true })
+        return
+      }
+      // The verdict line lands on stderr (0.146.0); check both streams so a
+      // future move doesn't silently degrade every verdict to 'unknown'.
+      if (`${stdout}\n${stderr}`.includes('Not logged in')) {
+        // Presence checks on the NAMES only; values are never read.
+        const hint = childEnv.CODEX_API_KEY
+          ? ' CODEX_API_KEY is read only by `codex exec`, never by the app-server — run ' +
+            '`codex login --with-api-key` under this profile’s CODEX_HOME to persist it.'
+          : childEnv.OPENAI_API_KEY
+            ? ' OPENAI_API_KEY is not used by codex — run `codex login --with-api-key` ' + 'under this profile’s CODEX_HOME.'
+            : ''
+        resolve({
+          available: false,
+          reason:
+            `codex is not logged in for this profile's environment — run \`codex login\`` +
+            (profile.codexHome ? ` with CODEX_HOME=${profile.codexHome}` : '') +
+            `.${hint}`,
+        })
+        return
+      }
+      // An errored probe (not a verdict) is not evidence of a missing login.
+      resolve({ available: 'unknown' })
+    })
   })
 }
 
@@ -160,10 +162,7 @@ function summarizeThread(row: AppServerThreadSummary): SdkSessionSummary {
     createdAt: secondsToMs(row.createdAt),
     customTitle: name,
     firstPrompt: preview,
-    gitBranch:
-      typeof row.gitInfo?.branch === 'string' && row.gitInfo.branch.length > 0
-        ? row.gitInfo.branch
-        : undefined,
+    gitBranch: typeof row.gitInfo?.branch === 'string' && row.gitInfo.branch.length > 0 ? row.gitInfo.branch : undefined,
     cwd: typeof row.cwd === 'string' ? row.cwd : undefined,
   }
 }
@@ -187,9 +186,13 @@ export async function listCodexSessions(options: {
 }): Promise<SdkSessionSummary[]> {
   const childEnv: Record<string, string> = {}
   for (const [key, value] of Object.entries(options.env)) {
-    if (value !== undefined) childEnv[key] = value
+    if (value !== undefined) {
+      childEnv[key] = value
+    }
   }
-  if (options.profile?.codexHome) childEnv.CODEX_HOME = options.profile.codexHome
+  if (options.profile?.codexHome) {
+    childEnv.CODEX_HOME = options.profile.codexHome
+  }
   const connection = options.connectFn({ env: childEnv })
   const rows: AppServerThreadSummary[] = []
   try {
@@ -218,8 +221,12 @@ export async function listCodexSessions(options: {
       })) as AppServerThreadListResponse
       const data = Array.isArray(result?.data) ? result.data : []
       rows.push(...data)
-      if (want !== undefined && rows.length >= want) break
-      if (data.length === 0 || typeof result?.nextCursor !== 'string') break
+      if (want !== undefined && rows.length >= want) {
+        break
+      }
+      if (data.length === 0 || typeof result?.nextCursor !== 'string') {
+        break
+      }
       cursor = result.nextCursor
     }
   } finally {
@@ -248,11 +255,13 @@ export const codexAdapter: EngineAdapter = {
   catalog: CODEX_CATALOG,
   checkAvailability: (profile, env) => checkCodexAvailability(profile, env),
   createRunner({ config, profile, restore, id }) {
-    if (restore) throw new Error('the codex engine cannot rebuild a parked session')
-    const executable =
-      (config as { codexPathOverride?: string }).codexPathOverride ??
-      resolveBundledCodexExecutable()
-    if (!executable) throw new Error(NOT_INSTALLED)
+    if (restore) {
+      throw new Error('the codex engine cannot rebuild a parked session')
+    }
+    const executable = (config as { codexPathOverride?: string }).codexPathOverride ?? resolveBundledCodexExecutable()
+    if (!executable) {
+      throw new Error(NOT_INSTALLED)
+    }
     return new CodexRunner(
       {
         ...config,
@@ -264,7 +273,9 @@ export const codexAdapter: EngineAdapter = {
   },
   async listSessions(options) {
     const executable = resolveBundledCodexExecutable()
-    if (!executable) throw new Error(NOT_INSTALLED)
+    if (!executable) {
+      throw new Error(NOT_INSTALLED)
+    }
     return listCodexSessions({
       ...options,
       connectFn: (connect) => connectAppServer({ executable, ...connect }),

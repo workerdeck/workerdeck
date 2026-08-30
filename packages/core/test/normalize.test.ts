@@ -26,12 +26,7 @@ describe('modelOptionsFromSdk', () => {
   })
 
   it('names each row with its version, in capability order', () => {
-    expect(modelOptionsFromSdk(reported).map((m) => m.displayName)).toEqual([
-      'Fable 5',
-      'Opus 5',
-      'Sonnet 5',
-      'Haiku 4.5',
-    ])
+    expect(modelOptionsFromSdk(reported).map((m) => m.displayName)).toEqual(['Fable 5', 'Opus 5', 'Sonnet 5', 'Haiku 4.5'])
   })
 
   it('marks the newest of each family primary and files older versions behind it', () => {
@@ -41,16 +36,8 @@ describe('modelOptionsFromSdk', () => {
       { value: 'claude-sonnet-4-6', resolvedModel: 'claude-sonnet-4-6', displayName: 'Sonnet 4.6' },
     ]
     const options = modelOptionsFromSdk(withOlder)
-    expect(options.filter((m) => m.primary).map((m) => m.displayName)).toEqual([
-      'Fable 5',
-      'Opus 5',
-      'Sonnet 5',
-      'Haiku 4.5',
-    ])
-    expect(options.filter((m) => !m.primary).map((m) => m.displayName)).toEqual([
-      'Opus 4.8',
-      'Sonnet 4.6',
-    ])
+    expect(options.filter((m) => m.primary).map((m) => m.displayName)).toEqual(['Fable 5', 'Opus 5', 'Sonnet 5', 'Haiku 4.5'])
+    expect(options.filter((m) => !m.primary).map((m) => m.displayName)).toEqual(['Opus 4.8', 'Sonnet 4.6'])
   })
 
   it("keeps the CLI's name when a derived one would be ambiguous", () => {
@@ -135,8 +122,6 @@ describe('rateLimitEventsFromUsage', () => {
         model_scoped: [{ display_name: 'Opus', utilization: 40 }],
       },
     })
-    expect(events.map((e) => e.type === 'rate_limit' && e.info.rateLimitType)).toEqual([
-      'seven_day_opus',
-    ])
+    expect(events.map((e) => e.type === 'rate_limit' && e.info.rateLimitType)).toEqual(['seven_day_opus'])
   })
 })

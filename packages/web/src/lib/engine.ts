@@ -7,13 +7,7 @@
  * ENGINE_CAPABILITIES is the fallback for a server that predates the field.
  */
 
-import {
-  ENGINE_CAPABILITIES,
-  type EngineCapabilities,
-  type ModelOption,
-  type PermissionMode,
-  type ProfileInfo,
-} from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, type EngineCapabilities, type ModelOption, type PermissionMode, type ProfileInfo } from '@workerdeck/protocol'
 import { MODEL_OPTIONS } from './settings.ts'
 
 export type EngineFormOptions = {
@@ -40,15 +34,9 @@ export type EngineFormOptions = {
  * arrive at any profile — coerce rather than submit something the gateway
  * will reject.
  */
-export function engineFormOptions(
-  profile: ProfileInfo | undefined,
-  mode: PermissionMode,
-  model: string,
-): EngineFormOptions {
+export function engineFormOptions(profile: ProfileInfo | undefined, mode: PermissionMode, model: string): EngineFormOptions {
   const capabilities = profile?.capabilities ?? ENGINE_CAPABILITIES[profile?.engine ?? 'claude']
-  const safeMode = capabilities.permissionModes.includes(mode)
-    ? mode
-    : capabilities.defaultPermissionMode
+  const safeMode = capabilities.permissionModes.includes(mode) ? mode : capabilities.defaultPermissionMode
 
   // Rows: the server-stamped catalog when present (claude/codex — correct from
   // the first request); else the operator-declared provider ids; else the
@@ -82,7 +70,6 @@ export function engineFormOptions(
     ],
     mode: safeMode,
     model: safeModel,
-    reasoningEfforts:
-      (matched ? matched.reasoningEfforts : undefined) ?? capabilities.reasoningEfforts ?? [],
+    reasoningEfforts: (matched ? matched.reasoningEfforts : undefined) ?? capabilities.reasoningEfforts ?? [],
   }
 }

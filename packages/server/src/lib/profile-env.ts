@@ -54,17 +54,14 @@ export function canonicalDir(path: string): string {
  * the profile, the pin stands: the profile must win over hook- or operator-set
  * env, or sessions under two profiles quietly collapse into one identity.
  */
-export function claudeSessionEnv(
-  profile: ProfileInfo,
-  base: Record<string, string | undefined>,
-): Record<string, string | undefined> {
-  return canonicalDir(profile.configDir!) === canonicalDir(cliConfigDir(base))
-    ? base
-    : { ...base, CLAUDE_CONFIG_DIR: profile.configDir! }
+export function claudeSessionEnv(profile: ProfileInfo, base: Record<string, string | undefined>): Record<string, string | undefined> {
+  return canonicalDir(profile.configDir!) === canonicalDir(cliConfigDir(base)) ? base : { ...base, CLAUDE_CONFIG_DIR: profile.configDir! }
 }
 
 export function cwdAllowed(cwd: string, roots: string[] | undefined): boolean {
-  if (!roots || roots.length === 0) return true
+  if (!roots || roots.length === 0) {
+    return true
+  }
   const resolved = resolvePath(cwd)
   return roots.some((root) => {
     const r = resolvePath(root)
@@ -82,7 +79,9 @@ export function cwdAllowed(cwd: string, roots: string[] | undefined): boolean {
  */
 export function readProfileConfig(profile: ProfileInfo): ProfileConfigSnapshot {
   const dir = profile.configDir
-  if (!dir) return { hasUserMemory: false, skills: [], agents: [], commands: [] }
+  if (!dir) {
+    return { hasUserMemory: false, skills: [], agents: [], commands: [] }
+  }
   const listDirs = (path: string): string[] => {
     try {
       return readdirSync(path, { withFileTypes: true })
@@ -110,25 +109,19 @@ export function readProfileConfig(profile: ProfileInfo): ProfileConfigSnapshot {
     commands: listMd(join(dir, 'commands')),
   }
   try {
-    const raw = JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8')) as Record<
-      string,
-      unknown
-    >
+    const raw = JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8')) as Record<string, unknown>
     const permissions = (raw.permissions ?? {}) as Record<string, unknown>
     const count = (rules: unknown): number => (Array.isArray(rules) ? rules.length : 0)
     snapshot.settings = {
       model: typeof raw.model === 'string' ? raw.model : undefined,
-      defaultPermissionMode:
-        typeof permissions.defaultMode === 'string' ? permissions.defaultMode : undefined,
+      defaultPermissionMode: typeof permissions.defaultMode === 'string' ? permissions.defaultMode : undefined,
       permissionRules: {
         allow: count(permissions.allow),
         ask: count(permissions.ask),
         deny: count(permissions.deny),
       },
-      envKeys:
-        raw.env && typeof raw.env === 'object' ? Object.keys(raw.env).sort() : undefined,
-      hooks:
-        raw.hooks && typeof raw.hooks === 'object' ? Object.keys(raw.hooks).sort() : undefined,
+      envKeys: raw.env && typeof raw.env === 'object' ? Object.keys(raw.env).sort() : undefined,
+      hooks: raw.hooks && typeof raw.hooks === 'object' ? Object.keys(raw.hooks).sort() : undefined,
     }
   } catch {
     // settings.json absent or unparseable — snapshot ships without the block

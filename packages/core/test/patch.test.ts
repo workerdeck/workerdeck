@@ -18,7 +18,7 @@ describe('filePatchFromToolResult', () => {
     lines: ['   "printWidth": 120,', '+    "**/*.md",', '   "**/build/**",'],
   }
 
-  it('keeps the engine\'s hunks and the path', () => {
+  it("keeps the engine's hunks and the path", () => {
     const patch = filePatchFromToolResult({
       filePath: '/repo/.prettierrc',
       oldString: 'a',
@@ -49,7 +49,7 @@ describe('filePatchFromToolResult', () => {
     expect(patch?.kind).toBe('create')
   })
 
-  it('takes Write\'s own create/update verdict', () => {
+  it("takes Write's own create/update verdict", () => {
     const patch = filePatchFromToolResult({
       type: 'create',
       filePath: '/repo/new.ts',

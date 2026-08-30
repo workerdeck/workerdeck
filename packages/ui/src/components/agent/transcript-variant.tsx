@@ -23,13 +23,7 @@ export type TranscriptVariant = 'cards' | 'terminal'
 
 const VariantContext = createContext<TranscriptVariant>('cards')
 
-export function TranscriptVariantProvider({
-  value,
-  children,
-}: {
-  value: TranscriptVariant
-  children: ReactNode
-}) {
+export function TranscriptVariantProvider({ value, children }: { value: TranscriptVariant; children: ReactNode }) {
   return <VariantContext.Provider value={value}>{children}</VariantContext.Provider>
 }
 
@@ -57,13 +51,7 @@ export type TranscriptDensity = 'comfortable' | 'compact'
 
 const DensityContext = createContext<TranscriptDensity>('comfortable')
 
-export function TranscriptDensityProvider({
-  value,
-  children,
-}: {
-  value: TranscriptDensity
-  children: ReactNode
-}) {
+export function TranscriptDensityProvider({ value, children }: { value: TranscriptDensity; children: ReactNode }) {
   return <DensityContext.Provider value={value}>{children}</DensityContext.Provider>
 }
 
@@ -95,10 +83,7 @@ export type TranscriptFont = 'sans' | 'mono'
  * it sets the scrollbar's length before rows mount and is replaced by a real
  * measurement the moment one does.
  */
-export const ROW_GAP: Record<
-  TranscriptVariant,
-  Record<TranscriptDensity, { className?: string; px: number }>
-> = {
+export const ROW_GAP: Record<TranscriptVariant, Record<TranscriptDensity, { className?: string; px: number }>> = {
   // The terminal theme has no gap scale: the space between blocks is a **blank
   // line**, decided per pair by `needsBlank` (a tool call and its output get
   // none), so it is a class the shell applies conditionally rather than a

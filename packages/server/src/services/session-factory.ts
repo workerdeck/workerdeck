@@ -10,7 +10,13 @@
  * `buildRunner`; `createRunner` registers and watches). The refs are filled
  * during assembly, before the server accepts a request.
  */
-import { supportsPermissionMode, type CreateSessionRequest, type PermissionMode, type ProfileEngine, type ProfileInfo } from '@workerdeck/protocol'
+import {
+  supportsPermissionMode,
+  type CreateSessionRequest,
+  type PermissionMode,
+  type ProfileEngine,
+  type ProfileInfo,
+} from '@workerdeck/protocol'
 import type { EngineAdapter, Runner, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
 import { checkScope, sameScope } from '../lib/scope.ts'
 import { claudeSessionEnv, cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
@@ -48,7 +54,9 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
    * for an explicit bypass-mode request; strips the pre-authorization capability
    * silently (see the option's doc for why). */
   const applyBypassPolicy = (req: CreateSessionRequest): string | null => {
-    if (!deps.disableBypassPermissions) return null
+    if (!deps.disableBypassPermissions) {
+      return null
+    }
     if (req.permissionMode === 'bypassPermissions') {
       return 'bypassPermissions is disabled on this server (disableBypassPermissions)'
     }
@@ -60,11 +68,10 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
    * The create form already filters what it offers, but the API is the boundary:
    * a provider session asked for 'plan' should be told so, not silently coerced
    * into 'default' by whatever assembles its runner. Returns an error message. */
-  const checkPermissionMode = (
-    mode: PermissionMode | undefined,
-    profile: ProfileInfo | undefined,
-  ): string | null => {
-    if (mode === undefined || supportsPermissionMode(profile?.engine, mode)) return null
+  const checkPermissionMode = (mode: PermissionMode | undefined, profile: ProfileInfo | undefined): string | null => {
+    if (mode === undefined || supportsPermissionMode(profile?.engine, mode)) {
+      return null
+    }
     return (
       `permission mode '${mode}' is not supported by profile '${profile!.name}' ` +
       `(engine '${engineOf(profile)}') — supported: ` +
@@ -83,10 +90,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
    * credentials, so honoring a client-supplied server would let a caller
    * point an authoritative tool anywhere it liked).
    */
-  const checkEngineGrants = (
-    req: CreateSessionRequest,
-    profile: ProfileInfo | undefined,
-  ): string | null => {
+  const checkEngineGrants = (req: CreateSessionRequest, profile: ProfileInfo | undefined): string | null => {
     const engine = engineOf(profile)
     const caps = adapterFor(profile?.engine).capabilities
     const name = profile?.name ?? 'default'
@@ -108,17 +112,20 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     if (req.forkSession && engine !== 'claude') {
       return `the ${engine} engine cannot fork a resumed session`
     }
-    if (
-      req.reasoningEffort !== undefined &&
-      (!caps.reasoningEfforts || caps.reasoningEfforts.length === 0)
-    ) {
+    if (req.reasoningEffort !== undefined && (!caps.reasoningEfforts || caps.reasoningEfforts.length === 0)) {
       return `the ${engine} engine does not take a reasoningEffort`
     }
-    if (!profile || !isProviderProfile(profile)) return null
+    if (!profile || !isProviderProfile(profile)) {
+      return null
+    }
     const granted = profile.session?.capabilities
-    if (!req.capabilities || !granted) return null
+    if (!req.capabilities || !granted) {
+      return null
+    }
     const ungranted = req.capabilities.filter((c) => !granted.includes(c))
-    if (ungranted.length === 0) return null
+    if (ungranted.length === 0) {
+      return null
+    }
     return (
       `profile '${profile.name}' does not grant: ${ungranted.join(', ')} ` +
       `(granted: ${granted.join(', ') || 'none'}) — a request may narrow capabilities, not widen them`
@@ -144,13 +151,14 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
    * request that slipped past it still cannot create a session in another
    * scope. An unscoped principal (the operator) may write any tags.
    */
-  const applyScope = (
-    req: CreateSessionRequest,
-    auth: { scope?: Record<string, string> },
-  ): { status: number; error: string } | null => {
+  const applyScope = (req: CreateSessionRequest, auth: { scope?: Record<string, string> }): { status: number; error: string } | null => {
     const invalid = checkScope(req.scope)
-    if (invalid) return { status: 400, error: invalid }
-    if (!auth.scope) return null
+    if (invalid) {
+      return { status: 400, error: invalid }
+    }
+    if (!auth.scope) {
+      return null
+    }
     const merged: Record<string, string> = { ...req.scope }
     for (const [key, value] of Object.entries(auth.scope)) {
       const claimed = merged[key]
@@ -162,7 +170,9 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     // Re-checked after the merge, so the advertised bound is the real ceiling
     // rather than one the principal's own keys can push past.
     const tooBig = checkScope(merged)
-    if (tooBig) return { status: 400, error: tooBig }
+    if (tooBig) {
+      return { status: 400, error: tooBig }
+    }
     req.scope = merged
     return null
   }
@@ -178,23 +188,16 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
    * filesystem-less engine `allowedCwdRoots` guards nothing at all. The
    * boundary there is the capability wiring, not a path prefix.
    */
-  const checkCwd = (
-    req: CreateSessionRequest,
-    profile: ProfileInfo | undefined,
-  ): { status: number; error: string } | null => {
+  const checkCwd = (req: CreateSessionRequest, profile: ProfileInfo | undefined): { status: number; error: string } | null => {
     if (req.cwd !== undefined && typeof req.cwd !== 'string') {
       return { status: 400, error: 'cwd must be a string' }
     }
     if (!req.cwd) {
       // Absent = true, so an engine record that predates the field keeps the old
       // always-required behaviour.
-      return adapterFor(profile?.engine).capabilities.hostCwd === false
-        ? null
-        : { status: 400, error: 'cwd is required' }
+      return adapterFor(profile?.engine).capabilities.hostCwd === false ? null : { status: 400, error: 'cwd is required' }
     }
-    return cwdAllowed(req.cwd, deps.allowedCwdRoots)
-      ? null
-      : { status: 403, error: 'cwd is outside the allowed roots' }
+    return cwdAllowed(req.cwd, deps.allowedCwdRoots) ? null : { status: 403, error: 'cwd is outside the allowed roots' }
   }
 
   /**
@@ -204,10 +207,8 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
    * which is the one direction a bug here must not go. Same posture as the
    * profile's env pin winning over the hook.
    */
-  const withScope = (
-    config: SessionRunnerConfig,
-    scope: Record<string, string> | undefined,
-  ): SessionRunnerConfig => (scope === undefined ? config : { ...config, scope })
+  const withScope = (config: SessionRunnerConfig, scope: Record<string, string> | undefined): SessionRunnerConfig =>
+    scope === undefined ? config : { ...config, scope }
 
   /** Profile-aware config hook: fill the profile's defaults into unset request fields,
    * run the host hook, then pin CLAUDE_CONFIG_DIR — the profile wins even when the
@@ -215,7 +216,9 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
    * skipped, and why). Handed to the queue too, so jobs inherit profiles. */
   const buildRunnerConfig = (req: CreateSessionRequest): SessionRunnerConfig => {
     const profile = req.profile !== undefined ? profiles.get(req.profile) : undefined
-    if (!profile) return withScope(deps.hostBuildRunnerConfig(req), req.scope)
+    if (!profile) {
+      return withScope(deps.hostBuildRunnerConfig(req), req.scope)
+    }
     const config = withScope(
       deps.hostBuildRunnerConfig({
         ...req,
@@ -228,7 +231,9 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     // from the operator's environment through the engine factory; a codex
     // profile's CODEX_HOME pin is applied by its adapter (the runner builds the
     // child env, because CodexOptions.env replaces rather than merges).
-    if (engineOf(profile) !== 'claude') return config
+    if (engineOf(profile) !== 'claude') {
+      return config
+    }
     const base = config.env ?? process.env
     const env = claudeSessionEnv(profile, base)
     // A skipped pin returns `base` itself — leave the config alone so an unset
@@ -309,9 +314,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     }
     const all = profiles.all()
     if (all.length === 0) {
-      return name !== undefined
-        ? { ok: false, status: 400, error: 'no profiles are configured on this server' }
-        : { ok: true }
+      return name !== undefined ? { ok: false, status: 400, error: 'no profiles are configured on this server' } : { ok: true }
     }
     const effective = name ?? (all.length === 1 ? all[0]!.name : undefined)
     if (effective === undefined) {
@@ -319,7 +322,9 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
       return { ok: false, status: 400, error: `profile is required (available: ${available})` }
     }
     const profile = profiles.get(effective)
-    if (!profile) return { ok: false, status: 400, error: `unknown profile: ${effective}` }
+    if (!profile) {
+      return { ok: false, status: 400, error: `unknown profile: ${effective}` }
+    }
     if (allowedProfiles && !allowedProfiles.includes(profile.name)) {
       return { ok: false, status: 403, error: `profile not allowed: ${profile.name}` }
     }
@@ -331,9 +336,13 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
   const watchAuthSource = (runner: Runner): void => {
     let seen = false
     runner.subscribe((event) => {
-      if (seen || event.type !== 'system_init') return
+      if (seen || event.type !== 'system_init') {
+        return
+      }
       seen = true
-      if (event.apiKeySource !== 'oauth') return
+      if (event.apiKeySource !== 'oauth') {
+        return
+      }
       if (deps.requireApiKey) {
         runner.fail(
           'This server requires API-key auth (requireApiKey), but the session initialized ' +
@@ -344,7 +353,9 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
         // Per profile, not global: distinct profiles are distinct accounts, and each
         // operator deserves the notice once.
         const profileName = runner.info().profile ?? ''
-        if (subscriptionNoticeShown.has(profileName)) return
+        if (subscriptionNoticeShown.has(profileName)) {
+          return
+        }
         subscriptionNoticeShown.add(profileName)
         const scope = profileName ? `Sessions under profile '${profileName}'` : 'Sessions'
         console.warn(

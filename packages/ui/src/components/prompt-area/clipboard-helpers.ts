@@ -6,14 +6,7 @@
  * clipboard I/O concerns alongside its DOM traversal and chip-accessor helpers.
  */
 import type { Segment, ChipSegment } from './types.ts'
-import {
-  chipNodeToSegment,
-  getChipDisplay,
-  getChipTrigger,
-  getSelectionRange,
-  isChipElement,
-  isHTMLElement,
-} from './dom-helpers.ts'
+import { chipNodeToSegment, getChipDisplay, getChipTrigger, getSelectionRange, isChipElement, isHTMLElement } from './dom-helpers.ts'
 import { mergeAdjacentTextSegments } from './prompt-area-engine.ts'
 import { getTextLengthInRange } from './cursor-helpers.ts'
 
@@ -89,11 +82,15 @@ export function serializeFragmentToSegments(fragment: DocumentFragment): Segment
 
   walkFragmentNodes(fragment, {
     onText: (value) => {
-      if (value) segments.push({ type: 'text', text: value })
+      if (value) {
+        segments.push({ type: 'text', text: value })
+      }
     },
     onChip: (node) => {
       const chip = chipNodeToSegment(node)
-      if (chip) segments.push(chip)
+      if (chip) {
+        segments.push(chip)
+      }
     },
     onBreak: () => {
       segments.push({ type: 'text', text: '\n' })
@@ -109,11 +106,15 @@ export function serializeFragmentToSegments(fragment: DocumentFragment): Segment
 export function parseSegmentsFromClipboard(json: string): Segment[] | null {
   try {
     const parsed: unknown = JSON.parse(json)
-    if (!Array.isArray(parsed)) return null
+    if (!Array.isArray(parsed)) {
+      return null
+    }
 
     const segments: Segment[] = []
     for (const item of parsed) {
-      if (!isRecord(item)) return null
+      if (!isRecord(item)) {
+        return null
+      }
 
       if (item.type === 'text' && typeof item.text === 'string') {
         segments.push({ type: 'text', text: item.text })
@@ -148,13 +149,11 @@ export function parseSegmentsFromClipboard(json: string): Segment[] | null {
  * Splits any text segment that straddles the cursor so the pasted content lands
  * exactly at the cursor and nothing before or after is lost.
  */
-export function insertSegmentsAtCursor(
-  currentSegments: Segment[],
-  pastedSegments: Segment[],
-  editor: HTMLElement,
-): Segment[] {
+export function insertSegmentsAtCursor(currentSegments: Segment[], pastedSegments: Segment[], editor: HTMLElement): Segment[] {
   const range = getSelectionRange()
-  if (!range) return [...currentSegments, ...pastedSegments]
+  if (!range) {
+    return [...currentSegments, ...pastedSegments]
+  }
 
   const preRange = document.createRange()
   preRange.selectNodeContents(editor)
@@ -175,7 +174,9 @@ export function insertSegmentsAtCursor(
   for (const seg of currentSegments) {
     if (seg.type === 'chip') {
       const chipLen = seg.trigger.length + seg.displayText.length
-      if (offset >= cursorOffset) insertOnce()
+      if (offset >= cursorOffset) {
+        insertOnce()
+      }
       result.push(seg)
       offset += chipLen
       continue
@@ -194,9 +195,13 @@ export function insertSegmentsAtCursor(
       const splitAt = cursorOffset - offset
       const before = seg.text.slice(0, splitAt)
       const after = seg.text.slice(splitAt)
-      if (before) result.push({ type: 'text', text: before })
+      if (before) {
+        result.push({ type: 'text', text: before })
+      }
       insertOnce()
-      if (after) result.push({ type: 'text', text: after })
+      if (after) {
+        result.push({ type: 'text', text: after })
+      }
     }
     offset = segEnd
   }

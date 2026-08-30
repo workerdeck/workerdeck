@@ -10,8 +10,7 @@
         var el = document.documentElement
         try {
           var t = localStorage.getItem('workerdeck.theme')
-          var dark =
-            t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          var dark = t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
           el.setAttribute('data-theme', dark ? 'dark' : 'light')
         } catch (e) {
           el.setAttribute('data-theme', 'light')

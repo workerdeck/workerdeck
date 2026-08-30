@@ -21,8 +21,7 @@ const extensionDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = resolve(extensionDir, '..', '..')
 const target = resolve(process.argv[2] ?? repoRoot)
 
-const run = (cmd, args, opts = {}) =>
-  spawnSync(cmd, args, { stdio: 'inherit', cwd: extensionDir, ...opts })
+const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { stdio: 'inherit', cwd: extensionDir, ...opts })
 
 if (run('pnpm', ['run', 'build']).status !== 0) {
   console.error('build failed — not launching')
@@ -31,9 +30,7 @@ if (run('pnpm', ['run', 'build']).status !== 0) {
 
 const code = spawnSync('code', ['--version'], { stdio: 'ignore' })
 if (code.status !== 0) {
-  console.error(
-    "the `code` CLI is not on PATH — in VS Code run: Shell Command: Install 'code' command in PATH",
-  )
+  console.error("the `code` CLI is not on PATH — in VS Code run: Shell Command: Install 'code' command in PATH")
   process.exit(1)
 }
 

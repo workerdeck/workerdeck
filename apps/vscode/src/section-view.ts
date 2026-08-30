@@ -70,7 +70,9 @@ export class SectionViewProvider implements vscode.WebviewViewProvider, vscode.D
   }
 
   async #onMessage(msg: SectionToHost): Promise<void> {
-    if (await this.#transports?.handle(msg)) return
+    if (await this.#transports?.handle(msg)) {
+      return
+    }
     if (msg.kind === 'wd-ready') {
       this.#ready = true
       this.push()
@@ -79,12 +81,16 @@ export class SectionViewProvider implements vscode.WebviewViewProvider, vscode.D
 
   /** Push current state + vitals (model change, vitals change, ready). */
   push(): void {
-    if (!this.#view) return
+    if (!this.#view) {
+      return
+    }
     // The header says it even while collapsed, which is the whole point: a
     // collapsed view whose body nobody can see still reports whether opening it
     // would show anything.
     this.#view.description = headerDescription(this.#kind, this.#feed.state(), this.#feed.vitals())
-    if (!this.#ready) return
+    if (!this.#ready) {
+      return
+    }
     void this.#view.webview.postMessage({
       kind: 'wd-sidebar-state',
       state: this.#feed.state(),
@@ -95,13 +101,14 @@ export class SectionViewProvider implements vscode.WebviewViewProvider, vscode.D
     } satisfies HostToSection)
   }
 
-
   /** Re-render this webview from disk — the dev reloader after a rebuild, and
    * a font-setting change (the typeface is baked into the HTML). The webview
    * re-announces `wd-ready`, which is what re-pushes its state. */
   reloadWebview(): void {
     const view = this.#view
-    if (!view) return
+    if (!view) {
+      return
+    }
     this.#ready = false
     const dist = vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
     view.webview.html = webviewHtml(view.webview, dist, 'sections.js', { 'data-view': this.#kind }, ++this.#htmlVersion)
@@ -118,24 +125,28 @@ export class SectionViewProvider implements vscode.WebviewViewProvider, vscode.D
  * while it is collapsed. Usage gets the session's spend, which is a number
  * people watch and which otherwise costs an expand to see.
  */
-function headerDescription(
-  kind: SectionKind,
-  state: SidebarState,
-  vitals: SessionVitals | undefined,
-): string | undefined {
+function headerDescription(kind: SectionKind, state: SidebarState, vitals: SessionVitals | undefined): string | undefined {
   const selected = state.selected
-  const info = selected
-    ? state.sessions[selected.hostId]?.find((s) => s.id === selected.sessionId)
-    : undefined
-  if (!info) return 'no session'
+  const info = selected ? state.sessions[selected.hostId]?.find((s) => s.id === selected.sessionId) : undefined
+  if (!info) {
+    return 'no session'
+  }
   // Live capabilities when the panel has them, the REST rollup next, the
   // engine's own record last — the same order the panel's own gating uses.
   const caps = vitals?.capabilities ?? info.capabilities ?? ENGINE_CAPABILITIES[info.engine ?? 'claude']
-  if (kind === 'context' && !caps.contextUsage) return 'not reported'
-  if (kind === 'usage' && !caps.rateLimits) return 'not reported'
-  if (kind === 'mcp' && !caps.mcpStatus) return 'not supported'
+  if (kind === 'context' && !caps.contextUsage) {
+    return 'not reported'
+  }
+  if (kind === 'usage' && !caps.rateLimits) {
+    return 'not reported'
+  }
+  if (kind === 'mcp' && !caps.mcpStatus) {
+    return 'not supported'
+  }
   // The rollup's number, not a live one: cost lands with the turn result, so
   // this is the same figure the session card and the status tooltip show.
-  if (kind === 'usage' && info.totalCostUsd !== undefined) return formatCost(info.totalCostUsd)
+  if (kind === 'usage' && info.totalCostUsd !== undefined) {
+    return formatCost(info.totalCostUsd)
+  }
   return undefined
 }

@@ -51,7 +51,9 @@ const listeners = new Set<() => void>()
 
 function emit(next: State) {
   state = next
-  for (const listener of listeners) listener()
+  for (const listener of listeners) {
+    listener()
+  }
 }
 
 let inFlight: Promise<void> | undefined
@@ -68,7 +70,9 @@ export function refreshSessions(): Promise<void> {
       const snapshots = await Promise.all(
         hosts.map(async (host): Promise<HostSnapshot> => {
           const client = clientFor(host.id)
-          if (!client) return { host, sessions: [], error: 'unusable address' }
+          if (!client) {
+            return { host, sessions: [], error: 'unusable address' }
+          }
           try {
             return { host, sessions: await client.listSessions() }
           } catch (e) {
@@ -95,7 +99,9 @@ export function refreshSessions(): Promise<void> {
  * limited, so it is safe to call from a streaming callback.
  */
 export function nudgeSessions(): void {
-  if (nudgeTimer !== undefined) return
+  if (nudgeTimer !== undefined) {
+    return
+  }
   const wait = Math.max(0, NUDGE_MIN_GAP_MS - (Date.now() - lastFetchAt))
   nudgeTimer = setTimeout(() => {
     nudgeTimer = undefined
@@ -117,8 +123,12 @@ let pollRegime: number | undefined
  */
 function arm(busy: boolean) {
   const interval = busy ? BUSY_MS : IDLE_MS
-  if (pollTimer !== undefined && pollRegime === interval) return
-  if (pollTimer !== undefined) clearInterval(pollTimer)
+  if (pollTimer !== undefined && pollRegime === interval) {
+    return
+  }
+  if (pollTimer !== undefined) {
+    clearInterval(pollTimer)
+  }
   pollRegime = interval
   pollTimer = setInterval(() => void refreshSessions(), interval)
 }
@@ -142,7 +152,9 @@ export function useSessions() {
 
   useEffect(() => {
     arm(busy)
-    if (!state.loaded) void refreshSessions()
+    if (!state.loaded) {
+      void refreshSessions()
+    }
   }, [busy])
 
   return { ...snapshot, refresh: refreshSessions }
@@ -167,17 +179,19 @@ export function useSessionRows(snapshots: HostSnapshot[]): SessionRow[] {
   return useMemo(
     () =>
       snapshots.flatMap(({ host, sessions }) =>
-        sessions.filter((info) => !isJobRun(info)).map((info) => ({
-          hostId: host.id,
-          hostName: host.name,
-          // The honest answer, not a hardcoded `true`: a session on a remote
-          // gateway runs on another machine, and its cwd is that machine's path.
-          local: isLocal(host),
-          adapter: info.engine ?? 'claude',
-          state: sessionState(info),
-          info,
-          unseen: unseenFor(host.id, info),
-        })),
+        sessions
+          .filter((info) => !isJobRun(info))
+          .map((info) => ({
+            hostId: host.id,
+            hostName: host.name,
+            // The honest answer, not a hardcoded `true`: a session on a remote
+            // gateway runs on another machine, and its cwd is that machine's path.
+            local: isLocal(host),
+            adapter: info.engine ?? 'claude',
+            state: sessionState(info),
+            info,
+            unseen: unseenFor(host.id, info),
+          })),
       ),
     [snapshots, unseenFor],
   )

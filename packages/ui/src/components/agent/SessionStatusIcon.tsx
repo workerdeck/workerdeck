@@ -28,8 +28,12 @@ import { cn } from '../../lib/utils.ts'
 export function SessionStatusIcon({ row, className }: { row: SessionRow; className?: string }) {
   const { info } = row
   const size = cn('size-4 shrink-0', className)
-  if (row.state === 'attention') return <BellRing className={cn(size, 'animate-pulse text-warning')} />
-  if (row.state === 'working') return <Spinner className={cn(size, 'text-info')} />
+  if (row.state === 'attention') {
+    return <BellRing className={cn(size, 'animate-pulse text-warning')} />
+  }
+  if (row.state === 'working') {
+    return <Spinner className={cn(size, 'text-info')} />
+  }
   switch (info.status) {
     case 'failed':
       return <CircleAlert className={cn(size, 'text-danger')} />

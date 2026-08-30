@@ -26,23 +26,20 @@ export function ProfilesSidebar() {
   // `+` is offered only where the server actually accepts one — a create form
   // behind a button that 403s is worse than no button.
   const create = canManage ? (
-    <Button variant='ghost' size='icon-sm' aria-label='New profile' onClick={() => setCreating(true)}>
-      <Plus className='size-4' />
+    <Button variant="ghost" size="icon-sm" aria-label="New profile" onClick={() => setCreating(true)}>
+      <Plus className="size-4" />
     </Button>
   ) : undefined
 
   return (
     <>
       <SidebarFrame
-        section='profiles'
-        title='Profiles'
-        badge={
-          profiles.length > 0 ? (
-            <span className='shrink-0 text-label text-fg-4'>{profiles.length}</span>
-          ) : undefined
-        }
+        section="profiles"
+        title="Profiles"
+        badge={profiles.length > 0 ? <span className="shrink-0 text-label text-fg-4">{profiles.length}</span> : undefined}
         actions={create}
-        railActions={create}>
+        railActions={create}
+      >
         <SidebarBody>
           {profiles.length === 0 ? (
             <Empty
@@ -63,15 +60,13 @@ export function ProfilesSidebar() {
             <SidebarRow
               key={profile.name}
               active={profile.name === activeName}
-              onSelect={() =>
-                void navigate({ to: '/profiles/$profileName', params: { profileName: profile.name } })
-              }
+              onSelect={() => void navigate({ to: '/profiles/$profileName', params: { profileName: profile.name } })}
               title={profile.name}
               status={
                 // Declared profiles are code and stay read-only; saying so on
                 // the row is cheaper than finding out on the detail page.
                 profile.managed ? null : (
-                  <Badge variant='neutral' className='shrink-0'>
+                  <Badge variant="neutral" className="shrink-0">
                     declared
                   </Badge>
                 )
@@ -85,9 +80,9 @@ export function ProfilesSidebar() {
                   <EngineIcon
                     engine={profile.engine ?? 'claude'}
                     model={profile.defaults?.model ?? profile.provider?.model}
-                    className='size-3 shrink-0 text-fg-3'
+                    className="size-3 shrink-0 text-fg-3"
                   />
-                  <span className='min-w-0 truncate'>
+                  <span className="min-w-0 truncate">
                     {profile.configDir ??
                       (profile.provider
                         ? `${profile.provider.id}${profile.provider.model ? ` · ${profile.provider.model}` : ''}`

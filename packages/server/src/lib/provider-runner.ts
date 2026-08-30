@@ -90,10 +90,7 @@ export type ProviderRunnerOptions = {
  * The hook itself stays open for anything this does not cover — this is the
  * 80% case, not a replacement for it.
  */
-export async function createProviderRunner(
-  ctx: EngineRunnerContext,
-  options: ProviderRunnerOptions,
-): Promise<Runner> {
+export async function createProviderRunner(ctx: EngineRunnerContext, options: ProviderRunnerOptions): Promise<Runner> {
   const { config, profile, bridge, restore, id } = ctx
   const resolveModel = (modelId: string | undefined): LanguageModel =>
     typeof options.model === 'function' ? options.model(modelId) : options.model
@@ -102,15 +99,13 @@ export async function createProviderRunner(
   const resolveBridged = (): ToolExecutor => ({
     dispatch: (call) => bridge.executorFor(call.sessionId).dispatch(call),
   })
-  const resolveExecutor = (raw: ToolExecutor | 'browser'): ToolExecutor =>
-    raw === 'browser' ? resolveBridged() : raw
+  const resolveExecutor = (raw: ToolExecutor | 'browser'): ToolExecutor => (raw === 'browser' ? resolveBridged() : raw)
 
   // Per-call executor: wrap into a per-call selectExecutor + backend so the
   // routing decision happens at dispatch time, not at session creation.
   const isPerCall = typeof options.executor === 'function'
   const selectExecutor: EngineSessionOptions['selectExecutor'] = isPerCall
-    ? (call: ToolExecutionCall) =>
-        resolveExecutor((options.executor as (call: ToolExecutionCall) => ToolExecutor | 'browser')(call))
+    ? (call: ToolExecutionCall) => resolveExecutor((options.executor as (call: ToolExecutionCall) => ToolExecutor | 'browser')(call))
     : () => resolveExecutor(options.executor as ToolExecutor | 'browser')
   const backend: EngineSessionOptions['backend'] = isPerCall
     ? (call: ToolExecutionCall) => {

@@ -40,7 +40,9 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
   async #client(uri: vscode.Uri): Promise<WorkerDeckClient> {
     const host = this.#store.get(uri.authority)
     const client = host && (await clientFor(this.#store, host))
-    if (!client) throw vscode.FileSystemError.Unavailable(`unknown workerdeck gateway: ${uri.authority}`)
+    if (!client) {
+      throw vscode.FileSystemError.Unavailable(`unknown workerdeck gateway: ${uri.authority}`)
+    }
     return client
   }
 
@@ -58,7 +60,9 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
       try {
         const listing = await client.listHostDir(parent)
         const entry = listing.entries.find((e) => e.path === path || e.name === path.slice(parent.length + 1))
-        if (entry) return statOf(entry)
+        if (entry) {
+          return statOf(entry)
+        }
       } catch {
         // Parent unlistable (e.g. path IS a root) — fall through.
       }
@@ -86,9 +90,7 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
     try {
       const res = await client.readHostFile(uri.path)
       this.#hashes.set(uri.toString(), res.hash)
-      return res.encoding === 'base64'
-        ? Uint8Array.from(Buffer.from(res.content, 'base64'))
-        : new TextEncoder().encode(res.content)
+      return res.encoding === 'base64' ? Uint8Array.from(Buffer.from(res.content, 'base64')) : new TextEncoder().encode(res.content)
     } catch (err) {
       throw toFsError(err, uri)
     }
@@ -97,13 +99,13 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
   async writeFile(uri: vscode.Uri, content: Uint8Array, options: { create: boolean; overwrite: boolean }): Promise<void> {
     const client = await this.#client(uri)
     if (!(await this.#writable(uri, client))) {
-      throw vscode.FileSystemError.NoPermissions(
-        'this gateway is read-only (hostFiles.write is a separate server opt-in)',
-      )
+      throw vscode.FileSystemError.NoPermissions('this gateway is read-only (hostFiles.write is a separate server opt-in)')
     }
     const key = uri.toString()
     const expectedHash = this.#hashes.get(key)
-    if (!expectedHash && !options.create) throw vscode.FileSystemError.FileNotFound(uri)
+    if (!expectedHash && !options.create) {
+      throw vscode.FileSystemError.FileNotFound(uri)
+    }
     try {
       const res = await client.writeHostFile({
         path: uri.path,
@@ -127,7 +129,9 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
 
   async #writable(uri: vscode.Uri, client: WorkerDeckClient): Promise<boolean> {
     const cached = this.#canWrite.get(uri.authority)
-    if (cached !== undefined) return cached
+    if (cached !== undefined) {
+      return cached
+    }
     try {
       const roots = await client.listHostRoots()
       const canWrite = roots.canWrite === true
@@ -183,9 +187,15 @@ function statOf(entry: HostDirEntry): vscode.FileStat {
 
 function toFsError(err: unknown, uri: vscode.Uri): Error {
   if (err instanceof WorkerDeckError) {
-    if (err.status === 404) return vscode.FileSystemError.FileNotFound(uri)
-    if (err.status === 403) return vscode.FileSystemError.NoPermissions(uri)
-    if (err.status === 413) return vscode.FileSystemError.Unavailable(`${uri.path}: too large for the gateway to serve`)
+    if (err.status === 404) {
+      return vscode.FileSystemError.FileNotFound(uri)
+    }
+    if (err.status === 403) {
+      return vscode.FileSystemError.NoPermissions(uri)
+    }
+    if (err.status === 413) {
+      return vscode.FileSystemError.Unavailable(`${uri.path}: too large for the gateway to serve`)
+    }
   }
   return err instanceof Error ? err : new Error(String(err))
 }

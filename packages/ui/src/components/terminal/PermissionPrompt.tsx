@@ -30,12 +30,7 @@ export interface TerminalPermissionPromptProps {
   className?: string
 }
 
-export function TerminalPermissionPrompt({
-  request,
-  onApprove,
-  onDeny,
-  className,
-}: TerminalPermissionPromptProps) {
+export function TerminalPermissionPrompt({ request, onApprove, onDeny, className }: TerminalPermissionPromptProps) {
   const [focused, setFocused] = useState(0)
   const [denying, setDenying] = useState(false)
   const [reason, setReason] = useState('')
@@ -67,7 +62,7 @@ export function TerminalPermissionPrompt({
           onChange={setReason}
           onSubmit={() => deny(false)}
           onCancel={() => setDenying(false)}
-          placeholder='Reason (optional) — the agent reads this and can try something else'
+          placeholder="Reason (optional) — the agent reads this and can try something else"
         />
       ) : undefined,
     },
@@ -76,14 +71,15 @@ export function TerminalPermissionPrompt({
 
   return (
     <div
-      data-slot='permission-prompt'
+      data-slot="permission-prompt"
       className={className}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault()
           deny(false)
         }
-      }}>
+      }}
+    >
       <Rule />
       <PromptTitle title={heading} subject={subject} />
       <Blank />
@@ -95,14 +91,12 @@ export function TerminalPermissionPrompt({
         </>
       ) : request.description ? (
         <>
-          <Row tone='dim'>{request.description}</Row>
+          <Row tone="dim">{request.description}</Row>
           <Blank />
         </>
       ) : null}
-      {request.decisionReason ? <Row tone='faint'>{request.decisionReason}</Row> : null}
-      <Row>
-        {request.title ?? `Do you want to proceed?`}
-      </Row>
+      {request.decisionReason ? <Row tone="faint">{request.decisionReason}</Row> : null}
+      <Row>{request.title ?? `Do you want to proceed?`}</Row>
       <Choices
         label={heading}
         options={options}
@@ -110,9 +104,13 @@ export function TerminalPermissionPrompt({
         onFocus={setFocused}
         active={!denying}
         onChoose={(index) => {
-          if (index === 0) onApprove(request.id)
-          else if (index === 1) setDenying(true)
-          else deny(true)
+          if (index === 0) {
+            onApprove(request.id)
+          } else if (index === 1) {
+            setDenying(true)
+          } else {
+            deny(true)
+          }
         }}
       />
       <Blank />

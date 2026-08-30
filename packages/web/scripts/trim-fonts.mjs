@@ -17,7 +17,9 @@ const dist = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist')
 let removed = 0
 let bytes = 0
 for (const entry of await readdir(dist, { withFileTypes: true, recursive: true })) {
-  if (!entry.isFile() || !entry.name.endsWith('.woff')) continue
+  if (!entry.isFile() || !entry.name.endsWith('.woff')) {
+    continue
+  }
   const path = join(entry.parentPath, entry.name)
   bytes += (await stat(path)).size
   await rm(path)
@@ -25,7 +27,5 @@ for (const entry of await readdir(dist, { withFileTypes: true, recursive: true }
 }
 
 console.log(
-  removed === 0
-    ? '[web] no legacy .woff files to trim'
-    : `[web] trimmed ${removed} legacy .woff files (${Math.round(bytes / 1024)} KB)`,
+  removed === 0 ? '[web] no legacy .woff files to trim' : `[web] trimmed ${removed} legacy .woff files (${Math.round(bytes / 1024)} KB)`,
 )

@@ -60,10 +60,14 @@ export function createWebFetch(options: WebFetchOptions = {}): WebFetchFn {
 
   const fetchPage = async (rawUrl: string): Promise<WebFetchResult> => {
     const cached = cache.get(rawUrl)
-    if (cached && cached.expiresAt > Date.now()) return cached.page
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.page
+    }
 
     let url = parseUrl(rawUrl)
-    if (!url) return { url: rawUrl, error: 'only absolute http(s) URLs are supported' }
+    if (!url) {
+      return { url: rawUrl, error: 'only absolute http(s) URLs are supported' }
+    }
 
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 30_000)
@@ -71,16 +75,24 @@ export function createWebFetch(options: WebFetchOptions = {}): WebFetchFn {
       let response: Response
       for (let hop = 0; ; hop++) {
         const denied = await denyReason(url, options.allowedHosts)
-        if (denied) return { url: url.href, error: denied }
+        if (denied) {
+          return { url: url.href, error: denied }
+        }
         response = await fetchImpl(url.href, {
           redirect: 'manual',
           signal: controller.signal,
         })
-        if (response.status < 300 || response.status >= 400) break
+        if (response.status < 300 || response.status >= 400) {
+          break
+        }
         const location = response.headers.get('location')
-        if (!location) return { url: url.href, error: `redirect (${response.status}) without a location` }
+        if (!location) {
+          return { url: url.href, error: `redirect (${response.status}) without a location` }
+        }
         const target = parseUrl(new URL(location, url).href)
-        if (!target) return { url: url.href, error: `redirect to unsupported URL: ${location}` }
+        if (!target) {
+          return { url: url.href, error: `redirect to unsupported URL: ${location}` }
+        }
         if (target.host !== url.host) {
           // Like the original: surface a cross-host redirect instead of silently
           // following it — the agent may fetch the new URL explicitly.
@@ -90,7 +102,9 @@ export function createWebFetch(options: WebFetchOptions = {}): WebFetchFn {
             notice: `redirected to a different host (${target.host}); not followed automatically`,
           }
         }
-        if (hop >= MAX_REDIRECTS) return { url: url.href, error: 'too many redirects' }
+        if (hop >= MAX_REDIRECTS) {
+          return { url: url.href, error: 'too many redirects' }
+        }
         url = target
       }
       if (!response.ok) {
@@ -105,8 +119,7 @@ export function createWebFetch(options: WebFetchOptions = {}): WebFetchFn {
         return { url: url.href, error: `response too large (> ${maxContentBytes} bytes)` }
       }
       const contentType = response.headers.get('content-type') ?? ''
-      const text =
-        contentType.includes('html') || looksLikeHtml(body) ? htmlToMarkdown(body) : body
+      const text = contentType.includes('html') || looksLikeHtml(body) ? htmlToMarkdown(body) : body
       const truncated = text.length > maxMarkdownBytes
       const page: WebFetchResult = {
         url: url.href,
@@ -115,16 +128,14 @@ export function createWebFetch(options: WebFetchOptions = {}): WebFetchFn {
       }
       if (cache.size >= MAX_CACHE_ENTRIES) {
         const oldest = cache.keys().next().value
-        if (oldest !== undefined) cache.delete(oldest)
+        if (oldest !== undefined) {
+          cache.delete(oldest)
+        }
       }
       cache.set(rawUrl, { expiresAt: Date.now() + cacheTtlMs, page })
       return page
     } catch (error) {
-      const message = controller.signal.aborted
-        ? 'request timed out'
-        : error instanceof Error
-          ? error.message
-          : String(error)
+      const message = controller.signal.aborted ? 'request timed out' : error instanceof Error ? error.message : String(error)
       return { url: url.href, error: message }
     } finally {
       clearTimeout(timer)
@@ -133,7 +144,9 @@ export function createWebFetch(options: WebFetchOptions = {}): WebFetchFn {
 
   return async (rawUrl, prompt) => {
     const page = await fetchPage(rawUrl)
-    if (page.error || page.notice || !options.digest || page.markdown === undefined) return page
+    if (page.error || page.notice || !options.digest || page.markdown === undefined) {
+      return page
+    }
     try {
       const digest = await options.digest(page.markdown, prompt)
       return { url: page.url, digest, truncated: page.truncated }
@@ -162,10 +175,16 @@ async function denyReason(url: URL, allowedHosts: string[] | undefined): Promise
   if (allowedHosts && allowedHosts.length > 0 && !hostMatches(host, allowedHosts)) {
     return `host not allowed: ${host}`
   }
-  if (host === 'localhost' || host.endsWith('.localhost')) return `host not allowed: ${host}`
+  if (host === 'localhost' || host.endsWith('.localhost')) {
+    return `host not allowed: ${host}`
+  }
   const literal = host.replace(/^\[|\]$/g, '')
-  if (isPrivateAddress(literal)) return `address not allowed: ${literal}`
-  if (/^[\d.]+$/.test(literal) || literal.includes(':')) return null // public literal IP
+  if (isPrivateAddress(literal)) {
+    return `address not allowed: ${literal}`
+  }
+  if (/^[\d.]+$/.test(literal) || literal.includes(':')) {
+    return null
+  } // public literal IP
   let addresses: Array<{ address: string }>
   try {
     addresses = await lookup(literal, { all: true })
@@ -173,7 +192,9 @@ async function denyReason(url: URL, allowedHosts: string[] | undefined): Promise
     return `cannot resolve host: ${host}`
   }
   for (const { address } of addresses) {
-    if (isPrivateAddress(address)) return `host resolves to a private address: ${host}`
+    if (isPrivateAddress(address)) {
+      return `host resolves to a private address: ${host}`
+    }
   }
   return null
 }
@@ -181,8 +202,12 @@ async function denyReason(url: URL, allowedHosts: string[] | undefined): Promise
 function hostMatches(host: string, allowedHosts: string[]): boolean {
   return allowedHosts.some((entry) => {
     const pattern = entry.trim().toLowerCase()
-    if (!pattern) return false
-    if (pattern.startsWith('*.')) return host.endsWith(pattern.slice(1))
+    if (!pattern) {
+      return false
+    }
+    if (pattern.startsWith('*.')) {
+      return host.endsWith(pattern.slice(1))
+    }
     return host === pattern
   })
 }
@@ -191,19 +216,35 @@ function hostMatches(host: string, allowedHosts: string[]): boolean {
 export function isPrivateAddress(address: string): boolean {
   const ip = address.toLowerCase()
   if (ip.includes(':')) {
-    if (ip === '::' || ip === '::1') return true
+    if (ip === '::' || ip === '::1') {
+      return true
+    }
     const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(ip)
-    if (mapped) return isPrivateAddress(mapped[1]!)
+    if (mapped) {
+      return isPrivateAddress(mapped[1]!)
+    }
     return ip.startsWith('fc') || ip.startsWith('fd') || /^fe[89ab]/.test(ip)
   }
   const parts = ip.split('.').map(Number)
-  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return false
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) {
+    return false
+  }
   const [a, b] = parts as [number, number, number, number]
-  if (a === 0 || a === 10 || a === 127) return true
-  if (a === 100 && b! >= 64 && b! <= 127) return true // CGNAT
-  if (a === 169 && b === 254) return true
-  if (a === 172 && b! >= 16 && b! <= 31) return true
-  if (a === 192 && b === 168) return true
+  if (a === 0 || a === 10 || a === 127) {
+    return true
+  }
+  if (a === 100 && b! >= 64 && b! <= 127) {
+    return true
+  } // CGNAT
+  if (a === 169 && b === 254) {
+    return true
+  }
+  if (a === 172 && b! >= 16 && b! <= 31) {
+    return true
+  }
+  if (a === 192 && b === 168) {
+    return true
+  }
   return a >= 224 // multicast + reserved
 }
 
@@ -217,7 +258,9 @@ async function readCapped(response: Response, maxBytes: number): Promise<string 
   let out = ''
   for (;;) {
     const { done, value } = await reader.read()
-    if (done) break
+    if (done) {
+      break
+    }
     out += decoder.decode(value, { stream: true })
     if (out.length > maxBytes) {
       await reader.cancel().catch(() => {})
@@ -252,7 +295,9 @@ export function htmlToMarkdown(html: string): string {
     .replace(/<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href: string, body: string) => {
       const label = stripTags(body).trim()
       // Skip anchors/scripts and empty labels; keep the label when it IS the URL.
-      if (!label || href.startsWith('#') || href.startsWith('javascript:')) return label
+      if (!label || href.startsWith('#') || href.startsWith('javascript:')) {
+        return label
+      }
       return label === href ? label : `[${label}](${href})`
     })
     .replace(/<li[^>]*>/gi, '\n- ')

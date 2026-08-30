@@ -14,8 +14,7 @@ import { applyEvent, initialTranscriptState, type TranscriptState } from '../src
  * and the coalesced log through `applyEvent`; the states must be identical.
  */
 
-const seqd = (bodies: SessionEventBody[]): SessionEvent[] =>
-  bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
+const seqd = (bodies: SessionEventBody[]): SessionEvent[] => bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
 
 /** The gateway's rule, reimplemented in the shape the runner applies it — a
  * backwards scan keeping the first occurrence of each key. Deliberately a
@@ -27,15 +26,19 @@ function coalesce(events: SessionEvent[]): SessionEvent[] {
   const seen = new Set<string>()
   for (let i = events.length - 1; i >= 0; i--) {
     const key = replayCoalesceKey(events[i]!)
-    if (key === undefined) continue
-    if (seen.has(key)) stale.add(events[i]!.seq)
-    else seen.add(key)
+    if (key === undefined) {
+      continue
+    }
+    if (seen.has(key)) {
+      stale.add(events[i]!.seq)
+    } else {
+      seen.add(key)
+    }
   }
   return events.filter((e) => !stale.has(e.seq))
 }
 
-const fold = (events: SessionEvent[]): TranscriptState =>
-  events.reduce(applyEvent, initialTranscriptState)
+const fold = (events: SessionEvent[]): TranscriptState => events.reduce(applyEvent, initialTranscriptState)
 
 const limit = (type: string, utilization: number): RateLimitInfo =>
   ({ rateLimitType: type, utilization, status: 'allowed' }) as RateLimitInfo
@@ -48,7 +51,19 @@ const usage = (total: number): SessionEventBody => ({
 describe('replay coalescing is unobservable', () => {
   it('lands on the same state as the full log, for a session of many turns', () => {
     const bodies: SessionEventBody[] = [
-      { type: 'system_init', sdkSessionId: 'sdk-1', model: 'm', cwd: '/w', apiKeySource: 'user', tools: [], skills: [], slashCommands: [], permissionMode: 'default', claudeCodeVersion: '2.0.0', mcpServers: [] },
+      {
+        type: 'system_init',
+        sdkSessionId: 'sdk-1',
+        model: 'm',
+        cwd: '/w',
+        apiKeySource: 'user',
+        tools: [],
+        skills: [],
+        slashCommands: [],
+        permissionMode: 'default',
+        claudeCodeVersion: '2.0.0',
+        mcpServers: [],
+      },
       { type: 'capabilities', models: [], commands: [], defaultModel: 'm' },
     ]
     // Fifty turns of the real emission pattern: a reading per window per turn.
@@ -138,7 +153,19 @@ describe('replay coalescing is unobservable', () => {
     expect(replayCoalesceKey({ type: 'capabilities', models: [], commands: [] })).toBeUndefined()
     expect(replayCoalesceKey({ type: 'model_changed', model: undefined })).toBeUndefined()
     expect(
-      replayCoalesceKey({ type: 'system_init', sdkSessionId: 's', model: 'm', cwd: '/w', apiKeySource: 'user', tools: [], skills: [], slashCommands: [], permissionMode: 'default', claudeCodeVersion: '2.0.0', mcpServers: [] }),
+      replayCoalesceKey({
+        type: 'system_init',
+        sdkSessionId: 's',
+        model: 'm',
+        cwd: '/w',
+        apiKeySource: 'user',
+        tools: [],
+        skills: [],
+        slashCommands: [],
+        permissionMode: 'default',
+        claudeCodeVersion: '2.0.0',
+        mcpServers: [],
+      }),
     ).toBeUndefined()
     // …and the reducer proves why for the two that would corrupt state.
     const caps = seqd([

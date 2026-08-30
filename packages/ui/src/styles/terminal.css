@@ -48,7 +48,9 @@
   /* Ligatures turn `=>` and `!=` into glyphs that no longer occupy the cells
      they were measured as. A grid renderer cannot have that. */
   font-variant-ligatures: none;
-  font-feature-settings: 'liga' 0, 'calt' 0;
+  font-feature-settings:
+    'liga' 0,
+    'calt' 0;
   /* `ch` is the advance of `0`, so tabular figures keep digit columns — the
      diff's line numbers — genuinely aligned. */
   font-variant-numeric: tabular-nums;
@@ -150,9 +152,15 @@
 
 /* Indent levels. A nested row steps one cell per level — the same 2 columns a
    marker occupies, so a child's marker sits under its parent's first letter. */
-.term-row[data-indent='1'] { padding-left: var(--term-cell); }
-.term-row[data-indent='2'] { padding-left: calc(2 * var(--term-cell)); }
-.term-row[data-indent='3'] { padding-left: calc(3 * var(--term-cell)); }
+.term-row[data-indent='1'] {
+  padding-left: var(--term-cell);
+}
+.term-row[data-indent='2'] {
+  padding-left: calc(2 * var(--term-cell));
+}
+.term-row[data-indent='3'] {
+  padding-left: calc(3 * var(--term-cell));
+}
 
 .term-gutter {
   /* `pre` so a space-only gutter keeps its cell — an unmarked row must still
@@ -215,20 +223,42 @@
  * takes `tone` and passes it straight through, so adding a colour is one line
  * here and nothing in the components.
  */
-[data-terminal] [data-tone='fg'] { color: var(--term-fg); }
-[data-terminal] [data-tone='bright'] { color: var(--term-bright); }
-[data-terminal] [data-tone='dim'] { color: var(--term-dim); }
-[data-terminal] [data-tone='faint'] { color: var(--term-faint); }
-[data-terminal] [data-tone='mark'] { color: var(--term-mark); }
-[data-terminal] [data-tone='blue'] { color: var(--term-blue); }
-[data-terminal] [data-tone='green'] { color: var(--term-green); }
-[data-terminal] [data-tone='red'] { color: var(--term-red); }
-[data-terminal] [data-tone='yellow'] { color: var(--term-yellow); }
-[data-terminal] [data-tone='magenta'] { color: var(--term-magenta); }
+[data-terminal] [data-tone='fg'] {
+  color: var(--term-fg);
+}
+[data-terminal] [data-tone='bright'] {
+  color: var(--term-bright);
+}
+[data-terminal] [data-tone='dim'] {
+  color: var(--term-dim);
+}
+[data-terminal] [data-tone='faint'] {
+  color: var(--term-faint);
+}
+[data-terminal] [data-tone='mark'] {
+  color: var(--term-mark);
+}
+[data-terminal] [data-tone='blue'] {
+  color: var(--term-blue);
+}
+[data-terminal] [data-tone='green'] {
+  color: var(--term-green);
+}
+[data-terminal] [data-tone='red'] {
+  color: var(--term-red);
+}
+[data-terminal] [data-tone='yellow'] {
+  color: var(--term-yellow);
+}
+[data-terminal] [data-tone='magenta'] {
+  color: var(--term-magenta);
+}
 
 /* Weight is the only other axis. A terminal has one type size, so emphasis has
    to be carried by weight and colour — never by a larger glyph. */
-[data-terminal] [data-weight='bold'] { font-weight: 600; }
+[data-terminal] [data-weight='bold'] {
+  font-weight: 600;
+}
 
 /* The scroller. Its horizontal padding IS `--term-bleed` — that is the whole
    contract a full-bleed band relies on — and its vertical padding is a line, so
@@ -415,12 +445,7 @@
 /* Dashed, for a boundary *within* a prompt. A repeating gradient rather than a
    dashed border, for the same no-layout reason. */
 [data-terminal] .term-rule-dashed {
-  background: repeating-linear-gradient(
-      to right,
-      var(--term-faint) 0 4px,
-      transparent 4px 8px
-    )
-    left center / 100% 1px no-repeat;
+  background: repeating-linear-gradient(to right, var(--term-faint) 0 4px, transparent 4px 8px) left center / 100% 1px no-repeat;
 }
 
 /* The focused option. A fill, never an outline: an outline is 2px of layout the
@@ -938,9 +963,18 @@
    percentages: the whole point of the 16px rail is that a lane is a reliable
    8px target, and a percentage would reintroduce the drift the fixed width was
    chosen to remove. */
-.term-scrubber .term-scrub-mark[data-lane='l'] { left: 0; width: 6px; }
-.term-scrubber .term-scrub-mark[data-lane='r'] { left: 6px; width: 6px; }
-.term-scrubber .term-scrub-mark[data-lane='f'] { left: 0; width: 12px; }
+.term-scrubber .term-scrub-mark[data-lane='l'] {
+  left: 0;
+  width: 6px;
+}
+.term-scrubber .term-scrub-mark[data-lane='r'] {
+  left: 6px;
+  width: 6px;
+}
+.term-scrubber .term-scrub-mark[data-lane='f'] {
+  left: 0;
+  width: 12px;
+}
 
 /* Lane marks are two-tone: the first 2px — the mark's own anchor — at full
    strength, the rest of the row's extent a 25% tail, so a long answer reads
@@ -950,11 +984,7 @@
    findable. The alarms (error, approval) stay solid: they are alarms, not
    extents. */
 .term-scrubber .term-scrub-mark[data-kind='user'] {
-  background: linear-gradient(
-    to bottom,
-    var(--term-blue) 0 2px,
-    color-mix(in srgb, var(--term-blue) 25%, transparent) 2px
-  );
+  background: linear-gradient(to bottom, var(--term-blue) 0 2px, color-mix(in srgb, var(--term-blue) 25%, transparent) 2px);
 }
 /* A sub-agent's stretch of the transcript, in the input lane: green, because
    every other colour on this rail is already spoken for and none of them means
@@ -963,27 +993,17 @@
    as an extent (2px head, 25% tail) like the two marks it shares its geometry
    with: collapsed it is a tick, expanded it is the band the sub-agent covers. */
 .term-scrubber .term-scrub-mark[data-kind='subagent'] {
-  background: linear-gradient(
-    to bottom,
-    var(--term-green) 0 2px,
-    color-mix(in srgb, var(--term-green) 25%, transparent) 2px
-  );
+  background: linear-gradient(to bottom, var(--term-green) 0 2px, color-mix(in srgb, var(--term-green) 25%, transparent) 2px);
 }
 .term-scrubber .term-scrub-mark[data-kind='turn'] {
-  background: linear-gradient(
-    to bottom,
-    var(--term-fg) 0 2px,
-    color-mix(in srgb, var(--term-fg) 25%, transparent) 2px
-  );
+  background: linear-gradient(to bottom, var(--term-fg) 0 2px, color-mix(in srgb, var(--term-fg) 25%, transparent) 2px);
 }
 .term-scrubber .term-scrub-mark[data-kind='turnFailed'] {
-  background: linear-gradient(
-    to bottom,
-    var(--term-red) 0 2px,
-    color-mix(in srgb, var(--term-red) 25%, transparent) 2px
-  );
+  background: linear-gradient(to bottom, var(--term-red) 0 2px, color-mix(in srgb, var(--term-red) 25%, transparent) 2px);
 }
-.term-scrubber .term-scrub-mark[data-kind='error'] { background: var(--term-red); }
+.term-scrubber .term-scrub-mark[data-kind='error'] {
+  background: var(--term-red);
+}
 /* A failed tool call is an alarm, so it is solid like the rest of them — in the
    response lane, since it is something the run produced — but at 55%, which is the one thing keeping the rail readable. A session
    error is rare and a turn failure rarer; a tool that failed and was recovered
@@ -995,18 +1015,21 @@
 .term-scrubber .term-scrub-mark[data-kind='toolFailed'] {
   background: color-mix(in srgb, var(--term-red) 55%, transparent);
 }
-.term-scrubber .term-scrub-mark[data-kind='bookmark'] { background: var(--term-magenta); }
+.term-scrubber .term-scrub-mark[data-kind='bookmark'] {
+  background: var(--term-magenta);
+}
 .term-scrubber .term-scrub-mark[data-kind='approval'] {
   background: var(--term-yellow);
   animation: term-scrub-pulse 1.2s infinite;
 }
 /* The catch-up boundary: a dashed hairline centered in its 3px hit box. */
 .term-scrubber .term-scrub-mark[data-kind='recap'] {
-  background: repeating-linear-gradient(to right, var(--term-faint) 0 3px, transparent 3px 6px)
-    left center / 100% 1px no-repeat;
+  background: repeating-linear-gradient(to right, var(--term-faint) 0 3px, transparent 3px 6px) left center / 100% 1px no-repeat;
 }
 @keyframes term-scrub-pulse {
-  50% { opacity: 0.3; }
+  50% {
+    opacity: 0.3;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .term-scrubber .term-scrub-mark[data-kind='approval'] {

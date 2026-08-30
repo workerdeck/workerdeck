@@ -20,11 +20,7 @@ export interface MessageProps extends HTMLAttributes<HTMLDivElement> {
  */
 export function Message({ from, className, children, ...props }: MessageProps) {
   return (
-    <div
-      data-slot='message'
-      data-from={from}
-      className={cn('flex w-full flex-col items-start gap-1', className)}
-      {...props}>
+    <div data-slot="message" data-from={from} className={cn('flex w-full flex-col items-start gap-1', className)} {...props}>
       {children}
     </div>
   )
@@ -33,7 +29,7 @@ export function Message({ from, className, children, ...props }: MessageProps) {
 export function MessageContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      data-slot='message-content'
+      data-slot="message-content"
       className={cn(
         'min-w-0 text-body-sm leading-6 text-fg-1',
         // Bubble treatment only within a user message row.

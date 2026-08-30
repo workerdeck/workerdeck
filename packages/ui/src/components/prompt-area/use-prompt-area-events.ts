@@ -11,11 +11,7 @@ import {
   insertSegmentsAtCursor,
 } from './clipboard-helpers.ts'
 import { htmlToMarkdown } from './html-to-markdown.ts'
-import {
-  normalizeListPrefixText,
-  renumberOrderedListLines,
-  hasOrderedListRun,
-} from './prompt-area-list-ops.ts'
+import { normalizeListPrefixText, renumberOrderedListLines, hasOrderedListRun } from './prompt-area-list-ops.ts'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -132,11 +128,15 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
       // Let a consumer take over the paste entirely (e.g. divert large text or
       // arbitrary files to an upload pipeline) by calling preventDefault().
       onRawPaste?.(e)
-      if (e.defaultPrevented) return
+      if (e.defaultPrevented) {
+        return
+      }
       e.preventDefault()
 
       const editor = editorRef.current
-      if (!editor) return
+      if (!editor) {
+        return
+      }
 
       // Check for image files in clipboard before processing text
       // Some browsers/OSes provide pasted images via `items` instead of `files` (e.g. screenshots)
@@ -162,7 +162,9 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
         if (parsed && parsed.length > 0) {
           // Insert the copied segments at cursor position
           const range = getSelectionRange()
-          if (!range) return
+          if (!range) {
+            return
+          }
 
           range.deleteContents()
 
@@ -212,8 +214,12 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
           }
         }
       }
-      if (!text) text = e.clipboardData.getData('text/plain')
-      if (!text) return
+      if (!text) {
+        text = e.clipboardData.getData('text/plain')
+      }
+      if (!text) {
+        return
+      }
 
       // Normalize pasted list markers ("- " → "•") so pasted bullets match
       // typed input. Applies to both the HTML→markdown and plain-text paths.
@@ -232,7 +238,9 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
 
       // Insert plain text at cursor position using Selection API
       const range = getSelectionRange()
-      if (!range) return
+      if (!range) {
+        return
+      }
 
       range.deleteContents()
 
@@ -273,11 +281,7 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
           if (
             seg.type === 'chip' &&
             !newSegments.some(
-              (s) =>
-                s.type === 'chip' &&
-                s.trigger === seg.trigger &&
-                s.value === seg.value &&
-                s.displayText === seg.displayText,
+              (s) => s.type === 'chip' && s.trigger === seg.trigger && s.value === seg.value && s.displayText === seg.displayText,
             )
           ) {
             onChipAdd?.(seg)
@@ -315,7 +319,9 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
     e.preventDefault()
 
     const range = getSelectionRange()
-    if (!range) return
+    if (!range) {
+      return
+    }
 
     const fragment = range.cloneContents()
 
@@ -345,7 +351,9 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
 
       // Then delete the selection
       const range = getSelectionRange()
-      if (!range) return
+      if (!range) {
+        return
+      }
 
       const currentSegments = readSegmentsFromDOM()
       pushUndo(currentSegments)
@@ -397,11 +405,15 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
   const handleBlur = useCallback(() => {
     setTimeout(() => {
       const editor = editorRef.current
-      if (!editor) return
+      if (!editor) {
+        return
+      }
 
       // Only dismiss if focus didn't move to an element within the editor container
       const activeEl = document.activeElement
-      if (activeEl && editor.parentElement?.contains(activeEl)) return
+      if (activeEl && editor.parentElement?.contains(activeEl)) {
+        return
+      }
 
       dismissTrigger()
     }, BLUR_DELAY_MS)
@@ -415,17 +427,23 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
     (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
       const isMeta = e.metaKey || e.ctrlKey
 
-      if (!isMeta || e.key !== 'z') return false
+      if (!isMeta || e.key !== 'z') {
+        return false
+      }
 
       e.preventDefault()
       const state = undoState.current
 
       if (e.shiftKey) {
         // Redo: Ctrl+Shift+Z
-        if (state.redoStack.length === 0) return true
+        if (state.redoStack.length === 0) {
+          return true
+        }
 
         const segments = state.redoStack.pop()
-        if (!segments) return true
+        if (!segments) {
+          return true
+        }
 
         const current = readSegmentsFromDOM()
         state.undoStack.push(current)
@@ -435,10 +453,14 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
         onRedo?.(segments)
       } else {
         // Undo: Ctrl+Z
-        if (state.undoStack.length === 0) return true
+        if (state.undoStack.length === 0) {
+          return true
+        }
 
         const segments = state.undoStack.pop()
-        if (!segments) return true
+        if (!segments) {
+          return true
+        }
 
         const current = readSegmentsFromDOM()
         state.redoStack.push(current)

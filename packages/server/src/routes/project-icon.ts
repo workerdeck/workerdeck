@@ -35,12 +35,7 @@ import { json } from '../lib/http.ts'
 import { readContained } from '../services/host-files.ts'
 import { MAX_PROJECT_ICON_BYTES, type ProjectInfoService } from '../services/project-info.ts'
 
-export function handleProjectIcon(
-  projects: ProjectInfoService,
-  req: IncomingMessage,
-  res: ServerResponse,
-  cwd: string,
-): void {
+export function handleProjectIcon(projects: ProjectInfoService, req: IncomingMessage, res: ServerResponse, cwd: string): void {
   if (req.method !== 'GET') {
     json(res, 405, { error: 'method not allowed' })
     return

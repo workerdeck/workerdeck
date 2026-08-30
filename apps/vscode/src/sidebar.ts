@@ -4,13 +4,7 @@ import { clientFor } from './gateway.ts'
 import { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import type { HostToSidebar, SidebarToHost } from './bridge-protocol.ts'
-import {
-  DEFAULT_VIEW_CONFIG,
-  buildRows,
-  filterRows,
-  runningSubagents,
-  type ViewConfig,
-} from './view-config.ts'
+import { DEFAULT_VIEW_CONFIG, buildRows, filterRows, runningSubagents, type ViewConfig } from './view-config.ts'
 import { webviewHtml } from './webview-html.ts'
 import { ProjectIconCache } from './project-icons.ts'
 
@@ -36,12 +30,7 @@ export type SidebarDelegate = {
   /** `subagentToolUseId` frames one agent's work; `revealToolUseId` stays on
    * the conversation and travels to a row. At most one is ever set — see
    * `wd-select-session`. */
-  selectSession: (
-    hostId: string,
-    sessionId: string,
-    subagentToolUseId?: string,
-    revealToolUseId?: string,
-  ) => Promise<void>
+  selectSession: (hostId: string, sessionId: string, subagentToolUseId?: string, revealToolUseId?: string) => Promise<void>
   /** The active session was deleted out from under the panel. */
   clearPanelIfActive: (sessionId: string) => Promise<void>
   activeSessionId: () => string | undefined
@@ -115,9 +104,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     this.#store = store
     this.#model = model
     this.#delegate = delegate
-    this.#icons = new ProjectIconCache(store, () =>
-      this.#post({ kind: 'wd-project-icons', icons: this.#icons.entries() }),
-    )
+    this.#icons = new ProjectIconCache(store, () => this.#post({ kind: 'wd-project-icons', icons: this.#icons.entries() }))
     this.#viewConfig = {
       ...DEFAULT_VIEW_CONFIG,
       ...context.globalState.get<ViewConfig>(VIEW_CONFIG_KEY),
@@ -138,9 +125,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     view.webview.options = { enableScripts: true, localResourceRoots: [dist] }
     view.webview.html = webviewHtml(view.webview, dist, 'sidebar.js')
     view.webview.onDidReceiveMessage((msg: SidebarToHost) => void this.#onMessage(msg))
-    view.onDidChangeVisibility(() =>
-      this.#model.setWatching(SidebarProvider.viewId, view.visible),
-    )
+    view.onDidChangeVisibility(() => this.#model.setWatching(SidebarProvider.viewId, view.visible))
     this.#model.setWatching(SidebarProvider.viewId, view.visible)
     view.onDidDispose(() => {
       this.#view = undefined
@@ -212,10 +197,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     // filter (or the workspace scope, which is on by default) is hiding sends
     // you looking for something that isn't there.
     const visible = filterRows(buildRows(state), this.#viewConfig, state.scope)
-    const rows = visible.reduce(
-      (total, row) => total + (state.unseen?.[`${row.hostId}:${row.info.id}`] ?? 0),
-      0,
-    )
+    const rows = visible.reduce((total, row) => total + (state.unseen?.[`${row.hostId}:${row.info.id}`] ?? 0), 0)
     this.#delegate.unread(rows, this.#model.attentionCount())
     // Counted over the same `visible` rows and in the same pass, for the same
     // reason: a bar announcing six agents in a session the filter is hiding
@@ -224,7 +206,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     let sessions = 0
     for (const row of visible) {
       const live = runningSubagents(row.info).length
-      if (live === 0) continue
+      if (live === 0) {
+        continue
+      }
       running += live
       sessions += 1
     }
@@ -232,7 +216,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
   }
 
   async #onMessage(msg: SidebarToHost): Promise<void> {
-    if (await this.#transports?.handle(msg)) return
+    if (await this.#transports?.handle(msg)) {
+      return
+    }
     switch (msg.kind) {
       case 'wd-ready':
         this.#ready = true
@@ -255,12 +241,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
         this.#pushState()
         return
       case 'wd-select-session':
-        await this.#delegate.selectSession(
-          msg.hostId,
-          msg.sessionId,
-          msg.subagentToolUseId,
-          msg.revealToolUseId,
-        )
+        await this.#delegate.selectSession(msg.hostId, msg.sessionId, msg.subagentToolUseId, msg.revealToolUseId)
         return
       case 'wd-stop-session':
         return this.#stopSession(msg.hostId, msg.sessionId)
@@ -285,7 +266,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
    */
   async #sessionMenu(hostId: string, sessionId: string): Promise<void> {
     const info = this.#model.sessionsOf(hostId).find((s) => s.id === sessionId)
-    if (!info) return
+    if (!info) {
+      return
+    }
     const running = info.status === 'running' || info.status === 'starting'
     const items: (vscode.QuickPickItem & { run: () => Promise<void> })[] = []
     if (running) {
@@ -326,7 +309,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
   async #stopSession(hostId: string, sessionId: string): Promise<void> {
     const host = this.#store.get(hostId)
     const client = host && (await clientFor(this.#store, host))
-    if (!client) return
+    if (!client) {
+      return
+    }
     await new Promise<void>((resolve) => {
       const handle = client.attach(sessionId, { reconnect: false })
       const timer = setTimeout(() => {
@@ -373,9 +358,13 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
       },
       'Clear context',
     )
-    if (confirmed !== 'Clear context') return
+    if (confirmed !== 'Clear context') {
+      return
+    }
     const client = host && (await clientFor(this.#store, host))
-    if (!client) return
+    if (!client) {
+      return
+    }
     await new Promise<void>((resolve) => {
       const handle = client.attach(sessionId, { reconnect: false })
       const timer = setTimeout(() => {
@@ -403,35 +392,39 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
   async #renameSession(hostId: string, sessionId: string, title: string): Promise<void> {
     const host = this.#store.get(hostId)
     const client = host && (await clientFor(this.#store, host))
-    if (!client) return
+    if (!client) {
+      return
+    }
     try {
       await client.updateSession(sessionId, { title: title.trim() || null })
     } catch (err) {
-      void vscode.window.showErrorMessage(
-        `WorkerDeck: rename failed — ${err instanceof Error ? err.message : String(err)}`,
-      )
+      void vscode.window.showErrorMessage(`WorkerDeck: rename failed — ${err instanceof Error ? err.message : String(err)}`)
     }
     await this.#model.refresh()
   }
 
   async #deleteSession(hostId: string, sessionId: string): Promise<void> {
     const host = this.#store.get(hostId)
-    if (!host) return
+    if (!host) {
+      return
+    }
     const info = this.#model.sessionsOf(hostId).find((s) => s.id === sessionId)
     const confirmed = await vscode.window.showWarningMessage(
       `Delete session "${info?.title ?? sessionId.slice(0, 8)}"?`,
       { modal: true },
       'Delete',
     )
-    if (confirmed !== 'Delete') return
+    if (confirmed !== 'Delete') {
+      return
+    }
     const client = await clientFor(this.#store, host)
-    if (!client) return
+    if (!client) {
+      return
+    }
     try {
       await client.deleteSession(sessionId)
     } catch (err) {
-      void vscode.window.showErrorMessage(
-        `WorkerDeck: delete failed — ${err instanceof Error ? err.message : String(err)}`,
-      )
+      void vscode.window.showErrorMessage(`WorkerDeck: delete failed — ${err instanceof Error ? err.message : String(err)}`)
     }
     await this.#delegate.clearPanelIfActive(sessionId)
     await this.#model.refresh()
@@ -442,7 +435,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
    * re-announces `wd-ready`, which is what re-pushes its state. */
   reloadWebview(): void {
     const view = this.#view
-    if (!view) return
+    if (!view) {
+      return
+    }
     this.#ready = false
     const dist = vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
     view.webview.html = webviewHtml(view.webview, dist, 'sidebar.js', {}, ++this.#htmlVersion)

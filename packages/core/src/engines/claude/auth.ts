@@ -11,9 +11,7 @@ import { createRequire } from 'node:module'
 export type ClaudeAuthStatus = 'logged_in' | 'logged_out' | 'unknown'
 
 /** Injectable form of {@link checkClaudeAuth} (tests, custom probes). */
-export type ClaudeAuthProbe = (
-  env: Record<string, string | undefined>,
-) => Promise<ClaudeAuthStatus>
+export type ClaudeAuthProbe = (env: Record<string, string | undefined>) => Promise<ClaudeAuthStatus>
 
 /**
  * The native Claude Code binary the Agent SDK itself spawns, resolved the way
@@ -36,13 +34,13 @@ export function resolveBundledClaudeExecutable(): string | undefined {
     // On linux only the matching libc variant installs (os/cpu/libc on the
     // optional deps), so trying both flavours needs no musl detection.
     const platforms =
-      process.platform === 'linux'
-        ? [`linux-${process.arch}`, `linux-${process.arch}-musl`]
-        : [`${process.platform}-${process.arch}`]
+      process.platform === 'linux' ? [`linux-${process.arch}`, `linux-${process.arch}-musl`] : [`${process.platform}-${process.arch}`]
     for (const platform of platforms) {
       try {
         const path = fromSdk.resolve(`@anthropic-ai/claude-agent-sdk-${platform}/claude${suffix}`)
-        if (existsSync(path)) return path
+        if (existsSync(path)) {
+          return path
+        }
       } catch {
         // not installed — try the next candidate
       }
@@ -70,7 +68,9 @@ export function checkClaudeAuth(
   options: { executable?: string; timeoutMs?: number } = {},
 ): Promise<ClaudeAuthStatus> {
   const executable = options.executable ?? resolveBundledClaudeExecutable()
-  if (!executable) return Promise.resolve('unknown')
+  if (!executable) {
+    return Promise.resolve('unknown')
+  }
   return new Promise((resolve) => {
     execFile(
       executable,

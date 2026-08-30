@@ -30,10 +30,7 @@ export type AppHostMessage = Exclude<HostToWebview, TransportToWebview>
 
 export class Bridge {
   readonly #vscode: VsCodeApi
-  readonly #pendingFetches = new Map<
-    number,
-    { resolve: (res: Response) => void; reject: (err: Error) => void }
-  >()
+  readonly #pendingFetches = new Map<number, { resolve: (res: Response) => void; reject: (err: Error) => void }>()
   readonly #sockets = new Map<number, BridgedWebSocket>()
   readonly #hostListeners = new Set<(msg: AppHostMessage) => void>()
   readonly #replayKinds: readonly string[]
@@ -63,7 +60,9 @@ export class Bridge {
     this.#hostListeners.add(listener)
     for (const kind of this.#replayKinds) {
       const last = this.#lastByKind.get(kind)
-      if (last) listener(last)
+      if (last) {
+        listener(last)
+      }
     }
     return () => this.#hostListeners.delete(listener)
   }
@@ -72,7 +71,9 @@ export class Bridge {
     switch (msg.kind) {
       case 'wd-fetch-result': {
         const pending = this.#pendingFetches.get(msg.id)
-        if (!pending) return
+        if (!pending) {
+          return
+        }
         this.#pendingFetches.delete(msg.id)
         if (!msg.ok) {
           // Reject like fetch does on network failure: a TypeError.
@@ -95,8 +96,12 @@ export class Bridge {
         this.#sockets.get(msg.id)?.dispatch(msg)
         return
       default:
-        if (this.#replayKinds.includes(msg.kind)) this.#lastByKind.set(msg.kind, msg)
-        for (const listener of this.#hostListeners) listener(msg)
+        if (this.#replayKinds.includes(msg.kind)) {
+          this.#lastByKind.set(msg.kind, msg)
+        }
+        for (const listener of this.#hostListeners) {
+          listener(msg)
+        }
         return
     }
   }
@@ -106,9 +111,7 @@ export class Bridge {
     const id = nextId++
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     const method = init?.method ?? 'GET'
-    const headers: [string, string][] = init?.headers
-      ? [...new Headers(init.headers as HeadersInit).entries()]
-      : []
+    const headers: [string, string][] = init?.headers ? [...new Headers(init.headers as HeadersInit).entries()] : []
     const bodyB64 = init?.body === undefined || init?.body === null ? undefined : await bodyToB64(init.body)
     const promise = new Promise<Response>((resolve, reject) => {
       this.#pendingFetches.set(id, { resolve, reject })
@@ -171,12 +174,16 @@ export class BridgedWebSocket {
   }
 
   send(data: string): void {
-    if (this.readyState !== BridgedWebSocket.OPEN) return
+    if (this.readyState !== BridgedWebSocket.OPEN) {
+      return
+    }
     this.#bridge.post({ kind: 'wd-ws-send', id: this.#id, data })
   }
 
   close(code?: number, reason?: string): void {
-    if (this.readyState === BridgedWebSocket.CLOSED) return
+    if (this.readyState === BridgedWebSocket.CLOSED) {
+      return
+    }
     this.readyState = BridgedWebSocket.CLOSING
     this.#bridge.post({ kind: 'wd-ws-close', id: this.#id, code, reason })
   }
@@ -209,9 +216,15 @@ export class BridgedWebSocket {
 }
 
 async function bodyToB64(body: BodyInit): Promise<string> {
-  if (typeof body === 'string') return b64FromBytes(new TextEncoder().encode(body))
-  if (body instanceof Blob) return b64FromBytes(new Uint8Array(await body.arrayBuffer()))
-  if (body instanceof ArrayBuffer) return b64FromBytes(new Uint8Array(body))
+  if (typeof body === 'string') {
+    return b64FromBytes(new TextEncoder().encode(body))
+  }
+  if (body instanceof Blob) {
+    return b64FromBytes(new Uint8Array(await body.arrayBuffer()))
+  }
+  if (body instanceof ArrayBuffer) {
+    return b64FromBytes(new Uint8Array(body))
+  }
   if (ArrayBuffer.isView(body)) {
     return b64FromBytes(new Uint8Array(body.buffer, body.byteOffset, body.byteLength))
   }
@@ -230,6 +243,8 @@ function b64FromBytes(bytes: Uint8Array): string {
 function bytesFromB64(b64: string): Uint8Array<ArrayBuffer> {
   const binary = atob(b64)
   const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
   return bytes
 }

@@ -8,8 +8,7 @@ import {
   type OpenFilesState,
 } from '../src/lib/open-files.ts'
 
-const run = (actions: OpenFilesAction[], from: OpenFilesState = initialOpenFilesState) =>
-  actions.reduce(openFilesReducer, from)
+const run = (actions: OpenFilesAction[], from: OpenFilesState = initialOpenFilesState) => actions.reduce(openFilesReducer, from)
 
 const paths = (state: OpenFilesState) => state.files.map((f) => f.path)
 
@@ -42,11 +41,7 @@ describe('openFilesReducer', () => {
   })
 
   it('focuses an already-open path instead of reading it again', () => {
-    const opened = run([
-      { type: 'open', path: '/p/a.ts' },
-      loaded('/p/a.ts', 'contents'),
-      { type: 'open', path: '/p/b.ts' },
-    ])
+    const opened = run([{ type: 'open', path: '/p/a.ts' }, loaded('/p/a.ts', 'contents'), { type: 'open', path: '/p/b.ts' }])
     const reopened = openFilesReducer(opened, { type: 'open', path: '/p/a.ts' })
     expect(paths(reopened)).toEqual(['/p/a.ts', '/p/b.ts'])
     expect(reopened.activePath).toBe('/p/a.ts')
@@ -86,7 +81,10 @@ describe('openFilesReducer', () => {
   })
 
   it('leaves nothing focused once the last tab is gone', () => {
-    const state = run([{ type: 'open', path: '/p/a.ts' }, { type: 'close', path: '/p/a.ts' }])
+    const state = run([
+      { type: 'open', path: '/p/a.ts' },
+      { type: 'close', path: '/p/a.ts' },
+    ])
     expect(state.files).toEqual([])
     expect(state.activePath).toBeUndefined()
   })
@@ -102,11 +100,7 @@ describe('openFilesReducer', () => {
   })
 
   it('drops a read that lands after its tab was closed', () => {
-    const state = run([
-      { type: 'open', path: '/p/a.ts' },
-      { type: 'close', path: '/p/a.ts' },
-      loaded('/p/a.ts'),
-    ])
+    const state = run([{ type: 'open', path: '/p/a.ts' }, { type: 'close', path: '/p/a.ts' }, loaded('/p/a.ts')])
     expect(state.files).toEqual([])
   })
 
@@ -132,11 +126,7 @@ describe('openFilesReducer', () => {
 
 /** A tab open, read, and edited — the starting point for every save test. */
 const edited = (draft = 'changed') =>
-  run([
-    { type: 'open', path: '/p/a.ts' },
-    loaded('/p/a.ts', 'original'),
-    { type: 'edit', path: '/p/a.ts', content: draft },
-  ])
+  run([{ type: 'open', path: '/p/a.ts' }, loaded('/p/a.ts', 'original'), { type: 'edit', path: '/p/a.ts', content: draft }])
 
 const only = (state: OpenFilesState) => state.files[0]!
 

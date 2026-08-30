@@ -1,16 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useRouterState, useSearch } from '@tanstack/react-router'
 import { filterRows, sessionLabel, type SessionRow } from '@workerdeck/protocol'
-import {
-  Button,
-  Empty,
-  EmptyKey,
-  EngineIcon,
-  SessionBrowser,
-  SessionStatusIcon,
-  cn,
-  toast,
-} from '@workerdeck/ui'
+import { Button, Empty, EmptyKey, EngineIcon, SessionBrowser, SessionStatusIcon, cn, toast } from '@workerdeck/ui'
 import { Filter, Layers, Plus, RefreshCw } from 'lucide-react'
 import { CreateSessionDialog } from '@/views/SessionsView.tsx'
 import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
@@ -32,7 +23,7 @@ import { useViewConfig } from '@/hooks/useViewConfig.ts'
 export function SessionsSidebar() {
   const navigate = useNavigate()
   const activeId = useRouterState({
-    select: (s) => (s.location.pathname.match(/^\/sessions\/[^/]+\/(.+)$/)?.[1] ?? undefined),
+    select: (s) => s.location.pathname.match(/^\/sessions\/[^/]+\/(.+)$/)?.[1] ?? undefined,
   })
   // The finer selection — which sub-agent is on screen — read from the URL, not
   // from a second channel out of the panel: `SessionView` folds the panel's
@@ -52,10 +43,11 @@ export function SessionsSidebar() {
   // Creation targets the primary gateway (see `primaryClient`), so the cwd
   // suggestions come from its sessions and the new session opens under its id.
   const primary = primaryHost()
-  const primarySessions =
-    snapshots.find((snap) => snap.host.id === primary?.id)?.sessions ?? []
+  const primarySessions = snapshots.find((snap) => snap.host.id === primary?.id)?.sessions ?? []
   const openCreated = (id: string) => {
-    if (!primary) return
+    if (!primary) {
+      return
+    }
     void navigate({
       to: '/sessions/$hostId/$sessionId',
       params: { hostId: primary.id, sessionId: id },
@@ -127,16 +119,16 @@ export function SessionsSidebar() {
   }
 
   const create = (
-    <Button variant='ghost' size='icon-sm' aria-label='New session' onClick={() => setCreating(true)}>
-      <Plus className='size-4' />
+    <Button variant="ghost" size="icon-sm" aria-label="New session" onClick={() => setCreating(true)}>
+      <Plus className="size-4" />
     </Button>
   )
 
   return (
     <>
       <SidebarFrame
-        section='sessions'
-        title='Sessions'
+        section="sessions"
+        title="Sessions"
         railActions={create}
         actions={
           <>
@@ -147,22 +139,19 @@ export function SessionsSidebar() {
                 what lets closing the bar leave the filters alone without hiding
                 the fact. */}
             <Button
-              variant='ghost'
-              size='icon-sm'
+              variant="ghost"
+              size="icon-sm"
               aria-label={filtersOpen ? 'Hide filters' : 'Show filters'}
               aria-pressed={filtersOpen}
               onClick={() => {
                 setFiltersOpen(!filtersOpen)
                 setFiltersShown(!filtersOpen)
-              }}>
+              }}
+            >
               <Filter className={cn('size-3.5', filtersOpen && 'fill-current text-fg-1')} />
             </Button>
-            <Button
-              variant='ghost'
-              size='icon-sm'
-              aria-label='Refresh'
-              onClick={() => void refresh()}>
-              <RefreshCw className='size-3.5' />
+            <Button variant="ghost" size="icon-sm" aria-label="Refresh" onClick={() => void refresh()}>
+              <RefreshCw className="size-3.5" />
             </Button>
             {create}
           </>
@@ -174,24 +163,22 @@ export function SessionsSidebar() {
         rail={visible.map((row) => (
           <button
             key={row.info.id}
-            type='button'
+            type="button"
             title={`${sessionLabel(row.info)} — ${row.state}`}
             aria-label={sessionLabel(row.info)}
             onClick={() => open(row)}
             className={cn(
               'flex w-full flex-col items-center gap-0.5 border-l-2 py-1.5',
-              row.info.id === activeId
-                ? 'border-l-accent bg-row-active'
-                : 'border-l-transparent hover:bg-row-hover',
-            )}>
-            <EngineIcon engine={row.adapter} model={row.info.model} className='size-4' />
+              row.info.id === activeId ? 'border-l-accent bg-row-active' : 'border-l-transparent hover:bg-row-hover',
+            )}
+          >
+            <EngineIcon engine={row.adapter} model={row.info.model} className="size-4" />
             <SessionStatusIcon row={row} />
           </button>
-        ))}>
+        ))}
+      >
         {failures.map(({ host, error }) => (
-          <div
-            key={host.id}
-            className='mx-2 mb-2 rounded-md bg-danger-bg px-2 py-1.5 text-label text-danger'>
+          <div key={host.id} className="mx-2 mb-2 rounded-md bg-danger-bg px-2 py-1.5 text-label text-danger">
             Can’t reach {host.name}: {error}
           </div>
         ))}
@@ -211,7 +198,9 @@ export function SessionsSidebar() {
             onRename={rename}
             onClearContext={(row) => {
               const client = clientFor(row.hostId)
-              if (!client) return
+              if (!client) {
+                return
+              }
               // A clear is a session COMMAND, not a REST route, so a list that
               // holds only REST clients has to borrow a socket for one frame —
               // the same shape the VS Code card's menu uses. `reconnect: false`
@@ -241,14 +230,12 @@ export function SessionsSidebar() {
               void clientFor(row.hostId)
                 ?.deleteSession(row.info.id)
                 .then(() => refresh())
-                .catch((e: unknown) =>
-                  toast.error(e instanceof Error ? e.message : 'Delete failed'),
-                )
+                .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Delete failed'))
             }}
             emptyState={
               <Empty
                 icon={<Layers />}
-                title='No sessions yet'
+                title="No sessions yet"
                 description={
                   <>
                     Start one with <EmptyKey>+</EmptyKey> above.

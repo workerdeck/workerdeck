@@ -83,16 +83,18 @@ export function useMarkdownMode(options: UseMarkdownModeOptions = {}): MarkdownM
   const { initialMode = 'markdown', mode: controlledMode, onModeChange } = options
   const isControlled = controlledMode !== undefined
 
-  const [internalMode, setInternalMode] = useState<PromptAreaMode>(
-    () => controlledMode ?? initialMode,
-  )
+  const [internalMode, setInternalMode] = useState<PromptAreaMode>(() => controlledMode ?? initialMode)
 
   const mode = isControlled ? controlledMode : internalMode
 
   const setMode = useCallback(
     (next: PromptAreaMode) => {
-      if (next === mode) return
-      if (!isControlled) setInternalMode(next)
+      if (next === mode) {
+        return
+      }
+      if (!isControlled) {
+        setInternalMode(next)
+      }
       onModeChange?.(next)
     },
     [mode, isControlled, onModeChange],

@@ -9,9 +9,9 @@ const meta: Meta<typeof Composer> = {
   component: Composer,
   decorators: [
     (Story) => (
-      <TranscriptVariantProvider value='cards'>
-        <TranscriptDensityProvider value='comfortable'>
-          <div className='w-[480px]' data-theme='dark'>
+      <TranscriptVariantProvider value="cards">
+        <TranscriptDensityProvider value="comfortable">
+          <div className="w-[480px]" data-theme="dark">
             <Story />
           </div>
         </TranscriptDensityProvider>
@@ -70,9 +70,9 @@ export const Inline: Story = {
 export const InlineNarrow: Story = {
   decorators: [
     (Story) => (
-      <TranscriptVariantProvider value='cards'>
-        <TranscriptDensityProvider value='comfortable'>
-          <div className='w-[320px]' data-theme='dark'>
+      <TranscriptVariantProvider value="cards">
+        <TranscriptDensityProvider value="comfortable">
+          <div className="w-[320px]" data-theme="dark">
             <Story />
           </div>
         </TranscriptDensityProvider>

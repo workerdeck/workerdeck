@@ -23,14 +23,10 @@ export const SIDEBAR_DEFAULT = 300
  * back to the default.
  */
 const widthKey = (section: SidebarSection) =>
-  section === 'sessions'
-    ? 'workerdeck.sessions-sidebar-width'
-    : `workerdeck.${section}-sidebar-width`
+  section === 'sessions' ? 'workerdeck.sessions-sidebar-width' : `workerdeck.${section}-sidebar-width`
 
 const collapsedKey = (section: SidebarSection) =>
-  section === 'sessions'
-    ? 'workerdeck.sessions-sidebar-collapsed'
-    : `workerdeck.${section}-sidebar-collapsed`
+  section === 'sessions' ? 'workerdeck.sessions-sidebar-collapsed' : `workerdeck.${section}-sidebar-collapsed`
 
 export function getSidebarWidth(section: SidebarSection): number {
   try {

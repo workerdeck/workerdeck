@@ -94,10 +94,7 @@ export type TriggerConfig = {
    * newer search supersedes this one. Pass it to `fetch()` or other async
    * APIs to cancel in-flight work automatically.
    */
-  onSearch?: (
-    query: string,
-    options: { signal: AbortSignal },
-  ) => TriggerSuggestion[] | Promise<TriggerSuggestion[]>
+  onSearch?: (query: string, options: { signal: AbortSignal }) => TriggerSuggestion[] | Promise<TriggerSuggestion[]>
   /**
    * For 'dropdown' mode: called when a suggestion is selected.
    * Return the display text for the chip, or void to use `suggestion.label`.

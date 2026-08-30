@@ -42,13 +42,17 @@ import { ENGINE_CAPABILITIES, type SessionEvent } from '@workerdeck/protocol'
 /** CRC-32 (the PNG/zlib one), table built on first use. */
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
   let c = n
-  for (let k = 0; k < 8; k++) c = c & 1 ? 0xed_b8_83_20 ^ (c >>> 1) : c >>> 1
+  for (let k = 0; k < 8; k++) {
+    c = c & 1 ? 0xed_b8_83_20 ^ (c >>> 1) : c >>> 1
+  }
   return c >>> 0
 })
 
 function crc32(buf: Buffer): number {
   let c = 0xff_ff_ff_ff
-  for (const byte of buf) c = CRC_TABLE[(c ^ byte) & 0xff]! ^ (c >>> 8)
+  for (const byte of buf) {
+    c = CRC_TABLE[(c ^ byte) & 0xff]! ^ (c >>> 8)
+  }
   return (c ^ 0xff_ff_ff_ff) >>> 0
 }
 
@@ -98,7 +102,9 @@ function onePagePdf(text: string): Buffer {
   })
   const xrefAt = pdf.length
   pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
-  for (const offset of offsets) pdf += `${String(offset).padStart(10, '0')} 00000 n \n`
+  for (const offset of offsets) {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`
+  }
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefAt}\n%%EOF\n`
   return Buffer.from(pdf, 'latin1')
 }
@@ -119,8 +125,7 @@ const CASES: Case[] = [
     name: 'swatch.png',
     mediaType: 'image/png',
     data: solidPng(64, [220, 30, 30]),
-    prompt:
-      'Look at the attached image. Reply with exactly one word: the colour that fills it. No tools, no preamble.',
+    prompt: 'Look at the attached image. Reply with exactly one word: the colour that fills it. No tools, no preamble.',
     expect: ['red', 'crimson', 'scarlet'],
   },
   {
@@ -128,8 +133,7 @@ const CASES: Case[] = [
     name: 'memo.pdf',
     mediaType: 'application/pdf',
     data: onePagePdf('VELVET ANTELOPE'),
-    prompt:
-      'Read the attached PDF and reply with exactly the two words printed on its only page. No tools, no preamble.',
+    prompt: 'Read the attached PDF and reply with exactly the two words printed on its only page. No tools, no preamble.',
     expect: ['velvet antelope'],
   },
   {
@@ -137,8 +141,7 @@ const CASES: Case[] = [
     name: 'notes.txt',
     mediaType: 'text/plain',
     data: Buffer.from('The passphrase is BRASS LANTERN.\n', 'utf8'),
-    prompt:
-      'The attached file names a passphrase. Reply with exactly that passphrase. No tools, no preamble.',
+    prompt: 'The attached file names a passphrase. Reply with exactly that passphrase. No tools, no preamble.',
     expect: ['brass lantern'],
   },
 ]
@@ -190,18 +193,24 @@ const handle = client.attach(session.id)
 /** Collected assistant text for the turn in flight, resolved on turn_result. */
 let inFlight: { text: string[]; done: (text: string) => void } | null = null
 handle.on('event', (event: SessionEvent) => {
-  if (!inFlight) return
+  if (!inFlight) {
+    return
+  }
   if (event.type === 'assistant_message') {
     const content = event.message.content
     if (Array.isArray(content)) {
       for (const block of content) {
-        if (block.type === 'text') inFlight.text.push(String((block as { text: string }).text))
+        if (block.type === 'text') {
+          inFlight.text.push(String((block as { text: string }).text))
+        }
       }
     } else if (typeof content === 'string') {
       inFlight.text.push(content)
     }
   }
-  if (event.type === 'turn_result') inFlight.done(inFlight.text.join(' '))
+  if (event.type === 'turn_result') {
+    inFlight.done(inFlight.text.join(' '))
+  }
 })
 
 async function ask(prompt: string, attachmentIds: string[]): Promise<string> {
@@ -233,7 +242,9 @@ async function expectRefused(testCase: Case): Promise<string | null> {
     body: new Uint8Array(testCase.data),
   })
   const payload = (await res.json().catch(() => ({}))) as { error?: string }
-  if (res.status !== 415) return `expected 415, got ${res.status} (${payload.error ?? 'no message'})`
+  if (res.status !== 415) {
+    return `expected 415, got ${res.status} (${payload.error ?? 'no message'})`
+  }
   // The remedy is only actionable if it says which engine refused.
   if (!payload.error?.includes(ENGINE)) {
     return `415 but the message does not name the engine: "${payload.error ?? ''}"`
@@ -245,8 +256,7 @@ let failures = 0
 for (const testCase of cases) {
   const refuses = !ACCEPTED.includes(testCase.kind)
   process.stdout.write(
-    `\n${testCase.kind.padEnd(6)} ${testCase.name} (${testCase.data.length} bytes) ` +
-      `${refuses ? '— expected refusal ' : ''}... `,
+    `\n${testCase.kind.padEnd(6)} ${testCase.name} (${testCase.data.length} bytes) ` + `${refuses ? '— expected refusal ' : ''}... `,
   )
   try {
     if (refuses) {

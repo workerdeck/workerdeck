@@ -56,7 +56,9 @@ function fakeCodexAdapter(options: {
           }
           if (method === 'turn/start') {
             const text = options.turns?.[turnIndex++] ?? 'done'
-            if (notify) options.onTurn?.(notify)
+            if (notify) {
+              options.onTurn?.(notify)
+            }
             notify?.('item/completed', {
               threadId: 'thread-1',
               turnId: 't1',
@@ -105,7 +107,9 @@ afterEach(async () => {
   vi.useRealTimers()
   await running?.close()
   running = undefined
-  if (scratchDir) rmSync(scratchDir, { recursive: true, force: true })
+  if (scratchDir) {
+    rmSync(scratchDir, { recursive: true, force: true })
+  }
   scratchDir = undefined
 })
 
@@ -150,14 +154,9 @@ describe('codex engine over the gateway', () => {
       const attached = frames.find((f) => f.type === 'attached')
       expect(attached).toBeDefined()
       // The attach snapshot is the session-level capability source.
-      expect(
-        (attached as { session: { capabilities?: { streaming?: string } } }).session.capabilities
-          ?.streaming,
-      ).toBe('token')
+      expect((attached as { session: { capabilities?: { streaming?: string } } }).session.capabilities?.streaming).toBe('token')
       const events = frames.filter((f) => f.type === 'event').map((f) => f.event)
-      expect(events.some((e) => e.type === 'turn_result' && e.result === 'hello from codex')).toBe(
-        true,
-      )
+      expect(events.some((e) => e.type === 'turn_result' && e.result === 'hello from codex')).toBe(true)
     })
     ws.close()
   })
@@ -407,10 +406,7 @@ describe('codex engine over the gateway', () => {
     running = createWorkerServer({
       allowUnauthenticated: true,
       allowedCwdRoots: ['/tmp'],
-      profiles: [
-        codexProfile(),
-        { name: 'kimi', engine: 'provider', provider: { id: 'moonshotai', model: 'kimi-k3' } },
-      ],
+      profiles: [codexProfile(), { name: 'kimi', engine: 'provider', provider: { id: 'moonshotai', model: 'kimi-k3' } }],
       engines: { codex: adapter },
       createEngineRunner: ({ config }) => {
         providerConfig = config as SessionRunnerConfig
@@ -541,14 +537,10 @@ describe('availability', () => {
         cwd: '/tmp/project',
       },
     ]
-    const codexList = vi.fn(
-      async (_options: { profile?: ProfileInfo; dir?: string; limit?: number }) => codexRows,
-    )
+    const codexList = vi.fn(async (_options: { profile?: ProfileInfo; dir?: string; limit?: number }) => codexRows)
     adapter.listSessions = codexList
     scratchDir = mkdtempSync(join(tmpdir(), 'cw-codex-list-'))
-    const claudeList = vi.fn(async () => [
-      { sessionId: 'sdk-1', summary: 'claude session', lastModified: 1000, cwd: '/tmp/project' },
-    ])
+    const claudeList = vi.fn(async () => [{ sessionId: 'sdk-1', summary: 'claude session', lastModified: 1000, cwd: '/tmp/project' }])
     running = createWorkerServer({
       allowUnauthenticated: true,
       allowedCwdRoots: ['/tmp'],
@@ -581,10 +573,7 @@ describe('availability', () => {
     // claude store via the injectable lister (old clients keep working).
     const legacy = await fetch(`${base}/sdk-sessions?dir=/tmp/project`)
     expect(legacy.status).toBe(200)
-    expect(
-      ((await legacy.json()) as { sdkSessions: Array<{ sessionId: string }> }).sdkSessions[0]!
-        .sessionId,
-    ).toBe('sdk-1')
+    expect(((await legacy.json()) as { sdkSessions: Array<{ sessionId: string }> }).sdkSessions[0]!.sessionId).toBe('sdk-1')
     expect(claudeList).toHaveBeenCalledTimes(1)
 
     // A claude profile named explicitly rides the same injectable seam.
@@ -634,9 +623,7 @@ describe('availability', () => {
     })
     const { port } = await running.listen(0, '127.0.0.1')
     await vi.waitFor(async () => {
-      const { profiles } = (await (
-        await fetch(`http://127.0.0.1:${port}/v1/profiles`)
-      ).json()) as { profiles: ProfileInfo[] }
+      const { profiles } = (await (await fetch(`http://127.0.0.1:${port}/v1/profiles`)).json()) as { profiles: ProfileInfo[] }
       expect(profiles[0]!.available).toBeUndefined()
       expect(profiles[0]!.unavailableReason).toBeUndefined()
     })

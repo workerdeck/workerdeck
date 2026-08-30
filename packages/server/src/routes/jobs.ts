@@ -104,8 +104,11 @@ export async function handleJobs(
   }
   if (req.method === 'GET') {
     const job = await queue.get(id)
-    if (job && authSvc.canSeeJob(auth, job)) json(res, 200, { job })
-    else json(res, 404, { error: 'job not found' })
+    if (job && authSvc.canSeeJob(auth, job)) {
+      json(res, 200, { job })
+    } else {
+      json(res, 404, { error: 'job not found' })
+    }
     return
   }
   if (req.method === 'DELETE') {
@@ -117,8 +120,11 @@ export async function handleJobs(
       return
     }
     const job = await queue.cancel(id)
-    if (job) json(res, 200, { job })
-    else json(res, 404, { error: 'job not found' })
+    if (job) {
+      json(res, 200, { job })
+    } else {
+      json(res, 404, { error: 'job not found' })
+    }
     return
   }
   json(res, 405, { error: 'method not allowed' })

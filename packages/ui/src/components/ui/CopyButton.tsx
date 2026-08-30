@@ -11,20 +11,13 @@ export interface CopyButtonProps extends Omit<ButtonProps, 'onClick' | 'children
   glyph?: boolean
 }
 
-export function CopyButton({
-  value,
-  glyph,
-  className,
-  variant = 'ghost',
-  size = 'icon-sm',
-  ...props
-}: CopyButtonProps) {
+export function CopyButton({ value, glyph, className, variant = 'ghost', size = 'icon-sm', ...props }: CopyButtonProps) {
   const [copied, setCopied] = useState(false)
   return (
     <Button
       variant={variant}
       size={size}
-      aria-label='Copy'
+      aria-label="Copy"
       className={cn('text-fg-3', className)}
       onClick={() => {
         // Through `copyText`, which falls back for insecure origins — the
@@ -33,20 +26,21 @@ export function CopyButton({
         void copyText(value).then((ok) => {
           // Only tick when it really copied: a check mark over an empty
           // clipboard is worse than no feedback.
-          if (!ok) return
+          if (!ok) {
+            return
+          }
           setCopied(true)
           setTimeout(() => setCopied(false), 1500)
         })
       }}
-      {...props}>
+      {...props}
+    >
       {glyph ? (
-        <span className={cn('font-mono text-body-sm leading-5', copied && 'text-success')}>
-          {copied ? '✓' : '⧉'}
-        </span>
+        <span className={cn('font-mono text-body-sm leading-5', copied && 'text-success')}>{copied ? '✓' : '⧉'}</span>
       ) : copied ? (
-        <Check className='size-3.5 text-success' />
+        <Check className="size-3.5 text-success" />
       ) : (
-        <Copy className='size-3.5' />
+        <Copy className="size-3.5" />
       )}
     </Button>
   )

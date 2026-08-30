@@ -46,8 +46,7 @@ const FILENAME = 'apns-devices.json'
 const TOKEN_PATTERN = /^[0-9a-fA-F]{32,200}$/
 const MAX_BODY_BYTES = 4096
 
-const isEnvironment = (value: unknown): value is ApnsEnvironment =>
-  value === 'development' || value === 'production'
+const isEnvironment = (value: unknown): value is ApnsEnvironment => value === 'development' || value === 'production'
 
 /**
  * `dir` null keeps the registry in memory: a restart then forgets every token,
@@ -76,7 +75,9 @@ export async function createDeviceRegistry(options: {
   }
 
   const persist = async (): Promise<void> => {
-    if (path === null) return
+    if (path === null) {
+      return
+    }
     try {
       await mkdir(options.dir!, { recursive: true, mode: 0o700 })
       await writeFile(path, `${JSON.stringify({ devices: [...devices.values()] }, null, 2)}\n`, {
@@ -98,26 +99,22 @@ export async function createDeviceRegistry(options: {
       // A repeat registration with nothing new to say is the common case — the
       // app re-registers on every launch — and rewriting the file for it is
       // pointless I/O.
-      if (
-        existing !== undefined &&
-        existing.environment === record.environment &&
-        existing.hostId === record.hostId
-      ) {
+      if (existing !== undefined && existing.environment === record.environment && existing.hostId === record.hostId) {
         return
       }
       await persist()
     },
     async remove(token) {
-      if (!devices.delete(token)) return
+      if (!devices.delete(token)) {
+        return
+      }
       await persist()
     },
   }
 }
 
 const respond = (res: ServerResponse, status: number, body: Record<string, unknown>): void => {
-  res
-    .writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' })
-    .end(JSON.stringify(body))
+  res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(body))
 }
 
 const readBody = (req: IncomingMessage): Promise<string | null> =>
@@ -166,7 +163,9 @@ export function createDeviceRoute(
     } catch {
       return false
     }
-    if (pathname !== '/apns/devices') return false
+    if (pathname !== '/apns/devices') {
+      return false
+    }
 
     if (req.method !== 'POST' && req.method !== 'DELETE') {
       res.writeHead(405, { allow: 'POST, DELETE' }).end()

@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type MouseEvent as ReactMouseEvent,
-  type ReactNode,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import {
   PROTOCOL_VERSION,
@@ -29,17 +21,7 @@ import {
   type TranscriptState,
   type UseToolCallHostOptions,
 } from '@workerdeck/react'
-import {
-  ChartPie,
-  FolderTree,
-  Gauge,
-  Info,
-  MoreHorizontal,
-  Plug,
-  Sparkles,
-  TriangleAlert,
-  X,
-} from 'lucide-react'
+import { ChartPie, FolderTree, Gauge, Info, MoreHorizontal, Plug, Sparkles, TriangleAlert, X } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
 import { Button } from '../ui/Button.tsx'
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../ui/Menu.tsx'
@@ -49,11 +31,7 @@ import { HostFilesDialog } from './HostFilesDialog.tsx'
 import { McpDialog } from './McpDialog.tsx'
 import { SkillsDialog } from './SkillsDialog.tsx'
 import { ModelSelect } from './ModelSelect.tsx'
-import {
-  PermissionModeSelect,
-  permissionModeChoices,
-  type PermissionModeChoice,
-} from './PermissionModeSelect.tsx'
+import { PermissionModeSelect, permissionModeChoices, type PermissionModeChoice } from './PermissionModeSelect.tsx'
 import { PermissionPrompt } from './PermissionPrompt.tsx'
 import { SubagentStrip } from './SubagentStrip.tsx'
 import { subagentItems, type ToolCallItem } from '../terminal/blocks.ts'
@@ -97,19 +75,16 @@ function PromptSurface({
   children: ReactNode
 }) {
   if (!terminal) {
-    return (
-      <div className='mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] flex-col gap-2'>
-        {children}
-      </div>
-    )
+    return <div className="mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] flex-col gap-2">{children}</div>
   }
   return (
     <TerminalSurface
       fontSize={metrics?.fontSize}
       lineHeight={metrics?.lineHeight}
       affordances={affordances}
-      bleed='1ch'
-      className='term-transcript'>
+      bleed="1ch"
+      className="term-transcript"
+    >
       {children}
     </TerminalSurface>
   )
@@ -598,9 +573,7 @@ export function SessionPanel({
   // the default the terminal derives from (13 : 18 ratio), and individual
   // terminalMetrics fields can still override each axis.
   const effectiveTermFontSize = terminalMetrics?.fontSize ?? fontSize
-  const effectiveTermLineHeight =
-    terminalMetrics?.lineHeight ??
-    (fontSize !== undefined ? Math.round(fontSize * (18 / 13)) : undefined)
+  const effectiveTermLineHeight = terminalMetrics?.lineHeight ?? (fontSize !== undefined ? Math.round(fontSize * (18 / 13)) : undefined)
 
   const external = panelSurface === 'external'
   const statusExternal = statusSurface === 'external'
@@ -635,9 +608,7 @@ export function SessionPanel({
    * came back). Re-revealing is both cheaper and more honest: you return to the
    * row you left from rather than to wherever you happened to be scrolled.
    */
-  const [returnReveal, setReturnReveal] = useState<
-    { toolUseId: string; nonce: number } | undefined
-  >(undefined)
+  const [returnReveal, setReturnReveal] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
   const {
     state,
     connection,
@@ -671,7 +642,9 @@ export function SessionPanel({
   // doesn't: it brought its own destination.
   const leaveSubagent = useCallback(() => {
     setSubagentId((current) => {
-      if (current !== undefined) setReturnReveal({ toolUseId: current, nonce: Date.now() })
+      if (current !== undefined) {
+        setReturnReveal({ toolUseId: current, nonce: Date.now() })
+      }
       return undefined
     })
   }, [])
@@ -692,8 +665,11 @@ export function SessionPanel({
   const openSubagentNonce = openSubagent?.nonce
   const openSubagentId = openSubagent?.toolUseId
   useEffect(() => {
-    if (openSubagentId === undefined) leaveSubagent()
-    else setSubagentId(openSubagentId)
+    if (openSubagentId === undefined) {
+      leaveSubagent()
+    } else {
+      setSubagentId(openSubagentId)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openSubagentNonce])
 
@@ -702,7 +678,9 @@ export function SessionPanel({
   // underneath it would be the worst of both.
   const revealNonce = reveal?.nonce
   useEffect(() => {
-    if (revealNonce === undefined) return
+    if (revealNonce === undefined) {
+      return
+    }
     setSubagentId(undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealNonce])
@@ -711,9 +689,13 @@ export function SessionPanel({
   // keeps a dialog's own Escape (and the composer's) ahead of it: this is the
   // outermost thing Escape can mean here, so it goes last.
   useEffect(() => {
-    if (subagentId === undefined) return
+    if (subagentId === undefined) {
+      return
+    }
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return
+      if (event.key !== 'Escape' || event.defaultPrevented) {
+        return
+      }
       leaveSubagent()
     }
     window.addEventListener('keydown', onKey)
@@ -741,7 +723,9 @@ export function SessionPanel({
   onSubagentChangeRef.current = onSubagentChange
   const reportedSubagentId = useRef<string | undefined>(undefined)
   useEffect(() => {
-    if (reportedSubagentId.current === subagentId) return
+    if (reportedSubagentId.current === subagentId) {
+      return
+    }
     reportedSubagentId.current = subagentId
     onSubagentChangeRef.current?.(subagentId)
   }, [subagentId])
@@ -765,8 +749,11 @@ export function SessionPanel({
   // handler — inert beats half-working).
   const openPanel = useCallback(
     (target: SessionSurfacePanel) => {
-      if (external) onOpenPanel?.(target)
-      else setPanel(target)
+      if (external) {
+        onOpenPanel?.(target)
+      } else {
+        setPanel(target)
+      }
     },
     [external, onOpenPanel],
   )
@@ -774,7 +761,9 @@ export function SessionPanel({
   // coming back to it is exactly when waiting the rest of it out is wrong.
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === 'visible') reconnectNow()
+      if (document.visibilityState === 'visible') {
+        reconnectNow()
+      }
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
@@ -804,9 +793,7 @@ export function SessionPanel({
     () =>
       subagentId === undefined
         ? undefined
-        : state.items.find(
-            (item): item is ToolCallItem => item.kind === 'tool_call' && item.id === subagentId,
-          ),
+        : state.items.find((item): item is ToolCallItem => item.kind === 'tool_call' && item.id === subagentId),
     [state.items, subagentId],
   )
   // The one thing the rollup is allowed to do: name an agent whose `Task` call
@@ -829,11 +816,7 @@ export function SessionPanel({
     enabled: capabilities.rateLimits,
   })
   const usage = useMemo(
-    () =>
-      mergeUsage(
-        { rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt },
-        profileUsage,
-      ),
+    () => mergeUsage({ rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt }, profileUsage),
     [state.rateLimits, state.rateLimitsUpdatedAt, profileUsage],
   )
   // Undefined rather than an empty map when nothing has been reported: absent is
@@ -938,12 +921,13 @@ export function SessionPanel({
   // "/model" is handled panel-side (see handleSend) — surface it in the autocomplete
   // even though the CLI's command list doesn't include it.
   const commands = useMemo(() => {
-    if (!state.commands) return undefined
-    if (state.commands.some((c) => c.name === 'model')) return state.commands
-    return [
-      { name: 'model', description: 'Switch the model for this session', argumentHint: '<model>' },
-      ...state.commands,
-    ]
+    if (!state.commands) {
+      return undefined
+    }
+    if (state.commands.some((c) => c.name === 'model')) {
+      return state.commands
+    }
+    return [{ name: 'model', description: 'Switch the model for this session', argumentHint: '<model>' }, ...state.commands]
   }, [state.commands])
 
   // Two things are answered here rather than sent, because sending them would
@@ -988,28 +972,28 @@ export function SessionPanel({
     <Menu>
       <MenuTrigger
         render={
-          <Button variant='ghost' size='icon-sm' aria-label='Session actions'>
-            <MoreHorizontal className='size-4' />
+          <Button variant="ghost" size="icon-sm" aria-label="Session actions">
+            <MoreHorizontal className="size-4" />
           </Button>
         }
       />
       <MenuContent>
         {capabilities.contextUsage ? (
           <MenuItem onClick={() => openPanel('context')}>
-            <ChartPie className='size-3.5 text-fg-3' /> Context
+            <ChartPie className="size-3.5 text-fg-3" /> Context
           </MenuItem>
         ) : null}
         {capabilities.rateLimits ? (
           <MenuItem onClick={() => openPanel('usage')}>
-            <Gauge className='size-3.5 text-fg-3' /> Usage
+            <Gauge className="size-3.5 text-fg-3" /> Usage
           </MenuItem>
         ) : null}
         <MenuItem onClick={() => openPanel('info')}>
-          <Info className='size-3.5 text-fg-3' /> Session info
+          <Info className="size-3.5 text-fg-3" /> Session info
         </MenuItem>
         {capabilities.mcpStatus ? (
           <MenuItem onClick={() => openPanel('mcp')}>
-            <Plug className='size-3.5 text-fg-3' /> MCP servers
+            <Plug className="size-3.5 text-fg-3" /> MCP servers
           </MenuItem>
         ) : null}
         {/* On the capability alone, like MCP's entry. Codex answers
@@ -1019,12 +1003,12 @@ export function SessionPanel({
             missing. The empty state says it instead. */}
         {capabilities.skillsList ? (
           <MenuItem onClick={() => openPanel('skills')}>
-            <Sparkles className='size-3.5 text-fg-3' /> Skills
+            <Sparkles className="size-3.5 text-fg-3" /> Skills
           </MenuItem>
         ) : null}
         {hostFiles.available ? (
           <MenuItem onClick={() => openPanel('files')}>
-            <FolderTree className='size-3.5 text-fg-3' /> Project files
+            <FolderTree className="size-3.5 text-fg-3" /> Project files
           </MenuItem>
         ) : null}
       </MenuContent>
@@ -1096,14 +1080,22 @@ export function SessionPanel({
   // default, which is the right thing in both cases.
   const panelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (!onLinkClick) return
+    if (!onLinkClick) {
+      return
+    }
     const el = panelRef.current
-    if (!el) return
+    if (!el) {
+      return
+    }
     const handler = (e: MouseEvent) => {
       const anchor = (e.target as HTMLElement)?.closest?.('a[href]') as HTMLAnchorElement | null
-      if (!anchor) return
+      if (!anchor) {
+        return
+      }
       const href = anchor.getAttribute('href')
-      if (!href) return
+      if (!href) {
+        return
+      }
       if (onLinkClick(href)) {
         e.preventDefault()
         e.stopPropagation()
@@ -1117,10 +1109,16 @@ export function SessionPanel({
   // — a control, a link, the end of a drag-selection — keeps its own meaning;
   // this only claims what was left over.
   const handleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (!focusComposerOnClick || readOnly) return
+    if (!focusComposerOnClick || readOnly) {
+      return
+    }
     const target = event.target as HTMLElement | null
-    if (target?.closest(INTERACTIVE)) return
-    if (window.getSelection()?.isCollapsed === false) return
+    if (target?.closest(INTERACTIVE)) {
+      return
+    }
+    if (window.getSelection()?.isCollapsed === false) {
+      return
+    }
     composerRef.current?.focus()
   }
 
@@ -1130,168 +1128,157 @@ export function SessionPanel({
     // run, and they read it from this context rather than a prop chain.
     <TranscriptVariantProvider value={transcriptVariant}>
       <TranscriptDensityProvider value={transcriptDensity}>
-      {/* The panel owns the session's one attach, so it is the only thing that
+        {/* The panel owns the session's one attach, so it is the only thing that
           can answer a row asking for the rest of a truncated tool result. Rows
           rendered anywhere else fall back to the context's no-op, which is
           correct for them: nothing truncates a replay they never asked for. */}
-      <ToolResultFetchProvider value={loadFullResult}>
-      <ToolResultImageProvider value={resultImages}>
-      <div
-        ref={panelRef}
-        data-slot='session-panel'
-        // The typeface is a cascade fact, not a React one — one attribute here,
-        // and the `[data-agent-font]` rule in theme.css does the rest. Nothing
-        // outside this subtree can pick it up.
-        data-agent-font={transcriptFont}
-        onClick={handleClick}
-        className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}
-        style={fontSize !== undefined ? { '--wd-font-size': `${Math.round(fontSize)}px` } as React.CSSProperties : undefined}>
-        {headerTakesActions ? header({ actions: menu }) : header}
-        {statusPlacement === 'top' ? statusBar : null}
-        {protocolMismatch !== undefined ? (
-          <Notice level='warning'>
-            Server speaks protocol v{protocolMismatch}, this build renders v{PROTOCOL_VERSION}. Some
-            events may not render.
-          </Notice>
-        ) : null}
-        {protocolError ? (
-          <Notice level='error' onDismiss={() => setProtocolError(undefined)}>
-            {protocolError}
-          </Notice>
-        ) : null}
-        {/* The takeover's one line: who is on screen, and the way back. Above
+        <ToolResultFetchProvider value={loadFullResult}>
+          <ToolResultImageProvider value={resultImages}>
+            <div
+              ref={panelRef}
+              data-slot="session-panel"
+              // The typeface is a cascade fact, not a React one — one attribute here,
+              // and the `[data-agent-font]` rule in theme.css does the rest. Nothing
+              // outside this subtree can pick it up.
+              data-agent-font={transcriptFont}
+              onClick={handleClick}
+              className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}
+              style={fontSize !== undefined ? ({ '--wd-font-size': `${Math.round(fontSize)}px` } as React.CSSProperties) : undefined}
+            >
+              {headerTakesActions ? header({ actions: menu }) : header}
+              {statusPlacement === 'top' ? statusBar : null}
+              {protocolMismatch !== undefined ? (
+                <Notice level="warning">
+                  Server speaks protocol v{protocolMismatch}, this build renders v{PROTOCOL_VERSION}. Some events may not render.
+                </Notice>
+              ) : null}
+              {protocolError ? (
+                <Notice level="error" onDismiss={() => setProtocolError(undefined)}>
+                  {protocolError}
+                </Notice>
+              ) : null}
+              {/* The takeover's one line: who is on screen, and the way back. Above
             the transcript because it is a frame around it, not a row in it —
             and because Back must be reachable without scrolling a stream that
             is still growing. */}
-        {subagentId !== undefined ? (
-          <SubagentStrip
-            task={subagentTask}
-            items={subagentFrameItems}
-            label={subagentFallbackLabel}
-            onBack={leaveSubagent}
-            terminal={terminal}
-            fontSize={effectiveTermFontSize}
-            lineHeight={effectiveTermLineHeight}
-          />
-        ) : null}
-        <Transcript
-          /* A remount, so the frame opens pinned to its own bottom with a fresh
+              {subagentId !== undefined ? (
+                <SubagentStrip
+                  task={subagentTask}
+                  items={subagentFrameItems}
+                  label={subagentFallbackLabel}
+                  onBack={leaveSubagent}
+                  terminal={terminal}
+                  fontSize={effectiveTermFontSize}
+                  lineHeight={effectiveTermLineHeight}
+                />
+              ) : null}
+              <Transcript
+                /* A remount, so the frame opens pinned to its own bottom with a fresh
              virtualizer and height epoch — which is the right landing for both
              cases: the live tail of a running agent, and the final report of a
              settled one. */
-          key={subagentId ?? 'session'}
-          state={state}
-          fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
-          attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
-          canBrowseFiles={hostFiles.available}
-          hostImage={hostImage}
-          variant={transcriptVariant}
-          density={transcriptDensity}
-          fontSize={effectiveTermFontSize}
-          lineHeight={effectiveTermLineHeight}
-          affordances={affordances}
-          stickyPrompt={stickyPrompt}
-          scrubber={scrubber}
-          scrubberMarks={scrubberMarks}
-          replaying={replaying}
-          catchUp={
-            catchUp && newCount > 0
-              ? { from: catchUp.itemCount, since: catchUp.since }
-              : undefined
-          }
-          /* On the way back, land on the Task you came from — see `returnReveal`.
+                key={subagentId ?? 'session'}
+                state={state}
+                fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
+                attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
+                canBrowseFiles={hostFiles.available}
+                hostImage={hostImage}
+                variant={transcriptVariant}
+                density={transcriptDensity}
+                fontSize={effectiveTermFontSize}
+                lineHeight={effectiveTermLineHeight}
+                affordances={affordances}
+                stickyPrompt={stickyPrompt}
+                scrubber={scrubber}
+                scrubberMarks={scrubberMarks}
+                replaying={replaying}
+                catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
+                /* On the way back, land on the Task you came from — see `returnReveal`.
              The host's own reveal still wins when it is the newer intent. */
-          reveal={returnReveal ?? reveal}
-          frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
-          onOpenSubagent={setSubagentId}
-          emptyState={emptyState}
-          jumpToRecapRef={jumpToRecap}
-          repinRef={repinTranscript}
-        />
-        {/* The way back into what you missed. Above the composer because that is
+                reveal={returnReveal ?? reveal}
+                frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
+                onOpenSubagent={setSubagentId}
+                emptyState={emptyState}
+                jumpToRecapRef={jumpToRecap}
+                repinRef={repinTranscript}
+              />
+              {/* The way back into what you missed. Above the composer because that is
             where the eye already is on returning, and because the transcript
             itself opens pinned to the newest row. Held with the transcript
             while the replay lands — its count is `state.items.length`, which
             during the replay is a number visibly climbing toward its answer. */}
-        {catchUp && newCount > 0 && !replaying && subagentId === undefined ? (
-          <div className='px-3 pb-1'>
-            <div
-              data-slot='catch-up'
-              className='mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] items-center gap-2 text-label text-fg-3'>
-              <span
-                aria-hidden
-                className={cn('select-none', terminal ? 'text-fg-3' : 'text-accent')}>
-                ※
-              </span>
-              <span className='min-w-0 flex-1 truncate'>
-                {newCount} new {newCount === 1 ? 'row' : 'rows'}
-                {catchUp.since !== undefined ? ` since you were last here` : ''}
-              </span>
-              <button
-                type='button'
-                onClick={() => jumpToRecap.current?.()}
-                className='shrink-0 underline-offset-2 hover:text-fg-1 hover:underline'>
-                jump
-              </button>
-              <button
-                type='button'
-                onClick={() => setCaughtUp(true)}
-                className='shrink-0 underline-offset-2 hover:text-fg-1 hover:underline'>
-                dismiss
-              </button>
-            </div>
-          </div>
-        ) : null}
-        {/* An engine with no approval channel never raises these, but a stale
+              {catchUp && newCount > 0 && !replaying && subagentId === undefined ? (
+                <div className="px-3 pb-1">
+                  <div
+                    data-slot="catch-up"
+                    className="mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] items-center gap-2 text-label text-fg-3"
+                  >
+                    <span aria-hidden className={cn('select-none', terminal ? 'text-fg-3' : 'text-accent')}>
+                      ※
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {newCount} new {newCount === 1 ? 'row' : 'rows'}
+                      {catchUp.since !== undefined ? ` since you were last here` : ''}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => jumpToRecap.current?.()}
+                      className="shrink-0 underline-offset-2 hover:text-fg-1 hover:underline"
+                    >
+                      jump
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCaughtUp(true)}
+                      className="shrink-0 underline-offset-2 hover:text-fg-1 hover:underline"
+                    >
+                      dismiss
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {/* An engine with no approval channel never raises these, but a stale
             pending request from a replayed log would still render — the record is
             the authority on whether an approval UI means anything here. */}
-        {/* A read-only surface has no answer to give: the status bar still says
+              {/* A read-only surface has no answer to give: the status bar still says
             `awaiting approval`, and the place that can act on it is wherever the
             session is actually driven. */}
-        {!readOnly && capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
-          <div className={cn(terminal ? 'pb-2' : 'px-3 pb-2')}>
-            <PromptSurface terminal={terminal} metrics={{ fontSize: effectiveTermFontSize, lineHeight: effectiveTermLineHeight }} affordances={affordances}>
-              {state.pendingApprovals.map((request) => {
-                const isQuestion =
-                  request.toolName === 'AskUserQuestion' &&
-                  parseUserQuestions(request.input).length > 0
-                if (terminal) {
-                  return isQuestion ? (
-                    <TerminalQuestionPrompt
-                      key={request.id}
-                      request={request}
-                      onAnswer={approve}
-                      onDismiss={(id) => deny(id, 'Question dismissed by user')}
-                    />
-                  ) : (
-                    <TerminalPermissionPrompt
-                      key={request.id}
-                      request={request}
-                      onApprove={approve}
-                      onDeny={deny}
-                    />
-                  )
-                }
-                return isQuestion ? (
-                  <QuestionPrompt
-                    key={request.id}
-                    request={request}
-                    onAnswer={approve}
-                    onDismiss={(id) => deny(id, 'Question dismissed by user')}
-                  />
-                ) : (
-                  <PermissionPrompt
-                    key={request.id}
-                    request={request}
-                    onApprove={approve}
-                    onDeny={deny}
-                  />
-                )
-              })}
-            </PromptSurface>
-          </div>
-        ) : null}
-        {/* No composer while a sub-agent is framed: you cannot talk to one, and a
+              {!readOnly && capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
+                <div className={cn(terminal ? 'pb-2' : 'px-3 pb-2')}>
+                  <PromptSurface
+                    terminal={terminal}
+                    metrics={{ fontSize: effectiveTermFontSize, lineHeight: effectiveTermLineHeight }}
+                    affordances={affordances}
+                  >
+                    {state.pendingApprovals.map((request) => {
+                      const isQuestion = request.toolName === 'AskUserQuestion' && parseUserQuestions(request.input).length > 0
+                      if (terminal) {
+                        return isQuestion ? (
+                          <TerminalQuestionPrompt
+                            key={request.id}
+                            request={request}
+                            onAnswer={approve}
+                            onDismiss={(id) => deny(id, 'Question dismissed by user')}
+                          />
+                        ) : (
+                          <TerminalPermissionPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
+                        )
+                      }
+                      return isQuestion ? (
+                        <QuestionPrompt
+                          key={request.id}
+                          request={request}
+                          onAnswer={approve}
+                          onDismiss={(id) => deny(id, 'Question dismissed by user')}
+                        />
+                      ) : (
+                        <PermissionPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
+                      )
+                    })}
+                  </PromptSurface>
+                </div>
+              ) : null}
+              {/* No composer while a sub-agent is framed: you cannot talk to one, and a
             live-looking input that silently addresses its *parent* is worse than
             no input at all. Its interrupt goes with it — Back is one press away,
             and a second interrupt control would be a second thing that stops
@@ -1301,83 +1288,79 @@ export function SessionPanel({
             sub-agent's own tool calls raise session-level permission requests,
             so hiding them here would let the takeover deadlock the very agent it
             is showing until the reader happened to press Back. */}
-        {readOnly || subagentId !== undefined ? null : (
-        <Composer
-          ref={composerRef}
-          onSend={handleSend}
-          onInterrupt={interrupt}
-          busy={busy}
-          disabled={ended || !sessionId}
-          commands={capabilities.slashCommands ? commands : undefined}
-          skills={capabilities.skillsList ? state.skills : undefined}
-          attachments={attachments}
-          onSearchFiles={
-            hostFiles.available
-              ? (query, options) => hostFiles.search(query, { ...options, limit: 8 })
-              : undefined
-          }
-          layout={controlsExternal ? 'inline' : 'stacked'}
-          toolbar={controlsExternal ? undefined : sessionControls}
-          fontSize={effectiveTermFontSize}
-          lineHeight={effectiveTermLineHeight}
-          affordances={affordances}
-        />
-        )}
-        {/* Below the composer, along the foot of the panel — the editor
+              {readOnly || subagentId !== undefined ? null : (
+                <Composer
+                  ref={composerRef}
+                  onSend={handleSend}
+                  onInterrupt={interrupt}
+                  busy={busy}
+                  disabled={ended || !sessionId}
+                  commands={capabilities.slashCommands ? commands : undefined}
+                  skills={capabilities.skillsList ? state.skills : undefined}
+                  attachments={attachments}
+                  onSearchFiles={hostFiles.available ? (query, options) => hostFiles.search(query, { ...options, limit: 8 }) : undefined}
+                  layout={controlsExternal ? 'inline' : 'stacked'}
+                  toolbar={controlsExternal ? undefined : sessionControls}
+                  fontSize={effectiveTermFontSize}
+                  lineHeight={effectiveTermLineHeight}
+                  affordances={affordances}
+                />
+              )}
+              {/* Below the composer, along the foot of the panel — the editor
             convention. Last in the flex column, so it is the bottom edge. */}
-        {statusPlacement === 'bottom' ? statusBar : null}
+              {statusPlacement === 'bottom' ? statusBar : null}
 
-        {/* The internal dialog surface. The external one renders none of these —
+              {/* The internal dialog surface. The external one renders none of these —
             the embedder hosts equivalent surfaces and is handed the intents. */}
-        {!external ? (
-          <>
-          <SessionInfoDialog
-            state={state}
-            client={client}
-            sessionId={sessionId}
-            open={panel === 'info'}
-            onOpenChange={(next) => setPanel(next ? 'info' : undefined)}
-          />
-          <ContextDialog
-            usage={state.contextUsage}
-            open={panel === 'context'}
-            onOpenChange={(next) => setPanel(next ? 'context' : undefined)}
-          />
-          <UsageDialog
-            rateLimits={windows}
-            subscriptionType={state.subscriptionType}
-            engine={state.engine ?? 'claude'}
-            totalCostUsd={state.totalCostUsd}
-            updatedAt={usageUpdatedAt}
-            open={panel === 'usage'}
-            onOpenChange={(next) => setPanel(next ? 'usage' : undefined)}
-          />
-          <McpDialog
-            client={client}
-            sessionId={sessionId}
-            canManageServers={capabilities.mcpServerActions}
-            open={panel === 'mcp'}
-            onOpenChange={(next) => setPanel(next ? 'mcp' : undefined)}
-          />
-          <SkillsDialog
-            skills={state.skills}
-            open={panel === 'skills'}
-            onOpenChange={(next) => setPanel(next ? 'skills' : undefined)}
-            // Drafts into the composer; the operator sends it. There is no engine
-            // call that runs a skill, so there is nothing else this button could do.
-            onUse={(skill) => composerRef.current?.insertText(skillPrompt(skill))}
-          />
-          <HostFilesDialog
-            client={client}
-            cwd={state.cwd}
-            open={panel === 'files'}
-            onOpenChange={(next) => setPanel(next ? 'files' : undefined)}
-          />
-          </>
-        ) : null}
-      </div>
-      </ToolResultImageProvider>
-      </ToolResultFetchProvider>
+              {!external ? (
+                <>
+                  <SessionInfoDialog
+                    state={state}
+                    client={client}
+                    sessionId={sessionId}
+                    open={panel === 'info'}
+                    onOpenChange={(next) => setPanel(next ? 'info' : undefined)}
+                  />
+                  <ContextDialog
+                    usage={state.contextUsage}
+                    open={panel === 'context'}
+                    onOpenChange={(next) => setPanel(next ? 'context' : undefined)}
+                  />
+                  <UsageDialog
+                    rateLimits={windows}
+                    subscriptionType={state.subscriptionType}
+                    engine={state.engine ?? 'claude'}
+                    totalCostUsd={state.totalCostUsd}
+                    updatedAt={usageUpdatedAt}
+                    open={panel === 'usage'}
+                    onOpenChange={(next) => setPanel(next ? 'usage' : undefined)}
+                  />
+                  <McpDialog
+                    client={client}
+                    sessionId={sessionId}
+                    canManageServers={capabilities.mcpServerActions}
+                    open={panel === 'mcp'}
+                    onOpenChange={(next) => setPanel(next ? 'mcp' : undefined)}
+                  />
+                  <SkillsDialog
+                    skills={state.skills}
+                    open={panel === 'skills'}
+                    onOpenChange={(next) => setPanel(next ? 'skills' : undefined)}
+                    // Drafts into the composer; the operator sends it. There is no engine
+                    // call that runs a skill, so there is nothing else this button could do.
+                    onUse={(skill) => composerRef.current?.insertText(skillPrompt(skill))}
+                  />
+                  <HostFilesDialog
+                    client={client}
+                    cwd={state.cwd}
+                    open={panel === 'files'}
+                    onOpenChange={(next) => setPanel(next ? 'files' : undefined)}
+                  />
+                </>
+              ) : null}
+            </div>
+          </ToolResultImageProvider>
+        </ToolResultFetchProvider>
       </TranscriptDensityProvider>
     </TranscriptVariantProvider>
   )
@@ -1417,7 +1400,9 @@ function useHostImage(
   const objectUrls = useRef<string[]>([])
   useEffect(
     () => () => {
-      for (const url of objectUrls.current) URL.revokeObjectURL(url)
+      for (const url of objectUrls.current) {
+        URL.revokeObjectURL(url)
+      }
       objectUrls.current = []
     },
     [],
@@ -1427,7 +1412,9 @@ function useHostImage(
       const produced = producedFiles?.[path]
       const key = produced ? `produced:${produced.fileId}` : `fs:${path}`
       const hit = cache.current.get(key)
-      if (hit) return hit
+      if (hit) {
+        return hit
+      }
       const pending =
         produced && sessionId
           ? // Fetched rather than pointed at: the panel may be talking to a
@@ -1436,7 +1423,9 @@ function useHostImage(
             client
               .readProducedFile(sessionId, produced.fileId)
               .then((blob) => {
-                if (blob.size === 0) return undefined
+                if (blob.size === 0) {
+                  return undefined
+                }
                 const url = URL.createObjectURL(blob)
                 objectUrls.current.push(url)
                 return url
@@ -1445,7 +1434,9 @@ function useHostImage(
           : client
               .readHostFile(path)
               .then((file) => {
-                if (file.encoding !== 'base64') return undefined
+                if (file.encoding !== 'base64') {
+                  return undefined
+                }
                 // The route reports bytes and an encoding but not a media type;
                 // the extension is what a browser needs to decode it.
                 const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
@@ -1472,34 +1463,26 @@ const IMAGE_MEDIA_TYPES: Record<string, string> = {
 }
 
 /** A dismissible advisory strip above the transcript. */
-function Notice({
-  level,
-  onDismiss,
-  children,
-}: {
-  level: 'warning' | 'error'
-  onDismiss?: () => void
-  children: ReactNode
-}) {
+function Notice({ level, onDismiss, children }: { level: 'warning' | 'error'; onDismiss?: () => void; children: ReactNode }) {
   return (
-    <div className='px-3 pt-2'>
+    <div className="px-3 pt-2">
       <div
-        role='alert'
+        role="alert"
         className={cn(
           'mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] items-start gap-2 rounded-md border px-3 py-2 text-body-sm',
-          level === 'error'
-            ? 'border-danger/40 bg-danger-bg text-danger'
-            : 'border-warning/40 bg-warning-bg text-warning',
-        )}>
-        <TriangleAlert className='mt-0.5 size-3.5 shrink-0' />
-        <span className='min-w-0 flex-1 break-words'>{children}</span>
+          level === 'error' ? 'border-danger/40 bg-danger-bg text-danger' : 'border-warning/40 bg-warning-bg text-warning',
+        )}
+      >
+        <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+        <span className="min-w-0 flex-1 break-words">{children}</span>
         {onDismiss ? (
           <button
-            type='button'
+            type="button"
             onClick={onDismiss}
-            aria-label='Dismiss'
-            className='shrink-0 opacity-70 transition-opacity hover:opacity-100'>
-            <X className='size-3.5' />
+            aria-label="Dismiss"
+            className="shrink-0 opacity-70 transition-opacity hover:opacity-100"
+          >
+            <X className="size-3.5" />
           </button>
         ) : null}
       </div>

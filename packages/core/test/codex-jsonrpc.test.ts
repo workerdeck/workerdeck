@@ -10,7 +10,9 @@ function harness() {
   const written: Array<Record<string, unknown>> = []
   fromClient.on('data', (chunk: Buffer) => {
     for (const line of String(chunk).split('\n')) {
-      if (line.trim()) written.push(JSON.parse(line) as Record<string, unknown>)
+      if (line.trim()) {
+        written.push(JSON.parse(line) as Record<string, unknown>)
+      }
     }
   })
   return {
@@ -72,7 +74,9 @@ describe('JsonRpcStdioConnection', () => {
   it('answers server→client requests from the handler, errors on a throw, -32601 unhandled', async () => {
     const { connection, written, send } = harness()
     connection.onRequest(async (method) => {
-      if (method === 'item/fileChange/requestApproval') return { decision: 'decline' }
+      if (method === 'item/fileChange/requestApproval') {
+        return { decision: 'decline' }
+      }
       throw new JsonRpcError(-32601, `unhandled: ${method}`)
     })
     send({ id: 'srv-1', method: 'item/fileChange/requestApproval', params: {} })

@@ -88,13 +88,9 @@ if (existsSync(claudeConfigDir)) {
 // hitting one public endpoint. DeepWiki is free/no-auth and answers questions
 // about public GitHub repos. Unreachable = sessions simply don't get the tools;
 // the dev server still starts.
-const mcp = await connectMcpTools(
-  process.env.NO_MCP ? {} : { deepwiki: { type: 'http', url: 'https://mcp.deepwiki.com/mcp' } },
-  {
-    onError: (name, error) =>
-      console.warn(`[provider-example] MCP '${name}' unavailable: ${String(error)}`),
-  },
-)
+const mcp = await connectMcpTools(process.env.NO_MCP ? {} : { deepwiki: { type: 'http', url: 'https://mcp.deepwiki.com/mcp' } }, {
+  onError: (name, error) => console.warn(`[provider-example] MCP '${name}' unavailable: ${String(error)}`),
+})
 const mcpToolNames = Object.keys(mcp.tools)
 
 const INSTRUCTIONS =
@@ -104,12 +100,12 @@ const INSTRUCTIONS =
   'expression is returned to you. Use web_fetch to answer questions about a web page. ' +
   'To hand a file to the user, write it with fs_write, then call deliver_file — the user ' +
   'gets a download card.' +
-  (mcpToolNames.length > 0
-    ? ` For questions about public GitHub repositories, use the ${mcpToolNames.join(', ')} tools.`
-    : '')
+  (mcpToolNames.length > 0 ? ` For questions about public GitHub repositories, use the ${mcpToolNames.join(', ')} tools.` : '')
 
 for (const [name, setup] of Object.entries(PROVIDERS)) {
-  if (!process.env[setup.env]) continue
+  if (!process.env[setup.env]) {
+    continue
+  }
   factories.set(name, (await setup.load()) as (id: string) => LanguageModel)
   profiles.push({
     name,
@@ -157,10 +153,10 @@ const { listen } = createWorkerServer({
       throw new Error(
         known.includes(providerId)
           ? `profile '${profile.name}' needs ${PROVIDERS[providerId]!.env} in the environment ` +
-            '(or the repo .env) — this dev server started without it, so it has no model factory ' +
-            `for '${providerId}'. Add the key and restart.`
+              '(or the repo .env) — this dev server started without it, so it has no model factory ' +
+              `for '${providerId}'. Add the key and restart.`
           : `profile '${profile.name}' names provider '${providerId}', which this example does not ` +
-            `wire. Known here: ${known.join(', ')}.`,
+              `wire. Known here: ${known.join(', ')}.`,
       )
     }
     const modelId = config.model ?? profile.provider!.model

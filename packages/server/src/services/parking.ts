@@ -1,9 +1,4 @@
-import type {
-  ParkedExecution,
-  Runner,
-  SessionRunnerConfig,
-  ToolExecutionResult,
-} from '@workerdeck/core'
+import type { ParkedExecution, Runner, SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
 import type { SessionRegistry } from './registry.ts'
 import {
@@ -64,10 +59,7 @@ export type SessionParkOptions = {
   onResumed?: (sessionId: string, runner: Runner) => void
   /** Park/remember/resume failures. These are not session errors — the session
    * is intact, the host's storage or engine assembly isn't. */
-  onError?: (
-    error: unknown,
-    context: { sessionId: string; phase: 'park' | 'remember' | 'resume' },
-  ) => void
+  onError?: (error: unknown, context: { sessionId: string; phase: 'park' | 'remember' | 'resume' }) => void
 }
 
 /**
@@ -177,8 +169,12 @@ export class SessionParkManager {
   async hydrate(): Promise<void> {
     const floor = Date.now() + (this.#options.expiredGraceMs ?? 60_000)
     for (const record of await this.#options.store.list()) {
-      if (isDormant(record)) continue
-      for (const execution of record.executions) this.#track(record.id, execution, floor)
+      if (isDormant(record)) {
+        continue
+      }
+      for (const execution of record.executions) {
+        this.#track(record.id, execution, floor)
+      }
     }
   }
 
@@ -192,7 +188,9 @@ export class SessionParkManager {
     return runner.subscribe((event) => {
       switch (event.type) {
         case 'execution_dispatched':
-          if (!event.deferred) return
+          if (!event.deferred) {
+            return
+          }
           this.#track(runner.id, {
             executionId: event.executionId,
             toolName: event.toolName,
@@ -204,11 +202,16 @@ export class SessionParkManager {
           this.#forget(event.executionId)
           // One call of a multi-call park settling leaves the session parked on
           // the rest — it has to go back down, and no new status_changed will say so.
-          if (runner.info().status === 'parked') void this.#park(runner)
+          if (runner.info().status === 'parked') {
+            void this.#park(runner)
+          }
           return
         case 'status_changed':
-          if (event.status === 'parked') void this.#park(runner)
-          else void this.#rememberDormant(runner)
+          if (event.status === 'parked') {
+            void this.#park(runner)
+          } else {
+            void this.#rememberDormant(runner)
+          }
           return
         case 'turn_result':
           // The write-through moment: a turn has ended, so the history is whole
@@ -257,7 +260,9 @@ export class SessionParkManager {
           // it does (`server.ts` closes parking before the registry). Without
           // this guard a graceful restart forgets every dormant session it was
           // supposed to preserve.
-          if (this.#closed) return
+          if (this.#closed) {
+            return
+          }
           void this.discard(runner.id)
           return
         default:
@@ -268,9 +273,13 @@ export class SessionParkManager {
 
   /** A client detached: park the session if that was the last one watching. */
   onDetach(sessionId: string): void {
-    if (this.#closed) return
+    if (this.#closed) {
+      return
+    }
     const runner = this.#options.registry.get(sessionId)
-    if (!runner || runner.info().status !== 'parked') return
+    if (!runner || runner.info().status !== 'parked') {
+      return
+    }
     clearTimeout(this.#detachTimers.get(sessionId))
     const timer = setTimeout(() => {
       this.#detachTimers.delete(sessionId)
@@ -300,16 +309,16 @@ export class SessionParkManager {
     // A live session has a dormant record too — that is what makes it survive a
     // restart — so the registry wins and the record is skipped. Without this the
     // merged listing would show every running session twice.
-    return records
-      .filter((record) => this.#options.registry.get(record.id) === undefined)
-      .map((record) => record.info)
+    return records.filter((record) => this.#options.registry.get(record.id) === undefined).map((record) => record.info)
   }
 
   /** The live runner for a session, rehydrating a parked one on demand. Undefined
    * when the session is neither live nor parked. */
   async ensureLive(id: string): Promise<Runner | undefined> {
     const live = this.#options.registry.get(id)
-    if (live) return live
+    if (live) {
+      return live
+    }
     return this.#resume(id)
   }
 
@@ -321,10 +330,7 @@ export class SessionParkManager {
    * settled: a duplicate delivery, or one racing the watchdog. Both are expected,
    * neither is an error.
    */
-  async submitResult(
-    executionId: string,
-    result: ToolExecutionResult,
-  ): Promise<{ applied: boolean; sessionId: string } | undefined> {
+  async submitResult(executionId: string, result: ToolExecutionResult): Promise<{ applied: boolean; sessionId: string } | undefined> {
     const sessionId = this.#owners.get(executionId)
     if (sessionId === undefined) {
       // Already answered — by an earlier delivery, or by the watchdog it raced.
@@ -341,7 +347,9 @@ export class SessionParkManager {
     // firing behind it would try to fail a call that no longer exists.
     this.#clearTimer(executionId)
     const applied = runner.settleExecution?.(executionId, result) ?? false
-    if (applied) this.#forget(executionId)
+    if (applied) {
+      this.#forget(executionId)
+    }
     return { applied, sessionId }
   }
 
@@ -352,18 +360,26 @@ export class SessionParkManager {
     this.#configs.delete(sessionId)
     this.#remembered.delete(sessionId)
     for (const [executionId, owner] of this.#owners) {
-      if (owner === sessionId) this.#forget(executionId)
+      if (owner === sessionId) {
+        this.#forget(executionId)
+      }
     }
     for (const [executionId, owner] of this.#settled) {
-      if (owner === sessionId) this.#settled.delete(executionId)
+      if (owner === sessionId) {
+        this.#settled.delete(executionId)
+      }
     }
     await this.#queue(sessionId, () => this.#options.store.delete(sessionId))
   }
 
   close(): void {
     this.#closed = true
-    for (const timer of this.#timers.values()) clearTimeout(timer)
-    for (const timer of this.#detachTimers.values()) clearTimeout(timer)
+    for (const timer of this.#timers.values()) {
+      clearTimeout(timer)
+    }
+    for (const timer of this.#detachTimers.values()) {
+      clearTimeout(timer)
+    }
     this.#timers.clear()
     this.#detachTimers.clear()
   }
@@ -384,13 +400,21 @@ export class SessionParkManager {
    * from an evicted runner finds itself a stranger here and writes nothing.
    */
   async #rememberDormant(runner: Runner): Promise<void> {
-    if (this.#closed) return
+    if (this.#closed) {
+      return
+    }
     const info = runner.info()
     const capabilities = info.capabilities ?? ENGINE_CAPABILITIES[info.engine ?? 'claude']
-    if (!capabilities.resume) return
+    if (!capabilities.resume) {
+      return
+    }
     const config = this.#configs.get(runner.id)
-    if (!config) return
-    if (this.#options.registry.get(runner.id) !== runner) return
+    if (!config) {
+      return
+    }
+    if (this.#options.registry.get(runner.id) !== runner) {
+      return
+    }
     const sdkSessionId = info.sdkSessionId
     if (sdkSessionId === undefined) {
       // Checked LAST on purpose. The other three guards are what keep this from
@@ -403,7 +427,9 @@ export class SessionParkManager {
       // remove; after a `conversation_reset` it means the record we wrote names
       // a conversation that has been cleared. `#remembered` separates the two,
       // so the ordinary case costs no store write.
-      if (this.#remembered.has(runner.id)) await this.#forgetDormant(runner.id)
+      if (this.#remembered.has(runner.id)) {
+        await this.#forgetDormant(runner.id)
+      }
       return
     }
     const record: DormantSessionRecord = {
@@ -483,18 +509,28 @@ export class SessionParkManager {
    * write-through that never writes and nothing that says so.
    */
   async #persistLive(runner: Runner): Promise<void> {
-    if (this.#closed || !this.#options.persistLive || !runner.snapshot) return
+    if (this.#closed || !this.#options.persistLive || !runner.snapshot) {
+      return
+    }
     const config = this.#configs.get(runner.id)
-    if (!config) return
-    if (this.#options.registry.get(runner.id) !== runner) return
+    if (!config) {
+      return
+    }
+    if (this.#options.registry.get(runner.id) !== runner) {
+      return
+    }
     try {
       await this.#queue(runner.id, async () => {
         // Re-checked inside the queue: this runs a tick or more after the event,
         // and the session may have parked or been evicted in between — a park's
         // record must not be overwritten by the live copy queued behind it.
-        if (this.#closed || this.#options.registry.get(runner.id) !== runner) return
+        if (this.#closed || this.#options.registry.get(runner.id) !== runner) {
+          return
+        }
         const snapshot = runner.snapshot?.()
-        if (!snapshot) return
+        if (!snapshot) {
+          return
+        }
         const info = runner.info()
         const record: ParkedSessionRecord = {
           kind: 'live',
@@ -529,21 +565,37 @@ export class SessionParkManager {
   }
 
   async #park(runner: Runner): Promise<void> {
-    if (this.#closed || !runner.park) return
+    if (this.#closed || !runner.park) {
+      return
+    }
     const id = runner.id
-    if (this.#options.registry.get(id) !== runner) return
-    if (runner.info().status !== 'parked') return
+    if (this.#options.registry.get(id) !== runner) {
+      return
+    }
+    if (runner.info().status !== 'parked') {
+      return
+    }
     // Someone is watching: keep it live and reconsider when they leave.
-    if (this.#options.attachedCount(id) > 0) return
+    if (this.#options.attachedCount(id) > 0) {
+      return
+    }
     const executions = [...this.#owners].filter(([, owner]) => owner === id).map(([e]) => e)
-    if (executions.length === 0) return
+    if (executions.length === 0) {
+      return
+    }
     const config = this.#configs.get(id)
-    if (!config) return
-    if (this.#options.onParking && !this.#options.onParking(id, executions[0]!)) return
+    if (!config) {
+      return
+    }
+    if (this.#options.onParking && !this.#options.onParking(id, executions[0]!)) {
+      return
+    }
     // park() → evict in one tick: an attach landing between them would bind a
     // client to a runner that is already inert.
     const snapshot = runner.park()
-    if (!snapshot) return
+    if (!snapshot) {
+      return
+    }
     const info = { ...runner.info(), status: 'parked' as const }
     this.#options.registry.evict(id)
     const record: ParkedSessionRecord = {
@@ -556,7 +608,9 @@ export class SessionParkManager {
       executions: snapshot.parked,
       parkedAt: Date.now(),
     }
-    for (const execution of snapshot.parked) this.#track(id, execution)
+    for (const execution of snapshot.parked) {
+      this.#track(id, execution)
+    }
     try {
       await this.#queue(id, () => this.#options.store.save(record))
     } catch (error) {
@@ -568,7 +622,9 @@ export class SessionParkManager {
 
   async #resume(id: string): Promise<Runner | undefined> {
     const inFlight = this.#resuming.get(id)
-    if (inFlight) return inFlight
+    if (inFlight) {
+      return inFlight
+    }
     const attempt = this.#rebuild(id)
     this.#resuming.set(id, attempt)
     try {
@@ -580,7 +636,9 @@ export class SessionParkManager {
 
   async #rebuild(id: string): Promise<Runner | undefined> {
     const record = await this.#queue(id, () => this.#options.store.get(id))
-    if (!record) return undefined
+    if (!record) {
+      return undefined
+    }
     let runner: Runner
     try {
       runner = await this.#options.rebuild(record)
@@ -644,14 +702,18 @@ export class SessionParkManager {
     )
     this.#storeOps.set(sessionId, settled)
     void settled.then(() => {
-      if (this.#storeOps.get(sessionId) === settled) this.#storeOps.delete(sessionId)
+      if (this.#storeOps.get(sessionId) === settled) {
+        this.#storeOps.delete(sessionId)
+      }
     })
     return result
   }
 
   #track(sessionId: string, execution: ParkedExecution, notBefore = 0): void {
     this.#owners.set(execution.executionId, sessionId)
-    if (execution.expiresAt === undefined || this.#timers.has(execution.executionId)) return
+    if (execution.expiresAt === undefined || this.#timers.has(execution.executionId)) {
+      return
+    }
     const expiresAt = Math.max(execution.expiresAt, notBefore)
     const timer = setTimeout(
       () => {
@@ -675,13 +737,17 @@ export class SessionParkManager {
   #forget(executionId: string): void {
     this.#clearTimer(executionId)
     const owner = this.#owners.get(executionId)
-    if (owner !== undefined) this.#settled.set(executionId, owner)
+    if (owner !== undefined) {
+      this.#settled.set(executionId, owner)
+    }
     this.#owners.delete(executionId)
   }
 
   #clearTimer(executionId: string): void {
     const timer = this.#timers.get(executionId)
-    if (timer === undefined) return
+    if (timer === undefined) {
+      return
+    }
     clearTimeout(timer)
     this.#timers.delete(executionId)
   }

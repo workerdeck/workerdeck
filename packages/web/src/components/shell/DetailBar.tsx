@@ -34,24 +34,17 @@ export function DetailBar({
   children?: ReactNode
 }) {
   return (
-    <div className='flex h-11 shrink-0 items-center gap-2 border-b border-border bg-surface px-3'>
-      <nav aria-label='Breadcrumb' className='flex min-w-0 items-center gap-1'>
+    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-surface px-3">
+      <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1">
         {crumbs.map((crumb, index) => (
-          <span key={crumb.label} className='flex min-w-0 items-center gap-1'>
-            {index > 0 ? (
-              <ChevronRight aria-hidden className='size-3 shrink-0 text-fg-4' />
-            ) : null}
+          <span key={crumb.label} className="flex min-w-0 items-center gap-1">
+            {index > 0 ? <ChevronRight aria-hidden className="size-3 shrink-0 text-fg-4" /> : null}
             {crumb.to ? (
-              <Link
-                to={crumb.to}
-                className='shrink-0 text-body-sm text-fg-3 outline-none hover:text-fg-1'>
+              <Link to={crumb.to} className="shrink-0 text-body-sm text-fg-3 outline-none hover:text-fg-1">
                 {crumb.label}
               </Link>
             ) : (
-              <span
-                aria-current='page'
-                className='min-w-0 truncate text-body-sm font-medium text-fg-1'
-                title={crumb.label}>
+              <span aria-current="page" className="min-w-0 truncate text-body-sm font-medium text-fg-1" title={crumb.label}>
                 {crumb.label}
               </span>
             )}
@@ -59,7 +52,7 @@ export function DetailBar({
         ))}
       </nav>
       {children}
-      <span className='flex-1' />
+      <span className="flex-1" />
       {actions}
     </div>
   )
@@ -69,8 +62,8 @@ export function DetailBar({
  * page shares, so three pages don't each pick their own measure. */
 export function DetailBody({ children }: { children: ReactNode }) {
   return (
-    <div className='min-h-0 flex-1 overflow-y-auto'>
-      <div className='mx-auto flex w-full max-w-3xl flex-col gap-5 px-6 py-6'>{children}</div>
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-6 py-6">{children}</div>
     </div>
   )
 }

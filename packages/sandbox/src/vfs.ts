@@ -21,7 +21,9 @@ export type SandboxVfs = {
 export function normalizeVfsPath(path: string): string {
   const out: string[] = []
   for (const part of path.split('/')) {
-    if (part === '' || part === '.') continue
+    if (part === '' || part === '.') {
+      continue
+    }
     if (part === '..') {
       out.pop()
       continue
@@ -36,7 +38,9 @@ export function createVfs(seed?: Record<string, string>): SandboxVfs {
   const write = (path: string, content: string): void => {
     files.set(normalizeVfsPath(path), content)
   }
-  for (const [path, content] of Object.entries(seed ?? {})) write(path, content)
+  for (const [path, content] of Object.entries(seed ?? {})) {
+    write(path, content)
+  }
   return {
     read(path) {
       return files.get(normalizeVfsPath(path))
@@ -44,9 +48,7 @@ export function createVfs(seed?: Record<string, string>): SandboxVfs {
     write,
     list(dir = '/') {
       const prefix = normalizeVfsPath(dir)
-      return [...files.keys()]
-        .filter((file) => prefix === '/' || file === prefix || file.startsWith(prefix + '/'))
-        .sort()
+      return [...files.keys()].filter((file) => prefix === '/' || file === prefix || file.startsWith(prefix + '/')).sort()
     },
     snapshot() {
       return Object.fromEntries(files)

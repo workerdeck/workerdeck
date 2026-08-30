@@ -14,21 +14,25 @@ import { cn } from '../../lib/utils.ts'
  */
 export function PromptTokenText({ text, className }: { text: string; className?: string }) {
   const tokens = scanPromptTokens(text)
-  if (tokens.length === 0) return <span className={className}>{text}</span>
+  if (tokens.length === 0) {
+    return <span className={className}>{text}</span>
+  }
   const parts: React.ReactNode[] = []
   let cursor = 0
   for (const [index, token] of tokens.entries()) {
-    if (token.start > cursor) parts.push(text.slice(cursor, token.start))
+    if (token.start > cursor) {
+      parts.push(text.slice(cursor, token.start))
+    }
     parts.push(
-      <span
-        key={`${token.start}-${index}`}
-        className={cn('font-mono', token.kind === 'file' ? 'text-accent' : 'text-info')}>
+      <span key={`${token.start}-${index}`} className={cn('font-mono', token.kind === 'file' ? 'text-accent' : 'text-info')}>
         {token.text}
       </span>,
     )
     cursor = token.end
   }
-  if (cursor < text.length) parts.push(text.slice(cursor))
+  if (cursor < text.length) {
+    parts.push(text.slice(cursor))
+  }
   return (
     <span className={className}>
       {parts.map((part, index) => (

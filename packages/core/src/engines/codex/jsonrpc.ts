@@ -47,9 +47,7 @@ export class JsonRpcStdioConnection {
   #notificationHandler: ((method: string, params: unknown) => void) | undefined
   /** Where {@link CODEX_TRACE_ENV} pointed, or undefined — read once. */
   #trace: string | undefined
-  #requestHandler:
-    | ((method: string, params: unknown, id: string | number) => Promise<unknown>)
-    | undefined
+  #requestHandler: ((method: string, params: unknown, id: string | number) => Promise<unknown>) | undefined
 
   constructor(options: { input: Readable; output: Writable }) {
     this.#output = options.output
@@ -62,7 +60,9 @@ export class JsonRpcStdioConnection {
   }
 
   request(method: string, params?: unknown): Promise<unknown> {
-    if (this.#closed) return Promise.reject(new Error(`codex app-server is closed (${method})`))
+    if (this.#closed) {
+      return Promise.reject(new Error(`codex app-server is closed (${method})`))
+    }
     const id = this.#nextId++
     return new Promise((resolve, reject) => {
       this.#pending.set(id, { method, resolve, reject })
@@ -71,7 +71,9 @@ export class JsonRpcStdioConnection {
   }
 
   notify(method: string, params?: unknown): void {
-    if (this.#closed) return
+    if (this.#closed) {
+      return
+    }
     this.#write({ method, ...(params === undefined ? {} : { params }) })
   }
 
@@ -86,7 +88,9 @@ export class JsonRpcStdioConnection {
   /** Reject everything in flight and refuse new traffic — the child is gone
    * (or the session is over). Idempotent. */
   fail(message: string): void {
-    if (this.#closed) return
+    if (this.#closed) {
+      return
+    }
     this.#closed = true
     const pending = [...this.#pending.values()]
     this.#pending.clear()
@@ -109,7 +113,9 @@ export class JsonRpcStdioConnection {
     while ((newline = this.#buffer.indexOf('\n')) >= 0) {
       const line = this.#buffer.slice(0, newline).trim()
       this.#buffer = this.#buffer.slice(newline + 1)
-      if (!line) continue
+      if (!line) {
+        continue
+      }
       let message: Record<string, unknown>
       try {
         message = JSON.parse(line) as Record<string, unknown>
@@ -131,10 +137,16 @@ export class JsonRpcStdioConnection {
    * and a debug sink that throws must not take the session with it.
    */
   #traceLine(message: Record<string, unknown>): void {
-    if (!this.#trace) return
+    if (!this.#trace) {
+      return
+    }
     const method = message.method
-    if (typeof method !== 'string') return
-    if (method.startsWith('account/') || method.startsWith('login')) return
+    if (typeof method !== 'string') {
+      return
+    }
+    if (method.startsWith('account/') || method.startsWith('login')) {
+      return
+    }
     try {
       appendFileSync(this.#trace, JSON.stringify(message) + '\n')
     } catch {
@@ -170,15 +182,17 @@ export class JsonRpcStdioConnection {
       )
       return
     }
-    if (id === undefined || id === null) return
+    if (id === undefined || id === null) {
+      return
+    }
     const pending = this.#pending.get(id as number)
-    if (!pending) return
+    if (!pending) {
+      return
+    }
     this.#pending.delete(id as number)
     if (message.error !== undefined && message.error !== null) {
       const error = message.error as { code?: number; message?: string }
-      pending.reject(
-        new JsonRpcError(error.code ?? -32603, error.message ?? `request '${pending.method}' failed`),
-      )
+      pending.reject(new JsonRpcError(error.code ?? -32603, error.message ?? `request '${pending.method}' failed`))
       return
     }
     pending.resolve(message.result)

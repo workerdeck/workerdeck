@@ -52,9 +52,7 @@ describe('toolFamily', () => {
 describe('runSummary', () => {
   it('keeps the shell-only wording exactly, singular and plural', () => {
     expect(runSummary([call('Bash')], false)).toBe('Ran 1 shell command')
-    expect(runSummary([call('Bash'), call('CodexCommand'), call('Bash')], false)).toBe(
-      'Ran 3 shell commands',
-    )
+    expect(runSummary([call('Bash'), call('CodexCommand'), call('Bash')], false)).toBe('Ran 3 shell commands')
   })
 
   it('gives a mixed run the count plus a breakdown', () => {
@@ -82,9 +80,7 @@ describe('runSummary', () => {
 
   it('trails the ellipsis on the whole line while busy, never on the count', () => {
     expect(runSummary([call('Bash'), call('Bash')], true)).toBe('Running 2 shell commands…')
-    expect(runSummary([call('Bash'), call('Read')], true)).toBe(
-      'Running 2 tools · 1 read, 1 shell…',
-    )
+    expect(runSummary([call('Bash'), call('Read')], true)).toBe('Running 2 tools · 1 read, 1 shell…')
   })
 })
 
@@ -136,9 +132,7 @@ describe('taskBrief', () => {
     // {description, subagent_type, run_in_background, prompt} and never emits
     // the brief as a nested user message, so no `parentToolUseId` item carries
     // it and only the call does.
-    expect(taskBrief(taskCall({ input: { prompt: 'Find every caller of parseRoute.' } }))).toBe(
-      'Find every caller of parseRoute.',
-    )
+    expect(taskBrief(taskCall({ input: { prompt: 'Find every caller of parseRoute.' } }))).toBe('Find every caller of parseRoute.')
   })
 
   it('is the fallback for a background agent, whose stream carries no brief at all', () => {
@@ -193,28 +187,20 @@ describe('taskLabel', () => {
 describe('taskSummary', () => {
   it('counts the subagent’s tool calls, settled', () => {
     const children = [brief, said, call('Read', 'task-1'), call('Grep', 'task-1')]
-    expect(taskSummary(taskCall(), children)).toBe(
-      'Task(Explore · find the auth check) · 2 tools',
-    )
+    expect(taskSummary(taskCall(), children)).toBe('Task(Explore · find the auth check) · 2 tools')
   })
 
   it('trails the ellipsis while the subagent works, and keeps counting', () => {
     const children = [brief, call('Read', 'task-1')]
-    expect(taskSummary(taskCall({ status: 'running' }), children)).toBe(
-      'Task(Explore · find the auth check) · 1 tool…',
-    )
+    expect(taskSummary(taskCall({ status: 'running' }), children)).toBe('Task(Explore · find the auth check) · 1 tool…')
   })
 
   it('says working, not “0 tools”, before the first call lands', () => {
-    expect(taskSummary(taskCall({ status: 'running' }), [brief])).toBe(
-      'Task(Explore · find the auth check) · working…',
-    )
+    expect(taskSummary(taskCall({ status: 'running' }), [brief])).toBe('Task(Explore · find the auth check) · working…')
   })
 
   it('says done for a task that settled without calling anything', () => {
-    expect(taskSummary(taskCall(), [brief, said])).toBe(
-      'Task(Explore · find the auth check) · done',
-    )
+    expect(taskSummary(taskCall(), [brief, said])).toBe('Task(Explore · find the auth check) · done')
   })
 })
 

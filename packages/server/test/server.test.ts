@@ -5,15 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import type {
-  JobEvent,
-  JobInfo,
-  ProfileInfo,
-  QueueServerFrame,
-  QueueStats,
-  ServerFrame,
-  SessionInfo,
-} from '@workerdeck/protocol'
+import type { JobEvent, JobInfo, ProfileInfo, QueueServerFrame, QueueStats, ServerFrame, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 /** `models` makes the fake query answer `supportedModels`, which is what makes a
@@ -50,8 +42,12 @@ function fakeHarness(models?: Array<Record<string, unknown>>) {
     },
     next(): Promise<IteratorResult<SDKMessage>> {
       const buffered = messages.shift()
-      if (buffered !== undefined) return Promise.resolve({ value: buffered, done: false })
-      if (done) return Promise.resolve({ value: undefined, done: true })
+      if (buffered !== undefined) {
+        return Promise.resolve({ value: buffered, done: false })
+      }
+      if (done) {
+        return Promise.resolve({ value: undefined, done: true })
+      }
       return new Promise((resolve) => {
         waiter = resolve
       })
@@ -113,7 +109,9 @@ function frameCollector(ws: WebSocket) {
   })
   const waitFor = (match: (f: ServerFrame) => boolean, timeoutMs = 2000): Promise<ServerFrame> => {
     const existing = frames.find(match)
-    if (existing) return Promise.resolve(existing)
+    if (existing) {
+      return Promise.resolve(existing)
+    }
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('timed out waiting for frame')), timeoutMs)
       waiters.push({
@@ -240,9 +238,7 @@ describe('createWorkerServer', () => {
 
     // command: set_model reaches the query and round-trips a model_changed event
     ws.send(JSON.stringify({ type: 'set_model', model: 'claude-opus-4-8' }))
-    await collector.waitFor(
-      (f) => f.type === 'event' && f.event.type === 'model_changed' && f.event.model === 'claude-opus-4-8',
-    )
+    await collector.waitFor((f) => f.type === 'event' && f.event.type === 'model_changed' && f.event.model === 'claude-opus-4-8')
     expect(harness.setModel).toHaveBeenCalledWith('claude-opus-4-8')
 
     // permission round-trip
@@ -251,13 +247,8 @@ describe('createWorkerServer', () => {
       { command: 'ls' },
       { signal: new AbortController().signal, requestId: 'creq-1', toolUseID: 'tool-1' },
     )
-    const requested = await collector.waitFor(
-      (f) => f.type === 'event' && f.event.type === 'permission_requested',
-    )
-    const requestId =
-      requested.type === 'event' && requested.event.type === 'permission_requested'
-        ? requested.event.request.id
-        : ''
+    const requested = await collector.waitFor((f) => f.type === 'event' && f.event.type === 'permission_requested')
+    const requestId = requested.type === 'event' && requested.event.type === 'permission_requested' ? requested.event.request.id : ''
     ws.send(JSON.stringify({ type: 'permission_decision', requestId, behavior: 'allow' }))
     await expect(resultPromise).resolves.toMatchObject({ behavior: 'allow' })
     await collector.waitFor((f) => f.type === 'event' && f.event.type === 'permission_resolved')
@@ -266,9 +257,7 @@ describe('createWorkerServer', () => {
     const lastSeqRes = await fetch(`${base}/sessions/${session.id}`)
     const { session: current } = (await lastSeqRes.json()) as { session: SessionInfo }
     ws.close()
-    const ws2 = new WebSocket(
-      `${wsBase}/sessions/${session.id}/ws?afterSeq=${current.lastSeq - 1}`,
-    )
+    const ws2 = new WebSocket(`${wsBase}/sessions/${session.id}/ws?afterSeq=${current.lastSeq - 1}`)
     const collector2 = frameCollector(ws2)
     await collector2.waitFor((f) => f.type === 'attached')
     const replayed = await collector2.waitFor((f) => f.type === 'event')
@@ -348,7 +337,8 @@ describe('createWorkerServer', () => {
       ],
     }
     const resultPromise = harness.captured.options!.canUseTool!('AskUserQuestion', input, {
-      signal: new AbortController().signal, requestId: 'creq-1',
+      signal: new AbortController().signal,
+      requestId: 'creq-1',
       toolUseID: 'q-1',
     })
     await vi.waitFor(async () => {
@@ -590,8 +580,7 @@ describe('createWorkerServer', () => {
     })
     const { job } = (await createRes.json()) as { job: JobInfo }
 
-    const eventTypes = () =>
-      frames.filter((f) => f.type === 'job_event').map((f) => (f as { event: JobEvent }).event.type)
+    const eventTypes = () => frames.filter((f) => f.type === 'job_event').map((f) => (f as { event: JobEvent }).event.type)
     await vi.waitFor(() => {
       expect(eventTypes()).toContain('job_submitted')
       expect(eventTypes()).toContain('job_started')
@@ -616,9 +605,7 @@ describe('createWorkerServer', () => {
     } as unknown as SDKMessage)
 
     await vi.waitFor(() => {
-      const completed = frames.find(
-        (f) => f.type === 'job_event' && f.event.type === 'job_completed' && f.event.job.id === job.id,
-      )
+      const completed = frames.find((f) => f.type === 'job_event' && f.event.type === 'job_completed' && f.event.job.id === job.id)
       expect(completed).toBeDefined()
     })
     // lifecycle changes push refreshed stats
@@ -792,13 +779,13 @@ describe('createWorkerServer', () => {
       const asDan = { 'content-type': 'application/json', authorization: 'Bearer dan' }
 
       // the listing only shows what the caller may use
-      const danList = (await (
-        await fetch(`${base}/profiles`, { headers: { authorization: 'Bearer dan' } })
-      ).json()) as { profiles: ProfileInfo[] }
+      const danList = (await (await fetch(`${base}/profiles`, { headers: { authorization: 'Bearer dan' } })).json()) as {
+        profiles: ProfileInfo[]
+      }
       expect(danList.profiles.map((p) => p.name)).toEqual(['dan'])
-      const adminList = (await (
-        await fetch(`${base}/profiles`, { headers: { authorization: 'Bearer admin' } })
-      ).json()) as { profiles: ProfileInfo[] }
+      const adminList = (await (await fetch(`${base}/profiles`, { headers: { authorization: 'Bearer admin' } })).json()) as {
+        profiles: ProfileInfo[]
+      }
       expect(adminList.profiles.map((p) => p.name)).toEqual(['toby', 'dan'])
 
       const forbidden = await fetch(`${base}/sessions`, {
@@ -817,12 +804,8 @@ describe('createWorkerServer', () => {
       expect(((await allowed.json()) as { session: SessionInfo }).session.profile).toBe('dan')
 
       // the detail endpoint is scoped the same way
-      expect(
-        (await fetch(`${base}/profiles/toby`, { headers: { authorization: 'Bearer dan' } })).status,
-      ).toBe(403)
-      expect(
-        (await fetch(`${base}/profiles/dan`, { headers: { authorization: 'Bearer dan' } })).status,
-      ).toBe(200)
+      expect((await fetch(`${base}/profiles/toby`, { headers: { authorization: 'Bearer dan' } })).status).toBe(403)
+      expect((await fetch(`${base}/profiles/dan`, { headers: { authorization: 'Bearer dan' } })).status).toBe(200)
     } finally {
       rmSync(tobyDir, { recursive: true, force: true })
       rmSync(danDir, { recursive: true, force: true })
@@ -838,9 +821,7 @@ describe('createWorkerServer', () => {
         createWorkerServer({
           allowUnauthenticated: true,
           disableBypassPermissions: true,
-          profiles: [
-            { name: 'yolo', configDir: profileDir, defaults: { permissionMode: 'bypassPermissions' } },
-          ],
+          profiles: [{ name: 'yolo', configDir: profileDir, defaults: { permissionMode: 'bypassPermissions' } }],
         }),
       ).toThrow(/disableBypassPermissions/)
 

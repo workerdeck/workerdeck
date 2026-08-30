@@ -46,12 +46,7 @@ export class CodexAgentTracker {
   /** Open (or return) the record for a thread. Fill-in, never overwrite: a
    * label-less fallback record keeps its accumulated count and its already
    * published toolUseId when the announcing item arrives late. */
-  open(
-    agentThreadId: string,
-    toolUseId: string,
-    agentType: string | undefined,
-    ts: number,
-  ): CodexAgent {
+  open(agentThreadId: string, toolUseId: string, agentType: string | undefined, ts: number): CodexAgent {
     let record = this.#byThread.get(agentThreadId)
     if (!record) {
       record = {
@@ -80,15 +75,23 @@ export class CodexAgentTracker {
     record.settledOrder = ++this.#settleCounter
     let settled = 0
     for (const r of this.#byThread.values()) {
-      if (r.settledOrder !== undefined) settled++
+      if (r.settledOrder !== undefined) {
+        settled++
+      }
     }
     while (settled > SUBAGENT_HISTORY) {
       let oldest: CodexAgent | undefined
       for (const r of this.#byThread.values()) {
-        if (r.settledOrder === undefined) continue
-        if (!oldest || r.settledOrder < oldest.settledOrder!) oldest = r
+        if (r.settledOrder === undefined) {
+          continue
+        }
+        if (!oldest || r.settledOrder < oldest.settledOrder!) {
+          oldest = r
+        }
       }
-      if (!oldest) break
+      if (!oldest) {
+        break
+      }
       this.#byThread.delete(oldest.agentThreadId)
       settled--
     }
@@ -97,7 +100,9 @@ export class CodexAgentTracker {
   /** A real verdict for one agent — its thread's `turn/completed`, or the
    * `interrupted` activity edge. */
   settle(record: CodexAgent, status: 'done' | 'failed'): void {
-    if (record.status === status) return
+    if (record.status === status) {
+      return
+    }
     this.#settle(record, status)
   }
 
@@ -105,7 +110,9 @@ export class CodexAgentTracker {
    * everything still running is settled as failed — the report can never come. */
   sweep(): void {
     for (const record of this.#byThread.values()) {
-      if (record.status === 'running') this.#settle(record, 'failed')
+      if (record.status === 'running') {
+        this.#settle(record, 'failed')
+      }
     }
   }
 
@@ -134,7 +141,9 @@ export class CodexAgentTracker {
    * objects, and `undefined` when there is nothing to say (absent and empty
    * mean the same thing to a client, and bytes on a polled list are paid for). */
   list(): SubagentInfo[] | undefined {
-    if (this.#byThread.size === 0) return undefined
+    if (this.#byThread.size === 0) {
+      return undefined
+    }
     const out: SubagentInfo[] = []
     for (const r of this.#byThread.values()) {
       out.push({

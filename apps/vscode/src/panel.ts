@@ -5,14 +5,7 @@ import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl, isLoopbackHost } from './hosts.ts'
 import { clientFor } from './gateway.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
-import {
-  panelFontSize,
-  terminalAffordances,
-  terminalMetrics,
-  transcriptDensity,
-  transcriptVariant,
-  webviewHtml,
-} from './webview-html.ts'
+import { panelFontSize, terminalAffordances, terminalMetrics, transcriptDensity, transcriptVariant, webviewHtml } from './webview-html.ts'
 import type { HostToPanel, PanelToHost } from './bridge-protocol.ts'
 
 export type ActiveSession = {
@@ -168,7 +161,9 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     // Queued rather than posted: a panel opening for the first time has not said
     // `wd-ready` yet, and a focus request that arrives before the composer exists
     // is one that silently does nothing.
-    if (active && options.focus) this.#focusPending = true
+    if (active && options.focus) {
+      this.#focusPending = true
+    }
     this.#pushActive()
   }
 
@@ -185,14 +180,18 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
    * looks like no session at all until you re-click it.
    */
   restoreActive(active: ActiveSession): void {
-    if (this.#active) return
+    if (this.#active) {
+      return
+    }
     this.#active = active
     this.#onDidChangeActive.fire(active)
     this.#pushActive()
   }
 
   #pushActive(): void {
-    if (!this.#view || !this.#ready) return
+    if (!this.#view || !this.#ready) {
+      return
+    }
     const active = this.#active
     if (!active) {
       this.#post({ kind: 'wd-show-session', session: undefined })
@@ -203,7 +202,9 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     const focus = this.#focusPending
     this.#focusPending = false
     const base = apiUrl(active.host)
-    if (!base) return
+    if (!base) {
+      return
+    }
     this.#post({
       kind: 'wd-show-session',
       session: {
@@ -213,7 +214,9 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
         unseen: this.#delegate.unseen(active.host.id, active.sessionId),
       },
     })
-    if (focus) this.#post({ kind: 'wd-focus-composer' })
+    if (focus) {
+      this.#post({ kind: 'wd-focus-composer' })
+    }
     // After the session, for the same reason the focus is: an id only means
     // something once the panel is on the transcript that contains it. Order
     // between these two does not matter, and that is enforced rather than
@@ -256,17 +259,25 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
   }
 
   #flushReveal(): void {
-    if (!this.#view || !this.#ready) return
+    if (!this.#view || !this.#ready) {
+      return
+    }
     const toolUseId = this.#revealPending
-    if (!toolUseId) return
+    if (!toolUseId) {
+      return
+    }
     this.#revealPending = undefined
     this.#post({ kind: 'wd-reveal-tool-use', toolUseId, nonce: ++this.#revealNonce })
   }
 
   #flushSubagent(): void {
-    if (!this.#view || !this.#ready) return
+    if (!this.#view || !this.#ready) {
+      return
+    }
     const toolUseId = this.#subagentPending
-    if (!toolUseId) return
+    if (!toolUseId) {
+      return
+    }
     this.#subagentPending = undefined
     // The nonce is what makes asking twice mean twice — `openSubagent` is a
     // prop, so an identical one is a no-op.
@@ -278,7 +289,9 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
   }
 
   async #onMessage(msg: PanelToHost): Promise<void> {
-    if (await this.#transports?.handle(msg)) return
+    if (await this.#transports?.handle(msg)) {
+      return
+    }
     switch (msg.kind) {
       case 'wd-ready':
         this.#ready = true
@@ -319,10 +332,14 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
    */
   #tapFrame(text: string): void {
     const active = this.#active
-    if (!active) return
+    if (!active) {
+      return
+    }
     // The visible panel already renders the prompt — a notification on top
     // would be noise. This exists for the user who is elsewhere.
-    if (this.#view?.visible) return
+    if (this.#view?.visible) {
+      return
+    }
     let frame: {
       type?: string
       event?: { type?: string; request?: { id?: string; toolName?: string; title?: string } }
@@ -332,19 +349,27 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     } catch {
       return
     }
-    if (frame.type !== 'event' || frame.event?.type !== 'permission_requested') return
+    if (frame.type !== 'event' || frame.event?.type !== 'permission_requested') {
+      return
+    }
     const request = frame.event.request
     const requestId = request?.id
-    if (!requestId) return
+    if (!requestId) {
+      return
+    }
     const title = `WorkerDeck (${active.host.name}): ${request?.title ?? `wants to run ${request?.toolName ?? 'a tool'}`}`
     void vscode.window.showWarningMessage(title, 'Approve', 'Deny', 'Open').then(async (choice) => {
-      if (!choice) return
+      if (!choice) {
+        return
+      }
       if (choice === 'Open') {
         await vscode.commands.executeCommand(`${SessionPanelProvider.viewId}.focus`)
         return
       }
       const client = await clientFor(this.#store, active.host)
-      if (!client) return
+      if (!client) {
+        return
+      }
       try {
         await client.resolvePermission(active.sessionId, requestId, {
           behavior: choice === 'Approve' ? 'allow' : 'deny',
@@ -354,7 +379,6 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
       }
     })
   }
-
 
   /** Switch the live session's model / permission mode. Inert when the panel
    * has never been opened: with no webview there is no attach to command. */
@@ -371,17 +395,12 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
    * re-announces `wd-ready`, which is what re-pushes its state. */
   reloadWebview(): void {
     const view = this.#view
-    if (!view) return
+    if (!view) {
+      return
+    }
     this.#ready = false
     const dist = vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
-    view.webview.html = webviewHtml(
-      view.webview,
-      dist,
-      'main.js',
-      this.#rootAttrs(),
-      ++this.#htmlVersion,
-      { font: true },
-    )
+    view.webview.html = webviewHtml(view.webview, dist, 'main.js', this.#rootAttrs(), ++this.#htmlVersion, { font: true })
   }
 
   dispose(): void {
@@ -400,14 +419,14 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
  * text, but the session's cwd is host-side state. With no cwd there is nothing
  * to resolve against, so the click is a no-op rather than a guess at the root.
  */
-async function openTranscriptPath(
-  active: ActiveSession | undefined,
-  clicked: string,
-  line: number | undefined,
-): Promise<void> {
-  if (!active) return
+async function openTranscriptPath(active: ActiveSession | undefined, clicked: string, line: number | undefined): Promise<void> {
+  if (!active) {
+    return
+  }
   const path = resolveAgainstCwd(clicked, active.cwd)
-  if (!path) return
+  if (!path) {
+    return
+  }
   const uri = isLoopbackHost(active.host)
     ? vscode.Uri.file(path)
     : vscode.Uri.from({ scheme: 'workerdeck', authority: active.host.id.toLowerCase(), path })
@@ -427,17 +446,26 @@ async function openTranscriptPath(
  * with `\` would produce a path neither side has ever seen.
  */
 function resolveAgainstCwd(clicked: string, cwd: string | undefined): string | undefined {
-  if (clicked.startsWith('/')) return normalizePosix(clicked)
-  if (!cwd) return undefined
+  if (clicked.startsWith('/')) {
+    return normalizePosix(clicked)
+  }
+  if (!cwd) {
+    return undefined
+  }
   return normalizePosix(`${cwd.replace(/\/+$/, '')}/${clicked}`)
 }
 
 function normalizePosix(path: string): string {
   const out: string[] = []
   for (const part of path.split('/')) {
-    if (part === '' || part === '.') continue
-    if (part === '..') out.pop()
-    else out.push(part)
+    if (part === '' || part === '.') {
+      continue
+    }
+    if (part === '..') {
+      out.pop()
+    } else {
+      out.push(part)
+    }
   }
   return `/${out.join('/')}`
 }

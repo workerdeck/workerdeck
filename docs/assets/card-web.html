@@ -6,149 +6,347 @@
   (the dashboard workspace: file rail + transcript + composer); small text is texture.
 -->
 <html>
-<head>
-<meta charset="utf-8" />
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 800px; height: 500px; overflow: hidden; }
-  body {
-    font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background: #000;
-    position: relative;
-  }
-  .mono { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; }
-  .glow {
-    position: absolute; inset: 0;
-    background:
-      radial-gradient(ellipse 520px 300px at 72% 28%, rgba(237,237,237,0.07), transparent 60%),
-      radial-gradient(ellipse 420px 260px at 12% 88%, rgba(237,237,237,0.05), transparent 60%);
-  }
-  .grid {
-    position: absolute; inset: 0;
-    background-image:
-      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
-    background-size: 44px 44px;
-    mask-image: radial-gradient(ellipse 640px 400px at 50% 50%, black 30%, transparent 78%);
-    -webkit-mask-image: radial-gradient(ellipse 640px 400px at 50% 50%, black 30%, transparent 78%);
-  }
-  .window {
-    position: absolute; left: 46px; top: 44px; width: 708px; height: 412px;
-    background: #0b0b0b; border: 1px solid #2e2e2e; border-radius: 14px;
-    box-shadow: 0 30px 80px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.02) inset;
-    overflow: hidden; display: flex; flex-direction: column;
-  }
-  .chrome {
-    flex: none; height: 44px; display: flex; align-items: center; gap: 9px;
-    padding: 0 18px; border-bottom: 1px solid #1f1f1f;
-  }
-  .dot { width: 11px; height: 11px; border-radius: 50%; background: #262626; }
-  .url {
-    margin: 0 auto; width: 250px; height: 26px; border-radius: 999px;
-    background: #141414; border: 1px solid #232323;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; color: #565656; letter-spacing: 0.04em;
-  }
-  .main { flex: 1; display: flex; min-height: 0; }
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 800px;
+        height: 500px;
+        overflow: hidden;
+      }
+      body {
+        font-family:
+          'Inter',
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        background: #000;
+        position: relative;
+      }
+      .mono {
+        font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+      }
+      .glow {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(ellipse 520px 300px at 72% 28%, rgba(237, 237, 237, 0.07), transparent 60%),
+          radial-gradient(ellipse 420px 260px at 12% 88%, rgba(237, 237, 237, 0.05), transparent 60%);
+      }
+      .grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+        background-size: 44px 44px;
+        mask-image: radial-gradient(ellipse 640px 400px at 50% 50%, black 30%, transparent 78%);
+        -webkit-mask-image: radial-gradient(ellipse 640px 400px at 50% 50%, black 30%, transparent 78%);
+      }
+      .window {
+        position: absolute;
+        left: 46px;
+        top: 44px;
+        width: 708px;
+        height: 412px;
+        background: #0b0b0b;
+        border: 1px solid #2e2e2e;
+        border-radius: 14px;
+        box-shadow:
+          0 30px 80px rgba(0, 0, 0, 0.75),
+          0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .chrome {
+        flex: none;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 18px;
+        border-bottom: 1px solid #1f1f1f;
+      }
+      .dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #262626;
+      }
+      .url {
+        margin: 0 auto;
+        width: 250px;
+        height: 26px;
+        border-radius: 999px;
+        background: #141414;
+        border: 1px solid #232323;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        color: #565656;
+        letter-spacing: 0.04em;
+      }
+      .main {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+      }
 
-  /* file rail */
-  .rail {
-    flex: none; width: 172px; border-right: 1px solid #1f1f1f;
-    padding: 14px 12px; display: flex; flex-direction: column; gap: 7px;
-  }
-  .rail-head { height: 12px; width: 84px; border-radius: 6px; background: #242424; margin-bottom: 8px; }
-  .frow { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 8px; border-radius: 7px; }
-  .frow .pip { flex: none; width: 11px; height: 11px; border-radius: 3px; background: #383838; }
-  .frow .fbar { height: 11px; border-radius: 5px; background: #313131; }
-  .frow.lvl2 { margin-left: 16px; }
-  .frow.active { background: #1e1e1e; }
-  .frow.active .fbar { background: #525252; }
+      /* file rail */
+      .rail {
+        flex: none;
+        width: 172px;
+        border-right: 1px solid #1f1f1f;
+        padding: 14px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .rail-head {
+        height: 12px;
+        width: 84px;
+        border-radius: 6px;
+        background: #242424;
+        margin-bottom: 8px;
+      }
+      .frow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 26px;
+        padding: 0 8px;
+        border-radius: 7px;
+      }
+      .frow .pip {
+        flex: none;
+        width: 11px;
+        height: 11px;
+        border-radius: 3px;
+        background: #383838;
+      }
+      .frow .fbar {
+        height: 11px;
+        border-radius: 5px;
+        background: #313131;
+      }
+      .frow.lvl2 {
+        margin-left: 16px;
+      }
+      .frow.active {
+        background: #1e1e1e;
+      }
+      .frow.active .fbar {
+        background: #525252;
+      }
 
-  /* session column */
-  .session { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  .shead {
-    flex: none; height: 42px; display: flex; align-items: center; gap: 11px;
-    padding: 0 18px; border-bottom: 1px solid #1f1f1f;
-  }
-  .live {
-    width: 11px; height: 11px; border-radius: 50%; background: #2fbf71;
-    box-shadow: 0 0 14px rgba(47,191,113,0.55);
-  }
-  .tbar { height: 12px; width: 128px; border-radius: 6px; background: #3a3a3a; }
-  .mbar { margin-left: auto; height: 10px; width: 74px; border-radius: 5px; background: #232323; }
+      /* session column */
+      .session {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .shead {
+        flex: none;
+        height: 42px;
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        padding: 0 18px;
+        border-bottom: 1px solid #1f1f1f;
+      }
+      .live {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #2fbf71;
+        box-shadow: 0 0 14px rgba(47, 191, 113, 0.55);
+      }
+      .tbar {
+        height: 12px;
+        width: 128px;
+        border-radius: 6px;
+        background: #3a3a3a;
+      }
+      .mbar {
+        margin-left: auto;
+        height: 10px;
+        width: 74px;
+        border-radius: 5px;
+        background: #232323;
+      }
 
-  .sbody { flex: 1; padding: 16px 18px; display: flex; flex-direction: column; gap: 11px; min-height: 0; }
-  .line { height: 12px; border-radius: 6px; background: #2c2c2c; }
-  .line.dim { background: #202020; }
+      .sbody {
+        flex: 1;
+        padding: 16px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 11px;
+        min-height: 0;
+      }
+      .line {
+        height: 12px;
+        border-radius: 6px;
+        background: #2c2c2c;
+      }
+      .line.dim {
+        background: #202020;
+      }
 
-  .tool { border: 1px solid #303030; border-radius: 10px; background: #141414; overflow: hidden; }
-  .tool-head {
-    display: flex; align-items: center; gap: 9px; padding: 9px 13px;
-    font-size: 14px; color: #d4d4d4;
-  }
-  .tool-head .arg { height: 10px; width: 96px; border-radius: 5px; background: #2b2b2b; }
-  .tool-cmd {
-    margin: 0 12px 11px; padding: 8px 11px; display: flex; align-items: center; gap: 8px;
-    background: #000; border: 1px solid #1f1f1f; border-radius: 8px;
-    font-size: 13px; color: #565656;
-  }
-  .tool-cmd .cbar { height: 10px; width: 210px; border-radius: 5px; background: #2f2f2f; }
+      .tool {
+        border: 1px solid #303030;
+        border-radius: 10px;
+        background: #141414;
+        overflow: hidden;
+      }
+      .tool-head {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px 13px;
+        font-size: 14px;
+        color: #d4d4d4;
+      }
+      .tool-head .arg {
+        height: 10px;
+        width: 96px;
+        border-radius: 5px;
+        background: #2b2b2b;
+      }
+      .tool-cmd {
+        margin: 0 12px 11px;
+        padding: 8px 11px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #000;
+        border: 1px solid #1f1f1f;
+        border-radius: 8px;
+        font-size: 13px;
+        color: #565656;
+      }
+      .tool-cmd .cbar {
+        height: 10px;
+        width: 210px;
+        border-radius: 5px;
+        background: #2f2f2f;
+      }
 
-  .composer {
-    margin-top: auto; flex: none; display: flex; align-items: center; gap: 10px;
-    border: 1px solid #2e2e2e; border-radius: 10px; padding: 11px 14px; background: #0e0e0e;
-  }
-  .composer .ph { height: 11px; width: 170px; border-radius: 5px; background: #232323; }
-  .composer .send {
-    margin-left: auto; width: 27px; height: 27px; border-radius: 8px; background: #222;
-    display: flex; align-items: center; justify-content: center; color: #8f8f8f; font-size: 14px;
-  }
-</style>
-</head>
-<body>
-  <div class="glow"></div>
-  <div class="grid"></div>
-  <div class="window">
-    <div class="chrome">
-      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-      <div class="url mono">localhost:8787</div>
-    </div>
-    <div class="main">
-      <div class="rail">
-        <div class="rail-head"></div>
-        <div class="frow"><div class="pip"></div><div class="fbar" style="width:74px"></div></div>
-        <div class="frow lvl2"><div class="pip"></div><div class="fbar" style="width:58px"></div></div>
-        <div class="frow lvl2 active"><div class="pip"></div><div class="fbar" style="width:82px"></div></div>
-        <div class="frow lvl2"><div class="pip"></div><div class="fbar" style="width:48px"></div></div>
-        <div class="frow"><div class="pip"></div><div class="fbar" style="width:66px"></div></div>
-        <div class="frow"><div class="pip"></div><div class="fbar" style="width:88px"></div></div>
-        <div class="frow"><div class="pip"></div><div class="fbar" style="width:54px"></div></div>
+      .composer {
+        margin-top: auto;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid #2e2e2e;
+        border-radius: 10px;
+        padding: 11px 14px;
+        background: #0e0e0e;
+      }
+      .composer .ph {
+        height: 11px;
+        width: 170px;
+        border-radius: 5px;
+        background: #232323;
+      }
+      .composer .send {
+        margin-left: auto;
+        width: 27px;
+        height: 27px;
+        border-radius: 8px;
+        background: #222;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #8f8f8f;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="glow"></div>
+    <div class="grid"></div>
+    <div class="window">
+      <div class="chrome">
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="url mono">localhost:8787</div>
       </div>
-      <div class="session">
-        <div class="shead">
-          <div class="live"></div>
-          <div class="tbar"></div>
-          <div class="mbar"></div>
-        </div>
-        <div class="sbody">
-          <div class="line" style="width:88%"></div>
-          <div class="line" style="width:64%"></div>
-          <div class="tool">
-            <div class="tool-head mono">Bash <div class="arg"></div></div>
-            <div class="tool-cmd mono">$ <div class="cbar"></div></div>
+      <div class="main">
+        <div class="rail">
+          <div class="rail-head"></div>
+          <div class="frow">
+            <div class="pip"></div>
+            <div class="fbar" style="width: 74px"></div>
           </div>
-          <div class="line dim" style="width:74%"></div>
-          <div class="line dim" style="width:46%"></div>
-          <div class="line" style="width:82%"></div>
-          <div class="line" style="width:58%"></div>
-          <div class="line dim" style="width:30%"></div>
-          <div class="composer">
-            <div class="ph"></div>
-            <div class="send">&#8593;</div>
+          <div class="frow lvl2">
+            <div class="pip"></div>
+            <div class="fbar" style="width: 58px"></div>
+          </div>
+          <div class="frow lvl2 active">
+            <div class="pip"></div>
+            <div class="fbar" style="width: 82px"></div>
+          </div>
+          <div class="frow lvl2">
+            <div class="pip"></div>
+            <div class="fbar" style="width: 48px"></div>
+          </div>
+          <div class="frow">
+            <div class="pip"></div>
+            <div class="fbar" style="width: 66px"></div>
+          </div>
+          <div class="frow">
+            <div class="pip"></div>
+            <div class="fbar" style="width: 88px"></div>
+          </div>
+          <div class="frow">
+            <div class="pip"></div>
+            <div class="fbar" style="width: 54px"></div>
+          </div>
+        </div>
+        <div class="session">
+          <div class="shead">
+            <div class="live"></div>
+            <div class="tbar"></div>
+            <div class="mbar"></div>
+          </div>
+          <div class="sbody">
+            <div class="line" style="width: 88%"></div>
+            <div class="line" style="width: 64%"></div>
+            <div class="tool">
+              <div class="tool-head mono">
+                Bash
+                <div class="arg"></div>
+              </div>
+              <div class="tool-cmd mono">
+                $
+                <div class="cbar"></div>
+              </div>
+            </div>
+            <div class="line dim" style="width: 74%"></div>
+            <div class="line dim" style="width: 46%"></div>
+            <div class="line" style="width: 82%"></div>
+            <div class="line" style="width: 58%"></div>
+            <div class="line dim" style="width: 30%"></div>
+            <div class="composer">
+              <div class="ph"></div>
+              <div class="send">&#8593;</div>
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
-</body>
+  </body>
 </html>

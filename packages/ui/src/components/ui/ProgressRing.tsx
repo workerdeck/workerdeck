@@ -17,30 +17,23 @@ export function ProgressRing({ value, size = 13, strokeWidth = 2, className }: P
   const circumference = 2 * Math.PI * radius
   return (
     <svg
-      data-slot='progress-ring'
+      data-slot="progress-ring"
       width={size}
       height={size}
       viewBox={`0 0 ${size} ${size}`}
-      role='img'
+      role="img"
       aria-label={`${Math.round(clamped)}%`}
-      className={cn('shrink-0 -rotate-90', className)}>
+      className={cn('shrink-0 -rotate-90', className)}
+    >
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeOpacity={0.2} strokeWidth={strokeWidth} />
       <circle
         cx={size / 2}
         cy={size / 2}
         r={radius}
-        fill='none'
-        stroke='currentColor'
-        strokeOpacity={0.2}
+        fill="none"
+        stroke="currentColor"
         strokeWidth={strokeWidth}
-      />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill='none'
-        stroke='currentColor'
-        strokeWidth={strokeWidth}
-        strokeLinecap='round'
+        strokeLinecap="round"
         strokeDasharray={circumference}
         strokeDashoffset={circumference * (1 - clamped / 100)}
       />

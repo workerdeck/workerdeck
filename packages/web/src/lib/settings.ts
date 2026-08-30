@@ -105,12 +105,17 @@ const FONT_SIZE_KEY = 'workerdeck.font-size'
 
 export function getFontSize(): number | undefined {
   const raw = localStorage.getItem(FONT_SIZE_KEY)
-  if (raw === null) return undefined
+  if (raw === null) {
+    return undefined
+  }
   const n = Number(raw)
   return Number.isFinite(n) && n >= 8 && n <= 24 ? Math.round(n) : undefined
 }
 
 export function setFontSize(size: number | undefined): void {
-  if (size === undefined) localStorage.removeItem(FONT_SIZE_KEY)
-  else localStorage.setItem(FONT_SIZE_KEY, String(Math.round(size)))
+  if (size === undefined) {
+    localStorage.removeItem(FONT_SIZE_KEY)
+  } else {
+    localStorage.setItem(FONT_SIZE_KEY, String(Math.round(size)))
+  }
 }

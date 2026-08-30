@@ -26,7 +26,9 @@ function fakeHarness() {
     },
     next(): Promise<IteratorResult<SDKMessage>> {
       const next = buffered.shift()
-      if (next !== undefined) return Promise.resolve({ value: next, done: false })
+      if (next !== undefined) {
+        return Promise.resolve({ value: next, done: false })
+      }
       return new Promise((resolve) => {
         waiter = resolve
       })
@@ -152,9 +154,7 @@ describe('session notifications', () => {
       })
 
       // The local observer sees everything the webhook does.
-      expect(observed.map((n) => n.type)).toEqual(
-        expect.arrayContaining(['permission_requested', 'turn_completed']),
-      )
+      expect(observed.map((n) => n.type)).toEqual(expect.arrayContaining(['permission_requested', 'turn_completed']))
     } finally {
       await receiver.close()
     }
@@ -188,9 +188,7 @@ describe('session notifications', () => {
 
       await vi.waitFor(() => expect(receiver.received.length).toBe(1))
       await vi.waitFor(() =>
-        expect(observed.map((n) => n.type)).toEqual(
-          expect.arrayContaining(['turn_completed', 'permission_requested']),
-        ),
+        expect(observed.map((n) => n.type)).toEqual(expect.arrayContaining(['turn_completed', 'permission_requested'])),
       )
       expect(receiver.received.map((n) => n.type)).toEqual(['permission_requested'])
       expect(receiver.received[0]!.sessionId).toBe(session.id)

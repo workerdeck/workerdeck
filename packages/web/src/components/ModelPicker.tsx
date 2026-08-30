@@ -18,7 +18,7 @@ export function ModelPicker({
 }) {
   return (
     <ModelSelect
-      variant='form'
+      variant="form"
       models={models}
       model={value || undefined}
       onModelChange={(model) => onChange(model ?? '')}

@@ -74,8 +74,7 @@ const runner = new AiSdkRunner({
     'and vfs.list(dir). The value of the last expression in your script is returned to you.',
   tools: {
     eval_script: tool({
-      description:
-        'Run a JavaScript snippet in a sandbox with access to the scratch filesystem via the vfs global.',
+      description: 'Run a JavaScript snippet in a sandbox with access to the scratch filesystem via the vfs global.',
       inputSchema: z.object({ script: z.string().describe('JavaScript to evaluate') }),
     }),
   },
@@ -84,11 +83,15 @@ const runner = new AiSdkRunner({
 runner.subscribe((event: SessionEvent) => {
   if (event.type === 'assistant_message') {
     for (const block of event.message.content as Array<Record<string, unknown>>) {
-      if (block.type === 'text') console.log(`\n💬 ${String(block.text).trim()}`)
+      if (block.type === 'text') {
+        console.log(`\n💬 ${String(block.text).trim()}`)
+      }
       if (block.type === 'tool_use') {
         console.log(`\n🔧 tool call: ${String(block.name)}`)
         const input = block.input as { script?: string }
-        if (input?.script) console.log(indent(input.script.trim()))
+        if (input?.script) {
+          console.log(indent(input.script.trim()))
+        }
       }
     }
   }
@@ -97,22 +100,26 @@ runner.subscribe((event: SessionEvent) => {
       `\n🏁 turn_result: ${event.subtype} (${event.durationMs}ms, turn ${event.numTurns})` +
         (event.usage ? `  usage: ${JSON.stringify(event.usage)}` : ''),
     )
-    if (event.errors?.length) console.log('   errors:', event.errors.join('; '))
+    if (event.errors?.length) {
+      console.log('   errors:', event.errors.join('; '))
+    }
   }
-  if (event.type === 'session_error') console.error('\n❗ session_error:', event.message)
+  if (event.type === 'session_error') {
+    console.error('\n❗ session_error:', event.message)
+  }
 })
 
 void runner.start()
-runner.sendMessage(
-  'Read /leads/acme.txt and tell me the revenue per employee, rounded to the nearest whole number.',
-)
+runner.sendMessage('Read /leads/acme.txt and tell me the revenue per employee, rounded to the nearest whole number.')
 
 // Drive the park → execute → replay cycle until the turn completes.
 const deadline = Date.now() + 120_000
 let executions = 0
 let completed = false
 runner.subscribe((e) => {
-  if (e.type === 'turn_result') completed = true
+  if (e.type === 'turn_result') {
+    completed = true
+  }
 })
 
 while (!completed && Date.now() < deadline) {
@@ -139,16 +146,14 @@ while (!completed && Date.now() < deadline) {
     const result = dispatch.result
     if (result.status === 'ok') {
       console.log(`   ✅ sandbox returned: ${JSON.stringify(result.output)}`)
-      for (const log of result.logs ?? []) console.log(`   guest ${log}`)
+      for (const log of result.logs ?? []) {
+        console.log(`   guest ${log}`)
+      }
       runner.resolveToolCall(call.toolCallId, { type: 'json', value: result.output })
     } else {
       console.log(`   ⚠️  sandbox failed (${result.reason}): ${result.error}`)
       // Feed the failure back so the model can adapt — this path is worth seeing.
-      runner.resolveToolCall(
-        call.toolCallId,
-        { type: 'text', value: `${result.reason}: ${result.error}` },
-        { isError: true },
-      )
+      runner.resolveToolCall(call.toolCallId, { type: 'text', value: `${result.reason}: ${result.error}` }, { isError: true })
     }
   }
 }

@@ -43,8 +43,12 @@ function fakeHarness() {
     },
     next(): Promise<IteratorResult<SDKMessage>> {
       const buffered = messages.shift()
-      if (buffered !== undefined) return Promise.resolve({ value: buffered, done: false })
-      if (done) return Promise.resolve({ value: undefined, done: true })
+      if (buffered !== undefined) {
+        return Promise.resolve({ value: buffered, done: false })
+      }
+      if (done) {
+        return Promise.resolve({ value: undefined, done: true })
+      }
       return new Promise((resolve) => {
         waiter = resolve
       })
@@ -120,15 +124,11 @@ const agentCall = (id: string, input: Record<string, unknown> = {}) => ({
 const ACK_TEXT =
   'Async agent launched successfully. (This tool result is internal metadata — never quote ' +
   'or paste any part of it, including the agentId below, into a user-facing reply.)\n' +
-  "agentId: a5ae18bf55ec3c1b1 (internal ID - do not mention to user.)\n" +
+  'agentId: a5ae18bf55ec3c1b1 (internal ID - do not mention to user.)\n' +
   'The agent is working in the background. You will be notified automatically when it completes.'
 
 const launchAck = (toolUseId: string, uuid = nextUuid()) =>
-  user(
-    [{ type: 'tool_result', tool_use_id: toolUseId, content: [{ type: 'text', text: ACK_TEXT }] }],
-    null,
-    uuid,
-  )
+  user([{ type: 'tool_result', tool_use_id: toolUseId, content: [{ type: 'text', text: ACK_TEXT }] }], null, uuid)
 
 /** The CLI's background-task lifecycle, live: system messages the runner passes
  * through as `sdk_event` bodies. Shapes from the captured session. */
@@ -223,9 +223,7 @@ describe('SessionRunner sub-agent rollup', () => {
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)
-    harness.emit(
-      assistant([taskCall('task-1', { subagent_type: 'Explore', description: 'find the auth check' })]),
-    )
+    harness.emit(assistant([taskCall('task-1', { subagent_type: 'Explore', description: 'find the auth check' })]))
     await tick()
     // Visible from the call, before any nested event arrives.
     expect(runner.info().subagents).toEqual([
@@ -258,9 +256,7 @@ describe('SessionRunner sub-agent rollup', () => {
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)
-    harness.emit(
-      assistant([taskCall('task-1', { subagent_type: '   ', description: 'x'.repeat(200) })]),
-    )
+    harness.emit(assistant([taskCall('task-1', { subagent_type: '   ', description: 'x'.repeat(200) })]))
     await tick()
     const [record] = runner.info().subagents!
     expect(record.agentType).toBeUndefined()
@@ -275,9 +271,7 @@ describe('SessionRunner sub-agent rollup', () => {
     harness.emit(assistant([taskCall('task-1', { subagent_type: 'Explore' }), toolCall('main-1')]))
     // The brief: a real user message inside the sidechain.
     harness.emit(user('Search the repo for X.', 'task-1'))
-    harness.emit(
-      assistant([{ type: 'text', text: 'Searching.' }, toolCall('c1', 'Grep'), toolCall('c2')], 'task-1'),
-    )
+    harness.emit(assistant([{ type: 'text', text: 'Searching.' }, toolCall('c1', 'Grep'), toolCall('c2')], 'task-1'))
     harness.emit({
       type: 'stream_event',
       event: { type: 'content_block_delta' },
@@ -287,9 +281,7 @@ describe('SessionRunner sub-agent rollup', () => {
     } as unknown as SDKMessage)
     harness.emit(assistant([toolCall('c3', 'Read')], 'task-1'))
     await tick()
-    expect(runner.info().subagents).toMatchObject([
-      { toolUseId: 'task-1', status: 'running', toolCount: 3 },
-    ])
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: 'task-1', status: 'running', toolCount: 3 }])
   })
 
   it('keeps two parallel Tasks apart while their events interleave', async () => {
@@ -324,17 +316,13 @@ describe('SessionRunner sub-agent rollup', () => {
     harness.emit(user('Do the thing.', 'task-x'))
     harness.emit(assistant([toolCall('x1')], 'task-x'))
     await tick()
-    expect(runner.info().subagents).toMatchObject([
-      { toolUseId: 'task-x', status: 'running', toolCount: 1 },
-    ])
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: 'task-x', status: 'running', toolCount: 1 }])
     expect(runner.info().subagents![0].agentType).toBeUndefined()
 
     // The named call turning up fills labels in without resetting the count.
     harness.emit(assistant([taskCall('task-x', { subagent_type: 'Explore' })]))
     await tick()
-    expect(runner.info().subagents).toMatchObject([
-      { toolUseId: 'task-x', agentType: 'Explore', status: 'running', toolCount: 1 },
-    ])
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: 'task-x', agentType: 'Explore', status: 'running', toolCount: 1 }])
   })
 
   it('settles a Task the turn abandoned as failed — never a running badge on an idle session', async () => {
@@ -348,9 +336,7 @@ describe('SessionRunner sub-agent rollup', () => {
     // Interrupt: no tool_result ever arrives, just the turn ending.
     harness.emit(turnResult)
     await tick()
-    expect(runner.info().subagents).toMatchObject([
-      { toolUseId: 'task-1', status: 'failed', toolCount: 1 },
-    ])
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: 'task-1', status: 'failed', toolCount: 1 }])
   })
 
   it('clears the rollup on conversation_reset — the Tasks belonged to a conversation that is gone', async () => {
@@ -378,7 +364,9 @@ describe('SessionRunner sub-agent rollup', () => {
     harness.emit(initMessage)
     const settled = Array.from({ length: SUBAGENT_HISTORY + 2 }, (_, i) => `task-${i + 1}`)
     harness.emit(assistant([...settled.map((id) => taskCall(id)), taskCall('task-live')]))
-    for (const id of settled) harness.emit(taskResult(id))
+    for (const id of settled) {
+      harness.emit(taskResult(id))
+    }
     await tick()
     const records = runner.info().subagents!
     // The two oldest-settled fell off; the running one is untouchable.
@@ -455,13 +443,7 @@ describe('SessionRunner sub-agent rollup', () => {
 
     // The SDK re-streams user messages on resume; the duplicate result must not
     // double-settle or reshuffle what is retained.
-    harness.emit(
-      user(
-        [{ type: 'tool_result', tool_use_id: 'task-done', content: 'report' }],
-        null,
-        'h-u2',
-      ),
-    )
+    harness.emit(user([{ type: 'tool_result', tool_use_id: 'task-done', content: 'report' }], null, 'h-u2'))
     await tick()
     expect(runner.info().subagents).toMatchObject([
       { toolUseId: 'task-done', status: 'done', toolCount: 2 },
@@ -510,9 +492,7 @@ describe('SessionRunner background sub-agents', () => {
     ])
 
     harness.emit(assistant([toolCall('n1')], id))
-    harness.emit(
-      assistant([{ type: 'text', text: 'All three Explore agents are launched and running.' }]),
-    )
+    harness.emit(assistant([{ type: 'text', text: 'All three Explore agents are launched and running.' }]))
     // The turn ends while the agent is mid-flight (and the runner's own idle
     // transition follows it) — this is exactly where the old sweep re-branded
     // a live, working agent as a failure.
@@ -524,9 +504,7 @@ describe('SessionRunner background sub-agents', () => {
     harness.emit(assistant([toolCall('n2'), toolCall('n3')], id))
     harness.emit(taskNotification('a5ae18bf55ec3c1b1', id, 'completed'))
     await tick()
-    expect(runner.info().subagents).toMatchObject([
-      { toolUseId: id, status: 'done', toolCount: 3 },
-    ])
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: id, status: 'done', toolCount: 3 }])
   })
 
   it('reads a notification that is not `completed` as the agent failing', async () => {
@@ -619,9 +597,7 @@ describe('SessionRunner background sub-agents', () => {
         session_id: 'sdk-session-prev',
         message: {
           role: 'user',
-          content: [
-            { type: 'tool_result', tool_use_id: 'agent-done', content: [{ type: 'text', text: ACK_TEXT }] },
-          ],
+          content: [{ type: 'tool_result', tool_use_id: 'agent-done', content: [{ type: 'text', text: ACK_TEXT }] }],
         },
         parent_tool_use_id: null,
         parent_agent_id: null,
@@ -632,9 +608,7 @@ describe('SessionRunner background sub-agents', () => {
         session_id: 'sdk-session-prev',
         message: {
           role: 'user',
-          content: [
-            { type: 'tool_result', tool_use_id: 'agent-dead', content: [{ type: 'text', text: ACK_TEXT }] },
-          ],
+          content: [{ type: 'tool_result', tool_use_id: 'agent-dead', content: [{ type: 'text', text: ACK_TEXT }] }],
         },
         parent_tool_use_id: null,
         parent_agent_id: null,
@@ -673,9 +647,7 @@ describe('SessionRunner background sub-agents', () => {
         session_id: 'sdk-session-prev',
         message: {
           role: 'user',
-          content: [
-            { type: 'tool_result', tool_use_id: 'spawn-y', content: [{ type: 'text', text: ACK_TEXT }] },
-          ],
+          content: [{ type: 'tool_result', tool_use_id: 'spawn-y', content: [{ type: 'text', text: ACK_TEXT }] }],
         },
         parent_tool_use_id: null,
         parent_agent_id: null,

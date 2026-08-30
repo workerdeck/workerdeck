@@ -23,10 +23,10 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 const src = readFileSync(join(root, 'packages/ui/src/components/agent/EngineIcon.tsx'), 'utf8')
 
 const table = src.slice(src.indexOf('const PATHS'), src.indexOf('\n}\n', src.indexOf('const PATHS')))
-const marks = [...table.matchAll(/(\w+): \{\s*title: '([^']+)',\s*d: '([^']+)',/g)].map(
-  ([, key, title, d]) => ({ key, title, d }),
-)
-if (marks.length === 0) throw new Error('no marks parsed — did PATHS change shape?')
+const marks = [...table.matchAll(/(\w+): \{\s*title: '([^']+)',\s*d: '([^']+)',/g)].map(([, key, title, d]) => ({ key, title, d }))
+if (marks.length === 0) {
+  throw new Error('no marks parsed — did PATHS change shape?')
+}
 
 const catalog = join(root, 'apps/ios/App/Assets.xcassets')
 for (const { key, title, d } of marks) {

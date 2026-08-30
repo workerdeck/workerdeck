@@ -33,8 +33,7 @@ import type { User } from '../shared.ts'
 
 type AuthInfo = { token: string; userId: string }
 
-const userOf = (context: { get: <T>(key: string) => T }): string =>
-  context.get<AuthInfo>('auth').userId
+const userOf = (context: { get: <T>(key: string) => T }): string => context.get<AuthInfo>('auth').userId
 
 /**
  * Treat a blank optional string as absent.
@@ -81,9 +80,7 @@ export function createWikiActions(db: WikiDb, state: AppState) {
   const listDocs = createAction({
     name: 'list_docs',
     kind: 'query',
-    description:
-      "List every document in the current user's wiki, newest first. Returns ids and titles; " +
-      'use read_doc to get a body.',
+    description: "List every document in the current user's wiki, newest first. Returns ids and titles; " + 'use read_doc to get a body.',
     input: z.object({}),
     output: z.object({ docs: z.array(docSummary) }),
     annotations: { readOnlyHint: true },
@@ -94,14 +91,10 @@ export function createWikiActions(db: WikiDb, state: AppState) {
     name: 'read_doc',
     kind: 'query',
     description:
-      'Read one wiki document by id or by exact title. Returns its full body. Prefer id when ' +
-      'you have one — titles are not unique.',
+      'Read one wiki document by id or by exact title. Returns its full body. Prefer id when ' + 'you have one — titles are not unique.',
     input: z.object({
       id: z.string().optional().describe('Document id, as returned by list_docs.'),
-      title: z
-        .string()
-        .optional()
-        .describe('Exact title, case-insensitive. Used only when id is absent.'),
+      title: z.string().optional().describe('Exact title, case-insensitive. Used only when id is absent.'),
     }),
     output: docBody,
     annotations: { readOnlyHint: true },
@@ -111,9 +104,13 @@ export function createWikiActions(db: WikiDb, state: AppState) {
       // and turn a perfectly good title lookup into a not-found.
       const id = text(input.id)
       const title = text(input.title)
-      if (!id && !title) throw badRequest('pass either id or title')
+      if (!id && !title) {
+        throw badRequest('pass either id or title')
+      }
       const doc = id ? db.getDoc(userId, id) : db.findDocByTitle(userId, title!)
-      if (!doc) throw notFound(`no such document: ${id || title}`)
+      if (!doc) {
+        throw notFound(`no such document: ${id || title}`)
+      }
       return { id: doc.id, title: doc.title, body: doc.body ?? '', updatedAt: doc.updatedAt }
     },
   })
@@ -147,7 +144,9 @@ export function createWikiActions(db: WikiDb, state: AppState) {
     annotations: { readOnlyHint: false },
     run: async ({ title, body }, context) => {
       const clean = text(title)
-      if (!clean) throw badRequest('pass a title when creating a document')
+      if (!clean) {
+        throw badRequest('pass a title when creating a document')
+      }
       const created = db.createDoc(userOf(context), clean, body)
       return { id: created.id, title: created.title, updatedAt: created.updatedAt }
     },
@@ -168,10 +167,14 @@ export function createWikiActions(db: WikiDb, state: AppState) {
     annotations: { readOnlyHint: false, destructiveHint: true },
     run: async (input, context) => {
       const id = text(input.id)
-      if (!id) throw badRequest('pass the id of the document to update')
+      if (!id) {
+        throw badRequest('pass the id of the document to update')
+      }
       // A blank title is "leave it alone", never a rename to nothing.
       const updated = db.updateDoc(userOf(context), id, { title: text(input.title), body: input.body })
-      if (!updated) throw notFound(`no such document: ${id}`)
+      if (!updated) {
+        throw notFound(`no such document: ${id}`)
+      }
       return { id: updated.id, title: updated.title, updatedAt: updated.updatedAt }
     },
   })
@@ -188,9 +191,13 @@ export function createWikiActions(db: WikiDb, state: AppState) {
     run: async (input, context) => {
       const id = text(input.id)
       const title = text(input.title)
-      if (!id || !title) throw badRequest('pass both an id and a non-empty title')
+      if (!id || !title) {
+        throw badRequest('pass both an id and a non-empty title')
+      }
       const updated = db.updateDoc(userOf(context), id, { title })
-      if (!updated) throw notFound(`no such document: ${id}`)
+      if (!updated) {
+        throw notFound(`no such document: ${id}`)
+      }
       return { id: updated.id, title: updated.title, updatedAt: updated.updatedAt }
     },
   })
@@ -225,11 +232,15 @@ export function createWikiActions(db: WikiDb, state: AppState) {
     run: async (input, context) => {
       const userId = userOf(context)
       const id = text(input.id)
-      if (!id) throw badRequest('pass the id of the document to delete')
+      if (!id) {
+        throw badRequest('pass the id of the document to delete')
+      }
       // Read first, so the answer can name what went — and so another user's id
       // is a plain not-found rather than a delete that reports zero rows.
       const doc = db.getDoc(userId, id)
-      if (!doc) throw notFound(`no such document: ${id}`)
+      if (!doc) {
+        throw notFound(`no such document: ${id}`)
+      }
       db.deleteDoc(userId, id)
       // If it was the one on screen, the user is now looking at a document that
       // does not exist. Clear the record and tell the tab, rather than leaving
@@ -314,9 +325,13 @@ export function createAgentActions(db: WikiDb, state: AppState, users: readonly 
       const userId = userOf(context)
       const id = text(input.id)
       const title = text(input.title)
-      if (!id && !title) throw badRequest('pass either id or title')
+      if (!id && !title) {
+        throw badRequest('pass either id or title')
+      }
       const doc = id ? db.getDoc(userId, id) : db.findDocByTitle(userId, title!)
-      if (!doc) throw notFound(`no such document: ${id || title}`)
+      if (!doc) {
+        throw notFound(`no such document: ${id || title}`)
+      }
       // Recorded either way: an agent working while the tab is closed should
       // still leave the user on the right document when they come back.
       state.set(userId, { ...state.get(userId), openDocId: doc.id })

@@ -16,13 +16,7 @@ import {
   sessionState,
   subsetSummary,
 } from '@workerdeck/protocol'
-import type {
-  SessionInfo,
-  SessionRow,
-  SubagentInfo,
-  ViewConfig,
-  WorkspaceScope,
-} from '@workerdeck/protocol'
+import type { SessionInfo, SessionRow, SubagentInfo, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
 
 /**
  * The sessions-list view model. It lives in `protocol` because three clients
@@ -91,9 +85,7 @@ describe('sessionState', () => {
   })
 
   it('reads idle once every sub-agent has settled', () => {
-    expect(
-      sessionState(info({ status: 'idle', subagents: [sub('done'), sub('failed')] })),
-    ).toBe('idle')
+    expect(sessionState(info({ status: 'idle', subagents: [sub('done'), sub('failed')] }))).toBe('idle')
   })
 
   it('never resurrects a terminal session off a stale running record', () => {
@@ -104,11 +96,7 @@ describe('sessionState', () => {
   })
 
   it('lets a pending approval outrank a running sub-agent', () => {
-    expect(
-      sessionState(
-        info({ status: 'idle', pendingPermissionCount: 1, subagents: [sub('running')] }),
-      ),
-    ).toBe('attention')
+    expect(sessionState(info({ status: 'idle', pendingPermissionCount: 1, subagents: [sub('running')] }))).toBe('attention')
   })
 })
 
@@ -125,8 +113,7 @@ describe('filterRows', () => {
   ]
 
   it('matches search across title, cwd, gateway, adapter and id prefix', () => {
-    const find = (search: string) =>
-      filterRows(rows, config({ search, scoped: false })).map((r) => r.info.id)
+    const find = (search: string) => filterRows(rows, config({ search, scoped: false })).map((r) => r.info.id)
     expect(find('parser')).toEqual(['a1'])
     expect(find('/srv')).toEqual(['b2'])
     expect(find('pi')).toEqual(['b2'])
@@ -139,9 +126,7 @@ describe('filterRows', () => {
 
   it('treats an empty facet as no filter, and facets as AND', () => {
     expect(filterRows(rows, config({ scoped: false })).length).toBe(2)
-    expect(
-      filterRows(rows, config({ scoped: false, adapters: ['codex'], gateways: ['mac'] })).length,
-    ).toBe(0)
+    expect(filterRows(rows, config({ scoped: false, adapters: ['codex'], gateways: ['mac'] })).length).toBe(0)
   })
 })
 
@@ -221,19 +206,12 @@ describe('subsetSummary', () => {
   })
 
   it('names every cause, counting the facets rather than listing them', () => {
-    const summary = subsetSummary(
-      config({ search: 'parser', adapters: ['codex'], states: ['idle'] }),
-      scope,
-      3,
-      30,
-    )
+    const summary = subsetSummary(config({ search: 'parser', adapters: ['codex'], states: ['idle'] }), scope, 3, 30)
     expect(summary).toEqual({ shown: 3, total: 30, causes: ['alpha', '2 filters', 'search'] })
   })
 
   it('omits scope when the scope filter is off', () => {
-    expect(subsetSummary(config({ scoped: false, search: 'x' }), scope, 1, 2)?.causes).toEqual([
-      'search',
-    ])
+    expect(subsetSummary(config({ scoped: false, search: 'x' }), scope, 1, 2)?.causes).toEqual(['search'])
   })
 })
 
@@ -260,10 +238,7 @@ describe('labels', () => {
   })
 
   it('derives the adapter chips from the rows present', () => {
-    expect(adaptersOf([row(), row({ adapter: 'codex' }), row({ adapter: 'codex' })])).toEqual([
-      'claude',
-      'codex',
-    ])
+    expect(adaptersOf([row(), row({ adapter: 'codex' }), row({ adapter: 'codex' })])).toEqual(['claude', 'codex'])
   })
 })
 
@@ -318,9 +293,7 @@ describe('project facet', () => {
     // The prefix trap: '/work/deck-two' starts with '/work/deck'. A session
     // there is not inside this project, and claiming 'two' as its sub-path
     // would be a path that does not exist.
-    expect(
-      projectSubpath(row({ info: info({ id: 's1', cwd: '/work/deck-two/pkg', project }) })),
-    ).toBeUndefined()
+    expect(projectSubpath(row({ info: info({ id: 's1', cwd: '/work/deck-two/pkg', project }) }))).toBeUndefined()
   })
 
   it('offers one filter entry per project, keyed by root and labelled by name', () => {
@@ -338,20 +311,14 @@ describe('project facet', () => {
   })
 
   it('groups declared and undeclared rows side by side, alphabetically by label', () => {
-    const groups = groupRows(
-      [undeclared, declaredUi, declaredWeb],
-      config({ groupBy: 'project', sortBy: 'recent' }),
-    )
+    const groups = groupRows([undeclared, declaredUi, declaredWeb], config({ groupBy: 'project', sortBy: 'recent' }))
     expect(groups.map((g) => g.label)).toEqual(['alpha', 'WorkerDeck'])
     expect(groups[1]?.rows.map((r) => r.info.id)).toEqual(['p1', 'p2'])
   })
 
   it('filters by project key, and a config predating the field filters nothing', () => {
     const rows = [declaredUi, undeclared]
-    const filtered = filterRows(
-      rows,
-      config({ scoped: false, projects: [projectKey(declaredUi)] }),
-    )
+    const filtered = filterRows(rows, config({ scoped: false, projects: [projectKey(declaredUi)] }))
     expect(filtered.map((r) => r.info.id)).toEqual(['p1'])
     // A stored ViewConfig restored from before the field existed: absent and
     // empty must mean the same thing.
@@ -363,10 +330,7 @@ describe('project facet', () => {
 
   it('matches search against the declared project name', () => {
     // The person knows the repo as "WorkerDeck", not by the folder's basename.
-    const found = filterRows(
-      [declaredUi, undeclared],
-      config({ scoped: false, search: 'workerdeck' }),
-    )
+    const found = filterRows([declaredUi, undeclared], config({ scoped: false, search: 'workerdeck' }))
     expect(found.map((r) => r.info.id)).toEqual(['p1'])
   })
 

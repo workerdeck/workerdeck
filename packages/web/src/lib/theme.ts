@@ -5,7 +5,9 @@ const KEY = 'workerdeck.theme'
 export function getTheme(): Theme {
   try {
     const stored = localStorage.getItem(KEY)
-    if (stored === 'light' || stored === 'dark') return stored
+    if (stored === 'light' || stored === 'dark') {
+      return stored
+    }
   } catch {
     // storage unavailable
   }

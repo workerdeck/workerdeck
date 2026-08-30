@@ -15,7 +15,9 @@ import type { Segment, ChipSegment, TriggerConfig, TriggerPosition, ActiveTrigge
 export function segmentsToPlainText(segments: Segment[]): string {
   return segments
     .map((seg) => {
-      if (seg.type === 'text') return seg.text
+      if (seg.type === 'text') {
+        return seg.text
+      }
       return `${seg.trigger}${seg.displayText}`
     })
     .join('')
@@ -26,7 +28,9 @@ export function segmentsToPlainText(segments: Segment[]): string {
  * Used for initial value conversion from plain strings.
  */
 export function plainTextToSegments(text: string): Segment[] {
-  if (!text) return []
+  if (!text) {
+    return []
+  }
   return [{ type: 'text', text }]
 }
 
@@ -37,12 +41,13 @@ export function plainTextToSegments(text: string): Segment[] {
  * can't be partially represented).
  */
 export function truncateSegmentsToLength(segments: Segment[], maxLength: number): Segment[] {
-  if (maxLength <= 0) return []
+  if (maxLength <= 0) {
+    return []
+  }
   const result: Segment[] = []
   let length = 0
   for (const seg of segments) {
-    const segLength =
-      seg.type === 'text' ? seg.text.length : seg.trigger.length + seg.displayText.length
+    const segLength = seg.type === 'text' ? seg.text.length : seg.trigger.length + seg.displayText.length
     if (length + segLength <= maxLength) {
       result.push(seg)
       length += segLength
@@ -54,8 +59,12 @@ export function truncateSegmentsToLength(segments: Segment[], maxLength: number)
         // Don't split a surrogate pair: if the cut lands right after a high
         // surrogate, drop the incomplete code point instead of a lone surrogate.
         const code = seg.text.charCodeAt(remaining - 1)
-        if (code >= 0xd800 && code <= 0xdbff) remaining -= 1
-        if (remaining > 0) result.push({ type: 'text', text: seg.text.slice(0, remaining) })
+        if (code >= 0xd800 && code <= 0xdbff) {
+          remaining -= 1
+        }
+        if (remaining > 0) {
+          result.push({ type: 'text', text: seg.text.slice(0, remaining) })
+        }
       }
     }
     break
@@ -88,7 +97,9 @@ export function isInlineWhitespace(char: string | undefined): boolean {
 function buildTriggerCharMap(triggers: TriggerConfig[]): Map<string, TriggerConfig> {
   const map = new Map<string, TriggerConfig>()
   for (const trigger of triggers) {
-    if (!map.has(trigger.char)) map.set(trigger.char, trigger)
+    if (!map.has(trigger.char)) {
+      map.set(trigger.char, trigger)
+    }
   }
   return map
 }
@@ -105,12 +116,10 @@ function buildTriggerCharMap(triggers: TriggerConfig[]): Map<string, TriggerConf
  * @param charIndex - The index of the trigger character in the text
  * @param position - The position rule to validate against
  */
-export function isValidTriggerPosition(
-  text: string,
-  charIndex: number,
-  position: TriggerPosition,
-): boolean {
-  if (charIndex === 0) return true
+export function isValidTriggerPosition(text: string, charIndex: number, position: TriggerPosition): boolean {
+  if (charIndex === 0) {
+    return true
+  }
 
   const prevChar = text[charIndex - 1]
 
@@ -136,12 +145,10 @@ export function isValidTriggerPosition(
  * @param cursorPos - The cursor position (character offset from start)
  * @param triggers - Available trigger configurations
  */
-export function detectActiveTrigger(
-  text: string,
-  cursorPos: number,
-  triggers: TriggerConfig[],
-): ActiveTrigger | null {
-  if (!text || cursorPos === 0 || triggers.length === 0) return null
+export function detectActiveTrigger(text: string, cursorPos: number, triggers: TriggerConfig[]): ActiveTrigger | null {
+  if (!text || cursorPos === 0 || triggers.length === 0) {
+    return null
+  }
 
   const triggerByChar = buildTriggerCharMap(triggers)
 
@@ -273,11 +280,7 @@ export function resolveChip(
       runningOffset += seg.text.length
     } else {
       runningOffset += seg.trigger.length + seg.displayText.length
-      if (
-        seg.value === chip.value &&
-        seg.displayText === chip.displayText &&
-        seg.trigger === activeTrigger.config.char
-      ) {
+      if (seg.value === chip.value && seg.displayText === chip.displayText && seg.trigger === activeTrigger.config.char) {
         lastChipEndOffset = runningOffset
       }
     }
@@ -315,7 +318,9 @@ export function resolveText(
       const chipEnd = offset + `${seg.trigger}${seg.displayText}`.length
       // A trigger range can never overlap a chip — chips are atomic — so a chip
       // is either wholly before or wholly after, and is kept either way.
-      if (chipEnd <= triggerStart || offset >= triggerEnd) newSegments.push(seg)
+      if (chipEnd <= triggerStart || offset >= triggerEnd) {
+        newSegments.push(seg)
+      }
       offset = chipEnd
       continue
     }
@@ -326,9 +331,13 @@ export function resolveText(
     } else {
       const before = seg.text.slice(0, Math.max(0, triggerStart - textStart))
       const after = seg.text.slice(Math.min(seg.text.length, triggerEnd - textStart))
-      if (before) newSegments.push({ type: 'text', text: before })
+      if (before) {
+        newSegments.push({ type: 'text', text: before })
+      }
       newSegments.push({ type: 'text', text })
-      if (after) newSegments.push({ type: 'text', text: after })
+      if (after) {
+        newSegments.push({ type: 'text', text: after })
+      }
     }
     offset = textEnd
   }
@@ -337,7 +346,9 @@ export function resolveText(
   // Clamp: a trigger detected against a stale document could otherwise leave the
   // caret past the end, which renders as no caret at all.
   const total = segmentsToPlainText(merged).length
-  if (cursorOffset > total) cursorOffset = total
+  if (cursorOffset > total) {
+    cursorOffset = total
+  }
   return { segments: merged, cursorOffset }
 }
 
@@ -353,8 +364,12 @@ export function resolveText(
  * @returns New segments array with the chip removed
  */
 export function removeChipAtIndex(segments: Segment[], index: number): Segment[] {
-  if (index < 0 || index >= segments.length) return segments
-  if (segments[index].type !== 'chip') return segments
+  if (index < 0 || index >= segments.length) {
+    return segments
+  }
+  if (segments[index].type !== 'chip') {
+    return segments
+  }
 
   const result = [...segments.slice(0, index), ...segments.slice(index + 1)]
   return mergeAdjacentTextSegments(result)
@@ -368,20 +383,17 @@ export function removeChipAtIndex(segments: Segment[], index: number): Segment[]
  * @param index - The segment index to revert
  * @returns New segments with the chip replaced by text, or null if not applicable
  */
-export function revertChipAtIndex(
-  segments: Segment[],
-  index: number,
-): { segments: Segment[]; revertedText: string } | null {
-  if (index < 0 || index >= segments.length) return null
+export function revertChipAtIndex(segments: Segment[], index: number): { segments: Segment[]; revertedText: string } | null {
+  if (index < 0 || index >= segments.length) {
+    return null
+  }
   const seg = segments[index]
-  if (seg.type !== 'chip' || !seg.autoResolved) return null
+  if (seg.type !== 'chip' || !seg.autoResolved) {
+    return null
+  }
 
   const revertedText = `${seg.trigger}${seg.displayText}`
-  const result = [
-    ...segments.slice(0, index),
-    { type: 'text' as const, text: revertedText },
-    ...segments.slice(index + 1),
-  ]
+  const result = [...segments.slice(0, index), { type: 'text' as const, text: revertedText }, ...segments.slice(index + 1)]
   return { segments: mergeAdjacentTextSegments(result), revertedText }
 }
 
@@ -397,12 +409,11 @@ export function revertChipAtIndex(
  * whitespace, or after a newline. This avoids false positives like email
  * addresses (user@example.com).
  */
-export function resolveTriggersInSegments(
-  segments: Segment[],
-  triggers: TriggerConfig[],
-): Segment[] {
+export function resolveTriggersInSegments(segments: Segment[], triggers: TriggerConfig[]): Segment[] {
   const autoResolveTriggers = triggers.filter((t) => t.resolveOnSpace)
-  if (autoResolveTriggers.length === 0) return segments
+  if (autoResolveTriggers.length === 0) {
+    return segments
+  }
 
   const triggerByChar = buildTriggerCharMap(autoResolveTriggers)
   const result: Segment[] = []
@@ -425,11 +436,10 @@ export function resolveTriggersInSegments(
  * A trigger pattern is: (start-of-string | whitespace) + trigger_char + word_chars
  * followed by whitespace or end-of-string.
  */
-function splitTextByTriggerPatterns(
-  text: string,
-  triggerByChar: Map<string, TriggerConfig>,
-): Segment[] {
-  if (!text) return []
+function splitTextByTriggerPatterns(text: string, triggerByChar: Map<string, TriggerConfig>): Segment[] {
+  if (!text) {
+    return []
+  }
 
   const segments: Segment[] = []
   let i = 0
@@ -493,12 +503,7 @@ function splitTextByTriggerPatterns(
  * @param replacement - The replacement text
  * @returns New segments array with the replacement applied
  */
-export function replaceTextRange(
-  segments: Segment[],
-  start: number,
-  end: number,
-  replacement: string,
-): Segment[] {
+export function replaceTextRange(segments: Segment[], start: number, end: number, replacement: string): Segment[] {
   const newSegments: Segment[] = []
   let offset = 0
   let inserted = false
@@ -585,28 +590,25 @@ export function toggleMarkdownWrap(
   selectionEnd: number,
   marker: string,
 ): { segments: Segment[]; selectionStart: number; selectionEnd: number } | null {
-  if (selectionStart === selectionEnd) return null
+  if (selectionStart === selectionEnd) {
+    return null
+  }
 
   const plainText = segmentsToPlainText(segments)
   const markerLen = marker.length
 
   // Check if already wrapped
-  const hasOpeningMarker =
-    selectionStart >= markerLen &&
-    plainText.slice(selectionStart - markerLen, selectionStart) === marker
+  const hasOpeningMarker = selectionStart >= markerLen && plainText.slice(selectionStart - markerLen, selectionStart) === marker
   const hasClosingMarker =
-    selectionEnd + markerLen <= plainText.length &&
-    plainText.slice(selectionEnd, selectionEnd + markerLen) === marker
+    selectionEnd + markerLen <= plainText.length && plainText.slice(selectionEnd, selectionEnd + markerLen) === marker
 
   let isWrapped = hasOpeningMarker && hasClosingMarker
 
   // For single-char markers (e.g., '*'), ensure we're not matching
   // inside a multi-char marker (e.g., '**')
   if (isWrapped && markerLen === 1) {
-    const charBeforeOpening =
-      selectionStart > markerLen ? plainText[selectionStart - markerLen - 1] : ''
-    const charAfterClosing =
-      selectionEnd + markerLen < plainText.length ? plainText[selectionEnd + markerLen] : ''
+    const charBeforeOpening = selectionStart > markerLen ? plainText[selectionStart - markerLen - 1] : ''
+    const charAfterClosing = selectionEnd + markerLen < plainText.length ? plainText[selectionEnd + markerLen] : ''
     if (charBeforeOpening === marker || charAfterClosing === marker) {
       isWrapped = false
     }
@@ -615,12 +617,7 @@ export function toggleMarkdownWrap(
   if (isWrapped) {
     // Unwrap: remove closing marker first (preserves start offsets), then opening
     const afterClosing = replaceTextRange(segments, selectionEnd, selectionEnd + markerLen, '')
-    const afterOpening = replaceTextRange(
-      afterClosing,
-      selectionStart - markerLen,
-      selectionStart,
-      '',
-    )
+    const afterOpening = replaceTextRange(afterClosing, selectionStart - markerLen, selectionStart, '')
     return {
       segments: afterOpening,
       selectionStart: selectionStart - markerLen,
@@ -654,7 +651,9 @@ export type MarkdownToken =
  * Does NOT handle block-level markdown (lists, headings, etc.).
  */
 export function parseInlineMarkdown(text: string): MarkdownToken[] {
-  if (!text) return []
+  if (!text) {
+    return []
+  }
 
   const tokens: MarkdownToken[] = []
   // Regex patterns for inline markdown elements:
@@ -708,15 +707,23 @@ export function parseInlineMarkdown(text: string): MarkdownToken[] {
  * Avoids JSON.stringify overhead for the common case.
  */
 export function segmentsEqual(a: Segment[], b: Segment[]): boolean {
-  if (a === b) return true
-  if (a.length !== b.length) return false
+  if (a === b) {
+    return true
+  }
+  if (a.length !== b.length) {
+    return false
+  }
 
   for (let i = 0; i < a.length; i++) {
     const sa = a[i]
     const sb = b[i]
-    if (sa.type !== sb.type) return false
+    if (sa.type !== sb.type) {
+      return false
+    }
     if (sa.type === 'text') {
-      if (sb.type !== 'text' || sa.text !== sb.text) return false
+      if (sb.type !== 'text' || sa.text !== sb.text) {
+        return false
+      }
     } else {
       if (
         sb.type !== 'chip' ||
@@ -724,8 +731,9 @@ export function segmentsEqual(a: Segment[], b: Segment[]): boolean {
         sa.value !== sb.value ||
         sa.displayText !== sb.displayText ||
         sa.autoResolved !== sb.autoResolved
-      )
+      ) {
         return false
+      }
     }
   }
   return true
@@ -743,7 +751,9 @@ export function mergeAdjacentTextSegments(segments: Segment[]): Segment[] {
   const result: Segment[] = []
 
   for (const seg of segments) {
-    if (seg.type === 'text' && seg.text === '') continue
+    if (seg.type === 'text' && seg.text === '') {
+      continue
+    }
 
     const last = result[result.length - 1]
     if (seg.type === 'text' && last?.type === 'text') {

@@ -32,32 +32,33 @@ export function GatewaysSidebar() {
   const connected = snapshots.filter((s) => s.error === undefined).length
 
   const create = (
-    <Button variant='ghost' size='icon-sm' aria-label='Add gateway' onClick={() => setCreating(true)}>
-      <Plus className='size-4' />
+    <Button variant="ghost" size="icon-sm" aria-label="Add gateway" onClick={() => setCreating(true)}>
+      <Plus className="size-4" />
     </Button>
   )
 
   return (
     <>
       <SidebarFrame
-        section='gateways'
-        title='Gateways'
+        section="gateways"
+        title="Gateways"
         badge={
           ready && hosts.length > 0 ? (
-            <span className='shrink-0 text-label text-fg-4'>
+            <span className="shrink-0 text-label text-fg-4">
               {connected}/{hosts.length}
             </span>
           ) : undefined
         }
         actions={create}
-        railActions={create}>
+        railActions={create}
+      >
         <SidebarBody>
           {ready && hosts.length === 0 ? (
             // No implicit localhost is invented here, exactly as the extension
             // refuses to: a gateway you did not configure is one you cannot reach.
             <Empty
               icon={<Server />}
-              title='No gateways yet'
+              title="No gateways yet"
               description={
                 <>
                   Add one with <EmptyKey>+</EmptyKey> above.
@@ -72,15 +73,11 @@ export function GatewaysSidebar() {
               <SidebarRow
                 key={host.id}
                 active={host.id === activeId}
-                onSelect={() =>
-                  void navigate({ to: '/gateways/$hostId', params: { hostId: host.id } })
-                }
+                onSelect={() => void navigate({ to: '/gateways/$hostId', params: { hostId: host.id } })}
                 title={host.name}
                 status={
                   <>
-                    {host.implicit ? (
-                      <span className='shrink-0 text-label text-fg-4'>this page</span>
-                    ) : null}
+                    {host.implicit ? <span className="shrink-0 text-label text-fg-4">this page</span> : null}
                     {/* State as one glyph on the right edge, where every other
                         list in this app puts it. */}
                     <span
@@ -99,7 +96,7 @@ export function GatewaysSidebar() {
                   // would just be closing the tab.
                   host.implicit ? null : (
                     <RowAction label={`Remove ${host.name}`} onClick={() => setRemoving(host)}>
-                      <Trash2 className='size-3' />
+                      <Trash2 className="size-3" />
                     </RowAction>
                   )
                 }
@@ -118,7 +115,9 @@ export function GatewaysSidebar() {
             setRemoving(undefined)
             // Standing on the page for a gateway that no longer exists is the
             // one case the detail route cannot recover from on its own.
-            if (gone) void navigate({ to: '/gateways' })
+            if (gone) {
+              void navigate({ to: '/gateways' })
+            }
           }}
         />
       ) : null}

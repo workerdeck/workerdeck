@@ -22,12 +22,7 @@ import {
   type SkillInfo,
   type UserQuestion,
 } from '@workerdeck/protocol'
-import {
-  attachmentKind,
-  attachmentRef,
-  normalizeMediaType,
-  type AttachmentInput,
-} from '../../lib/attachments.ts'
+import { attachmentKind, attachmentRef, normalizeMediaType, type AttachmentInput } from '../../lib/attachments.ts'
 import { parseUnifiedDiff } from '../../lib/patch.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
@@ -151,11 +146,7 @@ const GRANULAR_NEVER = {
  * only ever read off the session's own. Everything else (items, deltas) is
  * accepted from any thread on the connection — see `#handleNotification`.
  */
-const THREAD_SCOPED_NOTIFICATIONS = new Set([
-  'turn/started',
-  'turn/completed',
-  'thread/tokenUsage/updated',
-])
+const THREAD_SCOPED_NOTIFICATIONS = new Set(['turn/started', 'turn/completed', 'thread/tokenUsage/updated'])
 
 const APPROVAL_POLICY_BY_MODE: Partial<Record<PermissionMode, object>> = {
   default: GRANULAR_ASK,
@@ -221,7 +212,9 @@ export const CODEX_COLLAB_TOOL = 'CodexCollab'
 
 /** An agent's name is its path's basename: '/root/date_one' → 'date_one'. */
 function agentName(agentPath: string | null | undefined): string | undefined {
-  if (typeof agentPath !== 'string') return undefined
+  if (typeof agentPath !== 'string') {
+    return undefined
+  }
   const name = agentPath.split('/').filter(Boolean).at(-1)
   return name || undefined
 }
@@ -257,8 +250,7 @@ function turnReport(turn: AppServerTurn): string | undefined {
  * than a sentence, and encoded images do not go in the event log. */
 const MAX_IMAGE_RESULT_CHARS = 512
 
-const shortResult = (result: string): boolean =>
-  result.length > 0 && result.length <= MAX_IMAGE_RESULT_CHARS && !result.startsWith('data:')
+const shortResult = (result: string): boolean => result.length > 0 && result.length <= MAX_IMAGE_RESULT_CHARS && !result.startsWith('data:')
 
 /**
  * `file_produced.fileId` — derived from the path, not minted fresh.
@@ -301,7 +293,7 @@ function skillInfo(skill: AppServerSkillMetadata): SkillInfo {
   return {
     name: skill.name,
     ...(skill.description ? { description: skill.description } : {}),
-    ...(skill.interface?.shortDescription ?? skill.shortDescription
+    ...((skill.interface?.shortDescription ?? skill.shortDescription)
       ? { shortDescription: skill.interface?.shortDescription ?? skill.shortDescription }
       : {}),
     ...(skill.interface?.displayName ? { displayName: skill.interface.displayName } : {}),
@@ -334,9 +326,15 @@ function mcpStatusOf(
   }
   // codex's 'cancelled' has no Claude equivalent; it means the startup was
   // abandoned, which for a reader is the same actionable state as failed.
-  if (update?.status === 'cancelled') return 'failed'
-  if (authStatus === 'notLoggedIn') return 'needs-auth'
-  if (update?.status === 'ready') return 'connected'
+  if (update?.status === 'cancelled') {
+    return 'failed'
+  }
+  if (authStatus === 'notLoggedIn') {
+    return 'needs-auth'
+  }
+  if (update?.status === 'ready') {
+    return 'connected'
+  }
   // **Tools imply connected, and this branch is not a nicety.** The startup
   // notifications only fire for servers that come up *while we are attached*;
   // a session whose child already had its servers running receives none at all
@@ -344,7 +342,9 @@ function mcpStatusOf(
   // no notification). Tools can only have been enumerated over a completed
   // handshake, so their presence is direct evidence the server is up, and
   // without this a healthy server would read as 'pending' forever.
-  if (hasTools) return 'connected'
+  if (hasTools) {
+    return 'connected'
+  }
   // No notification and nothing exposed. Genuinely ambiguous: not started yet,
   // or switched off in config — and `mcpServerStatus/list` cannot tell the two
   // apart (it lists disabled servers too, also toolless). 'pending' is the
@@ -360,7 +360,9 @@ function mcpServerInfo(
   // A map keyed by tool name, not an array — and the key is authoritative when
   // the value omits its own `name`.
   const tools = Object.entries(server.tools ?? {}).flatMap(([key, tool]) => {
-    if (!tool) return []
+    if (!tool) {
+      return []
+    }
     const annotations = tool.annotations
     return [
       {
@@ -371,12 +373,8 @@ function mcpServerInfo(
           ? {
               annotations: {
                 ...(annotations.readOnlyHint != null ? { readOnly: annotations.readOnlyHint } : {}),
-                ...(annotations.destructiveHint != null
-                  ? { destructive: annotations.destructiveHint }
-                  : {}),
-                ...(annotations.openWorldHint != null
-                  ? { openWorld: annotations.openWorldHint }
-                  : {}),
+                ...(annotations.destructiveHint != null ? { destructive: annotations.destructiveHint } : {}),
+                ...(annotations.openWorldHint != null ? { openWorld: annotations.openWorldHint } : {}),
               },
             }
           : {}),
@@ -387,9 +385,7 @@ function mcpServerInfo(
     name: server.name,
     status: mcpStatusOf(server.authStatus ?? undefined, update, tools.length > 0),
     ...(update?.error ? { error: update.error } : {}),
-    ...(server.serverInfo?.name
-      ? { serverInfo: { name: server.serverInfo.name, version: server.serverInfo.version ?? '' } }
-      : {}),
+    ...(server.serverInfo?.name ? { serverInfo: { name: server.serverInfo.name, version: server.serverInfo.version ?? '' } } : {}),
     // Deliberately no `transport`/`command`/`args`/`url`: the list response
     // carries none of them. Inventing a transport from the server's name would
     // be a guess rendered as a fact, and the panel already omits what is absent.
@@ -416,12 +412,17 @@ function imageGenerationInput(item: AppServerImageGenerationItem): Record<string
  */
 function offeredDecisions(params: unknown): Set<string> | undefined {
   const raw = (params as { availableDecisions?: unknown })?.availableDecisions
-  if (!Array.isArray(raw)) return undefined
+  if (!Array.isArray(raw)) {
+    return undefined
+  }
   const names = new Set<string>()
   for (const entry of raw) {
-    if (typeof entry === 'string') names.add(entry)
-    else if (entry && typeof entry === 'object') {
-      for (const key of Object.keys(entry)) names.add(key)
+    if (typeof entry === 'string') {
+      names.add(entry)
+    } else if (entry && typeof entry === 'object') {
+      for (const key of Object.keys(entry)) {
+        names.add(key)
+      }
     }
   }
   return names.size > 0 ? names : undefined
@@ -444,14 +445,14 @@ function offeredDecisions(params: unknown): Set<string> | undefined {
  * - deny+interrupt → 'cancel' (codex's deny-and-interrupt) when offered;
  *   otherwise 'decline', and the caller interrupts the turn itself.
  */
-function pickDecision(
-  behavior: 'allow' | 'deny',
-  interrupt: boolean,
-  offered: Set<string> | undefined,
-): string | undefined {
+function pickDecision(behavior: 'allow' | 'deny', interrupt: boolean, offered: Set<string> | undefined): string | undefined {
   const has = (name: string) => !offered || offered.has(name)
-  if (behavior === 'allow') return has('accept') ? 'accept' : undefined
-  if (interrupt && has('cancel')) return 'cancel'
+  if (behavior === 'allow') {
+    return has('accept') ? 'accept' : undefined
+  }
+  if (interrupt && has('cancel')) {
+    return 'cancel'
+  }
   return 'decline'
 }
 
@@ -481,12 +482,16 @@ function userQuestionsFromCodex(questions: readonly AppServerUserInputQuestion[]
  * a smaller lie than a turn that never happened.
  */
 function historyUserText(item: AppServerUserMessageItem): string {
-  if (!Array.isArray(item.content)) return ''
+  if (!Array.isArray(item.content)) {
+    return ''
+  }
   let images = 0
   const text = item.content
     .map((part) => {
       const candidate = part as { type?: string; text?: unknown } | null
-      if (candidate?.type === 'text' && typeof candidate.text === 'string') return candidate.text
+      if (candidate?.type === 'text' && typeof candidate.text === 'string') {
+        return candidate.text
+      }
       // By name, because the part vocabulary is codex's and open ('image',
       // 'localImage', …). Anything else unnamed stays unrepresented rather than
       // counted as a picture it may not be.
@@ -497,7 +502,9 @@ function historyUserText(item: AppServerUserMessageItem): string {
     })
     .filter(Boolean)
     .join('\n')
-  if (text) return text
+  if (text) {
+    return text
+  }
   return images > 0 ? `[${images === 1 ? 'image' : `${images} images`}]` : ''
 }
 
@@ -511,15 +518,14 @@ function codexAnswers(
   const out: Record<string, { answers: string[] }> = {}
   for (const question of questions) {
     const value = answers?.[question.question] ?? answers?.[question.id]
-    if (typeof value === 'string' && value.length > 0) out[question.id] = { answers: [value] }
+    if (typeof value === 'string' && value.length > 0) {
+      out[question.id] = { answers: [value] }
+    }
   }
   return out
 }
 
-type ApprovalSurface = Pick<
-  PermissionRequest,
-  'toolName' | 'input' | 'title' | 'displayName' | 'description' | 'decisionReason'
->
+type ApprovalSurface = Pick<PermissionRequest, 'toolName' | 'input' | 'title' | 'displayName' | 'description' | 'decisionReason'>
 
 /**
  * One server→client ask channel: how it surfaces as a {@link PermissionRequest}
@@ -537,18 +543,11 @@ type ApprovalChannel = {
     updatedInput: Record<string, unknown> | undefined,
     offered: Set<string> | undefined,
   ): { response: unknown; decision?: string } | undefined
-  deny(
-    params: unknown,
-    interrupt: boolean,
-    offered: Set<string> | undefined,
-  ): { response: unknown; decision?: string }
+  deny(params: unknown, interrupt: boolean, offered: Set<string> | undefined): { response: unknown; decision?: string }
 }
 
 /** The two channels whose response is `{decision: …}` share their pick logic. */
-function decisionChannel(
-  describe: (params: unknown) => ApprovalSurface,
-  itemId: (params: unknown) => string | undefined,
-): ApprovalChannel {
+function decisionChannel(describe: (params: unknown) => ApprovalSurface, itemId: (params: unknown) => string | undefined): ApprovalChannel {
   return {
     describe,
     itemId,
@@ -584,9 +583,7 @@ const APPROVAL_CHANNELS: Record<string, ApprovalChannel> = {
         // sandbox escalation it reads "command failed; retry without sandbox?"
         // — an after-the-refusal question, NOT a pre-execution gate — and the
         // clients render `title` verbatim, so the tense stays honest.
-        title:
-          params.reason ??
-          (command ? `Codex wants to run: ${command}` : 'Codex wants to run a command'),
+        title: params.reason ?? (command ? `Codex wants to run: ${command}` : 'Codex wants to run a command'),
         displayName: 'Run command',
         description: params.reason && command ? command : (params.cwd ?? undefined),
         decisionReason: params.reason ?? undefined,
@@ -673,14 +670,10 @@ const APPROVAL_CHANNELS: Record<string, ApprovalChannel> = {
           ...(params.serverName ? { serverName: params.serverName } : {}),
           ...(params.message ? { message: params.message } : {}),
           ...(params.mode ? { mode: params.mode } : {}),
-          ...(params.requestedSchema !== undefined
-            ? { requestedSchema: params.requestedSchema }
-            : {}),
+          ...(params.requestedSchema !== undefined ? { requestedSchema: params.requestedSchema } : {}),
           ...(params.url ? { url: params.url } : {}),
         },
-        title: params.serverName
-          ? `MCP server '${params.serverName}' requests input`
-          : 'An MCP server requests input',
+        title: params.serverName ? `MCP server '${params.serverName}' requests input` : 'An MCP server requests input',
         displayName: 'MCP elicitation',
         description: params.message ?? undefined,
         decisionReason: undefined,
@@ -748,9 +741,15 @@ type QueuedTurn = { input: AppServerUserInput[] }
  * borrowing a name that would size it wrongly.
  */
 function rateLimitWindowName(minutes: number | null | undefined): string | undefined {
-  if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) return undefined
-  if (minutes === 300) return 'five_hour'
-  if (minutes === 10_080) return 'seven_day'
+  if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) {
+    return undefined
+  }
+  if (minutes === 300) {
+    return 'five_hour'
+  }
+  if (minutes === 10_080) {
+    return 'seven_day'
+  }
   return `window_${minutes}m`
 }
 
@@ -903,7 +902,9 @@ export class CodexRunner implements Runner {
     }
     // Optional on the wire, required here — the codex binary runs in a real
     // directory (see the same check in `SessionRunner`).
-    if (!config.cwd) throw new Error('the codex engine requires a cwd')
+    if (!config.cwd) {
+      throw new Error('the codex engine requires a cwd')
+    }
     this.#cwd = config.cwd
     this.#config = config
     this.#permissionMode = mode
@@ -921,9 +922,13 @@ export class CodexRunner implements Runner {
     const base = this.#config.env ?? process.env
     const env: Record<string, string> = {}
     for (const [key, value] of Object.entries(base)) {
-      if (value !== undefined) env[key] = value
+      if (value !== undefined) {
+        env[key] = value
+      }
     }
-    if (this.#config.codexHome) env.CODEX_HOME = this.#config.codexHome
+    if (this.#config.codexHome) {
+      env.CODEX_HOME = this.#config.codexHome
+    }
     return env
   }
 
@@ -972,9 +977,13 @@ export class CodexRunner implements Runner {
 
   #title(): string | undefined {
     const metaTitle = this.#config.meta?.title
-    if (typeof metaTitle === 'string' && metaTitle.length > 0) return metaTitle
+    if (typeof metaTitle === 'string' && metaTitle.length > 0) {
+      return metaTitle
+    }
     const prompt = this.#config.prompt
-    if (!prompt) return undefined
+    if (!prompt) {
+      return undefined
+    }
     return prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt
   }
 
@@ -982,13 +991,18 @@ export class CodexRunner implements Runner {
    * it (undefined) restores the derived title. The engine is never told. */
   setTitle(title: string | undefined): void {
     const meta = { ...this.#config.meta }
-    if (title) meta.title = title
-    else delete meta.title
+    if (title) {
+      meta.title = title
+    } else {
+      delete meta.title
+    }
     this.#config = { ...this.#config, meta }
   }
 
   start(): Promise<void> {
-    if (this.#started) return this.#turnChain
+    if (this.#started) {
+      return this.#turnChain
+    }
     this.#started = true
     this.#warnUntrustedProject()
     if (this.#config.resume && this.#config.backfillHistory !== false) {
@@ -1002,13 +1016,17 @@ export class CodexRunner implements Runner {
     } else {
       this.#setStatus('idle')
     }
-    if (this.#config.prompt) this.sendMessage(this.#config.prompt)
+    if (this.#config.prompt) {
+      this.sendMessage(this.#config.prompt)
+    }
     // A session that is about to connect anyway (a prompt to run, or a resume
     // to backfill) gets its skills from that connection a moment later. Only
     // the promptless, non-resume case — the dashboard's "create, then type" —
     // would otherwise sit with no child and therefore no skill list at all,
     // which is the one place codex's own TUI has them and we did not.
-    if (!this.#config.prompt && !this.#config.resume) void this.#probeSkills()
+    if (!this.#config.prompt && !this.#config.resume) {
+      void this.#probeSkills()
+    }
     return this.#turnChain
   }
 
@@ -1027,17 +1045,23 @@ export class CodexRunner implements Runner {
    * warning on a trusted project is worse than a missed one.
    */
   #warnUntrustedProject(): void {
-    if (this.#permissionMode !== 'default') return
+    if (this.#permissionMode !== 'default') {
+      return
+    }
     try {
       const env = this.#childEnv()
       // Mirror the child's own home resolution: the profile pin already won
       // inside #childEnv, then the session env's CODEX_HOME, then ~/.codex
       // under the env's HOME (codex reads $HOME, not the process owner's).
       const pin = env.CODEX_HOME
-      if (pin !== undefined && pin.length === 0) return
+      if (pin !== undefined && pin.length === 0) {
+        return
+      }
       const codexHome = pin ?? join(env.HOME ?? homedir(), '.codex')
       const message = untrustedProjectNotice({ cwd: this.#cwd, codexHome })
-      if (message) this.#emit({ type: 'session_error', message })
+      if (message) {
+        this.#emit({ type: 'session_error', message })
+      }
     } catch {
       // Silence, deliberately — a failed probe must neither warn nor break
       // the start.
@@ -1062,7 +1086,9 @@ export class CodexRunner implements Runner {
     let connection: AppServerConnection | undefined
     try {
       connection = await this.#openScratchConnection()
-      if (this.#closed) return
+      if (this.#closed) {
+        return
+      }
       await this.#refreshSkills(connection)
     } catch {
       // The session is fine; it simply has no skill list until its own child
@@ -1103,7 +1129,9 @@ export class CodexRunner implements Runner {
   }
 
   sendMessage(text: string, attachments?: readonly AttachmentInput[]): void {
-    if (this.#closed) throw new Error('session is closed')
+    if (this.#closed) {
+      throw new Error('session is closed')
+    }
     // `/clear` typed into a codex session, intercepted rather than sent.
     //
     // This engine declares `slashCommands: false` because the app-server has no
@@ -1126,9 +1154,7 @@ export class CodexRunner implements Runner {
       void this.clearContext().catch((error: unknown) => {
         this.#emit({
           type: 'session_error',
-          message: `could not clear the conversation: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          message: `could not clear the conversation: ${error instanceof Error ? error.message : String(error)}`,
         })
       })
       return
@@ -1146,8 +1172,11 @@ export class CodexRunner implements Runner {
     // turn chain (which the replay heads), so the new turn's user message can
     // never precede the history it follows. Otherwise it is immediate — a
     // message queued behind a running turn still echoes right away.
-    if (this.#backfillPending) this.#turnChain = this.#turnChain.then(echo)
-    else echo()
+    if (this.#backfillPending) {
+      this.#turnChain = this.#turnChain.then(echo)
+    } else {
+      echo()
+    }
     this.#queue.push({ input })
     this.#scheduleTurn()
   }
@@ -1181,12 +1210,12 @@ export class CodexRunner implements Runner {
           })
           break
         default:
-          throw new Error(
-            `unsupported attachment media type for the codex engine: ${attachment.mediaType}`,
-          )
+          throw new Error(`unsupported attachment media type for the codex engine: ${attachment.mediaType}`)
       }
     }
-    if (text) parts.push({ type: 'text', text })
+    if (text) {
+      parts.push({ type: 'text', text })
+    }
     return parts
   }
 
@@ -1194,7 +1223,9 @@ export class CodexRunner implements Runner {
    * timed out, or already settled by codex itself). */
   resolvePermission(requestId: string, decision: PermissionDecision): boolean {
     const pending = this.#approvals.get(requestId)
-    if (!pending) return false
+    if (!pending) {
+      return false
+    }
     this.#settleApproval(requestId, pending, decision, 'client')
     return true
   }
@@ -1204,12 +1235,7 @@ export class CodexRunner implements Runner {
     // denied interrupt first (codex's 'cancel' where the request offers it,
     // which itself ends the turn).
     for (const [id, pending] of this.#approvals) {
-      this.#settleApproval(
-        id,
-        pending,
-        { behavior: 'deny', message: 'interrupted', interrupt: true },
-        'policy',
-      )
+      this.#settleApproval(id, pending, { behavior: 'deny', message: 'interrupted', interrupt: true }, 'policy')
     }
     await this.#interruptTurn()
     await this.#turnChain
@@ -1245,7 +1271,9 @@ export class CodexRunner implements Runner {
    * cursor, not an item count), and so does `activityCount` — `#emit` owns both.
    */
   async clearContext(): Promise<void> {
-    if (this.#closed) throw new Error('session is closed')
+    if (this.#closed) {
+      throw new Error('session is closed')
+    }
     // Rides the TURN CHAIN, exactly like the intercepted `/clear`, and that is
     // the whole safety argument. The chain is what serialises everything that
     // touches `#ensureThread` — every `#runTurn`, and the resume backfill,
@@ -1267,7 +1295,9 @@ export class CodexRunner implements Runner {
 
   /** The clear itself, only ever called as a turn-chain link. */
   async #clearNow(): Promise<void> {
-    if (this.#closed) throw new Error('session is closed')
+    if (this.#closed) {
+      throw new Error('session is closed')
+    }
     // Deliberately NOT wiping `#queue`. Everything queued before the clear was
     // requested has already run — its `#runTurn` links sit ahead of this one on
     // the chain — so whatever is left was pushed *after* the clear and belongs
@@ -1303,18 +1333,15 @@ export class CodexRunner implements Runner {
     // the child. So their thread ids are remembered: `#agentFor` drops their
     // traffic instead of minting a fresh anchor for it, which is what would
     // otherwise stream the cleared conversation's agent work into the new one.
-    for (const agent of this.#agents.threadIds()) this.#clearedThreads.add(agent)
+    for (const agent of this.#agents.threadIds()) {
+      this.#clearedThreads.add(agent)
+    }
     this.#agents.forget()
     // An approval raised by one of those agents between root turns is a card
     // whose anchor was just cleared; it can never be answered against anything
     // the user can now see.
     for (const [id, pending] of this.#approvals) {
-      this.#settleApproval(
-        id,
-        pending,
-        { behavior: 'deny', message: 'the conversation was cleared' },
-        'policy',
-      )
+      this.#settleApproval(id, pending, { behavior: 'deny', message: 'the conversation was cleared' }, 'policy')
     }
     // Nothing stashed here can survive the thread it was read from.
     this.#resumedHistory = undefined
@@ -1344,7 +1371,9 @@ export class CodexRunner implements Runner {
         // disk and the next message respawns into it.
         // The onClose rejection settles the turn; `interrupted` explains it.
         connection.close()
-        if (this.#connection === connection) this.#connection = undefined
+        if (this.#connection === connection) {
+          this.#connection = undefined
+        }
         active.reject(new Error('interrupted'))
       }
     }
@@ -1370,14 +1399,18 @@ export class CodexRunner implements Runner {
   }
 
   fail(message: string): void {
-    if (this.#closed) return
+    if (this.#closed) {
+      return
+    }
     this.#emit({ type: 'session_error', message })
     this.#setStatus('failed')
     this.close('error')
   }
 
   close(reason: 'client' | 'server' | 'error' = 'client'): void {
-    if (this.#closed) return
+    if (this.#closed) {
+      return
+    }
     this.#closed = true
     this.#queue.length = 0
     // Settle pending approvals before the connection goes: each gets its
@@ -1407,11 +1440,7 @@ export class CodexRunner implements Runner {
     return this.#events.find((event) => event.seq === seq)
   }
 
-  subscribe(
-    listener: SessionEventListener,
-    afterSeq = 0,
-    options?: SubscribeOptions,
-  ): () => void {
+  subscribe(listener: SessionEventListener, afterSeq = 0, options?: SubscribeOptions): () => void {
     return this.#subscribers.subscribe(this.#events, listener, afterSeq, options, this.#resetSeq)
   }
 
@@ -1445,7 +1474,9 @@ export class CodexRunner implements Runner {
         config?: { sandbox_workspace_write?: Record<string, unknown> | null } | null
       }
       const block = result?.config?.sandbox_workspace_write
-      if (!block) return
+      if (!block) {
+        return
+      }
       const roots = block.writable_roots
       this.#workspaceWrite = {
         writableRoots: Array.isArray(roots) ? roots.filter((r): r is string => typeof r === 'string') : [],
@@ -1461,7 +1492,9 @@ export class CodexRunner implements Runner {
   /** The mode's turn-level sandbox policy, with the operator's workspace-write settings intact. */
   #turnSandboxPolicy(): { type: string } | undefined {
     const policy = TURN_SANDBOX_BY_MODE[this.#permissionMode]
-    if (policy?.type !== 'workspaceWrite' || !this.#workspaceWrite) return policy
+    if (policy?.type !== 'workspaceWrite' || !this.#workspaceWrite) {
+      return policy
+    }
     return { type: 'workspaceWrite', ...this.#workspaceWrite }
   }
 
@@ -1473,7 +1506,9 @@ export class CodexRunner implements Runner {
    * kept so per-turn overrides can name "the profile default" explicitly.
    */
   async #ensureThread(): Promise<AppServerConnection> {
-    if (this.#closed) throw new Error('session is closed')
+    if (this.#closed) {
+      throw new Error('session is closed')
+    }
     let connection = this.#connection
     if (!connection) {
       connection = this.#config.connectFn({ env: this.#childEnv() })
@@ -1515,12 +1550,15 @@ export class CodexRunner implements Runner {
         // Don't leave a half-initialized child around — the next message must
         // respawn from scratch, not talk to a child that refused the handshake.
         connection.close()
-        if (this.#connection === connection) this.#connection = undefined
+        if (this.#connection === connection) {
+          this.#connection = undefined
+        }
         if (error instanceof JsonRpcError) {
           throw new Error(
             'codex app-server rejected initialize (capabilities.experimentalApi: true — required ' +
               'for the granular approval policy, and WorkerDeck has no non-experimental fallback): ' +
               error.message,
+            { cause: error },
           )
         }
         throw error
@@ -1535,20 +1573,30 @@ export class CodexRunner implements Runner {
         sandbox: THREAD_SANDBOX_BY_MODE[this.#permissionMode],
         approvalsReviewer: APPROVALS_REVIEWER_BY_MODE[this.#permissionMode],
       }
-      if (this.#model) options.model = this.#model
+      if (this.#model) {
+        options.model = this.#model
+      }
       const resuming = this.#sdkSessionId !== undefined
-      const result = (resuming
-        ? await connection.request('thread/resume', { threadId: this.#sdkSessionId, ...options })
-        : await connection.request('thread/start', options)) as {
+      const result = (
+        resuming
+          ? await connection.request('thread/resume', { threadId: this.#sdkSessionId, ...options })
+          : await connection.request('thread/start', options)
+      ) as {
         thread?: { id?: string; turns?: AppServerHistoryTurn[] }
         model?: string | null
         reasoningEffort?: string | null
         /** Non-null: `thread.turns` is one PAGE and older turns exist beyond it. */
         turnsBackwardsCursor?: string | null
       }
-      if (typeof result?.thread?.id === 'string') this.#sdkSessionId = result.thread.id
-      if (typeof result?.model === 'string') this.#resolvedModel = result.model
-      if (typeof result?.reasoningEffort === 'string') this.#resolvedEffort = result.reasoningEffort
+      if (typeof result?.thread?.id === 'string') {
+        this.#sdkSessionId = result.thread.id
+      }
+      if (typeof result?.model === 'string') {
+        this.#resolvedModel = result.model
+      }
+      if (typeof result?.reasoningEffort === 'string') {
+        this.#resolvedEffort = result.reasoningEffort
+      }
       // The resume that backfill is waiting on carries the thread's prior
       // turns — stash them for it. A reconnect after a dead child resumes the
       // same thread but has no backfill pending, so nothing is stashed and
@@ -1586,13 +1634,17 @@ export class CodexRunner implements Runner {
    * session over, and the panel simply stays absent.
    */
   async #refreshSkills(connection: AppServerConnection): Promise<void> {
-    if (this.#skillsRefresh) return this.#skillsRefresh
+    if (this.#skillsRefresh) {
+      return this.#skillsRefresh
+    }
     const run = (async () => {
       try {
         const result = (await connection.request('skills/list', {
           cwds: [this.#cwd],
         })) as AppServerSkillsListResponse
-        if (this.#closed) return
+        if (this.#closed) {
+          return
+        }
         const entries = Array.isArray(result?.data) ? result.data : []
         const seen = new Set<string>()
         const skills: SkillInfo[] = []
@@ -1600,14 +1652,18 @@ export class CodexRunner implements Runner {
           for (const skill of entry?.skills ?? []) {
             // The same skill can be reported under several cwds; the first
             // wins, matching how codex itself resolves a name collision.
-            if (typeof skill?.name !== 'string' || seen.has(skill.name)) continue
+            if (typeof skill?.name !== 'string' || seen.has(skill.name)) {
+              continue
+            }
             seen.add(skill.name)
             skills.push(skillInfo(skill))
           }
         }
         skills.sort((a, b) => a.name.localeCompare(b.name))
         const fingerprint = JSON.stringify(skills)
-        if (fingerprint === this.#skillsFingerprint) return
+        if (fingerprint === this.#skillsFingerprint) {
+          return
+        }
         this.#skillsFingerprint = fingerprint
         this.#emit({ type: 'skills', skills })
       } catch {
@@ -1647,20 +1703,17 @@ export class CodexRunner implements Runner {
    * panel read-only instead of offering buttons that cannot work.
    */
   async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
-    if (this.#closed) return undefined
+    if (this.#closed) {
+      return undefined
+    }
     const live = this.#connection
     let scratch: AppServerConnection | undefined
     try {
       // The session's own child when it has one — its accumulated
       // `#mcpStatus` makes the answer sharper — and a throwaway otherwise.
       const connection = live ?? (scratch = await this.#openScratchConnection())
-      const result = (await connection.request(
-        'mcpServerStatus/list',
-        {},
-      )) as AppServerMcpServerStatusResponse
-      return (result?.data ?? []).map((server) =>
-        mcpServerInfo(server, this.#mcpStatus.get(server.name)),
-      )
+      const result = (await connection.request('mcpServerStatus/list', {})) as AppServerMcpServerStatusResponse
+      return (result?.data ?? []).map((server) => mcpServerInfo(server, this.#mcpStatus.get(server.name)))
     } catch {
       return undefined
     } finally {
@@ -1678,12 +1731,16 @@ export class CodexRunner implements Runner {
    * the note on `file_produced` in the protocol.
    */
   #emitFileProduced(path: string, toolUseId: string): void {
-    if (this.#producedPaths.has(path)) return
+    if (this.#producedPaths.has(path)) {
+      return
+    }
     this.#producedPaths.add(path)
     let bytes: number | undefined
     try {
       const stat = statSync(path)
-      if (stat.isFile()) bytes = stat.size
+      if (stat.isFile()) {
+        bytes = stat.size
+      }
       // A `savedPath` that is not a regular file is still announced: the route
       // re-checks before serving, and a client showing the path it was given
       // beats one silently dropping it.
@@ -1713,7 +1770,9 @@ export class CodexRunner implements Runner {
    */
   async #backfillHistory(): Promise<void> {
     try {
-      if (this.#closed) return
+      if (this.#closed) {
+        return
+      }
       const connection = await this.#ensureThread()
       const resumed = this.#resumedHistory
       this.#resumedHistory = undefined
@@ -1726,8 +1785,11 @@ export class CodexRunner implements Runner {
             includeTurns: true,
           })) as { thread?: { turns?: AppServerHistoryTurn[] } }
           const full = read?.thread?.turns
-          if (Array.isArray(full) && full.length >= turns.length) turns = full
-          else partialReason = 'thread/read returned less history than the resume page'
+          if (Array.isArray(full) && full.length >= turns.length) {
+            turns = full
+          } else {
+            partialReason = 'thread/read returned less history than the resume page'
+          }
         } catch (error) {
           partialReason = error instanceof Error ? error.message : String(error)
         }
@@ -1754,7 +1816,9 @@ export class CodexRunner implements Runner {
   /** Replay historical turns through the SAME item mapping the live path uses. */
   #replayTurns(turns: readonly AppServerHistoryTurn[]): void {
     for (const turn of turns) {
-      if (this.#closed) return
+      if (this.#closed) {
+        return
+      }
       // "Per turn" means per HISTORICAL turn: each replayed turn gets its own
       // nonce exactly as each live turn does — codex item ids restart per turn
       // ("item-1", …), so one shared namespace would fold turn N's items into
@@ -1768,7 +1832,9 @@ export class CodexRunner implements Runner {
             // Dropped on the live path (sendMessage already echoed it); in
             // history this IS the turn's user message.
             const text = historyUserText(item)
-            if (!text) continue
+            if (!text) {
+              continue
+            }
             this.#emit({
               type: 'user_message',
               message: { role: 'user', content: text },
@@ -1809,20 +1875,28 @@ export class CodexRunner implements Runner {
   }
 
   async #runTurn(): Promise<void> {
-    if (this.#closed) return
+    if (this.#closed) {
+      return
+    }
     const turn = this.#queue.shift()
-    if (!turn) return
+    if (!turn) {
+      return
+    }
     this.#setStatus('running')
     const startedAt = Date.now()
     const active: ActiveTurn = this.#newTurnState()
     const outcome = new Promise<AppServerTurn>((resolve, reject) => {
       active.resolve = (turnResult) => {
-        if (active.settled) return
+        if (active.settled) {
+          return
+        }
         active.settled = true
         resolve(turnResult)
       }
       active.reject = (error) => {
-        if (active.settled) return
+        if (active.settled) {
+          return
+        }
         active.settled = true
         reject(error)
       }
@@ -1842,42 +1916,54 @@ export class CodexRunner implements Runner {
       // model/effort explicitly every turn — the resolved default when no
       // override is set, which is what makes setModel(undefined) a real reset.
       const model = this.#model ?? this.#resolvedModel
-      if (model) params.model = model
+      if (model) {
+        params.model = model
+      }
       const effort = this.#reasoningEffort ?? this.#resolvedEffort
-      if (effort) params.effort = effort
+      if (effort) {
+        params.effort = effort
+      }
       // The terminal signal is the turn/completed NOTIFICATION; the response's
       // timing is unspecified, so it only contributes its turn id, a JSON-RPC
       // error (no turn ran → fail now), or — defensively — a terminal status.
       connection.request('turn/start', params).then(
         (result) => {
           const started = (result as { turn?: AppServerTurn })?.turn
-          if (!started) return
+          if (!started) {
+            return
+          }
           active.turnId ??= started.id
-          if (started.status && started.status !== 'inProgress') active.resolve(started)
+          if (started.status && started.status !== 'inProgress') {
+            active.resolve(started)
+          }
         },
         (error: unknown) => active.reject(error instanceof Error ? error : new Error(String(error))),
       )
       const result = await outcome
-      if (this.#closed) return
+      if (this.#closed) {
+        return
+      }
       if (result.status === 'completed') {
         this.#finishTurn('success', startedAt, active)
       } else {
         const reason =
           result.status === 'interrupted'
             ? 'interrupted'
-            : (result.error?.message ??
-              active.lastError ??
-              'codex app-server ended the turn without a result')
+            : (result.error?.message ?? active.lastError ?? 'codex app-server ended the turn without a result')
         this.#finishTurn('failure', startedAt, active, [reason])
       }
     } catch (error) {
-      if (this.#closed) return
+      if (this.#closed) {
+        return
+      }
       // A failed turn is not a failed session: the thread persists on disk and
       // the next message reconnects and resumes it.
       const message = error instanceof Error ? error.message : String(error)
       this.#finishTurn('failure', startedAt, active, [active.interrupted ? 'interrupted' : message])
     } finally {
-      if (this.#activeTurn === active) this.#activeTurn = undefined
+      if (this.#activeTurn === active) {
+        this.#activeTurn = undefined
+      }
     }
   }
 
@@ -1886,7 +1972,9 @@ export class CodexRunner implements Runner {
   // -------------------------------------------------------------------------
 
   #handleNotification(method: string, params: unknown): void {
-    if (this.#closed) return
+    if (this.#closed) {
+      return
+    }
     // A sub-agent runs in its OWN thread, and its notifications arrive on this
     // same connection carrying that thread's id. Turn lifecycle and token usage
     // are per-thread facts and must not be read off a child's: measured against
@@ -1901,11 +1989,14 @@ export class CodexRunner implements Runner {
     // 'completed' kind on `subAgentActivity`), and a fresh `turn/started` on a
     // settled agent's thread means it is working again.
     if (THREAD_SCOPED_NOTIFICATIONS.has(method) && !this.#isRootThread(params)) {
-      if (method === 'turn/completed') this.#settleAgentTurn(params)
-      else if (method === 'turn/started') {
+      if (method === 'turn/completed') {
+        this.#settleAgentTurn(params)
+      } else if (method === 'turn/started') {
         const threadId = this.#threadIdOf(params)
         const record = threadId ? this.#agents.get(threadId) : undefined
-        if (record && record.status !== 'running') this.#agents.revive(record)
+        if (record && record.status !== 'running') {
+          this.#agents.revive(record)
+        }
       }
       return
     }
@@ -1920,7 +2011,9 @@ export class CodexRunner implements Runner {
    * shape, not a sub-agent. */
   #isRootThread(params: unknown): boolean {
     const threadId = this.#threadIdOf(params)
-    if (threadId === undefined) return true
+    if (threadId === undefined) {
+      return true
+    }
     return threadId === this.#sdkSessionId
   }
 
@@ -1947,13 +2040,19 @@ export class CodexRunner implements Runner {
    */
   #agentFor(params: unknown): CodexAgent | undefined {
     const threadId = this.#threadIdOf(params)
-    if (threadId === undefined || threadId === this.#sdkSessionId) return undefined
+    if (threadId === undefined || threadId === this.#sdkSessionId) {
+      return undefined
+    }
     const known = this.#agents.get(threadId)
-    if (known) return known
+    if (known) {
+      return known
+    }
     // An agent from a conversation that has been cleared. Its work belonged to
     // a transcript that no longer exists, so it is dropped rather than minted
     // an anchor in the conversation that replaced it.
-    if (this.#clearedThreads.has(threadId)) return undefined
+    if (this.#clearedThreads.has(threadId)) {
+      return undefined
+    }
     const nonce = this.#activeTurn?.nonce ?? 'codex'
     const record = this.#agents.open(threadId, `${nonce}:agent:${threadId}`, undefined, Date.now())
     record.anchored = true
@@ -1972,14 +2071,13 @@ export class CodexRunner implements Runner {
   #settleAgentTurn(params: unknown): void {
     const threadId = this.#threadIdOf(params)
     const record = threadId ? this.#agents.get(threadId) : undefined
-    if (!record || record.status !== 'running') return
+    if (!record || record.status !== 'running') {
+      return
+    }
     const turn = (params as { turn?: AppServerTurn })?.turn
     const status = turn?.status === 'completed' ? 'done' : 'failed'
     this.#agents.settle(record, status)
-    const report =
-      (turn ? turnReport(turn) : undefined) ??
-      turn?.error?.message ??
-      (status === 'done' ? '' : (turn?.status ?? 'failed'))
+    const report = (turn ? turnReport(turn) : undefined) ?? turn?.error?.message ?? (status === 'done' ? '' : (turn?.status ?? 'failed'))
     this.#emitToolResult(record.toolUseId, report, status === 'failed')
   }
 
@@ -1991,32 +2089,37 @@ export class CodexRunner implements Runner {
   #reasoningDelta(method: string): (params: unknown) => void {
     return (params) => {
       const active = this.#activeTurn
-      if (!active) return
+      if (!active) {
+        return
+      }
       const payload = params as {
         delta?: string
         itemId?: string
         contentIndex?: number
         summaryIndex?: number
       }
-      if (typeof payload?.delta !== 'string' || !payload.delta) return
+      if (typeof payload?.delta !== 'string' || !payload.delta) {
+        return
+      }
       const index = payload.contentIndex ?? payload.summaryIndex ?? 0
       const key = `${payload.itemId ?? ''}:${method}`
       const previous = active.sectionIndex.get(key)
       active.sectionIndex.set(key, index)
       const separator = previous !== undefined && index > previous ? '\n\n' : ''
-      this.#emitDelta(
-        { type: 'thinking_delta', thinking: separator + payload.delta },
-        this.#agentFor(params)?.toolUseId ?? null,
-      )
+      this.#emitDelta({ type: 'thinking_delta', thinking: separator + payload.delta }, this.#agentFor(params)?.toolUseId ?? null)
     }
   }
 
   /** One item-progress handler serves `item/started` and `item/updated`. */
   #itemProgress = (params: unknown): void => {
     const active = this.#activeTurn
-    if (!active) return
+    if (!active) {
+      return
+    }
     const item = (params as { item?: AppServerItem })?.item
-    if (item) this.#handleItemProgress(item, active, this.#agentFor(params))
+    if (item) {
+      this.#handleItemProgress(item, active, this.#agentFor(params))
+    }
   }
 
   /** The notification dispatch table — every method the child emits that this
@@ -2025,32 +2128,46 @@ export class CodexRunner implements Runner {
   readonly #notifications: Record<string, (params: unknown) => void> = {
     'thread/started': (params) => {
       const thread = (params as { thread?: { id?: string } })?.thread
-      if (typeof thread?.id === 'string') this.#sdkSessionId = thread.id
+      if (typeof thread?.id === 'string') {
+        this.#sdkSessionId = thread.id
+      }
     },
     'turn/started': (params) => {
       const active = this.#activeTurn
       const turn = (params as { turn?: AppServerTurn })?.turn
-      if (active && turn && !active.turnId) active.turnId = turn.id
+      if (active && turn && !active.turnId) {
+        active.turnId = turn.id
+      }
     },
     'turn/completed': (params) => {
       const active = this.#activeTurn
       const turn = (params as { turn?: AppServerTurn })?.turn
-      if (!active || !turn) return
+      if (!active || !turn) {
+        return
+      }
       // Defence in depth behind the root-thread gate: a turn that is not the
       // one being awaited never ends it.
-      if (active.turnId && turn.id && turn.id !== active.turnId) return
+      if (active.turnId && turn.id && turn.id !== active.turnId) {
+        return
+      }
       active.resolve(turn)
     },
     'item/started': this.#itemProgress,
     'item/updated': this.#itemProgress,
     'item/completed': (params) => {
       const active = this.#activeTurn
-      if (!active) return
+      if (!active) {
+        return
+      }
       const item = (params as { item?: AppServerItem })?.item
-      if (item) this.#handleItemCompleted(item, active, this.#agentFor(params))
+      if (item) {
+        this.#handleItemCompleted(item, active, this.#agentFor(params))
+      }
     },
     'item/agentMessage/delta': (params) => {
-      if (!this.#activeTurn) return
+      if (!this.#activeTurn) {
+        return
+      }
       const delta = (params as { delta?: string })?.delta
       if (typeof delta === 'string' && delta) {
         // Two agents stream concurrently into this one connection, tokens
@@ -2063,16 +2180,19 @@ export class CodexRunner implements Runner {
     'item/reasoning/summaryTextDelta': this.#reasoningDelta('item/reasoning/summaryTextDelta'),
     'thread/tokenUsage/updated': (params) => {
       const active = this.#activeTurn
-      if (!active) return
+      if (!active) {
+        return
+      }
       const last = (params as AppServerTokenUsageUpdate)?.tokenUsage?.last
-      if (!last) return
+      if (!last) {
+        return
+      }
       // `last` is one model request; a tool-looping turn makes several. The
       // per-turn number the Anthropic convention wants is their sum.
       active.sawUsage = true
       active.usage.inputTokens += last.inputTokens ?? 0
       active.usage.cachedInputTokens += last.cachedInputTokens ?? 0
-      active.usage.cacheWriteInputTokens =
-        (active.usage.cacheWriteInputTokens ?? 0) + (last.cacheWriteInputTokens ?? 0)
+      active.usage.cacheWriteInputTokens = (active.usage.cacheWriteInputTokens ?? 0) + (last.cacheWriteInputTokens ?? 0)
       active.usage.outputTokens += last.outputTokens ?? 0
       active.usage.reasoningOutputTokens += last.reasoningOutputTokens ?? 0
       // Context occupancy is the OPPOSITE choice from the accounting above:
@@ -2092,7 +2212,9 @@ export class CodexRunner implements Runner {
       // up. Not gated on `active`: servers start with the child, well before
       // any turn.
       const update = params as AppServerMcpStatusUpdate
-      if (typeof update?.name !== 'string') return
+      if (typeof update?.name !== 'string') {
+        return
+      }
       this.#mcpStatus.set(update.name, {
         status: typeof update.status === 'string' ? update.status : 'starting',
         ...(update.error ? { error: update.error } : {}),
@@ -2105,7 +2227,9 @@ export class CodexRunner implements Runner {
       // `active`: the operator can edit a skill between turns, and that is
       // in fact when they usually do.
       const connection = this.#connection
-      if (connection) void this.#refreshSkills(connection)
+      if (connection) {
+        void this.#refreshSkills(connection)
+      }
     },
     'account/rateLimits/updated': (params) => {
       // Pushed during a turn, so — unlike the Claude engine, whose CLI only
@@ -2118,9 +2242,13 @@ export class CodexRunner implements Runner {
       // v2's todo list, published as the codex.todo_list sdk_event payload
       // both clients already render.
       const active = this.#activeTurn
-      if (!active) return
+      if (!active) {
+        return
+      }
       const plan = (params as AppServerPlanUpdate)?.plan
-      if (!Array.isArray(plan)) return
+      if (!Array.isArray(plan)) {
+        return
+      }
       this.#emit({
         type: 'sdk_event',
         payload: {
@@ -2137,7 +2265,9 @@ export class CodexRunner implements Runner {
       // resolved event reports 'deny' because we cannot know what codex
       // chose; the message says who really decided.
       const requestId = (params as { requestId?: string | number })?.requestId
-      if (requestId === undefined) return
+      if (requestId === undefined) {
+        return
+      }
       for (const [id, pending] of this.#approvals) {
         if (pending.wireId === requestId) {
           this.#settleApproval(id, pending, { behavior: 'deny', message: 'resolved by codex' }, 'policy')
@@ -2145,25 +2275,25 @@ export class CodexRunner implements Runner {
         }
       }
     },
-    'error': (params) => {
+    error: (params) => {
       // Mostly retry noise (`willRetry: true`); keep the last message so a
       // turn that fails without its own error still explains itself.
       const active = this.#activeTurn
       const error = (params as { error?: { message?: string } })?.error
-      if (active && typeof error?.message === 'string') active.lastError = error.message
+      if (active && typeof error?.message === 'string') {
+        active.lastError = error.message
+      }
     },
   }
 
   /** Answer a server→client request: the ask channels become pending
    * permission requests; anything else gets a JSON-RPC -32601 rather than a
    * hang (an unanswered server request wedges the turn). */
-  async #answerServerRequest(
-    method: string,
-    params: unknown,
-    wireId?: string | number,
-  ): Promise<unknown> {
+  async #answerServerRequest(method: string, params: unknown, wireId?: string | number): Promise<unknown> {
     const channel = APPROVAL_CHANNELS[method]
-    if (channel) return this.#requestApproval(channel, method, params, wireId)
+    if (channel) {
+      return this.#requestApproval(channel, method, params, wireId)
+    }
     throw new JsonRpcError(-32601, `workerdeck does not handle server request '${method}'`)
   }
 
@@ -2173,12 +2303,7 @@ export class CodexRunner implements Runner {
    * `permission_decision` lands — or by the timeout, an interrupt, turn end,
    * session close, or codex resolving it itself. Never left hanging.
    */
-  #requestApproval(
-    channel: ApprovalChannel,
-    method: string,
-    params: unknown,
-    wireId: string | number | undefined,
-  ): Promise<unknown> {
+  #requestApproval(channel: ApprovalChannel, method: string, params: unknown, wireId: string | number | undefined): Promise<unknown> {
     // AskUserQuestion policy resolution, the SessionRunner convention: 'auto'
     // picks each question's first (recommended) option, 'deny' sends the model
     // back to decide for itself — both visibly, neither pending.
@@ -2189,10 +2314,7 @@ export class CodexRunner implements Runner {
       }
     }
     const id = randomUUID()
-    const timeoutMs =
-      this.#config.approvalTimeoutMs ??
-      this.#config.defaultApprovalTimeoutMs ??
-      DEFAULT_APPROVAL_TIMEOUT_MS
+    const timeoutMs = this.#config.approvalTimeoutMs ?? this.#config.defaultApprovalTimeoutMs ?? DEFAULT_APPROVAL_TIMEOUT_MS
     const itemId = channel.itemId(params)
     const request: PermissionRequest = {
       id,
@@ -2220,18 +2342,16 @@ export class CodexRunner implements Runner {
         respond: resolve,
       })
       this.#emit({ type: 'permission_requested', request })
-      if (this.#activeTurn) this.#setStatus('awaiting_approval')
+      if (this.#activeTurn) {
+        this.#setStatus('awaiting_approval')
+      }
     })
   }
 
   /** 'auto'/'deny' sessions settle codex questions synchronously instead of
    * pending. Request/resolved events still fire so transcripts and job
    * webhooks show what was chosen. */
-  #resolveQuestionByPolicy(
-    channel: ApprovalChannel,
-    params: unknown,
-    mode: 'auto' | 'deny',
-  ): unknown {
+  #resolveQuestionByPolicy(channel: ApprovalChannel, params: unknown, mode: 'auto' | 'deny'): unknown {
     const itemId = channel.itemId(params)
     const request: PermissionRequest = {
       id: randomUUID(),
@@ -2245,15 +2365,16 @@ export class CodexRunner implements Runner {
         requestId: request.id,
         behavior: 'deny',
         resolvedBy: 'policy',
-        message:
-          'Interactive questions are disabled for this session — choose the most reasonable option yourself and continue.',
+        message: 'Interactive questions are disabled for this session — choose the most reasonable option yourself and continue.',
       })
       return { answers: {} }
     }
     const answers: Record<string, { answers: string[] }> = {}
     for (const question of (params as AppServerUserInputParams).questions ?? []) {
       const first = question.options?.[0]?.label
-      if (first) answers[question.id] = { answers: [first] }
+      if (first) {
+        answers[question.id] = { answers: [first] }
+      }
     }
     this.#emit({
       type: 'permission_resolved',
@@ -2271,12 +2392,7 @@ export class CodexRunner implements Runner {
    * denial, said out loud — never a silently widened grant, and never a
    * decision the request didn't offer.
    */
-  #settleApproval(
-    id: string,
-    pending: PendingCodexApproval,
-    decision: PermissionDecision,
-    resolvedBy: PermissionDecisionSource,
-  ): void {
+  #settleApproval(id: string, pending: PendingCodexApproval, decision: PermissionDecision, resolvedBy: PermissionDecisionSource): void {
     clearTimeout(pending.timer)
     this.#approvals.delete(id)
     let behavior = decision.behavior
@@ -2289,8 +2405,7 @@ export class CodexRunner implements Runner {
       } else {
         behavior = 'deny'
         resolvedBy = 'policy'
-        message =
-          'codex offered no plain accept for this request (only broader session/policy grants) — denied instead'
+        message = 'codex offered no plain accept for this request (only broader session/policy grants) — denied instead'
         sent = pending.channel.deny(pending.params, false, pending.offered)
       }
     } else {
@@ -2350,7 +2465,9 @@ export class CodexRunner implements Runner {
       // Rare but real: a progress item can already carry `savedPath`. Announce
       // it here too — `#emitFileProduced` dedupes by path, so the completed
       // item's second report costs nothing.
-      if (item.savedPath) this.#emitFileProduced(item.savedPath, id)
+      if (item.savedPath) {
+        this.#emitFileProduced(item.savedPath, id)
+      }
     }
   }
 
@@ -2378,12 +2495,7 @@ export class CodexRunner implements Runner {
    * union has never heard of; those take the passthrough above.)
    */
   readonly #itemCompleted: {
-    [K in AppServerItem['type']]: (
-      item: Extract<AppServerItem, { type: K }>,
-      active: ActiveTurn,
-      id: string,
-      agent?: CodexAgent,
-    ) => void
+    [K in AppServerItem['type']]: (item: Extract<AppServerItem, { type: K }>, active: ActiveTurn, id: string, agent?: CodexAgent) => void
   } = {
     // On the session's own thread, the echo of our turn/start input — already
     // in the log. On an agent's thread it would be the agent's brief; none has
@@ -2391,9 +2503,13 @@ export class CodexRunner implements Runner {
     // an item), but if one ever arrives it is the frame's opening row, exactly
     // where a claude sidechain puts its brief.
     userMessage: (item, active, _id, agent) => {
-      if (!agent) return
+      if (!agent) {
+        return
+      }
       const text = historyUserText(item)
-      if (!text) return
+      if (!text) {
+        return
+      }
       this.#emit({
         type: 'user_message',
         message: { role: 'user', content: text },
@@ -2405,7 +2521,9 @@ export class CodexRunner implements Runner {
       const text = typeof item.text === 'string' ? item.text : ''
       this.#emitAssistant(id, [{ type: 'text', text }], agent?.toolUseId ?? null)
       // An agent's prose is its own report, never the session's final line.
-      if (!agent) active.finalText = text
+      if (!agent) {
+        active.finalText = text
+      }
     },
     reasoning: (item, _active, id, agent) => {
       // `summary` is what streamed (the default config); raw `content` only
@@ -2414,7 +2532,9 @@ export class CodexRunner implements Runner {
       const summary = Array.isArray(item.summary) ? item.summary.filter(Boolean) : []
       const content = Array.isArray(item.content) ? item.content.filter(Boolean) : []
       const thinking = (summary.length > 0 ? summary : content).join('\n\n')
-      if (thinking) this.#emitAssistant(id, [{ type: 'thinking', thinking }], agent?.toolUseId ?? null)
+      if (thinking) {
+        this.#emitAssistant(id, [{ type: 'thinking', thinking }], agent?.toolUseId ?? null)
+      }
     },
     commandExecution: (item, active, id, agent) => {
       if (!active.toolUseEmitted.has(id)) {
@@ -2422,13 +2542,8 @@ export class CodexRunner implements Runner {
         this.#emitToolUse(id, 'CodexCommand', { command: item.command }, agent)
       }
       const exitCode = item.exitCode ?? undefined
-      const failed =
-        item.status === 'failed' ||
-        item.status === 'declined' ||
-        (exitCode !== undefined && exitCode !== 0)
-      const output =
-        (item.aggregatedOutput ?? '') +
-        (exitCode !== undefined && exitCode !== 0 ? `\n(exit code ${exitCode})` : '')
+      const failed = item.status === 'failed' || item.status === 'declined' || (exitCode !== undefined && exitCode !== 0)
+      const output = (item.aggregatedOutput ?? '') + (exitCode !== undefined && exitCode !== 0 ? `\n(exit code ${exitCode})` : '')
       this.#emitToolResult(id, output, failed, undefined, agent?.toolUseId ?? null)
     },
     fileChange: (item, _active, id, agent) => {
@@ -2462,8 +2577,7 @@ export class CodexRunner implements Runner {
       const isError = (item.error !== undefined && item.error !== null) || item.status === 'failed'
       this.#emitToolResult(
         id,
-        item.error?.message ??
-          (item.result === undefined || item.result === null ? '' : JSON.stringify(item.result)),
+        item.error?.message ?? (item.result === undefined || item.result === null ? '' : JSON.stringify(item.result)),
         isError,
         undefined,
         agent?.toolUseId ?? null,
@@ -2484,7 +2598,9 @@ export class CodexRunner implements Runner {
       // may carry them. `file_produced` is what makes those bytes reachable
       // anyway: the gateway serves a path its own runner reported, with no
       // host-file root to declare first.
-      if (item.savedPath) this.#emitFileProduced(item.savedPath, id)
+      if (item.savedPath) {
+        this.#emitFileProduced(item.savedPath, id)
+      }
       const lines = [
         item.savedPath ? `Saved to ${item.savedPath}` : 'No saved path reported',
         ...(shortResult(item.result) ? [item.result] : []),
@@ -2515,7 +2631,9 @@ export class CodexRunner implements Runner {
         // notice instead of dangling as running-forever, and the rollup stays
         // silent rather than invent verdicts for agents a dead process ran —
         // the one claim history cannot back is that they failed.
-        if (item.kind !== 'started') return
+        if (item.kind !== 'started') {
+          return
+        }
         this.#emitToolUse(
           id,
           CODEX_AGENT_TOOL,
@@ -2535,15 +2653,15 @@ export class CodexRunner implements Runner {
         )
         return
       }
-      const record =
-        this.#agents.get(item.agentThreadId) ??
-        this.#agents.open(item.agentThreadId, id, undefined, Date.now())
+      const record = this.#agents.get(item.agentThreadId) ?? this.#agents.open(item.agentThreadId, id, undefined, Date.now())
       const name = agentName(item.agentPath)
       // Fill-in, and re-anchor when the name arrives late: the reducer upserts
       // a tool_use by id, so re-emitting the anchor relabels the row a
       // fallback record opened nameless.
       const relabel = record.agentType === undefined && name !== undefined
-      if (relabel) record.agentType = name
+      if (relabel) {
+        record.agentType = name
+      }
       if (!record.anchored || relabel) {
         record.anchored = true
         this.#emitToolUse(
@@ -2568,7 +2686,9 @@ export class CodexRunner implements Runner {
         }
         return
       }
-      if (item.kind !== 'started' && record.status !== 'running') this.#agents.revive(record)
+      if (item.kind !== 'started' && record.status !== 'running') {
+        this.#agents.revive(record)
+      }
     },
     collabAgentToolCall: (item, active, id, agent) => {
       // The model's collab tool surface, mapped as an ordinary tool card —
@@ -2580,7 +2700,9 @@ export class CodexRunner implements Runner {
         active.toolUseEmitted.add(id)
         this.#emitToolUse(id, CODEX_COLLAB_TOOL, collabInput(item), agent)
       }
-      if (item.status === 'inProgress') return
+      if (item.status === 'inProgress') {
+        return
+      }
       const failed = item.status === 'failed' || item.status === 'declined'
       this.#emitToolResult(id, failed ? item.status : '', failed, undefined, agent?.toolUseId ?? null)
     },
@@ -2598,11 +2720,10 @@ export class CodexRunner implements Runner {
   // streaming buffers `streaming:<parentToolUseId>`, so two agents' interleaved
   // deltas accumulate apart as long as every frame says whose it is.
 
-  #emitDelta(
-    delta: { type: 'text_delta'; text: string } | { type: 'thinking_delta'; thinking: string },
-    parent: string | null,
-  ): void {
-    if (this.#config.includePartialMessages === false) return
+  #emitDelta(delta: { type: 'text_delta'; text: string } | { type: 'thinking_delta'; thinking: string }, parent: string | null): void {
+    if (this.#config.includePartialMessages === false) {
+      return
+    }
     this.#emit({
       type: 'stream_delta',
       event: { type: 'content_block_delta', delta },
@@ -2641,20 +2762,12 @@ export class CodexRunner implements Runner {
     })
   }
 
-  #emitToolResult(
-    toolUseId: string,
-    content: string,
-    isError: boolean,
-    patch?: FilePatch,
-    parent: string | null = null,
-  ): void {
+  #emitToolResult(toolUseId: string, content: string, isError: boolean, patch?: FilePatch, parent: string | null = null): void {
     this.#emit({
       type: 'user_message',
       message: {
         role: 'user',
-        content: [
-          { type: 'tool_result', tool_use_id: toolUseId, content, is_error: isError || undefined },
-        ],
+        content: [{ type: 'tool_result', tool_use_id: toolUseId, content, is_error: isError || undefined }],
       },
       parentToolUseId: parent,
       synthetic: true,
@@ -2671,12 +2784,7 @@ export class CodexRunner implements Runner {
    * unknown, the AiSdkRunner precedent. Usage is summed from the turn's
    * `thread/tokenUsage/updated` notifications — `turn/completed` carries none.
    */
-  #finishTurn(
-    kind: 'success' | 'failure',
-    startedAt: number,
-    active: ActiveTurn,
-    errors?: string[],
-  ): void {
+  #finishTurn(kind: 'success' | 'failure', startedAt: number, active: ActiveTurn, errors?: string[]): void {
     // Approvals that outlived the turn (codex moved on, or the turn failed
     // around them) are settled now — a card must never outlive what it gates,
     // and an unanswered timer must never fire into a finished turn.
@@ -2726,12 +2834,16 @@ export class CodexRunner implements Runner {
    * signal that a limit is actually biting, so it becomes 'rejected'.
    */
   #emitRateLimits(limits: AppServerRateLimits | undefined | null): void {
-    if (!limits) return
+    if (!limits) {
+      return
+    }
     const status = limits.rateLimitReachedType ? 'rejected' : 'allowed'
     for (const window of [limits.primary, limits.secondary]) {
       // A window with no percentage is unknown, not zero — dropped rather than
       // reported at 0%, the same rule the Claude mapping follows.
-      if (!window || window.usedPercent === null || window.usedPercent === undefined) continue
+      if (!window || window.usedPercent === null || window.usedPercent === undefined) {
+        continue
+      }
       this.#emit({
         type: 'rate_limit',
         info: {
@@ -2763,7 +2875,9 @@ export class CodexRunner implements Runner {
   #emitContextUsage(active: ActiveTurn): void {
     const totalTokens = active.contextTokens
     const maxTokens = active.contextWindow
-    if (totalTokens === undefined || !maxTokens || maxTokens <= 0) return
+    if (totalTokens === undefined || !maxTokens || maxTokens <= 0) {
+      return
+    }
     this.#emit({
       type: 'context_usage',
       usage: {
@@ -2777,8 +2891,12 @@ export class CodexRunner implements Runner {
   }
 
   #setStatus(status: SessionStatus, detail?: string): void {
-    if (this.#status === status) return
-    if (this.#status === 'closed' || this.#status === 'failed') return
+    if (this.#status === status) {
+      return
+    }
+    if (this.#status === 'closed' || this.#status === 'failed') {
+      return
+    }
     this.#status = status
     this.#emit({ type: 'status_changed', status, detail })
   }

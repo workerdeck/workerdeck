@@ -2,12 +2,7 @@ import { useEffect, useState } from 'react'
 import type { UsageWindowRow } from '@workerdeck/protocol'
 import { RotateCcw } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
-import {
-  formatAgoPrecise,
-  formatCountdown,
-  formatRateLimitWindowLong,
-  rateLimitWindowSeconds,
-} from '../../lib/format.ts'
+import { formatAgoPrecise, formatCountdown, formatRateLimitWindowLong, rateLimitWindowSeconds } from '../../lib/format.ts'
 
 /**
  * Ticking clock — the countdowns and the pace markers both move with it, and a
@@ -19,7 +14,9 @@ import {
 export function useMinuteClock(active = true): number {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    if (!active) return
+    if (!active) {
+      return
+    }
     setNow(Date.now())
     const timer = setInterval(() => setNow(Date.now()), 60_000)
     return () => clearInterval(timer)
@@ -83,19 +80,13 @@ function UsageMeter({ window, now }: { window: UsageWindowRow; now: number }) {
       : undefined
   return (
     <div>
-      <div className='flex items-baseline justify-between gap-3'>
-        <span className='truncate text-body-sm text-fg-1'>
-          {formatRateLimitWindowLong(windowKey)}
-        </span>
-        <span
-          className={cn(
-            'shrink-0 font-mono text-body-sm font-medium',
-            info.status === 'rejected' ? 'text-danger' : 'text-fg-1',
-          )}>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="truncate text-body-sm text-fg-1">{formatRateLimitWindowLong(windowKey)}</span>
+        <span className={cn('shrink-0 font-mono text-body-sm font-medium', info.status === 'rejected' ? 'text-danger' : 'text-fg-1')}>
           {utilization.toFixed(0)}% used
         </span>
       </div>
-      <div className='relative mt-2 h-2 rounded-full bg-border'>
+      <div className="relative mt-2 h-2 rounded-full bg-border">
         <div
           className={cn('h-full rounded-full', usageTint(utilization))}
           // A floor, so a barely-touched window still shows a mark instead of
@@ -105,20 +96,20 @@ function UsageMeter({ window, now }: { window: UsageWindowRow; now: number }) {
         {pace !== undefined ? (
           <span
             aria-hidden
-            title='Spent evenly, usage would be here by now'
-            className='absolute -top-1 h-4 w-0.5 -translate-x-1/2 rounded-full bg-fg-1'
+            title="Spent evenly, usage would be here by now"
+            className="absolute -top-1 h-4 w-0.5 -translate-x-1/2 rounded-full bg-fg-1"
             style={{ left: `${Math.min(100, Math.max(0, pace * 100))}%` }}
           />
         ) : null}
       </div>
-      <div className='mt-1.5 flex items-center gap-3 text-label text-fg-4'>
+      <div className="mt-1.5 flex items-center gap-3 text-label text-fg-4">
         {resetsAtMs !== undefined ? (
-          <span className='inline-flex items-center gap-1'>
-            <RotateCcw className='size-3' /> Resets in {formatCountdown(resetsAtMs, now)}
+          <span className="inline-flex items-center gap-1">
+            <RotateCcw className="size-3" /> Resets in {formatCountdown(resetsAtMs, now)}
           </span>
         ) : null}
-        {info.isUsingOverage ? <span className='text-warning'>overage</span> : null}
-        {info.status === 'rejected' ? <span className='text-danger'>limit reached</span> : null}
+        {info.isUsingOverage ? <span className="text-warning">overage</span> : null}
+        {info.status === 'rejected' ? <span className="text-danger">limit reached</span> : null}
         {/* Said plainly rather than drawn as a fact: the gateway zeroed this
             because the reading's own reset time passed with nothing newer, so 0
             is a floor — the account may have been spent elsewhere since. */}

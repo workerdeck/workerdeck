@@ -18,10 +18,7 @@
  * having to. See the README for the Vite configuration Monaco needs.
  */
 
-export {
-  SessionWorkspace,
-  type SessionWorkspaceProps,
-} from './components/agent/SessionWorkspace.tsx'
+export { SessionWorkspace, type SessionWorkspaceProps } from './components/agent/SessionWorkspace.tsx'
 export { FileTree, type FileTreeProps } from './components/agent/FileTree.tsx'
 export { EditorTabs, type EditorTabsProps } from './components/agent/EditorTabs.tsx'
 export { FileViewer, type FileViewerProps } from './components/agent/FileViewer.tsx'

@@ -1,9 +1,4 @@
-import {
-  useCallback,
-  useRef,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-} from 'react'
+import { useCallback, useRef, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { cn } from '../../lib/utils.ts'
 
 export interface SplitterProps {
@@ -70,7 +65,9 @@ export function Splitter({
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     // Secondary buttons open context menus; they are not drags.
-    if (event.button !== 0) return
+    if (event.button !== 0) {
+      return
+    }
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     drag.current = { origin: vertical ? event.clientX : event.clientY, start: value }
@@ -78,13 +75,17 @@ export function Splitter({
 
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const state = drag.current
-    if (!state) return
+    if (!state) {
+      return
+    }
     const delta = (vertical ? event.clientX : event.clientY) - state.origin
     onValueChange(clamp(state.start + (inverted ? -delta : delta)))
   }
 
   const endDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drag.current) return
+    if (!drag.current) {
+      return
+    }
     drag.current = null
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
@@ -94,7 +95,9 @@ export function Splitter({
   // The second click of a double-click has already started a drag, so the reset
   // has to land after `endDrag` — which it does: dblclick fires after pointerup.
   const onDoubleClick = () => {
-    if (defaultValue !== undefined) onValueChange(clamp(defaultValue))
+    if (defaultValue !== undefined) {
+      onValueChange(clamp(defaultValue))
+    }
   }
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -103,18 +106,24 @@ export function Splitter({
     const grow = vertical ? 'ArrowRight' : 'ArrowDown'
     const shrink = vertical ? 'ArrowLeft' : 'ArrowUp'
     const direction = inverted ? -1 : 1
-    if (event.key === grow) onValueChange(clamp(value + step * direction))
-    else if (event.key === shrink) onValueChange(clamp(value - step * direction))
-    else if (event.key === 'Home') onValueChange(min)
-    else if (event.key === 'End') onValueChange(max)
-    else return
+    if (event.key === grow) {
+      onValueChange(clamp(value + step * direction))
+    } else if (event.key === shrink) {
+      onValueChange(clamp(value - step * direction))
+    } else if (event.key === 'Home') {
+      onValueChange(min)
+    } else if (event.key === 'End') {
+      onValueChange(max)
+    } else {
+      return
+    }
     event.preventDefault()
   }
 
   return (
     <div
-      data-slot='splitter'
-      role='separator'
+      data-slot="splitter"
+      role="separator"
       tabIndex={0}
       aria-label={label}
       aria-orientation={orientation}
@@ -134,14 +143,9 @@ export function Splitter({
         'hover:bg-border-strong focus-visible:bg-accent focus-visible:outline-none',
         vertical ? 'w-px cursor-col-resize' : 'h-px cursor-row-resize',
         className,
-      )}>
-      <span
-        aria-hidden
-        className={cn(
-          'absolute',
-          vertical ? '-inset-x-[3px] inset-y-0' : '-inset-y-[3px] inset-x-0',
-        )}
-      />
+      )}
+    >
+      <span aria-hidden className={cn('absolute', vertical ? '-inset-x-[3px] inset-y-0' : '-inset-y-[3px] inset-x-0')} />
     </div>
   )
 }

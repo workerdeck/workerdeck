@@ -95,7 +95,9 @@ export function safeJsonStringify(value: unknown): string | undefined {
  * Returns undefined if the node is not a chip element.
  */
 export function getChipTrigger(node: Node): string | undefined {
-  if (!isChipElement(node)) return undefined
+  if (!isChipElement(node)) {
+    return undefined
+  }
   return node.dataset.chipTrigger
 }
 
@@ -103,7 +105,9 @@ export function getChipTrigger(node: Node): string | undefined {
  * Reads the chip value from a chip element's dataset.
  */
 export function getChipValue(node: Node): string | undefined {
-  if (!isChipElement(node)) return undefined
+  if (!isChipElement(node)) {
+    return undefined
+  }
   return node.dataset.chipValue
 }
 
@@ -111,7 +115,9 @@ export function getChipValue(node: Node): string | undefined {
  * Reads the chip display text from a chip element's dataset.
  */
 export function getChipDisplay(node: Node): string | undefined {
-  if (!isChipElement(node)) return undefined
+  if (!isChipElement(node)) {
+    return undefined
+  }
   return node.dataset.chipDisplay ?? node.textContent ?? undefined
 }
 
@@ -119,9 +125,13 @@ export function getChipDisplay(node: Node): string | undefined {
  * Reads and safely parses the chip data from a chip element's dataset.
  */
 export function getChipData(node: Node): unknown {
-  if (!isChipElement(node)) return undefined
+  if (!isChipElement(node)) {
+    return undefined
+  }
   const raw = node.dataset.chipData
-  if (!raw) return undefined
+  if (!raw) {
+    return undefined
+  }
   return safeJsonParse(raw)
 }
 
@@ -149,12 +159,16 @@ export function chipNodeTextLength(node: HTMLElement): number {
  * fields are required or how optional `data` / `autoResolved` are attached.
  */
 export function chipNodeToSegment(node: Node): ChipSegment | null {
-  if (!isChipElement(node)) return null
+  if (!isChipElement(node)) {
+    return null
+  }
 
   const trigger = getChipTrigger(node)
   const value = getChipValue(node)
   const displayText = getChipDisplay(node)
-  if (!trigger || value === undefined || !displayText) return null
+  if (!trigger || value === undefined || !displayText) {
+    return null
+  }
 
   const data = getChipData(node)
   const autoResolved = getChipAutoResolved(node)
@@ -180,7 +194,9 @@ export function chipNodeToSegment(node: Node): ChipSegment | null {
 export function indexOfChildNode(parent: HTMLElement, child: Node): number {
   const children = parent.childNodes
   for (let i = 0; i < children.length; i++) {
-    if (children[i] === child) return i
+    if (children[i] === child) {
+      return i
+    }
   }
   return -1
 }
@@ -198,10 +214,18 @@ export function indexOfChildNode(parent: HTMLElement, child: Node): number {
  * chip missing a required attribute (trigger/value/display), so this must too.
  */
 export function childProducesSegment(child: Node): boolean {
-  if (child.nodeType === Node.TEXT_NODE) return (child.textContent ?? '') !== ''
-  if (isBRElement(child)) return !child.dataset.sentinel
-  if (isChipElement(child)) return chipNodeToSegment(child) !== null
-  if (isHTMLElement(child)) return (child.textContent ?? '') !== ''
+  if (child.nodeType === Node.TEXT_NODE) {
+    return (child.textContent ?? '') !== ''
+  }
+  if (isBRElement(child)) {
+    return !child.dataset.sentinel
+  }
+  if (isChipElement(child)) {
+    return chipNodeToSegment(child) !== null
+  }
+  if (isHTMLElement(child)) {
+    return (child.textContent ?? '') !== ''
+  }
   return false
 }
 
@@ -216,7 +240,9 @@ export function childProducesSegment(child: Node): boolean {
 export function domChildIndexToSegmentIndex(editor: HTMLElement, childIndex: number): number {
   let segIdx = 0
   for (let i = 0; i < childIndex; i++) {
-    if (childProducesSegment(editor.childNodes[i])) segIdx++
+    if (childProducesSegment(editor.childNodes[i])) {
+      segIdx++
+    }
   }
   return segIdx
 }
@@ -229,7 +255,9 @@ export function domChildIndexToSegmentIndex(editor: HTMLElement, childIndex: num
 export function getDirectChildContaining(ancestor: HTMLElement, descendant: Node): Node | null {
   let node: Node | null = descendant
   while (node !== null) {
-    if (node.parentNode === ancestor) return node
+    if (node.parentNode === ancestor) {
+      return node
+    }
     node = node.parentNode
   }
   return null
@@ -275,9 +303,15 @@ export function normalizeEditorDOM(editor: HTMLElement): boolean {
     const child = editor.childNodes[i]
 
     // Skip non-element nodes, chip elements, and BR elements
-    if (!(child instanceof HTMLElement)) continue
-    if (child.dataset.chipTrigger !== undefined) continue
-    if (child instanceof HTMLBRElement) continue
+    if (!(child instanceof HTMLElement)) {
+      continue
+    }
+    if (child.dataset.chipTrigger !== undefined) {
+      continue
+    }
+    if (child instanceof HTMLBRElement) {
+      continue
+    }
 
     const tag = child.tagName
     if (blockTags.has(tag)) {
@@ -357,10 +391,14 @@ export function decorateURLsInEditor(editor: HTMLElement): boolean {
       }
     }
 
-    if (matches.length === 0) continue
+    if (matches.length === 0) {
+      continue
+    }
 
     const parent = textNode.parentNode
-    if (!parent) continue
+    if (!parent) {
+      continue
+    }
 
     // Validate URLs upfront – only keep those with safe protocols (CWE-79)
     const safeMatches: Array<{ url: string; href: string; index: number }> = []
@@ -375,7 +413,9 @@ export function decorateURLsInEditor(editor: HTMLElement): boolean {
       }
     }
 
-    if (safeMatches.length === 0) continue
+    if (safeMatches.length === 0) {
+      continue
+    }
 
     decorated = true
     const fragment = document.createDocumentFragment()
@@ -486,11 +526,15 @@ export function decorateMarkdownInEditor(editor: HTMLElement): boolean {
       }
     }
 
-    if (matches.length === 0) continue
+    if (matches.length === 0) {
+      continue
+    }
 
     decorated = true
     const parent = textNode.parentNode
-    if (!parent) continue
+    if (!parent) {
+      continue
+    }
 
     const fragment = document.createDocumentFragment()
     let lastIndex = 0
@@ -574,11 +618,15 @@ export function decorateBulletsInEditor(editor: HTMLElement): boolean {
       bulletIndices.push(match.index + match[1].length + match[2].length)
     }
 
-    if (bulletIndices.length === 0) continue
+    if (bulletIndices.length === 0) {
+      continue
+    }
 
     decorated = true
     const parent = textNode.parentNode
-    if (!parent) continue
+    if (!parent) {
+      continue
+    }
 
     const fragment = document.createDocumentFragment()
     let lastIndex = 0
@@ -634,7 +682,9 @@ export function decorateListIndentInEditor(editor: HTMLElement): boolean {
   const textNodes: Text[] = []
   for (let i = 0; i < editor.childNodes.length; i++) {
     const node = editor.childNodes[i]
-    if (isTextNode(node)) textNodes.push(node)
+    if (isTextNode(node)) {
+      textNodes.push(node)
+    }
   }
 
   for (const textNode of textNodes) {
@@ -647,11 +697,15 @@ export function decorateListIndentInEditor(editor: HTMLElement): boolean {
       runs.push({ start, end: start + match[2].length })
     }
 
-    if (runs.length === 0) continue
+    if (runs.length === 0) {
+      continue
+    }
 
     decorated = true
     const parent = textNode.parentNode
-    if (!parent) continue
+    if (!parent) {
+      continue
+    }
 
     const fragment = document.createDocumentFragment()
     let lastIndex = 0
@@ -703,7 +757,9 @@ export function decorateEditor(editor: HTMLElement, markdownEnabled: boolean): v
     decorateBulletsInEditor(editor)
   }
   decorateURLsInEditor(editor)
-  if (markdownEnabled) decorateMarkdownInEditor(editor)
+  if (markdownEnabled) {
+    decorateMarkdownInEditor(editor)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -716,6 +772,8 @@ export function decorateEditor(editor: HTMLElement, markdownEnabled: boolean): v
  */
 export function getSelectionRange(): Range | null {
   const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0) return null
+  if (!sel || sel.rangeCount === 0) {
+    return null
+  }
   return sel.getRangeAt(0)
 }

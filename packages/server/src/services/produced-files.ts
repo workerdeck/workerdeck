@@ -48,7 +48,9 @@ export class ProducedFileStore {
    */
   watch(runner: Runner): void {
     runner.subscribe((event) => {
-      if (event.type !== 'file_produced') return
+      if (event.type !== 'file_produced') {
+        return
+      }
       const held = this.#bySession.get(runner.id) ?? new Map<string, ProducedFile>()
       held.set(event.fileId, {
         fileId: event.fileId,

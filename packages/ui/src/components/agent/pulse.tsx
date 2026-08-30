@@ -33,7 +33,9 @@ export function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false)
   useEffect(() => {
     const query = window.matchMedia?.('(prefers-reduced-motion: reduce)')
-    if (!query) return
+    if (!query) {
+      return
+    }
     setReduced(query.matches)
     const onChange = () => setReduced(query.matches)
     query.addEventListener('change', onChange)
@@ -52,10 +54,14 @@ export function usePulse(animated: boolean): string {
   const running = animated && !reduced
   const [frame, setFrame] = useState(0)
   useEffect(() => {
-    if (!running) return
+    if (!running) {
+      return
+    }
     const timer = setInterval(() => setFrame((f) => f + 1), PULSE_MS)
     return () => clearInterval(timer)
   }, [running])
-  if (!running) return PULSE_REST
+  if (!running) {
+    return PULSE_REST
+  }
   return PULSE_FRAMES[frame % PULSE_FRAMES.length]!
 }

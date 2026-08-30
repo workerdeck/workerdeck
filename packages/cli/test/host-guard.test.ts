@@ -3,8 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { hostnameOf, isLoopbackHostname, parseArgs, resolveInstanceConfig } from '../src/config.ts'
 import { createHostGuard } from '../src/lib/instance.ts'
 
-const req = (host?: string): IncomingMessage =>
-  ({ headers: host === undefined ? {} : { host } }) as unknown as IncomingMessage
+const req = (host?: string): IncomingMessage => ({ headers: host === undefined ? {} : { host } }) as unknown as IncomingMessage
 
 const noConfig = { path: null, options: {} }
 
@@ -76,10 +75,7 @@ describe('createHostGuard', () => {
 describe('resolveInstanceConfig and the host guard', () => {
   it('arms the guard only when there is no auth', () => {
     expect(resolveInstanceConfig(parseArgs([]), noConfig, {}).allowedHosts).not.toBeNull()
-    expect(
-      resolveInstanceConfig(parseArgs(['--auth-key', 'long-enough-secret']), noConfig, {})
-        .allowedHosts,
-    ).toBeNull()
+    expect(resolveInstanceConfig(parseArgs(['--auth-key', 'long-enough-secret']), noConfig, {}).allowedHosts).toBeNull()
   })
 
   it('stands down when the config file authenticates for itself', () => {
@@ -112,11 +108,7 @@ describe('resolveInstanceConfig and the host guard', () => {
   })
 
   it('lets the guard honour an insecure host end to end', () => {
-    const config = resolveInstanceConfig(
-      parseArgs(['--host', 'toby', '--insecure-host', 'toby']),
-      noConfig,
-      {},
-    )
+    const config = resolveInstanceConfig(parseArgs(['--host', 'toby', '--insecure-host', 'toby']), noConfig, {})
     const guard = createHostGuard(config.allowedHosts)
     expect(guard(req('toby:8787'))).toBe(true)
     expect(guard(req('attacker.example:8787'))).toBe(false)

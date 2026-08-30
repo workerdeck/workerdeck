@@ -59,13 +59,7 @@ export interface TerminalTranscriptProps {
  * looks, that component owns which rows are mounted, and neither needs a copy
  * of the other.
  */
-export function TerminalItemView({
-  item,
-  fileUrl,
-}: {
-  item: TranscriptItem
-  fileUrl?: (path: string) => string
-}) {
+export function TerminalItemView({ item, fileUrl }: { item: TranscriptItem; fileUrl?: (path: string) => string }) {
   switch (item.kind) {
     case 'user':
       return <UserRow item={item} />
@@ -129,18 +123,19 @@ export function BriefRow({ text, terminal }: { text: string; terminal?: boolean 
   const [open, setOpen] = useState(false)
   if (!terminal) {
     return (
-      <div data-slot='brief' className='px-4 py-2 text-body-sm whitespace-pre-wrap text-fg-2'>
+      <div data-slot="brief" className="px-4 py-2 text-body-sm whitespace-pre-wrap text-fg-2">
         {text}
       </div>
     )
   }
   return (
-    <div data-slot='brief'>
+    <div data-slot="brief">
       <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
-        <Row glyph='>' glyphTone='blue' tone='dim'>
+        <Row glyph=">" glyphTone="blue" tone="dim">
           <span
             className={cn('whitespace-pre-wrap', !open && 'term-brief-clip')}
-            style={open ? undefined : { WebkitLineClamp: BRIEF_LINES }}>
+            style={open ? undefined : { WebkitLineClamp: BRIEF_LINES }}
+          >
             {text}
           </span>
         </Row>
@@ -188,10 +183,7 @@ export function TaskRow({
             "wrote to the workspace" a few rows down, and one colour cannot mean
             two things in the same gutter. Failure still outranks it — an alarm
             is not a category. */}
-        <Row
-          glyph={busy ? pulse : '●'}
-          glyphTone={failed ? 'red' : busy ? 'mark' : 'dim'}
-          tone={failed ? 'red' : 'green'}>
+        <Row glyph={busy ? pulse : '●'} glyphTone={failed ? 'red' : busy ? 'mark' : 'dim'} tone={failed ? 'red' : 'green'}>
           {taskSummary(block.task, children)}
         </Row>
       </Pressable>
@@ -199,18 +191,14 @@ export function TaskRow({
         // `term-nested` and not the shell's cards-era `border-l-2 pl-3`: this
         // sits on the open block's wash, where that border token is invisible,
         // and its 14px would take every nested marker off the cell grid.
-        <div className='term-nested'>
+        <div className="term-nested">
           {/* The brief leads the children for the same reason it leads the
               frame: the instruction, then the work. */}
           {brief ? <BriefRow text={brief} terminal /> : null}
           {block.children.map((leaf, index) => (
             <Fragment key={leaf.key}>
               {index > 0 && blockNeedsBlank(block.children[index - 1]!, leaf) ? <Blank /> : null}
-              {'run' in leaf ? (
-                <ToolRunRow items={leaf.run} />
-              ) : (
-                <TerminalItemView item={leaf.item} fileUrl={fileUrl} />
-              )}
+              {'run' in leaf ? <ToolRunRow items={leaf.run} /> : <TerminalItemView item={leaf.item} fileUrl={fileUrl} />}
             </Fragment>
           ))}
         </div>
@@ -223,9 +211,7 @@ export function TaskRow({
   return onOpenSubagent === undefined ? (
     row
   ) : (
-    <WithActions actions={<OpenSubagentAction onOpen={() => onOpenSubagent(block.task.id)} />}>
-      {row}
-    </WithActions>
+    <WithActions actions={<OpenSubagentAction onOpen={() => onOpenSubagent(block.task.id)} />}>{row}</WithActions>
   )
 }
 
@@ -245,22 +231,23 @@ function useRunStart(status: TranscriptState['status']): number | undefined {
 /** Is the model between outputs? Only then does the working line show — while
  * text is streaming, the text itself is the evidence. */
 function working(state: TranscriptState): boolean {
-  if (state.status !== 'running' && state.status !== 'starting') return false
+  if (state.status !== 'running' && state.status !== 'starting') {
+    return false
+  }
   const last = state.items.at(-1)
-  if (!last) return true
-  if (last.kind === 'assistant_text' && last.streaming) return false
-  if (last.kind === 'thinking' && last.id === 'streaming-thinking') return false
+  if (!last) {
+    return true
+  }
+  if (last.kind === 'assistant_text' && last.streaming) {
+    return false
+  }
+  if (last.kind === 'thinking' && last.id === 'streaming-thinking') {
+    return false
+  }
   return true
 }
 
-export function TerminalTranscript({
-  state,
-  fileUrl,
-  fontSize,
-  lineHeight,
-  affordances,
-  className,
-}: TerminalTranscriptProps) {
+export function TerminalTranscript({ state, fileUrl, fontSize, lineHeight, affordances, className }: TerminalTranscriptProps) {
   const runStartedAt = useRunStart(state.status)
   const blocks = useMemo(() => terminalBlocks(state.items), [state.items])
   return (
@@ -270,8 +257,9 @@ export function TerminalTranscript({
       affordances={affordances}
       // One cell of breathing room at each edge, and the value a full-bleed
       // band cancels so its wash reaches the scroller's edge.
-      bleed='1ch'
-      className={cn('term-transcript', className)}>
+      bleed="1ch"
+      className={cn('term-transcript', className)}
+    >
       {blocks.map((block, index) => (
         <Fragment key={block.key}>
           {index > 0 && blockNeedsBlank(blocks[index - 1]!, block) ? <Blank /> : null}

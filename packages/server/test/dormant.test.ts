@@ -6,12 +6,7 @@ import WebSocket from 'ws'
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import type { ProfileInfo, SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
-import {
-  createFileSessionStore,
-  createWorkerServer,
-  type SessionStore,
-  type WorkerServer,
-} from '../src/index.ts'
+import { createFileSessionStore, createWorkerServer, type SessionStore, type WorkerServer } from '../src/index.ts'
 
 /**
  * A runner standing in for claude/codex: it cannot park (no `park()`), but it
@@ -48,7 +43,9 @@ class ResumableRunner implements Runner {
    * `CodexRunner` both do this unconditionally — the behaviour under test). */
   async start(): Promise<void> {
     this.#sdkSessionId = this.config.resume ?? 'engine-session-1'
-    if (this.config.prompt) this.sendMessage(this.config.prompt)
+    if (this.config.prompt) {
+      this.sendMessage(this.config.prompt)
+    }
     this.#emit({
       type: 'system_init',
       sdkSessionId: this.#sdkSessionId,
@@ -82,13 +79,16 @@ class ResumableRunner implements Runner {
       meta: this.#meta,
       // The real `#title()`'s precedence, which the wake depends on: an explicit
       // `meta.title`, else one derived from the opening prompt.
-      title:
-        typeof this.#meta?.title === 'string' ? this.#meta.title : (this.config.prompt || undefined),
+      title: typeof this.#meta?.title === 'string' ? this.#meta.title : this.config.prompt || undefined,
     }
   }
 
   subscribe(listener: (event: SessionEvent) => void, afterSeq = 0): () => void {
-    for (const event of this.#events) if (event.seq > afterSeq) listener(event)
+    for (const event of this.#events) {
+      if (event.seq > afterSeq) {
+        listener(event)
+      }
+    }
     this.#listeners.add(listener)
     return () => this.#listeners.delete(listener)
   }
@@ -97,8 +97,11 @@ class ResumableRunner implements Runner {
   }
   setTitle(title: string | undefined): void {
     const meta = { ...this.#meta }
-    if (title) meta.title = title
-    else delete meta.title
+    if (title) {
+      meta.title = title
+    } else {
+      delete meta.title
+    }
     this.#meta = meta
   }
   resolvePermission(): boolean {
@@ -123,7 +126,9 @@ class ResumableRunner implements Runner {
   #emit(body: SessionEventBody): void {
     const event = { ...body, seq: ++this.#seq, ts: Date.now() } as SessionEvent
     this.#events.push(event)
-    for (const listener of this.#listeners) listener(event)
+    for (const listener of this.#listeners) {
+      listener(event)
+    }
   }
 }
 
@@ -150,9 +155,13 @@ const servers: WorkerServer[] = []
 const dirs: string[] = []
 
 afterEach(async () => {
-  for (const server of servers.splice(0)) await server.close()
+  for (const server of servers.splice(0)) {
+    await server.close()
+  }
   // retries: a wake-up's own save can still be in flight as the server closes.
-  for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true, maxRetries: 5 })
+  for (const dir of dirs.splice(0)) {
+    await rm(dir, { recursive: true, force: true, maxRetries: 5 })
+  }
 })
 
 /** Start a gateway over `store`. Calling it twice with the same store is the
@@ -178,11 +187,7 @@ async function startGateway(store: SessionStore): Promise<Gateway> {
   return { server, base: `http://127.0.0.1:${port}/v1`, built }
 }
 
-const create = async (
-  base: string,
-  profileName = 'resumable',
-  prompt?: string,
-): Promise<SessionInfo> => {
+const create = async (base: string, profileName = 'resumable', prompt?: string): Promise<SessionInfo> => {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -418,9 +423,7 @@ describe('sessions that survive a restart', () => {
 
     await vi.waitFor(async () => {
       const record = await store.get(session.id)
-      expect(record && record.kind === 'dormant' ? record.sdkSessionId : undefined).toBe(
-        'engine-session-2',
-      )
+      expect(record && record.kind === 'dormant' ? record.sdkSessionId : undefined).toBe('engine-session-2')
     })
   })
 })

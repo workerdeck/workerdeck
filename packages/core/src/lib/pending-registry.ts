@@ -121,15 +121,21 @@ export class PendingRequestRegistry {
     let canceled = 0
     // Snapshot ids first: settling mutates the map we would be iterating.
     for (const slot of Array.from(this.#slots.values())) {
-      if (kind && slot.kind !== kind) continue
-      if (this.#settle(slot.id, { ok: false, reason, error, settledBy: 'server' })) canceled += 1
+      if (kind && slot.kind !== kind) {
+        continue
+      }
+      if (this.#settle(slot.id, { ok: false, reason, error, settledBy: 'server' })) {
+        canceled += 1
+      }
     }
     return canceled
   }
 
   #settle(id: string, outcome: PendingOutcome<unknown>): boolean {
     const slot = this.#slots.get(id)
-    if (!slot) return false
+    if (!slot) {
+      return false
+    }
     clearTimeout(slot.timer)
     this.#slots.delete(id)
     slot.resolve(outcome)

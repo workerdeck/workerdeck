@@ -26,7 +26,9 @@ const RESULT_PREVIEW_CHARS = 2000
 const IMAGE_TOOLS = new Set(['CodexImageGeneration', 'CodexImageView'])
 
 const imagePathOf = (item: ToolCallItem): string | undefined => {
-  if (!IMAGE_TOOLS.has(item.name)) return undefined
+  if (!IMAGE_TOOLS.has(item.name)) {
+    return undefined
+  }
   const input = item.input as { savedPath?: unknown; path?: unknown } | null
   const path = input?.savedPath ?? input?.path
   return typeof path === 'string' ? path : undefined
@@ -65,21 +67,59 @@ const STATE_BADGE = {
  * is worse than none).
  */
 const EXTENSION_LANGUAGE: Record<string, string> = {
-  ts: 'ts', tsx: 'tsx', js: 'js', jsx: 'jsx', mjs: 'js', cjs: 'js',
-  json: 'json', jsonc: 'json', md: 'md', mdx: 'md', css: 'css', scss: 'scss',
-  html: 'html', xml: 'xml', yml: 'yaml', yaml: 'yaml', toml: 'toml',
-  py: 'python', rb: 'ruby', go: 'go', rs: 'rust', java: 'java', kt: 'kotlin',
-  swift: 'swift', c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp', cs: 'csharp',
-  php: 'php', sh: 'bash', bash: 'bash', zsh: 'bash', fish: 'fish', sql: 'sql',
-  graphql: 'graphql', dockerfile: 'dockerfile', diff: 'diff', patch: 'diff',
+  ts: 'ts',
+  tsx: 'tsx',
+  js: 'js',
+  jsx: 'jsx',
+  mjs: 'js',
+  cjs: 'js',
+  json: 'json',
+  jsonc: 'json',
+  md: 'md',
+  mdx: 'md',
+  css: 'css',
+  scss: 'scss',
+  html: 'html',
+  xml: 'xml',
+  yml: 'yaml',
+  yaml: 'yaml',
+  toml: 'toml',
+  py: 'python',
+  rb: 'ruby',
+  go: 'go',
+  rs: 'rust',
+  java: 'java',
+  kt: 'kotlin',
+  swift: 'swift',
+  c: 'c',
+  h: 'c',
+  cpp: 'cpp',
+  hpp: 'cpp',
+  cs: 'csharp',
+  php: 'php',
+  sh: 'bash',
+  bash: 'bash',
+  zsh: 'bash',
+  fish: 'fish',
+  sql: 'sql',
+  graphql: 'graphql',
+  dockerfile: 'dockerfile',
+  diff: 'diff',
+  patch: 'diff',
 }
 
 function resultLanguage(item: ToolCallItem): string | undefined {
-  if (item.name === 'Bash' || item.name === 'CodexCommand') return 'bash'
-  if (item.name === 'CodexFileChange') return 'diff'
+  if (item.name === 'Bash' || item.name === 'CodexCommand') {
+    return 'bash'
+  }
+  if (item.name === 'CodexFileChange') {
+    return 'diff'
+  }
   const input = item.input as { file_path?: unknown; path?: unknown } | null
   const path = input?.file_path ?? input?.path
-  if (typeof path !== 'string') return undefined
+  if (typeof path !== 'string') {
+    return undefined
+  }
   const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
   return EXTENSION_LANGUAGE[extension]
 }
@@ -108,37 +148,32 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
   const totalChars = item.result?.totalChars ?? resultText.length
 
   const details = open ? (
-    <div className='flex flex-col gap-2 border-t border-border p-2.5'>
-      <PlainPayload
-        code={JSON.stringify(item.input, null, 2)}
-        language='json'
-        label='Parameters'
-      />
-      {item.logs?.length ? (
-        <PlainPayload code={item.logs.join('\n')} label='Logs'/>
-      ) : null}
+    <div className="flex flex-col gap-2 border-t border-border p-2.5">
+      <PlainPayload code={JSON.stringify(item.input, null, 2)} language="json" label="Parameters" />
+      {item.logs?.length ? <PlainPayload code={item.logs.join('\n')} label="Logs" /> : null}
       {item.result !== undefined ? (
         <div>
           <PlainPayload
             code={shownResult || '(empty result)'}
             language={resultLanguage(item)}
             label={isError ? 'Error' : 'Result'}
-                className={cn(isError && 'border-danger/40 [&_pre]:text-danger')}
+            className={cn(isError && 'border-danger/40 [&_pre]:text-danger')}
           />
           {fetching ? (
-            <p className='mt-1 text-label text-fg-3'>
-              Fetching {totalChars.toLocaleString()} chars…
-            </p>
+            <p className="mt-1 text-label text-fg-3">Fetching {totalChars.toLocaleString()} chars…</p>
           ) : clipped || headOnly ? (
             <button
-              type='button'
-              className='mt-1 text-label text-fg-3 underline-offset-2 hover:underline'
+              type="button"
+              className="mt-1 text-label text-fg-3 underline-offset-2 hover:underline"
               onClick={() => {
                 setFullResult(true)
-                if (!headOnly) return
+                if (!headOnly) {
+                  return
+                }
                 setFetching(true)
                 void fetchResult(item.id).finally(() => setFetching(false))
-              }}>
+              }}
+            >
               Show all {totalChars.toLocaleString()} chars
             </button>
           ) : null}
@@ -156,7 +191,7 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
   // parts of the result itself, addressed by `(seq, toolUseId, part)`. Different
   // store, different route, and a call can plausibly have both.
   const resultImages = item.result?.images?.length ? (
-    <div className='flex flex-col gap-2 border-t border-border p-2.5'>
+    <div className="flex flex-col gap-2 border-t border-border p-2.5">
       {item.result.images.map((ref) => (
         <ResultImage key={ref.partIndex} toolUseId={item.id} image={ref} />
       ))}
@@ -165,34 +200,32 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
 
   return (
     <div
-      data-slot='tool-call'
+      data-slot="tool-call"
       data-state={status}
-      className={cn('w-full overflow-hidden rounded-lg border border-border bg-surface', className)}>
+      className={cn('w-full overflow-hidden rounded-lg border border-border bg-surface', className)}
+    >
       <button
-        type='button'
+        type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
           'flex w-full items-center gap-2 px-3 py-2 text-left transition-colors outline-none',
           'hover:bg-surface-hover focus-visible:bg-surface-hover',
-        )}>
-        <Icon className='size-3.5 shrink-0 text-fg-3' />
-        <span className='shrink-0 font-mono text-body-sm font-medium text-fg-1'>{item.name}</span>
+        )}
+      >
+        <Icon className="size-3.5 shrink-0 text-fg-3" />
+        <span className="shrink-0 font-mono text-body-sm font-medium text-fg-1">{item.name}</span>
         {item.backend && item.backend !== 'server' ? (
-          <Badge variant='neutral' className='shrink-0'>
+          <Badge variant="neutral" className="shrink-0">
             {item.backend}
           </Badge>
         ) : null}
-        <span className='min-w-0 flex-1 truncate font-mono text-label text-fg-4'>
-          {toolInputPreview(item.input)}
-        </span>
-        <Badge variant={badge.variant} dot={!badge.busy} className='shrink-0 gap-1'>
-          {badge.busy ? <Spinner className='size-3 text-current' /> : null}
-          {status === 'deferred' ? <Clock className='size-3 text-current' /> : null}
+        <span className="min-w-0 flex-1 truncate font-mono text-label text-fg-4">{toolInputPreview(item.input)}</span>
+        <Badge variant={badge.variant} dot={!badge.busy} className="shrink-0 gap-1">
+          {badge.busy ? <Spinner className="size-3 text-current" /> : null}
+          {status === 'deferred' ? <Clock className="size-3 text-current" /> : null}
           {badge.label}
         </Badge>
-        <ChevronDown
-          className={cn('size-3.5 shrink-0 text-fg-4 transition-transform', open && 'rotate-180')}
-        />
+        <ChevronDown className={cn('size-3.5 shrink-0 text-fg-4 transition-transform', open && 'rotate-180')} />
       </button>
       {image}
       {resultImages}
@@ -203,17 +236,8 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
 
 /** The framed card the `cards` transcript expands into. Unhighlighted by
  * design: it is structured data in a panel, not a file. */
-function PlainPayload({
-  code,
-  label,
-  className,
-}: {
-  code: string
-  label: string
-  language?: string
-  className?: string
-}) {
-  return <CodeBlock code={code} label={label} variant='panel' className={className} />
+function PlainPayload({ code, label, className }: { code: string; label: string; language?: string; className?: string }) {
+  return <CodeBlock code={code} label={label} variant="panel" className={className} />
 }
 
 /** One image part of a tool result, as the reducer holds it. */
@@ -233,13 +257,11 @@ type ToolResultImage = NonNullable<NonNullable<ToolCallItem['result']>['images']
 function ResultImage({ toolUseId, image }: { toolUseId: string; image: ToolResultImage }) {
   const { src, failed } = useToolResultImageSrc({ toolUseId, ...image })
   return (
-    <div className='flex h-60 items-start overflow-hidden rounded-md border border-border bg-surface-hover'>
+    <div className="flex h-60 items-start overflow-hidden rounded-md border border-border bg-surface-hover">
       {src ? (
-        <img src={src} alt={imagePlaceholder(image)} className='h-full max-w-full object-contain' />
+        <img src={src} alt={imagePlaceholder(image)} className="h-full max-w-full object-contain" />
       ) : (
-        <span className='p-2 text-label text-fg-4'>
-          {failed ? IMAGE_UNAVAILABLE : imagePlaceholder(image)}
-        </span>
+        <span className="p-2 text-label text-fg-4">{failed ? IMAGE_UNAVAILABLE : imagePlaceholder(image)}</span>
       )}
     </div>
   )
@@ -254,20 +276,16 @@ function ResultImage({ toolUseId, image }: { toolUseId: string; image: ToolResul
  * already names where the file went. An error banner over that would be noise
  * about a thing the operator can fix in one line of config.
  */
-function HostImage({
-  path,
-  load,
-}: {
-  path: string
-  load: (path: string) => Promise<string | undefined>
-}) {
+function HostImage({ path, load }: { path: string; load: (path: string) => Promise<string | undefined> }) {
   const [src, setSrc] = useState<string | undefined>()
   useEffect(() => {
     let cancelled = false
     setSrc(undefined)
     load(path)
       .then((url) => {
-        if (!cancelled) setSrc(url)
+        if (!cancelled) {
+          setSrc(url)
+        }
       })
       .catch(() => {
         // Not readable from here — the path in the result is the answer.
@@ -276,13 +294,15 @@ function HostImage({
       cancelled = true
     }
   }, [path, load])
-  if (!src) return null
+  if (!src) {
+    return null
+  }
   return (
-    <div className='border-t border-border p-2.5'>
+    <div className="border-t border-border p-2.5">
       <img
         src={src}
         alt={path.split('/').pop() ?? 'Generated image'}
-        className='max-h-96 w-auto max-w-full rounded-md border border-border'
+        className="max-h-96 w-auto max-w-full rounded-md border border-border"
       />
     </div>
   )

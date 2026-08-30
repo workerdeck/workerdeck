@@ -15,12 +15,7 @@ export {
   parseArgs,
   resolveInstanceConfig,
 } from './config.ts'
-export type {
-  WorkerDeckConfig,
-  CliFlags,
-  LoadedConfig,
-  ResolvedConfig,
-} from './config.ts'
+export type { WorkerDeckConfig, CliFlags, LoadedConfig, ResolvedConfig } from './config.ts'
 export { runGuard } from './lib/guard.ts'
 export { materializeAuthKey } from './auth/auth-key.ts'
 export type { MaterializedAuthKey } from './auth/auth-key.ts'

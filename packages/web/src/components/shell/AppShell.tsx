@@ -1,14 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
-import {
-  ListChecks,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Plug,
-  Settings,
-  SquareTerminal,
-  UsersRound,
-} from 'lucide-react'
+import { ListChecks, PanelLeftClose, PanelLeftOpen, Plug, Settings, SquareTerminal, UsersRound } from 'lucide-react'
 import { cn } from '@workerdeck/ui'
 import { SettingsDialog } from '@/components/SettingsDialog.tsx'
 import { BrandMark } from './BrandMark.tsx'
@@ -38,9 +30,7 @@ const COLLAPSED_KEY = 'workerdeck.sidebar-collapsed'
 export function AppShell({ children }: { children?: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   // Longest match wins, so `/gateways` never loses to a prefix of itself.
-  const section = [...NAV].sort((a, b) => b.path.length - a.path.length).find((item) =>
-    pathname.startsWith(item.path),
-  )
+  const section = [...NAV].sort((a, b) => b.path.length - a.path.length).find((item) => pathname.startsWith(item.path))
   const Sidebar = section?.sidebar
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(() => {
@@ -68,24 +58,14 @@ export function AppShell({ children }: { children?: ReactNode }) {
     cn(
       'flex items-center rounded-md text-body-sm transition-colors outline-none',
       collapsed ? 'justify-center p-2' : 'gap-2 px-2 py-1.5',
-      active
-        ? 'bg-surface font-medium text-fg-1 shadow-(--shadow-xs)'
-        : 'text-fg-3 hover:bg-row-hover hover:text-fg-1',
+      active ? 'bg-surface font-medium text-fg-1 shadow-(--shadow-xs)' : 'text-fg-3 hover:bg-row-hover hover:text-fg-1',
     )
   return (
-    <div className='flex h-dvh bg-sidebar'>
-      <aside
-        className={cn(
-          'flex shrink-0 flex-col gap-1 p-3 transition-[width] duration-150',
-          collapsed ? 'w-14 items-center' : 'w-52',
-        )}>
+    <div className="flex h-dvh bg-sidebar">
+      <aside className={cn('flex shrink-0 flex-col gap-1 p-3 transition-[width] duration-150', collapsed ? 'w-14 items-center' : 'w-52')}>
         <div className={cn('flex items-center py-2', collapsed ? 'justify-center' : 'gap-2 px-2')}>
-          <BrandMark className='size-4 shrink-0 text-fg-1' />
-          {!collapsed && (
-            <span className='text-body-sm font-semibold tracking-tight text-fg-1'>
-              workerdeck
-            </span>
-          )}
+          <BrandMark className="size-4 shrink-0 text-fg-1" />
+          {!collapsed && <span className="text-body-sm font-semibold tracking-tight text-fg-1">workerdeck</span>}
         </div>
         <nav className={cn('mt-1 flex flex-1 flex-col gap-0.5', collapsed && 'items-center')}>
           {NAV.map((item) => (
@@ -100,10 +80,13 @@ export function AppShell({ children }: { children?: ReactNode }) {
               // and "take me where I already am" has no useful answer other
               // than staying put.
               onClick={(e) => {
-                if (item.id === section?.id) e.preventDefault()
+                if (item.id === section?.id) {
+                  e.preventDefault()
+                }
               }}
-              className={itemClass(item.id === section?.id)}>
-              <item.icon className='size-4 shrink-0' />
+              className={itemClass(item.id === section?.id)}
+            >
+              <item.icon className="size-4 shrink-0" />
               {!collapsed && item.label}
             </Link>
           ))}
@@ -116,27 +99,19 @@ export function AppShell({ children }: { children?: ReactNode }) {
             when not. The version used to sit here and no longer does; it was
             the only thing in the frame that answered a question nobody was
             asking, and it left the icons unable to spread. */}
-        <div
-          className={cn(
-            'mt-1 grid place-items-center gap-1',
-            collapsed ? 'grid-rows-3' : 'grid-cols-3',
-          )}>
-          <button
-            type='button'
-            onClick={() => setSettingsOpen(true)}
-            title='Settings'
-            aria-label='Settings'
-            className={footIconClass}>
-            <Settings className='size-4' />
+        <div className={cn('mt-1 grid place-items-center gap-1', collapsed ? 'grid-rows-3' : 'grid-cols-3')}>
+          <button type="button" onClick={() => setSettingsOpen(true)} title="Settings" aria-label="Settings" className={footIconClass}>
+            <Settings className="size-4" />
           </button>
           <ThemeToggle />
           <button
-            type='button'
+            type="button"
             onClick={toggle}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className={footIconClass}>
-            {collapsed ? <PanelLeftOpen className='size-4' /> : <PanelLeftClose className='size-4' />}
+            className={footIconClass}
+          >
+            {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
           </button>
         </div>
       </aside>
@@ -149,11 +124,9 @@ export function AppShell({ children }: { children?: ReactNode }) {
 
           Keyed on the section so switching sections mounts a fresh sidebar
           rather than reconciling one list component into another's shape. */}
-      <div className='app-frame frame-shine m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-xl'>
+      <div className="app-frame frame-shine m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-xl">
         {Sidebar ? <Sidebar key={section?.id} /> : null}
-        <main className='flex min-w-0 flex-1 flex-col overflow-hidden'>
-          {children ?? <Outlet />}
-        </main>
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">{children ?? <Outlet />}</main>
       </div>
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

@@ -1,12 +1,5 @@
 import * as vscode from 'vscode'
-import type {
-  HostFileRoot,
-  ModelOption,
-  PermissionMode,
-  ProfileInfo,
-  SdkSessionSummary,
-  SessionInfo,
-} from '@workerdeck/protocol'
+import type { HostFileRoot, ModelOption, PermissionMode, ProfileInfo, SdkSessionSummary, SessionInfo } from '@workerdeck/protocol'
 import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import { clientFor } from './gateway.ts'
 import type { HostStore } from './hosts.ts'
@@ -75,11 +68,11 @@ export async function resumeSession(deps: NewSessionDeps): Promise<void> {
 
 async function run(deps: NewSessionDeps, options: { resume: boolean }): Promise<void> {
   const adapters = await loadAdapters(deps)
-  if (adapters === undefined) return
+  if (adapters === undefined) {
+    return
+  }
   if (adapters.length === 0) {
-    void vscode.window.showInformationMessage(
-      'WorkerDeck: no gateway is reachable. Add one in the Gateways view.',
-    )
+    void vscode.window.showInformationMessage('WorkerDeck: no gateway is reachable. Add one in the Gateways view.')
     return
   }
 
@@ -98,26 +91,32 @@ async function run(deps: NewSessionDeps, options: { resume: boolean }): Promise<
         continue
       }
       const picked = await pickAdapter(adapters, adapter)
-      if (picked === CANCEL) return
+      if (picked === CANCEL) {
+        return
+      }
       // Nothing before the first step, so its back button is never shown.
-      if (picked === BACK) return
+      if (picked === BACK) {
+        return
+      }
       adapter = picked
       step = 1
     } else if (step === 1) {
       const picked = await pickFolder(deps, adapter!, cwd)
-      if (picked === CANCEL) return
+      if (picked === CANCEL) {
+        return
+      }
       if (picked === BACK) {
         // Straight past a step that never asked, or there is nothing to go back to.
-        if (adapters.length === 1) return
+        if (adapters.length === 1) {
+          return
+        }
         step = 0
         continue
       }
       cwd = picked
       step = 2
     } else {
-      const done = options.resume
-        ? await pickAndResume(deps, adapter!, cwd!)
-        : await pickModelAndCreate(deps, adapter!, cwd!)
+      const done = options.resume ? await pickAndResume(deps, adapter!, cwd!) : await pickModelAndCreate(deps, adapter!, cwd!)
       if (done === BACK) {
         step = 1
         continue
@@ -135,14 +134,18 @@ async function run(deps: NewSessionDeps, options: { resume: boolean }): Promise<
  */
 async function loadAdapters(deps: NewSessionDeps): Promise<AdapterChoice[] | undefined> {
   const hosts = deps.state().hosts.filter((h) => h.probe === 'connected')
-  if (hosts.length === 0) return []
+  if (hosts.length === 0) {
+    return []
+  }
   const choices = await vscode.window.withProgress(
     { location: { viewId: 'workerdeck.sessions' }, title: 'Loading adapters…' },
     async () => {
       const perHost = await Promise.all(
         hosts.map(async (host) => {
           const client = await clientFor(deps.store, host)
-          if (!client) return []
+          if (!client) {
+            return []
+          }
           try {
             const { profiles } = await client.listProfiles()
             return profiles.map((profile) => ({
@@ -162,33 +165,22 @@ async function loadAdapters(deps: NewSessionDeps): Promise<AdapterChoice[] | und
   )
   // Available first — an adapter whose credentials are missing stays pickable
   // (the reason is on the row) but should not be what the cursor lands on.
-  return choices.sort(
-    (a, b) => Number(a.profile.available === false) - Number(b.profile.available === false),
-  )
+  return choices.sort((a, b) => Number(a.profile.available === false) - Number(b.profile.available === false))
 }
 
 type AdapterItem = vscode.QuickPickItem & { choice: AdapterChoice }
 
-async function pickAdapter(
-  adapters: readonly AdapterChoice[],
-  current: AdapterChoice | undefined,
-): Promise<Answer<AdapterChoice>> {
+async function pickAdapter(adapters: readonly AdapterChoice[], current: AdapterChoice | undefined): Promise<Answer<AdapterChoice>> {
   const multiGateway = new Set(adapters.map((a) => a.host.id)).size > 1
   const items: AdapterItem[] = adapters.map((choice) => {
     const engine = choice.profile.engine ?? 'claude'
     return {
       label: choice.profile.available === false ? `$(warning) ${engine}` : engine,
       // The profile name only earns a slot when it is not just the engine again.
-      description: [
-        choice.profile.name === engine ? undefined : choice.profile.name,
-        multiGateway ? choice.host.name : undefined,
-      ]
+      description: [choice.profile.name === engine ? undefined : choice.profile.name, multiGateway ? choice.host.name : undefined]
         .filter(Boolean)
         .join(' · '),
-      detail:
-        choice.profile.available === false
-          ? (choice.profile.unavailableReason ?? 'credentials look unavailable')
-          : undefined,
+      detail: choice.profile.available === false ? (choice.profile.unavailableReason ?? 'credentials look unavailable') : undefined,
       choice,
     }
   })
@@ -217,28 +209,27 @@ async function pickAdapter(
  * A typed path stays available throughout, since a listing can be refused or
  * truncated and the operator may know a path the routes will accept anyway.
  */
-async function pickFolder(
-  deps: NewSessionDeps,
-  adapter: AdapterChoice,
-  current: string | undefined,
-): Promise<Answer<string>> {
+async function pickFolder(deps: NewSessionDeps, adapter: AdapterChoice, current: string | undefined): Promise<Answer<string>> {
   const host = adapter.host
   // `verified` = this gateway is known to be able to chdir here, as opposed to a
   // path inferred from this window that it may or may not share. It decides the
   // *preset* only; every candidate is offered either way.
   const candidates: { path: string; hint: string; verified: boolean }[] = []
   const add = (path: string, hint: string, verified: boolean) => {
-    if (path && !candidates.some((c) => c.path === path)) candidates.push({ path, hint, verified })
+    if (path && !candidates.some((c) => c.path === path)) {
+      candidates.push({ path, hint, verified })
+    }
   }
 
   // Asked FIRST, because it is the only authoritative answer and everything
   // below wants to know it: where the gateway will let a session live. An absent
   // route (host files not configured) is a 404 — a fine answer, not an error.
   const roots = await hostRoots(deps, host)
-  const underRoot = (path: string) =>
-    roots.some((r) => path === r.path || path.startsWith(r.path.endsWith('/') ? r.path : `${r.path}/`))
+  const underRoot = (path: string) => roots.some((r) => path === r.path || path.startsWith(r.path.endsWith('/') ? r.path : `${r.path}/`))
 
-  if (current) add(current, 'chosen', true)
+  if (current) {
+    add(current, 'chosen', true)
+  }
   // The window's folders LEAD, always. Starting a session from an editor almost
   // always means "here", and that has to hold even when the gateway is reached
   // by a LAN name or a tailnet address rather than loopback — which is the
@@ -263,7 +254,9 @@ async function pickFolder(
   // different machine's directory rather than merely unverified.
   for (const root of workspaceScope()?.roots ?? []) {
     if (root.hostId) {
-      if (root.hostId.toLowerCase() === host.id.toLowerCase()) add(root.path, 'this window', true)
+      if (root.hostId.toLowerCase() === host.id.toLowerCase()) {
+        add(root.path, 'this window', true)
+      }
     } else if (host.local || underRoot(root.path)) {
       add(root.path, 'this window', true)
     } else {
@@ -274,8 +267,12 @@ async function pickFolder(
   // is a path this gateway shares.
   add(host.cwdSuggestion ?? '', 'suggested', true)
   // A session actually ran here, which is the strongest evidence there is.
-  for (const info of deps.state().sessions[host.id] ?? []) add(info.cwd, 'recent session', true)
-  for (const root of roots) add(root.path, 'on the gateway', true)
+  for (const info of deps.state().sessions[host.id] ?? []) {
+    add(info.cwd, 'recent session', true)
+  }
+  for (const root of roots) {
+    add(root.path, 'on the gateway', true)
+  }
 
   type FolderItem = vscode.QuickPickItem & { path?: string; browse?: boolean }
   const items: FolderItem[] = candidates.map((c) => ({
@@ -315,9 +312,7 @@ async function pickFolder(
   const preset = current ?? (candidates.find((c) => c.verified) ?? candidates[0])?.path
   const picked = await showPick(items, {
     title: 'New session: working folder',
-    placeHolder: host.local
-      ? 'Pick a folder, or type an absolute path'
-      : `Pick a folder on ${host.name}, or type an absolute path`,
+    placeHolder: host.local ? 'Pick a folder, or type an absolute path' : `Pick a folder on ${host.name}, or type an absolute path`,
     value: preset,
     activeItem: items.find((i) => i.path === preset),
     step: 2,
@@ -338,13 +333,15 @@ async function pickFolder(
           }
         : undefined,
   })
-  if (picked === CANCEL || picked === BACK) return picked
+  if (picked === CANCEL || picked === BACK) {
+    return picked
+  }
   if (picked.browse) {
-    const chosen = host.local
-      ? await browseLocally(candidates[0]?.path)
-      : await browseGateway(deps, host, roots)
+    const chosen = host.local ? await browseLocally(candidates[0]?.path) : await browseGateway(deps, host, roots)
     // Cancelling the browse returns to this step rather than dropping the flow.
-    if (!chosen) return pickFolder(deps, adapter, current)
+    if (!chosen) {
+      return pickFolder(deps, adapter, current)
+    }
     return chosen
   }
   return picked.path!
@@ -355,7 +352,9 @@ async function pickFolder(
  * failure, and not worth a message). */
 async function hostRoots(deps: NewSessionDeps, host: WireHost): Promise<HostFileRoot[]> {
   const client = await clientFor(deps.store, host)
-  if (!client) return []
+  if (!client) {
+    return []
+  }
   try {
     return (await client.listHostRoots()).roots
   } catch {
@@ -384,13 +383,11 @@ async function browseLocally(start: string | undefined): Promise<string | undefi
  * the parent, and "use this folder", which is what makes any level a valid
  * answer rather than only the leaves.
  */
-async function browseGateway(
-  deps: NewSessionDeps,
-  host: WireHost,
-  roots: readonly HostFileRoot[],
-): Promise<string | undefined> {
+async function browseGateway(deps: NewSessionDeps, host: WireHost, roots: readonly HostFileRoot[]): Promise<string | undefined> {
   const client = await clientFor(deps.store, host)
-  if (!client) return undefined
+  if (!client) {
+    return undefined
+  }
   let dir = roots.length === 1 ? roots[0]!.path : undefined
 
   // No single root to start from: pick one first.
@@ -405,16 +402,17 @@ async function browseGateway(
       })),
       { title: `Browse ${host.name}`, placeHolder: 'Which root?' },
     )
-    if (picked === CANCEL || picked === BACK) return undefined
+    if (picked === CANCEL || picked === BACK) {
+      return undefined
+    }
     dir = picked.path
   }
 
   for (;;) {
     let listing: Awaited<ReturnType<typeof client.listHostDir>>
     try {
-      listing = await vscode.window.withProgress(
-        { location: { viewId: 'workerdeck.sessions' }, title: 'Listing…' },
-        () => client.listHostDir(dir!),
+      listing = await vscode.window.withProgress({ location: { viewId: 'workerdeck.sessions' }, title: 'Listing…' }, () =>
+        client.listHostDir(dir!),
       )
     } catch (err) {
       void vscode.window.showErrorMessage(`WorkerDeck: cannot list ${dir} — ${message(err)}`)
@@ -431,9 +429,7 @@ async function browseGateway(
     type Entry = vscode.QuickPickItem & { path?: string; use?: boolean }
     const items: Entry[] = [
       { label: 'Use this folder', description: listing.path, use: true, alwaysShow: true },
-      ...(atRoot || parent === listing.path
-        ? []
-        : [{ label: '..', description: parent, path: parent, alwaysShow: true }]),
+      ...(atRoot || parent === listing.path ? [] : [{ label: '..', description: parent, path: parent, alwaysShow: true }]),
       ...dirs.map((e) => ({
         label: e.name,
         iconPath: new vscode.ThemeIcon('folder'),
@@ -444,8 +440,12 @@ async function browseGateway(
       title: `Browse ${host.name}`,
       placeHolder: listing.truncated ? `${listing.path} (truncated)` : listing.path,
     })
-    if (picked === CANCEL || picked === BACK) return undefined
-    if (picked.use) return listing.path
+    if (picked === CANCEL || picked === BACK) {
+      return undefined
+    }
+    if (picked.use) {
+      return listing.path
+    }
     dir = picked.path!
   }
 }
@@ -497,11 +497,7 @@ function lastSessionOf(deps: NewSessionDeps, adapter: AdapterChoice): SessionInf
  * interaction unless you want something else. The permission *mode* deliberately
  * stays out of the flow — see `resolveMode`.
  */
-async function pickModelAndCreate(
-  deps: NewSessionDeps,
-  adapter: AdapterChoice,
-  cwd: string,
-): Promise<Answer<void>> {
+async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, cwd: string): Promise<Answer<void>> {
   const previous = lastSessionOf(deps, adapter)
   const mode = resolveMode(adapter, previous)
   const models = adapter.profile.models ?? []
@@ -518,8 +514,7 @@ async function pickModelAndCreate(
   // "this id" — the gateway fills an unset model from the profile, and for
   // claude that is the operator's CLI config, which no catalog row can name.
   const preferred = previous?.model
-  const isPreferred = (m: ModelOption) =>
-    preferred !== undefined && (m.value === preferred || m.resolvedModel === preferred)
+  const isPreferred = (m: ModelOption) => preferred !== undefined && (m.value === preferred || m.resolvedModel === preferred)
   // `value: undefined` is the sentinel row protocol assigns to clients —
   // catalogs never carry one (see ModelOption's docs), and every other client
   // adds it. Without it this flow could not create a session on the profile's
@@ -553,8 +548,12 @@ async function pickModelAndCreate(
     step: 3,
     totalSteps: 3,
   })
-  if (picked === CANCEL) return CANCEL
-  if (picked === BACK) return BACK
+  if (picked === CANCEL) {
+    return CANCEL
+  }
+  if (picked === BACK) {
+    return BACK
+  }
   await create(deps, adapter, { cwd, model: picked.value, permissionMode: mode })
   return undefined
 }
@@ -573,18 +572,13 @@ async function pickModelAndCreate(
  * not have is dropped rather than sent: the gateway would refuse the create,
  * and the profile's own default is a better answer than an error.
  */
-function resolveMode(
-  adapter: AdapterChoice,
-  previous: SessionInfo | undefined,
-): PermissionMode | undefined {
-  const pinned = vscode.workspace
-    .getConfiguration('workerdeck')
-    .get<string>('newSession.permissionMode', 'remember')
+function resolveMode(adapter: AdapterChoice, previous: SessionInfo | undefined): PermissionMode | undefined {
+  const pinned = vscode.workspace.getConfiguration('workerdeck').get<string>('newSession.permissionMode', 'remember')
   const wanted =
-    pinned && pinned !== 'remember'
-      ? (pinned as PermissionMode)
-      : (previous?.permissionMode ?? adapter.profile.defaults?.permissionMode)
-  if (!wanted) return undefined
+    pinned && pinned !== 'remember' ? (pinned as PermissionMode) : (previous?.permissionMode ?? adapter.profile.defaults?.permissionMode)
+  if (!wanted) {
+    return undefined
+  }
   // The profile's OWN record, not the static table keyed by engine: the gateway
   // serves it from the first request and it is what the create call is actually
   // checked against.
@@ -596,29 +590,32 @@ function modeLabel(mode: PermissionMode | undefined): string {
   // 'default' is spelled "Manual" everywhere a person reads it (see
   // PERMISSION_MODES in ui) — the wire name would read as "the default", which
   // is the opposite of what it means.
-  if (mode === undefined || mode === 'default') return 'Manual'
-  if (mode === 'acceptEdits') return 'Accept edits'
-  if (mode === 'bypassPermissions') return 'Bypass'
-  if (mode === 'dontAsk') return "Don't ask"
+  if (mode === undefined || mode === 'default') {
+    return 'Manual'
+  }
+  if (mode === 'acceptEdits') {
+    return 'Accept edits'
+  }
+  if (mode === 'bypassPermissions') {
+    return 'Bypass'
+  }
+  if (mode === 'dontAsk') {
+    return "Don't ask"
+  }
   return mode.charAt(0).toUpperCase() + mode.slice(1)
 }
 
 /** Step 3 of a resume: which stored session to continue. */
-async function pickAndResume(
-  deps: NewSessionDeps,
-  adapter: AdapterChoice,
-  cwd: string,
-): Promise<Answer<void>> {
-  const caps =
-    adapter.profile.capabilities ?? ENGINE_CAPABILITIES[adapter.profile.engine ?? 'claude']
+async function pickAndResume(deps: NewSessionDeps, adapter: AdapterChoice, cwd: string): Promise<Answer<void>> {
+  const caps = adapter.profile.capabilities ?? ENGINE_CAPABILITIES[adapter.profile.engine ?? 'claude']
   if (!caps.listSessions) {
-    void vscode.window.showInformationMessage(
-      `WorkerDeck: ${adapter.profile.engine ?? 'claude'} cannot list stored sessions.`,
-    )
+    void vscode.window.showInformationMessage(`WorkerDeck: ${adapter.profile.engine ?? 'claude'} cannot list stored sessions.`)
     return undefined
   }
   const client = await clientFor(deps.store, adapter.host)
-  if (!client) return undefined
+  if (!client) {
+    return undefined
+  }
 
   let stored: SdkSessionSummary[]
   try {
@@ -655,8 +652,12 @@ async function pickAndResume(
     step: 3,
     totalSteps: 3,
   })
-  if (picked === CANCEL) return CANCEL
-  if (picked === BACK) return BACK
+  if (picked === CANCEL) {
+    return CANCEL
+  }
+  if (picked === BACK) {
+    return BACK
+  }
   await create(deps, adapter, {
     // A stored session knows its own directory; trust it over the pick.
     cwd: picked.stored.cwd ?? cwd,
@@ -688,16 +689,15 @@ async function create(
   },
 ): Promise<void> {
   const client = await clientFor(deps.store, adapter.host)
-  if (!client) return
+  if (!client) {
+    return
+  }
   // Say the mode out loud whenever it is not the asking one. The model step's
   // placeholder already does, but a profile with no catalog skips that step
   // entirely and creates straight off the folder — so a `bypassPermissions`
   // inherited from the last session would otherwise reach a running session
   // without ever having been shown.
-  const modeNote =
-    body.permissionMode && body.permissionMode !== 'default'
-      ? ` · ${modeLabel(body.permissionMode)}`
-      : ''
+  const modeNote = body.permissionMode && body.permissionMode !== 'default' ? ` · ${modeLabel(body.permissionMode)}` : ''
   try {
     const info = await vscode.window.withProgress(
       {
@@ -714,8 +714,7 @@ async function create(
           // The CLI only allows bypass when the process was spawned for it, so
           // it is decided here or never — asking for the mode without this flag
           // is asking for a switch the engine will refuse.
-          allowDangerouslySkipPermissions:
-            body.permissionMode === 'bypassPermissions' ? true : undefined,
+          allowDangerouslySkipPermissions: body.permissionMode === 'bypassPermissions' ? true : undefined,
           // `meta.title` is what SessionInfo.title prefers; a rename later
           // overwrites it through the same field.
           meta: body.title ? { title: body.title } : undefined,
@@ -762,7 +761,9 @@ function showPick<T extends vscode.QuickPickItem>(
     pick.ignoreFocusOut = true
     pick.items = [...items]
     // Shown only where there is something to go back to.
-    if ((options.step ?? 1) > 1) pick.buttons = [vscode.QuickInputButtons.Back]
+    if ((options.step ?? 1) > 1) {
+      pick.buttons = [vscode.QuickInputButtons.Back]
+    }
 
     let answered = false
     const finish = (answer: Answer<T>) => {
@@ -779,26 +780,35 @@ function showPick<T extends vscode.QuickPickItem>(
       })
     }
     pick.onDidTriggerButton((button) => {
-      if (button === vscode.QuickInputButtons.Back) finish(BACK)
+      if (button === vscode.QuickInputButtons.Back) {
+        finish(BACK)
+      }
     })
     pick.onDidAccept(() => {
       const [selected] = pick.selectedItems
-      if (selected) finish(selected)
+      if (selected) {
+        finish(selected)
+      }
     })
     // Fires for `esc` and for a real hide alike, so it must not clobber an
     // answer the accept/button handlers have already resolved.
     pick.onDidHide(() => {
-      if (!answered) resolve(CANCEL)
+      if (!answered) {
+        resolve(CANCEL)
+      }
       pick.dispose()
     })
     // Deliberately after the change handler is registered: assigning `value`
     // fires it, and the free-text row has to be computed against the prefill
     // rather than against an empty box.
-    if (options.value) pick.value = options.value
+    if (options.value) {
+      pick.value = options.value
+    }
     // …and the active row after *that*, because reassigning `items` (which the
     // change handler just did) resets the cursor to the first one.
-    if (options.activeItem) pick.activeItems = [options.activeItem]
+    if (options.activeItem) {
+      pick.activeItems = [options.activeItem]
+    }
     pick.show()
   })
 }
-

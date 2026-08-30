@@ -5,12 +5,7 @@ import { z } from 'zod'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
 import { createVfs, loadEngine, type SandboxEngine } from '@workerdeck/sandbox'
 import type { SessionEvent } from '@workerdeck/protocol'
-import {
-  QuickJsExecutor,
-  connectMcpTools,
-  createEngineSession,
-  type McpConnection,
-} from '../src/index.ts'
+import { QuickJsExecutor, connectMcpTools, createEngineSession, type McpConnection } from '../src/index.ts'
 
 let engine: SandboxEngine
 beforeAll(async () => {
@@ -133,10 +128,7 @@ describe('createEngineSession', () => {
   it('runs the web_fetch digest on the session model and bills it into the turn', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [
-        callTool('c1', 'web_fetch', { url: 'http://203.0.113.5/pricing', prompt: 'how much?' }),
-        say('The page says $10/mo.'),
-      ],
+      doStream: [callTool('c1', 'web_fetch', { url: 'http://203.0.113.5/pricing', prompt: 'how much?' }), say('The page says $10/mo.')],
       // The digest pass is a plain generateText on the same model.
       doGenerate: [generateSay('It costs $10/mo.')],
     })
@@ -205,7 +197,11 @@ describe('createEngineSession', () => {
  * that is "withheld" but still in the tool set is not withheld at all.
  */
 describe('createEngineSession grants', () => {
-  const assemble = async (options: Omit<Parameters<typeof createEngineSession>[0], 'resolveModel' | 'selectExecutor' | 'config'> & { config?: Partial<Parameters<typeof createEngineSession>[0]['config']> }) => {
+  const assemble = async (
+    options: Omit<Parameters<typeof createEngineSession>[0], 'resolveModel' | 'selectExecutor' | 'config'> & {
+      config?: Partial<Parameters<typeof createEngineSession>[0]['config']>
+    },
+  ) => {
     let toolNames: string[] = []
     let instructions: string | undefined
     const model = new MockLanguageModelV3({
@@ -269,8 +265,7 @@ describe('createEngineSession grants', () => {
   }, 30_000)
 
   it('restricts MCP tools to the servers the profile names', async () => {
-    const mcpTool = () =>
-      tool({ inputSchema: z.object({}), execute: async () => ({ ok: true }) })
+    const mcpTool = () => tool({ inputSchema: z.object({}), execute: async () => ({ ok: true }) })
     const { toolNames } = await assemble({
       profile: { name: 'p', engine: 'provider', session: { mcpServers: ['wiki'] } },
       mcpTools: { wiki__ask: mcpTool(), crm__push: mcpTool() },
@@ -318,9 +313,9 @@ describe('createEngineSession host tools and MCP declarations', () => {
       servers: [{ name: 'wiki', status: 'failed', error: 'ECONNREFUSED' }],
       close: async () => {},
     }
-    expect(() =>
-      build({ profile: { name: 'p', engine: 'provider', session: { mcpServers: ['wiki'] } }, mcp }),
-    ).toThrow(/wiki \(ECONNREFUSED\)/)
+    expect(() => build({ profile: { name: 'p', engine: 'provider', session: { mcpServers: ['wiki'] } }, mcp })).toThrow(
+      /wiki \(ECONNREFUSED\)/,
+    )
   })
 
   it('accepts a connected server that happens to expose no tools', () => {
@@ -407,9 +402,7 @@ describe('createEngineSession host tools and MCP declarations', () => {
   })
 
   it('refuses an authoritative tool nothing would ever answer', () => {
-    expect(() =>
-      build({ tools: { stuck: { trust: 'authoritative', tool: tool({ inputSchema: z.object({}) }) } } }),
-    ).toThrow(/no `execute`/)
+    expect(() => build({ tools: { stuck: { trust: 'authoritative', tool: tool({ inputSchema: z.object({}) }) } } })).toThrow(/no `execute`/)
   })
 
   it('refuses a host tool that would shadow a built-in', () => {
@@ -491,10 +484,7 @@ describe('connectMcpTools', () => {
   }, 20_000)
 
   it('reports every configured server, connected or not', async () => {
-    const connection = await connectMcpTools(
-      { broken: { type: 'http', url: 'http://127.0.0.1:1/mcp' } },
-      { onError: () => {} },
-    )
+    const connection = await connectMcpTools({ broken: { type: 'http', url: 'http://127.0.0.1:1/mcp' } }, { onError: () => {} })
     // The status list is the whole point of the loud path: "it degraded" has to
     // be inspectable, not just logged.
     expect(connection.servers).toHaveLength(1)
@@ -508,17 +498,14 @@ describe('connectMcpTools', () => {
   }, 20_000)
 
   it("rejects with `required` — an embedder's own server failing is not a degraded session", async () => {
-    await expect(
-      connectMcpTools({ broken: { type: 'http', url: 'http://127.0.0.1:1/mcp' } }, { required: true }),
-    ).rejects.toThrow(/MCP server 'broken' failed to connect/)
+    await expect(connectMcpTools({ broken: { type: 'http', url: 'http://127.0.0.1:1/mcp' } }, { required: true })).rejects.toThrow(
+      /MCP server 'broken' failed to connect/,
+    )
   }, 20_000)
 
   it('rejects stdio servers explicitly rather than dropping them silently', async () => {
     const errors: unknown[] = []
-    await connectMcpTools(
-      { local: { command: 'some-server' } },
-      { onError: (_name, error) => errors.push(error) },
-    )
+    await connectMcpTools({ local: { command: 'some-server' } }, { onError: (_name, error) => errors.push(error) })
     expect(String(errors[0])).toMatch(/stdio MCP servers are not supported/)
   })
 })

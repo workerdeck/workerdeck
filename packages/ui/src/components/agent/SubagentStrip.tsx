@@ -75,34 +75,26 @@ export function SubagentStrip({
    * confidently wrong about an agent we cannot see.
    */
   const status = !task ? undefined : failed ? 'failed' : busy ? `${pulse} working…` : 'done'
-  const detail = [tools > 0 ? `${tools} tool${tools === 1 ? '' : 's'}` : undefined, elapsed]
-    .filter(Boolean)
-    .join(' · ')
+  const detail = [tools > 0 ? `${tools} tool${tools === 1 ? '' : 's'}` : undefined, elapsed].filter(Boolean).join(' · ')
 
   if (terminal) {
     return (
-      <TerminalSurface fontSize={fontSize} lineHeight={lineHeight} className='shrink-0'>
+      <TerminalSurface fontSize={fontSize} lineHeight={lineHeight} className="shrink-0">
         {/* A row on the grid, not a chrome bar: the takeover is a mode of the
             transcript, and a toolbar in some other metric above it would read as
             a different application's. The whole line is the target — there is
             exactly one thing to do here. */}
-        <button
-          type='button'
-          onClick={onBack}
-          aria-label='Back to the session'
-          className='block w-full cursor-pointer text-left'>
+        <button type="button" onClick={onBack} aria-label="Back to the session" className="block w-full cursor-pointer text-left">
           {/* The arrow is in the gutter unconditionally. It used to give way to
               the pulse while the agent worked, which put the way *out* of the
               frame on a timer — the one control here should not come and go.
               The beat moved into the status instead. `indent` because this is a
               frame around the rows rather than one of them, and a marker flush
               against the panel edge reads as a clipped row. */}
-          <Row glyph='←' glyphTone='dim' indent={1} tone={failed ? 'red' : 'green'}>
+          <Row glyph="←" glyphTone="dim" indent={1} tone={failed ? 'red' : 'green'}>
             {name}
-            {status ? (
-              <Ink tone={failed ? 'red' : busy ? 'mark' : 'dim'}> · {status}</Ink>
-            ) : null}
-            {detail ? <Ink tone='faint'> · {detail}</Ink> : null}
+            {status ? <Ink tone={failed ? 'red' : busy ? 'mark' : 'dim'}> · {status}</Ink> : null}
+            {detail ? <Ink tone="faint"> · {detail}</Ink> : null}
           </Row>
         </button>
       </TerminalSurface>
@@ -110,25 +102,16 @@ export function SubagentStrip({
   }
 
   return (
-    <div className='flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5'>
-      <Button variant='ghost' size='sm' onClick={onBack} className='h-6 gap-1 px-1.5'>
-        <ArrowLeft className='size-3.5' />
+    <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5">
+      <Button variant="ghost" size="sm" onClick={onBack} className="h-6 gap-1 px-1.5">
+        <ArrowLeft className="size-3.5" />
         Back
       </Button>
-      <span
-        className={cn('min-w-0 flex-1 truncate text-body-sm', failed ? 'text-danger' : 'text-fg-2')}>
-        {name}
-      </span>
+      <span className={cn('min-w-0 flex-1 truncate text-body-sm', failed ? 'text-danger' : 'text-fg-2')}>{name}</span>
       {status ? (
-        <span
-          className={cn(
-            'shrink-0 text-label',
-            failed ? 'text-danger' : busy ? 'text-accent' : 'text-fg-3',
-          )}>
-          {status}
-        </span>
+        <span className={cn('shrink-0 text-label', failed ? 'text-danger' : busy ? 'text-accent' : 'text-fg-3')}>{status}</span>
       ) : null}
-      {detail ? <span className='shrink-0 text-label text-fg-4'>{detail}</span> : null}
+      {detail ? <span className="shrink-0 text-label text-fg-4">{detail}</span> : null}
     </div>
   )
 }

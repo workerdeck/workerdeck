@@ -10,11 +10,7 @@ import { subagentItems } from '../src/components/terminal/blocks.ts'
  */
 
 let seq = 0
-const tool = (
-  name: string,
-  parentToolUseId: string | null = null,
-  id = `t${++seq}`,
-): TranscriptItem => ({
+const tool = (name: string, parentToolUseId: string | null = null, id = `t${++seq}`): TranscriptItem => ({
   kind: 'tool_call',
   id,
   name,
@@ -47,18 +43,12 @@ const task = (id: string, input: unknown = {}): TranscriptItem => ({
 })
 
 const shape = (blocks: ReturnType<typeof terminalBlocks>) =>
-  blocks.map((b) =>
-    'run' in b ? `run(${b.run.length})` : 'task' in b ? `task(${b.childIndices.length})` : b.item.kind,
-  )
+  blocks.map((b) => ('run' in b ? `run(${b.run.length})` : 'task' in b ? `task(${b.childIndices.length})` : b.item.kind))
 
 describe('terminalBlocks', () => {
   it('folds a run of consecutive tool calls into one block', () => {
     const items = [text('working'), tool('Bash'), tool('Read'), tool('Bash'), text('done')]
-    expect(shape(terminalBlocks(items))).toEqual([
-      'assistant_text',
-      'run(3)',
-      'assistant_text',
-    ])
+    expect(shape(terminalBlocks(items))).toEqual(['assistant_text', 'run(3)', 'assistant_text'])
   })
 
   it('breaks a run on anything the model said between two calls', () => {
@@ -69,11 +59,7 @@ describe('terminalBlocks', () => {
   })
 
   it('breaks a run on a prompt', () => {
-    expect(shape(terminalBlocks([tool('Bash'), user('stop'), tool('Bash')]))).toEqual([
-      'run(1)',
-      'user',
-      'run(1)',
-    ])
+    expect(shape(terminalBlocks([tool('Bash'), user('stop'), tool('Bash')]))).toEqual(['run(1)', 'user', 'run(1)'])
   })
 
   it('does not fold a subagent’s calls together with top-level ones', () => {
@@ -91,11 +77,7 @@ describe('terminalBlocks', () => {
 
   it('gives one block per item with fold off — the cards variant’s row list', () => {
     const items = [tool('Bash'), tool('Read'), tool('Bash')]
-    expect(shape(terminalBlocks(items, 0, false))).toEqual([
-      'tool_call',
-      'tool_call',
-      'tool_call',
-    ])
+    expect(shape(terminalBlocks(items, 0, false))).toEqual(['tool_call', 'tool_call', 'tool_call'])
   })
 
   it('reports each block’s index in the whole transcript, not the slice', () => {
@@ -123,12 +105,16 @@ describe('terminalBlocks · run indices', () => {
   it('records every member’s global index, respecting the slice offset', () => {
     const items = [text('go'), tool('Bash'), tool('Read'), text('done')]
     const run = terminalBlocks(items)[1]!
-    if (!('run' in run)) throw new Error('expected a run block')
+    if (!('run' in run)) {
+      throw new Error('expected a run block')
+    }
     expect(run.indices).toEqual([1, 2])
     // The virtualized shell folds each side of the recap boundary separately,
     // so a slice's blocks must still say where they sit in the whole.
     const offset = terminalBlocks(items.slice(1), 1)[0]!
-    if (!('run' in offset)) throw new Error('expected a run block')
+    if (!('run' in offset)) {
+      throw new Error('expected a run block')
+    }
     expect(offset.indices).toEqual([1, 2])
   })
 
@@ -137,7 +123,9 @@ describe('terminalBlocks · run indices', () => {
     // are adjacent on screen, so `[index, index + len)` cannot describe them.
     const items = [task('A'), tool('Bash'), tool('Read', 'A'), tool('Bash'), text('done')]
     const run = terminalBlocks(items)[1]!
-    if (!('run' in run)) throw new Error('expected a run block')
+    if (!('run' in run)) {
+      throw new Error('expected a run block')
+    }
     expect(run.indices).toEqual([1, 3])
     expect(run.index).toBe(1)
   })
@@ -145,28 +133,14 @@ describe('terminalBlocks · run indices', () => {
 
 describe('terminalBlocks · task absorption', () => {
   it('absorbs a Task call and everything its subagent produced into one row', () => {
-    const items = [
-      task('A'),
-      user('brief', 'A'),
-      text('thinking it over', 'A'),
-      tool('Read', 'A'),
-      tool('Grep', 'A'),
-      text('done'),
-    ]
+    const items = [task('A'), user('brief', 'A'), text('thinking it over', 'A'), tool('Read', 'A'), tool('Grep', 'A'), text('done')]
     expect(shape(terminalBlocks(items))).toEqual(['task(4)', 'assistant_text'])
   })
 
   it('absorbs interleaved children of parallel tasks, wherever they fall', () => {
     // The crux: subagents run in parallel, so their items are NOT contiguous.
     // A consecutive-run rule would leave B's call standing between A's rows.
-    const items = [
-      task('A'),
-      task('B'),
-      tool('Read', 'A'),
-      tool('Grep', 'B'),
-      text('top-level aside'),
-      tool('Bash', 'A'),
-    ]
+    const items = [task('A'), task('B'), tool('Read', 'A'), tool('Grep', 'B'), text('top-level aside'), tool('Bash', 'A')]
     const blocks = terminalBlocks(items)
     expect(shape(blocks)).toEqual(['task(2)', 'task(1)', 'assistant_text'])
     expect(blocks[0]).toMatchObject({ key: 'task:A', index: 0, childIndices: [2, 5] })
@@ -186,10 +160,10 @@ describe('terminalBlocks · task absorption', () => {
       tool('Edit', 'A'),
     ]
     const a = terminalBlocks(items)[0]!
-    if (!('task' in a)) throw new Error('expected a task block')
-    expect(
-      a.children.map((c) => ('run' in c ? `run(${c.run.length})` : c.item.kind)),
-    ).toEqual(['run(2)', 'assistant_text', 'run(1)'])
+    if (!('task' in a)) {
+      throw new Error('expected a task block')
+    }
+    expect(a.children.map((c) => ('run' in c ? `run(${c.run.length})` : c.item.kind))).toEqual(['run(2)', 'assistant_text', 'run(1)'])
     // Each child block's index is its first member's GLOBAL transcript index.
     expect(a.children.map((c) => c.index)).toEqual([2, 5, 6])
   })
@@ -302,15 +276,8 @@ describe('subagentItems', () => {
   })
 
   it('keeps two parallel agents apart', () => {
-    const items = [
-      task('T1'),
-      task('T2'),
-      tool('Grep', 'T1'),
-      tool('Bash', 'T2'),
-      tool('Read', 'T1'),
-    ]
-    const names = (parent: string) =>
-      subagentItems(items, parent).map((i) => (i.kind === 'tool_call' ? i.name : i.kind))
+    const items = [task('T1'), task('T2'), tool('Grep', 'T1'), tool('Bash', 'T2'), tool('Read', 'T1')]
+    const names = (parent: string) => subagentItems(items, parent).map((i) => (i.kind === 'tool_call' ? i.name : i.kind))
     expect(names('T1')).toEqual(['Grep', 'Read'])
     expect(names('T2')).toEqual(['Bash'])
   })
@@ -328,17 +295,7 @@ describe('subagentItems', () => {
    * one the same rows draw when the Task row is expanded inline.
    */
   it('folds runs inside the frame, and absorbs nothing', () => {
-    const items = [
-      task('T1'),
-      user('go', 'T1'),
-      tool('Grep', 'T1'),
-      tool('Read', 'T1'),
-      text('done', 'T1'),
-    ]
-    expect(shape(terminalBlocks(subagentItems(items, 'T1'), 0, true))).toEqual([
-      'user',
-      'run(2)',
-      'assistant_text',
-    ])
+    const items = [task('T1'), user('go', 'T1'), tool('Grep', 'T1'), tool('Read', 'T1'), text('done', 'T1')]
+    expect(shape(terminalBlocks(subagentItems(items, 'T1'), 0, true))).toEqual(['user', 'run(2)', 'assistant_text'])
   })
 })

@@ -29,12 +29,7 @@ import { json } from '../lib/http.ts'
  * already gives it. */
 export type EventLookup = ((seq: number) => SessionEvent | undefined) | undefined
 
-export function handleToolResult(
-  req: IncomingMessage,
-  res: ServerResponse,
-  lookup: EventLookup,
-  seq: number,
-): void {
+export function handleToolResult(req: IncomingMessage, res: ServerResponse, lookup: EventLookup, seq: number): void {
   if (req.method !== 'GET') {
     json(res, 405, { error: 'method not allowed' })
     return
@@ -59,8 +54,7 @@ export function handleToolResult(
   }
   const block = event.message.content.find(
     (candidate): candidate is ToolResultBlock =>
-      candidate.type === 'tool_result' &&
-      (candidate as ToolResultBlock).tool_use_id === toolUseId,
+      candidate.type === 'tool_result' && (candidate as ToolResultBlock).tool_use_id === toolUseId,
   )
   if (!block) {
     json(res, 404, { error: 'no such tool result in that event' })

@@ -4,12 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
 import type { ProfileInfo, SessionInfo } from '@workerdeck/protocol'
-import {
-  createFileProfileStore,
-  createMemoryProfileStore,
-  createWorkerServer,
-  type WorkerServer,
-} from '../src/index.ts'
+import { createFileProfileStore, createMemoryProfileStore, createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
   return {
@@ -42,7 +37,9 @@ let tempDir: string | undefined
 afterEach(async () => {
   await running?.close()
   running = undefined
-  if (tempDir) rmSync(tempDir, { recursive: true, force: true })
+  if (tempDir) {
+    rmSync(tempDir, { recursive: true, force: true })
+  }
   tempDir = undefined
 })
 
@@ -232,9 +229,7 @@ describe('createFileProfileStore', () => {
     expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject([{ name: 'kimi' }])
     running = manageableServer({ profileStore: createFileProfileStore(path) })
     const restarted = await running.listen(0, '127.0.0.1')
-    const listed = (await fetch(`http://127.0.0.1:${restarted.port}/v1/profiles`).then((r) =>
-      r.json(),
-    )) as { profiles: ProfileInfo[] }
+    const listed = (await fetch(`http://127.0.0.1:${restarted.port}/v1/profiles`).then((r) => r.json())) as { profiles: ProfileInfo[] }
     expect(listed.profiles.map((p) => p.name)).toEqual(['kimi'])
   })
 

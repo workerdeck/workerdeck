@@ -53,10 +53,7 @@ export async function handleExecutionResult(
   }
   if (auth.allowedProfiles || auth.scope || ctx.options.authorizeSession) {
     const owner = parking.sessionFor(executionId)
-    const info =
-      owner === undefined
-        ? undefined
-        : (registry.get(owner)?.info() ?? (await parking.get(owner))?.info)
+    const info = owner === undefined ? undefined : (registry.get(owner)?.info() ?? (await parking.get(owner))?.info)
     const profile = info?.profile
     // Indistinguishable from an unknown id on purpose: whether an execution
     // exists elsewhere is not this caller's business. Scope is checked as well
@@ -64,9 +61,7 @@ export async function handleExecutionResult(
     // scope's execution is a way to steer its loop, not merely to read it.
     const refused =
       owner === undefined ||
-      (auth.allowedProfiles !== undefined &&
-        profile !== undefined &&
-        !auth.allowedProfiles.includes(profile)) ||
+      (auth.allowedProfiles !== undefined && profile !== undefined && !auth.allowedProfiles.includes(profile)) ||
       (info !== undefined && !authSvc.canSee(auth, info))
     if (refused) {
       json(res, 404, { error: 'execution not found' })

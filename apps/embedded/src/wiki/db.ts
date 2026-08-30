@@ -40,7 +40,9 @@ const toDoc = (row: Row, withBody: boolean): Doc => ({
 })
 
 export function openWikiDb(file: string): WikiDb {
-  if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true })
+  if (file !== ':memory:') {
+    mkdirSync(dirname(file), { recursive: true })
+  }
   const db = new DatabaseSync(file)
   // WAL so the agent's writes and the SPA's reads do not block each other; both
   // arrive on the same process but not on the same tick.
@@ -56,17 +58,11 @@ export function openWikiDb(file: string): WikiDb {
     CREATE INDEX IF NOT EXISTS docs_user ON docs (user_id, updated_at DESC);
   `)
 
-  const list = db.prepare(
-    'SELECT id, title, body, updated_at FROM docs WHERE user_id = ? ORDER BY updated_at DESC',
-  )
+  const list = db.prepare('SELECT id, title, body, updated_at FROM docs WHERE user_id = ? ORDER BY updated_at DESC')
   const get = db.prepare('SELECT id, title, body, updated_at FROM docs WHERE user_id = ? AND id = ?')
   // Case-insensitive so an agent told "the roadmap doc" finds `Roadmap`.
-  const byTitle = db.prepare(
-    'SELECT id, title, body, updated_at FROM docs WHERE user_id = ? AND lower(title) = lower(?) LIMIT 1',
-  )
-  const insert = db.prepare(
-    'INSERT INTO docs (id, user_id, title, body, updated_at) VALUES (?, ?, ?, ?, ?)',
-  )
+  const byTitle = db.prepare('SELECT id, title, body, updated_at FROM docs WHERE user_id = ? AND lower(title) = lower(?) LIMIT 1')
+  const insert = db.prepare('INSERT INTO docs (id, user_id, title, body, updated_at) VALUES (?, ?, ?, ?, ?)')
   const update = db.prepare('UPDATE docs SET title = ?, body = ?, updated_at = ? WHERE user_id = ? AND id = ?')
   const remove = db.prepare('DELETE FROM docs WHERE user_id = ? AND id = ?')
 
@@ -87,7 +83,9 @@ export function openWikiDb(file: string): WikiDb {
     },
     updateDoc: (userId, id, patch) => {
       const current = get.get(userId, id) as unknown as Row | undefined
-      if (!current) return undefined
+      if (!current) {
+        return undefined
+      }
       const next: Row = {
         ...current,
         title: patch.title ?? current.title,

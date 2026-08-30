@@ -45,13 +45,14 @@ export class HostStore {
 
   async save(host: GatewayHost, authKey: string | undefined): Promise<void> {
     const stored = this.#state.get<GatewayHost[]>(HOSTS_KEY, [])
-    const next = stored.some((h) => h.id === host.id)
-      ? stored.map((h) => (h.id === host.id ? host : h))
-      : [...stored, host]
+    const next = stored.some((h) => h.id === host.id) ? stored.map((h) => (h.id === host.id ? host : h)) : [...stored, host]
     await this.#state.update(HOSTS_KEY, next)
     // Empty string means "unauthenticated gateway" and clears any stored key.
-    if (authKey) await this.#secrets.store(secretKey(host.id), authKey)
-    else await this.#secrets.delete(secretKey(host.id))
+    if (authKey) {
+      await this.#secrets.store(secretKey(host.id), authKey)
+    } else {
+      await this.#secrets.delete(secretKey(host.id))
+    }
     this.#onDidChange.fire()
   }
 

@@ -12,14 +12,7 @@ import {
   projectsOf,
   subsetSummary,
 } from '@workerdeck/protocol'
-import type {
-  GroupBy,
-  SessionRow,
-  SessionState,
-  SortBy,
-  ViewConfig,
-  WorkspaceScope,
-} from '@workerdeck/protocol'
+import type { GroupBy, SessionRow, SessionState, SortBy, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
 import { Button } from '../ui/Button.tsx'
 import { Empty } from '../ui/Empty.tsx'
 import { Input } from '../ui/Input.tsx'
@@ -139,10 +132,7 @@ export interface SessionBrowserProps {
  *   sit flush against the sidebar edge.
  */
 export function rowShapeClass(active: boolean): string {
-  return cn(
-    'px-2 py-1.5 hover:bg-row-hover',
-    active ? 'mr-1 ml-0 rounded-r-md border-l-4 border-l-accent' : 'mx-1 rounded-md',
-  )
+  return cn('px-2 py-1.5 hover:bg-row-hover', active ? 'mr-1 ml-0 rounded-r-md border-l-4 border-l-accent' : 'mx-1 rounded-md')
 }
 
 export function SessionBrowser({
@@ -172,42 +162,44 @@ export function SessionBrowser({
   const projects = useMemo(() => projectsOf(rows), [rows])
   const gateways = useMemo(() => {
     const seen = new Map<string, string>()
-    for (const row of rows) seen.set(row.hostId, row.hostName)
+    for (const row of rows) {
+      seen.set(row.hostId, row.hostName)
+    }
     return [...seen].map(([id, name]) => ({ id, name }))
   }, [rows])
 
   const set = (patch: Partial<ViewConfig>) => onConfigChange({ ...config, ...patch })
 
   return (
-    <div data-slot='session-browser' className={cn('flex flex-col gap-3', className)}>
+    <div data-slot="session-browser" className={cn('flex flex-col gap-3', className)}>
       {/* One control per row, label left, input right — the shape VS Code uses
           for its own filter surfaces. A wrapping row of pill-shaped selects
           reflows into an unpredictable number of lines as facets appear and
           disappear; a column of labelled rows is the same height every time and
           reads at sidebar width, which is the only width this has. */}
       <div className={cn('flex flex-col gap-1.5 px-2', !showControls && 'hidden')}>
-        <div className='relative'>
-          <Search className='pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-fg-4' />
+        <div className="relative">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-fg-4" />
           <Input
             value={config.search}
             onChange={(e) => set({ search: e.target.value })}
-            placeholder='Search sessions'
-            aria-label='Search sessions'
-            className='pl-8'
+            placeholder="Search sessions"
+            aria-label="Search sessions"
+            className="pl-8"
           />
         </div>
-        <FilterRow label='State'>
+        <FilterRow label="State">
           <FacetSelect
-            label='State'
+            label="State"
             value={config.states}
             options={STATE_ORDER.map((s) => ({ value: s, label: STATE_LABELS[s] }))}
             onChange={(states) => set({ states: states as SessionState[] })}
           />
         </FilterRow>
         {adapters.length > 1 ? (
-          <FilterRow label='Engine'>
+          <FilterRow label="Engine">
             <FacetSelect
-              label='Engine'
+              label="Engine"
               value={config.adapters}
               options={adapters.map((a) => ({ value: a, label: a }))}
               onChange={(adapters) => set({ adapters })}
@@ -215,9 +207,9 @@ export function SessionBrowser({
           </FilterRow>
         ) : null}
         {gateways.length > 1 ? (
-          <FilterRow label='Gateway'>
+          <FilterRow label="Gateway">
             <FacetSelect
-              label='Gateway'
+              label="Gateway"
               value={config.gateways}
               options={gateways.map((g) => ({ value: g.id, label: g.name }))}
               onChange={(gateways) => set({ gateways })}
@@ -225,18 +217,18 @@ export function SessionBrowser({
           </FilterRow>
         ) : null}
         {projects.length > 1 ? (
-          <FilterRow label='Project'>
+          <FilterRow label="Project">
             <FacetSelect
-              label='Project'
+              label="Project"
               value={config.projects ?? []}
               options={projects.map((p) => ({ value: p.key, label: p.label }))}
               onChange={(next) => set({ projects: next })}
             />
           </FilterRow>
         ) : null}
-        <FilterRow label='Group'>
+        <FilterRow label="Group">
           <OneOfSelect
-            label='Group'
+            label="Group"
             value={config.groupBy}
             options={[
               { value: 'none', label: 'No grouping' },
@@ -248,9 +240,9 @@ export function SessionBrowser({
             onChange={(groupBy) => set({ groupBy: groupBy as GroupBy })}
           />
         </FilterRow>
-        <FilterRow label='Sort'>
+        <FilterRow label="Sort">
           <OneOfSelect
-            label='Sort'
+            label="Sort"
             value={config.sortBy}
             options={[
               { value: 'recent', label: 'Recent' },
@@ -265,22 +257,23 @@ export function SessionBrowser({
       </div>
 
       {subset ? (
-        <div className='flex items-center gap-2 px-3 text-label text-fg-4'>
+        <div className="flex items-center gap-2 px-3 text-label text-fg-4">
           <span>
             {subset.shown} of {subset.total}
             {subset.causes.length ? ` · ${subset.causes.join(' · ')}` : null}
           </span>
           <button
-            type='button'
-            className='text-fg-3 underline underline-offset-2 hover:text-fg-1'
-            onClick={() => onConfigChange(clearFilters(config))}>
+            type="button"
+            className="text-fg-3 underline underline-offset-2 hover:text-fg-1"
+            onClick={() => onConfigChange(clearFilters(config))}
+          >
             Show all
           </button>
         </div>
       ) : null}
 
       {rows.length === 0 ? (
-        (emptyState ?? <Empty icon={<Layers />} title='No sessions yet' />)
+        (emptyState ?? <Empty icon={<Layers />} title="No sessions yet" />)
       ) : visible.length === 0 ? (
         // Two different dead ends, two different ways out. "Nothing matches" is
         // a filter someone set; anything else is the state of the world — and
@@ -289,13 +282,13 @@ export function SessionBrowser({
         hasFacetFilter(config) ? (
           <Empty
             icon={<SearchX />}
-            title='No matches'
-            description='No session matches the current search and filters.'
-            action='Clear filters'
+            title="No matches"
+            description="No session matches the current search and filters."
+            action="Clear filters"
             onAction={() => onConfigChange(clearFilters(config))}
           />
         ) : (
-          <Empty icon={<Layers />} title='Nothing here' description='No session to show.' />
+          <Empty icon={<Layers />} title="Nothing here" description="No session to show." />
         )
       ) : (
         /* The list's own 4px inset, as **padding on the list** rather than
@@ -305,22 +298,18 @@ export function SessionBrowser({
            what it did. The cards ran past the sidebar's right edge and the
            column grew a horizontal scrollbar. Padding here cannot do that,
            whatever the card's own width rule turns out to be. */
-        <div className='flex flex-col gap-4 px-1'>
+        <div className="flex flex-col gap-4 px-1">
           {groups.map((group) => (
-            <div key={group.key} className='flex flex-col gap-1'>
+            <div key={group.key} className="flex flex-col gap-1">
               {config.groupBy !== 'none' && group.label ? (
-                <div className='flex items-center gap-2 px-2 text-label font-medium text-fg-4'>
+                <div className="flex items-center gap-2 px-2 text-label font-medium text-fg-4">
                   {/* Only the project facet has a mark of its own, and a group
                       IS one project root, so the first row is a fair source. */}
                   {config.groupBy === 'project' ? (
-                    <ProjectIcon
-                      icon={group.rows[0]?.info.project?.icon}
-                      src={iconSrcOf(group.rows[0], projectIcons)}
-                      name={group.label}
-                    />
+                    <ProjectIcon icon={group.rows[0]?.info.project?.icon} src={iconSrcOf(group.rows[0], projectIcons)} name={group.label} />
                   ) : null}
-                  <span className='uppercase tracking-wide'>{group.label}</span>
-                  <span className='text-fg-4/70'>{group.rows.length}</span>
+                  <span className="uppercase tracking-wide">{group.label}</span>
+                  <span className="text-fg-4/70">{group.rows.length}</span>
                 </div>
               ) : null}
               {group.rows.map((row) => (
@@ -351,10 +340,7 @@ export function SessionBrowser({
 /** The bytes for a row's project icon, if it has an image one and the caller has
  * fetched it yet. Shared by the row and its group header so the two cannot draw
  * different pictures for one project. */
-function iconSrcOf(
-  row: SessionRow | undefined,
-  icons: Record<string, string> | undefined,
-): string | undefined {
+function iconSrcOf(row: SessionRow | undefined, icons: Record<string, string> | undefined): string | undefined {
   const icon = row?.info.project?.icon
   return icon?.type === 'image' ? icons?.[icon.hash] : undefined
 }
@@ -424,16 +410,14 @@ function SessionRowItem({
       onSelectSubagent={onSelectSubagent ? (id) => onSelectSubagent(row, id) : undefined}
       onRevealStep={onRevealStep ? (id) => onRevealStep(row, id) : undefined}
       onRename={onRename ? (title) => onRename(row, title) : undefined}
-      renameOn='external'
+      renameOn="external"
       editing={editing}
       onEditingChange={setEditing}
       actions={
         <>
           {onRename && !editing ? (
-            <RowAction
-              label='Rename session'
-              onClick={() => setEditing(true)}>
-              <Pencil className='size-3 text-fg-3' />
+            <RowAction label="Rename session" onClick={() => setEditing(true)}>
+              <Pencil className="size-3 text-fg-3" />
             </RowAction>
           ) : null}
           {/* Gated on the row's own capability record, not on the engine name —
@@ -441,15 +425,16 @@ function SessionRowItem({
               here, and one that loses it stops offering a control that fails. */}
           {onClearContext && info.capabilities?.clearContext ? (
             <RowAction
-              label='Clear context'
-              title='Clear the conversation — the session keeps running and the old conversation stays resumable'
-              onClick={() => onClearContext(row)}>
-              <Eraser className='size-3 text-fg-3' />
+              label="Clear context"
+              title="Clear the conversation — the session keeps running and the old conversation stays resumable"
+              onClick={() => onClearContext(row)}
+            >
+              <Eraser className="size-3 text-fg-3" />
             </RowAction>
           ) : null}
           {onDelete ? (
-            <RowAction label='Close session' onClick={() => onDelete(row)}>
-              <Trash2 className='size-3 text-fg-3' />
+            <RowAction label="Close session" onClick={() => onDelete(row)}>
+              <Trash2 className="size-3 text-fg-3" />
             </RowAction>
           ) : null}
         </>
@@ -468,33 +453,23 @@ function SessionRowItem({
  * themselves. Both stop the click — the whole card is pressable underneath, and
  * an action that also selected the session would do two things per press.
  */
-function RowAction({
-  label,
-  title,
-  onClick,
-  children,
-}: {
-  label: string
-  title?: string
-  onClick: () => void
-  children: ReactNode
-}) {
+function RowAction({ label, title, onClick, children }: { label: string; title?: string; onClick: () => void; children: ReactNode }) {
   return (
     <Button
-      variant='ghost'
-      size='icon-sm'
+      variant="ghost"
+      size="icon-sm"
       aria-label={label}
       title={title ?? label}
-      className='size-5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100'
+      className="size-5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
       onClick={(e) => {
         e.stopPropagation()
         onClick()
-      }}>
+      }}
+    >
       {children}
     </Button>
   )
 }
-
 
 /** A multi-select facet. Empty = no filter, which is why the trigger reads the
  * facet's name rather than "All": nothing is being excluded. */
@@ -505,11 +480,11 @@ function RowAction({
  */
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className='flex items-center gap-2'>
-      <span aria-hidden className='w-14 shrink-0 truncate text-label text-fg-3'>
+    <div className="flex items-center gap-2">
+      <span aria-hidden className="w-14 shrink-0 truncate text-label text-fg-3">
         {label}
       </span>
-      <div className='min-w-0 flex-1'>{children}</div>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   )
 }
@@ -526,9 +501,9 @@ function FacetSelect({
   onChange: (value: string[]) => void
 }) {
   return (
-    <div className='flex items-center gap-1'>
+    <div className="flex items-center gap-1">
       <Select multiple value={value} onValueChange={(v) => onChange(v as string[])}>
-        <SelectTrigger aria-label={label} className='min-w-0 flex-1'>
+        <SelectTrigger aria-label={label} className="min-w-0 flex-1">
           <SelectValue>
             {/* "All" rather than the label, which the row already carries. */}
             {value.length === 0
@@ -547,8 +522,8 @@ function FacetSelect({
         </SelectContent>
       </Select>
       {value.length > 0 ? (
-        <Button variant='ghost' size='icon-sm' aria-label={`Clear ${label}`} onClick={() => onChange([])}>
-          <X className='size-3 text-fg-4' />
+        <Button variant="ghost" size="icon-sm" aria-label={`Clear ${label}`} onClick={() => onChange([])}>
+          <X className="size-3 text-fg-4" />
         </Button>
       ) : null}
     </div>
@@ -568,7 +543,7 @@ function OneOfSelect({
 }) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as string)}>
-      <SelectTrigger aria-label={label} className='w-full min-w-0'>
+      <SelectTrigger aria-label={label} className="w-full min-w-0">
         <SelectValue>{options.find((o) => o.value === value)?.label ?? label}</SelectValue>
       </SelectTrigger>
       <SelectContent>

@@ -15,9 +15,12 @@ export const DialogClose = DialogPrimitive.Close
  * Taller than {@link AlertDialogContent} and scrollable inside, because these
  * carry lists whose length is the engine's business, not the layout's.
  */
-export const DialogContent: FunctionComponent<
-  DialogPrimitive.Popup.Props & { size?: 'sm' | 'md' | 'lg' }
-> = ({ className, children, size = 'md', ...props }) => (
+export const DialogContent: FunctionComponent<DialogPrimitive.Popup.Props & { size?: 'sm' | 'md' | 'lg' }> = ({
+  className,
+  children,
+  size = 'md',
+  ...props
+}) => (
   <DialogPrimitive.Portal>
     <PortalScope>
       <DialogPrimitive.Backdrop
@@ -28,7 +31,7 @@ export const DialogContent: FunctionComponent<
         )}
       />
       <DialogPrimitive.Popup
-        data-slot='dialog-content'
+        data-slot="dialog-content"
         className={cn(
           'fixed top-1/2 left-1/2 z-70 flex max-h-[min(42rem,calc(100dvh-3rem))] -translate-x-1/2 -translate-y-1/2 flex-col',
           size === 'sm' && 'w-[min(24rem,calc(100vw-2rem))]',
@@ -40,7 +43,8 @@ export const DialogContent: FunctionComponent<
           'data-ending-style:scale-95 data-ending-style:opacity-0',
           className,
         )}
-        {...props}>
+        {...props}
+      >
         {children}
       </DialogPrimitive.Popup>
     </PortalScope>
@@ -54,31 +58,27 @@ export const DialogHeader: FunctionComponent<{
   /** Rendered between the title and the close button. */
   actions?: React.ReactNode
 }> = ({ title, description, actions }) => (
-  <div className='flex items-start gap-2 border-b border-border px-4 py-3'>
-    <div className='min-w-0 flex-1'>
-      <DialogPrimitive.Title className='truncate text-body-sm font-semibold text-text'>
-        {title}
-      </DialogPrimitive.Title>
+  <div className="flex items-start gap-2 border-b border-border px-4 py-3">
+    <div className="min-w-0 flex-1">
+      <DialogPrimitive.Title className="truncate text-body-sm font-semibold text-text">{title}</DialogPrimitive.Title>
       {description ? (
-        <DialogPrimitive.Description className='mt-0.5 text-label text-fg-4'>
-          {description}
-        </DialogPrimitive.Description>
+        <DialogPrimitive.Description className="mt-0.5 text-label text-fg-4">{description}</DialogPrimitive.Description>
       ) : null}
     </div>
     {actions}
     <DialogPrimitive.Close
-      aria-label='Close'
-      className='-mr-1 flex size-6 shrink-0 items-center justify-center rounded-md text-fg-3 transition-colors outline-none hover:bg-surface-hover hover:text-fg-1'>
-      <X className='size-3.5' />
+      aria-label="Close"
+      className="-mr-1 flex size-6 shrink-0 items-center justify-center rounded-md text-fg-3 transition-colors outline-none hover:bg-surface-hover hover:text-fg-1"
+    >
+      <X className="size-3.5" />
     </DialogPrimitive.Close>
   </div>
 )
 
 /** The scrolling region under the header. */
-export const DialogBody: FunctionComponent<React.HTMLAttributes<HTMLDivElement>> = ({
-  className,
-  ...props
-}) => <div className={cn('min-h-0 flex-1 overflow-y-auto p-4', className)} {...props} />
+export const DialogBody: FunctionComponent<React.HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
+  <div className={cn('min-h-0 flex-1 overflow-y-auto p-4', className)} {...props} />
+)
 
 /** A label/value row — the shape every one of these panels is mostly made of. */
 export const DialogRow: FunctionComponent<{
@@ -86,10 +86,8 @@ export const DialogRow: FunctionComponent<{
   children: React.ReactNode
   mono?: boolean
 }> = ({ label, children, mono }) => (
-  <div className='flex items-baseline justify-between gap-4 py-1.5'>
-    <span className='shrink-0 text-label text-fg-3'>{label}</span>
-    <span className={cn('min-w-0 truncate text-right text-body-sm text-fg-1', mono && 'font-mono text-label')}>
-      {children}
-    </span>
+  <div className="flex items-baseline justify-between gap-4 py-1.5">
+    <span className="shrink-0 text-label text-fg-3">{label}</span>
+    <span className={cn('min-w-0 truncate text-right text-body-sm text-fg-1', mono && 'font-mono text-label')}>{children}</span>
   </div>
 )

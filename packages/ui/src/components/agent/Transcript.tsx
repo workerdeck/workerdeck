@@ -1,13 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-  type RefObject,
-} from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
@@ -38,30 +29,24 @@ import { useTranscriptJumps } from './use-transcript-jumps.ts'
 import { Row } from '../terminal/row.tsx'
 import { TerminalSurface } from '../terminal/surface.tsx'
 import { BriefRow, TaskRow, TerminalItemView } from '../terminal/TerminalTranscript.tsx'
-import {
-  ROW_GAP,
-  TranscriptVariantProvider,
-  type TranscriptDensity,
-  type TranscriptVariant,
-} from './transcript-variant.tsx'
+import { ROW_GAP, TranscriptVariantProvider, type TranscriptDensity, type TranscriptVariant } from './transcript-variant.tsx'
 
 function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_result' }> }) {
   return (
-    <div data-slot='turn-result' className='py-1'>
-      <div className='flex items-center gap-2'>
-        <div className='h-px flex-1 bg-border' />
+    <div data-slot="turn-result" className="py-1">
+      <div className="flex items-center gap-2">
+        <div className="h-px flex-1 bg-border" />
         <span className={cn('font-mono text-label', item.isError ? 'text-danger' : 'text-fg-4')}>
-          {item.isError ? item.subtype : 'turn done'} · {formatDuration(item.durationMs)} ·{' '}
-          {formatCost(item.totalCostUsd)}
+          {item.isError ? item.subtype : 'turn done'} · {formatDuration(item.durationMs)} · {formatCost(item.totalCostUsd)}
         </span>
-        <div className='h-px flex-1 bg-border' />
+        <div className="h-px flex-1 bg-border" />
       </div>
       {/* A failed turn's reasons are the whole point of the row — dropping them
           leaves "error_during_execution" and nothing to act on. */}
       {item.errors?.length ? (
-        <ul className='mt-1 flex flex-col gap-0.5 text-center'>
+        <ul className="mt-1 flex flex-col gap-0.5 text-center">
           {item.errors.map((message, index) => (
-            <li key={index} className='text-label break-words text-danger'>
+            <li key={index} className="text-label break-words text-danger">
               {message}
             </li>
           ))}
@@ -74,13 +59,12 @@ function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_r
 function NoticeRow({ item }: { item: Extract<TranscriptItem, { kind: 'notice' }> }) {
   return (
     <div
-      data-slot='notice'
+      data-slot="notice"
       className={cn(
         'rounded-md border px-3 py-2 text-body-sm',
-        item.level === 'error'
-          ? 'border-transparent bg-danger-bg text-danger'
-          : 'border-border bg-surface text-fg-3',
-      )}>
+        item.level === 'error' ? 'border-transparent bg-danger-bg text-danger' : 'border-border bg-surface text-fg-3',
+      )}
+    >
       {item.text}
     </div>
   )
@@ -101,14 +85,14 @@ function TranscriptItemView({
 }) {
   // The terminal theme is a renderer, not a branch: it draws every kind itself,
   // so the switch below is never reached under it.
-  if (terminal) return <TerminalItemView item={item} fileUrl={fileUrl} />
+  if (terminal) {
+    return <TerminalItemView item={item} fileUrl={fileUrl} />
+  }
   switch (item.kind) {
     case 'user':
       return (
-        <Message from='user'>
-          {item.attachments?.length ? (
-            <SentAttachments attachments={item.attachments} attachmentUrl={attachmentUrl} />
-          ) : null}
+        <Message from="user">
+          {item.attachments?.length ? <SentAttachments attachments={item.attachments} attachmentUrl={attachmentUrl} /> : null}
           {/* A photo can be the whole message — an empty bubble under it says nothing. */}
           {item.text ? (
             <MessageContent>
@@ -119,7 +103,7 @@ function TranscriptItemView({
       )
     case 'assistant_text':
       return (
-        <Message from='assistant'>
+        <Message from="assistant">
           <MessageContent>
             <Response streaming={item.streaming}>{item.text}</Response>
           </MessageContent>
@@ -163,8 +147,8 @@ function RecapRow({ line, since, terminal }: { line: string; since?: number; ter
   // calculator loses its last estimated constant.
   if (terminal) {
     return (
-      <div data-slot='recap'>
-        <Row glyph='※' glyphTone='faint' tone='faint'>
+      <div data-slot="recap">
+        <Row glyph="※" glyphTone="faint" tone="faint">
           recap: {text}
         </Row>
       </div>
@@ -172,10 +156,10 @@ function RecapRow({ line, since, terminal }: { line: string; since?: number; ter
   }
 
   return (
-    <div data-slot='recap' className='flex items-center gap-2 py-1'>
-      <div className='h-px flex-1 bg-border' />
-      <span className='font-mono text-label text-fg-3'>※ recap: {text}</span>
-      <div className='h-px flex-1 bg-border' />
+    <div data-slot="recap" className="flex items-center gap-2 py-1">
+      <div className="h-px flex-1 bg-border" />
+      <span className="font-mono text-label text-fg-3">※ recap: {text}</span>
+      <div className="h-px flex-1 bg-border" />
     </div>
   )
 }
@@ -221,11 +205,19 @@ function useRunStart(status: TranscriptState['status']): number | undefined {
 /** Should the "waiting for output" loader show? Only while running with no in-flight
  * streamed content at the tail of the transcript. */
 function showLoader(state: TranscriptState): boolean {
-  if (state.status !== 'running' && state.status !== 'starting') return false
+  if (state.status !== 'running' && state.status !== 'starting') {
+    return false
+  }
   const last = state.items.at(-1)
-  if (!last) return true
-  if (last.kind === 'assistant_text' && last.streaming) return false
-  if (last.kind === 'thinking' && last.id === 'streaming-thinking') return false
+  if (!last) {
+    return true
+  }
+  if (last.kind === 'assistant_text' && last.streaming) {
+    return false
+  }
+  if (last.kind === 'thinking' && last.id === 'streaming-thinking') {
+    return false
+  }
   return last.kind !== 'turn_result' || state.status === 'running'
 }
 
@@ -239,20 +231,13 @@ function SentAttachments({
   attachmentUrl?: (attachmentId: string) => string
 }) {
   return (
-    <div className='mb-1 flex flex-wrap justify-start gap-1.5'>
+    <div className="mb-1 flex flex-wrap justify-start gap-1.5">
       {attachments.map((attachment) => {
         const href = attachmentUrl?.(attachment.id)
         return attachment.mediaType.startsWith('image/') && href ? (
-          <img
-            key={attachment.id}
-            src={href}
-            alt={attachment.name}
-            className='size-20 rounded-md border border-border object-cover'
-          />
+          <img key={attachment.id} src={href} alt={attachment.name} className="size-20 rounded-md border border-border object-cover" />
         ) : (
-          <span
-            key={attachment.id}
-            className='rounded-full border border-border bg-surface px-2.5 py-1 text-body-xs text-fg-3'>
+          <span key={attachment.id} className="rounded-full border border-border bg-surface px-2.5 py-1 text-body-xs text-fg-3">
             {attachment.name}
           </span>
         )
@@ -284,14 +269,11 @@ function TerminalShell({
   affordances?: TerminalAffordances | boolean
   children: ReactNode
 }) {
-  if (!active) return <>{children}</>
+  if (!active) {
+    return <>{children}</>
+  }
   return (
-    <TerminalSurface
-      fontSize={fontSize}
-      lineHeight={lineHeight}
-      affordances={affordances}
-      bleed='1ch'
-      className='term-transcript'>
+    <TerminalSurface fontSize={fontSize} lineHeight={lineHeight} affordances={affordances} bleed="1ch" className="term-transcript">
       {children}
     </TerminalSurface>
   )
@@ -400,13 +382,14 @@ function StickyPromptLane({
   useEffect(() => {
     const headElement = headRef.current
     const sentinel = sentinelRef.current
-    if (!headElement || !sentinel || !scrollRoot) return
+    if (!headElement || !sentinel || !scrollRoot) {
+      return
+    }
     const evaluate = () => {
       // Strictly above the scrollport's top edge — at exact equality the real
       // row's first line is itself flush with the top, and the head must not
       // cover it.
-      const stuck =
-        sentinel.getBoundingClientRect().top < scrollRoot.getBoundingClientRect().top
+      const stuck = sentinel.getBoundingClientRect().top < scrollRoot.getBoundingClientRect().top
       headElement.toggleAttribute('data-stuck', stuck)
     }
     evaluate()
@@ -417,10 +400,7 @@ function StickyPromptLane({
     // The attribute VALUE is the styling seam: terminal.css matches the bare
     // attribute under its `[data-terminal]` scope, theme.css keys the cards
     // bar on `[data-sticky-lane='cards']` — no `:not()` acrobatics either side.
-    <div
-      data-sticky-lane={terminal ? 'terminal' : 'cards'}
-      className='absolute inset-x-0'
-      style={{ top, height }}>
+    <div data-sticky-lane={terminal ? 'terminal' : 'cards'} className="absolute inset-x-0" style={{ top, height }}>
       {/* The head rides in its own absolutely positioned sub-lane rather than
           in flow with a cancelled footprint: sticky confinement clamps the
           *margin* box, and a negative bottom margin shrinks that box to zero
@@ -428,15 +408,15 @@ function StickyPromptLane({
           which put two pinned prompts on screen at once during the handoff.
           Out of flow, the border box is what gets clamped, and the push-off
           lands exactly at the lane's bottom edge. */}
-      <div data-sticky-headlane='' aria-hidden>
-        <div ref={headRef} data-sticky-head='' className={(terminal && gapClass) || undefined}>
+      <div data-sticky-headlane="" aria-hidden>
+        <div ref={headRef} data-sticky-head="" className={(terminal && gapClass) || undefined}>
           {head}
         </div>
       </div>
       <div
         ref={sentinelRef}
         aria-hidden
-        className='absolute left-0 w-px'
+        className="absolute left-0 w-px"
         style={{ top: gapClass ? (terminal ? 'var(--term-line)' : gapPx) : 0, height: 1 }}
       />
       <div ref={measureRef} data-index={index} className={gapClass || undefined}>
@@ -556,12 +536,7 @@ function TranscriptRows({
     // Top-level prompts only: a subagent's brief is a `user` item too, and one
     // that escaped absorption (an orphan) must not become the pinned prompt —
     // it is not what the answer on screen belongs to.
-    () =>
-      rows.flatMap((row, index) =>
-        'item' in row && row.item.kind === 'user' && parentOf(row.item) === undefined
-          ? [index]
-          : [],
-      ),
+    () => rows.flatMap((row, index) => ('item' in row && row.item.kind === 'user' && parentOf(row.item) === undefined ? [index] : [])),
     [rows],
   )
   // The pinned row must stay mounted even when it is far above the window, so
@@ -603,13 +578,19 @@ function TranscriptRows({
   // own button, instantly, which is what the spring would have done had it
   // noticed. The pinned-suppresses-corrections regime below is untouched.
   useEffect(() => {
-    if (!scrollElement) return
+    if (!scrollElement) {
+      return
+    }
     let last = scrollElement.clientHeight
     const observer = new ResizeObserver(() => {
       const height = scrollElement.clientHeight
-      if (height === last) return
+      if (height === last) {
+        return
+      }
       last = height
-      if (stick.state.isAtBottom) void stick.scrollToBottom('instant')
+      if (stick.state.isAtBottom) {
+        void stick.scrollToBottom('instant')
+      }
     })
     observer.observe(scrollElement)
     return () => observer.disconnect()
@@ -631,8 +612,12 @@ function TranscriptRows({
   useLayoutEffect(() => {
     const was = wasReplaying.current
     wasReplaying.current = replaying
-    if (!was || replaying) return
-    if (!stick.state.isAtBottom) return
+    if (!was || replaying) {
+      return
+    }
+    if (!stick.state.isAtBottom) {
+      return
+    }
     stick.state.scrollTop = stick.state.calculatedTargetScrollTop
   }, [replaying, stick])
 
@@ -677,14 +662,16 @@ function TranscriptRows({
       if (terminal && epoch) {
         const row = rows[index]
         const gapPx = index > 0 && gapBefore(rows, index) ? epoch.line : 0
-        if (row && 'text' in row && row.key === 'brief')
-          // Collapsed by default and clipped to BRIEF_LINES, so its height is
-          // known before it mounts — the same discipline the task row keeps by
-          // always being collapsed when unmounted. Expanding is local state on
-          // a mounted row, which the virtualizer re-measures.
+        if (row && 'text' in row && row.key === 'brief') // Collapsed by default and clipped to BRIEF_LINES, so its height is
+        // known before it mounts — the same discipline the task row keeps by
+        // always being collapsed when unmounted. Expanding is local state on
+        // a mounted row, which the virtualizer re-measures.
+        {
           return briefPx(row.text, epoch) + gapPx
-        if (row && !('line' in row))
+        }
+        if (row && !('line' in row)) {
           return estimateBlockPx(row, epoch) + gapPx
+        }
         return epoch.line + gapPx // recap: one Row, one line
       }
       return (terminal ? 36 : 100) + gap.px
@@ -708,10 +695,15 @@ function TranscriptRows({
         const offset = virtualizer.scrollOffset ?? 0
         let pinned = -1
         for (const index of prompts) {
-          if ((virtualizer.measurementsCache[index]?.start ?? Infinity) <= offset) pinned = index
-          else break
+          if ((virtualizer.measurementsCache[index]?.start ?? Infinity) <= offset) {
+            pinned = index
+          } else {
+            break
+          }
         }
-        if (pinned >= 0) indexes.add(pinned)
+        if (pinned >= 0) {
+          indexes.add(pinned)
+        }
       }
       return [...indexes].sort((a, b) => a - b)
     }, []),
@@ -737,11 +729,11 @@ function TranscriptRows({
   // grows below the reader's anchor point — and never while scrolling up,
   // where corrections cascade.
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
-    if (stick.state.isAtBottom) return false
+    if (stick.state.isAtBottom) {
+      return false
+    }
     const fold = (instance.scrollOffset ?? 0) + instance.scrollAdjustments
-    return instance.itemSizeCache.has(item.key)
-      ? item.end <= fold && instance.scrollDirection !== 'backward'
-      : item.start < fold
+    return instance.itemSizeCache.has(item.key) ? item.end <= fold && instance.scrollDirection !== 'backward' : item.start < fold
   }
 
   // A new epoch means every remembered size is against the wrong metrics —
@@ -757,10 +749,14 @@ function TranscriptRows({
   // of scrollable nothing after one sidebar toggle, on a real session. So the
   // mounted rows are fed straight back in.
   useEffect(() => {
-    if (!terminal || !epoch) return
+    if (!terminal || !epoch) {
+      return
+    }
     virtualizer.measure()
     const container = rowsRef.current
-    if (!container) return
+    if (!container) {
+      return
+    }
     // Two sharp edges in the re-feed, both learned the hard way. Order:
     // `resizeItem` diffs a measure against `measurementsCache`, and straight
     // after `measure()` that array is still the pre-wipe one — an unchanged
@@ -773,8 +769,9 @@ function TranscriptRows({
     virtualizer.getTotalSize()
     for (const element of container.querySelectorAll<HTMLElement>('[data-index]')) {
       const index = Number(element.getAttribute('data-index'))
-      if (Number.isInteger(index) && index >= 0)
+      if (Number.isInteger(index) && index >= 0) {
         virtualizer.resizeItem(index, element.getBoundingClientRect().height)
+      }
     }
   }, [terminal, epoch, virtualizer])
 
@@ -811,14 +808,16 @@ function TranscriptRows({
   const revealNonce = reveal?.nonce
   const revealId = reveal?.toolUseId
   useEffect(() => {
-    if (revealId === undefined) return
-    const itemIndex = items.findIndex(
-      (item) => item.kind === 'tool_call' && item.id === revealId,
-    )
+    if (revealId === undefined) {
+      return
+    }
+    const itemIndex = items.findIndex((item) => item.kind === 'tool_call' && item.id === revealId)
     // Not here: a compaction, a `/clear`, or simply a client whose list knows
     // about a Task this transcript has not replayed yet. Staying put beats
     // jumping somewhere arbitrary.
-    if (itemIndex < 0) return
+    if (itemIndex < 0) {
+      return
+    }
     jumpToRow(rowIndexForItem(rows, itemIndex), 'start')
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the nonce IS the trigger
   }, [revealNonce])
@@ -829,12 +828,11 @@ function TranscriptRows({
   // native one is hidden via an attribute on the scroll element.
   const scrubInteractive = resolveAffordances(affordances).hover
   const recapIndex = rows.findIndex((row) => row.key === 'recap')
-  const recapRow =
-    recapIndex >= 0
-      ? { rowIndex: recapIndex, label: (rows[recapIndex] as { line: string }).line }
-      : undefined
+  const recapRow = recapIndex >= 0 ? { rowIndex: recapIndex, label: (rows[recapIndex] as { line: string }).line } : undefined
   useEffect(() => {
-    if (!terminal || !scrubber || !scrubInteractive || !scrollElement) return
+    if (!terminal || !scrubber || !scrubInteractive || !scrollElement) {
+      return
+    }
     scrollElement.setAttribute('data-term-scrubber-host', '')
     return () => scrollElement.removeAttribute('data-term-scrubber-host')
   }, [terminal, scrubber, scrubInteractive, scrollElement])
@@ -880,11 +878,7 @@ function TranscriptRows({
   const measurements = virtualizer.measurementsCache
 
   return (
-    <div
-      ref={rowsRef}
-      data-slot='transcript-rows'
-      className='relative w-full'
-      style={{ height: virtualizer.getTotalSize() }}>
+    <div ref={rowsRef} data-slot="transcript-rows" className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
       {virtualizer.getVirtualItems().map((virtualRow) => {
         const row = rows[virtualRow.index]
         // The inter-row gap, folded into each row so the measured height
@@ -897,10 +891,7 @@ function TranscriptRows({
         // Every variant but terminal spaces every row alike. Terminal
         // asks whether the pair belongs together — a tool call and its
         // output get no blank line, exactly as the CLI leaves none.
-        const gapClass =
-          virtualRow.index > 0 && (!terminal || gapBefore(rows, virtualRow.index))
-            ? gap.className
-            : undefined
+        const gapClass = virtualRow.index > 0 && (!terminal || gapBefore(rows, virtualRow.index)) ? gap.className : undefined
         const content =
           'run' in row ? (
             <div className={cn(read(boundary, row.index) && 'opacity-45')}>
@@ -946,17 +937,9 @@ function TranscriptRows({
         // row clamped to its lane's bottom edge, never pinning at all.
         // Same predicate as `promptRows` above — the lane and the forced range
         // must agree on which rows are prompts.
-        if (
-          stickyPrompt &&
-          'item' in row &&
-          row.item.kind === 'user' &&
-          parentOf(row.item) === undefined
-        ) {
+        if (stickyPrompt && 'item' in row && row.item.kind === 'user' && parentOf(row.item) === undefined) {
           const next = promptRows.find((index) => index > virtualRow.index)
-          const laneEnd =
-            next === undefined
-              ? virtualizer.getTotalSize()
-              : (measurements[next]?.start ?? virtualRow.start)
+          const laneEnd = next === undefined ? virtualizer.getTotalSize() : (measurements[next]?.start ?? virtualRow.start)
           return (
             <StickyPromptLane
               key={row.key}
@@ -979,7 +962,8 @@ function TranscriptRows({
             ref={virtualizer.measureElement}
             data-index={virtualRow.index}
             className={cn('absolute inset-x-0 top-0', gapClass)}
-            style={{ transform: `translateY(${virtualRow.start}px)` }}>
+            style={{ transform: `translateY(${virtualRow.start}px)` }}
+          >
             {content}
           </div>
         )
@@ -1202,20 +1186,12 @@ export function Transcript({
   // The frame's own item list, and the single place the takeover's content is
   // decided. Everything below reads `items` rather than `state.items`, so the
   // row build, the empty state and the loader all describe the same surface.
-  const items = useMemo(
-    () => (frame ? subagentItems(state.items, frame.parentToolUseId) : state.items),
-    [state.items, frame],
-  )
+  const items = useMemo(() => (frame ? subagentItems(state.items, frame.parentToolUseId) : state.items), [state.items, frame])
   // The spawning call, for the header's claim and to tell "not here yet" from
   // "not in this transcript" — see the frame placeholder below.
   const frameTask = useMemo(
     () =>
-      frame
-        ? state.items.find(
-            (item): item is ToolCallItem =>
-              item.kind === 'tool_call' && item.id === frame.parentToolUseId,
-          )
-        : undefined,
+      frame ? state.items.find((item): item is ToolCallItem => item.kind === 'tool_call' && item.id === frame.parentToolUseId) : undefined,
     [state.items, frame],
   )
   const gap = ROW_GAP[variant][density]
@@ -1231,14 +1207,8 @@ export function Transcript({
   // the honest answer: an index into a conversation that no longer exists
   // cannot say what you missed. Clamping it would land on `items.length` and
   // read as "nothing is new" — the same outcome, told less truthfully.
-  const boundary =
-    !frame && catchUp && catchUp.from > 0 && catchUp.from < state.items.length
-      ? catchUp.from
-      : undefined
-  const recap = useMemo(
-    () => (boundary === undefined ? undefined : recapLine(summarizeSince(state, boundary))),
-    [state, boundary],
-  )
+  const boundary = !frame && catchUp && catchUp.from > 0 && catchUp.from < state.items.length ? catchUp.from : undefined
+  const recap = useMemo(() => (boundary === undefined ? undefined : recapLine(summarizeSince(state, boundary))), [state, boundary])
   // What this agent was asked, when the stream does not already say. A
   // foreground `Task` forwards its brief as a real nested user message and it is
   // already the frame's first row; a background agent forwards nothing, and
@@ -1246,25 +1216,19 @@ export function Transcript({
   // the guard rather than an unconditional splice — drawn both ways, the reader
   // would see the same instruction twice.
   const brief = useMemo(
-    () =>
-      frame && frameTask && !items.some((item) => item.kind === 'user')
-        ? taskBrief(frameTask)
-        : undefined,
+    () => (frame && frameTask && !items.some((item) => item.kind === 'user') ? taskBrief(frameTask) : undefined),
     [frame, frameTask, items],
   )
   const rows = useMemo<TranscriptRow[]>(() => {
-    const fold = (from: number, to: number) =>
-      terminalBlocks(items.slice(from, to), from, terminal)
+    const fold = (from: number, to: number) => terminalBlocks(items.slice(from, to), from, terminal)
     const lead: TranscriptRow[] = brief ? [{ key: 'brief' as const, text: brief }] : []
-    if (boundary === undefined || !recap) return [...lead, ...fold(0, items.length)]
+    if (boundary === undefined || !recap) {
+      return [...lead, ...fold(0, items.length)]
+    }
     // Each side of the boundary folds separately, so a shell run never spans it:
     // "what happened while you were away" must not hide inside a count that also
     // covers what you have already read.
-    return [
-      ...fold(0, boundary),
-      { key: 'recap' as const, line: recap },
-      ...fold(boundary, items.length),
-    ]
+    return [...fold(0, boundary), { key: 'recap' as const, line: recap }, ...fold(boundary, items.length)]
   }, [items, boundary, recap, terminal, brief])
   return (
     <TranscriptVariantProvider value={variant}>
@@ -1281,91 +1245,87 @@ export function Transcript({
           button portal/position into it, not into the scroller. */}
       <Conversation className={cn(replaying && 'invisible', className)}>
         <ConversationContent className={cn(terminal && 'gap-0 p-0')}>
-          <TerminalShell
-            active={terminal}
-            fontSize={fontSize}
-            lineHeight={lineHeight}
-            affordances={affordances}>
-          {frame ? (
-            // The frame's own empty states, and they are two different facts.
-            // A task that is present with nothing under it yet is simply an
-            // agent that has not spoken — the loader below says so. A task the
-            // transcript does not have is either still replaying (say nothing,
-            // the hold is up) or genuinely absent: a `/clear` retired the
-            // conversation it lived in, or the id was never this session's.
-            // **Never auto-exit on that** — navigating out from under a reader
-            // is worse than one honest line they can leave when they choose.
-            frameTask === undefined && !replaying ? (
-              <div className={cn(terminal ? 'term-row text-fg-4' : 'p-4 text-body-sm text-fg-4')}>
-                This sub-agent's work is not in this transcript.
-              </div>
-            ) : null
-          ) : items.length === 0 && state.status !== 'starting' ? (
-            emptyState !== undefined ? (
-              emptyState
-            ) : (
-              <SessionEmptyState
-                cwd={state.cwd}
-                hasCommands={!!state.commands?.length}
-                hasSkills={!!state.skills?.some((s) => s.enabled)}
-                canBrowseFiles={canBrowseFiles}
-              />
-            )
-          ) : null}
-          {frame && frameTask === undefined && !replaying ? null : (
-            <TranscriptRows
-              rows={rows}
-              boundary={boundary}
-              since={catchUp?.since}
-              terminal={terminal}
-              replaying={replaying}
-              stickyPrompt={!frame && stickyPrompt}
-              gap={gap}
-              fontSize={fontSize}
-              lineHeight={lineHeight}
-              items={items}
-              pendingApprovals={state.pendingApprovals}
-              /* The rail rides the frame's OWN rows, so inside a takeover it
+          <TerminalShell active={terminal} fontSize={fontSize} lineHeight={lineHeight} affordances={affordances}>
+            {frame ? (
+              // The frame's own empty states, and they are two different facts.
+              // A task that is present with nothing under it yet is simply an
+              // agent that has not spoken — the loader below says so. A task the
+              // transcript does not have is either still replaying (say nothing,
+              // the hold is up) or genuinely absent: a `/clear` retired the
+              // conversation it lived in, or the id was never this session's.
+              // **Never auto-exit on that** — navigating out from under a reader
+              // is worse than one honest line they can leave when they choose.
+              frameTask === undefined && !replaying ? (
+                <div className={cn(terminal ? 'term-row text-fg-4' : 'p-4 text-body-sm text-fg-4')}>
+                  This sub-agent's work is not in this transcript.
+                </div>
+              ) : null
+            ) : items.length === 0 && state.status !== 'starting' ? (
+              emptyState !== undefined ? (
+                emptyState
+              ) : (
+                <SessionEmptyState
+                  cwd={state.cwd}
+                  hasCommands={!!state.commands?.length}
+                  hasSkills={!!state.skills?.some((s) => s.enabled)}
+                  canBrowseFiles={canBrowseFiles}
+                />
+              )
+            ) : null}
+            {frame && frameTask === undefined && !replaying ? null : (
+              <TranscriptRows
+                rows={rows}
+                boundary={boundary}
+                since={catchUp?.since}
+                terminal={terminal}
+                replaying={replaying}
+                stickyPrompt={!frame && stickyPrompt}
+                gap={gap}
+                fontSize={fontSize}
+                lineHeight={lineHeight}
+                items={items}
+                pendingApprovals={state.pendingApprovals}
+                /* The rail rides the frame's OWN rows, so inside a takeover it
                  marks the sub-agent's prompts, answers and failures — the thing
                  a long agent run most needs, and coherent because every input
                  it takes (`items`, `rowIndexFor`, `offsetOfRow`) is the frame's.
                  The **bookmarks are not**: those indices are the host's, in
                  full-transcript space, and painting them here would put marks
                  at meaningless offsets. See `frame`'s doc for the rest. */
-              scrubber={scrubber}
-              scrubberMarks={frame ? undefined : scrubberMarks}
-              affordances={affordances}
-              fileUrl={fileUrl}
-              attachmentUrl={attachmentUrl}
-              hostImage={hostImage}
-              jumpToRecapRef={jumpToRecapRef}
-              repinRef={repinRef}
-              reveal={frame ? undefined : reveal}
-              frameParentId={frame?.parentToolUseId}
-              onOpenSubagent={frame ? undefined : onOpenSubagent}
-            />
-          )}
-          {(frame ? frameTask !== undefined && taskBusy(frameTask, items) : showLoader(state)) ? (
-            terminal ? (
-              // The CLI's own working line, and it is a *row of the transcript*
-              // rather than a spinner floating over it — one blank line down,
-              // like every other block.
-              <>
-                {state.items.length > 0 ? <div className='term-blank' aria-hidden /> : null}
-                <WorkingRow
-                  label={state.status === 'starting' ? 'Starting…' : 'Working…'}
+                scrubber={scrubber}
+                scrubberMarks={frame ? undefined : scrubberMarks}
+                affordances={affordances}
+                fileUrl={fileUrl}
+                attachmentUrl={attachmentUrl}
+                hostImage={hostImage}
+                jumpToRecapRef={jumpToRecapRef}
+                repinRef={repinRef}
+                reveal={frame ? undefined : reveal}
+                frameParentId={frame?.parentToolUseId}
+                onOpenSubagent={frame ? undefined : onOpenSubagent}
+              />
+            )}
+            {(frame ? frameTask !== undefined && taskBusy(frameTask, items) : showLoader(state)) ? (
+              terminal ? (
+                // The CLI's own working line, and it is a *row of the transcript*
+                // rather than a spinner floating over it — one blank line down,
+                // like every other block.
+                <>
+                  {state.items.length > 0 ? <div className="term-blank" aria-hidden /> : null}
+                  <WorkingRow
+                    label={state.status === 'starting' ? 'Starting…' : 'Working…'}
+                    startedAt={runStartedAt}
+                    tokens={state.contextUsage?.totalTokens}
+                  />
+                </>
+              ) : (
+                <Loader
+                  label={state.status === 'starting' ? 'Starting session…' : undefined}
                   startedAt={runStartedAt}
                   tokens={state.contextUsage?.totalTokens}
                 />
-              </>
-            ) : (
-              <Loader
-                label={state.status === 'starting' ? 'Starting session…' : undefined}
-                startedAt={runStartedAt}
-                tokens={state.contextUsage?.totalTokens}
-              />
-            )
-          ) : null}
+              )
+            ) : null}
           </TerminalShell>
         </ConversationContent>
         <ConversationScrollButton />
@@ -1385,25 +1345,17 @@ export function Transcript({
             ref) so the paddings line up with the real rows'. */}
         {replaying ? (
           <div
-            data-slot='transcript-hold'
+            data-slot="transcript-hold"
             aria-hidden
-            className='wd-hold-appear visible pointer-events-none absolute inset-0 overflow-hidden'>
-            <div
-              className={cn(
-                'mx-auto w-full max-w-[var(--wd-transcript-max-width)]',
-                !terminal && 'px-4 py-4',
-              )}>
+            className="wd-hold-appear visible pointer-events-none absolute inset-0 overflow-hidden"
+          >
+            <div className={cn('mx-auto w-full max-w-[var(--wd-transcript-max-width)]', !terminal && 'px-4 py-4')}>
               {terminal ? (
-                <TerminalSurface
-                  fontSize={fontSize}
-                  lineHeight={lineHeight}
-                  affordances={false}
-                  bleed='1ch'
-                  className='term-transcript'>
-                  <WorkingRow label='Loading…' />
+                <TerminalSurface fontSize={fontSize} lineHeight={lineHeight} affordances={false} bleed="1ch" className="term-transcript">
+                  <WorkingRow label="Loading…" />
                 </TerminalSurface>
               ) : (
-                <Loader label='Loading session…' />
+                <Loader label="Loading session…" />
               )}
             </div>
           </div>

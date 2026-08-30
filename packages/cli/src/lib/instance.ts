@@ -30,11 +30,10 @@ export type Instance = {
  * from the static host.
  */
 export function resolveWebRoot(): string {
-  if (existsSync(join(dashboardDir, 'index.html'))) return dashboardDir
-  throw new Error(
-    `no dashboard build at ${dashboardDir}\n` +
-      `  in a checkout: pnpm --filter @workerdeck/web run build`,
-  )
+  if (existsSync(join(dashboardDir, 'index.html'))) {
+    return dashboardDir
+  }
+  throw new Error(`no dashboard build at ${dashboardDir}\n` + `  in a checkout: pnpm --filter @workerdeck/web run build`)
 }
 
 /**
@@ -46,14 +45,20 @@ export function resolveWebRoot(): string {
  * what they cannot control is the name the victim's browser writes into Host.
  */
 export function createHostGuard(allowedHosts: Set<string> | null): (req: IncomingMessage) => boolean {
-  if (allowedHosts === null) return () => true
+  if (allowedHosts === null) {
+    return () => true
+  }
   return (req) => {
     const header = req.headers.host
     // No Host at all is an HTTP/1.0 client or a raw script, never a browser
     // being driven cross-origin — and it cannot be a rebinding victim.
-    if (header === undefined) return true
+    if (header === undefined) {
+      return true
+    }
     const hostname = hostnameOf(header)
-    if (hostname === '') return false
+    if (hostname === '') {
+      return false
+    }
     return isLoopbackHostname(hostname) || allowedHosts.has(hostname)
   }
 }
@@ -108,8 +113,12 @@ function createFallback(
       )
       return
     }
-    if (await auth.handleAuthRequest(req, res)) return
-    if (apnsRoute !== undefined && (await apnsRoute(req, res))) return
+    if (await auth.handleAuthRequest(req, res)) {
+      return
+    }
+    if (apnsRoute !== undefined && (await apnsRoute(req, res))) {
+      return
+    }
     if (apnsRoute === undefined && pathnameOf(req) === '/apns/devices') {
       res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
       res.end('this gateway runs without push\n')
@@ -139,7 +148,9 @@ function createFallback(
       const result = await serveFile(req, res, filePath, {
         immutable: pathname.startsWith('/assets/'),
       })
-      if (result === 'served') return
+      if (result === 'served') {
+        return
+      }
       if (result === 'method-not-allowed') {
         res.writeHead(405, { allow: 'GET, HEAD' })
         res.end()
@@ -173,19 +184,14 @@ function createFallback(
   }
 }
 
-export async function startInstance(
-  config: ResolvedConfig,
-  options: { quiet?: boolean } = {},
-): Promise<Instance> {
+export async function startInstance(config: ResolvedConfig, options: { quiet?: boolean } = {}): Promise<Instance> {
   // Resolved lazily: `resolveWebRoot` throws when there is no build, and an
   // instance told not to serve the dashboard should not need one to exist.
   const webRoot = config.web ? (config.webRoot ?? resolveWebRoot()) : undefined
   // The other half of `generateAuthKey`: resolution promised auth without doing
   // I/O, this is where the key actually comes to exist.
   const generated: MaterializedAuthKey | null =
-    config.generateAuthKey && !config.hostAuthenticates
-      ? await materializeAuthKey(config.stateDir)
-      : null
+    config.generateAuthKey && !config.hostAuthenticates ? await materializeAuthKey(config.stateDir) : null
   const authOptions = config.hostAuthenticates
     ? { ...config.auth, secret: undefined }
     : generated
@@ -195,9 +201,7 @@ export async function startInstance(
   // same reason the key does: a restart should not un-pair every client. Only
   // meaningful when there is a secret to log in with and somewhere to write.
   const sessions =
-    authOptions.secret !== undefined && config.stateDir
-      ? await createAuthSessionStore({ stateDir: config.stateDir })
-      : undefined
+    authOptions.secret !== undefined && config.stateDir ? await createAuthSessionStore({ stateDir: config.stateDir }) : undefined
   const auth = createCliAuth(sessions ? { ...authOptions, sessions } : authOptions)
   // The failure mode this seam must make impossible: a resolved config that
   // stood down the Host-header guard (allowedHosts null) believing auth would
@@ -261,13 +265,16 @@ export async function startInstance(
     parking,
     // Composed, not replaced: a config file may already have a webhook and its
     // own observer, and turning push on must not silently unhook either.
-    notifications: apns === undefined ? config.options.notifications : {
-      ...config.options.notifications,
-      onNotification: (notification) => {
-        config.options.notifications?.onNotification?.(notification)
-        apns.onNotification(notification)
-      },
-    },
+    notifications:
+      apns === undefined
+        ? config.options.notifications
+        : {
+            ...config.options.notifications,
+            onNotification: (notification) => {
+              config.options.notifications?.onNotification?.(notification)
+              apns.onNotification(notification)
+            },
+          },
     fallback,
     ...(config.corsOrigins.length ? { cors: { origins: config.corsOrigins } } : {}),
     // A config file's own `authenticate` wins outright — mixing two auth schemes
@@ -295,8 +302,9 @@ export async function startInstance(
     const line = (text: string): void => void process.stdout.write(`${text}\n`)
     line('')
     line(`  workerdeck  ${url}`)
-    if (config.hostAuthenticates) line('  auth: the config file supplies its own `authenticate`')
-    else if (generated?.source === 'created') {
+    if (config.hostAuthenticates) {
+      line('  auth: the config file supplies its own `authenticate`')
+    } else if (generated?.source === 'created') {
       // Printed exactly once, at creation — later starts reuse the file and
       // point at it instead of spraying the secret into every log.
       line(`  auth: generated key  ${generated.key}`)
@@ -306,11 +314,16 @@ export async function startInstance(
       line('        ephemeral — no state dir to keep it, so the next start mints a new one')
     } else if (generated?.source === 'stored') {
       line(`  auth: shared key from ${generated.path}`)
-    } else if (auth.enabled) line('  auth: shared key — browsers sign in, services send a header')
-    else line('  NO AUTH — anyone who can reach this port gets a session')
+    } else if (auth.enabled) {
+      line('  auth: shared key — browsers sign in, services send a header')
+    } else {
+      line('  NO AUTH — anyone who can reach this port gets a session')
+    }
     // Said plainly, because the URL above is the first thing an operator will
     // paste into a browser and it now answers 404.
-    if (!config.web) line('  dashboard: off — bare gateway, /v1 and /auth only')
+    if (!config.web) {
+      line('  dashboard: off — bare gateway, /v1 and /auth only')
+    }
     if (config.corsOrigins.length) {
       line(`  cors: ${config.corsOrigins.join(', ')} may call /v1 (still key-gated)`)
     }
@@ -321,12 +334,11 @@ export async function startInstance(
     )
     if (apns) {
       const count = apns.deviceCount()
-      line(
-        `  push: APNs forwarder on ${config.apns?.topic} — ` +
-          `${count === 0 ? 'no devices registered yet' : `${count} device(s)`}`,
-      )
+      line(`  push: APNs forwarder on ${config.apns?.topic} — ` + `${count === 0 ? 'no devices registered yet' : `${count} device(s)`}`)
     }
-    if (config.configPath) line(`  config ${config.configPath}`)
+    if (config.configPath) {
+      line(`  config ${config.configPath}`)
+    }
     line('')
   }
 

@@ -56,9 +56,7 @@ describe('BrowserBridgeExecutor', () => {
     await h.executor.dispatch(call())
     expect(h.executor.resolve('exec-1', { output: { type: 'json', value: { n: 2 } }, logs: ['[log] hi'] })).toBe(true)
     await settle()
-    expect(h.results).toEqual([
-      { executionId: 'exec-1', result: { status: 'ok', output: { n: 2 }, logs: ['[log] hi'] } },
-    ])
+    expect(h.results).toEqual([{ executionId: 'exec-1', result: { status: 'ok', output: { n: 2 }, logs: ['[log] hi'] } }])
   })
 
   it('delivers a client-side failure as a failed result, not an exception', async () => {
@@ -123,7 +121,12 @@ describe('BrowserBridgeExecutor', () => {
     const h = harness()
     void h.executor.registry.register({ id: 'approval-1', kind: 'approval' })
     await h.executor.dispatch(call())
-    expect(h.executor.registry.list().map((e) => e.kind).sort()).toEqual(['approval', 'tool_call'])
+    expect(
+      h.executor.registry
+        .list()
+        .map((e) => e.kind)
+        .sort(),
+    ).toEqual(['approval', 'tool_call'])
     expect(h.executor.registry.get('exec-1')).toMatchObject({ meta: { toolName: 'eval_script' } })
   })
 })

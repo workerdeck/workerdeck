@@ -19,11 +19,7 @@ import type { CliAuthOptions } from './auth/auth.ts'
  * auth entirely — see `resolveInstanceConfig`.
  */
 
-const CONFIG_BASENAMES = [
-  'workerdeck.config.mjs',
-  'workerdeck.config.js',
-  'workerdeck.config.cjs',
-]
+const CONFIG_BASENAMES = ['workerdeck.config.mjs', 'workerdeck.config.js', 'workerdeck.config.cjs']
 
 /**
  * What a `workerdeck.config.mjs` default-exports: the server options, plus
@@ -179,10 +175,14 @@ export function parseArgs(argv: string[]): CliFlags {
         const raw = next(i, arg)
         i++
         const eq = raw.indexOf('=')
-        if (eq <= 0) throw new ConfigError(`--profile expects name=dir, got: ${raw}`)
+        if (eq <= 0) {
+          throw new ConfigError(`--profile expects name=dir, got: ${raw}`)
+        }
         const name = raw.slice(0, eq)
         const dir = raw.slice(eq + 1)
-        if (!dir) throw new ConfigError(`--profile ${name}= is missing a directory`)
+        if (!dir) {
+          throw new ConfigError(`--profile ${name}= is missing a directory`)
+        }
         flags.profiles.push({ name, configDir: resolve(dir) })
         break
       }
@@ -255,11 +255,15 @@ export async function loadConfigFile(explicit?: string, cwd = process.cwd()): Pr
   let path: string | null = null
   if (explicit) {
     path = isAbsolute(explicit) ? explicit : resolve(cwd, explicit)
-    if (!existsSync(path)) throw new ConfigError(`no config file at ${path}`)
+    if (!existsSync(path)) {
+      throw new ConfigError(`no config file at ${path}`)
+    }
   } else {
     path = CONFIG_BASENAMES.map((name) => join(cwd, name)).find((p) => existsSync(p)) ?? null
   }
-  if (!path) return { path: null, options: {} }
+  if (!path) {
+    return { path: null, options: {} }
+  }
 
   let mod: { default?: unknown }
   try {
@@ -268,9 +272,7 @@ export async function loadConfigFile(explicit?: string, cwd = process.cwd()): Pr
     // try to resolve or inline it.
     mod = (await import(pathToFileURL(path).href)) as { default?: unknown }
   } catch (error) {
-    throw new ConfigError(
-      `failed to load ${path}: ${error instanceof Error ? error.message : String(error)}`,
-    )
+    throw new ConfigError(`failed to load ${path}: ${error instanceof Error ? error.message : String(error)}`)
   }
   const exported = mod.default
   if (exported === undefined) {
@@ -351,7 +353,9 @@ export function hostnameOf(hostHeader: string): string {
 
 /** 127.0.0.0/8, ::1, and the names that mean them. */
 export function isLoopbackHostname(hostname: string): boolean {
-  if (LOOPBACK.has(hostname)) return true
+  if (LOOPBACK.has(hostname)) {
+    return true
+  }
   return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
 }
 
@@ -367,8 +371,7 @@ export function isLoopbackHostname(hostname: string): boolean {
 function normalizeInsecureHost(raw: string): string {
   const entry = raw.trim()
   const looksLikeNamePort = /^[^:]+:\d+$/.test(entry)
-  const candidate =
-    entry.includes(':') && !entry.startsWith('[') && !looksLikeNamePort ? `[${entry}]` : entry
+  const candidate = entry.includes(':') && !entry.startsWith('[') && !looksLikeNamePort ? `[${entry}]` : entry
   let url: URL
   try {
     url = new URL(`http://${candidate}`)
@@ -390,24 +393,22 @@ export function resolveInstanceConfig(
   env: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
 ): ResolvedConfig {
-  const envPort = env.WORKERDECK_PORT
-    ? parsePort(env.WORKERDECK_PORT, 'WORKERDECK_PORT')
-    : undefined
+  const envPort = env.WORKERDECK_PORT ? parsePort(env.WORKERDECK_PORT, 'WORKERDECK_PORT') : undefined
   const port = flags.port ?? envPort ?? loaded.options.port ?? 8787
   const host = flags.host ?? env.WORKERDECK_HOST ?? loaded.options.host ?? '127.0.0.1'
   // `?? undefined` would keep an empty string, and an empty secret is not a
   // secret: WORKERDECK_AUTH_KEY= in an env file means "unset", not "no auth
   // but pretend otherwise".
-  const authKey =
-    flags.authKey || env.WORKERDECK_AUTH_KEY || loaded.options.auth?.secret || undefined
+  const authKey = flags.authKey || env.WORKERDECK_AUTH_KEY || loaded.options.auth?.secret || undefined
   const hostAuthenticates = typeof loaded.options.authenticate === 'function'
 
-  const insecureHosts = new Set(
-    [...flags.insecureHosts, ...(loaded.options.insecureHosts ?? [])].map(normalizeInsecureHost),
-  )
+  const insecureHosts = new Set([...flags.insecureHosts, ...(loaded.options.insecureHosts ?? [])].map(normalizeInsecureHost))
   /** The bind host in the same normal form the entries were put in. It never
    * carries a port — that is a separate flag — so only brackets and case vary. */
-  const bindHost = host.trim().replace(/^\[|\]$/g, '').toLowerCase()
+  const bindHost = host
+    .trim()
+    .replace(/^\[|\]$/g, '')
+    .toLowerCase()
 
   // An unauthenticated Claude Code gateway on a routable interface is a shell
   // for anyone who can reach the port, so serving one takes an explicit opt-out:
@@ -428,10 +429,7 @@ export function resolveInstanceConfig(
   const stateDir =
     flags.parking === false || loaded.options.stateDir === null
       ? null
-      : (flags.stateDir ??
-        env.WORKERDECK_STATE_DIR ??
-        loaded.options.stateDir ??
-        defaultStateDir(loaded.path))
+      : (flags.stateDir ?? env.WORKERDECK_STATE_DIR ?? loaded.options.stateDir ?? defaultStateDir(loaded.path))
 
   const envCwdRoots = env.WORKERDECK_CWD_ROOTS?.split(':')
     .filter(Boolean)
@@ -474,23 +472,21 @@ export function resolveInstanceConfig(
     ? null
     : new Set([
         ...LOOPBACK,
-        ...[...flags.allowedHosts, ...(loaded.options.allowedHosts ?? [])].map((name) =>
-          name.toLowerCase(),
-        ),
+        ...[...flags.allowedHosts, ...(loaded.options.allowedHosts ?? [])].map((name) => name.toLowerCase()),
         ...insecureHosts,
       ])
 
   // Flag wins over config file, which wins over the turnkey default.
   const web = flags.web ?? loaded.options.web ?? true
 
-  const corsOrigins = flags.corsOrigins.length
-    ? flags.corsOrigins
-    : (loaded.options.corsOrigins ?? [])
+  const corsOrigins = flags.corsOrigins.length ? flags.corsOrigins : (loaded.options.corsOrigins ?? [])
   for (const origin of corsOrigins) {
     // Exactness is the guarantee. A wildcard would hand the API to every page
     // on the internet that can reach this port, and a bare hostname is not an
     // origin — the browser sends scheme + host + port, and compares literally.
-    if (origin === '*') throw new ConfigError('--cors-origin does not accept "*"')
+    if (origin === '*') {
+      throw new ConfigError('--cors-origin does not accept "*"')
+    }
     let parsed: URL
     try {
       parsed = new URL(origin)
@@ -498,9 +494,7 @@ export function resolveInstanceConfig(
       throw new ConfigError(`--cors-origin expects a full origin, got: ${origin}`)
     }
     if (parsed.origin !== origin) {
-      throw new ConfigError(
-        `--cors-origin expects scheme://host[:port] with no path, got: ${origin}`,
-      )
+      throw new ConfigError(`--cors-origin expects scheme://host[:port] with no path, got: ${origin}`)
     }
   }
   // Naming both is a mistake, not a preference to silently resolve: one of the
@@ -524,7 +518,9 @@ export function resolveInstanceConfig(
     ...serverOptions
   } = loaded.options
   const options: WorkerServerOptions = { ...serverOptions }
-  if (cwdRoots?.length) options.allowedCwdRoots = cwdRoots
+  if (cwdRoots?.length) {
+    options.allowedCwdRoots = cwdRoots
+  }
   if (fsRoots?.length || flags.fsWrite) {
     options.hostFiles = {
       ...loaded.options.hostFiles,
@@ -534,7 +530,9 @@ export function resolveInstanceConfig(
   }
   // Flags win, but they *replace* rather than merge: a half-declared profile set
   // is a credential mix-up waiting to happen.
-  if (flags.profiles.length) options.profiles = flags.profiles
+  if (flags.profiles.length) {
+    options.profiles = flags.profiles
+  }
 
   return {
     port,
@@ -564,7 +562,9 @@ export function resolveInstanceConfig(
  */
 function resolveApns(loaded: LoadedConfig): ApnsConfig | undefined {
   const apns = loaded.options.apns
-  if (!apns) return undefined
+  if (!apns) {
+    return undefined
+  }
   for (const field of ['keyFile', 'keyId', 'teamId', 'topic'] as const) {
     if (typeof apns[field] !== 'string' || apns[field] === '') {
       throw new ConfigError(`apns.${field} is required when apns is configured`)

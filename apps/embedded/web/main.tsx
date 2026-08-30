@@ -6,7 +6,9 @@ import { App } from './App.tsx'
 import { queryClient } from './lib/trpc.ts'
 
 const root = document.getElementById('root')
-if (!root) throw new Error('#root is missing from index.html')
+if (!root) {
+  throw new Error('#root is missing from index.html')
+}
 
 createRoot(root).render(
   <StrictMode>

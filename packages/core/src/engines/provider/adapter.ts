@@ -20,17 +20,19 @@ export const providerAdapter: EngineAdapter = {
     const keyEnv = profile.provider?.apiKeyEnv
     // No declared key variable = nothing this probe can check (the host hook
     // may resolve credentials some other way) — unknown, not unavailable.
-    if (!keyEnv) return { available: 'unknown' }
+    if (!keyEnv) {
+      return { available: 'unknown' }
+    }
     const value = env[keyEnv]
-    if (value !== undefined && value !== '') return { available: true }
+    if (value !== undefined && value !== '') {
+      return { available: true }
+    }
     return {
       available: false,
       reason: `${keyEnv} is not set in the server environment (profile '${profile.name}' names it as apiKeyEnv)`,
     }
   },
   createRunner() {
-    throw new Error(
-      "provider-engine runners are built by the host's createEngineRunner hook, not the adapter",
-    )
+    throw new Error("provider-engine runners are built by the host's createEngineRunner hook, not the adapter")
   },
 }

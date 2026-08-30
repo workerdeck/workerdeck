@@ -32,19 +32,27 @@ export const STATE_LABELS: Record<SessionState, string> = {
 export function sessionState(info: SessionInfo): SessionState {
   // A pending approval outranks everything, a running background agent
   // included: it is the one thing the person has to act on.
-  if (info.pendingPermissionCount > 0 || info.status === 'awaiting_approval') return 'attention'
+  if (info.pendingPermissionCount > 0 || info.status === 'awaiting_approval') {
+    return 'attention'
+  }
   // Terminal statuses are checked before the sub-agent arm, defensively: the
   // `session_closed` sweep settles every sub-agent record (the process hosting
   // them is gone), so a closed session carrying a `running` record should be
   // unreachable — but a stale record must read `ended`, never `working`.
-  if (info.status === 'failed' || info.status === 'closed') return 'ended'
-  if (info.status === 'running' || info.status === 'starting') return 'working'
+  if (info.status === 'failed' || info.status === 'closed') {
+    return 'ended'
+  }
+  if (info.status === 'running' || info.status === 'starting') {
+    return 'working'
+  }
   // A *background* agent outlives its turn by design (`task_started`, the
   // async spawn): the turn ends, `status` comes to rest at `idle`, and the
   // agent keeps burning tokens. Without this arm the row read Idle while an
   // agent was actively working in it — the status alone cannot carry it,
   // because the status is the turn's.
-  if (runningSubagents(info).length > 0) return 'working'
+  if (runningSubagents(info).length > 0) {
+    return 'working'
+  }
   return 'idle'
 }
 
@@ -97,7 +105,9 @@ export function isAgentRecord(sub: SubagentInfo): boolean {
 export function subagentLabel(sub: SubagentInfo): string {
   const agent = sub.agentType?.trim()
   const description = sub.description?.trim()
-  if (agent && description) return `${agent} · ${description}`
+  if (agent && description) {
+    return `${agent} · ${description}`
+  }
   return agent || description || 'Sub-agent'
 }
 
@@ -189,10 +199,10 @@ export function adaptersOf(rows: readonly SessionRow[]): string[] {
  */
 export function projectsOf(rows: readonly SessionRow[]): { key: string; label: string }[] {
   const byKey = new Map<string, string>()
-  for (const row of rows) byKey.set(projectKey(row), projectLabel(row))
-  return [...byKey]
-    .map(([key, label]) => ({ key, label }))
-    .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()))
+  for (const row of rows) {
+    byKey.set(projectKey(row), projectLabel(row))
+  }
+  return [...byKey].map(([key, label]) => ({ key, label })).sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()))
 }
 
 export function sessionLabel(info: SessionInfo): string {
@@ -232,7 +242,9 @@ export function projectKey(row: SessionRow): string {
  */
 export function projectLabel(row: Pick<SessionRow, 'info'>): string {
   const name = row.info.project?.name
-  if (name) return name
+  if (name) {
+    return name
+  }
   const dir = normalizePath(row.info.cwd)
   return dir.slice(dir.lastIndexOf('/') + 1) || 'No project'
 }
@@ -255,12 +267,18 @@ export function projectLabel(row: Pick<SessionRow, 'info'>): string {
  */
 export function projectSubpath(row: Pick<SessionRow, 'info'>): string | undefined {
   const root = row.info.project?.root
-  if (root === undefined || !row.info.cwd) return undefined
+  if (root === undefined || !row.info.cwd) {
+    return undefined
+  }
   const base = normalizePath(root)
   const dir = normalizePath(row.info.cwd)
-  if (dir === base) return undefined
+  if (dir === base) {
+    return undefined
+  }
   // A prefix match is not containment: `/a/repo-two` starts with `/a/repo`.
-  if (!dir.startsWith(`${base}/`)) return undefined
+  if (!dir.startsWith(`${base}/`)) {
+    return undefined
+  }
   return dir.slice(base.length + 1) || undefined
 }
 
@@ -279,7 +297,9 @@ export function isJobRun(info: SessionInfo): boolean {
 }
 
 function matchesSearch(row: SessionRow, needle: string): boolean {
-  if (!needle) return true
+  if (!needle) {
+    return true
+  }
   return (
     sessionLabel(row.info).toLowerCase().includes(needle) ||
     row.info.cwd.toLowerCase().includes(needle) ||
@@ -313,9 +333,7 @@ function isWithin(root: string, path: string): boolean {
  */
 export function inScope(row: SessionRow, scope: WorkspaceScope): boolean {
   return scope.roots.some(
-    (root) =>
-      (root.hostId ? root.hostId.toLowerCase() === row.hostId.toLowerCase() : row.local) &&
-      isWithin(root.path, row.info.cwd),
+    (root) => (root.hostId ? root.hostId.toLowerCase() === row.hostId.toLowerCase() : row.local) && isWithin(root.path, row.info.cwd),
   )
 }
 
@@ -325,11 +343,7 @@ export function scopeActive(config: ViewConfig, scope: WorkspaceScope | undefine
   return config.scoped && scope !== undefined
 }
 
-export function filterRows(
-  rows: readonly SessionRow[],
-  config: ViewConfig,
-  scope?: WorkspaceScope,
-): SessionRow[] {
+export function filterRows(rows: readonly SessionRow[], config: ViewConfig, scope?: WorkspaceScope): SessionRow[] {
   const needle = config.search.trim().toLowerCase()
   const scoping = scopeActive(config, scope) ? scope : undefined
   return rows.filter(
@@ -346,13 +360,7 @@ export function filterRows(
 }
 
 function facetKey(row: SessionRow, facet: Facet): string {
-  return facet === 'gateway'
-    ? row.hostId
-    : facet === 'adapter'
-      ? row.adapter
-      : facet === 'project'
-        ? projectKey(row)
-        : row.state
+  return facet === 'gateway' ? row.hostId : facet === 'adapter' ? row.adapter : facet === 'project' ? projectKey(row) : row.state
 }
 
 function facetLabel(row: SessionRow, facet: Facet): string {
@@ -368,7 +376,9 @@ function facetLabel(row: SessionRow, facet: Facet): string {
 /** Comparable rank for a facet: states run worst-first (attention before ended),
  * the rest alphabetically by their visible label. */
 function facetRank(row: SessionRow, facet: Facet): string {
-  if (facet === 'state') return String(STATE_ORDER.indexOf(row.state))
+  if (facet === 'state') {
+    return String(STATE_ORDER.indexOf(row.state))
+  }
   return facetLabel(row, facet).toLowerCase()
 }
 
@@ -376,7 +386,9 @@ const byRecency = (a: SessionRow, b: SessionRow) =>
   (b.info.lastActivityAt ?? b.info.createdAt) - (a.info.lastActivityAt ?? a.info.createdAt)
 
 function compare(a: SessionRow, b: SessionRow, sortBy: SortBy): number {
-  if (sortBy === 'recent') return byRecency(a, b)
+  if (sortBy === 'recent') {
+    return byRecency(a, b)
+  }
   if (sortBy === 'name') {
     return (
       sessionLabel(a.info).localeCompare(sessionLabel(b.info), undefined, {
@@ -395,14 +407,17 @@ function compare(a: SessionRow, b: SessionRow, sortBy: SortBy): number {
  */
 export function groupRows(rows: readonly SessionRow[], config: ViewConfig): SessionGroup[] {
   const sorted = [...rows].sort((a, b) => compare(a, b, config.sortBy))
-  if (config.groupBy === 'none') return sorted.length ? [{ key: 'all', rows: sorted }] : []
+  if (config.groupBy === 'none') {
+    return sorted.length ? [{ key: 'all', rows: sorted }] : []
+  }
   const facet = config.groupBy
   const groups = new Map<string, SessionGroup & { rank: string }>()
   for (const row of sorted) {
     const key = facetKey(row, facet)
     const group = groups.get(key)
-    if (group) group.rows.push(row)
-    else {
+    if (group) {
+      group.rows.push(row)
+    } else {
       groups.set(key, {
         key,
         label: facetLabel(row, facet),
@@ -435,18 +450,23 @@ export function subsetSummary(
   shown: number,
   total: number,
 ): SubsetSummary | undefined {
-  if (shown >= total) return undefined
+  if (shown >= total) {
+    return undefined
+  }
   const causes: string[] = []
-  if (scope && scopeActive(config, scope)) causes.push(scope.label)
+  if (scope && scopeActive(config, scope)) {
+    causes.push(scope.label)
+  }
   // The facets collapse to a count: naming three of them would wrap the line in
   // a sidebar, and the funnel beside it is where their detail already lives.
   const facets =
-    (config.gateways.length ? 1 : 0) +
-    (config.adapters.length ? 1 : 0) +
-    (config.states.length ? 1 : 0) +
-    (config.projects?.length ? 1 : 0)
-  if (facets > 0) causes.push(`${facets} filter${facets === 1 ? '' : 's'}`)
-  if (config.search.trim()) causes.push('search')
+    (config.gateways.length ? 1 : 0) + (config.adapters.length ? 1 : 0) + (config.states.length ? 1 : 0) + (config.projects?.length ? 1 : 0)
+  if (facets > 0) {
+    causes.push(`${facets} filter${facets === 1 ? '' : 's'}`)
+  }
+  if (config.search.trim()) {
+    causes.push('search')
+  }
   return { shown, total, causes }
 }
 

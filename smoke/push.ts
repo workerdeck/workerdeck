@@ -90,7 +90,7 @@ if (!listed.ok) {
   console.error(
     `GET /v1/sessions -> ${listed.status}. ` +
       (listed.status === 401
-        ? 'Set WD_AUTH_KEY to the gateway\'s <state-dir>/auth-key — and check the host is spelled\n' +
+        ? "Set WD_AUTH_KEY to the gateway's <state-dir>/auth-key — and check the host is spelled\n" +
           'the way the gateway was started: the Host-header guard also answers 401.'
         : ''),
   )
@@ -105,9 +105,7 @@ if (session === undefined) {
   process.exit(1)
 }
 
-const registry = JSON.parse(
-  await readFile(`${stateDir}/apns-devices.json`, 'utf8'),
-) as Registry
+const registry = JSON.parse(await readFile(`${stateDir}/apns-devices.json`, 'utf8')) as Registry
 // The tail unless told otherwise — see the `[seq]` note at the top of this file.
 const seq = wantedSeq === undefined ? session.lastSeq : Number(wantedSeq)
 console.log(

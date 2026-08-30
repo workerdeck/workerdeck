@@ -36,10 +36,18 @@ export type AttachmentKind = 'image' | 'pdf' | 'text'
  */
 export function attachmentKind(mediaType: string): AttachmentKind | undefined {
   const type = mediaType.split(';')[0]!.trim().toLowerCase()
-  if (type.startsWith('image/')) return 'image'
-  if (type === 'application/pdf') return 'pdf'
-  if (type.startsWith('text/')) return 'text'
-  if (TEXTUAL_TYPES.has(type)) return 'text'
+  if (type.startsWith('image/')) {
+    return 'image'
+  }
+  if (type === 'application/pdf') {
+    return 'pdf'
+  }
+  if (type.startsWith('text/')) {
+    return 'text'
+  }
+  if (TEXTUAL_TYPES.has(type)) {
+    return 'text'
+  }
   return undefined
 }
 
@@ -118,20 +126,22 @@ export function useAttachments(
 
   useEffect(
     () => () => {
-      for (const url of previewUrls.current) URL.revokeObjectURL(url)
+      for (const url of previewUrls.current) {
+        URL.revokeObjectURL(url)
+      }
     },
     [],
   )
 
   const patch = useCallback((key: string, next: Partial<StagedAttachment>) => {
-    setItems((current) =>
-      current.map((item) => (item.key === key ? { ...item, ...next } : item)),
-    )
+    setItems((current) => current.map((item) => (item.key === key ? { ...item, ...next } : item)))
   }, [])
 
   const upload = useCallback(
     (key: string, file: File) => {
-      if (!sessionId) return
+      if (!sessionId) {
+        return
+      }
       patch(key, { status: 'uploading', error: undefined })
       void (async () => {
         try {
@@ -174,13 +184,14 @@ export function useAttachments(
         })
         pending.push({ key, file })
       }
-      if (staged.length === 0) return
+      if (staged.length === 0) {
+        return
+      }
       setItems((current) => [...current, ...staged])
-      fileByKey.current = new Map([
-        ...fileByKey.current,
-        ...pending.map(({ key, file }) => [key, file] as const),
-      ])
-      for (const { key, file } of pending) upload(key, file)
+      fileByKey.current = new Map([...fileByKey.current, ...pending.map(({ key, file }) => [key, file] as const)])
+      for (const { key, file } of pending) {
+        upload(key, file)
+      }
     },
     [accepts, engine, upload],
   )
@@ -188,18 +199,26 @@ export function useAttachments(
   const forget = useCallback((keys: string[]) => {
     setItems((current) => {
       for (const item of current) {
-        if (keys.includes(item.key) && item.previewUrl) URL.revokeObjectURL(item.previewUrl)
+        if (keys.includes(item.key) && item.previewUrl) {
+          URL.revokeObjectURL(item.previewUrl)
+        }
       }
       return current.filter((item) => !keys.includes(item.key))
     })
-    for (const key of keys) fileByKey.current.delete(key)
+    for (const key of keys) {
+      fileByKey.current.delete(key)
+    }
   }, [])
 
   const remove = useCallback((key: string) => forget([key]), [forget])
 
   const clear = useCallback(() => {
     setItems((current) => {
-      for (const item of current) if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
+      for (const item of current) {
+        if (item.previewUrl) {
+          URL.revokeObjectURL(item.previewUrl)
+        }
+      }
       return []
     })
     fileByKey.current.clear()
@@ -208,7 +227,9 @@ export function useAttachments(
   const retry = useCallback(
     (key: string) => {
       const file = fileByKey.current.get(key)
-      if (file) upload(key, file)
+      if (file) {
+        upload(key, file)
+      }
     },
     [upload],
   )
@@ -236,11 +257,19 @@ export function useAttachments(
  * the gateway refuses the rest with a clear message); a narrower record narrows
  * the browsing too, so most refusals never happen. */
 function acceptAttribute(kinds: readonly AttachmentKind[]): string {
-  if (kinds.length === 0) return ''
+  if (kinds.length === 0) {
+    return ''
+  }
   const parts: string[] = []
-  if (kinds.includes('image')) parts.push('image/*')
-  if (kinds.includes('pdf')) parts.push('application/pdf')
-  if (kinds.includes('text')) parts.push('text/*', '.md', '.json', '.yaml', '.yml', '.toml')
+  if (kinds.includes('image')) {
+    parts.push('image/*')
+  }
+  if (kinds.includes('pdf')) {
+    parts.push('application/pdf')
+  }
+  if (kinds.includes('text')) {
+    parts.push('text/*', '.md', '.json', '.yaml', '.yml', '.toml')
+  }
   return kinds.length === 3 ? '' : parts.join(',')
 }
 
@@ -284,7 +313,9 @@ async function prepare(file: File): Promise<{ body: Blob; mediaType: string }> {
   if (!createImageBitmap || !document || !mediaType.startsWith('image/')) {
     return { body: file, mediaType }
   }
-  if (mediaType === 'image/gif') return { body: file, mediaType }
+  if (mediaType === 'image/gif') {
+    return { body: file, mediaType }
+  }
   try {
     const bitmap = await createImageBitmap(file)
     const longest = Math.max(bitmap.width, bitmap.height)
@@ -303,9 +334,7 @@ async function prepare(file: File): Promise<{ body: Blob; mediaType: string }> {
     }
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
     bitmap.close()
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/jpeg', 0.85),
-    )
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85))
     return blob ? { body: blob, mediaType: 'image/jpeg' } : { body: file, mediaType }
   } catch {
     // A format the browser can't decode (HEIC on most desktops) — let the

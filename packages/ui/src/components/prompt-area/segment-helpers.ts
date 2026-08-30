@@ -40,7 +40,9 @@ export function chip(opts: Omit<ChipSegment, 'type'>): ChipSegment {
 
 /** Returns `true` when the segment array is empty or contains only whitespace text. */
 export function isSegmentsEmpty(segments: Segment[]): boolean {
-  if (segments.length === 0) return true
+  if (segments.length === 0) {
+    return true
+  }
   return segments.every((seg) => seg.type === 'text' && seg.text.trim() === '')
 }
 
@@ -56,7 +58,5 @@ export function getChips(segments: Segment[]): ChipSegment[] {
 
 /** Extracts chips matching a specific trigger character. */
 export function getChipsByTrigger(segments: Segment[], trigger: string): ChipSegment[] {
-  return segments.filter(
-    (seg): seg is ChipSegment => seg.type === 'chip' && seg.trigger === trigger,
-  )
+  return segments.filter((seg): seg is ChipSegment => seg.type === 'chip' && seg.trigger === trigger)
 }

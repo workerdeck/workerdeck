@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  attachmentContentBlocks,
-  attachmentKind,
-  normalizeMediaType,
-  type AttachmentInput,
-} from '../src/lib/attachments.ts'
+import { attachmentContentBlocks, attachmentKind, normalizeMediaType, type AttachmentInput } from '../src/lib/attachments.ts'
 
 function input(mediaType: string, data: string, name = 'thing'): AttachmentInput {
   return {
@@ -38,9 +33,7 @@ describe('attachmentKind', () => {
 
 describe('attachmentContentBlocks', () => {
   it('builds an image block from base64, keeping the caller’s order', () => {
-    expect(
-      attachmentContentBlocks([input('image/png', 'AAA='), input('image/jpeg', 'BBB=')]),
-    ).toEqual([
+    expect(attachmentContentBlocks([input('image/png', 'AAA='), input('image/jpeg', 'BBB=')])).toEqual([
       { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAA=' } },
       { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'BBB=' } },
     ])
@@ -64,8 +57,6 @@ describe('attachmentContentBlocks', () => {
   })
 
   it('throws on a type it cannot represent rather than sending something else', () => {
-    expect(() => attachmentContentBlocks([input('video/mp4', 'AAA=')])).toThrow(
-      /unsupported attachment media type/,
-    )
+    expect(() => attachmentContentBlocks([input('video/mp4', 'AAA=')])).toThrow(/unsupported attachment media type/)
   })
 })

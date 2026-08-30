@@ -5,154 +5,286 @@
   window to 3200x1040, and screenshot the full page to banner.png.
 -->
 <html>
-<head>
-<meta charset="utf-8" />
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 1600px; height: 520px; overflow: hidden; }
-  body {
-    font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background: #000;
-    color: #ededed;
-    position: relative;
-  }
-  .glow {
-    position: absolute; inset: 0;
-    background:
-      radial-gradient(ellipse 900px 420px at 78% 40%, rgba(237,237,237,0.07), transparent 60%),
-      radial-gradient(ellipse 700px 380px at 12% 80%, rgba(237,237,237,0.045), transparent 60%);
-  }
-  .grid {
-    position: absolute; inset: 0;
-    background-image:
-      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
-    background-size: 44px 44px;
-    mask-image: radial-gradient(ellipse 1200px 560px at 50% 50%, black 30%, transparent 78%);
-    -webkit-mask-image: radial-gradient(ellipse 1200px 560px at 50% 50%, black 30%, transparent 78%);
-  }
-  .wrap {
-    position: relative; z-index: 1;
-    display: flex; align-items: center; justify-content: space-between;
-    height: 100%; padding: 0 96px 0 104px; gap: 64px;
-  }
-  .left { max-width: 820px; }
-  .badge {
-    display: inline-flex; align-items: center; gap: 11px;
-    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
-    font-size: 13px; letter-spacing: 0.22em; color: #8f8f8f;
-    border: 1px solid #292929; border-radius: 999px;
-    padding: 7px 18px 7px 14px; margin-bottom: 30px; background: rgba(10,10,10,0.6);
-  }
-  .badge svg { display: block; }
-  h1 {
-    font-size: 52px; line-height: 1.12; font-weight: 700; letter-spacing: -0.025em;
-    color: #f5f5f5;
-  }
-  h1 .dim { color: #6e6e6e; }
-  .sub {
-    margin-top: 26px;
-    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
-    font-size: 15px; color: #8f8f8f; letter-spacing: 0.02em;
-  }
-  .sub b { color: #d4d4d4; font-weight: 500; }
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1600px;
+        height: 520px;
+        overflow: hidden;
+      }
+      body {
+        font-family:
+          'Inter',
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        background: #000;
+        color: #ededed;
+        position: relative;
+      }
+      .glow {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(ellipse 900px 420px at 78% 40%, rgba(237, 237, 237, 0.07), transparent 60%),
+          radial-gradient(ellipse 700px 380px at 12% 80%, rgba(237, 237, 237, 0.045), transparent 60%);
+      }
+      .grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+        background-size: 44px 44px;
+        mask-image: radial-gradient(ellipse 1200px 560px at 50% 50%, black 30%, transparent 78%);
+        -webkit-mask-image: radial-gradient(ellipse 1200px 560px at 50% 50%, black 30%, transparent 78%);
+      }
+      .wrap {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 100%;
+        padding: 0 96px 0 104px;
+        gap: 64px;
+      }
+      .left {
+        max-width: 820px;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 11px;
+        font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+        font-size: 13px;
+        letter-spacing: 0.22em;
+        color: #8f8f8f;
+        border: 1px solid #292929;
+        border-radius: 999px;
+        padding: 7px 18px 7px 14px;
+        margin-bottom: 30px;
+        background: rgba(10, 10, 10, 0.6);
+      }
+      .badge svg {
+        display: block;
+      }
+      h1 {
+        font-size: 52px;
+        line-height: 1.12;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        color: #f5f5f5;
+      }
+      h1 .dim {
+        color: #6e6e6e;
+      }
+      .sub {
+        margin-top: 26px;
+        font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+        font-size: 15px;
+        color: #8f8f8f;
+        letter-spacing: 0.02em;
+      }
+      .sub b {
+        color: #d4d4d4;
+        font-weight: 500;
+      }
 
-  /* ---- panel mockup ---- */
-  .panel {
-    width: 500px; flex-shrink: 0;
-    background: #0a0a0a;
-    border: 1px solid #292929; border-radius: 16px;
-    box-shadow: 0 30px 80px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.02) inset;
-    overflow: hidden;
-    transform: rotate(-0.4deg);
-  }
-  .panel-head {
-    display: flex; align-items: center; gap: 10px;
-    padding: 14px 18px; border-bottom: 1px solid #1f1f1f;
-    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 12px; color: #8f8f8f;
-  }
-  .panel-head .status { width: 8px; height: 8px; border-radius: 50%; background: #2fbf71; }
-  .panel-head .title { color: #d4d4d4; }
-  .panel-head .meta { margin-left: auto; color: #565656; }
-  .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
-  .msg { font-size: 13.5px; line-height: 1.6; color: #a1a1a1; }
-  .msg .cursor {
-    display: inline-block; width: 7px; height: 15px; background: #ededed;
-    vertical-align: text-bottom; margin-left: 3px; border-radius: 1px;
-  }
-  .tool {
-    border: 1px solid #292929; border-radius: 10px; background: #111;
-  }
-  .tool-head {
-    display: flex; align-items: center; gap: 8px;
-    padding: 10px 14px;
-    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 12.5px; color: #d4d4d4;
-  }
-  .tool-head .chip {
-    font-size: 10.5px; letter-spacing: 0.08em; color: #e8a33d;
-    border: 1px solid rgba(232,163,61,0.35); background: rgba(232,163,61,0.08);
-    padding: 2.5px 8px; border-radius: 999px;
-  }
-  .tool-cmd {
-    margin: 0 14px; padding: 10px 12px;
-    background: #000; border: 1px solid #1f1f1f; border-radius: 8px;
-    font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 12.5px; color: #8f8f8f;
-  }
-  .tool-cmd b { color: #ededed; font-weight: 500; }
-  .tool-actions { display: flex; gap: 10px; padding: 12px 14px 14px; }
-  .btn {
-    font-size: 12.5px; font-weight: 600; border-radius: 8px; padding: 7px 18px;
-  }
-  .btn.allow { background: #ededed; color: #0a0a0a; }
-  .btn.deny { border: 1px solid #3d3d3d; color: #a1a1a1; }
-  .composer {
-    display: flex; align-items: center; gap: 10px;
-    border: 1px solid #292929; border-radius: 10px; padding: 11px 14px;
-    font-size: 13px; color: #565656;
-  }
-  .composer .send {
-    margin-left: auto; width: 26px; height: 26px; border-radius: 7px; background: #1f1f1f;
-    display: flex; align-items: center; justify-content: center; color: #8f8f8f; font-size: 13px;
-  }
-</style>
-</head>
-<body>
-  <div class="glow"></div>
-  <div class="grid"></div>
-  <div class="wrap">
-    <div class="left">
-      <div class="badge">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b8b8b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 3 20.5 7.75 12 12.5 3.5 7.75Z" />
-          <path d="M3.5 12.25 12 17l8.5-4.75" stroke="#6e6e6e" />
-          <path d="M3.5 16.5 12 21.25l8.5-4.75" stroke="#6e6e6e" />
-          <path d="M12 6.15 14.85 7.75 12 9.35 9.15 7.75Z" fill="#2fbf71" stroke="none" />
-        </svg>
-        WORKERDECK
-      </div>
-      <h1>Coding agent sessions you can <span class="dim">watch, steer, and embed.</span></h1>
-      <div class="sub">web dashboard <b>·</b> iOS <b>·</b> VS Code <b>·</b> your own app</div>
-    </div>
-    <div class="panel">
-      <div class="panel-head">
-        <span class="status"></span>
-        <span class="title">session</span>
-        <span>~/checkouts/my-repo</span>
-        <span class="meta">seq 142 · running</span>
-      </div>
-      <div class="panel-body">
-        <div class="msg">Running the content gate now — reading the draft and checking it against the claims ledger<span class="cursor"></span></div>
-        <div class="tool">
-          <div class="tool-head">Bash <span class="chip">NEEDS APPROVAL</span></div>
-          <div class="tool-cmd">$ <b>pnpm test --filter content-gate</b></div>
-          <div class="tool-actions">
-            <div class="btn allow">Allow</div>
-            <div class="btn deny">Deny</div>
-          </div>
+      /* ---- panel mockup ---- */
+      .panel {
+        width: 500px;
+        flex-shrink: 0;
+        background: #0a0a0a;
+        border: 1px solid #292929;
+        border-radius: 16px;
+        box-shadow:
+          0 30px 80px rgba(0, 0, 0, 0.75),
+          0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+        overflow: hidden;
+        transform: rotate(-0.4deg);
+      }
+      .panel-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 18px;
+        border-bottom: 1px solid #1f1f1f;
+        font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+        font-size: 12px;
+        color: #8f8f8f;
+      }
+      .panel-head .status {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #2fbf71;
+      }
+      .panel-head .title {
+        color: #d4d4d4;
+      }
+      .panel-head .meta {
+        margin-left: auto;
+        color: #565656;
+      }
+      .panel-body {
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .msg {
+        font-size: 13.5px;
+        line-height: 1.6;
+        color: #a1a1a1;
+      }
+      .msg .cursor {
+        display: inline-block;
+        width: 7px;
+        height: 15px;
+        background: #ededed;
+        vertical-align: text-bottom;
+        margin-left: 3px;
+        border-radius: 1px;
+      }
+      .tool {
+        border: 1px solid #292929;
+        border-radius: 10px;
+        background: #111;
+      }
+      .tool-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+        font-size: 12.5px;
+        color: #d4d4d4;
+      }
+      .tool-head .chip {
+        font-size: 10.5px;
+        letter-spacing: 0.08em;
+        color: #e8a33d;
+        border: 1px solid rgba(232, 163, 61, 0.35);
+        background: rgba(232, 163, 61, 0.08);
+        padding: 2.5px 8px;
+        border-radius: 999px;
+      }
+      .tool-cmd {
+        margin: 0 14px;
+        padding: 10px 12px;
+        background: #000;
+        border: 1px solid #1f1f1f;
+        border-radius: 8px;
+        font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+        font-size: 12.5px;
+        color: #8f8f8f;
+      }
+      .tool-cmd b {
+        color: #ededed;
+        font-weight: 500;
+      }
+      .tool-actions {
+        display: flex;
+        gap: 10px;
+        padding: 12px 14px 14px;
+      }
+      .btn {
+        font-size: 12.5px;
+        font-weight: 600;
+        border-radius: 8px;
+        padding: 7px 18px;
+      }
+      .btn.allow {
+        background: #ededed;
+        color: #0a0a0a;
+      }
+      .btn.deny {
+        border: 1px solid #3d3d3d;
+        color: #a1a1a1;
+      }
+      .composer {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid #292929;
+        border-radius: 10px;
+        padding: 11px 14px;
+        font-size: 13px;
+        color: #565656;
+      }
+      .composer .send {
+        margin-left: auto;
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+        background: #1f1f1f;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #8f8f8f;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="glow"></div>
+    <div class="grid"></div>
+    <div class="wrap">
+      <div class="left">
+        <div class="badge">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#b8b8b8"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M12 3 20.5 7.75 12 12.5 3.5 7.75Z" />
+            <path d="M3.5 12.25 12 17l8.5-4.75" stroke="#6e6e6e" />
+            <path d="M3.5 16.5 12 21.25l8.5-4.75" stroke="#6e6e6e" />
+            <path d="M12 6.15 14.85 7.75 12 9.35 9.15 7.75Z" fill="#2fbf71" stroke="none" />
+          </svg>
+          WORKERDECK
         </div>
-        <div class="composer">Reply to the agent… <span class="send">↑</span></div>
+        <h1>Coding agent sessions you can <span class="dim">watch, steer, and embed.</span></h1>
+        <div class="sub">web dashboard <b>·</b> iOS <b>·</b> VS Code <b>·</b> your own app</div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <span class="status"></span>
+          <span class="title">session</span>
+          <span>~/checkouts/my-repo</span>
+          <span class="meta">seq 142 · running</span>
+        </div>
+        <div class="panel-body">
+          <div class="msg">
+            Running the content gate now — reading the draft and checking it against the claims ledger<span class="cursor"></span>
+          </div>
+          <div class="tool">
+            <div class="tool-head">Bash <span class="chip">NEEDS APPROVAL</span></div>
+            <div class="tool-cmd">$ <b>pnpm test --filter content-gate</b></div>
+            <div class="tool-actions">
+              <div class="btn allow">Allow</div>
+              <div class="btn deny">Deny</div>
+            </div>
+          </div>
+          <div class="composer">Reply to the agent… <span class="send">↑</span></div>
+        </div>
       </div>
     </div>
-  </div>
-</body>
+  </body>
 </html>

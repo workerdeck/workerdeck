@@ -29,7 +29,9 @@ export async function copyText(value: string): Promise<boolean> {
 }
 
 function legacyCopy(value: string): boolean {
-  if (typeof document === 'undefined') return false
+  if (typeof document === 'undefined') {
+    return false
+  }
   const textarea = document.createElement('textarea')
   textarea.value = value
   // Off-screen rather than hidden: `display: none` and `visibility: hidden`
@@ -51,6 +53,8 @@ function legacyCopy(value: string): boolean {
     return false
   } finally {
     document.body.removeChild(textarea)
-    if (previous instanceof HTMLElement) previous.focus()
+    if (previous instanceof HTMLElement) {
+      previous.focus()
+    }
   }
 }

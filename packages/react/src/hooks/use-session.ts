@@ -1,25 +1,9 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { WorkerDeckClient, SessionHandle } from '@workerdeck/client'
 import { PROTOCOL_VERSION } from '@workerdeck/protocol'
-import type {
-  AttachedFrame,
-  ModelOption,
-  PermissionMode,
-  SessionEvent,
-} from '@workerdeck/protocol'
-import {
-  applyEvent,
-  initialTranscriptState,
-  hydrateToolResult,
-  seedFromSessionInfo,
-  type TranscriptState,
-} from '../lib/transcript.ts'
-import {
-  deleteTranscriptCache,
-  readTranscriptCache,
-  transcriptCacheKey,
-  writeTranscriptCache,
-} from '../lib/transcript-cache.ts'
+import type { AttachedFrame, ModelOption, PermissionMode, SessionEvent } from '@workerdeck/protocol'
+import { applyEvent, initialTranscriptState, hydrateToolResult, seedFromSessionInfo, type TranscriptState } from '../lib/transcript.ts'
+import { deleteTranscriptCache, readTranscriptCache, transcriptCacheKey, writeTranscriptCache } from '../lib/transcript-cache.ts'
 import { attachSeedToken, planAttach, shouldWriteParting } from '../lib/attach-plan.ts'
 
 /** Replace the state wholesale — an in-place session switch, or the stale-log
@@ -32,16 +16,14 @@ type HydrateAction = { type: 'transcript_hydrate_result'; toolUseId: string; tex
 
 /** Session events drive the reducer; the attach snapshot seeds fields (permission
  * mode, model) that a promptless session's event stream doesn't carry yet. */
-function reduce(
-  state: TranscriptState,
-  action: SessionEvent | AttachedFrame | SeedAction | HydrateAction,
-): TranscriptState {
-  if (action.type === 'transcript_seed') return action.state
-  if (action.type === 'transcript_hydrate_result')
+function reduce(state: TranscriptState, action: SessionEvent | AttachedFrame | SeedAction | HydrateAction): TranscriptState {
+  if (action.type === 'transcript_seed') {
+    return action.state
+  }
+  if (action.type === 'transcript_hydrate_result') {
     return hydrateToolResult(state, action.toolUseId, action.text)
-  return action.type === 'attached'
-    ? seedFromSessionInfo(state, action.session)
-    : applyEvent(state, action)
+  }
+  return action.type === 'attached' ? seedFromSessionInfo(state, action.session) : applyEvent(state, action)
 }
 
 /**
@@ -115,8 +97,12 @@ export function initialReplayTarget(frame: AttachedFrame): number | undefined {
  * hits the identical silence, so the hook applies this to every attach frame.
  */
 export function staleAttach(frame: AttachedFrame, held: TranscriptState): boolean {
-  if (frame.replayingFrom === 0 || held.lastSeq === 0) return false
-  if (frame.session.lastSeq < held.lastSeq) return true
+  if (frame.replayingFrom === 0 || held.lastSeq === 0) {
+    return false
+  }
+  if (frame.session.lastSeq < held.lastSeq) {
+    return true
+  }
   return held.session !== undefined && frame.session.createdAt !== held.session.createdAt
 }
 
@@ -256,9 +242,7 @@ export function useClaudeSession(
   // Which (resync, client identity, session) the reducer state belongs to. The
   // initializer above seeded for the mount's token; the effect re-seeds when its
   // token differs (an in-place session switch, or a resync).
-  const seededForRef = useRef(
-    attachSeedToken(0, sessionId === undefined ? '' : transcriptCacheKey(client, sessionId)),
-  )
+  const seededForRef = useRef(attachSeedToken(0, sessionId === undefined ? '' : transcriptCacheKey(client, sessionId)))
   // True from a stale-log detection until the next attach: the cleanup must not
   // write the condemned state back into the cache (it would re-poison the very
   // retry that just discarded it), and the retry must attach cold even if some
@@ -266,7 +250,9 @@ export function useClaudeSession(
   const skipCacheRef = useRef(false)
 
   useEffect(() => {
-    if (!sessionId) return
+    if (!sessionId) {
+      return
+    }
     const cache = optionsRef.current?.cacheTranscript !== false
     const key = transcriptCacheKey(client, sessionId)
     // Every decision — which state this attach holds, whether to re-seed the
@@ -328,13 +314,9 @@ export function useClaudeSession(
       // re-attach picks up from whatever landed, streaming the rest visibly
       // rather than holding for a target the first socket never delivered.
       setReplayTarget(initialReplayTarget(frame))
-      setProtocolMismatch(
-        frame.protocolVersion === PROTOCOL_VERSION ? undefined : frame.protocolVersion,
-      )
+      setProtocolMismatch(frame.protocolVersion === PROTOCOL_VERSION ? undefined : frame.protocolVersion)
     })
-    const offConn = handle.on('connectionChange', (open: boolean) =>
-      setConnection(open ? 'live' : 'reconnecting'),
-    )
+    const offConn = handle.on('connectionChange', (open: boolean) => setConnection(open ? 'live' : 'reconnecting'))
     const offRetry = handle.on('reconnectAttempt', (attempts: number) =>
       setConnection(attempts >= OFFLINE_AFTER_ATTEMPTS ? 'offline' : 'reconnecting'),
     )
@@ -369,12 +351,16 @@ export function useClaudeSession(
   // the derived `replaying` below flips false in that same render; this state
   // is then cleared so the next attach starts clean.
   useEffect(() => {
-    if (replayTarget === undefined) return
+    if (replayTarget === undefined) {
+      return
+    }
     const timer = setTimeout(() => setReplayTarget(undefined), REPLAY_HOLD_MAX_MS)
     return () => clearTimeout(timer)
   }, [replayTarget])
   useEffect(() => {
-    if (replayTarget !== undefined && state.lastSeq >= replayTarget) setReplayTarget(undefined)
+    if (replayTarget !== undefined && state.lastSeq >= replayTarget) {
+      setReplayTarget(undefined)
+    }
   }, [replayTarget, state.lastSeq])
 
   const models = useProfileModelFallback(client, sessionId, state)
@@ -394,12 +380,14 @@ export function useClaudeSession(
   // every row in the transcript.
   const loadFullResult = useCallback(
     async (toolUseId: string): Promise<boolean> => {
-      if (!sessionId) return false
-      const item = stateRef.current.items.find(
-        (candidate) => candidate.kind === 'tool_call' && candidate.id === toolUseId,
-      )
+      if (!sessionId) {
+        return false
+      }
+      const item = stateRef.current.items.find((candidate) => candidate.kind === 'tool_call' && candidate.id === toolUseId)
       const result = item?.kind === 'tool_call' ? item.result : undefined
-      if (!result?.truncated || result.sourceSeq === undefined) return false
+      if (!result?.truncated || result.sourceSeq === undefined) {
+        return false
+      }
       try {
         const full = await client.toolResult(sessionId, result.sourceSeq, toolUseId)
         const text =
@@ -434,8 +422,7 @@ export function useClaudeSession(
       handle: handleState,
       send: (text, attachmentIds) => handleRef.current?.send(text, attachmentIds),
       approve: (requestId, updatedInput) => handleRef.current?.approve(requestId, updatedInput),
-      deny: (requestId, message, interrupt) =>
-        handleRef.current?.deny(requestId, message, interrupt),
+      deny: (requestId, message, interrupt) => handleRef.current?.deny(requestId, message, interrupt),
       interrupt: () => handleRef.current?.interrupt(),
       clearContext: () => handleRef.current?.clearContext(),
       setPermissionMode: (mode) => handleRef.current?.setPermissionMode(mode),
@@ -444,17 +431,7 @@ export function useClaudeSession(
       reconnectNow,
       loadFullResult,
     }),
-    [
-      state,
-      connected,
-      connection,
-      replaying,
-      protocolMismatch,
-      models,
-      handleState,
-      reconnectNow,
-      loadFullResult,
-    ],
+    [state, connected, connection, replaying, protocolMismatch, models, handleState, reconnectNow, loadFullResult],
   )
 }
 
@@ -467,11 +444,7 @@ export function useClaudeSession(
  * degrades to the old behaviour rather than raising an error about a list the
  * operator may never open.
  */
-function useProfileModelFallback(
-  client: WorkerDeckClient,
-  sessionId: string | undefined,
-  state: TranscriptState,
-): ModelOption[] {
+function useProfileModelFallback(client: WorkerDeckClient, sessionId: string | undefined, state: TranscriptState): ModelOption[] {
   const [catalog, setCatalog] = useState<ModelOption[]>([])
   const profile = state.session?.profile
   const reported = state.models
@@ -480,7 +453,9 @@ function useProfileModelFallback(
   useEffect(() => setCatalog([]), [sessionId])
 
   useEffect(() => {
-    if (!profile || hasReported) return
+    if (!profile || hasReported) {
+      return
+    }
     let cancelled = false
     client
       .listProfiles()

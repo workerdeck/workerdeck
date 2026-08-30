@@ -20,14 +20,12 @@ import { applyEvent, initialTranscriptState, type TranscriptState } from '../src
  * delta stream, the same rule would silently erase every thought.
  */
 
-const seqd = (bodies: SessionEventBody[]): SessionEvent[] =>
-  bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
+const seqd = (bodies: SessionEventBody[]): SessionEvent[] => bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
 
 /** The runner's rule, applied the way `#buildSnapshot` applies it. */
 const retain = (events: SessionEvent[]): SessionEvent[] => events.filter((e) => snapshotRetains(e))
 
-const fold = (events: SessionEvent[]): TranscriptState =>
-  events.reduce(applyEvent, initialTranscriptState)
+const fold = (events: SessionEvent[]): TranscriptState => events.reduce(applyEvent, initialTranscriptState)
 
 const textDelta = (text: string, uuid: string): SessionEventBody => ({
   type: 'stream_delta',
@@ -96,18 +94,10 @@ describe('snapshot retention is unobservable', () => {
     // folding `transcriptActivity` over the retained log. If retention could
     // drop a row-bearing event, every client's stored watermark would sit above
     // the count the restored session reports, and the unread badge would die.
-    const full = seqd([
-      user('hi'),
-      textDelta('par', 'd1'),
-      textDelta('tial', 'd2'),
-      assistantText('partial', 'a1'),
-      turnEnd(),
-    ])
-    const count = (events: SessionEvent[]) =>
-      events.reduce((total, event) => total + transcriptActivity(event), 0)
+    const full = seqd([user('hi'), textDelta('par', 'd1'), textDelta('tial', 'd2'), assistantText('partial', 'a1'), turnEnd()])
+    const count = (events: SessionEvent[]) => events.reduce((total, event) => total + transcriptActivity(event), 0)
     expect(count(retain(full))).toBe(count(full))
-    expect(full.filter((e) => e.type === 'stream_delta').every((e) => transcriptActivity(e) === 0))
-      .toBe(true)
+    expect(full.filter((e) => e.type === 'stream_delta').every((e) => transcriptActivity(e) === 0)).toBe(true)
   })
 
   it('survives an interrupted turn — the catch path flushes what it produced', () => {

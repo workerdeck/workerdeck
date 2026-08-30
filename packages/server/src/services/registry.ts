@@ -45,7 +45,9 @@ export class SessionRegistry {
     // session) is a new runner and does fire.
     const existing = this.#sessions.get(runner.id)
     this.#sessions.set(runner.id, runner)
-    if (existing !== runner) this.#options.onRegister?.(runner)
+    if (existing !== runner) {
+      this.#options.onRegister?.(runner)
+    }
     return runner
   }
 
@@ -59,7 +61,9 @@ export class SessionRegistry {
 
   remove(id: string): boolean {
     const runner = this.#sessions.get(id)
-    if (!runner) return false
+    if (!runner) {
+      return false
+    }
     runner.close('server')
     return this.#sessions.delete(id)
   }
@@ -71,6 +75,8 @@ export class SessionRegistry {
   }
 
   closeAll(): void {
-    for (const runner of this.#sessions.values()) runner.close('server')
+    for (const runner of this.#sessions.values()) {
+      runner.close('server')
+    }
   }
 }

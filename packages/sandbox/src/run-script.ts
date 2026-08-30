@@ -131,7 +131,9 @@ export async function runScript(engine: SandboxEngine, options: RunScriptOptions
       return content === undefined ? undefined : context.newString(content)
     })
     defineHostFn('__host_vfs_write', (pathHandle, contentHandle) => {
-      if (!options.vfs) throw new Error('vfs is not enabled for this execution')
+      if (!options.vfs) {
+        throw new Error('vfs is not enabled for this execution')
+      }
       options.vfs.write(context.getString(pathHandle), context.getString(contentHandle))
       return undefined
     })
@@ -143,7 +145,9 @@ export async function runScript(engine: SandboxEngine, options: RunScriptOptions
       const fetchText = options.fetchText
       const handle = context.newAsyncifiedFunction('__host_fetch_text', async (urlHandle) => {
         const url = context.getString(urlHandle)
-        if (!fetchText) throw new Error('network access is not enabled for this execution')
+        if (!fetchText) {
+          throw new Error('network access is not enabled for this execution')
+        }
         return context.newString(await fetchText(url))
       })
       context.setProp(context.global, '__host_fetch_text', handle)
@@ -185,7 +189,9 @@ export async function runScript(engine: SandboxEngine, options: RunScriptOptions
     }
     const resultHandle = state.type === 'fulfilled' && !state.notAPromise ? state.value : evaluatedValue
     const value = context.dump(resultHandle)
-    if (resultHandle !== evaluatedValue) resultHandle.dispose()
+    if (resultHandle !== evaluatedValue) {
+      resultHandle.dispose()
+    }
     evaluatedValue.dispose()
     return { ok: true, value, logs }
   } catch (error) {
@@ -196,23 +202,23 @@ export async function runScript(engine: SandboxEngine, options: RunScriptOptions
   }
 }
 
-function failure(
-  error: unknown,
-  interruptedBy: 'timeout' | 'aborted' | undefined,
-  logs: SandboxLog[],
-): RunScriptResult {
+function failure(error: unknown, interruptedBy: 'timeout' | 'aborted' | undefined, logs: SandboxLog[]): RunScriptResult {
   const text = describeGuestError(error)
   const reason = interruptedBy ?? (/out of memory/i.test(text) ? 'oom' : 'exception')
   return { ok: false, reason, error: text, logs }
 }
 
 function describeGuestError(error: unknown): string {
-  if (typeof error === 'string') return error
+  if (typeof error === 'string') {
+    return error
+  }
   if (error && typeof error === 'object') {
     const e = error as { name?: unknown; message?: unknown }
     const name = typeof e.name === 'string' ? e.name : undefined
     const message = typeof e.message === 'string' ? e.message : undefined
-    if (name || message) return [name, message].filter(Boolean).join(': ')
+    if (name || message) {
+      return [name, message].filter(Boolean).join(': ')
+    }
     try {
       return JSON.stringify(error)
     } catch {

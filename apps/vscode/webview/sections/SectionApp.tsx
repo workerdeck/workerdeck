@@ -20,16 +20,17 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
   useEffect(
     () =>
       bridge.onHostMessage((msg: AppHostMessage) => {
-        if (msg.kind === 'wd-sidebar-state') setState(msg.state)
-        else if (msg.kind === 'wd-vitals') setVitals(msg.vitals)
+        if (msg.kind === 'wd-sidebar-state') {
+          setState(msg.state)
+        } else if (msg.kind === 'wd-vitals') {
+          setVitals(msg.vitals)
+        }
       }),
     [bridge],
   )
 
   const selected = state?.selected
-  const info: SessionInfo | undefined = selected
-    ? state?.sessions[selected.hostId]?.find((s) => s.id === selected.sessionId)
-    : undefined
+  const info: SessionInfo | undefined = selected ? state?.sessions[selected.hostId]?.find((s) => s.id === selected.sessionId) : undefined
   const host = selected ? state?.hosts.find((h) => h.id === selected.hostId) : undefined
 
   // MCP's REST client for the selected session's gateway — never attaches.
@@ -53,8 +54,7 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
 
   // Live capabilities first, the REST rollup next, the engine's record last —
   // the panel's own gating order, and the same one the view header uses.
-  const caps =
-    vitals?.capabilities ?? info.capabilities ?? ENGINE_CAPABILITIES[info.engine ?? 'claude']
+  const caps = vitals?.capabilities ?? info.capabilities ?? ENGINE_CAPABILITIES[info.engine ?? 'claude']
   const engine = info.engine ?? 'claude'
 
   switch (kind) {
@@ -65,21 +65,27 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
         </Pad>
       )
     case 'context':
-      if (!caps.contextUsage) return <Empty>{engine} reports no context window.</Empty>
+      if (!caps.contextUsage) {
+        return <Empty>{engine} reports no context window.</Empty>
+      }
       return (
         <Pad>
           <ContextSection usage={vitals?.contextUsage} />
         </Pad>
       )
     case 'usage':
-      if (!caps.rateLimits) return <Empty>{engine} reports no plan usage.</Empty>
+      if (!caps.rateLimits) {
+        return <Empty>{engine} reports no plan usage.</Empty>
+      }
       return (
         <Pad>
           <UsageSection rateLimits={vitals?.rateLimits} />
         </Pad>
       )
     case 'mcp':
-      if (!caps.mcpStatus) return <Empty>{engine} exposes no MCP servers.</Empty>
+      if (!caps.mcpStatus) {
+        return <Empty>{engine} exposes no MCP servers.</Empty>
+      }
       return (
         <Pad>
           <McpSection client={client} sessionId={info.id} />
@@ -89,9 +95,9 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
 }
 
 function Pad({ children }: { children: React.ReactNode }) {
-  return <div className='p-2'>{children}</div>
+  return <div className="p-2">{children}</div>
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <div className='p-3 text-body-sm text-fg-4'>{children}</div>
+  return <div className="p-3 text-body-sm text-fg-4">{children}</div>
 }

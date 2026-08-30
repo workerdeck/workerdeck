@@ -4,12 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { ProfileInfo, SessionEvent, SessionInfo } from '@workerdeck/protocol'
-import {
-  createFileSessionStore,
-  createWorkerServer,
-  type SessionStore,
-  type WorkerServer,
-} from '../src/index.ts'
+import { createFileSessionStore, createWorkerServer, type SessionStore, type WorkerServer } from '../src/index.ts'
 import { ParkableRunner } from './parkable-runner.ts'
 
 /**
@@ -44,8 +39,12 @@ const servers: WorkerServer[] = []
 const dirs: string[] = []
 
 afterEach(async () => {
-  for (const server of servers.splice(0)) await server.close()
-  for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true, maxRetries: 5 })
+  for (const server of servers.splice(0)) {
+    await server.close()
+  }
+  for (const dir of dirs.splice(0)) {
+    await rm(dir, { recursive: true, force: true, maxRetries: 5 })
+  }
 })
 
 /** Start a gateway over `store`. Calling it twice with the same store is the
@@ -87,15 +86,14 @@ async function stateDir(): Promise<string> {
 }
 
 /** Attach and stay attached, collecting events. The caller closes it. */
-async function openSocket(
-  base: string,
-  id: string,
-): Promise<{ socket: WebSocket; events: SessionEvent[] }> {
+async function openSocket(base: string, id: string): Promise<{ socket: WebSocket; events: SessionEvent[] }> {
   const socket = new WebSocket(`${base.replace('http', 'ws')}/sessions/${id}/ws`)
   const events: SessionEvent[] = []
   socket.on('message', (raw) => {
     const frame = JSON.parse(String(raw)) as { type: string; event?: SessionEvent }
-    if (frame.type === 'event' && frame.event) events.push(frame.event)
+    if (frame.type === 'event' && frame.event) {
+      events.push(frame.event)
+    }
   })
   await new Promise<void>((resolve, reject) => {
     socket.on('open', () => resolve())
@@ -114,7 +112,9 @@ async function attach(base: string, id: string): Promise<SessionEvent[]> {
   // misses all of it.
   socket.on('message', (raw) => {
     const frame = JSON.parse(String(raw)) as { type: string; event?: SessionEvent }
-    if (frame.type === 'event' && frame.event) events.push(frame.event)
+    if (frame.type === 'event' && frame.event) {
+      events.push(frame.event)
+    }
   })
   await new Promise<void>((resolve, reject) => {
     socket.on('open', () => resolve())

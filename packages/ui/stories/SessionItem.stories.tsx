@@ -18,7 +18,7 @@ const meta: Meta<typeof SessionItem> = {
   component: SessionItem,
   decorators: [
     (Story) => (
-      <div className='w-[310px] text-body-sm'>
+      <div className="w-[310px] text-body-sm">
         <Story />
       </div>
     ),
@@ -29,10 +29,11 @@ const meta: Meta<typeof SessionItem> = {
     onRename: () => {},
     actions: (
       <button
-        type='button'
-        aria-label='Session actions'
-        className='flex shrink-0 items-center rounded-[4px] p-0.5 text-fg-4 outline-none hover:bg-row-hover hover:text-fg-1'>
-        <MoreHorizontal className='size-4' />
+        type="button"
+        aria-label="Session actions"
+        className="flex shrink-0 items-center rounded-[4px] p-0.5 text-fg-4 outline-none hover:bg-row-hover hover:text-fg-1"
+      >
+        <MoreHorizontal className="size-4" />
       </button>
     ),
   },
@@ -144,7 +145,7 @@ function SelectionPlayground(args: React.ComponentProps<typeof SessionItem>) {
   const [agentKey, setAgentKey] = useState<string | undefined>(undefined)
   const [log, setLog] = useState('nothing selected')
   return (
-    <div className='flex flex-col gap-2'>
+    <div className="flex flex-col gap-2">
       <SessionItem
         {...args}
         expanded
@@ -172,8 +173,8 @@ function SelectionPlayground(args: React.ComponentProps<typeof SessionItem>) {
           setLog(`select session + scroll to task ${toolUseId}`)
         }}
       />
-      <p className='px-1 text-micro text-fg-4'>
-        host received: <span className='text-fg-2'>{log}</span>
+      <p className="px-1 text-micro text-fg-4">
+        host received: <span className="text-fg-2">{log}</span>
       </p>
     </div>
   )
@@ -193,10 +194,7 @@ export const Ended: Story = {
 /** Waiting on a human. The one state the list is scanned for. */
 export const NeedsAttention: Story = {
   args: {
-    row: makeRow(
-      { id: '6', title: 'Session 6 Title', status: 'awaiting_approval', pendingPermissionCount: 1 },
-      12,
-    ),
+    row: makeRow({ id: '6', title: 'Session 6 Title', status: 'awaiting_approval', pendingPermissionCount: 1 }, 12),
   },
 }
 
@@ -233,8 +231,8 @@ export const Codex: Story = {
 export const TheList: Story = {
   args: { row: makeRow({ id: 'x', title: 'unused' }) },
   render: (args) => (
-    <div className='flex flex-col'>
-      <SessionItem {...args} row={makeRow({ id: 'a', title: 'Session 1 Title', subagents: AGENTS }, 5)} expanded activeStepKey='a' />
+    <div className="flex flex-col">
+      <SessionItem {...args} row={makeRow({ id: 'a', title: 'Session 1 Title', subagents: AGENTS }, 5)} expanded activeStepKey="a" />
       <SessionItem {...args} row={makeRow({ id: 'b', title: 'Session 2 Title', status: 'idle' }, 3)} />
       <SessionItem {...args} row={makeRow({ id: 'c', title: 'Session 3 Title', subagents: AGENTS }, 5)} active expanded />
       <SessionItem {...args} row={makeRow({ id: 'd', title: 'Session 4 Title', subagents: AGENTS }, 5)} />

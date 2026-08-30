@@ -110,14 +110,20 @@ runner.subscribe((event) => {
   events.push(event)
   if (event.type === 'assistant_message' && Array.isArray(event.message.content)) {
     for (const block of event.message.content) {
-      if (block.type === 'text') console.log(`\n💬 ${String((block as { text: string }).text).trim()}`)
-      if (block.type === 'tool_use') console.log(`\n🔧 tool call: ${(block as ToolUseBlock).name}`)
+      if (block.type === 'text') {
+        console.log(`\n💬 ${String((block as { text: string }).text).trim()}`)
+      }
+      if (block.type === 'tool_use') {
+        console.log(`\n🔧 tool call: ${(block as ToolUseBlock).name}`)
+      }
     }
   }
   if (event.type === 'turn_result') {
     completed = true
     console.log(`\n🏁 turn_result: ${event.subtype} (${event.durationMs}ms)`)
-    if (event.errors?.length) console.log('   errors:', event.errors.join('; '))
+    if (event.errors?.length) {
+      console.log('   errors:', event.errors.join('; '))
+    }
   }
 })
 
@@ -128,7 +134,9 @@ runner.sendMessage(
 )
 
 const deadline = Date.now() + 180_000
-while (!completed && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100))
+while (!completed && Date.now() < deadline) {
+  await new Promise((r) => setTimeout(r, 100))
+}
 
 // ------------------------------------------------------------------ verdict ----
 
@@ -138,7 +146,9 @@ const fail = (message: string): never => {
   process.exit(1)
 }
 
-if (!completed) fail('Timed out before the turn completed.')
+if (!completed) {
+  fail('Timed out before the turn completed.')
+}
 const turn = events.find((e) => e.type === 'turn_result')!
 if (turn.type === 'turn_result' && turn.subtype !== 'success') {
   fail(`Turn ended with '${turn.subtype}', not success.`)
@@ -146,9 +156,7 @@ if (turn.type === 'turn_result' && turn.subtype !== 'success') {
 
 const mcpCalls = events.flatMap((e) =>
   e.type === 'assistant_message' && Array.isArray(e.message.content)
-    ? e.message.content.filter(
-        (b): b is ToolUseBlock => b.type === 'tool_use' && String(b.name).startsWith('deepwiki__'),
-      )
+    ? e.message.content.filter((b): b is ToolUseBlock => b.type === 'tool_use' && String(b.name).startsWith('deepwiki__'))
     : [],
 )
 if (mcpCalls.length === 0) {

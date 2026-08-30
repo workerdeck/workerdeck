@@ -48,9 +48,7 @@ export function App({
   const [shown, setShown] = useState<Shown | undefined>(undefined)
   /** The sub-agent the sessions list last asked to be shown — see
    * `wd-open-subagent`. */
-  const [openSubagent, setOpenSubagent] = useState<
-    { toolUseId: string; nonce: number } | undefined
-  >(undefined)
+  const [openSubagent, setOpenSubagent] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
   /** The row the sessions list last asked to be travelled to — a **task**, which
    * has no agent to frame. See `wd-reveal-tool-use`. */
   const [reveal, setReveal] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
@@ -69,7 +67,9 @@ export function App({
    */
   const focusWanted = useRef(false)
   const tryFocus = () => {
-    if (!focusWanted.current || !controls.current) return
+    if (!focusWanted.current || !controls.current) {
+      return
+    }
     focusWanted.current = false
     controls.current.focusComposer()
   }
@@ -84,9 +84,9 @@ export function App({
           // and the panel's own nonce effect would not re-fire to correct it.
           setOpenSubagent(undefined)
           setReveal(undefined)
-        }
-        else if (msg.kind === 'wd-set-model') controls.current?.setModel(msg.model)
-        else if (msg.kind === 'wd-set-permission-mode') {
+        } else if (msg.kind === 'wd-set-model') {
+          controls.current?.setModel(msg.model)
+        } else if (msg.kind === 'wd-set-permission-mode') {
           controls.current?.setPermissionMode(msg.mode)
         } else if (msg.kind === 'wd-focus-composer') {
           focusWanted.current = true
@@ -130,9 +130,13 @@ export function App({
       // (real file for loopback gateways, workerdeck:// for remote ones;
       // a relative path is resolved against the session cwd there, which
       // is the only side that knows it).
-      if (!e.metaKey && !e.ctrlKey) return
+      if (!e.metaKey && !e.ctrlKey) {
+        return
+      }
       const match = matchPath((e.target as HTMLElement | null)?.textContent)
-      if (!match) return
+      if (!match) {
+        return
+      }
       e.preventDefault()
       e.stopPropagation()
       bridge.post({ kind: 'wd-open-path', path: match.path, line: match.line })
@@ -155,25 +159,36 @@ export function App({
     }
     const mark = (target: EventTarget | null) => {
       const element = target instanceof HTMLElement ? target : undefined
-      if (element === hovered) return
+      if (element === hovered) {
+        return
+      }
       unmark()
-      if (!element) return
+      if (!element) {
+        return
+      }
       const text = element.textContent?.trim() ?? ''
       const match = matchPath(text)
       // Mostly-a-path, or an element whose whole job is to be one (inline code).
-      if (!match || (match.length < text.length * 0.6 && element.tagName !== 'CODE')) return
+      if (!match || (match.length < text.length * 0.6 && element.tagName !== 'CODE')) {
+        return
+      }
       hovered = element
       element.classList.add(LINKISH)
     }
 
     const onMove = (e: MouseEvent) => {
-      if (e.metaKey || e.ctrlKey) mark(e.target)
-      else unmark()
+      if (e.metaKey || e.ctrlKey) {
+        mark(e.target)
+      } else {
+        unmark()
+      }
     }
     // Releasing the key (or leaving the window with it down) has to clear it:
     // an underline that outlives the modifier promises a click that won't work.
     const onKey = (e: KeyboardEvent) => {
-      if (!e.metaKey && !e.ctrlKey) unmark()
+      if (!e.metaKey && !e.ctrlKey) {
+        unmark()
+      }
     }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('keydown', onKey)
@@ -189,20 +204,16 @@ export function App({
   }, [])
 
   if (!shown || !client) {
-    return (
-      <div className='flex h-screen items-center justify-center text-sm text-fg-3'>
-        Pick a session in the WorkerDeck sidebar.
-      </div>
-    )
+    return <div className="flex h-screen items-center justify-center text-sm text-fg-3">Pick a session in the WorkerDeck sidebar.</div>
   }
 
   return (
-    <div className='h-screen'>
+    <div className="h-screen">
       <SessionPanel
         key={`${shown.baseUrl}#${shown.sessionId}`}
         client={client}
         sessionId={shown.sessionId}
-        className='h-full'
+        className="h-full"
         // From `workerdeck.transcriptVariant`, defaulting to `terminal`: this
         // panel sits beside the editor and the integrated terminal, and the CLI
         // it mirrors is what it should look like. Someone who drags the panel
@@ -230,11 +241,11 @@ export function App({
         // From `workerdeck.transcriptDensity`, and `cards` only: a terminal has
         // one line height, so under `terminal` this reaches nothing.
         transcriptDensity={density}
-        panelSurface='external'
+        panelSurface="external"
         // Model and mode live in the window status bar (a click there opens a
         // QuickPick), so the composer keeps no toolbar row and collapses to a
         // single line — the vertical space a dock cannot spare.
-        controlsSurface='external'
+        controlsSurface="external"
         // A dock is focussed in order to type in it: a click on anything that
         // isn't itself a control puts the caret in the composer.
         focusComposerOnClick
@@ -248,7 +259,7 @@ export function App({
         }}
         // The window status bar renders these instead (src/status-bar.ts) — a
         // second bar inside a panel that already sits in one is a bar too many.
-        statusSurface='external'
+        statusSurface="external"
         onOpenPanel={(panel) => bridge.post({ kind: 'wd-open-panel', panel })}
         onVitals={(vitals) => bridge.post({ kind: 'wd-vitals', vitals })}
         /* What the panel now has framed, straight across to the host so the

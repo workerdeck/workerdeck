@@ -66,7 +66,9 @@ export function collapsedResult(lines: string[], totalChars?: number): Collapsed
       cut = true
       break
     }
-    if (shown.length > 0 && chars + line.length > PREVIEW_CHARS) break
+    if (shown.length > 0 && chars + line.length > PREVIEW_CHARS) {
+      break
+    }
     shown.push(line)
     chars += line.length + 1
   }
@@ -76,11 +78,14 @@ export function collapsedResult(lines: string[], totalChars?: number): Collapsed
   // rather than the result.
   const held = lines.join('\n').length
   const total = totalChars ?? held
-  if (cut) return { shown, more: `… +${(total - chars).toLocaleString()} chars` }
+  if (cut) {
+    return { shown, more: `… +${(total - chars).toLocaleString()} chars` }
+  }
   // A truncated result always has more, even when its head happened to fit the
   // line budget: the row must never claim to be showing everything.
-  if (totalChars !== undefined && total > held)
+  if (totalChars !== undefined && total > held) {
     return { shown, more: `… +${(total - chars).toLocaleString()} chars` }
+  }
   const hidden = lines.length - shown.length
   return { shown, more: hidden > 0 ? `… +${hidden} line${hidden === 1 ? '' : 's'}` : undefined }
 }

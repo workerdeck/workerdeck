@@ -2,22 +2,11 @@ import { type HTMLAttributes } from 'react'
 import { cn } from '../../lib/utils.ts'
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      data-slot='card'
-      className={cn('rounded-lg border border-border bg-surface', className)}
-      {...props}
-    />
-  )
+  return <div data-slot="card" className={cn('rounded-lg border border-border bg-surface', className)} {...props} />
 }
 
 export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn('flex items-start justify-between gap-3 px-4 pt-3.5 pb-3', className)}
-      {...props}
-    />
-  )
+  return <div className={cn('flex items-start justify-between gap-3 px-4 pt-3.5 pb-3', className)} {...props} />
 }
 
 export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {

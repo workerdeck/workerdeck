@@ -3,11 +3,7 @@
  * to the unknown-id answer: whether a session exists elsewhere is not this
  * caller's business. */
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type {
-  CreateSessionRequest,
-  ResolvePermissionRequest,
-  UpdateSessionRequest,
-} from '@workerdeck/protocol'
+import type { CreateSessionRequest, ResolvePermissionRequest, UpdateSessionRequest } from '@workerdeck/protocol'
 import { contentTypeFor, json, readJsonBody } from '../lib/http.ts'
 import type { SessionRoute } from '../lib/parse-route.ts'
 import type { AuthContext } from '../services/auth.ts'
@@ -36,9 +32,7 @@ export async function handleSessions(
       json(res, 200, {
         // Project identity is stamped at serve time, after the scope filter:
         // decorating a row nobody may see would spend walks on hidden sessions.
-        sessions: sessions
-          .filter((session) => authSvc.canSee(auth, session))
-          .map((session) => projects.withProject(session)),
+        sessions: sessions.filter((session) => authSvc.canSee(auth, session)).map((session) => projects.withProject(session)),
       })
       return
     }
@@ -70,8 +64,7 @@ export async function handleSessions(
         return
       }
       const badRequest =
-        factory.checkPermissionMode(body.permissionMode, resolved.profile) ??
-        factory.checkEngineGrants(body, resolved.profile)
+        factory.checkPermissionMode(body.permissionMode, resolved.profile) ?? factory.checkEngineGrants(body, resolved.profile)
       if (badRequest) {
         json(res, 400, { error: badRequest })
         return
@@ -106,14 +99,7 @@ export async function handleSessions(
     return
   }
   if (route.attachments) {
-    await handleAttachments(
-      ctx,
-      req,
-      res,
-      route.id,
-      runner?.info() ?? parked!.info,
-      route.attachmentId,
-    )
+    await handleAttachments(ctx, req, res, route.id, runner?.info() ?? parked!.info, route.attachmentId)
     return
   }
   if (route.mcp) {
@@ -181,8 +167,7 @@ export async function handleSessions(
     handleToolResult(
       req,
       res,
-      runner?.eventAt?.bind(runner) ??
-        (snapshot && ((seq: number) => snapshot.find((event) => event.seq === seq))),
+      runner?.eventAt?.bind(runner) ?? (snapshot && ((seq: number) => snapshot.find((event) => event.seq === seq))),
       route.resultSeq,
     )
     return
@@ -248,9 +233,7 @@ export async function handleSessions(
     attachmentStore.drop(route.id)
     producedFiles.drop(route.id)
     json(res, 200, {
-      session: projects.withProject(
-        runner?.info() ?? { ...parked!.info, status: 'closed' as const },
-      ),
+      session: projects.withProject(runner?.info() ?? { ...parked!.info, status: 'closed' as const }),
     })
     return
   }

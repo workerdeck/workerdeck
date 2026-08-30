@@ -57,7 +57,9 @@ const listeners = new Set<() => void>()
 function emit(next: State) {
   state = next
   clients.clear()
-  for (const listener of listeners) listener()
+  for (const listener of listeners) {
+    listener()
+  }
 }
 
 function readStored(): GatewayHost[] {
@@ -94,7 +96,9 @@ function persist(hosts: GatewayHost[]) {
  * browser is the entire requirement.
  */
 export function newHostId(): string {
-  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  if (typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
   const bytes = crypto.getRandomValues(new Uint8Array(16))
   bytes[6] = (bytes[6]! & 0x0f) | 0x40 // version 4
   bytes[8] = (bytes[8]! & 0x3f) | 0x80 // variant 1
@@ -112,8 +116,11 @@ export function keyFor(id: string): string {
 
 function setKey(id: string, key: string) {
   try {
-    if (key === '') localStorage.removeItem(keyKey(id))
-    else localStorage.setItem(keyKey(id), key)
+    if (key === '') {
+      localStorage.removeItem(keyKey(id))
+    } else {
+      localStorage.setItem(keyKey(id), key)
+    }
   } catch {
     /* private mode */
   }
@@ -133,11 +140,17 @@ const clients = new Map<string, WorkerDeckClient>()
  */
 export function clientFor(hostId: string): WorkerDeckClient | undefined {
   const cached = clients.get(hostId)
-  if (cached) return cached
+  if (cached) {
+    return cached
+  }
   const host = state.hosts.find((h) => h.id === hostId)
-  if (!host) return undefined
+  if (!host) {
+    return undefined
+  }
   const base = apiUrl(host)
-  if (base === undefined) return undefined
+  if (base === undefined) {
+    return undefined
+  }
   const client = new WorkerDeckClient({
     baseUrl: base,
     // The implicit host authenticates with the cookie the gateway set, which
@@ -182,9 +195,7 @@ export function isLocal(host: GatewayHost): boolean {
 
 export function saveHost(host: GatewayHost, key: string): void {
   const stored = readStored()
-  const next = stored.some((h) => h.id === host.id)
-    ? stored.map((h) => (h.id === host.id ? host : h))
-    : [...stored, host]
+  const next = stored.some((h) => h.id === host.id) ? stored.map((h) => (h.id === host.id ? host : h)) : [...stored, host]
   persist(next)
   setKey(host.id, key)
   emit({ ...state, hosts: [...state.hosts.filter((h) => h.implicit), ...next] })
@@ -217,8 +228,12 @@ async function probeOrigin(): Promise<boolean> {
     const res = await fetch(`${location.origin}/auth/status`, {
       headers: { accept: 'application/json' },
     })
-    if (!res.ok) return false
-    if (!res.headers.get('content-type')?.includes('application/json')) return false
+    if (!res.ok) {
+      return false
+    }
+    if (!res.headers.get('content-type')?.includes('application/json')) {
+      return false
+    }
     const body: unknown = await res.json()
     return typeof body === 'object' && body !== null && 'enabled' in body
   } catch {
@@ -229,7 +244,9 @@ async function probeOrigin(): Promise<boolean> {
 let started = false
 
 function start() {
-  if (started) return
+  if (started) {
+    return
+  }
   started = true
   const stored = readStored()
   // Render the stored hosts immediately; the implicit one joins them when the

@@ -44,12 +44,20 @@ export function scanPromptTokens(text: string): PromptToken[] {
   while ((match = words.exec(text)) !== null) {
     const word = match[0]
     const kind = word[0] === '@' ? 'file' : word[0] === '/' ? 'command' : undefined
-    if (!kind) continue
+    if (!kind) {
+      continue
+    }
     let end = match.index + word.length
-    while (end > match.index && SENTENCE_TAIL.has(text[end - 1]!)) end--
+    while (end > match.index && SENTENCE_TAIL.has(text[end - 1]!)) {
+      end--
+    }
     const body = text.slice(match.index + 1, end)
-    if (!body) continue
-    if (kind === 'command' && !COMMAND_BODY.test(body)) continue
+    if (!body) {
+      continue
+    }
+    if (kind === 'command' && !COMMAND_BODY.test(body)) {
+      continue
+    }
     tokens.push({ kind, start: match.index, end, text: text.slice(match.index, end) })
   }
   return tokens

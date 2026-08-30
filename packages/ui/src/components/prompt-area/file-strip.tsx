@@ -21,7 +21,8 @@ function Svg({ className, children }: IconProps & { children: React.ReactNode })
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
-      className={className}>
+      className={className}
+    >
       {children}
     </svg>
   )
@@ -79,17 +80,21 @@ const COLLAPSE_THRESHOLD = 3
 
 /** Pick a lucide icon key based on MIME type. */
 function getFileIconKey(type?: string): 'pdf' | 'spreadsheet' | 'code' | 'image' | 'default' {
-  if (!type) return 'default'
-  if (type === 'application/pdf') return 'pdf'
-  if (type.includes('spreadsheet') || type === 'text/csv') return 'spreadsheet'
-  if (
-    type.startsWith('text/') ||
-    type.includes('javascript') ||
-    type.includes('json') ||
-    type.includes('xml')
-  )
+  if (!type) {
+    return 'default'
+  }
+  if (type === 'application/pdf') {
+    return 'pdf'
+  }
+  if (type.includes('spreadsheet') || type === 'text/csv') {
+    return 'spreadsheet'
+  }
+  if (type.startsWith('text/') || type.includes('javascript') || type.includes('json') || type.includes('xml')) {
     return 'code'
-  if (type.startsWith('image/')) return 'image'
+  }
+  if (type.startsWith('image/')) {
+    return 'image'
+  }
   return 'default'
 }
 
@@ -103,16 +108,24 @@ const FILE_ICONS = {
 
 /** Format bytes into a human-readable string. */
 function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes < 1024) {
+    return `${bytes} B`
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
 }
 
 /** Extract a short extension label from a filename (e.g., "PDF", "CSV"). */
 function getExtensionLabel(name: string): string | null {
   const dot = name.lastIndexOf('.')
-  if (dot === -1 || dot === name.length - 1) return null
+  if (dot === -1 || dot === name.length - 1) {
+    return null
+  }
   return name.slice(dot + 1).toUpperCase()
 }
 
@@ -140,19 +153,14 @@ function FileCard({
         compact ? 'h-10 w-36 px-2' : 'h-14 w-48 px-3',
         onClick && 'cursor-pointer',
       )}
-      onClick={() => onClick?.(file)}>
+      onClick={() => onClick?.(file)}
+    >
       {(() => {
         const Icon = FILE_ICONS[getFileIconKey(file.type)]
-        return (
-          <Icon
-            className={cn('text-muted-foreground flex-shrink-0', compact ? 'h-4 w-4' : 'h-5 w-5')}
-          />
-        )
+        return <Icon className={cn('text-muted-foreground flex-shrink-0', compact ? 'h-4 w-4' : 'h-5 w-5')} />
       })()}
       <div className="min-w-0 flex-1">
-        <div
-          className={cn('truncate font-medium', compact ? 'text-xs' : 'text-sm')}
-          title={file.name}>
+        <div className={cn('truncate font-medium', compact ? 'text-xs' : 'text-sm')} title={file.name}>
           {file.name}
         </div>
         {!compact && meta && <div className="text-muted-foreground truncate text-xs">{meta}</div>}
@@ -175,15 +183,15 @@ export function FileStrip({ files, onRemove, onClick, className }: FileStripProp
   const toggleRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
-    if (!expanded) return
+    if (!expanded) {
+      return
+    }
     const handleClick = (e: MouseEvent) => {
       const target = e.target
-      if (!(target instanceof Node)) return
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(target) &&
-        !toggleRef.current?.contains(target)
-      ) {
+      if (!(target instanceof Node)) {
+        return
+      }
+      if (popoverRef.current && !popoverRef.current.contains(target) && !toggleRef.current?.contains(target)) {
         setExpanded(false)
       }
     }
@@ -191,7 +199,9 @@ export function FileStrip({ files, onRemove, onClick, className }: FileStripProp
     return () => document.removeEventListener('mousedown', handleClick)
   }, [expanded])
 
-  if (files.length === 0) return null
+  if (files.length === 0) {
+    return null
+  }
 
   const collapsible = files.length > COLLAPSE_THRESHOLD
   const compact = collapsible
@@ -202,13 +212,7 @@ export function FileStrip({ files, onRemove, onClick, className }: FileStripProp
     <div className={cn('relative', className)}>
       <div className="flex flex-wrap gap-2" role="list" aria-label="Attached files">
         {(collapsible ? visibleFiles : files).map((file) => (
-          <FileCard
-            key={file.id}
-            file={file}
-            compact={compact}
-            onRemove={onRemove}
-            onClick={onClick}
-          />
+          <FileCard key={file.id} file={file} compact={compact} onRemove={onRemove} onClick={onClick} />
         ))}
         {collapsible && (
           <div role="listitem">
@@ -219,7 +223,8 @@ export function FileStrip({ files, onRemove, onClick, className }: FileStripProp
               className={cn(
                 'border-border text-muted-foreground hover:bg-surface-hover flex flex-shrink-0 cursor-pointer items-center justify-center rounded-lg border transition-colors',
                 compact ? 'h-10 px-3 text-xs' : 'h-14 px-4 text-sm',
-              )}>
+              )}
+            >
               {expanded ? 'Show less' : `+${hiddenCount} more`}
             </button>
           </div>
@@ -231,16 +236,11 @@ export function FileStrip({ files, onRemove, onClick, className }: FileStripProp
           ref={popoverRef}
           className={cn(
             'bg-surface border-border absolute bottom-full left-0 z-10 mb-2 max-h-48 overflow-y-auto rounded-lg border p-2 shadow-lg',
-          )}>
+          )}
+        >
           <div className="flex flex-wrap gap-2" role="list" aria-label="More attached files">
             {files.slice(COLLAPSE_THRESHOLD).map((file) => (
-              <FileCard
-                key={file.id}
-                file={file}
-                compact={compact}
-                onRemove={onRemove}
-                onClick={onClick}
-              />
+              <FileCard key={file.id} file={file} compact={compact} onRemove={onRemove} onClick={onClick} />
             ))}
           </div>
         </div>

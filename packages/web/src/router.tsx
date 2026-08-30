@@ -1,10 +1,4 @@
-import {
-  createHashHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  redirect,
-} from '@tanstack/react-router'
+import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
 import { AppShell } from '@/components/shell/AppShell.tsx'
 import { IMPLICIT_HOST_ID } from '@/lib/hosts.ts'
 import { GatewayView } from '@/views/GatewayView.tsx'
@@ -63,9 +57,7 @@ const sessionRoute = createRoute({
    * items and drew an empty agent view; a task is a reference, and this is what
    * following one looks like. `rn` is its own nonce for the same reason `sn` is.
    */
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { subagent?: string; sn?: number; reveal?: string; rn?: number } => ({
+  validateSearch: (search: Record<string, unknown>): { subagent?: string; sn?: number; reveal?: string; rn?: number } => ({
     subagent: typeof search.subagent === 'string' ? search.subagent : undefined,
     sn: typeof search.sn === 'number' ? search.sn : undefined,
     reveal: typeof search.reveal === 'string' ? search.reveal : undefined,

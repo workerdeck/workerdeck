@@ -1,12 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import {
-  ToolLoopAgent,
-  generateText,
-  isStepCount,
-  type LanguageModel,
-  type ModelMessage,
-  type ToolSet,
-} from 'ai'
+import { ToolLoopAgent, generateText, isStepCount, type LanguageModel, type ModelMessage, type ToolSet } from 'ai'
 import {
   ENGINE_CAPABILITIES,
   snapshotRetains,
@@ -27,13 +20,7 @@ import {
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import { type AttachmentInput, attachmentRef, normalizeMediaType } from '../../lib/attachments.ts'
-import type {
-  ParkedExecution,
-  PermissionDecision,
-  Runner,
-  RunnerSnapshot,
-  SessionEventListener,
-} from '../../runner-interface.ts'
+import type { ParkedExecution, PermissionDecision, Runner, RunnerSnapshot, SessionEventListener } from '../../runner-interface.ts'
 import type { ToolExecutionCall, ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 
@@ -147,9 +134,7 @@ export type AiSdkSessionState = {
   parkedAt?: number
 }
 
-export type ToolCallOutput =
-  | { type: 'text'; value: string }
-  | { type: 'json'; value: unknown }
+export type ToolCallOutput = { type: 'text'; value: string } | { type: 'json'; value: unknown }
 
 /**
  * Model-agnostic runner over the AI SDK v7 ToolLoopAgent. The session's durable
@@ -211,12 +196,15 @@ export class AiSdkRunner implements Runner {
    * given, so a rehydrated session can re-resolve the same choice. */
   #modelAlias: string | undefined
   /** Permission prompts awaiting a client decision. Keyed by request id. */
-  #pendingApprovals = new Map<string, {
-    request: PermissionRequest
-    /** The tool call this approval gates — dispatched on allow, failed on deny. */
-    toolCallId: string
-    timer: ReturnType<typeof setTimeout>
-  }>()
+  #pendingApprovals = new Map<
+    string,
+    {
+      request: PermissionRequest
+      /** The tool call this approval gates — dispatched on allow, failed on deny. */
+      toolCallId: string
+      timer: ReturnType<typeof setTimeout>
+    }
+  >()
 
   constructor(config: AiSdkRunnerConfig, id: string = randomUUID()) {
     const mode = config.permissionMode ?? 'default'
@@ -230,7 +218,9 @@ export class AiSdkRunner implements Runner {
     // A rehydrated session keeps its identity: same id, same age, same event log.
     this.id = config.restore?.id ?? id
     this.createdAt = config.restore?.createdAt ?? Date.now()
-    if (config.restore) this.#restore(config.restore)
+    if (config.restore) {
+      this.#restore(config.restore)
+    }
   }
 
   /** Adopt a parked session's state. The event log and seq counter come back
@@ -260,10 +250,14 @@ export class AiSdkRunner implements Runner {
         // replay the cleared conversation to the first client that attached.
         this.#resetSeq = event.seq
         this.#contextUsage = undefined
-      } else this.#contextUsage = contextReading(event) ?? this.#contextUsage
+      } else {
+        this.#contextUsage = contextReading(event) ?? this.#contextUsage
+      }
     }
     this.#messages = [...state.messages]
-    for (const call of state.pendingToolCalls) this.#pendingToolCalls.set(call.toolCallId, call)
+    for (const call of state.pendingToolCalls) {
+      this.#pendingToolCalls.set(call.toolCallId, call)
+    }
     // Already handed to a backend before the teardown: re-dispatching would run
     // the work twice (and a deferred backend can only ever answer once).
     this.#dispatched = new Set(state.dispatched)
@@ -341,7 +335,9 @@ export class AiSdkRunner implements Runner {
   }
 
   start(): Promise<void> {
-    if (this.#started) return this.#turnChain
+    if (this.#started) {
+      return this.#turnChain
+    }
     this.#started = true
     if (this.#config.restore) {
       // Rehydrated: the prompt was consumed by the original run, and the history
@@ -363,7 +359,9 @@ export class AiSdkRunner implements Runner {
       return this.#turnChain
     }
     this.#setStatus('idle')
-    if (this.#config.prompt) this.sendMessage(this.#config.prompt)
+    if (this.#config.prompt) {
+      this.sendMessage(this.#config.prompt)
+    }
     return this.#turnChain
   }
 
@@ -374,11 +372,15 @@ export class AiSdkRunner implements Runner {
    * or an already-closed/parked runner.
    */
   park(): RunnerSnapshot | undefined {
-    if (this.#closed || this.#parked) return undefined
+    if (this.#closed || this.#parked) {
+      return undefined
+    }
     // A generate() in flight cannot be snapshotted — its messages are not in the
     // history yet. Parking is only ever correct once the loop has come to rest on
     // external calls, which is exactly when #abort has been cleared.
-    if (this.#abort || !this.#restingOnDeferred()) return undefined
+    if (this.#abort || !this.#restingOnDeferred()) {
+      return undefined
+    }
     // Emitted before the snapshot so the persisted log carries the transition and
     // still-attached listeners see it.
     this.#setStatus('parked')
@@ -421,8 +423,12 @@ export class AiSdkRunner implements Runner {
    *   exactly the case this exists to allow.
    */
   snapshot(): RunnerSnapshot | undefined {
-    if (this.#closed || this.#parked || this.#abort) return undefined
-    if (this.#pendingToolCalls.size > 0 && !this.#restingOnDeferred()) return undefined
+    if (this.#closed || this.#parked || this.#abort) {
+      return undefined
+    }
+    if (this.#pendingToolCalls.size > 0 && !this.#restingOnDeferred()) {
+      return undefined
+    }
     return this.#buildSnapshot()
   }
 
@@ -471,8 +477,12 @@ export class AiSdkRunner implements Runner {
   }
 
   sendMessage(text: string, attachments?: readonly AttachmentInput[]): void {
-    if (this.#parked) throw new Error('session is parked')
-    if (this.#closed) throw new Error('session is closed')
+    if (this.#parked) {
+      throw new Error('session is parked')
+    }
+    if (this.#closed) {
+      throw new Error('session is closed')
+    }
     // AI SDK v7 has one part type for attached bytes: `file`, with the media type
     // telling the provider what it is. Parts lead, text follows — same order the
     // Claude engine uses, for the same reason.
@@ -504,8 +514,12 @@ export class AiSdkRunner implements Runner {
    * Idempotent per toolCallId: unknown/already-settled ids return false.
    */
   resolveToolCall(toolCallId: string, output: ToolCallOutput, options?: { isError?: boolean }): boolean {
-    if (!this.#settlePendingCall(toolCallId, output, options?.isError === true)) return false
-    if (this.#pendingToolCalls.size === 0) this.#scheduleTurn()
+    if (!this.#settlePendingCall(toolCallId, output, options?.isError === true)) {
+      return false
+    }
+    if (this.#pendingToolCalls.size === 0) {
+      this.#scheduleTurn()
+    }
     return true
   }
 
@@ -514,14 +528,18 @@ export class AiSdkRunner implements Runner {
    * providers) and the event log. Does NOT re-enter the loop. */
   #settlePendingCall(toolCallId: string, output: ToolCallOutput, isError: boolean): boolean {
     const pending = this.#pendingToolCalls.get(toolCallId)
-    if (!pending || this.#closed || this.#parked) return false
+    if (!pending || this.#closed || this.#parked) {
+      return false
+    }
     this.#pendingToolCalls.delete(toolCallId)
     // Keep the result adjacent to the assistant message that made the call:
     // user messages typed while the turn was parked must sort AFTER the tool
     // results, or providers reject the replayed history (a tool call whose
     // result is not in the directly following message).
     let insertAt = this.#messages.length
-    while (insertAt > 0 && this.#messages[insertAt - 1]!.role === 'user') insertAt--
+    while (insertAt > 0 && this.#messages[insertAt - 1]!.role === 'user') {
+      insertAt--
+    }
     this.#messages.splice(insertAt, 0, {
       role: 'tool',
       content: [
@@ -555,7 +573,9 @@ export class AiSdkRunner implements Runner {
 
   resolvePermission(requestId: string, decision: PermissionDecision): boolean {
     const approval = this.#pendingApprovals.get(requestId)
-    if (!approval) return false
+    if (!approval) {
+      return false
+    }
     clearTimeout(approval.timer)
     this.#pendingApprovals.delete(requestId)
     const source: PermissionDecisionSource = 'client'
@@ -597,7 +617,9 @@ export class AiSdkRunner implements Runner {
   /** Emit `file_delivered` — the deliver_file tool's hand-over event (wired by
    * createEngineSession via ToolContextOptions.onFileDelivered). */
   emitFileDelivered(file: { path: string; bytes: number; description?: string }): void {
-    if (this.#closed || this.#parked) return
+    if (this.#closed || this.#parked) {
+      return
+    }
     this.#emit({ type: 'file_delivered', ...file })
   }
 
@@ -643,7 +665,9 @@ export class AiSdkRunner implements Runner {
     // a clear requested mid-turn queues behind that turn instead of racing it.
     // A failed clear must not poison the chain.
     const run = this.#turnChain.then(() => {
-      if (this.#closed) throw new Error('session is closed')
+      if (this.#closed) {
+        throw new Error('session is closed')
+      }
       // Parked external work is the one thing waiting cannot resolve: a bridged
       // call's result is owed by a client that may answer in two days, and the
       // messages it will be spliced into are exactly what a clear would drop.
@@ -701,14 +725,18 @@ export class AiSdkRunner implements Runner {
 
   async setModel(model?: string): Promise<void> {
     const resolve = this.#config.resolveModel
-    if (!resolve) throw new Error('set_model is not supported by this session')
+    if (!resolve) {
+      throw new Error('set_model is not supported by this session')
+    }
     this.#model = resolve(model)
     this.#modelAlias = model
     this.#emit({ type: 'model_changed', model })
   }
 
   fail(message: string): void {
-    if (this.#closed) return
+    if (this.#closed) {
+      return
+    }
     this.#emit({ type: 'session_error', message })
     this.#setStatus('failed')
     this.close('error')
@@ -717,12 +745,16 @@ export class AiSdkRunner implements Runner {
   close(reason: 'client' | 'server' | 'error' = 'client'): void {
     // Parked instances are already handed off — the host drops them from its
     // registry, and that must not read as the session ending.
-    if (this.#closed || this.#parked) return
+    if (this.#closed || this.#parked) {
+      return
+    }
     this.#closed = true
     this.#abort?.abort()
     this.#pendingToolCalls.clear()
     this.#dispatched.clear()
-    for (const { timer } of this.#pendingApprovals.values()) clearTimeout(timer)
+    for (const { timer } of this.#pendingApprovals.values()) {
+      clearTimeout(timer)
+    }
     this.#pendingApprovals.clear()
     this.#emit({ type: 'session_closed', reason })
     this.#setStatus('closed')
@@ -740,11 +772,7 @@ export class AiSdkRunner implements Runner {
     return this.#events.find((event) => event.seq === seq)
   }
 
-  subscribe(
-    listener: SessionEventListener,
-    afterSeq = 0,
-    options?: SubscribeOptions,
-  ): () => void {
+  subscribe(listener: SessionEventListener, afterSeq = 0, options?: SubscribeOptions): () => void {
     return this.#subscribers.subscribe(this.#events, listener, afterSeq, options, this.#resetSeq)
   }
 
@@ -758,8 +786,12 @@ export class AiSdkRunner implements Runner {
    * deferred executor). Idempotent by executionId.
    */
   settleExecution(executionId: string, result: ToolExecutionResult): boolean {
-    if (this.#closed || this.#parked) return false
-    if (!this.#pendingToolCalls.has(executionId)) return false
+    if (this.#closed || this.#parked) {
+      return false
+    }
+    if (!this.#pendingToolCalls.has(executionId)) {
+      return false
+    }
     this.#applyExecutionResult(executionId, result)
     return true
   }
@@ -768,7 +800,9 @@ export class AiSdkRunner implements Runner {
    * the permission mode requires it. */
   #dispatchPending(): void {
     const executor = this.#config.executor
-    if (!executor) return
+    if (!executor) {
+      return
+    }
     const executable = this.#config.executableTools
     const needsApproval = this.#permissionMode === 'default' && this.#config.shouldApprove
     const inFlight: Array<Promise<unknown>> = []
@@ -776,8 +810,12 @@ export class AiSdkRunner implements Runner {
     let anyAwaiting = false
     // Snapshot first: applying a result mutates the map we are iterating.
     for (const call of Array.from(this.#pendingToolCalls.values())) {
-      if (executable && !executable.includes(call.toolName)) continue
-      if (this.#dispatched.has(call.toolCallId)) continue
+      if (executable && !executable.includes(call.toolName)) {
+        continue
+      }
+      if (this.#dispatched.has(call.toolCallId)) {
+        continue
+      }
       // Permission gate: park the call and prompt the user.
       if (needsApproval && needsApproval({ toolName: call.toolName, input: call.input as Record<string, unknown> })) {
         // Don't double-prompt: if this call is already awaiting approval, skip.
@@ -797,7 +835,9 @@ export class AiSdkRunner implements Runner {
           expiresAt: Date.now() + timeoutMs,
         }
         const timer = setTimeout(() => {
-          if (!this.#pendingApprovals.has(requestId)) return
+          if (!this.#pendingApprovals.has(requestId)) {
+            return
+          }
           this.resolvePermission(requestId, {
             behavior: 'deny',
             message: 'Approval timed out',
@@ -813,30 +853,37 @@ export class AiSdkRunner implements Runner {
       anyDeferred ||= dispatched.deferred
       inFlight.push(dispatched.promise)
     }
-    if (anyAwaiting) this.#setStatus('awaiting_approval')
+    if (anyAwaiting) {
+      this.#setStatus('awaiting_approval')
+    }
     // Announce the park only once every dispatch of this batch has been handed
     // over: a host that parks on the first announcement would snapshot a session
     // whose remaining calls are still being dispatched — and dispatch them into a
     // runner it had already discarded.
-    if (anyDeferred) void Promise.allSettled(inFlight).then(() => this.#announceParked())
+    if (anyDeferred) {
+      void Promise.allSettled(inFlight).then(() => this.#announceParked())
+    }
   }
 
   /** Dispatch a single tool call that was held behind an approval gate. */
   #dispatchSingle(toolCallId: string): void {
     const executor = this.#config.executor
-    if (!executor) return
+    if (!executor) {
+      return
+    }
     const call = this.#pendingToolCalls.get(toolCallId)
-    if (!call || this.#dispatched.has(toolCallId)) return
+    if (!call || this.#dispatched.has(toolCallId)) {
+      return
+    }
     this.#dispatched.add(toolCallId)
     const dispatched = this.#dispatchCall(executor, call)
-    if (dispatched.deferred) void dispatched.promise.then(() => this.#announceParked())
+    if (dispatched.deferred) {
+      void dispatched.promise.then(() => this.#announceParked())
+    }
   }
 
   /** The actual dispatch + event emission for one tool call. */
-  #dispatchCall(
-    executor: ToolExecutor,
-    call: PendingToolCall,
-  ): { deferred: boolean; promise: Promise<void> } {
+  #dispatchCall(executor: ToolExecutor, call: PendingToolCall): { deferred: boolean; promise: Promise<void> } {
     const toolCall: ToolExecutionCall = {
       executionId: call.toolCallId,
       sessionId: this.id,
@@ -884,17 +931,25 @@ export class AiSdkRunner implements Runner {
    * rather than an inference from individual dispatch events.
    */
   #announceParked(): void {
-    if (this.#closed || this.#parked || this.#abort) return
-    if (this.#restingOnDeferred()) this.#setStatus('parked')
+    if (this.#closed || this.#parked || this.#abort) {
+      return
+    }
+    if (this.#restingOnDeferred()) {
+      this.#setStatus('parked')
+    }
   }
 
   /** The loop is waiting, and everything it waits on can only be answered from
    * outside this process. One still-live in-process execution means a result is
    * coming back to THIS runner, and tearing it down would strand it. */
   #restingOnDeferred(): boolean {
-    if (this.#pendingToolCalls.size === 0) return false
+    if (this.#pendingToolCalls.size === 0) {
+      return false
+    }
     for (const call of this.#pendingToolCalls.values()) {
-      if (call.deferred !== true) return false
+      if (call.deferred !== true) {
+        return false
+      }
     }
     return true
   }
@@ -903,7 +958,9 @@ export class AiSdkRunner implements Runner {
   #applyExecutionResult(executionId: string, result: ToolExecutionResult): void {
     // A parked instance is not the session any more: its rehydrated successor owns
     // the pending call, and applying here would write into a discarded history.
-    if (this.#closed || this.#parked) return
+    if (this.#closed || this.#parked) {
+      return
+    }
     this.#dispatched.delete(executionId)
     if (result.status === 'ok') {
       this.#emit({
@@ -923,20 +980,20 @@ export class AiSdkRunner implements Runner {
       logs: result.logs,
     })
     // A failed execution is ordinary tool output: the agent gets to adapt.
-    this.resolveToolCall(
-      executionId,
-      { type: 'text', value: `${result.reason}: ${result.error}` },
-      { isError: true },
-    )
+    this.resolveToolCall(executionId, { type: 'text', value: `${result.reason}: ${result.error}` }, { isError: true })
   }
 
   async #runTurn(): Promise<void> {
-    if (this.#closed || this.#parked || this.#pendingToolCalls.size > 0) return
+    if (this.#closed || this.#parked || this.#pendingToolCalls.size > 0) {
+      return
+    }
     // Nothing to respond to: the history already ends with the assistant.
     // Happens when several triggers queued turns for the same input (a message
     // typed mid-park + the park resolving) — one turn answers all of it, the
     // stragglers must not burn a generate() on an already-answered history.
-    if (this.#messages.at(-1)?.role === 'assistant') return
+    if (this.#messages.at(-1)?.role === 'assistant') {
+      return
+    }
     this.#setStatus('running')
     const agent = new ToolLoopAgent({
       model: this.#model,
@@ -961,7 +1018,9 @@ export class AiSdkRunner implements Runner {
     const textBuf = new Map<string, string>()
     const reasoningBuf = new Map<string, string>()
     const flush = (): void => {
-      if (blocks.length === 0) return
+      if (blocks.length === 0) {
+        return
+      }
       this.#emit({
         type: 'assistant_message',
         message: { role: 'assistant', content: blocks, model: this.#modelId() },
@@ -994,7 +1053,9 @@ export class AiSdkRunner implements Runner {
       }
       let streamError: unknown
       for await (const part of result.fullStream) {
-        if (this.#closed) break
+        if (this.#closed) {
+          break
+        }
         switch (part.type) {
           case 'text-delta':
             textBuf.set(part.id, (textBuf.get(part.id) ?? '') + part.text)
@@ -1010,7 +1071,9 @@ export class AiSdkRunner implements Runner {
           case 'text-end': {
             const text = textBuf.get(part.id)
             textBuf.delete(part.id)
-            if (text) blocks.push({ type: 'text', text })
+            if (text) {
+              blocks.push({ type: 'text', text })
+            }
             break
           }
           case 'reasoning-delta':
@@ -1027,7 +1090,9 @@ export class AiSdkRunner implements Runner {
           case 'reasoning-end': {
             const thinking = reasoningBuf.get(part.id)
             reasoningBuf.delete(part.id)
-            if (thinking) blocks.push({ type: 'thinking', thinking })
+            if (thinking) {
+              blocks.push({ type: 'thinking', thinking })
+            }
             break
           }
           case 'tool-call':
@@ -1040,10 +1105,7 @@ export class AiSdkRunner implements Runner {
             flush()
             break
           case 'tool-result':
-            emitToolResult(
-              part.toolCallId,
-              typeof part.output === 'string' ? part.output : JSON.stringify(part.output),
-            )
+            emitToolResult(part.toolCallId, typeof part.output === 'string' ? part.output : JSON.stringify(part.output))
             break
           case 'tool-error':
             emitToolResult(part.toolCallId, errorText(part.error), true)
@@ -1059,15 +1121,21 @@ export class AiSdkRunner implements Runner {
         }
       }
       flush()
-      if (streamError !== undefined) throw streamError
-      if (abort.signal.aborted) throw new Error('interrupted')
+      if (streamError !== undefined) {
+        throw streamError
+      }
+      if (abort.signal.aborted) {
+        throw new Error('interrupted')
+      }
       const [responseMessages, usage, toolCalls, text] = await Promise.all([
         result.responseMessages,
         result.totalUsage,
         result.toolCalls,
         result.text,
       ])
-      if (this.#closed) return
+      if (this.#closed) {
+        return
+      }
       // v7's totalUsage is already cumulative across THIS call's steps — add it
       // once per leg, never per step.
       accum.input += usage.inputTokens ?? 0
@@ -1082,13 +1150,19 @@ export class AiSdkRunner implements Runner {
       // parking on it would hang the session forever (nobody owns it).
       const settled = new Set<string>()
       for (const message of responseMessages as ModelMessage[]) {
-        if (message.role !== 'tool' || !Array.isArray(message.content)) continue
+        if (message.role !== 'tool' || !Array.isArray(message.content)) {
+          continue
+        }
         for (const part of message.content) {
-          if (part.type === 'tool-result') settled.add(part.toolCallId)
+          if (part.type === 'tool-result') {
+            settled.add(part.toolCallId)
+          }
         }
       }
       for (const call of toolCalls) {
-        if (settled.has(call.toolCallId)) continue
+        if (settled.has(call.toolCallId)) {
+          continue
+        }
         this.#pendingToolCalls.set(call.toolCallId, {
           toolCallId: call.toolCallId,
           toolName: call.toolName,
@@ -1103,7 +1177,9 @@ export class AiSdkRunner implements Runner {
       }
       this.#finishTurn(text)
     } catch (error) {
-      if (this.#closed) return
+      if (this.#closed) {
+        return
+      }
       // What the turn produced before it died is part of the record: without a
       // durable assistant_message the partial text exists only as stream
       // deltas, which the client holds in a singleton streaming item — wiped
@@ -1113,10 +1189,14 @@ export class AiSdkRunner implements Runner {
       // mid-stream (no `text-end` came); completed-but-unflushed blocks are in
       // `blocks` already.
       for (const [, thinking] of reasoningBuf) {
-        if (thinking) blocks.push({ type: 'thinking', thinking })
+        if (thinking) {
+          blocks.push({ type: 'thinking', thinking })
+        }
       }
       for (const [, text] of textBuf) {
-        if (text) blocks.push({ type: 'text', text })
+        if (text) {
+          blocks.push({ type: 'text', text })
+        }
       }
       flush()
       const message = error instanceof Error ? error.message : String(error)
@@ -1134,7 +1214,9 @@ export class AiSdkRunner implements Runner {
       this.#turnAccum = undefined
       this.#setStatus('idle')
     } finally {
-      if (this.#abort === abort) this.#abort = undefined
+      if (this.#abort === abort) {
+        this.#abort = undefined
+      }
     }
   }
 
@@ -1164,15 +1246,21 @@ export class AiSdkRunner implements Runner {
 
   #modelId(): string | undefined {
     const model = this.#model
-    if (typeof model === 'string') return model
+    if (typeof model === 'string') {
+      return model
+    }
     return (model as { modelId?: string }).modelId
   }
 
   #title(): string | undefined {
     const metaTitle = this.#config.meta?.title
-    if (typeof metaTitle === 'string' && metaTitle.length > 0) return metaTitle
+    if (typeof metaTitle === 'string' && metaTitle.length > 0) {
+      return metaTitle
+    }
     const prompt = this.#config.prompt
-    if (!prompt) return undefined
+    if (!prompt) {
+      return undefined
+    }
     return prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt
   }
 
@@ -1192,14 +1280,21 @@ export class AiSdkRunner implements Runner {
    * it (undefined) restores the derived title. The engine is never told. */
   setTitle(title: string | undefined): void {
     const meta = { ...this.#config.meta }
-    if (title) meta.title = title
-    else delete meta.title
+    if (title) {
+      meta.title = title
+    } else {
+      delete meta.title
+    }
     this.#config = { ...this.#config, meta }
   }
 
   #setStatus(status: SessionStatus, detail?: string): void {
-    if (this.#status === status) return
-    if (this.#status === 'closed' || this.#status === 'failed') return
+    if (this.#status === status) {
+      return
+    }
+    if (this.#status === 'closed' || this.#status === 'failed') {
+      return
+    }
     this.#status = status
     this.#emit({ type: 'status_changed', status, detail })
   }

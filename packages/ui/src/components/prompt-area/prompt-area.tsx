@@ -134,7 +134,9 @@ export function PromptArea({
 
   const syncHeight = useCallback(() => {
     const el = editorRef.current
-    if (!el) return
+    if (!el) {
+      return
+    }
     // Temporarily set height to auto so scrollHeight reflects true content height
     el.style.height = 'auto'
     const contentHeight = el.scrollHeight
@@ -143,20 +145,28 @@ export function PromptArea({
   }, [editorRef])
 
   const handleFocus = useCallback(() => {
-    if (!autoGrow) return
+    if (!autoGrow) {
+      return
+    }
     setIsFocused(true)
     syncHeight()
   }, [autoGrow, syncHeight])
 
   const handleBlurWithShrink = useCallback(() => {
     eventHandlers.onBlur()
-    if (!autoGrow) return
+    if (!autoGrow) {
+      return
+    }
     setTimeout(() => {
       const editor = editorRef.current
-      if (!editor) return
+      if (!editor) {
+        return
+      }
       // Only shrink if focus truly left the component
       const activeEl = document.activeElement
-      if (activeEl && editor.parentElement?.contains(activeEl)) return
+      if (activeEl && editor.parentElement?.contains(activeEl)) {
+        return
+      }
       setIsFocused(false)
       setEditorHeight(undefined)
     }, BLUR_DELAY_MS)
@@ -184,7 +194,9 @@ export function PromptArea({
   const overflowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (!autoGrow) return
+    if (!autoGrow) {
+      return
+    }
 
     const checkOverflow = () => {
       if (isFocused) {
@@ -192,7 +204,9 @@ export function PromptArea({
         return
       }
       const el = editorRef.current
-      if (!el) return
+      if (!el) {
+        return
+      }
       setHasOverflow(el.scrollHeight > el.clientHeight)
     }
 
@@ -238,7 +252,9 @@ export function PromptArea({
   const handleKeyDownCombined = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       onKeyDown?.(e)
-      if (e.defaultPrevented) return
+      if (e.defaultPrevented) {
+        return
+      }
       handleKeyDown(e)
     },
     [onKeyDown, handleKeyDown],
@@ -256,27 +272,16 @@ export function PromptArea({
     [onBlur, handleBlurWithShrink],
   )
 
-  const isEmpty =
-    value.length === 0 || (value.length === 1 && value[0].type === 'text' && value[0].text === '')
+  const isEmpty = value.length === 0 || (value.length === 1 && value[0].type === 'text' && value[0].text === '')
 
   const imageStrip =
     images.length > 0 ? (
-      <ImageStrip
-        images={images}
-        onRemove={onImageRemove}
-        onClick={onImageClick}
-        className={imagePosition === 'above' ? 'pb-2' : 'pt-2'}
-      />
+      <ImageStrip images={images} onRemove={onImageRemove} onClick={onImageClick} className={imagePosition === 'above' ? 'pb-2' : 'pt-2'} />
     ) : null
 
   const fileStrip =
     files.length > 0 ? (
-      <FileStrip
-        files={files}
-        onRemove={onFileRemove}
-        onClick={onFileClick}
-        className={filePosition === 'above' ? 'pb-2' : 'pt-2'}
-      />
+      <FileStrip files={files} onRemove={onFileRemove} onClick={onFileClick} className={filePosition === 'above' ? 'pb-2' : 'pt-2'} />
     ) : null
 
   // Typography (font-size/line-height) lives on the container, not the editor, so
@@ -327,7 +332,8 @@ export function PromptArea({
             aria-hidden="true"
             className="pointer-events-auto absolute right-0 bottom-0 left-0 cursor-pointer"
             style={{ height: '32px' }}
-            onClick={() => editorRef.current?.focus()}>
+            onClick={() => editorRef.current?.focus()}
+          >
             <div
               className="h-full w-full"
               style={{
@@ -347,7 +353,8 @@ export function PromptArea({
             <div
               className="pointer-events-none absolute top-0 left-0 select-none"
               style={{ color: 'var(--prompt-area-placeholder, var(--muted-foreground))' }}
-              aria-hidden="true">
+              aria-hidden="true"
+            >
               {placeholder}
             </div>
           ))}

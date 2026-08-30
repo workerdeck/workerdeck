@@ -112,14 +112,20 @@ export function searchFiles(base: string, options: SearchOptions = {}): SearchRe
       }
       const kind = entryKind(entry)
       if (kind === 'dir') {
-        if (!ignore.has(entry.name)) queue.push({ dir: join(dir, entry.name), depth: depth + 1 })
+        if (!ignore.has(entry.name)) {
+          queue.push({ dir: join(dir, entry.name), depth: depth + 1 })
+        }
         continue
       }
-      if (kind !== 'file') continue
+      if (kind !== 'file') {
+        continue
+      }
       const path = join(dir, entry.name)
       const rel = relative(base, path)
       const score = scoreMatch(rel, entry.name, needle)
-      if (score !== null) found.push({ file: { path, relative: rel }, score, depth })
+      if (score !== null) {
+        found.push({ file: { path, relative: rel }, score, depth })
+      }
     }
   }
 
@@ -145,9 +151,13 @@ export function searchFiles(base: string, options: SearchOptions = {}): SearchRe
  * same characters scattered — rather than trying to be a ranking engine.
  */
 function scoreMatch(relativePath: string, name: string, needle: string): number | null {
-  if (needle === '') return 0
+  if (needle === '') {
+    return 0
+  }
   const inName = subsequenceScore(name.toLowerCase(), needle)
-  if (inName !== null) return inName + 1000
+  if (inName !== null) {
+    return inName + 1000
+  }
   return subsequenceScore(relativePath.toLowerCase(), needle)
 }
 
@@ -157,9 +167,15 @@ function subsequenceScore(haystack: string, needle: string): number | null {
   let previous = -2
   for (const char of needle) {
     const at = haystack.indexOf(char, from)
-    if (at === -1) return null
-    if (at === previous + 1) score += 8
-    if (at === 0) score += 4
+    if (at === -1) {
+      return null
+    }
+    if (at === previous + 1) {
+      score += 8
+    }
+    if (at === 0) {
+      score += 4
+    }
     from = at + 1
     previous = at
   }

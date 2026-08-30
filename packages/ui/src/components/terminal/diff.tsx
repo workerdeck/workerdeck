@@ -21,8 +21,7 @@ import { Row } from './row.tsx'
 /** Which side of the edit a body line belongs to, from its unified-diff prefix. */
 type LineKind = 'context' | 'add' | 'remove'
 
-const kindOf = (line: string): LineKind =>
-  line.startsWith('+') ? 'add' : line.startsWith('-') ? 'remove' : 'context'
+const kindOf = (line: string): LineKind => (line.startsWith('+') ? 'add' : line.startsWith('-') ? 'remove' : 'context')
 
 /**
  * The rows of one hunk, each with the line number it has *in the file*.
@@ -41,9 +40,11 @@ function hunkRows(hunk: PatchHunk): { kind: LineKind; number: number; text: stri
     const kind = kindOf(line)
     // The prefix is diff syntax, not content — the marker column says it now.
     const text = line.slice(1)
-    if (kind === 'add') rows.push({ kind, number: newLine++, text })
-    else if (kind === 'remove') rows.push({ kind, number: oldLine++, text })
-    else {
+    if (kind === 'add') {
+      rows.push({ kind, number: newLine++, text })
+    } else if (kind === 'remove') {
+      rows.push({ kind, number: oldLine++, text })
+    } else {
       rows.push({ kind, number: newLine, text })
       oldLine++
       newLine++
@@ -67,12 +68,16 @@ export function previewPatch(input: unknown): FilePatch | undefined {
   const edit = input as { file_path?: unknown; old_string?: unknown; new_string?: unknown } | null
   const before = typeof edit?.old_string === 'string' ? edit.old_string : undefined
   const after = typeof edit?.new_string === 'string' ? edit.new_string : undefined
-  if (before === undefined && after === undefined) return undefined
+  if (before === undefined && after === undefined) {
+    return undefined
+  }
   const lines = [
     ...(before ? before.split('\n').map((line) => `-${line}`) : []),
     ...(after ? after.split('\n').map((line) => `+${line}`) : []),
   ]
-  if (lines.length === 0) return undefined
+  if (lines.length === 0) {
+    return undefined
+  }
   return {
     ...(typeof edit?.file_path === 'string' && { path: edit.file_path }),
     hunks: [{ oldStart: 0, oldLines: 0, newStart: 0, newLines: 0, lines }],
@@ -93,35 +98,29 @@ export function TerminalDiff({ patch }: { patch: FilePatch }) {
   const columns = numbered ? width + 3 : 2
 
   return (
-    <div className='term-diff'>
+    <div className="term-diff">
       {rows.map((hunk, index) => (
         <div key={index}>
           {/* Hunks are not adjacent in the file, and a blank line would say they
               were merely a paragraph apart. The CLI's separator is the honest
               one: a row that says lines were skipped. */}
-          {index > 0 ? (
-            <Row columns={columns} glyph={' '.repeat(width) + ' ⋮'} tone='faint' />
-          ) : null}
+          {index > 0 ? <Row columns={columns} glyph={' '.repeat(width) + ' ⋮'} tone="faint" /> : null}
           {hunk.map((row, line) => (
             <Row
               key={line}
               columns={columns}
               data-diff={row.kind}
-              glyph={
-                numbered
-                  ? `${String(row.number).padStart(width)} ${MARKER[row.kind]}`
-                  : MARKER[row.kind]
-              }
+              glyph={numbered ? `${String(row.number).padStart(width)} ${MARKER[row.kind]}` : MARKER[row.kind]}
               // `pre-wrap` on the body already keeps the code's own indentation;
               // an empty line still has to occupy its row, hence the space.
-              >
+            >
               {row.text || ' '}
             </Row>
           ))}
         </div>
       ))}
       {patch.truncated ? (
-        <Row columns={columns} tone='faint'>
+        <Row columns={columns} tone="faint">
           … diff truncated
         </Row>
       ) : null}

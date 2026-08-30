@@ -63,24 +63,30 @@ const codexBin = resolveBundledCodexExecutable()
 function scratchEnv(extra: Record<string, string | undefined> = {}): Record<string, string> {
   const home = mkdtempSync(join(tmpdir(), 'codex-smoke-home-'))
   const env: Record<string, string> = {}
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v !== undefined) {
+      env[k] = v
+    }
+  }
   // The scratch home isolates auth; the auth env vars are controlled per test.
   delete env.CODEX_API_KEY
   delete env.OPENAI_API_KEY
   delete env.CODEX_ACCESS_TOKEN
   env.CODEX_HOME = home
   for (const [k, v] of Object.entries(extra)) {
-    if (v === undefined) delete env[k]
-    else env[k] = v
+    if (v === undefined) {
+      delete env[k]
+    } else {
+      env[k] = v
+    }
   }
   return env
 }
 
-function makeRunner(
-  cwd: string,
-  overrides: Record<string, unknown> = {},
-): { runner: CodexRunner; events: SessionEvent[] } {
-  if (!codexBin) throw new Error('bundled codex binary not resolvable — is @openai/codex installed?')
+function makeRunner(cwd: string, overrides: Record<string, unknown> = {}): { runner: CodexRunner; events: SessionEvent[] } {
+  if (!codexBin) {
+    throw new Error('bundled codex binary not resolvable — is @openai/codex installed?')
+  }
   const runner = new CodexRunner({
     cwd,
     model: MODEL,
@@ -99,8 +105,12 @@ const turnResults = (events: SessionEvent[]) =>
 async function waitFor(pred: () => boolean, timeoutMs: number, what: string): Promise<void> {
   const deadline = Date.now() + timeoutMs
   for (;;) {
-    if (pred()) return
-    if (Date.now() > deadline) throw new Error(`timed out after ${timeoutMs / 1000}s waiting for ${what}`)
+    if (pred()) {
+      return
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`timed out after ${timeoutMs / 1000}s waiting for ${what}`)
+    }
     await new Promise((r) => setTimeout(r, 250))
   }
 }
@@ -124,7 +134,9 @@ async function probeTurn(env: Record<string, string>): Promise<string> {
   try {
     await runner.start()
     const [result] = turnResults(events)
-    if (!result) return 'no turn_result within 90s'
+    if (!result) {
+      return 'no turn_result within 90s'
+    }
     return result.subtype === 'success' ? '' : (result.errors?.join('; ') ?? 'unknown failure')
   } finally {
     clearTimeout(timeout)
@@ -229,10 +241,7 @@ async function canaries(): Promise<void> {
           fail('granular approvalPolicy gate', 'thread/start answered without a thread id')
         }
       } catch (error) {
-        fail(
-          'granular approvalPolicy gate',
-          `thread/start rejected the granular approvalPolicy: ${(error as Error).message}`,
-        )
+        fail('granular approvalPolicy gate', `thread/start rejected the granular approvalPolicy: ${(error as Error).message}`)
       }
 
       // 6. `skills/list` — the shape `engines/codex/types.ts` mirrors by hand.
@@ -258,28 +267,27 @@ async function canaries(): Promise<void> {
           const named = skills.filter((s) => typeof s?.name === 'string')
           const badEntry = entries.find((e) => e?.skills !== undefined && !Array.isArray(e.skills))
           if (badEntry) {
-            fail('skills/list shape', 'an entry\'s `skills` is not an array')
+            fail('skills/list shape', "an entry's `skills` is not an array")
           } else if (named.length !== skills.length) {
             fail('skills/list shape', 'a skill came back without a string `name`')
           } else {
             // `enabled` may be absent (the runner defaults it true); `interface`
             // may be absent; neither may be a different *kind* of thing.
-            const wrongEnabled = skills.find(
-              (s) => s.enabled !== undefined && typeof s.enabled !== 'boolean',
-            )
+            const wrongEnabled = skills.find((s) => s.enabled !== undefined && typeof s.enabled !== 'boolean')
             const wrongInterface = skills.find(
               (s) => s.interface !== undefined && (typeof s.interface !== 'object' || s.interface === null),
             )
-            if (wrongEnabled) fail('skills/list shape', '`enabled` is not a boolean')
-            else if (wrongInterface) fail('skills/list shape', '`interface` is not an object')
-            else {
+            if (wrongEnabled) {
+              fail('skills/list shape', '`enabled` is not a boolean')
+            } else if (wrongInterface) {
+              fail('skills/list shape', '`interface` is not an object')
+            } else {
               const withPrompt = skills.filter(
                 (s) => typeof (s.interface as { defaultPrompt?: unknown })?.defaultPrompt === 'string',
               ).length
               pass(
                 'skills/list shape',
-                `${skills.length} skill(s) across ${entries.length} cwd(s), ` +
-                  `${withPrompt} carrying interface.defaultPrompt`,
+                `${skills.length} skill(s) across ${entries.length} cwd(s), ` + `${withPrompt} carrying interface.defaultPrompt`,
               )
             }
           }
@@ -288,7 +296,7 @@ async function canaries(): Promise<void> {
         fail(
           'skills/list shape',
           `skills/list rejected: ${(error as Error).message} — the skills panel and the ` +
-            'composer\'s skill completion are both dead until the runner is updated',
+            "composer's skill completion are both dead until the runner is updated",
         )
       }
 
@@ -323,10 +331,7 @@ async function canaries(): Promise<void> {
           const keys = ['writable_roots', 'network_access', 'exclude_tmpdir_env_var', 'exclude_slash_tmp']
           const missing = keys.filter((k) => !(k in block))
           if (missing.length) {
-            fail(
-              'config/read sandbox_workspace_write',
-              `block is missing ${missing.join(', ')} — the restated policy would default them`,
-            )
+            fail('config/read sandbox_workspace_write', `block is missing ${missing.join(', ')} — the restated policy would default them`)
           } else {
             pass('config/read sandbox_workspace_write', `all four fields present`)
           }
@@ -374,14 +379,29 @@ async function canaries(): Promise<void> {
  * knowing about each one is.
  */
 async function threadItemUnionCanary(): Promise<void> {
-  if (!codexBin) return
+  if (!codexBin) {
+    return
+  }
   // Every variant present in 0.146.0. Adding to this list is the deliberate act
   // of saying "we have looked at this one".
   const KNOWN = new Set([
-    'userMessage', 'hookPrompt', 'agentMessage', 'plan', 'reasoning',
-    'commandExecution', 'fileChange', 'mcpToolCall', 'dynamicToolCall',
-    'collabAgentToolCall', 'subAgentActivity', 'webSearch', 'imageView',
-    'sleep', 'imageGeneration', 'enteredReviewMode', 'exitedReviewMode',
+    'userMessage',
+    'hookPrompt',
+    'agentMessage',
+    'plan',
+    'reasoning',
+    'commandExecution',
+    'fileChange',
+    'mcpToolCall',
+    'dynamicToolCall',
+    'collabAgentToolCall',
+    'subAgentActivity',
+    'webSearch',
+    'imageView',
+    'sleep',
+    'imageGeneration',
+    'enteredReviewMode',
+    'exitedReviewMode',
     'contextCompaction',
   ])
   // What `AppServerItem` in `engines/codex/types.ts` actually models. Everything
@@ -390,9 +410,17 @@ async function threadItemUnionCanary(): Promise<void> {
   // work (`engines/codex/subagents.ts`): `subAgentActivity` is the spawn
   // signal the whole design keys off, `collabAgentToolCall` a plain tool card.
   const MAPPED = new Set([
-    'agentMessage', 'reasoning', 'commandExecution', 'fileChange', 'mcpToolCall',
-    'webSearch', 'imageGeneration', 'imageView', 'userMessage',
-    'subAgentActivity', 'collabAgentToolCall',
+    'agentMessage',
+    'reasoning',
+    'commandExecution',
+    'fileChange',
+    'mcpToolCall',
+    'webSearch',
+    'imageGeneration',
+    'imageView',
+    'userMessage',
+    'subAgentActivity',
+    'collabAgentToolCall',
   ])
 
   const out = mkdtempSync(join(tmpdir(), 'wd-codex-schema-'))
@@ -400,9 +428,10 @@ async function threadItemUnionCanary(): Promise<void> {
     await execFileP(codexBin, ['app-server', 'generate-json-schema', '--out', out], {
       timeout: 60_000,
     })
-    const schema = JSON.parse(
-      readFileSync(join(out, 'codex_app_server_protocol.v2.schemas.json'), 'utf8'),
-    ) as { definitions?: Record<string, unknown>; $defs?: Record<string, unknown> }
+    const schema = JSON.parse(readFileSync(join(out, 'codex_app_server_protocol.v2.schemas.json'), 'utf8')) as {
+      definitions?: Record<string, unknown>
+      $defs?: Record<string, unknown>
+    }
     const item = (schema.definitions ?? schema.$defs ?? {})['ThreadItem'] as
       | { oneOf?: { properties?: { type?: { const?: string; enum?: string[] } } }[] }
       | undefined
@@ -427,8 +456,7 @@ async function threadItemUnionCanary(): Promise<void> {
     const unmapped = variants.filter((name) => !MAPPED.has(name))
     pass(
       'ThreadItem union',
-      `${variants.length} variants, none new` +
-        (unmapped.length > 0 ? ` · ${unmapped.length} unmapped: ${unmapped.join(', ')}` : ''),
+      `${variants.length} variants, none new` + (unmapped.length > 0 ? ` · ${unmapped.length} unmapped: ${unmapped.join(', ')}` : ''),
     )
   } catch (error) {
     fail('ThreadItem union', `generate-json-schema failed: ${(error as Error).message}`)
@@ -440,7 +468,9 @@ async function threadItemUnionCanary(): Promise<void> {
 /** The auth this run will use, mirroring the availability probe's chain:
  * `login status` alone — the env keys are not read by the app-server. */
 async function detectAuth(): Promise<string | null> {
-  if (!codexBin) return null
+  if (!codexBin) {
+    return null
+  }
   try {
     await execFileP(codexBin, ['login', 'status'], { timeout: 15_000 })
     return 'codex login'
@@ -460,7 +490,9 @@ async function clearScenario(cwd: string): Promise<void> {
   try {
     await runClearScenario(cwd, open)
   } finally {
-    for (const runner of open) runner.close()
+    for (const runner of open) {
+      runner.close()
+    }
   }
 }
 
@@ -495,16 +527,14 @@ async function runClearScenario(cwd: string, open: CodexRunner[]): Promise<void>
   await waitFor(() => turnResults(clearRun.events).length >= 1, 120_000, 'the pre-clear turn')
   const clearedThread = clearRun.runner.sdkSessionId
   const readingBefore = clearRun.runner.info().contextUsage
-  if (!clearedThread) throw new Error('no thread id after the pre-clear turn')
+  if (!clearedThread) {
+    throw new Error('no thread id after the pre-clear turn')
+  }
 
   // The literal `/clear` a user types, not the route — deliberately the same
   // call, so this exercises both entry points at once.
   clearRun.runner.sendMessage('/clear')
-  await waitFor(
-    () => clearRun.events.some((e) => e.type === 'conversation_reset'),
-    60_000,
-    'conversation_reset',
-  )
+  await waitFor(() => clearRun.events.some((e) => e.type === 'conversation_reset'), 60_000, 'conversation_reset')
   const newThread = clearRun.runner.sdkSessionId
   if (newThread && newThread !== clearedThread) {
     // The LAST octet, not the first: codex thread ids are time-ordered, so two
@@ -512,23 +542,16 @@ async function runClearScenario(cwd: string, open: CodexRunner[]): Promise<void>
     // renders a genuine change as no change at all.
     pass('clear starts a new thread', `…${clearedThread.slice(-8)} → …${newThread.slice(-8)}`)
   } else {
-    fail(
-      'clear starts a new thread',
-      newThread ? 'the thread id did not change — this was a resume, not a start' : 'no new thread id',
-    )
+    fail('clear starts a new thread', newThread ? 'the thread id did not change — this was a resume, not a start' : 'no new thread id')
   }
   if (clearRun.runner.info().contextUsage === undefined) {
     pass('the reading is retired', 'contextUsage is absent, so the ring goes blank rather than 0%')
   } else {
-    fail(
-      'the reading is retired',
-      `contextUsage survived the reset: ${JSON.stringify(clearRun.runner.info().contextUsage)}`,
-    )
+    fail('the reading is retired', `contextUsage survived the reset: ${JSON.stringify(clearRun.runner.info().contextUsage)}`)
   }
 
   clearRun.runner.sendMessage(
-    'What codeword did I ask you to remember? Reply with just the codeword, ' +
-      'or the single word none if I never gave you one.',
+    'What codeword did I ask you to remember? Reply with just the codeword, ' + 'or the single word none if I never gave you one.',
   )
   await waitFor(() => turnResults(clearRun.events).length >= 2, 120_000, 'the post-clear turn')
   const afterClear = turnResults(clearRun.events)[1]
@@ -584,9 +607,7 @@ async function runClearScenario(cwd: string, open: CodexRunner[]): Promise<void>
     } else {
       fail(
         'the new thread is resumable, and clean',
-        history.includes(CODEWORD)
-          ? 'the cleared conversation came back on resume'
-          : 'the post-clear turn was not in the backfill',
+        history.includes(CODEWORD) ? 'the cleared conversation came back on resume' : 'the post-clear turn was not in the backfill',
       )
     }
     resumedNew.runner.close()
@@ -626,7 +647,9 @@ async function paid(): Promise<void> {
     })
     await runner.start()
     const [result] = turnResults(events)
-    if (!result) throw new Error('turn 1 produced no turn_result')
+    if (!result) {
+      throw new Error('turn 1 produced no turn_result')
+    }
     if (result.subtype !== 'success') {
       throw new Error(`turn 1 failed: ${result.errors?.join('; ')}`)
     }
@@ -634,20 +657,21 @@ async function paid(): Promise<void> {
       (e) =>
         e.type === 'assistant_message' &&
         Array.isArray(e.message.content) &&
-        e.message.content.some(
-          (b) => b.type === 'tool_use' && (b as { name?: string }).name === 'CodexCommand',
-        ),
+        e.message.content.some((b) => b.type === 'tool_use' && (b as { name?: string }).name === 'CodexCommand'),
     )
-    if (commandUse) pass('command execution', 'CodexCommand tool_use emitted for the echo')
-    else fail('command execution', 'no CodexCommand tool_use in the transcript')
+    if (commandUse) {
+      pass('command execution', 'CodexCommand tool_use emitted for the echo')
+    } else {
+      fail('command execution', 'no CodexCommand tool_use in the transcript')
+    }
     const echoed = events.some(
-      (e) =>
-        e.type === 'user_message' &&
-        Array.isArray(e.message.content) &&
-        JSON.stringify(e.message.content).includes('codex-smoke-ok'),
+      (e) => e.type === 'user_message' && Array.isArray(e.message.content) && JSON.stringify(e.message.content).includes('codex-smoke-ok'),
     )
-    if (echoed) pass('command output', 'tool_result carries the echoed marker')
-    else fail('command output', 'echo output did not reach a tool_result')
+    if (echoed) {
+      pass('command output', 'tool_result carries the echoed marker')
+    } else {
+      fail('command output', 'echo output did not reach a tool_result')
+    }
 
     // Token streaming — the reason the app-server transport is THE transport.
     // exec's JSONL never carried a partial message (the old smoke asserted the
@@ -666,8 +690,7 @@ async function paid(): Promise<void> {
     } else {
       fail(
         'token streaming',
-        'no stream_delta at all — item/agentMessage/delta never fired; the capability record ' +
-          "(streaming: 'token') is now a lie",
+        'no stream_delta at all — item/agentMessage/delta never fired; the capability record ' + "(streaming: 'token') is now a lie",
       )
     }
     // Agreement is asserted PER MESSAGE, not across the turn — a turn with a
@@ -685,15 +708,26 @@ async function paid(): Promise<void> {
     for (const event of events) {
       if (event.type === 'stream_delta') {
         const delta = (event.event as { delta?: { type?: string; text?: string } }).delta
-        if (delta?.type === 'text_delta') pending += delta.text ?? ''
+        if (delta?.type === 'text_delta') {
+          pending += delta.text ?? ''
+        }
         continue
       }
-      if (event.type !== 'assistant_message' || !Array.isArray(event.message.content)) continue
+      if (event.type !== 'assistant_message' || !Array.isArray(event.message.content)) {
+        continue
+      }
       const text = event.message.content.find((b) => b.type === 'text') as { text?: string } | undefined
-      if (text === undefined) continue
-      if (pending === '') continue // a message that was never streamed — nothing to agree with
-      if (text.text === pending) matched += 1
-      else mismatches.push(`streamed ${JSON.stringify(pending.slice(0, 30))} vs completed ${JSON.stringify((text.text ?? '').slice(0, 30))}`)
+      if (text === undefined) {
+        continue
+      }
+      if (pending === '') {
+        continue
+      } // a message that was never streamed — nothing to agree with
+      if (text.text === pending) {
+        matched += 1
+      } else {
+        mismatches.push(`streamed ${JSON.stringify(pending.slice(0, 30))} vs completed ${JSON.stringify((text.text ?? '').slice(0, 30))}`)
+      }
       pending = ''
     }
     if (matched > 0 && mismatches.length === 0) {
@@ -712,8 +746,11 @@ async function paid(): Promise<void> {
     if (!usage) {
       fail('usage', 'turn_result carried no usage — tokenUsage/updated never arrived')
     } else {
-      if (usage.output_tokens! > 0) pass('usage', `nonzero output (${usage.output_tokens})`)
-      else fail('usage', 'zero output tokens')
+      if (usage.output_tokens! > 0) {
+        pass('usage', `nonzero output (${usage.output_tokens})`)
+      } else {
+        fail('usage', 'zero output tokens')
+      }
       if (usage.input_tokens! >= 0 && usage.cache_read_input_tokens! >= 0) {
         pass(
           'usage relation',
@@ -724,7 +761,9 @@ async function paid(): Promise<void> {
     }
 
     const threadId = runner.sdkSessionId
-    if (!threadId) throw new Error('no thread id after turn 1')
+    if (!threadId) {
+      throw new Error('no thread id after turn 1')
+    }
     runner.close()
 
     // Turn 2: resume continuity (a fresh child + thread/resume) + the
@@ -787,10 +826,7 @@ async function paid(): Promise<void> {
     if (aliveResult?.subtype === 'success' && /alive/i.test(aliveResult.result ?? '')) {
       pass('post-interrupt resume', 'the thread stayed resumable after an interrupted turn')
     } else {
-      fail(
-        'post-interrupt resume',
-        `resume after interrupt: ${aliveResult?.result ?? aliveResult?.errors?.join('; ') ?? 'nothing'}`,
-      )
+      fail('post-interrupt resume', `resume after interrupt: ${aliveResult?.result ?? aliveResult?.errors?.join('; ') ?? 'nothing'}`)
     }
     afterInterrupt.runner.close()
 
@@ -822,20 +858,19 @@ async function paid(): Promise<void> {
     await readonly.runner.start()
     clearTimeout(readonlyTimeout)
     if (approvals.length > 0) {
-      pass(
-        'sandbox escalation asks',
-        `permission_requested (${approvals[0]!.toolName}): "${approvals[0]!.title ?? ''}"`,
-      )
+      pass('sandbox escalation asks', `permission_requested (${approvals[0]!.toolName}): "${approvals[0]!.title ?? ''}"`)
     } else {
       fail(
         'sandbox escalation asks',
-        'no permission_requested — the granular ask policy did not ask; the sandbox refusal ' +
-          'was silent (the pre-approvals behavior)',
+        'no permission_requested — the granular ask policy did not ask; the sandbox refusal ' + 'was silent (the pre-approvals behavior)',
       )
     }
     const wrote = existsSync(join(cwd, 'smoke-write-test.txt'))
-    if (!wrote) pass('denied escalation stays denied', 'the write never landed')
-    else fail('denied escalation stays denied', 'the file exists — a decline still let the write through')
+    if (!wrote) {
+      pass('denied escalation stays denied', 'the write never landed')
+    } else {
+      fail('denied escalation stays denied', 'the file exists — a decline still let the write through')
+    }
     const [readonlyResult] = turnResults(readonly.events)
     if (readonlyResult?.subtype === 'success') {
       pass('decline keeps the turn alive', 'the turn completed after the deny')
@@ -853,8 +888,7 @@ async function paid(): Promise<void> {
     // exec-era paid run (2026-08-05) caught an "expected blue" assertion that
     // had never executed. A model that never received the attachment cannot
     // name it.
-    const png =
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
     const vision = makeRunner(cwd, {})
     void vision.runner.start()
     vision.runner.sendMessage('In one word, what colour is this image?', [
@@ -872,10 +906,7 @@ async function paid(): Promise<void> {
     if (visionResult?.subtype === 'success' && /red/i.test(visionResult.result ?? '')) {
       pass('image attachment', `the model saw the red pixel ("${visionResult.result?.trim()}")`)
     } else {
-      fail(
-        'image attachment',
-        `answer: ${visionResult?.result ?? visionResult?.errors?.join('; ') ?? 'none'} (expected red)`,
-      )
+      fail('image attachment', `answer: ${visionResult?.result ?? visionResult?.errors?.join('; ') ?? 'none'} (expected red)`)
     }
     vision.runner.close()
 
@@ -887,7 +918,9 @@ async function paid(): Promise<void> {
 
 console.log('smoke:codex — CodexRunner over `codex app-server` against the real binary')
 await canaries()
-if (!CANARY_ONLY) await paid()
+if (!CANARY_ONLY) {
+  await paid()
+}
 if (failures > 0) {
   console.error(`\n${failures} check(s) failed`)
   process.exit(1)

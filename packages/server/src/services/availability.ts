@@ -47,7 +47,9 @@ export class AvailabilityTracker {
 
   probe(profile: ProfileInfo): void {
     const { checkCredentials, adapterFor, sessionEnvFor } = this.#opts
-    if (!checkCredentials) return
+    if (!checkCredentials) {
+      return
+    }
     const conf = checkCredentials === true ? {} : checkCredentials
     // Mark in-flight immediately so concurrent GET /profiles don't re-spawn.
     this.#verdicts.set(profile.name, {
@@ -60,32 +62,28 @@ export class AvailabilityTracker {
     const claudeProbe: ClaudeAuthProbe | undefined =
       engineOf(profile) !== 'claude'
         ? undefined
-        : (conf.probe ??
-          (conf.timeoutMs !== undefined
-            ? (env) => checkClaudeAuth(env, { timeoutMs: conf.timeoutMs })
-            : undefined))
-    const run: Promise<EngineAvailability> =
-      claudeProbe
-        ? claudeProbe(sessionEnvFor(profile)).then(
-            (status): EngineAvailability =>
-              status === 'logged_in'
-                ? { available: true }
-                : status === 'logged_out'
-                  ? { available: false, reason: 'no usable Claude credentials for this profile' }
-                  : { available: 'unknown' },
-          )
-        : adapter.checkAvailability(profile, sessionEnvFor(profile))
+        : (conf.probe ?? (conf.timeoutMs !== undefined ? (env) => checkClaudeAuth(env, { timeoutMs: conf.timeoutMs }) : undefined))
+    const run: Promise<EngineAvailability> = claudeProbe
+      ? claudeProbe(sessionEnvFor(profile)).then((status): EngineAvailability =>
+          status === 'logged_in'
+            ? { available: true }
+            : status === 'logged_out'
+              ? { available: false, reason: 'no usable Claude credentials for this profile' }
+              : { available: 'unknown' },
+        )
+      : adapter.checkAvailability(profile, sessionEnvFor(profile))
     void run
       .then((verdict) => {
         this.#verdicts.set(profile.name, { verdict, at: Date.now() })
         if (verdict.available === false && !this.#warned.has(profile.name)) {
           this.#warned.add(profile.name)
           console.warn(
-            `[workerdeck] Profile '${profile.name}' is unavailable: ${verdict.reason} ` +
-              '(`checkCredentials: false` disables this check)',
+            `[workerdeck] Profile '${profile.name}' is unavailable: ${verdict.reason} ` + '(`checkCredentials: false` disables this check)',
           )
         }
-        if (verdict.available === true) this.#warned.delete(profile.name)
+        if (verdict.available === true) {
+          this.#warned.delete(profile.name)
+        }
       })
       .catch(() => {
         // a probe that breaks is 'unknown', and unknown stays silent
@@ -98,9 +96,13 @@ export class AvailabilityTracker {
    * not evidence of anything and must not become a closed door.
    */
   checkAvailable(profile: ProfileInfo | undefined): Refusal | null {
-    if (!this.#opts.requireAvailableProfile || !profile) return null
+    if (!this.#opts.requireAvailableProfile || !profile) {
+      return null
+    }
     const verdict = this.get(profile.name)
-    if (!verdict || verdict.available !== false) return null
+    if (!verdict || verdict.available !== false) {
+      return null
+    }
     return {
       status: 503,
       error: `profile '${profile.name}' is unavailable: ${verdict.reason ?? 'no usable credentials'}`,
@@ -109,18 +111,24 @@ export class AvailabilityTracker {
 
   /** Launch-time sweep, concurrent and fire-and-forget. */
   preflight(profiles: ProfileInfo[]): void {
-    for (const profile of profiles) this.probe(profile)
+    for (const profile of profiles) {
+      this.probe(profile)
+    }
   }
 
   /** Lazy re-probe on reads, so an operator who just ran `codex login` (or
    * exported a key) sees the profile go green without a restart. Serves the
    * cached verdict now; the refreshed one lands on the next request. */
   refresh(profiles: ProfileInfo[]): void {
-    if (!this.#opts.checkCredentials) return
+    if (!this.#opts.checkCredentials) {
+      return
+    }
     const now = Date.now()
     for (const profile of profiles) {
       const cached = this.#verdicts.get(profile.name)
-      if (!cached || now - cached.at > AVAILABILITY_TTL_MS) this.probe(profile)
+      if (!cached || now - cached.at > AVAILABILITY_TTL_MS) {
+        this.probe(profile)
+      }
     }
   }
 }

@@ -20,8 +20,7 @@ export const SESSION_COOKIE = 'embedded_user'
  * what the app passes.
  */
 export function createCookieAuth(secret: string = randomBytes(32).toString('hex')) {
-  const sign = (value: string): string =>
-    createHmac('sha256', secret).update(value).digest('base64url')
+  const sign = (value: string): string => createHmac('sha256', secret).update(value).digest('base64url')
 
   return {
     /** `Set-Cookie` value for a login. */
@@ -41,9 +40,13 @@ export function createCookieAuth(secret: string = randomBytes(32).toString('hex'
     /** The user a request is authenticated as, or undefined. */
     resolve(req: Pick<IncomingMessage, 'headers'>): User | undefined {
       const raw = readCookie(req.headers.cookie, SESSION_COOKIE)
-      if (!raw) return undefined
+      if (!raw) {
+        return undefined
+      }
       const at = raw.lastIndexOf('.')
-      if (at <= 0) return undefined
+      if (at <= 0) {
+        return undefined
+      }
       const userId = raw.slice(0, at)
       const provided = Buffer.from(raw.slice(at + 1))
       const expected = Buffer.from(sign(userId))
@@ -84,7 +87,9 @@ export function sameOrigin(req: Pick<IncomingMessage, 'headers'>): boolean {
   const site = req.headers['sec-fetch-site']
   // 'none' is a direct navigation (the user typed the URL); 'same-origin' is the
   // SPA's own fetch. 'same-site' and 'cross-site' are not this app's.
-  if (typeof site === 'string') return site === 'same-origin' || site === 'none'
+  if (typeof site === 'string') {
+    return site === 'same-origin' || site === 'none'
+  }
   const origin = req.headers.origin
   if (typeof origin === 'string') {
     const host = req.headers.host
@@ -98,11 +103,17 @@ export function sameOrigin(req: Pick<IncomingMessage, 'headers'>): boolean {
 }
 
 export function readCookie(header: string | undefined, name: string): string | undefined {
-  if (!header) return undefined
+  if (!header) {
+    return undefined
+  }
   for (const part of header.split(';')) {
     const eq = part.indexOf('=')
-    if (eq === -1) continue
-    if (part.slice(0, eq).trim() === name) return decodeURIComponent(part.slice(eq + 1).trim())
+    if (eq === -1) {
+      continue
+    }
+    if (part.slice(0, eq).trim() === name) {
+      return decodeURIComponent(part.slice(eq + 1).trim())
+    }
   }
   return undefined
 }

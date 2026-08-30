@@ -53,8 +53,12 @@ export function createAppState(): AppState {
     },
     dispatch: (userId, intent) => {
       const set = listeners.get(userId)
-      if (!set || set.size === 0) return 0
-      for (const listener of set) listener(intent)
+      if (!set || set.size === 0) {
+        return 0
+      }
+      for (const listener of set) {
+        listener(intent)
+      }
       return set.size
     },
     subscribe: (userId, listener) => {
@@ -66,7 +70,9 @@ export function createAppState(): AppState {
       set.add(listener)
       return () => {
         set.delete(listener)
-        if (set.size === 0) listeners.delete(userId)
+        if (set.size === 0) {
+          listeners.delete(userId)
+        }
       }
     },
   }

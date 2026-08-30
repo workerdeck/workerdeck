@@ -23,18 +23,6 @@ export { BridgeHub } from './services/bridge.ts'
 export type { BridgeHubOptions } from './services/bridge.ts'
 export { SessionParkManager } from './services/parking.ts'
 export type { SessionParkOptions } from './services/parking.ts'
-export {
-  createFileSessionStore,
-  MemorySessionStore,
-  toDurableRecord,
-} from './services/session-store.ts'
-export type {
-  FileSessionStoreOptions,
-  ParkedSessionRecord,
-  SessionStore,
-} from './services/session-store.ts'
-export {
-  createFileProfileStore,
-  createMemoryProfileStore,
-  type ProfileStore,
-} from './services/profile-store.ts'
+export { createFileSessionStore, MemorySessionStore, toDurableRecord } from './services/session-store.ts'
+export type { FileSessionStoreOptions, ParkedSessionRecord, SessionStore } from './services/session-store.ts'
+export { createFileProfileStore, createMemoryProfileStore, type ProfileStore } from './services/profile-store.ts'

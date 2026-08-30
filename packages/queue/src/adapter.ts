@@ -60,10 +60,7 @@ export class InMemoryQueueAdapter implements QueueAdapter {
   claimNext(): Promise<JobRecord | null> {
     const now = Date.now()
     for (const job of this.#jobs.values()) {
-      if (
-        job.info.status === 'queued' &&
-        (job.info.nextRunAt === undefined || job.info.nextRunAt <= now)
-      ) {
+      if (job.info.status === 'queued' && (job.info.nextRunAt === undefined || job.info.nextRunAt <= now)) {
         job.info = { ...job.info, status: 'running' }
         return Promise.resolve(job)
       }
@@ -81,7 +78,9 @@ export class InMemoryQueueAdapter implements QueueAdapter {
 
   update(id: string, patch: Partial<JobInfo>): Promise<JobRecord | null> {
     const job = this.#jobs.get(id)
-    if (!job) return Promise.resolve(null)
+    if (!job) {
+      return Promise.resolve(null)
+    }
     job.info = { ...job.info, ...patch }
     return Promise.resolve(job)
   }

@@ -1,12 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 
 /**
@@ -50,13 +42,7 @@ const noop: ToolResultImageLoader = async () => undefined
 
 const ImageContext = createContext<ToolResultImageLoader>(noop)
 
-export function ToolResultImageProvider({
-  value,
-  children,
-}: {
-  value: ToolResultImageLoader | undefined
-  children: ReactNode
-}) {
+export function ToolResultImageProvider({ value, children }: { value: ToolResultImageLoader | undefined; children: ReactNode }) {
   return <ImageContext.Provider value={value ?? noop}>{children}</ImageContext.Provider>
 }
 
@@ -99,10 +85,14 @@ export function useToolResultImageSrc(ref: ToolResultImageRef): ToolResultImageS
     const timer = setTimeout(() => {
       load({ toolUseId, sourceSeq, partIndex, mediaType, bytes })
         .then((src) => {
-          if (live) setState({ src, failed: src === undefined })
+          if (live) {
+            setState({ src, failed: src === undefined })
+          }
         })
         .catch(() => {
-          if (live) setState({ failed: true })
+          if (live) {
+            setState({ failed: true })
+          }
         })
     }, MOUNT_SETTLE_MS)
     return () => {
@@ -135,21 +125,24 @@ type Entry = { pending: Promise<string | undefined>; url?: string; bytes: number
  * one authenticated request away, which is precisely what makes it cheap not to
  * have shipped them in the attach.
  */
-export function useToolResultImages(
-  client: WorkerDeckClient,
-  sessionId: string | undefined,
-): ToolResultImageLoader {
+export function useToolResultImages(client: WorkerDeckClient, sessionId: string | undefined): ToolResultImageLoader {
   const cache = useRef(new Map<string, Entry>())
   useEffect(
     () => () => {
-      for (const entry of cache.current.values()) if (entry.url) URL.revokeObjectURL(entry.url)
+      for (const entry of cache.current.values()) {
+        if (entry.url) {
+          URL.revokeObjectURL(entry.url)
+        }
+      }
       cache.current.clear()
     },
     [],
   )
   return useCallback(
     (ref: ToolResultImageRef) => {
-      if (!sessionId) return Promise.resolve(undefined)
+      if (!sessionId) {
+        return Promise.resolve(undefined)
+      }
       // The whole address, because every part of it can change under a row that
       // is still on screen: a dormant wake restarts the seqs, and a cached
       // address that outlived its log must miss rather than serve another
@@ -169,7 +162,9 @@ export function useToolResultImages(
       const pending = client
         .toolResultImage(sessionId, ref.sourceSeq, ref.toolUseId, ref.partIndex)
         .then((blob) => {
-          if (blob.size === 0) return undefined
+          if (blob.size === 0) {
+            return undefined
+          }
           const url = URL.createObjectURL(blob)
           const entry = cache.current.get(key)
           if (entry) {
@@ -198,11 +193,19 @@ export function useToolResultImages(
  * draw would be a fetch spent on nothing. */
 function evict(cache: Map<string, Entry>, keep: string): void {
   let held = 0
-  for (const entry of cache.values()) held += entry.bytes
+  for (const entry of cache.values()) {
+    held += entry.bytes
+  }
   for (const [key, entry] of cache) {
-    if (held <= CACHE_BUDGET_BYTES) return
-    if (key === keep) continue
-    if (entry.url) URL.revokeObjectURL(entry.url)
+    if (held <= CACHE_BUDGET_BYTES) {
+      return
+    }
+    if (key === keep) {
+      continue
+    }
+    if (entry.url) {
+      URL.revokeObjectURL(entry.url)
+    }
     cache.delete(key)
     held -= entry.bytes
   }

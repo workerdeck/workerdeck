@@ -140,11 +140,7 @@ describe('agent loop + sandboxed tool execution', () => {
     expect(result).toMatchObject({ status: 'failed', reason: 'timeout' })
 
     // A failed execution is ordinary loop input, not a session error.
-    runner.resolveToolCall(
-      pending.toolCallId,
-      { type: 'text', value: `${result.reason}: ${result.error}` },
-      { isError: true },
-    )
+    runner.resolveToolCall(pending.toolCallId, { type: 'text', value: `${result.reason}: ${result.error}` }, { isError: true })
     await waitFor(() => events.some((e) => e.type === 'turn_result'))
     expect(events.find((e) => e.type === 'turn_result')).toMatchObject({
       subtype: 'success',
@@ -159,7 +155,9 @@ describe('agent loop + sandboxed tool execution', () => {
 async function waitFor(predicate: () => boolean, ms = 5000): Promise<void> {
   const deadline = Date.now() + ms
   while (!predicate()) {
-    if (Date.now() > deadline) throw new Error('timed out waiting for condition')
+    if (Date.now() > deadline) {
+      throw new Error('timed out waiting for condition')
+    }
     await new Promise((r) => setTimeout(r, 5))
   }
 }

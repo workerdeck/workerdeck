@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type {
-  Options,
-  Query,
-  SDKMessage,
-  SDKUserMessage,
-} from '@anthropic-ai/claude-agent-sdk'
+import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { SessionRunner, type SessionRunnerConfig } from '../src/index.ts'
 
@@ -51,8 +46,12 @@ function fakeHarness(capabilities?: HarnessCapabilities) {
     },
     next(): Promise<IteratorResult<SDKMessage>> {
       const buffered = messages.shift()
-      if (buffered !== undefined) return Promise.resolve({ value: buffered, done: false })
-      if (done) return Promise.resolve({ value: undefined, done: true })
+      if (buffered !== undefined) {
+        return Promise.resolve({ value: buffered, done: false })
+      }
+      if (done) {
+        return Promise.resolve({ value: undefined, done: true })
+      }
       return new Promise((resolve) => {
         waiter = resolve
       })
@@ -67,14 +66,10 @@ function fakeHarness(capabilities?: HarnessCapabilities) {
           supportedCommands: vi.fn(async () => capabilities.commands ?? []),
         }
       : {}),
-    ...(capabilities?.contextUsage
-      ? { getContextUsage: vi.fn(async () => capabilities.contextUsage) }
-      : {}),
+    ...(capabilities?.contextUsage ? { getContextUsage: vi.fn(async () => capabilities.contextUsage) } : {}),
     ...(capabilities?.usage
       ? {
-          usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: vi.fn(
-            async () => capabilities.usage,
-          ),
+          usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: vi.fn(async () => capabilities.usage),
         }
       : {}),
   } as unknown as Query
@@ -140,10 +135,7 @@ const resultMessage = {
   session_id: 'sdk-session-1',
 } as unknown as SDKMessage
 
-function makeRunner(
-  overrides: Partial<SessionRunnerConfig> = {},
-  capabilities?: HarnessCapabilities,
-) {
+function makeRunner(overrides: Partial<SessionRunnerConfig> = {}, capabilities?: HarnessCapabilities) {
   const harness = fakeHarness(capabilities)
   const runner = new SessionRunner({
     cwd: '/tmp/project',
@@ -188,9 +180,7 @@ describe('SessionRunner', () => {
     runner.sendMessage('second')
     await tick()
 
-    const userEvents = events.filter(
-      (e): e is Extract<SessionEvent, { type: 'user_message' }> => e.type === 'user_message',
-    )
+    const userEvents = events.filter((e): e is Extract<SessionEvent, { type: 'user_message' }> => e.type === 'user_message')
     expect(userEvents.map((e) => e.message.content)).toEqual(['first', 'second'])
     expect(userEvents.every((e) => typeof e.uuid === 'string' && e.uuid.length > 0)).toBe(true)
     expect(userEvents.every((e) => !e.synthetic && !e.replay)).toBe(true)
@@ -202,10 +192,7 @@ describe('SessionRunner', () => {
     runner.sendMessage('follow-up')
     await tick()
 
-    expect(harness.captured.inputs.map((m) => m.message.content)).toEqual([
-      '/verify-content 42',
-      'follow-up',
-    ])
+    expect(harness.captured.inputs.map((m) => m.message.content)).toEqual(['/verify-content 42', 'follow-up'])
   })
 
   it('promotes canUseTool into a pending approval and resolves an allow decision', async () => {
@@ -308,7 +295,8 @@ describe('SessionRunner', () => {
     await tick()
 
     const result = await harness.captured.options!.canUseTool!('AskUserQuestion', questionInput, {
-      signal: new AbortController().signal, requestId: 'creq-1',
+      signal: new AbortController().signal,
+      requestId: 'creq-1',
       toolUseID: 'q-1',
     })
     expect(result).toEqual({
@@ -340,7 +328,8 @@ describe('SessionRunner', () => {
     await tick()
 
     const result = await harness.captured.options!.canUseTool!('AskUserQuestion', questionInput, {
-      signal: new AbortController().signal, requestId: 'creq-1',
+      signal: new AbortController().signal,
+      requestId: 'creq-1',
       toolUseID: 'q-2',
     })
     expect(result).toMatchObject({ behavior: 'deny', toolUseID: 'q-2' })
@@ -366,11 +355,11 @@ describe('SessionRunner', () => {
     harness.emit(initMessage)
     await tick()
 
-    const resultPromise = harness.captured.options!.canUseTool!(
-      'AskUserQuestion',
-      questionInput,
-      { signal: new AbortController().signal, requestId: 'creq-1', toolUseID: 'q-3' },
-    )
+    const resultPromise = harness.captured.options!.canUseTool!('AskUserQuestion', questionInput, {
+      signal: new AbortController().signal,
+      requestId: 'creq-1',
+      toolUseID: 'q-3',
+    })
     await tick()
     expect(runner.pendingApprovals).toHaveLength(1)
 
@@ -411,23 +400,26 @@ describe('SessionRunner', () => {
   })
 
   it('polls context usage after each turn and emits context_usage', async () => {
-    const { harness, runner, events } = makeRunner({}, {
-      contextUsage: {
-        categories: [
-          { name: 'System prompt', tokens: 3000, color: '#888', isDeferred: false },
-          { name: 'Messages', tokens: 39_000, color: '#0aa' },
-        ],
-        totalTokens: 42_000,
-        maxTokens: 200_000,
-        rawMaxTokens: 200_000,
-        percentage: 21,
-        gridRows: [],
-        model: 'claude-test-1',
-        memoryFiles: [],
-        mcpTools: [],
-        agents: [],
+    const { harness, runner, events } = makeRunner(
+      {},
+      {
+        contextUsage: {
+          categories: [
+            { name: 'System prompt', tokens: 3000, color: '#888', isDeferred: false },
+            { name: 'Messages', tokens: 39_000, color: '#0aa' },
+          ],
+          totalTokens: 42_000,
+          maxTokens: 200_000,
+          rawMaxTokens: 200_000,
+          percentage: 21,
+          gridRows: [],
+          model: 'claude-test-1',
+          memoryFiles: [],
+          mcpTools: [],
+          agents: [],
+        },
       },
-    })
+    )
     void runner.start()
     harness.emit(initMessage)
     harness.emit(resultMessage)
@@ -449,10 +441,7 @@ describe('SessionRunner', () => {
       },
     })
     expect((usage as { usage: Record<string, unknown> }).usage.gridRows).toBeUndefined()
-    expect(
-      (usage as { usage: { categories: Array<Record<string, unknown>> } }).usage.categories[0]!
-        .isDeferred,
-    ).toBeUndefined()
+    expect((usage as { usage: { categories: Array<Record<string, unknown>> } }).usage.categories[0]!.isDeferred).toBeUndefined()
   })
 
   it('promotes rate_limit_event messages to first-class rate_limit events', async () => {
@@ -508,9 +497,7 @@ describe('SessionRunner', () => {
     await tick()
 
     // The plan is a session-long fact — polled every turn, emitted on change.
-    expect(events.filter((e) => e.type === 'plan_info')).toEqual([
-      expect.objectContaining({ type: 'plan_info', subscriptionType: 'max' }),
-    ])
+    expect(events.filter((e) => e.type === 'plan_info')).toEqual([expect.objectContaining({ type: 'plan_info', subscriptionType: 'max' })])
     // The windows are not: every poll re-reports them.
     expect(events.filter((e) => e.type === 'rate_limit').length).toBeGreaterThan(1)
     expect(events.find((e) => e.type === 'rate_limit')).toMatchObject({
@@ -519,10 +506,13 @@ describe('SessionRunner', () => {
   })
 
   it('emits capabilities after init when the query reports models/commands', async () => {
-    const { harness, runner, events } = makeRunner({ prompt: 'hi' }, {
-      models: [{ value: 'claude-opus-4-8', displayName: 'Opus 4.8', description: 'Most capable' }],
-      commands: [{ name: 'compact', description: 'Compact the conversation', argumentHint: '' }],
-    })
+    const { harness, runner, events } = makeRunner(
+      { prompt: 'hi' },
+      {
+        models: [{ value: 'claude-opus-4-8', displayName: 'Opus 4.8', description: 'Most capable' }],
+        commands: [{ name: 'compact', description: 'Compact the conversation', argumentHint: '' }],
+      },
+    )
     void runner.start()
     harness.emit(initMessage)
     await tick()
@@ -537,10 +527,13 @@ describe('SessionRunner', () => {
   it('fetches capabilities eagerly for promptless sessions, emitting only once', async () => {
     // The CLI answers control requests before the init handshake — a promptless
     // session must not sit blank (no models/commands) until its first message.
-    const { harness, runner, events } = makeRunner({}, {
-      models: [{ value: 'default', displayName: 'Default (recommended)', description: 'Opus' }],
-      commands: [{ name: 'compact', description: '', argumentHint: '' }],
-    })
+    const { harness, runner, events } = makeRunner(
+      {},
+      {
+        models: [{ value: 'default', displayName: 'Default (recommended)', description: 'Opus' }],
+        commands: [{ name: 'compact', description: '', argumentHint: '' }],
+      },
+    )
     void runner.start()
     await tick()
 
@@ -854,10 +847,7 @@ describe('SessionRunner', () => {
       harness.emit(resetMessage)
       await tick()
 
-      const reset = events.find(
-        (e): e is Extract<SessionEvent, { type: 'conversation_reset' }> =>
-          e.type === 'conversation_reset',
-      )
+      const reset = events.find((e): e is Extract<SessionEvent, { type: 'conversation_reset' }> => e.type === 'conversation_reset')
       expect(reset?.sdkSessionId).toBe('sdk-session-2')
       // A dormant record written between the clear and the next prompt must
       // resume the fresh conversation, not replay the cleared one.
@@ -868,10 +858,7 @@ describe('SessionRunner', () => {
     })
 
     it('replays no pre-reset content to a fresh attach, but every state-bearing event', async () => {
-      const { harness, runner } = makeRunner(
-        {},
-        { models: [{ value: 'opus', displayName: 'Opus', description: '' }], commands: [] },
-      )
+      const { harness, runner } = makeRunner({}, { models: [{ value: 'opus', displayName: 'Opus', description: '' }], commands: [] })
       void runner.start()
       await tick() // promptless: capabilities fetched eagerly
       harness.emit(initMessage)
@@ -894,10 +881,7 @@ describe('SessionRunner', () => {
       expect(types).toContain('status_changed')
       expect(types).toContain('conversation_reset')
       // The surviving assistant message is the post-reset one.
-      const assistant = replayed.find(
-        (e): e is Extract<SessionEvent, { type: 'assistant_message' }> =>
-          e.type === 'assistant_message',
-      )
+      const assistant = replayed.find((e): e is Extract<SessionEvent, { type: 'assistant_message' }> => e.type === 'assistant_message')
       expect(assistant?.uuid).toBe('uuid-a2')
     })
 
@@ -935,16 +919,10 @@ describe('SessionRunner', () => {
 
       const replayed: SessionEvent[] = []
       runner.subscribe((e) => replayed.push(e))
-      const resets = replayed.filter(
-        (e): e is Extract<SessionEvent, { type: 'conversation_reset' }> =>
-          e.type === 'conversation_reset',
-      )
+      const resets = replayed.filter((e): e is Extract<SessionEvent, { type: 'conversation_reset' }> => e.type === 'conversation_reset')
       expect(resets).toHaveLength(1)
       expect(resets[0]!.sdkSessionId).toBe('sdk-session-3')
-      const assistants = replayed.filter(
-        (e): e is Extract<SessionEvent, { type: 'assistant_message' }> =>
-          e.type === 'assistant_message',
-      )
+      const assistants = replayed.filter((e): e is Extract<SessionEvent, { type: 'assistant_message' }> => e.type === 'assistant_message')
       expect(assistants.map((e) => e.uuid)).toEqual(['uuid-after'])
       expect(runner.sdkSessionId).toBe('sdk-session-3')
     })
@@ -972,18 +950,14 @@ describe('SessionRunner', () => {
  * whatever the engine says about the turn.
  */
 describe('status after a turn ends under a standing approval', () => {
-  const askApproval = (
-    harness: ReturnType<typeof makeRunner>['harness'],
-    id: string,
-  ): void =>
+  const askApproval = (harness: ReturnType<typeof makeRunner>['harness'], id: string): void =>
     void harness.captured.options!.canUseTool!(
       'Bash',
       { command: 'ls' },
       { signal: new AbortController().signal, requestId: id, toolUseID: `tool-${id}` },
     )
 
-  const stateChanged = (state: 'idle' | 'running') =>
-    ({ type: 'system', subtype: 'session_state_changed', state }) as unknown as SDKMessage
+  const stateChanged = (state: 'idle' | 'running') => ({ type: 'system', subtype: 'session_state_changed', state }) as unknown as SDKMessage
 
   it('settles to idle when turn_result arrived while the approval was pending', async () => {
     const { harness, runner } = makeRunner()

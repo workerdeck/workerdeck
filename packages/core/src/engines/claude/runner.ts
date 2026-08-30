@@ -26,11 +26,7 @@ import {
   type SessionInfo,
   type SessionStatus,
 } from '@workerdeck/protocol'
-import {
-  type AttachmentInput,
-  attachmentContentBlocks,
-  attachmentRef,
-} from '../../lib/attachments.ts'
+import { type AttachmentInput, attachmentContentBlocks, attachmentRef } from '../../lib/attachments.ts'
 import { InputQueue } from '../../lib/input-queue.ts'
 import {
   type UsageRateLimits,
@@ -46,20 +42,11 @@ import type { PermissionDecision, Runner, SessionEventListener } from '../../run
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { SubagentTracker } from './subagents.ts'
 
-export type QueryFn = (params: {
-  prompt: AsyncIterable<SDKUserMessage>
-  options?: Options
-}) => Query
+export type QueryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }) => Query
 
-export type HistoryFn = (
-  sdkSessionId: string,
-  options: { dir?: string },
-) => Promise<SessionMessage[]>
+export type HistoryFn = (sdkSessionId: string, options: { dir?: string }) => Promise<SessionMessage[]>
 
-export type SessionInfoFn = (
-  sdkSessionId: string,
-  options: { dir?: string },
-) => Promise<SDKSessionInfo | undefined>
+export type SessionInfoFn = (sdkSessionId: string, options: { dir?: string }) => Promise<SDKSessionInfo | undefined>
 
 export type SessionRunnerConfig = CreateSessionRequest & {
   /** Injectable query implementation (tests, instrumentation). Defaults to the SDK's query(). */
@@ -172,7 +159,9 @@ export class SessionRunner implements Runner {
     // required here: this one spawns the CLI in a real directory. The gateway
     // enforces it off `EngineCapabilities.hostCwd`, so reaching this throw means
     // a host built a runner around that check.
-    if (!config.cwd) throw new Error('the claude engine requires a cwd')
+    if (!config.cwd) {
+      throw new Error('the claude engine requires a cwd')
+    }
     this.#cwd = config.cwd
     this.#config = config
     this.#permissionMode = config.permissionMode
@@ -215,9 +204,7 @@ export class SessionRunner implements Runner {
       // Fixed at spawn: the CLI refuses to switch into bypass unless it was
       // launched for it (see #buildOptions). Reported so a client can disable
       // the mode rather than offer a switch that will be refused.
-      canBypassPermissions:
-        this.#config.permissionMode === 'bypassPermissions' ||
-        this.#config.allowDangerouslySkipPermissions === true,
+      canBypassPermissions: this.#config.permissionMode === 'bypassPermissions' || this.#config.allowDangerouslySkipPermissions === true,
       apiKeySource: this.#apiKeySource,
       createdAt: this.createdAt,
       lastSeq: this.#seq,
@@ -246,10 +233,16 @@ export class SessionRunner implements Runner {
    */
   #title(): string | undefined {
     const metaTitle = this.#config.meta?.title
-    if (typeof metaTitle === 'string' && metaTitle.length > 0) return metaTitle
-    if (this.#engineTitle) return this.#engineTitle
+    if (typeof metaTitle === 'string' && metaTitle.length > 0) {
+      return metaTitle
+    }
+    if (this.#engineTitle) {
+      return this.#engineTitle
+    }
     const prompt = this.#config.prompt
-    if (!prompt) return undefined
+    if (!prompt) {
+      return undefined
+    }
     return prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt
   }
 
@@ -257,16 +250,23 @@ export class SessionRunner implements Runner {
    * it (undefined) restores the derived title. The engine is never told. */
   setTitle(title: string | undefined): void {
     const meta = { ...this.#config.meta }
-    if (title) meta.title = title
-    else delete meta.title
+    if (title) {
+      meta.title = title
+    } else {
+      delete meta.title
+    }
     this.#config = { ...this.#config, meta }
   }
 
   /** Begin the session. Idempotent; returns the run promise (resolves when the query ends). */
   start(): Promise<void> {
-    if (this.#started) return this.#runPromise!
+    if (this.#started) {
+      return this.#runPromise!
+    }
     this.#started = true
-    if (this.#config.prompt) this.sendMessage(this.#config.prompt)
+    if (this.#config.prompt) {
+      this.sendMessage(this.#config.prompt)
+    }
     this.#runPromise = this.#run()
     return this.#runPromise
   }
@@ -277,7 +277,9 @@ export class SessionRunner implements Runner {
    * are logged as references. A message may be attachments alone — an empty text
    * block is not valid API input, so the text is only added when there is some. */
   sendMessage(text: string, attachments?: readonly AttachmentInput[]): void {
-    if (this.#closed) throw new Error('session is closed')
+    if (this.#closed) {
+      throw new Error('session is closed')
+    }
     const blocks = attachments?.length ? attachmentContentBlocks(attachments) : []
     const content = blocks.length
       ? ([...blocks, ...(text ? [{ type: 'text', text }] : [])] as unknown as SDKUserMessage['message']['content'])
@@ -304,7 +306,9 @@ export class SessionRunner implements Runner {
    * pretending the session has no servers. */
   async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
     const query = this.#query
-    if (typeof query?.mcpServerStatus !== 'function') return undefined
+    if (typeof query?.mcpServerStatus !== 'function') {
+      return undefined
+    }
     return (await query.mcpServerStatus()).map(mcpStatusInfo)
   }
 
@@ -327,7 +331,9 @@ export class SessionRunner implements Runner {
   /** Resolve a pending permission request. Returns false if the id is unknown (e.g. timed out). */
   resolvePermission(requestId: string, decision: PermissionDecision): boolean {
     const pending = this.#pending.get(requestId)
-    if (!pending) return false
+    if (!pending) {
+      return false
+    }
     this.#settleApproval(requestId, pending, decision, 'client')
     return true
   }
@@ -376,7 +382,9 @@ export class SessionRunner implements Runner {
 
   /** Emit a session_error and terminate. For host-enforced policy (e.g. requireApiKey). */
   fail(message: string): void {
-    if (this.#closed) return
+    if (this.#closed) {
+      return
+    }
     this.#emit({ type: 'session_error', message })
     this.#setStatus('failed')
     this.close('error')
@@ -384,7 +392,9 @@ export class SessionRunner implements Runner {
 
   /** Terminate the session and the underlying CLI subprocess. */
   close(reason: 'client' | 'server' | 'error' = 'client'): void {
-    if (this.#closed) return
+    if (this.#closed) {
+      return
+    }
     this.#closed = true
     for (const [id, pending] of this.#pending) {
       this.#settleApproval(id, pending, { behavior: 'deny', message: 'Session closed' }, 'policy')
@@ -415,11 +425,7 @@ export class SessionRunner implements Runner {
    * reconnecting client still holding pre-reset rows; superseded resets are
    * content below the newer one and are skipped with what they cleared.
    */
-  subscribe(
-    listener: SessionEventListener,
-    afterSeq = 0,
-    options?: SubscribeOptions,
-  ): () => void {
+  subscribe(listener: SessionEventListener, afterSeq = 0, options?: SubscribeOptions): () => void {
     return this.#subscribers.subscribe(this.#events, listener, afterSeq, options, this.#resetSeq)
   }
 
@@ -427,7 +433,9 @@ export class SessionRunner implements Runner {
     const queryFn = this.#config.queryFn ?? (sdkQuery as QueryFn)
     try {
       await this.#backfillHistory()
-      if (this.#closed) return
+      if (this.#closed) {
+        return
+      }
       this.#query = queryFn({ prompt: this.#input, options: this.#buildOptions() })
       // Without an initial prompt the CLI stays silent (no init handshake) until the
       // first message arrives, so 'starting' would never resolve — the session is
@@ -470,9 +478,10 @@ export class SessionRunner implements Runner {
    */
   async #backfillHistory(): Promise<void> {
     const c = this.#config
-    if (!c.resume || c.backfillHistory === false) return
-    const historyFn = c.historyFn
-      ?? ((sessionId: string, options: { dir?: string }) => getSessionMessages(sessionId, options))
+    if (!c.resume || c.backfillHistory === false) {
+      return
+    }
+    const historyFn = c.historyFn ?? ((sessionId: string, options: { dir?: string }) => getSessionMessages(sessionId, options))
     let messages: SessionMessage[]
     try {
       messages = await historyFn(c.resume, { dir: this.#cwd })
@@ -481,7 +490,9 @@ export class SessionRunner implements Runner {
       return
     }
     for (const m of messages) {
-      if (this.#closed) return
+      if (this.#closed) {
+        return
+      }
       if (m.type === 'user') {
         const message = toApiMessage(m.message)
         this.#emit({
@@ -544,9 +555,7 @@ export class SessionRunner implements Runner {
       // with the capability — smoke-verified: "Cannot set permission mode to
       // bypassPermissions because the session was not launched with
       // --dangerously-skip-permissions".
-      ...(c.permissionMode === 'bypassPermissions' || c.allowDangerouslySkipPermissions
-        ? { allowDangerouslySkipPermissions: true }
-        : {}),
+      ...(c.permissionMode === 'bypassPermissions' || c.allowDangerouslySkipPermissions ? { allowDangerouslySkipPermissions: true } : {}),
       ...c.extraOptions,
     }
     return options
@@ -586,12 +595,18 @@ export class SessionRunner implements Runner {
       // *display*, which is not a reason to forget what it said. Remember, and
       // apply it when the approval settles.
       if (this.#pending.size > 0) {
-        if (msg.state === 'idle') this.#turnOverWhileBlocked = true
-        else if (msg.state === 'running') this.#turnOverWhileBlocked = false
+        if (msg.state === 'idle') {
+          this.#turnOverWhileBlocked = true
+        } else if (msg.state === 'running') {
+          this.#turnOverWhileBlocked = false
+        }
         return
       }
-      if (msg.state === 'idle') this.#setStatus('idle')
-      else if (msg.state === 'running') this.#setStatus('running')
+      if (msg.state === 'idle') {
+        this.#setStatus('idle')
+      } else if (msg.state === 'running') {
+        this.#setStatus('running')
+      }
       return
     }
     const body = normalizeSdkMessage(msg)
@@ -603,7 +618,9 @@ export class SessionRunner implements Runner {
         // with the next prompt) — a dormant record written in between must
         // resume the fresh conversation, not replay the cleared one. The next
         // system_init stays authoritative and overwrites it.
-        if (body.sdkSessionId) this.#sdkSessionId = body.sdkSessionId
+        if (body.sdkSessionId) {
+          this.#sdkSessionId = body.sdkSessionId
+        }
         // The window now holds an almost-empty conversation; re-poll so clients
         // aren't left staring at the cleared conversation's reading.
         void this.#fetchContextUsage()
@@ -614,8 +631,11 @@ export class SessionRunner implements Runner {
         this.#numTurns = body.numTurns
         // Fallback for SDK versions without session_state_changed, deferred
         // under a standing approval for the reason above.
-        if (this.#pending.size === 0) this.#setStatus('idle')
-        else this.#turnOverWhileBlocked = true
+        if (this.#pending.size === 0) {
+          this.#setStatus('idle')
+        } else {
+          this.#turnOverWhileBlocked = true
+        }
         // Context usage moves every turn; the poll is a cheap control request.
         void this.#fetchContextUsage()
         void this.#fetchRateLimits()
@@ -630,17 +650,18 @@ export class SessionRunner implements Runner {
    * queries in tests may not implement these, and a failure must not affect the
    * session. */
   async #fetchCapabilities(): Promise<void> {
-    if (this.#capabilitiesEmitted) return
+    if (this.#capabilitiesEmitted) {
+      return
+    }
     const query = this.#query
     if (typeof query?.supportedModels !== 'function' || typeof query.supportedCommands !== 'function') {
       return
     }
     try {
-      const [models, commands] = await Promise.all([
-        query.supportedModels(),
-        query.supportedCommands(),
-      ])
-      if (this.#closed || this.#capabilitiesEmitted) return
+      const [models, commands] = await Promise.all([query.supportedModels(), query.supportedCommands()])
+      if (this.#closed || this.#capabilitiesEmitted) {
+        return
+      }
       this.#capabilitiesEmitted = true
       this.#emit({
         type: 'capabilities',
@@ -684,17 +705,24 @@ export class SessionRunner implements Runner {
    */
   async #fetchEngineTitle(): Promise<void> {
     const metaTitle = this.#config.meta?.title
-    if (typeof metaTitle === 'string' && metaTitle.length > 0) return
+    if (typeof metaTitle === 'string' && metaTitle.length > 0) {
+      return
+    }
     const sdkSessionId = this.#sdkSessionId
-    if (!sdkSessionId) return
+    if (!sdkSessionId) {
+      return
+    }
     const read = this.#config.sessionInfoFn ?? getSessionInfo
     try {
       const info = await read(sdkSessionId, { dir: this.#cwd })
-      if (this.#closed || !info) return
-      const summary =
-        info.summary && info.summary !== info.firstPrompt ? info.summary : undefined
+      if (this.#closed || !info) {
+        return
+      }
+      const summary = info.summary && info.summary !== info.firstPrompt ? info.summary : undefined
       const title = info.customTitle || summary
-      if (title) this.#engineTitle = title
+      if (title) {
+        this.#engineTitle = title
+      }
     } catch {
       // The title is decoration; a session with none works exactly as well.
     }
@@ -704,10 +732,14 @@ export class SessionRunner implements Runner {
    * and best-effort for the same reasons as #fetchCapabilities. */
   async #fetchContextUsage(): Promise<void> {
     const query = this.#query
-    if (typeof query?.getContextUsage !== 'function') return
+    if (typeof query?.getContextUsage !== 'function') {
+      return
+    }
     try {
       const usage = await query.getContextUsage()
-      if (this.#closed) return
+      if (this.#closed) {
+        return
+      }
       this.#emit({
         type: 'context_usage',
         usage: {
@@ -739,14 +771,16 @@ export class SessionRunner implements Runner {
    * this can only ever be decoration.
    */
   async #fetchRateLimits(): Promise<void> {
-    const query = this.#query as
-      | { usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<unknown> }
-      | undefined
+    const query = this.#query as { usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<unknown> } | undefined
     const fetchUsage = query?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET
-    if (typeof fetchUsage !== 'function') return
+    if (typeof fetchUsage !== 'function') {
+      return
+    }
     try {
       const usage = (await fetchUsage.call(query)) as UsageRateLimits
-      if (this.#closed) return
+      if (this.#closed) {
+        return
+      }
       // The plan names the windows, so it goes out ahead of them — and only when
       // it changes, since this is polled after every turn and the answer is the
       // same one all session long.
@@ -755,7 +789,9 @@ export class SessionRunner implements Runner {
         this.#subscriptionType = subscriptionType
         this.#emit({ type: 'plan_info', subscriptionType })
       }
-      for (const body of rateLimitEventsFromUsage(usage)) this.#emit(body)
+      for (const body of rateLimitEventsFromUsage(usage)) {
+        this.#emit(body)
+      }
     } catch {
       // Best-effort, and experimental on top of that.
     }
@@ -763,8 +799,7 @@ export class SessionRunner implements Runner {
 
   #canUseTool: CanUseTool = (toolName, input, options) => {
     const id = randomUUID()
-    const timeoutMs = this.#config.approvalTimeoutMs ?? this.#config.defaultApprovalTimeoutMs
-      ?? DEFAULT_APPROVAL_TIMEOUT_MS
+    const timeoutMs = this.#config.approvalTimeoutMs ?? this.#config.defaultApprovalTimeoutMs ?? DEFAULT_APPROVAL_TIMEOUT_MS
     const request: PermissionRequest = {
       id,
       toolName,
@@ -786,24 +821,14 @@ export class SessionRunner implements Runner {
       const timer = setTimeout(() => {
         const pending = this.#pending.get(id)
         if (pending) {
-          this.#settleApproval(
-            id,
-            pending,
-            { behavior: 'deny', message: 'Approval timed out' },
-            'timeout',
-          )
+          this.#settleApproval(id, pending, { behavior: 'deny', message: 'Approval timed out' }, 'timeout')
         }
       }, timeoutMs)
       this.#pending.set(id, { request, resolve, timer })
       options.signal.addEventListener('abort', () => {
         const pending = this.#pending.get(id)
         if (pending) {
-          this.#settleApproval(
-            id,
-            pending,
-            { behavior: 'deny', message: 'Turn aborted' },
-            'policy',
-          )
+          this.#settleApproval(id, pending, { behavior: 'deny', message: 'Turn aborted' }, 'policy')
         }
       })
       this.#emit({ type: 'permission_requested', request })
@@ -818,8 +843,7 @@ export class SessionRunner implements Runner {
   #resolveQuestionByPolicy(request: PermissionRequest, mode: 'auto' | 'deny'): PermissionResult {
     this.#emit({ type: 'permission_requested', request })
     if (mode === 'deny') {
-      const message =
-        'Interactive questions are disabled for this session — choose the most reasonable option yourself and continue.'
+      const message = 'Interactive questions are disabled for this session — choose the most reasonable option yourself and continue.'
       this.#emit({
         type: 'permission_resolved',
         requestId: request.id,
@@ -842,12 +866,7 @@ export class SessionRunner implements Runner {
     }
   }
 
-  #settleApproval(
-    id: string,
-    pending: PendingApproval,
-    decision: PermissionDecision,
-    resolvedBy: 'client' | 'timeout' | 'policy',
-  ): void {
+  #settleApproval(id: string, pending: PendingApproval, decision: PermissionDecision, resolvedBy: 'client' | 'timeout' | 'policy'): void {
     clearTimeout(pending.timer)
     this.#pending.delete(id)
     if (decision.behavior === 'allow') {
@@ -879,15 +898,22 @@ export class SessionRunner implements Runner {
       // approval in a live turn cannot inherit it.
       const endedWhileBlocked = this.#turnOverWhileBlocked
       this.#turnOverWhileBlocked = false
-      if (endedWhileBlocked) this.#setStatus('idle')
-      else if (this.#status === 'awaiting_approval') this.#setStatus('running')
+      if (endedWhileBlocked) {
+        this.#setStatus('idle')
+      } else if (this.#status === 'awaiting_approval') {
+        this.#setStatus('running')
+      }
     }
   }
 
   #setStatus(status: SessionStatus, detail?: string): void {
-    if (this.#status === status && this.#statusDetail === detail) return
+    if (this.#status === status && this.#statusDetail === detail) {
+      return
+    }
     // Terminal states win.
-    if (this.#status === 'closed' || this.#status === 'failed') return
+    if (this.#status === 'closed' || this.#status === 'failed') {
+      return
+    }
     this.#status = status
     this.#statusDetail = detail
     this.#emit({ type: 'status_changed', status, detail })
@@ -926,9 +952,13 @@ function recommendedAnswers(input: Record<string, unknown>): Record<string, stri
   const questions = Array.isArray(input.questions) ? input.questions : []
   for (const entry of questions) {
     const q = entry as { question?: unknown; options?: unknown }
-    if (typeof q.question !== 'string' || !Array.isArray(q.options)) continue
+    if (typeof q.question !== 'string' || !Array.isArray(q.options)) {
+      continue
+    }
     const first = q.options[0] as { label?: unknown } | undefined
-    if (typeof first?.label === 'string') answers[q.question] = first.label
+    if (typeof first?.label === 'string') {
+      answers[q.question] = first.label
+    }
   }
   return answers
 }

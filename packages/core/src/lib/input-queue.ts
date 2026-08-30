@@ -10,7 +10,9 @@ export class InputQueue implements AsyncIterable<SDKUserMessage> {
   #done = false
 
   push(message: SDKUserMessage): void {
-    if (this.#done) return
+    if (this.#done) {
+      return
+    }
     if (this.#waiter) {
       const resolve = this.#waiter
       this.#waiter = null
@@ -21,7 +23,9 @@ export class InputQueue implements AsyncIterable<SDKUserMessage> {
   }
 
   end(): void {
-    if (this.#done) return
+    if (this.#done) {
+      return
+    }
     this.#done = true
     if (this.#waiter) {
       const resolve = this.#waiter
@@ -34,8 +38,12 @@ export class InputQueue implements AsyncIterable<SDKUserMessage> {
     return {
       next: (): Promise<IteratorResult<SDKUserMessage>> => {
         const buffered = this.#buffer.shift()
-        if (buffered !== undefined) return Promise.resolve({ value: buffered, done: false })
-        if (this.#done) return Promise.resolve({ value: undefined, done: true })
+        if (buffered !== undefined) {
+          return Promise.resolve({ value: buffered, done: false })
+        }
+        if (this.#done) {
+          return Promise.resolve({ value: undefined, done: true })
+        }
         return new Promise((resolve) => {
           this.#waiter = resolve
         })

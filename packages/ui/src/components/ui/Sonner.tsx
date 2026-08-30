@@ -6,7 +6,7 @@ export { toast }
 export function Toaster() {
   return (
     <SonnerToaster
-      position='bottom-right'
+      position="bottom-right"
       toastOptions={{
         style: {
           background: 'var(--surface)',

@@ -68,7 +68,7 @@ function peekContent(
     body = request ? (
       <>
         <div>{request.title ?? 'Permission required'}</div>
-        <div className='wd-scrub-ex' data-tone='muted'>
+        <div className="wd-scrub-ex" data-tone="muted">
           {`${request.displayName ?? request.toolName}(${toolInputPreview(request.input)})`}
         </div>
       </>
@@ -81,12 +81,12 @@ function peekContent(
       const turn = first.turnIndex === undefined ? undefined : items[first.turnIndex]
       body = (
         <>
-          {item?.kind === 'assistant_text' ? <div className='wd-scrub-ex'>{item.text}</div> : null}
+          {item?.kind === 'assistant_text' ? <div className="wd-scrub-ex">{item.text}</div> : null}
           {turn?.kind === 'turn_result' ? (
             <>
               <div data-tone={turn.isError ? 'danger' : 'muted'}>{doneLine(turn)}</div>
               {turn.errors?.map((message, index) => (
-                <div key={index} data-tone='danger'>
+                <div key={index} data-tone="danger">
                   {message}
                 </div>
               ))}
@@ -101,18 +101,14 @@ function peekContent(
           : undefined
       body = (
         <>
-          <div
-            className='wd-scrub-ex'
-            data-tone={
-              first.kind === 'error' || first.kind === 'toolFailed' ? 'danger' : undefined
-            }>
-            {first.kind === 'user' ? <span data-tone='muted'>{'❯ '}</span> : null}
+          <div className="wd-scrub-ex" data-tone={first.kind === 'error' || first.kind === 'toolFailed' ? 'danger' : undefined}>
+            {first.kind === 'user' ? <span data-tone="muted">{'❯ '}</span> : null}
             {excerpt(item)}
           </div>
           {/* Which tool failed is rarely the question — the first non-blank
               line of what it said back is the thing worth peeking at. */}
           {failure ? (
-            <div className='wd-scrub-ex' data-tone='danger'>
+            <div className="wd-scrub-ex" data-tone="danger">
               {failure}
             </div>
           ) : null}
@@ -122,7 +118,7 @@ function peekContent(
   }
   return (
     <>
-      <div data-tone='muted'>
+      <div data-tone="muted">
         {KIND_NAME[first?.kind ?? cluster.kind]}
         {more}
       </div>
@@ -144,13 +140,13 @@ export function Scrubber({
   const railRef = useRef<HTMLDivElement | null>(null)
   const peekRef = useRef<HTMLDivElement | null>(null)
   const [railH, setRailH] = useState(0)
-  const [peek, setPeek] = useState<{ cluster: Cluster; mark: Mark | undefined; y: number } | null>(
-    null,
-  )
+  const [peek, setPeek] = useState<{ cluster: Cluster; mark: Mark | undefined; y: number } | null>(null)
 
   useEffect(() => {
     const element = railRef.current
-    if (!element) return
+    if (!element) {
+      return
+    }
     const observer = new ResizeObserver(() => setRailH(element.clientHeight))
     observer.observe(element)
     setRailH(element.clientHeight)
@@ -168,36 +164,41 @@ export function Scrubber({
   // rail after it has a measured height.
   useLayoutEffect(() => {
     const element = peekRef.current
-    if (!element || !peek) return
+    if (!element || !peek) {
+      return
+    }
     const height = element.offsetHeight
     const railHeight = railRef.current?.clientHeight ?? 0
     element.style.top = `${Math.max(4, Math.min(railHeight - height - 4, peek.y - height / 2))}px`
   }, [peek])
 
   const clusters = useMemo(() => {
-    if (railH <= 0) return []
-    const built = clusterMarks(
-      buildMarks(items, { frameParentId, bookmarks, recapItemIndex }),
-      railH,
-      items.length,
-    )
-    if (pendingApprovals.length > 0) built.push(approvalCluster(railH))
+    if (railH <= 0) {
+      return []
+    }
+    const built = clusterMarks(buildMarks(items, { frameParentId, bookmarks, recapItemIndex }), railH, items.length)
+    if (pendingApprovals.length > 0) {
+      built.push(approvalCluster(railH))
+    }
     return built
   }, [items, frameParentId, bookmarks, recapItemIndex, pendingApprovals, railH])
 
   /** A pointer's y in rail space. */
-  const railY = (clientY: number): number =>
-    clientY - (railRef.current?.getBoundingClientRect().top ?? 0)
+  const railY = (clientY: number): number => clientY - (railRef.current?.getBoundingClientRect().top ?? 0)
 
   const activate = (cluster: Cluster, clientY: number) => {
     if (cluster.kind === 'approval' && cluster.marks.length === 0) {
       // The approval prompt renders below the transcript — the closest an
       // item jump can take the reader is the tail.
-      if (items.length > 0) onJumpToItem?.(items.length - 1)
+      if (items.length > 0) {
+        onJumpToItem?.(items.length - 1)
+      }
       return
     }
     const mark = nearestMember(cluster, railY(clientY))
-    if (mark) onJumpToItem?.(mark.itemIndex)
+    if (mark) {
+      onJumpToItem?.(mark.itemIndex)
+    }
   }
 
   const showPeek = (cluster: Cluster, clientY: number) => {
@@ -214,15 +215,11 @@ export function Scrubber({
   // carries, and interactive it is a pointer affordance rather than the
   // scroll surface — the native scrollbar stays the accessible one.
   return (
-    <div
-      ref={railRef}
-      className={cn('wd-scrubber', className)}
-      data-interactive={interactive || undefined}
-      aria-hidden>
+    <div ref={railRef} className={cn('wd-scrubber', className)} data-interactive={interactive || undefined} aria-hidden>
       {clusters.map((cluster, index) => (
         <div
           key={index}
-          className='wd-scrub-mark'
+          className="wd-scrub-mark"
           data-lane={cluster.lane}
           data-kind={cluster.kind}
           style={{ top: cluster.y, height: cluster.h }}
@@ -239,7 +236,7 @@ export function Scrubber({
         />
       ))}
       {peek ? (
-        <div ref={peekRef} className='wd-scrub-peek' style={{ top: peek.y }}>
+        <div ref={peekRef} className="wd-scrub-peek" style={{ top: peek.y }}>
           {peekContent(peek.cluster, peek.mark, items, pendingApprovals)}
         </div>
       ) : null}

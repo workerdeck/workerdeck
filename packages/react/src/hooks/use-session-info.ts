@@ -22,10 +22,7 @@ export type UseSessionInfoResult = {
  * Fetched once per session id. The record is registry state, not a live feed;
  * anything that changes during a run arrives on the session's event stream.
  */
-export function useSessionInfo(
-  client: WorkerDeckClient,
-  sessionId: string | undefined,
-): UseSessionInfoResult {
+export function useSessionInfo(client: WorkerDeckClient, sessionId: string | undefined): UseSessionInfoResult {
   const [info, setInfo] = useState<SessionInfo | undefined>()
   const [loading, setLoading] = useState(!!sessionId)
   const [error, setError] = useState<string | undefined>()
@@ -46,12 +43,16 @@ export function useSessionInfo(
     client
       .getSession(sessionId)
       .then((next) => {
-        if (cancelled) return
+        if (cancelled) {
+          return
+        }
         setInfo(next)
         setLoading(false)
       })
       .catch((e: unknown) => {
-        if (cancelled) return
+        if (cancelled) {
+          return
+        }
         setError(e instanceof Error ? e.message : 'Session not found')
         setLoading(false)
       })

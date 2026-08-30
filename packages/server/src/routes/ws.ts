@@ -7,12 +7,7 @@ import type { Runner } from '@workerdeck/core'
 import { PROTOCOL_VERSION, type ClientFrame, type ServerFrame } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 
-export function attachClient(
-  ctx: ServerContext,
-  ws: WebSocket,
-  runner: Runner,
-  req: IncomingMessage,
-): void {
+export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, req: IncomingMessage): void {
   const { bridge, parking } = ctx
   const url = new URL(req.url ?? '/', 'http://internal')
   const afterSeq = Number(url.searchParams.get('afterSeq') ?? '0') || 0
@@ -29,7 +24,9 @@ export function attachClient(
   const imageRefs = url.searchParams.get('imageRefs') === '1'
 
   const send = (frame: ServerFrame): void => {
-    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(frame))
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify(frame))
+    }
   }
 
   send({
@@ -122,9 +119,7 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
       // It reaches the client as a `protocol_error` frame like every other
       // command failure here; there is no HTTP route for this.
       if (!runner.clearContext) {
-        throw new Error(
-          `the ${runner.info().engine ?? 'claude'} engine cannot clear a conversation`,
-        )
+        throw new Error(`the ${runner.info().engine ?? 'claude'} engine cannot clear a conversation`)
       }
       await runner.clearContext()
       return

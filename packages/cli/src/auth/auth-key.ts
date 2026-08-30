@@ -41,9 +41,10 @@ export async function materializeAuthKey(
   stateDir: string | null,
   options: { warn?: (message: string) => void } = {},
 ): Promise<MaterializedAuthKey> {
-  const warn =
-    options.warn ?? ((message: string) => process.stderr.write(`[workerdeck] ${message}\n`))
-  if (stateDir === null) return { key: generateKey(), source: 'ephemeral', path: null }
+  const warn = options.warn ?? ((message: string) => process.stderr.write(`[workerdeck] ${message}\n`))
+  if (stateDir === null) {
+    return { key: generateKey(), source: 'ephemeral', path: null }
+  }
 
   const path = join(stateDir, 'auth-key')
   let raw: string | null = null
@@ -58,10 +59,7 @@ export async function materializeAuthKey(
       try {
         const { mode } = await stat(path)
         if ((mode & 0o077) !== 0) {
-          warn(
-            `auth key file ${path} is readable by other users ` +
-              `(mode ${(mode & 0o777).toString(8)}) — run: chmod 600 ${path}`,
-          )
+          warn(`auth key file ${path} is readable by other users ` + `(mode ${(mode & 0o777).toString(8)}) — run: chmod 600 ${path}`)
         }
       } catch {
         // stat failing after a successful read is exotic; the key still works.

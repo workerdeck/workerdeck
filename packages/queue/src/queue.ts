@@ -98,7 +98,9 @@ type RunningJob = {
 const dayKey = (epochMs: number): string => new Date(epochMs).toISOString().slice(0, 10)
 
 const sumUsage = (usage: unknown): number => {
-  if (typeof usage !== 'object' || usage === null) return 0
+  if (typeof usage !== 'object' || usage === null) {
+    return 0
+  }
   const u = usage as Record<string, unknown>
   return (
     (typeof u.input_tokens === 'number' ? u.input_tokens : 0) +
@@ -109,9 +111,7 @@ const sumUsage = (usage: unknown): number => {
 }
 
 const textPreview = (message: ApiMessage, max = 140): JobProgress | null => {
-  const blocks = typeof message.content === 'string'
-    ? [{ type: 'text', text: message.content }]
-    : message.content
+  const blocks = typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : message.content
   for (const block of blocks) {
     if (block.type === 'tool_use') {
       return { kind: 'tool_use', preview: (block as { name?: string }).name }
@@ -162,8 +162,12 @@ export class JobQueue {
   }
 
   async submit(request: CreateJobRequest): Promise<JobInfo> {
-    if (this.#closed) throw new Error('queue is closed')
-    if (!request.session?.prompt?.trim()) throw new Error('session.prompt is required')
+    if (this.#closed) {
+      throw new Error('queue is closed')
+    }
+    if (!request.session?.prompt?.trim()) {
+      throw new Error('session.prompt is required')
+    }
     // No `cwd` check: whether one is required depends on the engine's
     // capability record, which the gateway resolves at the door (see the
     // server's `checkCwd`). A second, engine-blind copy of the rule here would
@@ -223,8 +227,12 @@ export class JobQueue {
    */
   onSessionParking(sessionId: string, executionId: string): boolean {
     const job = this.#bySession(this.#running, sessionId)
-    if (!job) return true
-    if (job.finalized || job.killReason) return false
+    if (!job) {
+      return true
+    }
+    if (job.finalized || job.killReason) {
+      return false
+    }
     const now = Date.now()
     job.unsubscribe()
     job.runningMs += now - job.legStartedAt
@@ -252,12 +260,10 @@ export class JobQueue {
       parkedAt: job.parkedAt,
       parkedExecutionId: executionId,
     })
-    if (updated) job.record = updated
-    this.#emit(
-      job.record,
-      { type: 'job_parked', job: job.record.info, executionId, ts: Date.now() },
-      job,
-    )
+    if (updated) {
+      job.record = updated
+    }
+    this.#emit(job.record, { type: 'job_parked', job: job.record.info, executionId, ts: Date.now() }, job)
     // The slot is free now — let a queued job take it.
     void this.#pump()
   }
@@ -273,7 +279,9 @@ export class JobQueue {
    */
   onSessionResumed(sessionId: string, runner: Runner): void {
     const job = this.#bySession(this.#parked, sessionId)
-    if (!job || job.finalized) return
+    if (!job || job.finalized) {
+      return
+    }
     const now = Date.now()
     const executionId = job.parkedExecutionId ?? ''
     clearTimeout(job.parkTimer)
@@ -306,17 +314,17 @@ export class JobQueue {
       parkedAt: undefined,
       parkedExecutionId: undefined,
     })
-    if (updated) job.record = updated
-    this.#emit(
-      job.record,
-      { type: 'job_resumed', job: job.record.info, executionId, ts: Date.now() },
-      job,
-    )
+    if (updated) {
+      job.record = updated
+    }
+    this.#emit(job.record, { type: 'job_resumed', job: job.record.info, executionId, ts: Date.now() }, job)
   }
 
   #bySession(jobs: Map<string, RunningJob>, sessionId: string): RunningJob | undefined {
     for (const job of jobs.values()) {
-      if (job.record.info.sessionId === sessionId) return job
+      if (job.record.info.sessionId === sessionId) {
+        return job
+      }
     }
     return undefined
   }
@@ -324,7 +332,9 @@ export class JobQueue {
   /** Cancel a queued, running, or parked job. Returns the job, or null if unknown. */
   async cancel(id: string): Promise<JobInfo | null> {
     const record = await this.#adapter.get(id)
-    if (!record) return null
+    if (!record) {
+      return null
+    }
     const running = this.#running.get(id) ?? this.#parked.get(id)
     if (running) {
       running.canceled = true
@@ -336,13 +346,17 @@ export class JobQueue {
       })
       return running.record.info
     }
-    if (record.info.status !== 'queued') return record.info
+    if (record.info.status !== 'queued') {
+      return record.info
+    }
     const updated = await this.#adapter.update(id, {
       status: 'canceled',
       finishedAt: Date.now(),
       error: 'canceled',
     })
-    if (updated) this.#emit(updated, { type: 'job_completed', job: updated.info, ts: Date.now() })
+    if (updated) {
+      this.#emit(updated, { type: 'job_completed', job: updated.info, ts: Date.now() })
+    }
     return updated?.info ?? null
   }
 
@@ -368,20 +382,26 @@ export class JobQueue {
     this.#closed = true
     this.#offWork?.()
     clearInterval(this.#sweepTimer)
-    for (const timer of this.#retryTimers) clearTimeout(timer)
+    for (const timer of this.#retryTimers) {
+      clearTimeout(timer)
+    }
     this.#retryTimers.clear()
   }
 
   #sweep(): void {
     const retention = this.#options.retention
-    if (!retention) return
+    if (!retention) {
+      return
+    }
     this.#adapter.prune(retention.maxAgeMs).catch(() => {
       // sweep failures must not break the queue; the next sweep retries
     })
   }
 
   async #pump(): Promise<void> {
-    if (this.#pumping || this.#closed) return
+    if (this.#pumping || this.#closed) {
+      return
+    }
     this.#pumping = true
     try {
       const maxConcurrency = this.#options.maxConcurrency ?? 1
@@ -391,7 +411,9 @@ export class JobQueue {
           return
         }
         const record = await this.#adapter.claimNext()
-        if (!record) return
+        if (!record) {
+          return
+        }
         await this.#start(record)
       }
     } finally {
@@ -420,7 +442,9 @@ export class JobQueue {
         finishedAt: Date.now(),
         error: error instanceof Error ? error.message : String(error),
       })
-      if (failed) this.#emit(failed, { type: 'job_completed', job: failed.info, ts: Date.now() })
+      if (failed) {
+        this.#emit(failed, { type: 'job_completed', job: failed.info, ts: Date.now() })
+      }
       return
     }
     const job: RunningJob = {
@@ -441,14 +465,13 @@ export class JobQueue {
       startedAt: Date.now(),
       sessionId: runner.id,
     })
-    if (updated) job.record = updated
+    if (updated) {
+      job.record = updated
+    }
     this.#emit(job.record, { type: 'job_started', job: job.record.info, ts: Date.now() })
     const durationLimit = this.#effectiveDurationLimit(record.request)
     if (durationLimit !== undefined) {
-      job.durationTimer = setTimeout(
-        () => this.#kill(job, `job exceeded max duration (${durationLimit}ms)`),
-        durationLimit,
-      )
+      job.durationTimer = setTimeout(() => this.#kill(job, `job exceeded max duration (${durationLimit}ms)`), durationLimit)
       job.durationTimer.unref?.()
     }
     job.unsubscribe = runner.subscribe((event) => void this.#handleEvent(job, event))
@@ -457,7 +480,9 @@ export class JobQueue {
   /** Kill a run: interrupt it and, if the CLI never yields a result (stuck process),
    * force-finalize after the grace period so the job can't hang forever. */
   #kill(job: RunningJob, reason: string): void {
-    if (job.finalized || job.killReason) return
+    if (job.finalized || job.killReason) {
+      return
+    }
     job.killReason = reason
     if (job.parkedAt !== undefined) {
       // Parked: there is no live runner to interrupt and no result coming, so the
@@ -481,21 +506,27 @@ export class JobQueue {
   }
 
   async #handleEvent(job: RunningJob, event: SessionEvent): Promise<void> {
-    if (job.finalized) return
+    if (job.finalized) {
+      return
+    }
     job.lastSeq = Math.max(job.lastSeq, event.seq)
     switch (event.type) {
       case 'system_init':
         await this.#adapter.update(job.record.info.id, { sdkSessionId: event.sdkSessionId })
         return
       case 'assistant_message': {
-        if (event.replay) return
+        if (event.replay) {
+          return
+        }
         job.estimatedTokens += sumUsage(event.message.usage)
         const limit = this.#effectiveTokenLimit(job.record.request)
         if (limit !== undefined && job.estimatedTokens > limit) {
           this.#kill(job, `session token limit exceeded (${job.estimatedTokens} > ${limit})`)
         }
         const progress = textPreview(event.message)
-        if (progress) this.#progress(job, progress)
+        if (progress) {
+          this.#progress(job, progress)
+        }
         return
       }
       case 'permission_requested':
@@ -526,12 +557,8 @@ export class JobQueue {
             errors: event.errors,
             durationMs: event.durationMs,
           },
-          status: job.killReason
-            ? (job.canceled ? 'canceled' : 'failed')
-            : event.isError
-              ? 'failed'
-              : 'succeeded',
-          error: job.killReason ?? (event.isError ? (event.errors?.join('; ') || event.subtype) : undefined),
+          status: job.killReason ? (job.canceled ? 'canceled' : 'failed') : event.isError ? 'failed' : 'succeeded',
+          error: job.killReason ?? (event.isError ? event.errors?.join('; ') || event.subtype : undefined),
         })
         return
       }
@@ -555,16 +582,12 @@ export class JobQueue {
   }
 
   #effectiveTokenLimit(request: CreateJobRequest): number | undefined {
-    const limits = [request.maxTokens, this.#options.sessionTokenLimit].filter(
-      (n): n is number => typeof n === 'number',
-    )
+    const limits = [request.maxTokens, this.#options.sessionTokenLimit].filter((n): n is number => typeof n === 'number')
     return limits.length > 0 ? Math.min(...limits) : undefined
   }
 
   #effectiveDurationLimit(request: CreateJobRequest): number | undefined {
-    const limits = [request.maxDurationMs, this.#options.maxJobDurationMs].filter(
-      (n): n is number => typeof n === 'number',
-    )
+    const limits = [request.maxDurationMs, this.#options.maxJobDurationMs].filter((n): n is number => typeof n === 'number')
     return limits.length > 0 ? Math.min(...limits) : undefined
   }
 
@@ -572,7 +595,9 @@ export class JobQueue {
    * totals live on the stored info and are folded in here. A failed (not canceled) run
    * with attempts left re-queues with backoff instead of completing. */
   async #finalize(job: RunningJob, patch: Partial<JobInfo>): Promise<void> {
-    if (job.finalized) return
+    if (job.finalized) {
+      return
+    }
     job.finalized = true
     job.unsubscribe()
     clearTimeout(job.durationTimer)
@@ -585,9 +610,7 @@ export class JobQueue {
       // The live runner is already gone; what survives the run is the persisted
       // snapshot, and nothing will ever rehydrate it now.
       try {
-        void Promise.resolve(this.#options.discardSession?.(job.record.info.sessionId)).catch(
-          () => {},
-        )
+        void Promise.resolve(this.#options.discardSession?.(job.record.info.sessionId)).catch(() => {})
       } catch {
         // discard failures must not break finalization
       }
@@ -662,30 +685,26 @@ export class JobQueue {
   }
 
   /** Notify the local observer and, when configured, the job's webhook (ordered per job). */
-  #emit(
-    record: JobRecord,
-    event: JobEvent,
-    chainOwner?: RunningJob,
-    { skipWebhook = false }: { skipWebhook?: boolean } = {},
-  ): void {
+  #emit(record: JobRecord, event: JobEvent, chainOwner?: RunningJob, { skipWebhook = false }: { skipWebhook?: boolean } = {}): void {
     try {
       this.#options.onEvent?.(event)
     } catch {
       // observer errors must not break the queue
     }
     const webhook = record.request.webhook
-    if (!webhook || skipWebhook) return
+    if (!webhook || skipWebhook) {
+      return
+    }
     const running = chainOwner ?? this.#running.get(record.info.id)
     const deliver = () => this.#deliver(webhook.url, webhook.headers, event)
-    if (running) running.deliveries = running.deliveries.then(deliver)
-    else void deliver()
+    if (running) {
+      running.deliveries = running.deliveries.then(deliver)
+    } else {
+      void deliver()
+    }
   }
 
-  async #deliver(
-    url: string,
-    headers: Record<string, string> | undefined,
-    event: JobEvent,
-  ): Promise<void> {
+  async #deliver(url: string, headers: Record<string, string> | undefined, event: JobEvent): Promise<void> {
     const fetchImpl = this.#options.fetchImpl ?? fetch
     const attempts = this.#options.webhookAttempts ?? 3
     const baseDelay = this.#options.webhookRetryDelayMs ?? 500
@@ -696,7 +715,9 @@ export class JobQueue {
           headers: { 'content-type': 'application/json', ...headers },
           body: JSON.stringify(event),
         })
-        if (res.ok) return
+        if (res.ok) {
+          return
+        }
       } catch {
         // network error — retry below
       }

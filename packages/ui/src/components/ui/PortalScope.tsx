@@ -21,7 +21,7 @@ import { type FunctionComponent, type ReactNode } from 'react'
  * element is inert, so the wrapper is unconditional.
  */
 export const PortalScope: FunctionComponent<{ children?: ReactNode }> = ({ children }) => (
-  <div className='wd-root' style={{ display: 'contents' }}>
+  <div className="wd-root" style={{ display: 'contents' }}>
     {children}
   </div>
 )

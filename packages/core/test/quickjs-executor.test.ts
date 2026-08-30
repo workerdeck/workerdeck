@@ -44,9 +44,7 @@ describe('QuickJsExecutor', () => {
 
   it('reports guest failures as structured results, never throwing', async () => {
     const executor = new QuickJsExecutor({ engine })
-    const timedOut = await executor.dispatch(
-      call({ input: { script: 'while (true) {}' }, limits: { timeoutMs: 150 } }),
-    )
+    const timedOut = await executor.dispatch(call({ input: { script: 'while (true) {}' }, limits: { timeoutMs: 150 } }))
     expect(timedOut).toMatchObject({ status: 'settled', result: { status: 'failed', reason: 'timeout' } })
 
     const threw = await executor.dispatch(call({ input: { script: 'null.x' } }))
@@ -72,9 +70,7 @@ describe('QuickJsExecutor', () => {
 
     const hostFetch = vi.fn(async () => 'document body')
     const allowed = new QuickJsExecutor({ engine, allowedHosts: ['ok.example'], hostFetch })
-    const allowedResult = await allowed.dispatch(
-      call({ input: { script: 'fetchText("https://ok.example/x")' } }),
-    )
+    const allowedResult = await allowed.dispatch(call({ input: { script: 'fetchText("https://ok.example/x")' } }))
     expect(allowedResult).toMatchObject({ result: { status: 'ok', output: 'document body' } })
     expect(hostFetch).toHaveBeenCalledOnce()
   })

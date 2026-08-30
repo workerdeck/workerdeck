@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PermissionRequest } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
-import {
-  buildClusters,
-  railScale,
-  type TerminalScrubberProps,
-} from '../src/components/terminal/scrubber.tsx'
+import { buildClusters, railScale, type TerminalScrubberProps } from '../src/components/terminal/scrubber.tsx'
 
 /**
  * The rail's mark model. Both bugs it has shipped were here and neither needed a
@@ -36,10 +32,7 @@ const notice = (level: 'info' | 'error', text: string): TranscriptItem => ({
   level,
   text,
 })
-const toolCall = (
-  status: 'running' | 'settled' | 'failed',
-  result?: { text: string; isError: boolean },
-): TranscriptItem => ({
+const toolCall = (status: 'running' | 'settled' | 'failed', result?: { text: string; isError: boolean }): TranscriptItem => ({
   kind: 'tool_call',
   id: `t${++seq}`,
   name: 'Bash',
@@ -54,10 +47,7 @@ const toolCall = (
 const ROW = 100
 const RAIL = 100
 
-const props = (
-  items: TranscriptItem[],
-  extra: Partial<TerminalScrubberProps> = {},
-): TerminalScrubberProps => ({
+const props = (items: TranscriptItem[], extra: Partial<TerminalScrubberProps> = {}): TerminalScrubberProps => ({
   items,
   pendingApprovals: [],
   bookmarks: [],
@@ -74,8 +64,7 @@ const props = (
 
 /** Every mark, with the lane its cluster drew it in — clusters merge, so a
  * cluster-level filter silently loses the quieter member. */
-const members = (clusters: ReturnType<typeof buildClusters>) =>
-  clusters.flatMap((c) => c.marks.map((m) => ({ lane: c.lane, ...m.mark })))
+const members = (clusters: ReturnType<typeof buildClusters>) => clusters.flatMap((c) => c.marks.map((m) => ({ lane: c.lane, ...m.mark })))
 
 const kinds = (items: TranscriptItem[], extra?: Partial<TerminalScrubberProps>) =>
   buildClusters(props(items, extra), RAIL).map((c) => `${c.lane}:${c.kind}`)
@@ -109,18 +98,14 @@ describe('inside a sub-agent frame', () => {
 
   it('marks a failure the frame’s own renderer reddens', () => {
     const items = [framed('trying'), failedChild()]
-    expect(members(buildClusters(props(items, { frameParentId: 'task-1' }), RAIL)).map((m) => m.kind))
-      .toContain('toolFailed')
+    expect(members(buildClusters(props(items, { frameParentId: 'task-1' }), RAIL)).map((m) => m.kind)).toContain('toolFailed')
   })
 
   it('still marks nothing of a sub-agent’s in the conversation itself', () => {
     // The rule this generalisation must not break: at the top level a
     // sub-agent's steps are represented by its `Task` band, not by a second set
     // of marks threaded through the rail.
-    expect(kinds([user('go'), framed('looking'), assistant('done'), turn()])).toEqual([
-      'l:user',
-      'r:turn',
-    ])
+    expect(kinds([user('go'), framed('looking'), assistant('done'), turn()])).toEqual(['l:user', 'r:turn'])
   })
 })
 
@@ -230,9 +215,9 @@ describe('buildClusters', () => {
     expect(band[0]!.lane).toBe('l')
     expect(band[0]!.itemIndex).toBe(1)
     // A childless tool call is not a sub-agent.
-    expect(members(buildClusters(props([user('go'), toolCall('settled')]), RAIL)).map(
-      (m) => `${m.lane}:${m.kind}`,
-    )).not.toContain('l:subagent')
+    expect(members(buildClusters(props([user('go'), toolCall('settled')]), RAIL)).map((m) => `${m.lane}:${m.kind}`)).not.toContain(
+      'l:subagent',
+    )
   })
 
   it('gives a failed sub-agent a band AND a failure mark, one per channel', () => {
@@ -278,10 +263,7 @@ describe('buildClusters', () => {
     }
     // Same row for both, so they merge: the prompt is the step you navigate by
     // and must keep the cluster's colour.
-    const clusters = buildClusters(
-      props([user('go'), spawn, child], { rowIndexFor: () => 0, offsetOfRow: () => 0 }),
-      RAIL,
-    )
+    const clusters = buildClusters(props([user('go'), spawn, child], { rowIndexFor: () => 0, offsetOfRow: () => 0 }), RAIL)
     const left = clusters.filter((c) => c.lane === 'l')
     expect(left).toHaveLength(1)
     expect(left[0]!.kind).toBe('user')
@@ -334,9 +316,7 @@ describe('buildClusters', () => {
     // `is_error` block to read, and an engine can flag `is_error` on a call the
     // reducer has not settled.
     expect(kinds([toolCall('failed')])).toEqual(['r:toolFailed'])
-    expect(kinds([toolCall('settled', { text: 'no matches', isError: true })])).toEqual([
-      'r:toolFailed',
-    ])
+    expect(kinds([toolCall('settled', { text: 'no matches', isError: true })])).toEqual(['r:toolFailed'])
     expect(kinds([toolCall('settled', { text: 'ok', isError: false })])).toEqual([])
     expect(kinds([toolCall('running')])).toEqual([])
   })
@@ -367,16 +347,11 @@ describe('buildClusters', () => {
 
   it('drops a bookmark pointing outside the transcript', () => {
     expect(kinds([user('a')], { bookmarks: [0] })).toContain('f:bookmark')
-    expect(kinds([user('a')], { bookmarks: [7, -1] }).filter((k) => k.endsWith('bookmark'))).toEqual(
-      [],
-    )
+    expect(kinds([user('a')], { bookmarks: [7, -1] }).filter((k) => k.endsWith('bookmark'))).toEqual([])
   })
 
   it('marks the recap seam from its row, not from an item', () => {
-    const clusters = buildClusters(
-      props([user('a')], { recapRow: { rowIndex: 0, label: '3 new rows' } }),
-      RAIL,
-    )
+    const clusters = buildClusters(props([user('a')], { recapRow: { rowIndex: 0, label: '3 new rows' } }), RAIL)
     const recap = clusters.find((c) => c.marks.some((m) => m.mark.kind === 'recap'))!
     expect(recap.marks.find((m) => m.mark.kind === 'recap')!.mark.itemIndex).toBe(-1)
   })
@@ -445,14 +420,11 @@ describe('marks inside a shared row', () => {
       sizeOfRow: () => 20,
       totalSize: 20_000,
     }
-    const withFraction = buildClusters(
-      props(items, { ...collapsed, positionInRow: (i) => ({ ordinal: i - 1, count: 2 }) }),
-      RAIL,
-    ).filter((c) => c.kind === 'toolFailed')
-    expect(withFraction).toHaveLength(1)
-    const before = buildClusters(props(items, collapsed), RAIL).filter(
+    const withFraction = buildClusters(props(items, { ...collapsed, positionInRow: (i) => ({ ordinal: i - 1, count: 2 }) }), RAIL).filter(
       (c) => c.kind === 'toolFailed',
     )
+    expect(withFraction).toHaveLength(1)
+    const before = buildClusters(props(items, collapsed), RAIL).filter((c) => c.kind === 'toolFailed')
     expect(withFraction.map((c) => [c.y, c.h])).toEqual(before.map((c) => [c.y, c.h]))
   })
 

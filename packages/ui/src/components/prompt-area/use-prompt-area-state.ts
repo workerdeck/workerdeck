@@ -86,16 +86,15 @@ export function usePromptAreaState(options: UsePromptAreaStateOptions = {}): Pro
   const plainText = useMemo(() => segmentsToPlainText(value), [value])
 
   const isEmpty = useMemo(() => {
-    if (value.length === 0) return true
+    if (value.length === 0) {
+      return true
+    }
     return value.every((seg) => seg.type === 'text' && seg.text.trim() === '')
   }, [value])
 
   const hasChips = useMemo(() => value.some((seg) => seg.type === 'chip'), [value])
 
-  const chips = useMemo(
-    () => value.filter((seg): seg is ChipSegment => seg.type === 'chip'),
-    [value],
-  )
+  const chips = useMemo(() => value.filter((seg): seg is ChipSegment => seg.type === 'chip'), [value])
 
   // Bind object — safe to spread onto <PromptArea>
   const bind = useMemo<PromptAreaBind>(() => ({ ref, value, onChange: setValue }), [value])
@@ -112,10 +111,7 @@ export function usePromptAreaState(options: UsePromptAreaStateOptions = {}): Pro
   const focus = useCallback(() => ref.current?.focus(), [])
   const blur = useCallback(() => ref.current?.blur(), [])
 
-  const insertChip = useCallback(
-    (chip: Omit<ChipSegment, 'type'>) => ref.current?.insertChip(chip),
-    [],
-  )
+  const insertChip = useCallback((chip: Omit<ChipSegment, 'type'>) => ref.current?.insertChip(chip), [])
 
   return {
     bind,

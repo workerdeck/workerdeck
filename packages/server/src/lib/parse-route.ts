@@ -23,11 +23,17 @@ export type SessionRoute = {
 
 export function parseSessionRoute(basePath: string, url: string): SessionRoute | null {
   const pathname = new URL(url, 'http://internal').pathname
-  if (!pathname.startsWith(basePath + '/sessions')) return null
+  if (!pathname.startsWith(basePath + '/sessions')) {
+    return null
+  }
   const rest = pathname.slice((basePath + '/sessions').length)
-  if (rest === '' || rest === '/') return {}
+  if (rest === '' || rest === '/') {
+    return {}
+  }
   const parts = rest.replace(/^\//, '').split('/')
-  if (parts.length === 1) return { id: decodeURIComponent(parts[0]!) }
+  if (parts.length === 1) {
+    return { id: decodeURIComponent(parts[0]!) }
+  }
   if (parts.length === 2 && parts[1] === 'ws') {
     return { id: decodeURIComponent(parts[0]!), ws: true }
   }
@@ -53,7 +59,9 @@ export function parseSessionRoute(basePath: string, url: string): SessionRoute |
   }
   if (parts.length === 4 && parts[1] === 'events' && parts[3] === 'result') {
     const seq = Number(parts[2])
-    if (!Number.isInteger(seq) || seq < 0) return null
+    if (!Number.isInteger(seq) || seq < 0) {
+      return null
+    }
     return { id: decodeURIComponent(parts[0]!), resultSeq: seq }
   }
   if (parts.length <= 3 && parts[1] === 'mcp') {

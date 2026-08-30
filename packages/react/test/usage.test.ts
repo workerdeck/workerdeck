@@ -36,10 +36,7 @@ describe('mergeUsage', () => {
     // per-window reading is fed from every session, including this one, so it is
     // never older than what this transcript holds.
     const profile: ProfileUsage = { five_hour: { info: info(70), updatedAt: 5_000 } }
-    const merged = mergeUsage(
-      { rateLimits: { five_hour: info(40), seven_day: info(12) }, updatedAt: 9_000 },
-      profile,
-    )
+    const merged = mergeUsage({ rateLimits: { five_hour: info(40), seven_day: info(12) }, updatedAt: 9_000 }, profile)
     expect(merged.five_hour.info.utilization).toBe(70)
     // ...and a window the gateway does not hold is still the session's.
     expect(merged.seven_day).toEqual({ info: info(12), updatedAt: 9_000 })
@@ -64,10 +61,7 @@ describe('mergeUsage', () => {
   })
 
   it('flattens back to the shape every existing meter reads', () => {
-    const merged = mergeUsage(
-      { rateLimits: { seven_day: info(12) }, updatedAt: 1 },
-      { five_hour: { info: info(70), updatedAt: 5_000 } },
-    )
+    const merged = mergeUsage({ rateLimits: { seven_day: info(12) }, updatedAt: 1 }, { five_hour: { info: info(70), updatedAt: 5_000 } })
     expect(usageInfos(merged)).toEqual({ five_hour: info(70), seven_day: info(12) })
   })
 })

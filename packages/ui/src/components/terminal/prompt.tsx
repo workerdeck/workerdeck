@@ -29,11 +29,7 @@ export function Rule({ dashed }: { dashed?: boolean }) {
 
 /** The dim `·`-separated key legend under a prompt. */
 export function Hint({ children }: { children: ReactNode }) {
-  return (
-    <Row tone='faint'>
-      {children}
-    </Row>
-  )
+  return <Row tone="faint">{children}</Row>
 }
 
 /**
@@ -56,10 +52,10 @@ export function Box({ children, className }: { children: ReactNode; className?: 
 export function PromptTitle({ title, subject }: { title: string; subject?: string }) {
   return (
     <>
-      <Row tone='blue' bold>
+      <Row tone="blue" bold>
         {title}
       </Row>
-      {subject ? <Row tone='dim'>{subject}</Row> : null}
+      {subject ? <Row tone="dim">{subject}</Row> : null}
     </>
   )
 }
@@ -124,10 +120,13 @@ export interface ChoicesProps {
 
 /** Is the reader mid-keystroke somewhere that keeps its own caret? */
 function isTyping(element: Element | null): boolean {
-  if (!(element instanceof HTMLElement)) return false
-  const editable =
-    element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable
-  if (!editable) return false
+  if (!(element instanceof HTMLElement)) {
+    return false
+  }
+  const editable = element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable
+  if (!editable) {
+    return false
+  }
   // Focus in a field is not the same as a message in progress, and only the
   // second is worth protecting. This used to return true for any focused
   // editable, which read fine until a host that keeps the composer focused at
@@ -139,10 +138,7 @@ function isTyping(element: Element | null): boolean {
   //
   // An empty field has nothing to lose, so the takeover proceeds; a half-typed
   // message still wins, which is the case the guard was written for.
-  const text =
-    element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
-      ? element.value
-      : (element.textContent ?? '')
+  const text = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : (element.textContent ?? '')
   return text.trim().length > 0
 }
 
@@ -154,19 +150,13 @@ function isTyping(element: Element | null): boolean {
  * on the same column and the list reads as a column of answers rather than a
  * ragged paragraph.
  */
-export function Choices({
-  options,
-  focused,
-  onFocus,
-  onChoose,
-  active = true,
-  autoFocus = true,
-  label,
-}: ChoicesProps) {
+export function Choices({ options, focused, onFocus, onChoose, active = true, autoFocus = true, label }: ChoicesProps) {
   const refs = useRef<Array<HTMLButtonElement | null>>([])
 
   useEffect(() => {
-    if (!active) return
+    if (!active) {
+      return
+    }
     // Two different jobs, told apart by where the keyboard already is rather
     // than by how many times this has run.
     //
@@ -181,20 +171,22 @@ export function Choices({
     // remount, so the second pass saw `mounted === true`, skipped the guard
     // entirely and stole focus from whatever you were typing. It read as
     // correct in production and wrong in dev, which is the worst way round.
-    const focusIsInList = refs.current.some(
-      (row) => row !== null && row === document.activeElement,
-    )
-    if (!focusIsInList && (!autoFocus || isTyping(document.activeElement))) return
+    const focusIsInList = refs.current.some((row) => row !== null && row === document.activeElement)
+    if (!focusIsInList && (!autoFocus || isTyping(document.activeElement))) {
+      return
+    }
     refs.current[focused]?.focus()
   }, [active, focused, autoFocus])
 
   const move = (delta: number) => {
-    if (options.length > 0) onFocus((focused + delta + options.length) % options.length)
+    if (options.length > 0) {
+      onFocus((focused + delta + options.length) % options.length)
+    }
   }
 
   return (
     <div
-      role='group'
+      role="group"
       aria-label={label}
       onKeyDown={(event) => {
         if (event.key === 'ArrowDown') {
@@ -216,7 +208,8 @@ export function Choices({
           onChoose(digit - 1)
           event.preventDefault()
         }
-      }}>
+      }}
+    >
       {options.map((option, index) => {
         const isFocused = index === focused
         return (
@@ -225,12 +218,13 @@ export function Choices({
               ref={(element) => {
                 refs.current[index] = element
               }}
-              type='button'
+              type="button"
               tabIndex={isFocused ? 0 : -1}
               aria-pressed={option.checked}
               onFocus={() => onFocus(index)}
               onClick={() => onChoose(index)}
-              className='term-press'>
+              className="term-press"
+            >
               {/* `❯ 1.` is the gutter: marker and number together, so the label
                   starts on one column whether or not the row is focused. */}
               <Row
@@ -238,21 +232,20 @@ export function Choices({
                 glyph={`${isFocused ? '❯' : ' '} ${index + 1}.`}
                 glyphTone={isFocused ? 'fg' : 'faint'}
                 tone={option.danger ? 'red' : option.selected ? 'green' : 'fg'}
-                data-focused={isFocused ? '' : undefined}>
+                data-focused={isFocused ? '' : undefined}
+              >
                 {option.checked !== undefined ? (
-                  <Ink tone={option.checked ? 'green' : 'faint'}>
-                    {MARKERS[option.marker ?? 'check'][option.checked ? 1 : 0]}{' '}
-                  </Ink>
+                  <Ink tone={option.checked ? 'green' : 'faint'}>{MARKERS[option.marker ?? 'check'][option.checked ? 1 : 0]} </Ink>
                 ) : null}
                 <Ink bold={isFocused || option.selected}>{option.label}</Ink>
               </Row>
             </button>
             {option.description ? (
-              <Row columns={5} tone='dim'>
+              <Row columns={5} tone="dim">
                 {option.description}
               </Row>
             ) : null}
-            {option.detail ? <div className='term-detail'>{option.detail}</div> : null}
+            {option.detail ? <div className="term-detail">{option.detail}</div> : null}
           </div>
         )
       })}
@@ -278,7 +271,7 @@ export function PromptInput({
   placeholder?: string
 }) {
   return (
-    <Row columns={5} glyph='   ›' glyphTone='dim'>
+    <Row columns={5} glyph="   ›" glyphTone="dim">
       <input
         autoFocus
         value={value}
@@ -296,7 +289,7 @@ export function PromptInput({
             onCancel()
           }
         }}
-        className='term-input'
+        className="term-input"
       />
     </Row>
   )
@@ -324,18 +317,19 @@ export function TabStrip({
   onSelect: (index: number) => void
 }) {
   return (
-    <Row glyph='←' glyphTone='faint'>
+    <Row glyph="←" glyphTone="faint">
       {tabs.map((tab, index) => (
         <button
           key={tab.key}
-          type='button'
+          type="button"
           tabIndex={-1}
           onClick={() => onSelect(index)}
-          className={cn('term-tab', index === active && 'term-tab-active')}>
+          className={cn('term-tab', index === active && 'term-tab-active')}
+        >
           {tab.glyph} {tab.label}
         </button>
       ))}
-      <Ink tone='faint'> →</Ink>
+      <Ink tone="faint"> →</Ink>
     </Row>
   )
 }

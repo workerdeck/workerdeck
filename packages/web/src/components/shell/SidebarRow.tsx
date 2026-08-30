@@ -35,18 +35,10 @@ export interface SidebarRowProps {
  * identifying (an engine mark) belongs on the description line, where it lines
  * up under the title rather than displacing it.
  */
-export function SidebarRow({
-  title,
-  status,
-  description,
-  actions,
-  active,
-  onSelect,
-  onDoubleClick,
-}: SidebarRowProps) {
+export function SidebarRow({ title, status, description, actions, active, onSelect, onDoubleClick }: SidebarRowProps) {
   return (
     <div
-      data-slot='sidebar-row'
+      data-slot="sidebar-row"
       data-active={active || undefined}
       // The whole row selects, including the status corner: `status` and
       // `actions` sit outside the two text buttons, so with the handler on the
@@ -63,28 +55,24 @@ export function SidebarRow({
         // same fill is how one list comes to hover differently from the list
         // beside it.
         rowShapeClass(active === true),
-      )}>
+      )}
+    >
       {/* Both lines are real buttons, and the wrapper is only styling. A div
           with an `onClick` looks identical and is unreachable by keyboard — and
           a single button around everything cannot hold the row actions, since a
           button inside a button is invalid. This is the shape `SessionBrowser`
           arrived at for the same two reasons. */}
-      <div className='flex items-center gap-1.5'>
+      <div className="flex items-center gap-1.5">
         <button
-          type='button'
-          className={cn(
-            'min-w-0 flex-1 truncate text-left text-body-sm outline-none',
-            active ? 'font-medium text-fg-1' : 'text-fg-2',
-          )}>
+          type="button"
+          className={cn('min-w-0 flex-1 truncate text-left text-body-sm outline-none', active ? 'font-medium text-fg-1' : 'text-fg-2')}
+        >
           {title}
         </button>
         {status}
       </div>
-      <div className='flex items-center gap-1 text-label text-fg-4'>
-        <button
-          type='button'
-          tabIndex={-1}
-          className='flex min-w-0 flex-1 items-center gap-1.5 truncate text-left font-mono outline-none'>
+      <div className="flex items-center gap-1 text-label text-fg-4">
+        <button type="button" tabIndex={-1} className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left font-mono outline-none">
           {description}
         </button>
         {actions}
@@ -95,18 +83,10 @@ export function SidebarRow({
 
 /** An action on a row: an icon button that appears on hover, at the far right of
  * the description line. The one shape all four lists use. */
-export function RowAction({
-  label,
-  onClick,
-  children,
-}: {
-  label: string
-  onClick: () => void
-  children: ReactNode
-}) {
+export function RowAction({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
   return (
     <button
-      type='button'
+      type="button"
       aria-label={label}
       title={label}
       onClick={(e) => {
@@ -115,7 +95,8 @@ export function RowAction({
         e.stopPropagation()
         onClick()
       }}
-      className='flex size-5 shrink-0 items-center justify-center rounded text-fg-3 opacity-0 transition-opacity outline-none hover:bg-surface-hover hover:text-fg-1 group-hover:opacity-100'>
+      className="flex size-5 shrink-0 items-center justify-center rounded text-fg-3 opacity-0 transition-opacity outline-none hover:bg-surface-hover hover:text-fg-1 group-hover:opacity-100"
+    >
       {children}
     </button>
   )
