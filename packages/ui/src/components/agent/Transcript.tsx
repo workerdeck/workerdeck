@@ -1,3 +1,13 @@
+/**
+ * **Nothing on this surface animates its scroll position.** VS Code does not —
+ * click its editor scrollbar and it jumps — and neither does a terminal, which
+ * is the article this transcript is drawing; every travel a reader complained
+ * about here was an animation we asked for. Both writers of `scrollTop` (the
+ * follow spring, the virtualizer's size-change correction) stay split by
+ * regime, and `Conversation` is hardwired to `instant` on `initial` and
+ * `resize` — there is no smooth mode left to decide between.
+ */
+
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual'
@@ -89,7 +99,7 @@ const TranscriptItemView = ({
     return <TerminalItemView item={item} fileUrl={fileUrl} />
   }
   switch (item.kind) {
-    case 'user':
+    case 'user': {
       return (
         <Message from="user">
           {item.attachments?.length ? <SentAttachments attachments={item.attachments} attachmentUrl={attachmentUrl} /> : null}
@@ -101,7 +111,8 @@ const TranscriptItemView = ({
           ) : null}
         </Message>
       )
-    case 'assistant_text':
+    }
+    case 'assistant_text': {
       return (
         <Message from="assistant">
           <MessageContent>
@@ -109,18 +120,25 @@ const TranscriptItemView = ({
           </MessageContent>
         </Message>
       )
-    case 'thinking':
+    }
+    case 'thinking': {
       return <Reasoning isStreaming={item.id === 'streaming-thinking'}>{item.text}</Reasoning>
-    case 'tool_call':
+    }
+    case 'tool_call': {
       return <ToolCallCard item={item} hostImage={hostImage} />
-    case 'turn_result':
+    }
+    case 'turn_result': {
       return <TurnResultRow item={item} />
-    case 'notice':
+    }
+    case 'notice': {
       return <NoticeRow item={item} />
-    case 'file_delivered':
+    }
+    case 'file_delivered': {
       return <FileCard item={item} href={fileUrl?.(item.path)} />
-    default:
+    }
+    default: {
       return null
+    }
   }
 }
 
@@ -155,26 +173,6 @@ const RecapRow = ({ line, since, terminal }: { line: string; since?: number; ter
     </div>
   )
 }
-
-/**
- * **Nothing on this surface animates its scroll position.** VS Code does not —
- * click its editor scrollbar and it jumps — and neither does a terminal, which
- * is the article this transcript is drawing. Every travel a reader ever
- * complained about here was an animation we asked for.
- *
- * What used to be here was `useSettled`: a latch deciding smooth-vs-instant for
- * the follow spring, with a quiet window, a "silence before the first row does
- * not count" guard and a live-status gate — all of it apparatus for a
- * smooth-scroll bug (the attach replays hundreds of rows, and animating that
- * turned opening a session into a several-second journey). With no smooth mode
- * left there is nothing for it to decide, so the whole thing is gone rather
- * than pinned to `false`.
- *
- * The two remaining writers of `scrollTop` — the follow spring and the
- * virtualizer's size-change correction — are unchanged and still split by
- * regime; `Conversation` itself is now hardwired to `instant` on both `initial`
- * and `resize`.
- */
 
 /**
  * When the current run began. Taken here rather than in the loader, which comes

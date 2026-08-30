@@ -22,13 +22,17 @@ export function SessionStatusIcon({ row, className }: { row: SessionRow; classNa
     return <Spinner className={cn(size, 'text-info')} />
   }
   switch (info.status) {
-    case 'failed':
+    case 'failed': {
       return <CircleAlert className={cn(size, 'text-danger')} />
-    case 'closed':
+    }
+    case 'closed': {
       return <CircleSlash className={cn(size, 'text-fg-4')} />
-    case 'parked':
+    }
+    case 'parked': {
       return <PauseCircle className={cn(size, 'text-fg-3')} />
-    default:
+    }
+    default: {
       return <Moon className={cn(size, 'text-fg-4')} />
+    }
   }
 }

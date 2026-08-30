@@ -1,5 +1,3 @@
-import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
-
 /**
  * Turning an engine's edit output into the wire's {@link FilePatch}.
  *
@@ -14,6 +12,8 @@ import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
  * reaches the wire, and the dashboard, the extension and the phone all render
  * from it without a per-engine branch or a diff parser of their own.
  */
+
+import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
 
 /**
  * The most lines a patch may put on the wire.

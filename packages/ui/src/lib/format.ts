@@ -1,4 +1,4 @@
-export function formatCost(usd: number | undefined): string {
+export const formatCost = (usd: number | undefined): string => {
   if (usd === undefined || Number.isNaN(usd)) {
     return '—'
   }
@@ -11,7 +11,7 @@ export function formatCost(usd: number | undefined): string {
   return `$${usd.toFixed(2)}`
 }
 
-export function formatDuration(ms: number): string {
+export const formatDuration = (ms: number): string => {
   if (ms < 1000) {
     return `${Math.round(ms)}ms`
   }
@@ -24,7 +24,7 @@ export function formatDuration(ms: number): string {
 }
 
 /** Compact token count, Claude Code-style: 850 → "850", 359_000 → "359.0k", 1_200_000 → "1.2M". */
-export function formatTokens(tokens: number): string {
+export const formatTokens = (tokens: number): string => {
   if (tokens >= 1_000_000) {
     return `${(tokens / 1_000_000).toFixed(1)}M`
   }
@@ -34,7 +34,7 @@ export function formatTokens(tokens: number): string {
   return String(Math.round(tokens))
 }
 
-export function formatBytes(bytes: number): string {
+export const formatBytes = (bytes: number): string => {
   if (bytes >= 1024 * 1024) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
@@ -45,7 +45,7 @@ export function formatBytes(bytes: number): string {
 }
 
 /** Countdown to an epoch-ms deadline: "2h 18m", "12m", "<1m"; "now" once passed. */
-export function formatCountdown(untilEpochMs: number, now = Date.now()): string {
+export const formatCountdown = (untilEpochMs: number, now = Date.now()): string => {
   const remaining = untilEpochMs - now
   if (remaining <= 0) {
     return 'now'
@@ -64,7 +64,7 @@ export function formatCountdown(untilEpochMs: number, now = Date.now()): string 
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
 }
 
-export function formatRelativeTime(epochMs: number | undefined, now = Date.now()): string {
+export const formatRelativeTime = (epochMs: number | undefined, now = Date.now()): string => {
   if (!epochMs) {
     return '—'
   }
@@ -90,7 +90,7 @@ export function formatRelativeTime(epochMs: number | undefined, now = Date.now()
  * 'seven_day_opus' → "7d opus". The per-model suffix is an open set — the CLI
  * adds buckets as plans gain them — so it is rewritten rather than enumerated.
  */
-export function formatRateLimitWindow(key: string): string {
+export const formatRateLimitWindow = (key: string): string => {
   if (key === 'five_hour') {
     return '5h'
   }
@@ -103,7 +103,7 @@ export function formatRateLimitWindow(key: string): string {
 
 /** The same key spelled out, where there is room: 'five_hour' → "5-hour
  * session", 'seven_day_fable' → "Weekly · Fable". */
-export function formatRateLimitWindowLong(key: string): string {
+export const formatRateLimitWindowLong = (key: string): string => {
   if (key === 'five_hour') {
     return '5-hour session'
   }
@@ -126,7 +126,7 @@ export function formatRateLimitWindowLong(key: string): string {
  * and a percentage, never a duration. `undefined` for a window whose key doesn't
  * say, and the marker is then simply not drawn rather than guessed.
  */
-export function rateLimitWindowSeconds(key: string): number | undefined {
+export const rateLimitWindowSeconds = (key: string): number | undefined => {
   if (key === 'five_hour') {
     return 5 * 3600
   }
@@ -138,7 +138,7 @@ export function rateLimitWindowSeconds(key: string): number | undefined {
 
 /** "8 secs ago" / "3 mins ago" — a freshness line finer-grained than
  * {@link formatRelativeTime}, because a poll that just landed should say so. */
-export function formatAgoPrecise(epochMs: number, now = Date.now()): string {
+export const formatAgoPrecise = (epochMs: number, now = Date.now()): string => {
   const seconds = Math.max(0, Math.floor((now - epochMs) / 1000))
   if (seconds < 60) {
     return `${seconds} sec${seconds === 1 ? '' : 's'} ago`
@@ -152,7 +152,7 @@ export function formatAgoPrecise(epochMs: number, now = Date.now()): string {
 }
 
 /** Compact one-line preview of a tool input for card headers. */
-export function toolInputPreview(input: unknown, max = 80): string {
+export const toolInputPreview = (input: unknown, max = 80): string => {
   if (input === null || input === undefined) {
     return ''
   }
@@ -190,7 +190,7 @@ const MODEL_FAMILIES: Record<string, { name: string; joiner?: string }> = {
  * `friendlyModelName` — this one must cope with every vendor the provider
  * engine can reach.
  */
-export function friendlyModel(id: string | undefined): string | undefined {
+export const friendlyModel = (id: string | undefined): string | undefined => {
   if (!id) {
     return undefined
   }

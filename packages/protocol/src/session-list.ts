@@ -1,5 +1,3 @@
-import type { SessionInfo, SubagentInfo } from './index.ts'
-
 /**
  * How a sessions list is filtered, grouped and sorted — the whole of the view
  * config, kept pure and separate from the components so every surface renders
@@ -16,6 +14,8 @@ import type { SessionInfo, SubagentInfo } from './index.ts'
  * any other, not the frame the list lives in.
  */
 
+import type { SessionInfo, SubagentInfo } from './index.ts'
+
 /** Coarse lifecycle bucket — what a person actually filters on. Raw statuses are
  * too many and too engine-shaped ('starting' vs 'running' is not a decision). */
 export type SessionState = 'attention' | 'working' | 'idle' | 'ended'
@@ -29,7 +29,7 @@ export const STATE_LABELS: Record<SessionState, string> = {
   ended: 'Ended',
 }
 
-export function sessionState(info: SessionInfo): SessionState {
+export const sessionState = (info: SessionInfo): SessionState => {
   // A pending approval outranks everything, a running background agent
   // included: it is the one thing the person has to act on.
   if (info.pendingPermissionCount > 0 || info.status === 'awaiting_approval') {
@@ -69,7 +69,7 @@ export function sessionState(info: SessionInfo): SessionState {
  * rather than assumed: the row is in the working bucket whichever kind is
  * running, and this list only says more about it.
  */
-export function runningSubagents(info: SessionInfo): SubagentInfo[] {
+export const runningSubagents = (info: SessionInfo): SubagentInfo[] => {
   return (info.subagents ?? []).filter((sub) => sub.status === 'running')
 }
 
@@ -89,7 +89,7 @@ export function runningSubagents(info: SessionInfo): SubagentInfo[] {
  * disagree about across surfaces — what is pressable, and what wears the
  * sub-agent colour.
  */
-export function isAgentRecord(sub: SubagentInfo): boolean {
+export const isAgentRecord = (sub: SubagentInfo): boolean => {
   return (sub.agentType?.trim() ?? '') !== ''
 }
 
@@ -102,7 +102,7 @@ export function isAgentRecord(sub: SubagentInfo): boolean {
  * then to a generic word: a row with no label at all reads as a rendering bug,
  * and an engine is free to send neither field.
  */
-export function subagentLabel(sub: SubagentInfo): string {
+export const subagentLabel = (sub: SubagentInfo): string => {
   const agent = sub.agentType?.trim()
   const description = sub.description?.trim()
   if (agent && description) {
@@ -182,7 +182,7 @@ export type SessionGroup = { key: string; label?: string; rows: SessionRow[] }
 
 /** The adapters actually present, for the filter chips — derived rather than
  * enumerated, so a new engine needs no change here. */
-export function adaptersOf(rows: readonly SessionRow[]): string[] {
+export const adaptersOf = (rows: readonly SessionRow[]): string[] => {
   return [...new Set(rows.map((r) => r.adapter))].sort()
 }
 
@@ -197,7 +197,7 @@ export function adaptersOf(rows: readonly SessionRow[]): string[] {
  * really are two different directories, and the alternative is a filter that
  * silently selects both.
  */
-export function projectsOf(rows: readonly SessionRow[]): { key: string; label: string }[] {
+export const projectsOf = (rows: readonly SessionRow[]): { key: string; label: string }[] => {
   const byKey = new Map<string, string>()
   for (const row of rows) {
     byKey.set(projectKey(row), projectLabel(row))
@@ -205,7 +205,7 @@ export function projectsOf(rows: readonly SessionRow[]): { key: string; label: s
   return [...byKey].map(([key, label]) => ({ key, label })).sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()))
 }
 
-export function sessionLabel(info: SessionInfo): string {
+export const sessionLabel = (info: SessionInfo): string => {
   return info.title ?? info.id.slice(0, 8)
 }
 
@@ -223,7 +223,7 @@ export function sessionLabel(info: SessionInfo): string {
  * exists. Sessions with no cwd at all (a filesystem-less engine) share one
  * per-gateway bucket — see {@link projectLabel}.
  */
-export function projectKey(row: SessionRow): string {
+export const projectKey = (row: SessionRow): string => {
   return `${row.hostId}:${normalizePath(row.info.project?.root ?? row.info.cwd)}`
 }
 
@@ -240,7 +240,7 @@ export function projectKey(row: SessionRow): string {
  * renders *in place of* the cwd basename it used to draw, and two spellings of
  * it would put the list and its group headers on different names.
  */
-export function projectLabel(row: Pick<SessionRow, 'info'>): string {
+export const projectLabel = (row: Pick<SessionRow, 'info'>): string => {
   const name = row.info.project?.name
   if (name) {
     return name
@@ -265,7 +265,7 @@ export function projectLabel(row: Pick<SessionRow, 'info'>): string {
  * must render nothing rather than a `.` or a repeated name — the slot simply
  * goes away, which is the point.
  */
-export function projectSubpath(row: Pick<SessionRow, 'info'>): string | undefined {
+export const projectSubpath = (row: Pick<SessionRow, 'info'>): string | undefined => {
   const root = row.info.project?.root
   if (root === undefined || !row.info.cwd) {
     return undefined
@@ -292,7 +292,7 @@ export function projectSubpath(row: Pick<SessionRow, 'info'>): string | undefine
  * jobs surface (the extension, the phone) should, or they would be invisible.
  * The queue stamps `meta.jobId`; nothing else may write that key.
  */
-export function isJobRun(info: SessionInfo): boolean {
+export const isJobRun = (info: SessionInfo): boolean => {
   return typeof info.meta?.jobId === 'string'
 }
 
@@ -331,7 +331,7 @@ const isWithin = (root: string, path: string): boolean => {
  * because a remote gateway's identical-looking path is a different machine's
  * directory.
  */
-export function inScope(row: SessionRow, scope: WorkspaceScope): boolean {
+export const inScope = (row: SessionRow, scope: WorkspaceScope): boolean => {
   return scope.roots.some(
     (root) => (root.hostId ? root.hostId.toLowerCase() === row.hostId.toLowerCase() : row.local) && isWithin(root.path, row.info.cwd),
   )
@@ -339,11 +339,11 @@ export function inScope(row: SessionRow, scope: WorkspaceScope): boolean {
 
 /** Whether the scope filter is actually hiding anything — it is inert with no
  * folder open, and that is the difference between a default and a filter. */
-export function scopeActive(config: ViewConfig, scope: WorkspaceScope | undefined): boolean {
+export const scopeActive = (config: ViewConfig, scope: WorkspaceScope | undefined): boolean => {
   return config.scoped && scope !== undefined
 }
 
-export function filterRows(rows: readonly SessionRow[], config: ViewConfig, scope?: WorkspaceScope): SessionRow[] {
+export const filterRows = (rows: readonly SessionRow[], config: ViewConfig, scope?: WorkspaceScope): SessionRow[] => {
   const needle = config.search.trim().toLowerCase()
   const scoping = scopeActive(config, scope) ? scope : undefined
   return rows.filter(
@@ -405,7 +405,7 @@ const compare = (a: SessionRow, b: SessionRow, sortBy: SortBy): number => {
  * name should still put "Needs attention" first, so groups are ordered by their
  * facet rank, never by the row sort.
  */
-export function groupRows(rows: readonly SessionRow[], config: ViewConfig): SessionGroup[] {
+export const groupRows = (rows: readonly SessionRow[], config: ViewConfig): SessionGroup[] => {
   const sorted = [...rows].sort((a, b) => compare(a, b, config.sortBy))
   if (config.groupBy === 'none') {
     return sorted.length ? [{ key: 'all', rows: sorted }] : []
@@ -441,12 +441,12 @@ export function groupRows(rows: readonly SessionRow[], config: ViewConfig): Sess
  */
 export type SubsetSummary = { shown: number; total: number; causes: string[] }
 
-export function subsetSummary(
+export const subsetSummary = (
   config: ViewConfig,
   scope: WorkspaceScope | undefined,
   shown: number,
   total: number,
-): SubsetSummary | undefined {
+): SubsetSummary | undefined => {
   if (shown >= total) {
     return undefined
   }
@@ -475,7 +475,7 @@ export function subsetSummary(
  * Scope is excluded because it is on by default — it is the state, not a choice
  * someone made.
  */
-export function hasFacetFilter(config: ViewConfig): boolean {
+export const hasFacetFilter = (config: ViewConfig): boolean => {
   return (
     config.search.trim().length > 0 ||
     config.gateways.length > 0 ||
@@ -487,7 +487,7 @@ export function hasFacetFilter(config: ViewConfig): boolean {
 
 /** "Show me everything": every filter off, including scope. The group/sort
  * choices are a layout preference and survive. */
-export function clearFilters(config: ViewConfig): ViewConfig {
+export const clearFilters = (config: ViewConfig): ViewConfig => {
   return {
     ...DEFAULT_VIEW_CONFIG,
     scoped: false,

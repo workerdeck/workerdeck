@@ -33,7 +33,7 @@ export type { Facet, GroupBy, SessionGroup, SessionRow, SessionState, SortBy, Su
 
 /** Every connected gateway's sessions, flattened. Recency order is preserved from
  * the model, so it survives as the tiebreak through every sort. */
-export function buildRows(state: SidebarState | undefined): SessionRow[] {
+export const buildRows = (state: SidebarState | undefined): SessionRow[] => {
   if (!state) {
     return []
   }

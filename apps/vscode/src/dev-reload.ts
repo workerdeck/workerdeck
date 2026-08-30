@@ -12,7 +12,7 @@ export type ReloadableView = { reloadWebview: () => void }
  * host. Development mode only; a self-triggered reload of a real install would be
  * the last thing a user's editor should do.
  */
-export function startDevReload(context: vscode.ExtensionContext, views: readonly ReloadableView[]): vscode.Disposable {
+export const startDevReload = (context: vscode.ExtensionContext, views: readonly ReloadableView[]): vscode.Disposable => {
   const enabled =
     context.extensionMode === vscode.ExtensionMode.Development &&
     vscode.workspace.getConfiguration('workerdeck').get<boolean>('dev.autoReload', true)

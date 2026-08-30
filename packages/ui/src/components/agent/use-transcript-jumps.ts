@@ -19,7 +19,7 @@ const AIM_SETTLE_MS = 50
  * calculator cannot know: the recap row's estimated constant, and flagged
  * content (CJK, compressed tables).
  */
-export function useTranscriptJumps(options: {
+export const useTranscriptJumps = (options: {
   rows: TranscriptRow[]
   terminal: boolean
   stickyPrompt: boolean
@@ -31,7 +31,7 @@ export function useTranscriptJumps(options: {
   stick: ReturnType<typeof useStickToBottomContext>
   jumpToRecapRef?: RefObject<(() => void) | null>
   repinRef?: RefObject<(() => void) | null>
-}): (rowIndex: number, align?: 'start' | 'center') => void {
+}): ((rowIndex: number, align?: 'start' | 'center') => void) => {
   const { rows, terminal, stickyPrompt, epoch, promptRows, scrollElement, rowsRef, virtualizer, stick, jumpToRecapRef, repinRef } = options
 
   // The pending re-aim must live in a ref: the closure is rebuilt every render

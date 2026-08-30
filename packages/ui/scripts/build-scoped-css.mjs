@@ -59,7 +59,7 @@ const OUT = join(pkgRoot, 'build/scoped.css')
 /* ── Selector rewriting ───────────────────────────────────────────────── */
 
 /** Nodes of the first compound (everything before the first combinator). */
-function splitFirstCompound(selector) {
+const splitFirstCompound = (selector) => {
   const first = []
   let rest = null
   for (const node of selector.nodes) {
@@ -77,7 +77,7 @@ function splitFirstCompound(selector) {
 const stringify = (nodes) => nodes.map((n) => String(n)).join('')
 
 /** `[data-theme='x']` (exactly, alone in its compound) → the theme value. */
-function themeAttrValue(compound) {
+const themeAttrValue = (compound) => {
   if (compound.length !== 1) {
     return null
   }
@@ -96,7 +96,7 @@ function themeAttrValue(compound) {
  * (`.wd-root[data-theme]`) carry one extra attribute of specificity so a panel
  * pinned light under a dark document stays light.
  */
-function mapThemeTokenBlock(value) {
+const mapThemeTokenBlock = (value) => {
   if (value === 'dark') {
     return [`${SCOPE}:where([data-theme='dark'], [data-theme='dark'] *)`, `${SCOPE} [data-theme='dark']`]
   }
@@ -105,7 +105,7 @@ function mapThemeTokenBlock(value) {
 
 const ROOTISH = new Set([':root', ':host', 'html', 'body'])
 
-function transformSelectors(selectorText) {
+const transformSelectors = (selectorText) => {
   const root = selectorParser().astSync(selectorText, { lossless: false })
   const out = []
   for (const selector of root.nodes) {
@@ -160,7 +160,7 @@ function transformSelectors(selectorText) {
 
 const SKIP_ATRULES = /^(-\w+-)?(keyframes|font-face|property|page|counter-style)$/
 
-function insideSkippedAtRule(rule) {
+const insideSkippedAtRule = (rule) => {
   for (let parent = rule.parent; parent; parent = parent.parent) {
     if (parent.type === 'atrule' && SKIP_ATRULES.test(parent.name)) {
       return true

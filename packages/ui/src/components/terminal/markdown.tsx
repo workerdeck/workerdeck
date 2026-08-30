@@ -1,9 +1,3 @@
-import { memo, type ReactNode } from 'react'
-import { Streamdown, type Components } from 'streamdown'
-import { cn } from '../../lib/utils.ts'
-import { CopyAction, WithActions } from './affordances.tsx'
-import { Band } from './row.tsx'
-
 /**
  * Markdown on the character grid: every element mapped onto the theme's own
  * {@link Row}/{@link Band} primitives, never the renderer's prose defaults
@@ -15,6 +9,12 @@ import { Band } from './row.tsx'
  * line height), markers are cells (a wrapped line hangs under the text, not
  * the bullet), and code is a band, not a card.
  */
+
+import { memo, type ReactNode } from 'react'
+import { Streamdown, type Components } from 'streamdown'
+import { cn } from '../../lib/utils.ts'
+import { CopyAction, WithActions } from './affordances.tsx'
+import { Band } from './row.tsx'
 
 /** Pull the text out of a fenced block's React children (`<code>…</code>`). */
 const codeText = (node: ReactNode): string => {

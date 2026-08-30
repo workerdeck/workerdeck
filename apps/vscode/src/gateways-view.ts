@@ -131,13 +131,15 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
 
   async #onMessage(msg: GatewaysToHost): Promise<void> {
     switch (msg.kind) {
-      case 'wd-ready':
+      case 'wd-ready': {
         this.#ready = true
         this.push()
         this.#flushForm()
         return
-      case 'wd-submit-gateway':
+      }
+      case 'wd-submit-gateway': {
         return this.#submit(msg)
+      }
       case 'wd-edit-gateway': {
         const host = this.#store.get(msg.hostId)
         if (!host) {
@@ -158,12 +160,14 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
         this.#flushForm()
         return
       }
-      case 'wd-gateway-form-state':
+      case 'wd-gateway-form-state': {
         // The webview is the authority on whether the form is up; this side only dresses the frame.
         this.#setFormOpen(msg.open)
         return
-      case 'wd-remove-gateway':
+      }
+      case 'wd-remove-gateway': {
         return this.#remove(msg.hostId)
+      }
     }
   }
 

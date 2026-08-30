@@ -8,8 +8,8 @@
  * in a filename-with-extension, or `and/or` underlines as a path.
  */
 
-/** One path segment: no whitespace, no separator, none of the characters that
- * bracket a path in prose. `:` is out because it introduces `:line`. */
+// One path segment: no whitespace, no separator, none of the characters that
+// bracket a path in prose. `:` is out because it introduces `:line`.
 const SEG = '[^\\s:\'"`()\\[\\]{}<>|]+'
 
 /** The *first* segment of a relative path additionally cannot start with `@`:
@@ -41,7 +41,7 @@ export type PathMatch = {
   length: number
 }
 
-export function matchPath(text: string | null | undefined): PathMatch | undefined {
+export const matchPath = (text: string | null | undefined): PathMatch | undefined => {
   const match = PATH_PATTERN.exec(text ?? '')
   if (!match) {
     return undefined

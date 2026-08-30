@@ -23,49 +23,66 @@ import {
  * the two clients recognisably in step. Unknown tools fall back to a wrench,
  * MCP tools (`mcp__server__name`) to the puzzle piece the MCP screens use.
  */
-export function toolIcon(toolName: string): LucideIcon {
+export const toolIcon = (toolName: string): LucideIcon => {
   switch (toolName) {
     case 'Bash':
     case 'BashOutput':
-    case 'KillShell':
+    case 'KillShell': {
       return Terminal
-    case 'Read':
+    }
+    case 'Read': {
       return FileText
-    case 'Write':
+    }
+    case 'Write': {
       return SquarePen
+    }
     case 'Edit':
     case 'MultiEdit':
-    case 'NotebookEdit':
+    case 'NotebookEdit': {
       return PencilLine
-    case 'Glob':
+    }
+    case 'Glob': {
       return FolderSearch
-    case 'Grep':
+    }
+    case 'Grep': {
       return Search
-    case 'WebFetch':
+    }
+    case 'WebFetch': {
       return ArrowDownCircle
-    case 'WebSearch':
+    }
+    case 'WebSearch': {
       return Globe
+    }
     case 'Task':
-    case 'Agent':
+    case 'Agent': {
       return UsersRound
-    case 'TodoWrite':
+    }
+    case 'TodoWrite': {
       return CheckSquare
-    case 'Skill':
+    }
+    case 'Skill': {
       return Sparkles
-    case 'AskUserQuestion':
+    }
+    case 'AskUserQuestion': {
       return MessageCircleQuestion
+    }
     // The codex engine's own tool names (see its runner's item mapping).
-    case 'CodexCommand':
+    case 'CodexCommand': {
       return Terminal
-    case 'CodexFileChange':
+    }
+    case 'CodexFileChange': {
       return FileDiff
-    case 'CodexWebSearch':
+    }
+    case 'CodexWebSearch': {
       return Globe
+    }
     case 'CodexImageGeneration':
-    case 'CodexImageView':
+    case 'CodexImageView': {
       return Image
-    default:
+    }
+    default: {
       return toolName.startsWith('mcp__') ? Puzzle : Wrench
+    }
   }
 }
 
@@ -74,7 +91,7 @@ export function toolIcon(toolName: string): LucideIcon {
  * commands" fold. `BashOutput`/`KillShell` are excluded on purpose — they
  * manage a background shell rather than run something.
  */
-export function isShellTool(toolName: string): boolean {
+export const isShellTool = (toolName: string): boolean => {
   return toolName === 'Bash' || toolName === 'CodexCommand'
 }
 
@@ -83,16 +100,18 @@ export function isShellTool(toolName: string): boolean {
  * an MCP tool is unknowable from its name, so it reads as neutral rather than
  * guessed.
  */
-export function isMutatingTool(toolName: string): boolean {
+export const isMutatingTool = (toolName: string): boolean => {
   switch (toolName) {
     case 'Write':
     case 'Edit':
     case 'MultiEdit':
     case 'NotebookEdit':
     case 'Update':
-    case 'CodexFileChange':
+    case 'CodexFileChange': {
       return true
-    default:
+    }
+    default: {
       return false
+    }
   }
 }

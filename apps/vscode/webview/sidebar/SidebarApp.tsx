@@ -69,15 +69,18 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
     () =>
       bridge.onHostMessage((msg: AppHostMessage) => {
         switch (msg.kind) {
-          case 'wd-sidebar-state':
+          case 'wd-sidebar-state': {
             setState(msg.state)
             return
-          case 'wd-project-icons':
+          }
+          case 'wd-project-icons': {
             setProjectIcons((held) => ({ ...held, ...msg.icons }))
             return
-          case 'wd-filter-open':
+          }
+          case 'wd-filter-open': {
             setFilterOpen(msg.open)
             return
+          }
         }
       }),
     [bridge],

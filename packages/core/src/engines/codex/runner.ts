@@ -1187,7 +1187,7 @@ export class CodexRunner implements Runner {
           parts.push({ type: 'localImage', path })
           break
         }
-        case 'text':
+        case 'text': {
           parts.push({
             type: 'text',
             text:
@@ -1195,8 +1195,10 @@ export class CodexRunner implements Runner {
               `${Buffer.from(attachment.data, 'base64').toString('utf8')}\n</attachment>`,
           })
           break
-        default:
+        }
+        default: {
           throw new Error(`unsupported attachment media type for the codex engine: ${attachment.mediaType}`)
+        }
       }
     }
     if (text) {

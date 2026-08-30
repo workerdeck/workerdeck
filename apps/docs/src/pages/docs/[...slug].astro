@@ -2,7 +2,7 @@
 import { getCollection, render } from 'astro:content'
 import DocsLayout from '../../layouts/DocsLayout.astro'
 
-export async function getStaticPaths() {
+export const getStaticPaths = async () => {
   const entries = await getCollection('docs')
   return entries.map((entry) => ({ params: { slug: entry.id }, props: { entry } }))
 }

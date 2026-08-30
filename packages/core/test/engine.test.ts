@@ -6,6 +6,7 @@ import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
 import { createVfs, loadEngine, type SandboxEngine } from '@workerdeck/sandbox'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { QuickJsExecutor, connectMcpTools, createEngineSession, type McpConnection } from '../src/index.ts'
+import type { ToolExecutionCall } from '../src/executors/tool-executor.ts'
 
 let engine: SandboxEngine
 beforeAll(async () => {
@@ -368,7 +369,7 @@ describe('createEngineSession host tools and MCP declarations', () => {
       // executor, which is what makes it bridgeable to a tab. Nothing else in
       // the API could express this — `mcpTools` is authoritative by construction.
       selectExecutor: () => ({
-        dispatch: async (call: import('../src/executors/tool-executor.ts').ToolExecutionCall) => {
+        dispatch: async (call: ToolExecutionCall) => {
           dispatched.push(call.tool)
           return {
             executionId: call.executionId,

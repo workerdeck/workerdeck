@@ -9,7 +9,7 @@ import { TranscriptDensityProvider, TranscriptVariantProvider } from '../src/com
  * pins to the top of the scroller.
  */
 
-function mockItems(): TranscriptItem[] {
+const mockItems = (): TranscriptItem[] => {
   const items: TranscriptItem[] = []
   // Turn 1
   items.push({

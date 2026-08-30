@@ -187,7 +187,7 @@ export class SessionParkManager {
   watch(runner: Runner, afterSeq = 0): () => void {
     return runner.subscribe((event) => {
       switch (event.type) {
-        case 'execution_dispatched':
+        case 'execution_dispatched': {
           if (!event.deferred) {
             return
           }
@@ -197,8 +197,9 @@ export class SessionParkManager {
             expiresAt: event.expiresAt,
           })
           return
+        }
         case 'execution_result':
-        case 'execution_failed':
+        case 'execution_failed': {
           this.#forget(event.executionId)
           // One call of a multi-call park settling leaves the session parked on
           // the rest — it has to go back down, and no new status_changed will say so.
@@ -206,32 +207,37 @@ export class SessionParkManager {
             void this.#park(runner)
           }
           return
-        case 'status_changed':
+        }
+        case 'status_changed': {
           if (event.status === 'parked') {
             void this.#park(runner)
           } else {
             void this.#rememberDormant(runner)
           }
           return
-        case 'turn_result':
+        }
+        case 'turn_result': {
           // The write-through moment: a turn has ended, so the history is whole
           // and the snapshot is cheap to justify.
           void this.#persistLive(runner)
           return
+        }
         case 'permission_mode_changed':
-        case 'model_changed':
+        case 'model_changed': {
           // Both are part of what "the session is still there" means, and both
           // can be flipped between turns — so neither is covered by turn_result
           // alone. Flipped *mid*-turn, `snapshot()` refuses (a turn is in
           // flight) and the turn's own write covers it a moment later.
           void this.#persistLive(runner)
           return
-        case 'system_init':
+        }
+        case 'system_init': {
           // The first moment a resume is even possible: before the engine names
           // its session there is nothing to come back to.
           void this.#rememberDormant(runner)
           return
-        case 'conversation_reset':
+        }
+        case 'conversation_reset': {
           // Two engines, two records, and a clear invalidates whichever one this
           // session has.
           //
@@ -252,7 +258,8 @@ export class SessionParkManager {
           void this.#rememberDormant(runner)
           void this.#persistLive(runner)
           return
-        case 'session_closed':
+        }
+        case 'session_closed': {
           // Not during shutdown. The registry closes every runner on the way
           // down and the reason it gives is the same 'server' a DELETE produces,
           // so the *only* thing separating "this session is over" from "this
@@ -265,8 +272,10 @@ export class SessionParkManager {
           }
           void this.discard(runner.id)
           return
-        default:
+        }
+        default: {
           return
+        }
       }
     }, afterSeq)
   }

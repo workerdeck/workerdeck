@@ -12,9 +12,9 @@
  * look alike but are not interchangeable.
  */
 
-/** `TokenUsageBreakdown` — one entry of `thread/tokenUsage/updated`. OpenAI
- * accounting: `inputTokens` INCLUDES the cached share (the relation the
- * runner's subtraction assumes, asserted in `smoke:codex`). */
+// `TokenUsageBreakdown` — one entry of `thread/tokenUsage/updated`. OpenAI
+// accounting: `inputTokens` INCLUDES the cached share (the relation the runner's
+// subtraction assumes, asserted in `smoke:codex`).
 export type AppServerTokenUsage = {
   inputTokens: number
   cachedInputTokens: number

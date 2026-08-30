@@ -22,7 +22,7 @@ export interface PerfReport {
 
 const round = (n: number) => Math.round(n * 10) / 10
 
-export async function perfSweep(scroller: HTMLElement, { step = 400 }: { step?: number } = {}): Promise<PerfReport> {
+export const perfSweep = async (scroller: HTMLElement, { step = 400 }: { step?: number } = {}): Promise<PerfReport> => {
   const longTasks: { duration: number }[] = []
   let observer: PerformanceObserver | undefined
   try {

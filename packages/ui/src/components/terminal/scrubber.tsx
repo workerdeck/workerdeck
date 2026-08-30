@@ -125,7 +125,7 @@ const MIN_MARK = 2
  * viewport when everything fits, the band fills it exactly, and `bandH` can
  * structurally never exceed `railH`.
  */
-export function railScale(railH: number, totalSize: number, viewportH: number): number {
+export const railScale = (railH: number, totalSize: number, viewportH: number): number => {
   return totalSize > 0 ? railH / Math.max(totalSize, viewportH) : 0
 }
 
@@ -148,16 +148,21 @@ const excerpt = (item: TranscriptItem): string => {
     case 'user':
     case 'assistant_text':
     case 'thinking':
-    case 'notice':
+    case 'notice': {
       return item.text
-    case 'tool_call':
+    }
+    case 'tool_call': {
       return `${item.name}(${toolInputPreview(item.input)})`
-    case 'turn_result':
+    }
+    case 'turn_result': {
       return doneLine(item)
-    case 'file_delivered':
+    }
+    case 'file_delivered': {
       return item.path
-    default:
+    }
+    default: {
       return ''
+    }
   }
 }
 
@@ -207,7 +212,7 @@ export interface TerminalScrubberProps {
  * package's surface. Both bugs this function has shipped were pure-logic ones
  * a unit test catches.
  */
-export function buildClusters(props: TerminalScrubberProps, railH: number): Cluster[] {
+export const buildClusters = (props: TerminalScrubberProps, railH: number): Cluster[] => {
   const {
     items,
     bookmarks,

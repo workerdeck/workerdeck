@@ -1,6 +1,3 @@
-import type { CSSProperties, HTMLAttributes, ReactNode } from 'react'
-import { cn } from '../../lib/utils.ts'
-
 /**
  * The primitives every terminal row is built from — the whole vocabulary:
  * {@link Row} (gutter cell + body cell), {@link Blank} (one empty line),
@@ -8,6 +5,9 @@ import { cn } from '../../lib/utils.ts'
  * `styles/terminal.css`; these choose a class, a marker and a tone, never a
  * measurement.
  */
+
+import type { CSSProperties, HTMLAttributes, ReactNode } from 'react'
+import { cn } from '../../lib/utils.ts'
 
 /** The palette, as a name. See the `[data-tone]` rules in `terminal.css`. */
 export type Tone = 'fg' | 'bright' | 'dim' | 'faint' | 'mark' | 'blue' | 'green' | 'red' | 'yellow' | 'magenta'

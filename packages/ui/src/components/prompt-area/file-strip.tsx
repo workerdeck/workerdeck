@@ -79,7 +79,7 @@ type FileStripProps = {
 const COLLAPSE_THRESHOLD = 3
 
 /** Pick a lucide icon key based on MIME type. */
-function getFileIconKey(type?: string): 'pdf' | 'spreadsheet' | 'code' | 'image' | 'default' {
+const getFileIconKey = (type?: string): 'pdf' | 'spreadsheet' | 'code' | 'image' | 'default' => {
   if (!type) {
     return 'default'
   }
@@ -107,7 +107,7 @@ const FILE_ICONS = {
 } as const
 
 /** Format bytes into a human-readable string. */
-function formatFileSize(bytes: number): string {
+const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) {
     return `${bytes} B`
   }
@@ -121,7 +121,7 @@ function formatFileSize(bytes: number): string {
 }
 
 /** Extract a short extension label from a filename (e.g., "PDF", "CSV"). */
-function getExtensionLabel(name: string): string | null {
+const getExtensionLabel = (name: string): string | null => {
   const dot = name.lastIndexOf('.')
   if (dot === -1 || dot === name.length - 1) {
     return null

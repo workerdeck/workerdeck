@@ -7,7 +7,7 @@
  * off-screen textarea is the only thing that works on those origins. Returns
  * whether the text actually landed.
  */
-export async function copyText(value: string): Promise<boolean> {
+export const copyText = async (value: string): Promise<boolean> => {
   // Optional-chained, not `in`-checked: some embedded webviews expose a
   // `clipboard` object whose `writeText` rejects. Both paths hit the fallback.
   try {

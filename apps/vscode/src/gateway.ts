@@ -9,7 +9,7 @@ import { apiUrl } from './hosts.ts'
  * the client resolves its WS implementation at construction and VS Code's Node 18
  * has no global `WebSocket`.
  */
-export async function clientFor(store: HostStore, host: GatewayHost): Promise<WorkerDeckClient | undefined> {
+export const clientFor = async (store: HostStore, host: GatewayHost): Promise<WorkerDeckClient | undefined> => {
   const base = apiUrl(host)
   if (!base) {
     return undefined
@@ -26,7 +26,7 @@ export async function clientFor(store: HostStore, host: GatewayHost): Promise<Wo
 export type ProbeResult = 'connected' | 'unauthorized' | 'unreachable'
 
 /** One cheap authenticated GET decides all three states. */
-export async function probe(client: WorkerDeckClient): Promise<ProbeResult> {
+export const probe = async (client: WorkerDeckClient): Promise<ProbeResult> => {
   try {
     await client.listSessions()
     return 'connected'

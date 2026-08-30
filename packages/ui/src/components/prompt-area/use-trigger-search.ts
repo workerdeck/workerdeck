@@ -20,7 +20,7 @@ type UseTriggerSearchReturn = {
  * Extracted from `usePromptArea` so the main hook stays focused on
  * editing concerns while this hook owns the data-fetching side.
  */
-export function useTriggerSearch(): UseTriggerSearchReturn {
+export const useTriggerSearch = (): UseTriggerSearchReturn => {
   const [suggestions, setSuggestions] = useState<TriggerSuggestion[]>([])
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null)

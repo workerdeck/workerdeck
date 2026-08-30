@@ -1,4 +1,4 @@
-import * as vscode from 'vscode'
+import type * as vscode from 'vscode'
 import { Watermarks } from '@workerdeck/protocol'
 import type { Watermark, WatermarkStore } from '@workerdeck/protocol'
 
@@ -13,7 +13,7 @@ export { unseenCount } from '@workerdeck/protocol'
 
 const KEY = 'workerdeck.watermarks.v1'
 
-export function createWatermarks(context: vscode.ExtensionContext): Watermarks {
+export const createWatermarks = (context: vscode.ExtensionContext): Watermarks => {
   const store: WatermarkStore = {
     read: () => context.globalState.get<Record<string, Watermark>>(KEY),
     // Fire-and-forget: a Memento update that loses a race re-runs on the next mark a minute later.

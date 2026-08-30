@@ -17,7 +17,7 @@ export const PULSE_MS = 150
 export const PULSE_REST = PULSE_FRAMES[PULSE_FRAMES.length - 1]
 
 /** The OS-level "stop moving things" setting. */
-export function usePrefersReducedMotion(): boolean {
+export const usePrefersReducedMotion = (): boolean => {
   const [reduced, setReduced] = useState(false)
   useEffect(() => {
     const query = window.matchMedia?.('(prefers-reduced-motion: reduce)')
@@ -34,7 +34,7 @@ export function usePrefersReducedMotion(): boolean {
 
 /** The current pulse frame, ticking while `animated`; holds at rest under
  * reduced motion. */
-export function usePulse(animated: boolean): string {
+export const usePulse = (animated: boolean): string => {
   const reduced = usePrefersReducedMotion()
   const running = animated && !reduced
   const [frame, setFrame] = useState(0)

@@ -21,17 +21,17 @@ import { segmentsToPlainText, plainTextToSegments } from './prompt-area-engine.t
 export { segmentsToPlainText, plainTextToSegments }
 
 /** Create a text segment. */
-export function text(value: string): TextSegment {
+export const text = (value: string): TextSegment => {
   return { type: 'text', text: value }
 }
 
 /** Create a chip segment. */
-export function chip(opts: Omit<ChipSegment, 'type'>): ChipSegment {
+export const chip = (opts: Omit<ChipSegment, 'type'>): ChipSegment => {
   return { type: 'chip', ...opts }
 }
 
 /** Returns `true` when the segment array is empty or contains only whitespace text. */
-export function isSegmentsEmpty(segments: Segment[]): boolean {
+export const isSegmentsEmpty = (segments: Segment[]): boolean => {
   if (segments.length === 0) {
     return true
   }
@@ -39,16 +39,16 @@ export function isSegmentsEmpty(segments: Segment[]): boolean {
 }
 
 /** Returns `true` when the segment array contains at least one chip. */
-export function hasChips(segments: Segment[]): boolean {
+export const hasChips = (segments: Segment[]): boolean => {
   return segments.some((seg) => seg.type === 'chip')
 }
 
 /** Extracts all chip segments from a segment array. */
-export function getChips(segments: Segment[]): ChipSegment[] {
+export const getChips = (segments: Segment[]): ChipSegment[] => {
   return segments.filter((seg): seg is ChipSegment => seg.type === 'chip')
 }
 
 /** Extracts chips matching a specific trigger character. */
-export function getChipsByTrigger(segments: Segment[], trigger: string): ChipSegment[] {
+export const getChipsByTrigger = (segments: Segment[], trigger: string): ChipSegment[] => {
   return segments.filter((seg): seg is ChipSegment => seg.type === 'chip' && seg.trigger === trigger)
 }

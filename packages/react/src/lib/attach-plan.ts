@@ -1,5 +1,3 @@
-import { initialTranscriptState, type TranscriptState } from './transcript.ts'
-
 /**
  * The attach effect's decisions, pure. `useClaudeSession` is never rendered in
  * tests — this package deliberately carries no jsdom — so everything the effect
@@ -8,6 +6,8 @@ import { initialTranscriptState, type TranscriptState } from './transcript.ts'
  * here where plain vitest reaches it. The refs stay in the hook: everything
  * stateful arrives as a value and leaves as an instruction.
  */
+
+import { initialTranscriptState, type TranscriptState } from './transcript.ts'
 
 /**
  * Which (resync, client identity, session) a reducer state was seeded for.

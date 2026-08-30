@@ -62,12 +62,15 @@ export const sessionSteps = (info: SessionInfo, onSelect: (toolUseId: string, ki
 
 const stepState = (status: SubagentInfo['status']): Step['state'] => {
   switch (status) {
-    case 'running':
+    case 'running': {
       return 'running'
-    case 'failed':
+    }
+    case 'failed': {
       return 'failed'
-    default:
+    }
+    default: {
       return 'done'
+    }
   }
 }
 
@@ -183,13 +186,17 @@ const StepIcon = ({ state, kind }: { state: Step['state']; kind: Step['kind'] })
     return <Dot className="size-[11px] shrink-0" />
   }
   switch (state) {
-    case 'running':
+    case 'running': {
       return <Spinner className="size-[11px] shrink-0" />
-    case 'failed':
+    }
+    case 'failed': {
       return <CircleAlert className="size-[11px] shrink-0" />
-    case 'pending':
+    }
+    case 'pending': {
       return <PauseCircle className="size-[11px] shrink-0" />
-    default:
+    }
+    default: {
       return <Check className="size-[11px] shrink-0" />
+    }
   }
 }

@@ -22,7 +22,12 @@ const withinRoots = (sessions: SdkSessionSummary[], roots: string[], limit?: num
   return limit === undefined ? allowed.slice(offset) : allowed.slice(offset, offset + limit)
 }
 
-export async function handleSdkSessions(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, auth: AuthContext): Promise<void> {
+export const handleSdkSessions = async (
+  ctx: ServerContext,
+  req: IncomingMessage,
+  res: ServerResponse,
+  auth: AuthContext,
+): Promise<void> => {
   const { adapterFor, factory, profiles } = ctx
   if (req.method !== 'GET') {
     json(res, 405, { error: 'method not allowed' })

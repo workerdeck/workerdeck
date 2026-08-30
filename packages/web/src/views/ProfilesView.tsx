@@ -2,7 +2,7 @@ import { Empty } from '@workerdeck/ui'
 import { UsersRound } from 'lucide-react'
 
 /** Opens the profile's config dir in VSCode via the vscode:// URL scheme. */
-export function openInVsCode(path: string): void {
+export const openInVsCode = (path: string): void => {
   window.location.href = `vscode://file${path}`
 }
 

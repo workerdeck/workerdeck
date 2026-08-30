@@ -10,7 +10,17 @@
     "no-unused-vars": "warn",
     "curly": "error",
     "unicorn/no-array-sort": "off",
-    "unicorn/require-post-message-target-origin": "off"
+    "unicorn/require-post-message-target-origin": "off",
+    "unicorn/switch-case-braces": "error",
+    "typescript/consistent-type-imports": [
+      "error",
+      {
+        "disallowTypeAnnotations": false
+      }
+    ],
+    "wd/module-func-style": "error",
+    "wd/no-stacked-jsdoc": "error",
+    "wd/max-comment-lines": "warn"
   },
   "overrides": [
     {
@@ -19,6 +29,32 @@
         "unicorn/require-module-specifiers": "off",
         "unicorn/no-empty-file": "off"
       }
+    },
+    {
+      "files": ["**/test/**", "**/*.test.ts", "**/*.test.tsx", "smoke/**"],
+      "rules": {
+        "unicorn/consistent-function-scoping": "off",
+        "wd/max-comment-lines": "off"
+      }
+    },
+    {
+      "files": ["packages/ui/dev/**"],
+      "rules": {
+        "no-underscore-dangle": "off"
+      }
+    },
+    {
+      "files": ["lint/**"],
+      "rules": {
+        "wd/module-func-style": "off"
+      }
+    },
+    {
+      "files": ["packages/ui/src/components/prompt-area/**"],
+      "rules": {
+        "wd/module-func-style": "off"
+      }
     }
-  ]
+  ],
+  "jsPlugins": ["./lint/wd-plugin.js"]
 }

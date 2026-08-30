@@ -1,15 +1,15 @@
-import { createHash } from 'node:crypto'
-import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { SessionInfo, SessionNotification } from '@workerdeck/protocol'
-import { type ApnsClient, type ApnsConfig, createApnsClient, loadApnsKey, type ApnsRequest } from './client.ts'
-import { createDeviceRegistry, createDeviceRoute, type DeviceRegistry } from './devices.ts'
-
 /**
  * Turns the server's session notifications into APNs pushes. Session webhooks are
  * the primitive and this is one consumer of them: it hooks
  * `notifications.onNotification` in-process, but nothing in the server knows that,
  * and push credentials live here and nowhere in `packages/server`.
  */
+
+import { createHash } from 'node:crypto'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { SessionInfo, SessionNotification } from '@workerdeck/protocol'
+import { type ApnsClient, type ApnsConfig, createApnsClient, loadApnsKey, type ApnsRequest } from './client.ts'
+import { createDeviceRegistry, createDeviceRoute, type DeviceRegistry } from './devices.ts'
 
 /** Under APNs' 4 KB payload cap, with room for the alert dictionary to grow. */
 const MAX_PAYLOAD_BYTES = 3800
@@ -54,16 +54,21 @@ const collapseKey = (sessionId: string): string => createHash('sha256').update(s
 
 const titleFor = (notification: SessionNotification, name: string): string => {
   switch (notification.type) {
-    case 'permission_requested':
+    case 'permission_requested': {
       return `Approval needed — ${name}`
-    case 'turn_completed':
+    }
+    case 'turn_completed': {
       return notification.result?.isError === true ? `Turn failed — ${name}` : name
-    case 'session_error':
+    }
+    case 'session_error': {
       return `Session error — ${name}`
-    case 'session_closed':
+    }
+    case 'session_closed': {
       return `Session ended — ${name}`
-    default:
+    }
+    default: {
       return name
+    }
   }
 }
 
@@ -73,14 +78,18 @@ const bodyFor = (notification: SessionNotification): string => {
     return preview
   }
   switch (notification.type) {
-    case 'permission_requested':
+    case 'permission_requested': {
       return 'The agent is waiting for your approval.'
-    case 'turn_completed':
+    }
+    case 'turn_completed': {
       return 'The turn finished.'
-    case 'session_closed':
+    }
+    case 'session_closed': {
       return `Closed by the ${notification.reason ?? 'server'}.`
-    default:
+    }
+    default: {
       return 'Something needs your attention.'
+    }
   }
 }
 

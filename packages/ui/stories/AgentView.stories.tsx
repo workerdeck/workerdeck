@@ -20,7 +20,7 @@ import {
 
 // ── Fixture: a rich transcript with every markdown feature ──────────────
 
-function richItems(): TranscriptItem[] {
+const richItems = (): TranscriptItem[] => {
   const items: TranscriptItem[] = []
 
   // Turn 1 — user prompt with a skill chip

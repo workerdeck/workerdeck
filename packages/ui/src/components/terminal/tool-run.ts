@@ -20,7 +20,7 @@ type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
  * Equal `parentToolUseId` is the one membership condition: a subagent's calls
  * must not fold under a top-level count.
  */
-export function foldsTogether(a: ToolCallItem, b: ToolCallItem): boolean {
+export const foldsTogether = (a: ToolCallItem, b: ToolCallItem): boolean => {
   return a.parentToolUseId === b.parentToolUseId
 }
 
@@ -29,7 +29,7 @@ export function foldsTogether(a: ToolCallItem, b: ToolCallItem): boolean {
  * (`mcp__<server>__<tool>`), shell tools from both engines as "shell",
  * everything else its own name lowercased.
  */
-export function toolFamily(name: string): string {
+export const toolFamily = (name: string): string => {
   if (isShellTool(name)) {
     return 'shell'
   }
@@ -45,7 +45,7 @@ export function toolFamily(name: string): string {
  * commands"); anything mixed gets the count plus a breakdown, loudest family
  * first.
  */
-export function runSummary(items: readonly ToolCallItem[], busy: boolean): string {
+export const runSummary = (items: readonly ToolCallItem[], busy: boolean): string => {
   const verb = busy ? 'Running ' : 'Ran '
   const tail = busy ? '…' : ''
   const n = items.length
@@ -82,7 +82,7 @@ const trimmed = (value: unknown): string | undefined => (typeof value === 'strin
  * Task input's `subagent_type` and `description`, falling back to the ordinary
  * input preview when an engine sends neither.
  */
-export function taskLabel(task: ToolCallItem): string {
+export const taskLabel = (task: ToolCallItem): string => {
   return `${task.name}(${taskIdentity(task)})`
 }
 
@@ -91,7 +91,7 @@ export function taskLabel(task: ToolCallItem): string {
  * sub-agent takeover's header. One spelling so the header, the row it opened
  * from, and protocol's `subagentLabel` cannot drift.
  */
-export function taskIdentity(task: ToolCallItem): string {
+export const taskIdentity = (task: ToolCallItem): string => {
   const input = task.input as { description?: unknown; subagent_type?: unknown } | null
   const description = trimmed(input?.description)
   const agent = trimmed(input?.subagent_type)
@@ -110,7 +110,7 @@ export function taskIdentity(task: ToolCallItem): string {
  * header already prints it, and it is not the instruction. Codex genuinely has
  * none (`spawn_agent` is an encrypted blob), so there the row is not drawn.
  */
-export function taskBrief(task: ToolCallItem): string | undefined {
+export const taskBrief = (task: ToolCallItem): string | undefined => {
   const input = task.input as { prompt?: unknown } | null
   return trimmed(input?.prompt)
 }
@@ -129,7 +129,7 @@ export const callFailed = (call: ToolCallItem): boolean => call.status === 'fail
  * are one press away and the recap counts them. The scrubber follows this
  * rule: it marks a failed call only when the call is its row's outcome.
  */
-export function runFailed(items: readonly ToolCallItem[]): boolean {
+export const runFailed = (items: readonly ToolCallItem[]): boolean => {
   const last = items[items.length - 1]
   return last !== undefined && callFailed(last)
 }
@@ -138,7 +138,7 @@ export function runFailed(items: readonly ToolCallItem[]): boolean {
  * settles only when its subagent finishes — but a bridged or deferred child
  * can outlive it, and a pulse that stopped while a child still worked would
  * read as a hang. */
-export function taskBusy(task: ToolCallItem, children: readonly TranscriptItem[]): boolean {
+export const taskBusy = (task: ToolCallItem, children: readonly TranscriptItem[]): boolean => {
   return callBusy(task) || children.some((child) => child.kind === 'tool_call' && callBusy(child))
 }
 
@@ -148,7 +148,7 @@ export function taskBusy(task: ToolCallItem, children: readonly TranscriptItem[]
  * failure must not redden the task; it is red on its own row, one press away,
  * and the recap counts it. The scrubber follows this rule too.
  */
-export function taskFailed(task: ToolCallItem): boolean {
+export const taskFailed = (task: ToolCallItem): boolean => {
   return callFailed(task)
 }
 
@@ -160,7 +160,7 @@ export function taskFailed(task: ToolCallItem): boolean {
  * line from the same items it holds today. With no tool calls yet the line
  * says `working…` (`0 tools…` reads as a stall); settled with none, `done`.
  */
-export function taskSummary(task: ToolCallItem, children: readonly TranscriptItem[]): string {
+export const taskSummary = (task: ToolCallItem, children: readonly TranscriptItem[]): string => {
   const busy = taskBusy(task, children)
   const calls = children.reduce((n, child) => n + (child.kind === 'tool_call' ? 1 : 0), 0)
   const label = taskLabel(task)

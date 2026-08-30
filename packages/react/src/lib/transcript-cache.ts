@@ -1,6 +1,3 @@
-import type { WorkerDeckClient } from '@workerdeck/client'
-import type { TranscriptState } from './transcript.ts'
-
 /**
  * Module-scope cache of detached transcript states, so switching back to a
  * recently viewed session paints its transcript in the mount frame and
@@ -22,6 +19,9 @@ import type { TranscriptState } from './transcript.ts'
  * session id is unique only within one gateway, and an entry must never be
  * readable through a client speaking as a different principal.
  */
+
+import type { WorkerDeckClient } from '@workerdeck/client'
+import type { TranscriptState } from './transcript.ts'
 
 /** How many detached transcripts stay warm. Five covers an operator's working
  * set while keeping the pathological case (five ~4k-item transcripts) in the

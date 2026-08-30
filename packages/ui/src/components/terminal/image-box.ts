@@ -1,5 +1,3 @@
-import { formatBytes } from '../../lib/format.ts'
-
 /**
  * The box a tool result's image is drawn in. Pure and its own module because
  * `items.tsx` draws these boxes and `height.ts` predicts their pixel height
@@ -11,6 +9,8 @@ import { formatBytes } from '../../lib/format.ts'
  * calculator exists to kill. Letterboxing is the accepted cost.
  */
 
+import { formatBytes } from '../../lib/format.ts'
+
 /** 12 lines ≈ 240px at an 18px line: legible screenshot, and four of them still fit a screen. */
 export const IMAGE_BOX_LINES = 12
 
@@ -18,7 +18,7 @@ export const IMAGE_BOX_LINES = 12
  * What the box says before the fetch lands. `bytes` is the decoded size the
  * gateway stamped on the reference — the client cannot compute it.
  */
-export function imagePlaceholder(image: { bytes: number }): string {
+export const imagePlaceholder = (image: { bytes: number }): string => {
   return `image · ${formatBytes(image.bytes)}`
 }
 

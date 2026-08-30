@@ -6,7 +6,6 @@
  * live here once.
  */
 
-/** What kind of async request this is. Purely descriptive — the mechanics are shared. */
 export type PendingKind = 'approval' | 'tool_call' | 'execution'
 
 /** Who settled a request. Mirrors the existing approval vocabulary. */

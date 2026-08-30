@@ -26,7 +26,7 @@ const offGrid = (value: number, step: number): number => {
   return Math.min(remainder, step - remainder)
 }
 
-export function auditGrid(surface: HTMLElement): GridReport {
+export const auditGrid = (surface: HTMLElement): GridReport => {
   const style = getComputedStyle(surface)
   const line = Number.parseFloat(style.getPropertyValue('--term-line'))
   // From the content top, not the border box, so the report is independent of the

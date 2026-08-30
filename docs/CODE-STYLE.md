@@ -26,7 +26,19 @@ that `pnpm format` + `pnpm lint --fix` converge the whole repo, and format-on-sa
 ## Lint-enforced (oxlint)
 
 - **Always use curly braces**, including single-statement bodies (`curly: error`, autofixable).
-  `if`/`else if` chains always take newlines and braces. `case` arms are always braced.
+  `if`/`else if` chains always take newlines and braces. `case` arms are always braced
+  (`unicorn/switch-case-braces` — `curly` alone does not cover switch).
+- **`import type` for type-only imports** (`typescript/consistent-type-imports`;
+  `disallowTypeAnnotations` is off because vitest's `importOriginal<typeof import('m')>()` is
+  idiomatic).
+- **Custom rules** in `lint/wd-plugin.js` (loaded via `jsPlugins`):
+  - `wd/module-func-style` — module-level helpers must be arrow-function consts; `function`
+    declarations are reserved for PascalCase components and generators. Vendored code
+    (`packages/ui/src/components/prompt-area`) is exempt — it keeps its upstream shape.
+  - `wd/no-stacked-jsdoc` — two `/** */` blocks on one declaration is always a mistake: one of
+    them documents the wrong symbol or went stale.
+  - `wd/max-comment-lines` (warn) — a comment block over 12 lines is documentation that belongs
+    in `docs/` with a one-line pointer left behind.
 
 ## Conventions the tooling cannot (yet) enforce
 
@@ -39,7 +51,9 @@ that `pnpm format` + `pnpm lint --fix` converge the whole repo, and format-on-sa
   would imply more certainty about the shape than exists.
 - **Module-level `const`s at the top of the file** (after imports and type declarations).
 - **Module-level helpers are arrow-function consts** on a single-line signature:
-  `const fn = (a: string): R => { … }` — not `function` declarations.
+  `const fn = (a: string): R => { … }` — not `function` declarations. **PascalCase React
+  components are the exception**: `export function Component()` is the repo's component form.
+  (Both halves are enforced by `wd/module-func-style`.)
 - **Keep function signatures on one line.** Width 160 makes this the default; don't hand-wrap.
 
 ## Known formatter tradeoff

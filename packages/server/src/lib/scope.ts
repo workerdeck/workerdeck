@@ -4,9 +4,9 @@
  * enforces the tags; the embedder's `authorizeSession` decides what they mean.
  */
 
-/** Most tags one session (or one principal) may carry, and the longest a key or
- * value may be. Not a security property — a bound so an opaque map cannot become
- * an unbounded store that every list response then carries. */
+// Most tags one session (or one principal) may carry, and the longest a key or
+// value may be. Not a security property — a bound so an opaque map cannot become
+// an unbounded store that every list response then carries.
 const MAX_SCOPE_KEYS = 16
 const MAX_SCOPE_LEN = 200
 

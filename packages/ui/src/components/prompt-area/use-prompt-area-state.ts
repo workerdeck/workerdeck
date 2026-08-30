@@ -64,7 +64,7 @@ export type PromptAreaState = {
   insertChip: (chip: Omit<ChipSegment, 'type'>) => void
 }
 
-export function usePromptAreaState(options: UsePromptAreaStateOptions = {}): PromptAreaState {
+export const usePromptAreaState = (options: UsePromptAreaStateOptions = {}): PromptAreaState => {
   const { initialValue = [] } = options
 
   const [value, setValue] = useState<Segment[]>(initialValue)

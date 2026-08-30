@@ -98,16 +98,21 @@ export const excerpt = (item: TranscriptItem): string => {
     case 'user':
     case 'assistant_text':
     case 'thinking':
-    case 'notice':
+    case 'notice': {
       return item.text
-    case 'tool_call':
+    }
+    case 'tool_call': {
       return `${item.name}(${toolInputPreview(item.input)})`
-    case 'turn_result':
+    }
+    case 'turn_result': {
       return doneLine(item)
-    case 'file_delivered':
+    }
+    case 'file_delivered': {
       return item.path
-    default:
+    }
+    default: {
       return ''
+    }
   }
 }
 

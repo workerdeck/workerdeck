@@ -6,7 +6,7 @@ import { formatAgoPrecise, formatCountdown, formatRateLimitWindowLong, rateLimit
 
 /** Ticking clock for the countdowns and pace markers — a minute is the finest
  * resolution either prints. `active` is what a dialog passes its `open`. */
-export function useMinuteClock(active = true): number {
+export const useMinuteClock = (active = true): number => {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!active) {

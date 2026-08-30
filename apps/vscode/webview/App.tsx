@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
 import { SessionPanel, Toaster, type SessionControls, type TerminalMetrics } from '@workerdeck/ui'
-import { Bridge } from './bridge.ts'
+import type { Bridge } from './bridge.ts'
 import { matchPath } from './paths.ts'
 
 /** Marks the element under the pointer while Cmd/Ctrl is held (styles.css). */

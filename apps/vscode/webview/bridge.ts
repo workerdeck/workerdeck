@@ -92,10 +92,11 @@ export class Bridge {
         )
         return
       }
-      case 'wd-ws-event':
+      case 'wd-ws-event': {
         this.#sockets.get(msg.id)?.dispatch(msg)
         return
-      default:
+      }
+      default: {
         if (this.#replayKinds.includes(msg.kind)) {
           this.#lastByKind.set(msg.kind, msg)
         }
@@ -103,6 +104,7 @@ export class Bridge {
           listener(msg)
         }
         return
+      }
     }
   }
 
@@ -196,26 +198,30 @@ export class BridgedWebSocket {
       | { event: 'error'; message?: string },
   ): void {
     switch (msg.event) {
-      case 'open':
+      case 'open': {
         this.readyState = BridgedWebSocket.OPEN
         this.onopen?.({ type: 'open' })
         return
-      case 'message':
+      }
+      case 'message': {
         this.onmessage?.(new MessageEvent('message', { data: msg.data }))
         return
-      case 'error':
+      }
+      case 'error': {
         this.onerror?.({ type: 'error', message: msg.message })
         return
-      case 'close':
+      }
+      case 'close': {
         this.readyState = BridgedWebSocket.CLOSED
         this.#bridge.unregisterSocket(this.#id)
         this.onclose?.({ type: 'close', code: msg.code, reason: msg.reason })
         return
+      }
     }
   }
 }
 
-async function bodyToB64(body: BodyInit): Promise<string> {
+const bodyToB64 = async (body: BodyInit): Promise<string> => {
   if (typeof body === 'string') {
     return b64FromBytes(new TextEncoder().encode(body))
   }
@@ -231,7 +237,7 @@ async function bodyToB64(body: BodyInit): Promise<string> {
   throw new TypeError('unsupported request body type for the workerdeck bridge')
 }
 
-function b64FromBytes(bytes: Uint8Array): string {
+const b64FromBytes = (bytes: Uint8Array): string => {
   let binary = ''
   const chunk = 0x8000
   for (let i = 0; i < bytes.length; i += chunk) {
@@ -240,7 +246,7 @@ function b64FromBytes(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
-function bytesFromB64(b64: string): Uint8Array<ArrayBuffer> {
+const bytesFromB64 = (b64: string): Uint8Array<ArrayBuffer> => {
   const binary = atob(b64)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) {

@@ -97,7 +97,7 @@ const errorResult = (): SessionEventBody => ({
   errors: ['hit max turns'],
 })
 
-function makeQueue(options: Partial<JobQueueOptions> = {}) {
+const makeQueue = (options: Partial<JobQueueOptions> = {}) => {
   const runners: FakeRunner[] = []
   const createRunner = vi.fn(() => {
     const runner = new FakeRunner()

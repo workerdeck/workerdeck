@@ -46,7 +46,7 @@ type ParsedListLine =
     }
 
 /** Classifies a single line as a bullet/numbered list item, or null. */
-function parseListLine(line: string): ParsedListLine | null {
+const parseListLine = (line: string): ParsedListLine | null => {
   const bulletMatch = line.match(/^(\s*)([•\-*]) /)
   if (bulletMatch) {
     return {
@@ -80,7 +80,7 @@ function parseListLine(line: string): ParsedListLine | null {
  * @param cursorPos - The cursor position (character offset from start)
  * @returns List context if the cursor is in a list line, null otherwise
  */
-export function getListContext(text: string, cursorPos: number): ListContext | null {
+export const getListContext = (text: string, cursorPos: number): ListContext | null => {
   const lineStart = text.lastIndexOf('\n', cursorPos - 1) + 1
   const lineEnd = text.indexOf('\n', cursorPos)
   const line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd)
@@ -174,7 +174,7 @@ export function insertListContinuation(segments: Segment[], cursorPos: number): 
 }
 
 /** Returns the indent level of the list line directly above `lineStart`, or null. */
-function getPrevListLineLevel(text: string, lineStart: number): number | null {
+const getPrevListLineLevel = (text: string, lineStart: number): number | null => {
   if (lineStart === 0) {
     return null
   }
@@ -252,7 +252,7 @@ export function removeListPrefix(segments: Segment[], cursorPos: number): { segm
 const FENCE_LINE = /^\s*```/
 
 /** Swaps the leading list marker on a single line ("- " ↔ "• "). */
-function swapListPrefixLine(line: string, markdownEnabled: boolean): string {
+const swapListPrefixLine = (line: string, markdownEnabled: boolean): string => {
   return markdownEnabled ? line.replace(/^(\s*)- /, '$1• ') : line.replace(/^(\s*)• /, '$1- ')
 }
 
@@ -263,7 +263,7 @@ function swapListPrefixLine(line: string, markdownEnabled: boolean): string {
  * following lines still normalize — so a stray "```" in prose does not silently
  * suppress bullet normalization for the rest of the text.
  */
-function fenceProtectedLineIndices(lines: string[]): Set<number> {
+const fenceProtectedLineIndices = (lines: string[]): Set<number> => {
   const protectedLines = new Set<number>()
   let openIndex = -1
   lines.forEach((line, i) => {
@@ -290,7 +290,7 @@ function fenceProtectedLineIndices(lines: string[]): Set<number> {
  *
  * Lines inside a balanced ```…``` block are preserved verbatim.
  */
-export function normalizeListPrefixText(text: string, markdownEnabled: boolean): string {
+export const normalizeListPrefixText = (text: string, markdownEnabled: boolean): string => {
   const lines = text.split('\n')
   const protectedLines = fenceProtectedLineIndices(lines)
   return lines.map((line, i) => (protectedLines.has(i) ? line : swapListPrefixLine(line, markdownEnabled))).join('\n')
@@ -303,7 +303,7 @@ export function normalizeListPrefixText(text: string, markdownEnabled: boolean):
  * code block split into per-line text segments on paste still has its "- " lines
  * preserved, while an unterminated fence does not suppress later bullets.
  */
-export function normalizeListPrefixes(segments: Segment[], markdownEnabled: boolean): Segment[] {
+export const normalizeListPrefixes = (segments: Segment[], markdownEnabled: boolean): Segment[] => {
   const globalLines: string[] = []
   segments.forEach((seg) => {
     if (seg.type === 'text') {
@@ -359,7 +359,7 @@ export type NumberEdit = { oldStart: number; oldEnd: number; newText: string }
  * otherwise treat as a list — `1985. Born / 2020. Died`, `5. / 10. / 15.` — is
  * left untouched.
  */
-export function hasOrderedListRun(text: string): boolean {
+export const hasOrderedListRun = (text: string): boolean => {
   let runLevel: number | null = null
   let runStart = 0
   let prevNumber = 0
@@ -468,7 +468,7 @@ export function renumberOrderedListLines(text: string): { text: string; edits: N
  * width, so the shift depends on how many changed spans lie strictly before the
  * offset, with a clamp when the offset sits inside a resized number.
  */
-export function remapOffset(old: number, edits: NumberEdit[]): number {
+export const remapOffset = (old: number, edits: NumberEdit[]): number => {
   let shift = 0
   for (const e of edits) {
     if (e.oldEnd <= old) {

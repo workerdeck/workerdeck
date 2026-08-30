@@ -159,14 +159,18 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
 
 const fileType = (entry: HostDirEntry): vscode.FileType => {
   switch (entry.type) {
-    case 'dir':
+    case 'dir': {
       return vscode.FileType.Directory
-    case 'file':
+    }
+    case 'file': {
       return vscode.FileType.File
-    case 'symlink':
+    }
+    case 'symlink': {
       return vscode.FileType.SymbolicLink
-    default:
+    }
+    default: {
       return vscode.FileType.Unknown
+    }
   }
 }
 

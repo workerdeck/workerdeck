@@ -35,8 +35,9 @@
  * (the iOS app) send it as `Authorization: Bearer <key>`; browsers post it once at
  * the login page and ride a cookie. Then point the client at
  * `http://<your-tailscale-name>:8787`.
+ *
+ * @type {import('workerdeck').WorkerDeckConfig}
  */
-/** @type {import('workerdeck').WorkerDeckConfig} */
 export default {
   /**
    * A claude profile from your own `~/.claude` (exactly what auto-detection

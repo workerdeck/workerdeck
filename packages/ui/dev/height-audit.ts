@@ -53,12 +53,12 @@ const recapRowIndex = (blocks: TerminalBlock[], from: number | undefined): numbe
   return at < 0 ? Infinity : at
 }
 
-export function auditHeights(
+export const auditHeights = (
   state: TranscriptState,
   root: HTMLElement,
   /** `catchUp.from`, when the transcript was given one — see {@link recapRowIndex}. */
   catchUpFrom?: number,
-): HeightAuditReport {
+): HeightAuditReport => {
   const surface = root.querySelector<HTMLElement>('[data-terminal]')
   if (!surface) {
     throw new Error('no [data-terminal] surface mounted')

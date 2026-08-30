@@ -1,6 +1,3 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import type { WorkerDeckClient } from '@workerdeck/client'
-
 /**
  * How a row gets the picture the replay refused to send: an opted-in socket
  * delivers a base64 `image` part as an `image_ref` and the bytes are fetched
@@ -12,6 +9,9 @@ import type { WorkerDeckClient } from '@workerdeck/client'
  * real one — it owns the session's one attach and therefore the only
  * `(seq, toolUseId)` addresses that mean anything.
  */
+
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import type { WorkerDeckClient } from '@workerdeck/client'
 
 /** One image part, as the row addresses it: the reducer's entry plus the id of
  * the call it came back from. `sourceSeq` is the entry's **own** — the
@@ -38,7 +38,7 @@ export function ToolResultImageProvider({ value, children }: { value: ToolResult
   return <ImageContext.Provider value={value ?? noop}>{children}</ImageContext.Provider>
 }
 
-export function useToolResultImageLoader(): ToolResultImageLoader {
+export const useToolResultImageLoader = (): ToolResultImageLoader => {
   return useContext(ImageContext)
 }
 
@@ -60,7 +60,7 @@ export type ToolResultImageState = { src?: string; failed: boolean }
  * reducer replaces items on every streamed delta, so an object-identity dep
  * would re-run this on every token of the turn after it.
  */
-export function useToolResultImageSrc(ref: ToolResultImageRef): ToolResultImageState {
+export const useToolResultImageSrc = (ref: ToolResultImageRef): ToolResultImageState => {
   const load = useToolResultImageLoader()
   const [state, setState] = useState<ToolResultImageState>({ failed: false })
   const { toolUseId, sourceSeq, partIndex, mediaType, bytes } = ref
@@ -104,7 +104,7 @@ type Entry = { pending: Promise<string | undefined>; url?: string; bytes: number
  * until revoked, so freeing only the `Map` entry frees nothing. Re-fetching on
  * a return scroll is the design.
  */
-export function useToolResultImages(client: WorkerDeckClient, sessionId: string | undefined): ToolResultImageLoader {
+export const useToolResultImages = (client: WorkerDeckClient, sessionId: string | undefined): ToolResultImageLoader => {
   const cache = useRef(new Map<string, Entry>())
   useEffect(
     () => () => {

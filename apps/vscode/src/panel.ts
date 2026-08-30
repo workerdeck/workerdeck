@@ -257,7 +257,7 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
       return
     }
     switch (msg.kind) {
-      case 'wd-ready':
+      case 'wd-ready': {
         this.#ready = true
         // A fresh webview has no frame open by construction, and the panel reports frame
         // *changes* only (it deliberately stays silent on mount) — so without this a panel
@@ -266,19 +266,25 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
         this.#delegate.subagent(undefined)
         this.#pushActive()
         return
-      case 'wd-open-path':
+      }
+      case 'wd-open-path': {
         return openTranscriptPath(this.#active, msg.path, msg.line)
-      case 'wd-open-url':
+      }
+      case 'wd-open-url': {
         return void vscode.env.openExternal(vscode.Uri.parse(msg.url))
-      case 'wd-vitals':
+      }
+      case 'wd-vitals': {
         this.#delegate.vitals(msg.vitals)
         return
-      case 'wd-open-panel':
+      }
+      case 'wd-open-panel': {
         await this.#delegate.openPanel(msg.panel)
         return
-      case 'wd-subagent-open':
+      }
+      case 'wd-subagent-open': {
         this.#delegate.subagent(msg.toolUseId)
         return
+      }
     }
   }
 

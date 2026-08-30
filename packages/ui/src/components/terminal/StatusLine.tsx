@@ -1,3 +1,10 @@
+/**
+ * The session's readings as one `·`-separated line, the way the CLI's status
+ * line writes them. The readings come from the same `lib/status.ts` helpers
+ * the styled bar uses — in particular `statusPresentation` owns the rule that
+ * a dropped socket outranks the session status. Never re-derive them here.
+ */
+
 import type { RateLimitInfo } from '@workerdeck/protocol'
 import type { ConnectionState, TranscriptState } from '@workerdeck/react'
 import { formatCost, formatTokens } from '../../lib/format.ts'
@@ -11,13 +18,6 @@ import {
   type StatusSeverity,
 } from '../../lib/status.ts'
 import { Ink, Row, type Tone } from './row.tsx'
-
-/**
- * The session's readings as one `·`-separated line, the way the CLI's status
- * line writes them. The readings come from the same `lib/status.ts` helpers
- * the styled bar uses — in particular `statusPresentation` owns the rule that
- * a dropped socket outranks the session status. Never re-derive them here.
- */
 
 /** Severity → tone. The 80/95 thresholds are `lib/status.ts`'s, not new ones. */
 const SEVERITY_TONE: Record<StatusSeverity, Tone> = {

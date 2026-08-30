@@ -6,12 +6,10 @@
  * - Immutable chips for resolved mentions/commands
  * - Configurable trigger behavior (dropdown vs callback)
  * - Simple inline markdown rendering
+ *
+ * The document model is an ordered array of {@link TextSegment}/{@link ChipSegment}.
  */
 
-/**
- * A segment of content within the editable text.
- * The document model is an ordered array of these segments.
- */
 export type TextSegment = {
   type: 'text'
   text: string

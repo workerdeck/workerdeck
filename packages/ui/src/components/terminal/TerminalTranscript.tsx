@@ -52,22 +52,30 @@ export interface TerminalTranscriptProps {
  */
 export function TerminalItemView({ item, fileUrl }: { item: TranscriptItem; fileUrl?: (path: string) => string }) {
   switch (item.kind) {
-    case 'user':
+    case 'user': {
       return <UserRow item={item} />
-    case 'assistant_text':
+    }
+    case 'assistant_text': {
       return <AssistantRow item={item} />
-    case 'thinking':
+    }
+    case 'thinking': {
       return <ThinkingRow item={item} />
-    case 'tool_call':
+    }
+    case 'tool_call': {
       return <ToolRow item={item} />
-    case 'turn_result':
+    }
+    case 'turn_result': {
       return <TurnResultRow item={item} />
-    case 'notice':
+    }
+    case 'notice': {
       return <NoticeRow item={item} />
-    case 'file_delivered':
+    }
+    case 'file_delivered': {
       return <FileRow item={item} href={fileUrl?.(item.path)} />
-    default:
+    }
+    default: {
       return null
+    }
   }
 }
 

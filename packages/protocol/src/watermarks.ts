@@ -131,7 +131,7 @@ export class Watermarks {
  * badge that counted every session's whole history on first launch would be
  * noise on the one day it should be quiet.
  */
-export function unseenCount(mark: Watermark | undefined, info: { activityCount?: number; turns?: number }): number {
+export const unseenCount = (mark: Watermark | undefined, info: { activityCount?: number; turns?: number }): number => {
   if (!mark) {
     return 0
   }

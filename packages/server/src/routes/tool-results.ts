@@ -19,7 +19,7 @@ import { json } from '../lib/http.ts'
  * so it resolves to `undefined` and 404s — the same answer `/files` gives it. */
 export type EventLookup = ((seq: number) => SessionEvent | undefined) | undefined
 
-export function handleToolResult(req: IncomingMessage, res: ServerResponse, lookup: EventLookup, seq: number): void {
+export const handleToolResult = (req: IncomingMessage, res: ServerResponse, lookup: EventLookup, seq: number): void => {
   if (req.method !== 'GET') {
     json(res, 405, { error: 'method not allowed' })
     return

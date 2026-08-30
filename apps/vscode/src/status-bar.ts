@@ -100,7 +100,7 @@ const usageTooltip = (rateLimits: Record<string, RateLimitInfo>, now: number): v
   return md
 }
 
-export function badgeEnabled(badge: StatusBadge): boolean {
+export const badgeEnabled = (badge: StatusBadge): boolean => {
   return vscode.workspace.getConfiguration('workerdeck.statusBar').get<boolean>(badge, BADGE_DEFAULT[badge] ?? true)
 }
 

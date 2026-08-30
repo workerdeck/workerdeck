@@ -54,7 +54,7 @@ const hitFor = (element: HTMLElement | undefined): PathHit | undefined => {
   return hit
 }
 
-export function usePathLinks({
+export const usePathLinks = ({
   container,
   onOpen,
   enabled = true,
@@ -72,7 +72,7 @@ export function usePathLinks({
    * and every identifier in it would otherwise match as a filename.
    */
   ignore?: string
-}) {
+}) => {
   useEffect(() => {
     const root = container.current
     if (!root || !enabled) {

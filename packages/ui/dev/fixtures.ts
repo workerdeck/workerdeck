@@ -305,18 +305,20 @@ const huge: TranscriptItem[] = Array.from({ length: 600 }, (_, index) => {
 const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
   const turn = Math.floor(index / 10)
   switch (index % 10) {
-    case 0:
+    case 0: {
       return item({
         kind: 'user',
         text: `Task ${turn}: review the module, refactor what you find, and summarise. ${'Keep the diff reviewable. '.repeat(1 + (turn % 3))}`,
       })
-    case 1:
+    }
+    case 1: {
       return item({
         kind: 'thinking',
         text: `Thought for ${3 + (turn % 20)}s about module ${turn} and its ${1 + (turn % 7)} call sites`,
         parentToolUseId: null,
       })
-    case 2:
+    }
+    case 2: {
       // Stanza text: hard line breaks, the calculator's hardest common case.
       return item({
         kind: 'assistant_text',
@@ -328,8 +330,9 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
           ).join('\n'),
         ).join('\n\n'),
       })
+    }
     case 3:
-    case 4:
+    case 4: {
       // Consecutive shell calls — folds into a ToolRunRow.
       return item({
         kind: 'tool_call',
@@ -342,7 +345,8 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
           isError: false,
         },
       })
-    case 5:
+    }
+    case 5: {
       return item({
         kind: 'tool_call',
         name: 'Read',
@@ -354,7 +358,8 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
           isError: false,
         },
       })
-    case 6:
+    }
+    case 6: {
       return item({
         kind: 'tool_call',
         name: 'Edit',
@@ -382,7 +387,8 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
           ],
         },
       })
-    case 7:
+    }
+    case 7: {
       return item({
         kind: 'assistant_text',
         streaming: false,
@@ -400,11 +406,13 @@ The refactor holds. ${'The call sites stay compatible and the tests agree. '.rep
 | tests | pass |
 | types | clean |`,
       })
-    case 8:
+    }
+    case 8: {
       return turn % 7 === 3
         ? item({ kind: 'notice', level: 'error', text: `module ${turn}: transient watcher error, retried once` })
         : item({ kind: 'assistant_text', streaming: false, parentToolUseId: null, text: `Module ${turn} done; moving on.` })
-    default:
+    }
+    default: {
       return item({
         kind: 'turn_result',
         subtype: turn % 11 === 5 ? 'error_during_execution' : 'success',
@@ -413,6 +421,7 @@ The refactor holds. ${'The call sites stay compatible and the tests agree. '.rep
         totalCostUsd: 0.03,
         ...(turn % 11 === 5 ? { errors: ['interrupted'] } : {}),
       })
+    }
   }
 })
 

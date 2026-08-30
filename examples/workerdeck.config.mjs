@@ -1,15 +1,13 @@
-/**
- * Advanced `workerdeck` configuration — the shape a real deployment needs.
- *
- * `npx workerdeck` needs none of this: with no config file it serves the
- * gateway and the dashboard on 127.0.0.1:8787, unauthenticated, with durable
- * parking under ~/.workerdeck. This file is for the cases flags cannot
- * express, because the options are functions.
- *
- * Run it with:  workerdeck --config ./workerdeck.config.mjs
- *
- * Precedence is narrowest-wins: flags > env > this file > defaults.
- */
+// Advanced `workerdeck` configuration — the shape a real deployment needs.
+//
+// `npx workerdeck` needs none of this: with no config file it serves the gateway
+// and the dashboard on 127.0.0.1:8787, unauthenticated, with durable parking
+// under ~/.workerdeck. This file is for the cases flags cannot express, because
+// the options are functions.
+//
+// Run it with:  workerdeck --config ./workerdeck.config.mjs
+//
+// Precedence is narrowest-wins: flags > env > this file > defaults.
 
 /**
  * Supplying `authenticate` turns the built-in shared-secret auth off entirely —
@@ -18,8 +16,9 @@
  * on a WebSocket handshake, so if you take this over you are responsible for a
  * credential the browser can actually present (a cookie your own middleware
  * sets, typically). Use `--auth-key` instead unless you need this.
+ *
+ * @type {import('workerdeck').WorkerDeckConfig['authenticate']}
  */
-/** @type {import('workerdeck').WorkerDeckConfig['authenticate']} */
 const authenticate = (req) => {
   const key = req.headers['x-agent-proxy-key']
   if (typeof key !== 'string' || key !== process.env.AGENT_PROXY_KEY) {

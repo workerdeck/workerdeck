@@ -3,7 +3,7 @@
  * `vscode-light`/`vscode-dark`/`vscode-high-contrast*` onto `<body>` and swaps it
  * live on theme change. Map one onto the other and keep it mapped.
  */
-export function syncVsCodeTheme(): void {
+export const syncVsCodeTheme = (): void => {
   const apply = () => {
     const cls = document.body.classList
     const dark = cls.contains('vscode-dark') || cls.contains('vscode-high-contrast')

@@ -1045,7 +1045,7 @@ export class AiSdkRunner implements Runner {
           break
         }
         switch (part.type) {
-          case 'text-delta':
+          case 'text-delta': {
             textBuf.set(part.id, (textBuf.get(part.id) ?? '') + part.text)
             if (partials) {
               this.#emit({
@@ -1056,6 +1056,7 @@ export class AiSdkRunner implements Runner {
               })
             }
             break
+          }
           case 'text-end': {
             const text = textBuf.get(part.id)
             textBuf.delete(part.id)
@@ -1064,7 +1065,7 @@ export class AiSdkRunner implements Runner {
             }
             break
           }
-          case 'reasoning-delta':
+          case 'reasoning-delta': {
             reasoningBuf.set(part.id, (reasoningBuf.get(part.id) ?? '') + part.text)
             if (partials) {
               this.#emit({
@@ -1075,6 +1076,7 @@ export class AiSdkRunner implements Runner {
               })
             }
             break
+          }
           case 'reasoning-end': {
             const thinking = reasoningBuf.get(part.id)
             reasoningBuf.delete(part.id)
@@ -1083,7 +1085,7 @@ export class AiSdkRunner implements Runner {
             }
             break
           }
-          case 'tool-call':
+          case 'tool-call': {
             blocks.push({
               type: 'tool_use',
               id: part.toolCallId,
@@ -1092,20 +1094,26 @@ export class AiSdkRunner implements Runner {
             })
             flush()
             break
-          case 'tool-result':
+          }
+          case 'tool-result': {
             emitToolResult(part.toolCallId, typeof part.output === 'string' ? part.output : JSON.stringify(part.output))
             break
-          case 'tool-error':
+          }
+          case 'tool-error': {
             emitToolResult(part.toolCallId, errorText(part.error), true)
             break
-          case 'finish-step':
+          }
+          case 'finish-step': {
             flush()
             break
-          case 'error':
+          }
+          case 'error': {
             streamError ??= part.error
             break
-          default:
+          }
+          default: {
             break
+          }
         }
       }
       flush()

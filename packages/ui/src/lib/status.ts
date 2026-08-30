@@ -42,7 +42,7 @@ const STATUS_META: Record<SessionStatus, StatusPresentation> = {
  * the last thing we heard, not the current state — so a lost link takes the slot
  * rather than letting "Running" imply a turn is still streaming.
  */
-export function statusPresentation(vitals: StatusReadings | undefined): StatusPresentation {
+export const statusPresentation = (vitals: StatusReadings | undefined): StatusPresentation => {
   if (!vitals) {
     return { icon: 'hubot', label: 'Connecting…', severity: 'none' }
   }
@@ -56,7 +56,7 @@ export function statusPresentation(vitals: StatusReadings | undefined): StatusPr
 }
 
 /** 0–100 → the colour a meter wears. One pair of thresholds for every surface. */
-export function meterSeverity(pct: number | undefined): StatusSeverity {
+export const meterSeverity = (pct: number | undefined): StatusSeverity => {
   if (pct === undefined) {
     return 'none'
   }
@@ -84,10 +84,10 @@ export function meterSeverity(pct: number | undefined): StatusSeverity {
 export type UsageLane = 'session' | 'weekly' | 'model'
 
 /** The window a lane points at, or `undefined` when this account has none. */
-export function usageWindow(
+export const usageWindow = (
   rateLimits: Record<string, RateLimitInfo> | undefined,
   lane: UsageLane,
-): { key: string; info: RateLimitInfo } | undefined {
+): { key: string; info: RateLimitInfo } | undefined => {
   if (!rateLimits) {
     return undefined
   }
@@ -108,7 +108,7 @@ export function usageWindow(
 
 /** The rate-limit window for a surface with exactly one slot: whichever is
  * fullest. {@link usageWindow} is for one with three. */
-export function tightestWindow(rateLimits: Record<string, RateLimitInfo> | undefined): { key: string; info: RateLimitInfo } | undefined {
+export const tightestWindow = (rateLimits: Record<string, RateLimitInfo> | undefined): { key: string; info: RateLimitInfo } | undefined => {
   const entries = Object.entries(rateLimits ?? {})
   if (entries.length === 0) {
     return undefined
@@ -133,7 +133,7 @@ export function tightestWindow(rateLimits: Record<string, RateLimitInfo> | undef
 /** A rate-limit window's key, named for a human. A model-scoped bucket is
  * named for its model alone (`seven_day_fable` → "Fable"): its lane already
  * says weekly. */
-export function windowLabel(key: string): string {
+export const windowLabel = (key: string): string => {
   if (key === 'five_hour') {
     return 'Session'
   }
@@ -153,7 +153,7 @@ export type ModelReadings = { model?: string; models: readonly ModelOption[] }
  * (`claude-sonnet-5`) where the row may be keyed on the alias (`sonnet`), and
  * either can carry a `[1m]` context-window suffix.
  */
-export function currentModel(vitals: ModelReadings | undefined): ModelOption | undefined {
+export const currentModel = (vitals: ModelReadings | undefined): ModelOption | undefined => {
   const id = vitals?.model
   if (!id) {
     return undefined
@@ -165,7 +165,7 @@ export function currentModel(vitals: ModelReadings | undefined): ModelOption | u
 
 /** A session's model, named the way the picker names it. Falls back to the raw
  * id, and to "Default" while the session is on the CLI's own pick. */
-export function modelLabel(vitals: ModelReadings | undefined): string {
+export const modelLabel = (vitals: ModelReadings | undefined): string => {
   if (!vitals?.model) {
     return 'Default'
   }
@@ -175,13 +175,13 @@ export function modelLabel(vitals: ModelReadings | undefined): string {
 /** Context percentage as its meter severity. Takes only the number it reads,
  * so the compact `ContextReading` and the full `ContextUsage` are coloured by
  * one rule. */
-export function contextSeverity(usage: { percentage: number } | undefined): StatusSeverity {
+export const contextSeverity = (usage: { percentage: number } | undefined): StatusSeverity => {
   return meterSeverity(usage?.percentage)
 }
 
 /** {@link meterSeverity} as a text colour class — one copy of the thresholds
  * for every surface that paints the reading. */
-export function meterColorClass(pct: number | undefined): string {
+export const meterColorClass = (pct: number | undefined): string => {
   const severity = meterSeverity(pct)
   return severity === 'error' ? 'text-danger' : severity === 'warning' ? 'text-warning' : 'text-fg-3'
 }

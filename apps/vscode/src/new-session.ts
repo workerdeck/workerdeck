@@ -1,11 +1,3 @@
-import * as vscode from 'vscode'
-import type { HostFileRoot, ModelOption, PermissionMode, ProfileInfo, SdkSessionSummary, SessionInfo } from '@workerdeck/protocol'
-import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
-import { clientFor } from './gateway.ts'
-import type { HostStore } from './hosts.ts'
-import type { SidebarState, WireHost } from './bridge-protocol.ts'
-import { workspaceScope } from './workspace-scope.ts'
-
 /**
  * Creating and resuming a session, as native multi-step QuickPicks.
  *
@@ -15,6 +7,14 @@ import { workspaceScope } from './workspace-scope.ts'
  * answered wherever it can be, so the flow is `enter, enter, enter`. The permission
  * mode is a default rather than a fourth step — see `resolveMode`.
  */
+
+import * as vscode from 'vscode'
+import type { HostFileRoot, ModelOption, PermissionMode, ProfileInfo, SdkSessionSummary, SessionInfo } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
+import { clientFor } from './gateway.ts'
+import type { HostStore } from './hosts.ts'
+import type { SidebarState, WireHost } from './bridge-protocol.ts'
+import { workspaceScope } from './workspace-scope.ts'
 
 /** One adapter the operator could run, on one gateway. */
 type AdapterChoice = {
@@ -60,7 +60,7 @@ const CANCEL = Symbol('cancel')
 const BACK = Symbol('back')
 type Answer<T> = T | typeof CANCEL | typeof BACK
 
-export async function createSession(deps: NewSessionDeps): Promise<void> {
+export const createSession = async (deps: NewSessionDeps): Promise<void> => {
   await run(deps, { resume: false })
 }
 
@@ -69,7 +69,7 @@ export async function createSession(deps: NewSessionDeps): Promise<void> {
  * question is which stored session. Only engines whose sessions are on disk and
  * browsable can offer it.
  */
-export async function resumeSession(deps: NewSessionDeps): Promise<void> {
+export const resumeSession = async (deps: NewSessionDeps): Promise<void> => {
   await run(deps, { resume: true })
 }
 

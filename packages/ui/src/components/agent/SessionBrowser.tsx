@@ -411,8 +411,6 @@ const RowAction = ({ label, title, onClick, children }: { label: string; title?:
   )
 }
 
-/** A multi-select facet. Empty = no filter, which is why the trigger reads the
- * facet's name rather than "All": nothing is being excluded. */
 /** One labelled control row. The label column is fixed so every control starts
  * on the same x. */
 const FilterRow = ({ label, children }: { label: string; children: React.ReactNode }) => {
@@ -426,6 +424,8 @@ const FilterRow = ({ label, children }: { label: string; children: React.ReactNo
   )
 }
 
+/** A multi-select facet. Empty = no filter, which is why the trigger reads
+ * "All" rather than excluding anything. */
 const FacetSelect = ({
   label,
   value,

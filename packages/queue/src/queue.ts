@@ -508,9 +508,10 @@ export class JobQueue {
     }
     job.lastSeq = Math.max(job.lastSeq, event.seq)
     switch (event.type) {
-      case 'system_init':
+      case 'system_init': {
         await this.#adapter.update(job.record.info.id, { sdkSessionId: event.sdkSessionId })
         return
+      }
       case 'assistant_message': {
         if (event.replay) {
           return
@@ -526,7 +527,7 @@ export class JobQueue {
         }
         return
       }
-      case 'permission_requested':
+      case 'permission_requested': {
         // The full request rides along so webhook consumers can answer it over REST
         // (questions, approvals) instead of only seeing a preview string.
         this.#progress(job, {
@@ -535,9 +536,11 @@ export class JobQueue {
           request: event.request,
         })
         return
-      case 'permission_resolved':
+      }
+      case 'permission_resolved': {
         this.#progress(job, { kind: 'permission_resolved', preview: event.behavior })
         return
+      }
       case 'turn_result': {
         // One job = one unattended run: the first result is the outcome.
         const tokens = sumUsage(event.usage) || job.estimatedTokens
@@ -559,22 +562,25 @@ export class JobQueue {
         })
         return
       }
-      case 'session_error':
+      case 'session_error': {
         await this.#finalize(job, {
           usage: { tokens: job.estimatedTokens, totalCostUsd: 0, numTurns: 0 },
           status: job.canceled ? 'canceled' : 'failed',
           error: job.killReason ?? event.message,
         })
         return
-      case 'session_closed':
+      }
+      case 'session_closed': {
         await this.#finalize(job, {
           usage: { tokens: job.estimatedTokens, totalCostUsd: 0, numTurns: 0 },
           status: job.canceled ? 'canceled' : 'failed',
           error: job.killReason ?? 'session closed before completing',
         })
         return
-      default:
+      }
+      default: {
         return
+      }
     }
   }
 

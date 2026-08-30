@@ -14,13 +14,13 @@ import { handleProducedFiles } from './produced-files.ts'
 import { handleProjectIcon } from './project-icon.ts'
 import { handleToolResult } from './tool-results.ts'
 
-export async function handleSessions(
+export const handleSessions = async (
   ctx: ServerContext,
   req: IncomingMessage,
   res: ServerResponse,
   route: SessionRoute,
   auth: AuthContext,
-): Promise<void> {
+): Promise<void> => {
   const { attachmentStore, auth: authSvc, availability, bridge, factory, parking, producedFiles, projects, registry } = ctx
 
   if (!route.id) {

@@ -1,7 +1,3 @@
-import { useEffect, useRef, type ReactNode } from 'react'
-import { cn } from '../../lib/utils.ts'
-import { Blank, Ink, Row } from './row.tsx'
-
 /**
  * The parts a terminal prompt is built from, in the CLI's idiom: a rule marks
  * where the run stops and the decision starts, options are numbered so a key
@@ -9,6 +5,10 @@ import { Blank, Ink, Row } from './row.tsx'
  * grid — rules and box frames are drawn by backgrounds, never borders that
  * would cost layout.
  */
+
+import { useEffect, useRef, type ReactNode } from 'react'
+import { cn } from '../../lib/utils.ts'
+import { Blank, Ink, Row } from './row.tsx'
 
 /**
  * The boundary above a prompt. Solid separates the run from the decision;

@@ -16,6 +16,7 @@ import {
   useHostFileSearch,
   useProfileUsage,
   useToolCallHost,
+  type ClientToolHandler,
   type ConnectionState,
   type ProducedFileRef,
   type TranscriptState,
@@ -333,7 +334,7 @@ export interface SessionPanelProps {
    * />
    * ```
    */
-  clientTools?: Record<string, import('@workerdeck/react').ClientToolHandler>
+  clientTools?: Record<string, ClientToolHandler>
   /**
    * Base font size in **whole pixels**, scaling everything the panel draws in
    * both variants. Under the terminal theme it sets `--term-font-size` and

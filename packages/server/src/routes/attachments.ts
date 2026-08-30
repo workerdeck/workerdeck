@@ -16,14 +16,14 @@ import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
 import { json, readRawBody } from '../lib/http.ts'
 import type { ServerContext } from '../context.ts'
 
-export async function handleAttachments(
+export const handleAttachments = async (
   ctx: ServerContext,
   req: IncomingMessage,
   res: ServerResponse,
   sessionId: string,
   session: SessionInfo,
   attachmentId?: string,
-): Promise<void> {
+): Promise<void> => {
   const { attachmentStore } = ctx
   if (req.method === 'POST' && attachmentId === undefined) {
     const url = new URL(req.url ?? '/', 'http://internal')

@@ -1,5 +1,3 @@
-import * as vscode from 'vscode'
-
 /**
  * The HTML skeleton every webview shares, plus the settings readings that have to
  * be stamped into it. No external `connect-src`: every byte to a gateway rides
@@ -11,13 +9,15 @@ import * as vscode from 'vscode'
  * A change to any of them re-renders the HTML (see `activate`).
  */
 
+import * as vscode from 'vscode'
+
 /**
  * The typeface the agent panel runs in. The panel alone opts in (`{ font: true }`);
  * the sidebar and section views are ordinary VS Code UI and follow the editor's UI
  * font. **`cards` only** — the terminal variant is monospace by construction and
  * takes the editor font through `--cw-font-mono`.
  */
-export function fontMode(): 'editor' | 'sans' {
+export const fontMode = (): 'editor' | 'sans' => {
   return vscode.workspace.getConfiguration('workerdeck').get<'editor' | 'sans'>('fontFamily') === 'sans' ? 'sans' : 'editor'
 }
 
@@ -26,7 +26,7 @@ export function fontMode(): 'editor' | 'sans' {
  * has one line height, so the terminal variant's spacing is a blank line decided
  * per pair of blocks (see `ROW_GAP` in `@workerdeck/ui`).
  */
-export function transcriptDensity(): 'comfortable' | 'compact' {
+export const transcriptDensity = (): 'comfortable' | 'compact' => {
   return vscode.workspace.getConfiguration('workerdeck').get<'comfortable' | 'compact'>('transcriptDensity') === 'compact'
     ? 'compact'
     : 'comfortable'
@@ -36,7 +36,7 @@ export function transcriptDensity(): 'comfortable' | 'compact' {
  * How the panel draws a turn. Anything that is not `cards` resolves to `terminal`,
  * which is what carries a settings file still holding the retired `lines` across.
  */
-export function transcriptVariant(): 'terminal' | 'cards' {
+export const transcriptVariant = (): 'terminal' | 'cards' => {
   return vscode.workspace.getConfiguration('workerdeck').get<'terminal' | 'cards'>('transcriptVariant') === 'cards' ? 'cards' : 'terminal'
 }
 
@@ -45,7 +45,7 @@ export function transcriptVariant(): 'terminal' | 'cards' {
  * `editor.fontSize` → 13. The one knob behind both variants — the cards root's
  * `font-size`, and the terminal cell's default size.
  */
-export function panelFontSize(): number {
+export const panelFontSize = (): number => {
   const wd = vscode.workspace.getConfiguration('workerdeck')
   const editor = vscode.workspace.getConfiguration('editor')
   return Math.round(wd.get<number>('fontSize') || editor.get<number>('fontSize') || 13)
@@ -58,7 +58,7 @@ export function panelFontSize(): number {
  * readings are made here. Rounding is not a nicety: a fractional cell puts every
  * other row on a half-pixel (see `terminal.css`'s geometry rules).
  */
-export function terminalMetrics(): { fontSize: number; lineHeight: number } {
+export const terminalMetrics = (): { fontSize: number; lineHeight: number } => {
   const wd = vscode.workspace.getConfiguration('workerdeck')
   const editor = vscode.workspace.getConfiguration('editor')
   // Terminal-specific → panel-wide → editor → 13.
@@ -71,11 +71,11 @@ export function terminalMetrics(): { fontSize: number; lineHeight: number } {
 
 /** The pointer affordances the terminal theme allows itself: the hover fill and the
  * hover-revealed copy. Off is the pure article. */
-export function terminalAffordances(): boolean {
+export const terminalAffordances = (): boolean => {
   return vscode.workspace.getConfiguration('workerdeck').get<boolean>('terminal.affordances') !== false
 }
 
-export function webviewHtml(
+export const webviewHtml = (
   webview: vscode.Webview,
   dist: vscode.Uri,
   script: string,
@@ -84,7 +84,7 @@ export function webviewHtml(
   version = 0,
   /** `font: true` honours `workerdeck.fontFamily` — the agent panel only. */
   options: { font?: boolean } = {},
-): string {
+): string => {
   const bust = version ? `?v=${version}` : ''
   const scriptUri = `${webview.asWebviewUri(vscode.Uri.joinPath(dist, script))}${bust}`
   const attrs = Object.entries(rootAttrs)

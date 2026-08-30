@@ -145,16 +145,18 @@ export const openFilesReducer = (state: OpenFilesState, action: OpenFilesAction)
       return { files, activePath: next?.path }
     }
 
-    case 'closeAll':
+    case 'closeAll': {
       return initialOpenFilesState
+    }
 
-    case 'activate':
+    case 'activate': {
       if (!state.files.some((f) => f.path === action.path)) {
         return state
       }
       return state.activePath === action.path ? state : { ...state, activePath: action.path }
+    }
 
-    case 'loaded':
+    case 'loaded': {
       // Also the "reload from disk" path: the draft goes, deliberately, because
       // the only way here with a dirty tab is someone choosing to discard.
       return patch(state, action.path, () => ({
@@ -170,32 +172,37 @@ export const openFilesReducer = (state: OpenFilesState, action: OpenFilesAction)
         hash: action.hash,
         modifiedAt: action.modifiedAt,
       }))
+    }
 
-    case 'failed':
+    case 'failed': {
       return patch(state, action.path, (file) => ({ ...file, status: 'error', error: action.error }))
+    }
 
-    case 'edit':
+    case 'edit': {
       // Only a readable text file can be edited; a binary or errored tab has no
       // content the editor could have been showing.
       return patch(state, action.path, (file) => (file.status === 'ready' ? { ...file, draft: action.content } : file))
+    }
 
-    case 'revert':
+    case 'revert': {
       return patch(state, action.path, (file) => ({
         ...file,
         draft: undefined,
         saveError: undefined,
         conflict: false,
       }))
+    }
 
-    case 'saveStart':
+    case 'saveStart': {
       return patch(state, action.path, (file) => ({
         ...file,
         saving: true,
         saveError: undefined,
         conflict: false,
       }))
+    }
 
-    case 'saved':
+    case 'saved': {
       return patch(state, action.path, (file) => ({
         ...file,
         saving: false,
@@ -209,21 +216,24 @@ export const openFilesReducer = (state: OpenFilesState, action: OpenFilesAction)
         // written is simply no longer a draft.
         draft: file.draft === action.content ? undefined : file.draft,
       }))
+    }
 
-    case 'saveFailed':
+    case 'saveFailed': {
       return patch(state, action.path, (file) => ({
         ...file,
         saving: false,
         saveError: action.error,
         conflict: action.conflict ?? false,
       }))
+    }
 
-    case 'dismissConflict':
+    case 'dismissConflict': {
       return patch(state, action.path, (file) => ({
         ...file,
         conflict: false,
         saveError: undefined,
       }))
+    }
   }
 }
 

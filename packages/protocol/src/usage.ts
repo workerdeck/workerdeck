@@ -37,7 +37,7 @@ export type SessionUsage = {
  * Absent stays absent throughout: a window nobody has reported is **unknown,
  * never 0%**, and this returns an empty map rather than inventing entries.
  */
-export function mergeUsage(session: SessionUsage, profile: ProfileUsage | undefined): ProfileUsage {
+export const mergeUsage = (session: SessionUsage, profile: ProfileUsage | undefined): ProfileUsage => {
   const out: ProfileUsage = {}
   for (const [key, info] of Object.entries(session.rateLimits ?? {})) {
     out[key] = { info, updatedAt: session.updatedAt ?? 0 }
@@ -73,7 +73,7 @@ export type UsageWindowRow = {
  * dashboard's profile page straight off `ProfileInfo.usage` — and a list that
  * ordered or filtered differently would be the same account described two ways.
  */
-export function orderUsageWindows(usage: ProfileUsage | undefined): UsageWindowRow[] {
+export const orderUsageWindows = (usage: ProfileUsage | undefined): UsageWindowRow[] => {
   const all = Object.entries(usage ?? {})
     .filter(([, w]) => w.info.utilization !== undefined)
     .map(([key, w]) => ({ key, info: w.info, updatedAt: w.updatedAt, inferredReset: w.inferredReset }))
@@ -85,7 +85,7 @@ export function orderUsageWindows(usage: ProfileUsage | undefined): UsageWindowR
 /** The flat `rateLimitType → reading` map every existing renderer takes, out of
  * the dated form. Undefined in, undefined out — so a surface can keep telling
  * "no reading" apart from "an empty one". */
-export function usageInfos(usage: ProfileUsage | undefined): Record<string, RateLimitInfo> | undefined {
+export const usageInfos = (usage: ProfileUsage | undefined): Record<string, RateLimitInfo> | undefined => {
   if (!usage) {
     return undefined
   }

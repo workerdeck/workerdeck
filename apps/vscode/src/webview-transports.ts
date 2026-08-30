@@ -27,23 +27,29 @@ export class WebviewTransportHost {
   /** True when the message was a transport message and has been handled. */
   async handle(msg: WebviewToHost): Promise<boolean> {
     switch (msg.kind) {
-      case 'wd-fetch':
+      case 'wd-fetch': {
         await this.#handleFetch(msg)
         return true
-      case 'wd-fetch-abort':
+      }
+      case 'wd-fetch-abort': {
         this.#aborts.get(msg.id)?.abort()
         return true
-      case 'wd-ws-open':
+      }
+      case 'wd-ws-open': {
         await this.#handleWsOpen(msg.id, msg.url)
         return true
-      case 'wd-ws-send':
+      }
+      case 'wd-ws-send': {
         this.#sockets.get(msg.id)?.send(msg.data)
         return true
-      case 'wd-ws-close':
+      }
+      case 'wd-ws-close': {
         this.#sockets.get(msg.id)?.close(msg.code, msg.reason)
         return true
-      default:
+      }
+      default: {
         return false
+      }
     }
   }
 

@@ -9,7 +9,7 @@ import { WorkerDeckClient, type SessionHandle } from '../src/index.ts'
  * Typed structurally rather than against the Agent SDK: this package must never
  * import it, tests included.
  */
-function idleQueryFn() {
+const idleQueryFn = () => {
   const query = {
     [Symbol.asyncIterator]() {
       return this
@@ -34,7 +34,7 @@ afterEach(async () => {
   results.length = 0
 })
 
-async function start(bridgeTimeoutMs?: number) {
+const start = async (bridgeTimeoutMs?: number) => {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],

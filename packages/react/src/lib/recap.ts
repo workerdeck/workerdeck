@@ -56,32 +56,38 @@ export const summarizeSince = (state: RecapInput, fromIndex: number): RecapSumma
 
   for (const item of fresh) {
     switch (item.kind) {
-      case 'turn_result':
+      case 'turn_result': {
         turns += 1
         if (item.isError) {
           errors += 1
         }
         break
-      case 'assistant_text':
+      }
+      case 'assistant_text': {
         replies += 1
         break
-      case 'tool_call':
+      }
+      case 'tool_call': {
         tools += 1
         toolCounts.set(item.name, (toolCounts.get(item.name) ?? 0) + 1)
         if (item.status === 'failed' || item.result?.isError) {
           errors += 1
         }
         break
-      case 'file_delivered':
+      }
+      case 'file_delivered': {
         files += 1
         break
-      case 'notice':
+      }
+      case 'notice': {
         if (item.level === 'error') {
           errors += 1
         }
         break
-      default:
+      }
+      default: {
         break
+      }
     }
   }
 

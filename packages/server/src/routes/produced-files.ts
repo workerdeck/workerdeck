@@ -15,13 +15,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { contentTypeFor, json } from '../lib/http.ts'
 import type { ServerContext } from '../context.ts'
 
-export async function handleProducedFiles(
+export const handleProducedFiles = async (
   ctx: ServerContext,
   req: IncomingMessage,
   res: ServerResponse,
   sessionId: string,
   fileId?: string,
-): Promise<void> {
+): Promise<void> => {
   const { producedFiles } = ctx
   if (req.method !== 'GET') {
     json(res, 405, { error: 'method not allowed' })

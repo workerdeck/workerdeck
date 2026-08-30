@@ -8,14 +8,14 @@ import { createHeightEpoch, measureCh, type HeightEpoch } from '../terminal/heig
  * honest. All DOM reads happen in the debounced effect; render never touches
  * layout.
  */
-export function useHeightEpoch(options: {
+export const useHeightEpoch = (options: {
   terminal: boolean
   /** The terminal cell, when the host set one — only read as a signal that the
    * epoch must re-measure; the epoch's numbers come from the DOM. */
   fontSize?: number
   lineHeight?: number
   rowsRef: RefObject<HTMLDivElement | null>
-}): HeightEpoch | null {
+}): HeightEpoch | null => {
   const { terminal, fontSize, lineHeight, rowsRef } = options
   const [epoch, setEpoch] = useState<HeightEpoch | null>(null)
   useEffect(() => {

@@ -1,8 +1,3 @@
-import { describe, expect, it } from 'vitest'
-import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import { SUBAGENT_HISTORY } from '@workerdeck/protocol'
-import { SessionRunner, type SessionRunnerConfig } from '../src/index.ts'
-
 /**
  * The sub-agent rollup (`SessionInfo.subagents`) — what a sessions list, which
  * never attaches, can know about the agents running inside a session. Driven
@@ -10,6 +5,11 @@ import { SessionRunner, type SessionRunnerConfig } from '../src/index.ts'
  * test is that the one `#emit` chokepoint (live stream *and* resume backfill)
  * is enough to derive it: no event was added to the protocol for this.
  */
+
+import { describe, expect, it } from 'vitest'
+import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import { SUBAGENT_HISTORY } from '@workerdeck/protocol'
+import { SessionRunner, type SessionRunnerConfig } from '../src/index.ts'
 
 /** Minimal stand-in for the SDK: emit SDKMessages, capture options + streamed
  * input (same shape as runner.test.ts's harness, without the control surface). */

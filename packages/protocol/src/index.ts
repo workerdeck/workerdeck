@@ -7,9 +7,10 @@
  *
  * This package is dependency-free and browser-safe. Anthropic API message content is modeled
  * structurally (see {@link ApiMessage}) so clients don't need the Agent SDK to render transcripts.
+ *
+ * {@link PROTOCOL_VERSION} is bumped on any breaking change to events, commands, or REST shapes.
  */
 
-/** Bumped on any breaking change to events, commands, or REST shapes. */
 export const PROTOCOL_VERSION = 7
 
 // ---------------------------------------------------------------------------
@@ -151,7 +152,7 @@ const base64Bytes = (data: string): number => {
  * "drop non-text parts" rule would sweep in `tool_reference` for no measurable
  * gain, and narrowness is this family's standing habit.
  */
-export function imagePartRef(part: { type?: string; [key: string]: unknown }, index: number): ImageRefPart | undefined {
+export const imagePartRef = (part: { type?: string; [key: string]: unknown }, index: number): ImageRefPart | undefined => {
   if (part.type !== 'image') {
     return undefined
   }
@@ -1126,7 +1127,7 @@ export const PROVIDER_PERMISSION_MODES: readonly PermissionMode[] = ENGINE_CAPAB
  * truth for the restriction: create forms filter what they offer with it, the
  * gateway rejects with it. An absent `engine` means 'claude' (every mode).
  */
-export function supportsPermissionMode(engine: ProfileEngine | undefined, mode: PermissionMode): boolean {
+export const supportsPermissionMode = (engine: ProfileEngine | undefined, mode: PermissionMode): boolean => {
   return ENGINE_CAPABILITIES[engine ?? 'claude'].permissionModes.includes(mode)
 }
 
@@ -1745,7 +1746,7 @@ export type SessionInfo = {
  * says nothing about the window, it retires the conversation the window
  * described.
  */
-export function contextReading(body: SessionEventBody): ContextReading | undefined {
+export const contextReading = (body: SessionEventBody): ContextReading | undefined => {
   if (body.type !== 'context_usage') {
     return undefined
   }
@@ -1768,7 +1769,7 @@ export function contextReading(body: SessionEventBody): ContextReading | undefin
  * other: the runners count with it, and any client compares the totals. If the
  * reducer's row rule changes, change this with it.
  */
-export function transcriptActivity(body: SessionEventBody): number {
+export const transcriptActivity = (body: SessionEventBody): number => {
   // A subagent's own messages score 0: they render inside the `Task` call that
   // spawned them, which is itself a counted row — the badge is a promise about
   // what is on screen. Unlike `transcriptContent`, which still counts them:
@@ -1787,15 +1788,18 @@ export function transcriptActivity(body: SessionEventBody): number {
       const rows = content.filter((block) => block.type === 'text' || block.type === 'thinking' || block.type === 'tool_use').length
       return rows
     }
-    case 'user_message':
+    case 'user_message': {
       // Tool results arrive as synthetic user messages; they are not rows.
       return body.synthetic ? 0 : 1
+    }
     case 'turn_result':
     case 'file_delivered':
-    case 'session_error':
+    case 'session_error': {
       return 1
-    default:
+    }
+    default: {
       return 0
+    }
   }
 }
 
@@ -1827,7 +1831,7 @@ export function transcriptActivity(body: SessionEventBody): number {
  * this with it. Unknown/future event types are NOT content — the safe failure
  * is replaying a stale row, never withholding state.
  */
-export function transcriptContent(body: SessionEventBody): boolean {
+export const transcriptContent = (body: SessionEventBody): boolean => {
   switch (body.type) {
     case 'user_message':
     case 'assistant_message':
@@ -1839,10 +1843,12 @@ export function transcriptContent(body: SessionEventBody): boolean {
     case 'file_delivered':
     case 'session_error':
     case 'session_closed':
-    case 'conversation_reset':
+    case 'conversation_reset': {
       return true
-    default:
+    }
+    default: {
       return false
+    }
   }
 }
 
@@ -1884,21 +1890,24 @@ export function transcriptContent(body: SessionEventBody): boolean {
  * for `state.lastSeq` to reach the attach's `session.lastSeq`, and would hang
  * on a blank panel forever if a coalescer could swallow the final event.
  */
-export function replayCoalesceKey(body: SessionEventBody): string | undefined {
+export const replayCoalesceKey = (body: SessionEventBody): string | undefined => {
   switch (body.type) {
-    case 'context_usage':
+    case 'context_usage': {
       return 'context_usage'
-    case 'rate_limit':
+    }
+    case 'rate_limit': {
       // Per window. The reducer keys `rateLimits` by `rateLimitType`; an event
       // without one is dropped by the reducer, so it has no key here either.
       return body.info.rateLimitType ? `rate_limit:${body.info.rateLimitType}` : undefined
-    case 'status_changed':
+    }
+    case 'status_changed': {
       // Pure replace in the reducer. Safe only because coalescing is opt-in at
       // the WS attach: `parking.ts` subscribes from seq 0 and *branches* on
       // this event (a `parked` status triggers a park), so a coalesced log
       // handed to every subscriber would silently skip that side effect.
       return 'status_changed'
-    case 'sdk_event':
+    }
+    case 'sdk_event': {
       // The CLI's transient liveness chatter — the single most numerous thing
       // in a real log, describing what the runner was doing an hour ago.
       // Narrow on purpose: `sdk_event` is the escape hatch for SDK messages
@@ -1906,8 +1915,10 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
       // that the safe failure is replaying a stale row, never withholding state
       // — a compaction boundary or an auth notice keeps arriving in full.
       return body.payload.type === 'system' && body.payload.subtype === 'status' ? 'sdk_event:system:status' : undefined
-    default:
+    }
+    default: {
       return undefined
+    }
   }
 }
 
@@ -1947,7 +1958,7 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
  * folding the full log and the retained log through `applyEvent` yields
  * identical state (`packages/react/test/replay-retain.test.ts`).
  */
-export function replayRetains(body: SessionEventBody): boolean {
+export const replayRetains = (body: SessionEventBody): boolean => {
   if (body.type !== 'stream_delta') {
     return true
   }
@@ -1998,7 +2009,7 @@ export function replayRetains(body: SessionEventBody): boolean {
  * replay hold waits for `state.lastSeq` to reach the attach's `lastSeq`, which a
  * rule that could drop the final event would hang forever.
  */
-export function snapshotRetains(body: SessionEventBody): boolean {
+export const snapshotRetains = (body: SessionEventBody): boolean => {
   return body.type !== 'stream_delta'
 }
 

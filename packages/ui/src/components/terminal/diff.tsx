@@ -1,6 +1,3 @@
-import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
-import { Row } from './row.tsx'
-
 /**
  * A file edit, drawn the way the CLI draws it: right-aligned line numbers, a
  * `+`/`-` marker, the line, full-bleed wash on adds/removes.
@@ -11,6 +8,9 @@ import { Row } from './row.tsx'
  * form the {@link Row} gutter, so a wrapped line hangs under the text, not the
  * numbers.
  */
+
+import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
+import { Row } from './row.tsx'
 
 /** Which side of the edit a body line belongs to, from its unified-diff prefix. */
 type LineKind = 'context' | 'add' | 'remove'
@@ -51,7 +51,7 @@ const MARKER = { context: ' ', add: '+', remove: '-' } as const
  * {@link TerminalDiff} reads that back: all-zero hunks render without a number
  * column.
  */
-export function previewPatch(input: unknown): FilePatch | undefined {
+export const previewPatch = (input: unknown): FilePatch | undefined => {
   const edit = input as { file_path?: unknown; old_string?: unknown; new_string?: unknown } | null
   const before = typeof edit?.old_string === 'string' ? edit.old_string : undefined
   const after = typeof edit?.new_string === 'string' ? edit.new_string : undefined

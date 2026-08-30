@@ -23,7 +23,7 @@ import { startInstance, type Instance } from '../src/lib/instance.ts'
 const SECRET = 'a-long-enough-test-secret'
 
 /** Minimal stand-in for the Agent SDK's `query()`. */
-function fakeQueryFn() {
+const fakeQueryFn = () => {
   const messages: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
   let done = false
@@ -80,7 +80,7 @@ afterEach(async () => {
 })
 
 /** A dashboard build stand-in — the real one is only present after a prepack. */
-async function fakeWebRoot(): Promise<string> {
+const fakeWebRoot = async (): Promise<string> => {
   const dir = await mkdtemp(join(import.meta.dirname, '.tmp-web-'))
   dirs.push(dir)
   await mkdir(join(dir, 'assets'))
@@ -91,10 +91,10 @@ async function fakeWebRoot(): Promise<string> {
 
 /** `overrides` lands after resolution, so a test can resolve routable-host
  * semantics (generated keys, insecure hosts) while still binding loopback. */
-async function start(
+const start = async (
   argv: string[],
   overrides: Partial<ResolvedConfig> = {},
-): Promise<{ base: string; wsBase: string; stateDir: string | null }> {
+): Promise<{ base: string; wsBase: string; stateDir: string | null }> => {
   const webRoot = await fakeWebRoot()
   const stateDir = await mkdtemp(join(import.meta.dirname, '.tmp-state-'))
   dirs.push(stateDir)
@@ -116,7 +116,7 @@ async function start(
 }
 
 /** A GET with a Host header of our choosing — see the rebinding test. */
-function rawGet(port: number, path: string, host: string): Promise<{ status: number }> {
+const rawGet = (port: number, path: string, host: string): Promise<{ status: number }> => {
   return new Promise((resolve, reject) => {
     const req = request({ host: '127.0.0.1', port, path, method: 'GET', headers: { host } }, (res) => {
       res.resume()
@@ -134,7 +134,7 @@ const cookieFrom = (res: Response): string => {
   return raw!.split(';')[0]!
 }
 
-async function login(base: string): Promise<string> {
+const login = async (base: string): Promise<string> => {
   const res = await fetch(`${base}/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },

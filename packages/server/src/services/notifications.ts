@@ -60,14 +60,15 @@ export class SessionNotifier {
     }
     runner.subscribe((event) => {
       switch (event.type) {
-        case 'permission_requested':
+        case 'permission_requested': {
           this.#emit(runner, event.seq, event.ts, {
             type: 'permission_requested',
             preview: event.request.title ?? event.request.toolName,
             request: event.request,
           })
           return
-        case 'turn_result':
+        }
+        case 'turn_result': {
           this.#emit(runner, event.seq, event.ts, {
             type: 'turn_completed',
             preview: event.isError ? event.errors?.join('\n') : event.result,
@@ -79,20 +80,24 @@ export class SessionNotifier {
             },
           })
           return
-        case 'session_error':
+        }
+        case 'session_error': {
           this.#emit(runner, event.seq, event.ts, {
             type: 'session_error',
             preview: event.message,
           })
           return
-        case 'session_closed':
+        }
+        case 'session_closed': {
           this.#emit(runner, event.seq, event.ts, {
             type: 'session_closed',
             reason: event.reason,
           })
           return
-        default:
+        }
+        default: {
           return
+        }
       }
     }, afterSeq)
   }

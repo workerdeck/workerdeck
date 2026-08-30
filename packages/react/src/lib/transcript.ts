@@ -1,3 +1,8 @@
+/**
+ * Pure transcript state machine over the wire-protocol event stream. Framework-free
+ * so it can be unit-tested and reused outside React.
+ */
+
 import { ENGINE_CAPABILITIES, mergeUsage, orderUsageWindows } from '@workerdeck/protocol'
 import type {
   ContentBlock,
@@ -20,11 +25,6 @@ import type {
   ToolResultBlock,
   UsageWindowRow,
 } from '@workerdeck/protocol'
-
-/**
- * Pure transcript state machine over the wire-protocol event stream. Framework-free
- * so it can be unit-tested and reused outside React.
- */
 
 /** An `image_ref` address a tool result carried, as the transcript keeps it. */
 export type ToolResultImageRef = { partIndex: number; mediaType: string; bytes: number; sourceSeq: number }
@@ -387,7 +387,7 @@ export const applyEvent = (state: TranscriptState, event: SessionEvent): Transcr
   const base: TranscriptState = { ...state, lastSeq: event.seq }
 
   switch (event.type) {
-    case 'system_init':
+    case 'system_init': {
       return {
         ...base,
         model: event.model,
@@ -395,24 +395,28 @@ export const applyEvent = (state: TranscriptState, event: SessionEvent): Transcr
         sdkSessionId: event.sdkSessionId,
         permissionMode: event.permissionMode,
       }
+    }
 
-    case 'status_changed':
+    case 'status_changed': {
       return { ...base, status: event.status, statusDetail: event.detail }
+    }
 
-    case 'capabilities':
+    case 'capabilities': {
       return {
         ...base,
         models: event.models,
         commands: event.commands,
         defaultModel: event.defaultModel ?? base.defaultModel,
       }
+    }
 
-    case 'skills':
+    case 'skills': {
       // Replaced whole, never merged: the event is the engine's current answer,
       // so a skill deleted on disk has to be able to disappear from the list.
       return { ...base, skills: event.skills }
+    }
 
-    case 'file_produced':
+    case 'file_produced': {
       // Keyed by PATH, not by fileId, because the lookup a card does is
       // "here is the savedPath in my tool input — is there anything to fetch?".
       return {
@@ -426,16 +430,20 @@ export const applyEvent = (state: TranscriptState, event: SessionEvent): Transcr
           },
         },
       }
+    }
 
-    case 'model_changed':
+    case 'model_changed': {
       // undefined = reset to the server default; keep showing the last known model.
       return event.model === undefined ? base : { ...base, model: event.model }
+    }
 
-    case 'permission_mode_changed':
+    case 'permission_mode_changed': {
       return { ...base, permissionMode: event.mode }
+    }
 
-    case 'context_usage':
+    case 'context_usage': {
       return { ...base, contextUsage: event.usage }
+    }
 
     case 'rate_limit': {
       // Keyed by window so five_hour and seven_day updates don't clobber each other.
@@ -450,10 +458,11 @@ export const applyEvent = (state: TranscriptState, event: SessionEvent): Transcr
       }
     }
 
-    case 'plan_info':
+    case 'plan_info': {
       return { ...base, subscriptionType: event.subscriptionType }
+    }
 
-    case 'conversation_reset':
+    case 'conversation_reset': {
       // Same session, fresh conversation (/clear, plan-mode exit). Only
       // conversation-scoped state resets: the items, the context reading (the
       // window now holds an almost-empty conversation; the runner re-polls),
@@ -468,6 +477,7 @@ export const applyEvent = (state: TranscriptState, event: SessionEvent): Transcr
         contextUsage: undefined,
         sdkSessionId: event.sdkSessionId ?? base.sdkSessionId,
       }
+    }
 
     case 'user_message': {
       let items = base.items
@@ -643,7 +653,7 @@ export const applyEvent = (state: TranscriptState, event: SessionEvent): Transcr
       return base
     }
 
-    case 'turn_result':
+    case 'turn_result': {
       return {
         ...base,
         // total_cost_usd is session-cumulative on each SDK result message.
@@ -676,22 +686,25 @@ export const applyEvent = (state: TranscriptState, event: SessionEvent): Transcr
           },
         ],
       }
+    }
 
-    case 'permission_requested':
+    case 'permission_requested': {
       return { ...base, pendingApprovals: [...base.pendingApprovals, event.request] }
+    }
 
-    case 'permission_resolved':
+    case 'permission_resolved': {
       return {
         ...base,
         pendingApprovals: base.pendingApprovals.filter((r) => r.id !== event.requestId),
       }
+    }
 
     // Execution lifecycle for tool calls that run outside the model loop
     // (bridged to this client, queued, or deferred). Keyed by executionId, which
     // equals the tool_use id for calls the model made. Events for an unknown id
     // are ignored rather than fabricating an item: the tool_use that explains it
     // may simply not have arrived (or belongs to another session).
-    case 'execution_dispatched':
+    case 'execution_dispatched': {
       return {
         ...base,
         items: base.items.map((item) =>
@@ -705,8 +718,9 @@ export const applyEvent = (state: TranscriptState, event: SessionEvent): Transcr
             : item,
         ),
       }
+    }
 
-    case 'execution_result':
+    case 'execution_result': {
       return {
         ...base,
         items: base.items.map((item) =>
@@ -721,8 +735,9 @@ export const applyEvent = (state: TranscriptState, event: SessionEvent): Transcr
             : item,
         ),
       }
+    }
 
-    case 'execution_failed':
+    case 'execution_failed': {
       return {
         ...base,
         items: base.items.map((item) =>
@@ -737,8 +752,9 @@ export const applyEvent = (state: TranscriptState, event: SessionEvent): Transcr
             : item,
         ),
       }
+    }
 
-    case 'file_delivered':
+    case 'file_delivered': {
       return {
         ...base,
         items: [
@@ -752,14 +768,16 @@ export const applyEvent = (state: TranscriptState, event: SessionEvent): Transcr
           },
         ],
       }
+    }
 
-    case 'session_error':
+    case 'session_error': {
       return {
         ...base,
         items: [...base.items, { kind: 'notice', id: `err-${event.seq}`, level: 'error', text: event.message }],
       }
+    }
 
-    case 'session_closed':
+    case 'session_closed': {
       return {
         ...base,
         items: [
@@ -772,9 +790,11 @@ export const applyEvent = (state: TranscriptState, event: SessionEvent): Transcr
           },
         ],
       }
+    }
 
     case 'sdk_event':
-    default:
+    default: {
       return base
+    }
   }
 }

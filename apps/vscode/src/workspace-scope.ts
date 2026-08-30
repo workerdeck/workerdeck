@@ -8,7 +8,7 @@ import type { ScopeRoot, WorkspaceScope } from './bridge-protocol.ts'
  * gateways only (`hostId` absent → any local host); a `workerdeck://<hostId>/…`
  * mount scopes exactly that gateway; anything else has no meaning as a session cwd.
  */
-export function workspaceScope(): WorkspaceScope | undefined {
+export const workspaceScope = (): WorkspaceScope | undefined => {
   const folders = vscode.workspace.workspaceFolders ?? []
   const roots: ScopeRoot[] = []
   for (const folder of folders) {

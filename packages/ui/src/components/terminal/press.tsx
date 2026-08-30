@@ -66,7 +66,7 @@ export function Pressable({
  * view), one-directional, and only on the open transition — collapsing shrinks
  * toward its own top.
  */
-export function useRevealOnOpen(open: boolean) {
+export const useRevealOnOpen = (open: boolean) => {
   const ref = useRef<HTMLDivElement>(null)
   const previous = useRef(open)
   useEffect(() => {

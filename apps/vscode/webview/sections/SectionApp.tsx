@@ -55,13 +55,14 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
   const engine = info.engine ?? 'claude'
 
   switch (kind) {
-    case 'info':
+    case 'info': {
       return (
         <Pad>
           <InfoSection info={info} />
         </Pad>
       )
-    case 'context':
+    }
+    case 'context': {
       if (!caps.contextUsage) {
         return <Empty>{engine} reports no context window.</Empty>
       }
@@ -70,7 +71,8 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
           <ContextSection usage={vitals?.contextUsage} />
         </Pad>
       )
-    case 'usage':
+    }
+    case 'usage': {
       if (!caps.rateLimits) {
         return <Empty>{engine} reports no plan usage.</Empty>
       }
@@ -79,7 +81,8 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
           <UsageSection rateLimits={vitals?.rateLimits} />
         </Pad>
       )
-    case 'mcp':
+    }
+    case 'mcp': {
       if (!caps.mcpStatus) {
         return <Empty>{engine} exposes no MCP servers.</Empty>
       }
@@ -88,6 +91,7 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
           <McpSection client={client} sessionId={info.id} />
         </Pad>
       )
+    }
   }
 }
 

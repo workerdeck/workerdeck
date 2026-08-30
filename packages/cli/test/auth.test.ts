@@ -6,13 +6,13 @@ import { createCliAuth, type CliAuth, type CliPrincipal, type CliSessionStore, t
 const SECRET = 'correct-horse-battery-staple'
 
 // Node lowercases incoming header names; fakes must match or lookups miss.
-function fakeReq(init: {
+const fakeReq = (init: {
   method?: string
   url?: string
   headers?: Record<string, string>
   remoteAddress?: string
   encrypted?: boolean
-}): IncomingMessage {
+}): IncomingMessage => {
   return {
     method: init.method ?? 'GET',
     url: init.url ?? '/v1/sessions',
@@ -30,7 +30,7 @@ afterEach(async () => {
 
 /** Wire the auth surface the way the CLI's request handler does: auth routes
  * first, then the gateway (authenticate), then the static host (hasValidSession). */
-async function startHost(auth: CliAuth): Promise<string> {
+const startHost = async (auth: CliAuth): Promise<string> => {
   const server = createServer((req, res) => {
     void (async () => {
       if (await auth.handleAuthRequest(req, res)) {
@@ -63,7 +63,7 @@ type RawResponse = { status: number; headers: IncomingMessage['headers']; setCoo
 
 // Raw node:http instead of fetch: the fetch spec marks Origin a forbidden
 // request header, and these tests exist to send arbitrary Origins.
-function request(url: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<RawResponse> {
+const request = (url: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<RawResponse> => {
   return new Promise((resolve, reject) => {
     const req = httpRequest(url, { method: init.method ?? 'GET', headers: init.headers, agent: false }, (res) => {
       const chunks: Buffer[] = []
@@ -82,7 +82,7 @@ function request(url: string, init: { method?: string; headers?: Record<string, 
   })
 }
 
-async function login(base: string, secret: string): Promise<{ res: RawResponse; cookie: string }> {
+const login = async (base: string, secret: string): Promise<{ res: RawResponse; cookie: string }> => {
   const res = await request(`${base}/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },

@@ -31,18 +31,20 @@ export function GatewaysApp({ bridge }: { bridge: Bridge }) {
     () =>
       bridge.onHostMessage((msg: AppHostMessage) => {
         switch (msg.kind) {
-          case 'wd-gateways':
+          case 'wd-gateways': {
             setHosts(msg.hosts)
             setSessionCounts(msg.sessionCounts)
             return
-          case 'wd-gateway-form':
+          }
+          case 'wd-gateway-form': {
             // The host opens the form for an edit (it holds the key) and for the
             // `+` action; closing it is the only thing this side decides alone.
             setError(undefined)
             setBusy(false)
             setForm(msg.open ? { editing: msg.gateway } : undefined)
             return
-          case 'wd-form-result':
+          }
+          case 'wd-form-result': {
             setBusy(false)
             if (msg.ok) {
               setForm(undefined)
@@ -50,6 +52,7 @@ export function GatewaysApp({ bridge }: { bridge: Bridge }) {
               setError(msg.error ?? 'failed')
             }
             return
+          }
         }
       }),
     [bridge],

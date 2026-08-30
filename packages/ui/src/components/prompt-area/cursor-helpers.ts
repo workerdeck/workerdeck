@@ -26,7 +26,7 @@ export type SavedCursor = {
   offset: number
 }
 
-export function saveCursorPosition(editor: HTMLElement): SavedCursor | null {
+export const saveCursorPosition = (editor: HTMLElement): SavedCursor | null => {
   const range = getSelectionRange()
   if (!range) {
     return null
@@ -49,7 +49,7 @@ export function saveCursorPosition(editor: HTMLElement): SavedCursor | null {
   return { nodeIndex, offset: range.startOffset }
 }
 
-export function restoreCursorPosition(editor: HTMLElement, saved: SavedCursor): void {
+export const restoreCursorPosition = (editor: HTMLElement, saved: SavedCursor): void => {
   const sel = window.getSelection()
   if (!sel) {
     return
@@ -84,7 +84,7 @@ export function restoreCursorPosition(editor: HTMLElement, saved: SavedCursor): 
   sel.addRange(range)
 }
 
-export function getCursorOffset(editor: HTMLElement): number | null {
+export const getCursorOffset = (editor: HTMLElement): number | null => {
   const range = getSelectionRange()
   if (!range) {
     return null
@@ -104,7 +104,7 @@ export function getCursorOffset(editor: HTMLElement): number | null {
  * Create a collapsed Range at the given plain-text offset inside the editor.
  * Returns null if the offset can't be mapped to a DOM position.
  */
-export function createRangeAtOffset(editor: HTMLElement, targetOffset: number): Range | null {
+export const createRangeAtOffset = (editor: HTMLElement, targetOffset: number): Range | null => {
   const pos = findDOMPosition(editor, targetOffset)
   if (!pos) {
     return null
@@ -131,7 +131,7 @@ export function createRangeAtOffset(editor: HTMLElement, targetOffset: number): 
  * that the one it sits after. Selecting a node gives a real rect even for a
  * `<br>`, which is what the line the caret just moved to consists of.
  */
-function caretRect(range: Range): DOMRect | null {
+const caretRect = (range: Range): DOMRect | null => {
   const direct = range.getBoundingClientRect()
   if (direct.height > 0) {
     return direct
@@ -173,7 +173,7 @@ function caretRect(range: Range): DOMRect | null {
  * A no-op when the caret is already visible, so it is safe on every call — it
  * corrects an off-screen caret rather than scrolling to one.
  */
-export function scrollCaretIntoView(editor: HTMLElement): void {
+export const scrollCaretIntoView = (editor: HTMLElement): void => {
   const sel = window.getSelection()
   if (!sel || sel.rangeCount === 0) {
     return
@@ -196,7 +196,7 @@ export function scrollCaretIntoView(editor: HTMLElement): void {
   }
 }
 
-export function setCursorAtOffset(editor: HTMLElement, targetOffset: number): void {
+export const setCursorAtOffset = (editor: HTMLElement, targetOffset: number): void => {
   const sel = window.getSelection()
   if (!sel) {
     return
@@ -222,7 +222,7 @@ export function setCursorAtOffset(editor: HTMLElement, targetOffset: number): vo
   scrollCaretIntoView(editor)
 }
 
-export function getTextLengthInRange(range: Range): number {
+export const getTextLengthInRange = (range: Range): number => {
   const fragment = range.cloneContents()
   let length = 0
 
@@ -279,7 +279,7 @@ export function getSelectionOffsets(editor: HTMLElement): { start: number; end: 
  * Sets a (potentially non-collapsed) selection at the given plain-text offsets.
  * Used to restore selection after markdown wrap/unwrap operations.
  */
-export function setSelectionAtOffsets(editor: HTMLElement, startOffset: number, endOffset: number): void {
+export const setSelectionAtOffsets = (editor: HTMLElement, startOffset: number, endOffset: number): void => {
   const sel = window.getSelection()
   if (!sel) {
     return

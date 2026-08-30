@@ -1,3 +1,17 @@
+/**
+ * One transcript item, drawn as terminal rows. Each renderer answers the same
+ * two questions: which marker goes in the gutter, and what the body says —
+ * never a spacing, radius or border. The markers are the CLI's:
+ *
+ * | glyph | means                                    |
+ * |-------|------------------------------------------|
+ * | `❯`   | what you typed                           |
+ * | `●`   | what the model said, or a tool it called |
+ * | `⎿`   | that tool's output, one level in         |
+ * | `✻`   | thinking                                 |
+ * | `!`   | a notice from the runner, not the model  |
+ */
+
 import { useEffect, useState } from 'react'
 import type { TranscriptItem } from '@workerdeck/react'
 import { formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
@@ -31,20 +45,6 @@ export {
   type TerminalBlock,
   type ToolCallItem,
 } from './blocks.ts'
-
-/**
- * One transcript item, drawn as terminal rows. Each renderer answers the same
- * two questions: which marker goes in the gutter, and what the body says —
- * never a spacing, radius or border. The markers are the CLI's:
- *
- * | glyph | means                                    |
- * |-------|------------------------------------------|
- * | `❯`   | what you typed                           |
- * | `●`   | what the model said, or a tool it called |
- * | `⎿`   | that tool's output, one level in         |
- * | `✻`   | thinking                                 |
- * | `!`   | a notice from the runner, not the model  |
- */
 
 /**
  * The prompt marker, in the transcript and the composer both — exported so
@@ -361,7 +361,7 @@ export function FileRow({ item, href }: { item: Extract<TranscriptItem, { kind: 
 }
 
 /** A once-a-second clock, running only while `on`. */
-export function useTicker(on: boolean): number {
+export const useTicker = (on: boolean): number => {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!on) {

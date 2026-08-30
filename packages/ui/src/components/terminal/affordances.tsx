@@ -18,12 +18,12 @@ const DEFAULTS: Required<TerminalAffordances> = { hover: true, actions: true }
 
 const AffordanceContext = createContext<Required<TerminalAffordances>>(DEFAULTS)
 
-export function useAffordances(): Required<TerminalAffordances> {
+export const useAffordances = (): Required<TerminalAffordances> => {
   return useContext(AffordanceContext)
 }
 
 /** Resolve the surface's prop — `false` means none, `true`/absent means all. */
-export function resolveAffordances(value: TerminalAffordances | boolean | undefined): Required<TerminalAffordances> {
+export const resolveAffordances = (value: TerminalAffordances | boolean | undefined): Required<TerminalAffordances> => {
   if (value === false) {
     return { hover: false, actions: false }
   }

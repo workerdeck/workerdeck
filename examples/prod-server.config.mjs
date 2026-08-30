@@ -26,8 +26,9 @@
  * - **No `apns` key**, so the push forwarder does not exist and `/apns/devices`
  *   404s. A second gateway minting pushes to the same phone from the same p8 is
  *   noise, and the credential belongs to the instance you actually run.
+ *
+ * @type {import('workerdeck').WorkerDeckConfig}
  */
-/** @type {import('workerdeck').WorkerDeckConfig} */
 export default {
   /**
    * The same two profiles the dev gateway declares — a claude profile from your

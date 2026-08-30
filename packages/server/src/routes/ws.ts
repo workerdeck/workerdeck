@@ -7,7 +7,7 @@ import type { Runner } from '@workerdeck/core'
 import { PROTOCOL_VERSION, type ClientFrame, type ServerFrame } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 
-export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, req: IncomingMessage): void {
+export const attachClient = (ctx: ServerContext, ws: WebSocket, runner: Runner, req: IncomingMessage): void => {
   const { bridge, parking } = ctx
   const url = new URL(req.url ?? '/', 'http://internal')
   const afterSeq = Number(url.searchParams.get('afterSeq') ?? '0') || 0
@@ -86,7 +86,7 @@ const handleCommand = async (ctx: ServerContext, frame: ClientFrame, runner: Run
       runner.sendMessage(frame.text, resolved.attachments)
       return
     }
-    case 'permission_decision':
+    case 'permission_decision': {
       if (frame.behavior === 'allow') {
         runner.resolvePermission(frame.requestId, {
           behavior: 'allow',
@@ -100,10 +100,12 @@ const handleCommand = async (ctx: ServerContext, frame: ClientFrame, runner: Run
         })
       }
       return
-    case 'interrupt':
+    }
+    case 'interrupt': {
       await runner.interrupt()
       return
-    case 'clear_context':
+    }
+    case 'clear_context': {
       // Optional on `Runner`, like every member added after it became public API; an engine
       // that declines it is what `EngineCapabilities.clearContext` told the client to expect.
       if (!runner.clearContext) {
@@ -111,32 +113,39 @@ const handleCommand = async (ctx: ServerContext, frame: ClientFrame, runner: Run
       }
       await runner.clearContext()
       return
-    case 'set_permission_mode':
+    }
+    case 'set_permission_mode': {
       if (frame.mode === 'bypassPermissions' && ctx.options.disableBypassPermissions) {
         throw new Error('bypassPermissions is disabled on this server (disableBypassPermissions)')
       }
       await runner.setPermissionMode(frame.mode)
       return
-    case 'set_model':
+    }
+    case 'set_model': {
       await runner.setModel(frame.model)
       return
-    case 'tool_call_result':
+    }
+    case 'tool_call_result': {
       // Untrusted client input by contract — never a source for server-authoritative state.
       // Unknown or already settled ids are ignored rather than erroring: a late answer racing
       // a timeout is expected, not a client bug.
       bridge.resolve(runner.id, frame.executionId, { output: frame.output, logs: frame.logs })
       return
-    case 'tool_call_error':
+    }
+    case 'tool_call_error': {
       bridge.resolve(runner.id, frame.executionId, {
         reason: frame.reason,
         error: frame.error,
         logs: frame.logs,
       })
       return
-    case 'close':
+    }
+    case 'close': {
       runner.close('client')
       return
-    default:
+    }
+    default: {
       throw new Error(`unknown command: ${(frame as { type?: string }).type}`)
+    }
   }
 }

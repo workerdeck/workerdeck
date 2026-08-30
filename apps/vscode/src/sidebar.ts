@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 import type { HostStore } from './hosts.ts'
 import type { SessionHandle } from '@workerdeck/client'
 import { clientFor } from './gateway.ts'
-import { SessionsModel } from './sessions-model.ts'
+import type { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import type { HostToSidebar, SidebarToHost } from './bridge-protocol.ts'
 import { DEFAULT_VIEW_CONFIG, buildRows, filterRows, runningSubagents, type ViewConfig } from './view-config.ts'
@@ -181,7 +181,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
       return
     }
     switch (msg.kind) {
-      case 'wd-ready':
+      case 'wd-ready': {
         this.#ready = true
         // Whole, not incremental: a webview VS Code rebuilt has no map to merge into.
         this.#post({ kind: 'wd-project-icons', icons: this.#icons.entries() })
@@ -189,26 +189,34 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
         // The webview boots with the bar closed and learns otherwise here: it cannot read a context key.
         this.#post({ kind: 'wd-filter-open', open: this.#filterOpen })
         return
-      case 'wd-reveal-gateways':
+      }
+      case 'wd-reveal-gateways': {
         await this.#delegate.revealGateways({ add: msg.add })
         return
-      case 'wd-view-config':
+      }
+      case 'wd-view-config': {
         // Persisted so a fresh window counts correctly before the sidebar has been opened once.
         this.#viewConfig = msg.config
         void this.#context.globalState.update(VIEW_CONFIG_KEY, msg.config)
         this.#pushState()
         return
-      case 'wd-select-session':
+      }
+      case 'wd-select-session': {
         await this.#delegate.selectSession(msg.hostId, msg.sessionId, msg.subagentToolUseId, msg.revealToolUseId)
         return
-      case 'wd-stop-session':
+      }
+      case 'wd-stop-session': {
         return this.#stopSession(msg.hostId, msg.sessionId)
-      case 'wd-rename-session':
+      }
+      case 'wd-rename-session': {
         return this.#renameSession(msg.hostId, msg.sessionId, msg.title)
-      case 'wd-delete-session':
+      }
+      case 'wd-delete-session': {
         return this.#deleteSession(msg.hostId, msg.sessionId)
-      case 'wd-session-menu':
+      }
+      case 'wd-session-menu': {
         return this.#sessionMenu(msg.hostId, msg.sessionId)
+      }
     }
   }
 

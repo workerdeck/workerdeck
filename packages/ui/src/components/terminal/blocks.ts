@@ -37,7 +37,7 @@ export type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
  * `user` items carry `parentToolUseId` only optionally (the key exists only on
  * a subagent's brief), the other kinds carry it as `string | null`.
  */
-export function parentOf(item: TranscriptItem): string | undefined {
+export const parentOf = (item: TranscriptItem): string | undefined => {
   const parent = 'parentToolUseId' in item ? item.parentToolUseId : undefined
   return parent ?? undefined
 }
@@ -51,13 +51,13 @@ export function parentOf(item: TranscriptItem): string | undefined {
  * nothing absorbs, and runs still fold because {@link foldsTogether} keys on
  * an *equal* parent rather than absence of one.
  */
-export function subagentItems(items: readonly TranscriptItem[], parentToolUseId: string): TranscriptItem[] {
+export const subagentItems = (items: readonly TranscriptItem[], parentToolUseId: string): TranscriptItem[] => {
   return items.filter((item) => parentOf(item) === parentToolUseId)
 }
 
 /** Is this a row the transcript folds into a run? Any tool call is — see
  * `tool-run.ts` for why this is no longer shell-only. */
-export function isRunCall(item: TranscriptItem): item is ToolCallItem {
+export const isRunCall = (item: TranscriptItem): item is ToolCallItem => {
   return item.kind === 'tool_call'
 }
 
@@ -101,7 +101,7 @@ export type TerminalBlock = ItemBlock | RunBlock | TaskBlock
 
 /** The absorbed items, flat and in stream order — what `taskSummary` counts
  * and the collapsed row's one line is built from. */
-export function taskChildItems(block: TaskBlock): TranscriptItem[] {
+export const taskChildItems = (block: TaskBlock): TranscriptItem[] => {
   return block.children.flatMap((child) => ('run' in child ? child.run : [child.item]))
 }
 
@@ -131,7 +131,7 @@ const pushLeaf = (out: LeafBlock[], item: TranscriptItem, index: number): void =
  *   renders: this is the terminal theme's rule and must not silently reshape
  *   another renderer's row list.
  */
-export function terminalBlocks(items: readonly TranscriptItem[], offset = 0, fold = true): TerminalBlock[] {
+export const terminalBlocks = (items: readonly TranscriptItem[], offset = 0, fold = true): TerminalBlock[] => {
   if (!fold) {
     return items.map((item, position) => ({
       key: `${item.kind}:${item.id}`,
@@ -195,7 +195,7 @@ export function terminalBlocks(items: readonly TranscriptItem[], offset = 0, fol
 /** Spacing between two items: a blank line, unless the pair belongs together.
  * Tool output already sits under its call, and a run of tool calls reads as one
  * block — the CLI leaves no blank line inside either. */
-export function needsBlank(previous: TranscriptItem, next: TranscriptItem): boolean {
+export const needsBlank = (previous: TranscriptItem, next: TranscriptItem): boolean => {
   if (previous.kind === 'tool_call' && next.kind === 'tool_call') {
     return false
   }
@@ -206,7 +206,7 @@ export function needsBlank(previous: TranscriptItem, next: TranscriptItem): bool
  * task block counts as the `Task` call it stands for — a collapsed task row
  * sits flush with the tool rows of the same turn, exactly as the call itself
  * did before it grew children. */
-export function blockNeedsBlank(previous: TerminalBlock, next: TerminalBlock): boolean {
+export const blockNeedsBlank = (previous: TerminalBlock, next: TerminalBlock): boolean => {
   const kind = (block: TerminalBlock) => ('item' in block ? block.item.kind : 'tool_call')
   return !(kind(previous) === 'tool_call' && kind(next) === 'tool_call')
 }

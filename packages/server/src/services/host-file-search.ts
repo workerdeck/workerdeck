@@ -1,7 +1,3 @@
-import { readdirSync } from 'node:fs'
-import { join, relative } from 'node:path'
-import { entryKind } from './host-files.ts'
-
 /**
  * The recursive half of the host-file routes: what `@file` autocomplete needs and
  * `/fs/list` deliberately isn't. Listing answers "what is in this directory"; this
@@ -13,6 +9,10 @@ import { entryKind } from './host-files.ts'
  * and never resolves a path of its own. Its one security-relevant rule is that it
  * does not follow symlinks — see the walk below.
  */
+
+import { readdirSync } from 'node:fs'
+import { join, relative } from 'node:path'
+import { entryKind } from './host-files.ts'
 
 /**
  * Directories a source tree keeps that nobody types `@` looking for, and that are

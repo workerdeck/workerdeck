@@ -1,11 +1,3 @@
-import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
-import type { TranscriptItem } from '@workerdeck/react'
-import { formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
-import { taskChildItems, type TerminalBlock, type ToolCallItem } from './blocks.ts'
-import { IMAGE_BOX_LINES } from './image-box.ts'
-import { collapsedResult } from './result-preview.ts'
-import { runSummary, taskSummary } from './tool-run.ts'
-
 /**
  * The terminal theme's row-height calculator: the pixel height the renderer
  * will draw an item at, computed from cell metrics alone — no DOM. A terminal
@@ -45,6 +37,14 @@ import { runSummary, taskSummary } from './tool-run.ts'
  * exactly where `break-word` differs from `anywhere`.
  */
 
+import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
+import type { TranscriptItem } from '@workerdeck/react'
+import { formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
+import { taskChildItems, type TerminalBlock, type ToolCallItem } from './blocks.ts'
+import { IMAGE_BOX_LINES } from './image-box.ts'
+import { collapsedResult } from './result-preview.ts'
+import { runSummary, taskSummary } from './tool-run.ts'
+
 /** The cell everything is measured in. `ch` is the advance of `0` in px —
  * *measured* off the live surface via {@link measureCh}, never derived from the
  * font size (7.83px at 13px JetBrains Mono, not 13 × 0.6). */
@@ -79,14 +79,14 @@ export type HeightEpoch = CellMetrics & {
   cache: WeakMap<TranscriptItem, ComputedHeight>
 }
 
-export function createHeightEpoch(width: number, ch: number, line: number): HeightEpoch {
+export const createHeightEpoch = (width: number, ch: number, line: number): HeightEpoch => {
   return { width, ch, line, cache: new WeakMap() }
 }
 
 /** A virtual row's computed height under `epoch` — the `estimateSize` feed.
  * The inter-row gap is the *pair's* business (`gapBefore`), not the row's, so
  * it is added by the caller. */
-export function estimateBlockPx(block: TerminalBlock, epoch: HeightEpoch): number {
+export const estimateBlockPx = (block: TerminalBlock, epoch: HeightEpoch): number => {
   // Only item blocks cache. A run's array is rebuilt every render (worthless
   // key), and a task block must not key on its `task` item: children arrive
   // without the call object changing, so a height cached against the task
@@ -114,7 +114,7 @@ export const BRIEF_LINES = 4
  * plus the header row; expanding is local state on a mounted (hence measured)
  * row, so only the collapsed height must be right.
  */
-export function briefPx(text: string, m: CellMetrics): number {
+export const briefPx = (text: string, m: CellMetrics): number => {
   const cols = Math.max(1, Math.floor(m.width / m.ch + EPS))
   return (Math.min(textLines(text, cols).lines, BRIEF_LINES) + 1) * m.line
 }
@@ -123,7 +123,7 @@ export function briefPx(text: string, m: CellMetrics): number {
  * the epoch's measurement pass (an effect / ResizeObserver callback), never
  * from render. The probe is absolutely positioned, so it contributes no layout
  * and cannot re-trigger the observer that called it. */
-export function measureCh(surface: HTMLElement): number {
+export const measureCh = (surface: HTMLElement): number => {
   const probe = document.createElement('span')
   probe.textContent = '0'.repeat(200)
   probe.style.position = 'absolute'
@@ -333,7 +333,7 @@ const wrapOne = (line: string, cols: number): { lines: number; exact: boolean } 
 /** Visual lines of a (possibly multi-hard-line) text at `cols` columns.
  * Exported for the dev audit; also the one genuinely pure piece a unit test
  * could pin, should `ui` ever grow a runner. */
-export function textLines(text: string, cols: number): { lines: number; exact: boolean } {
+export const textLines = (text: string, cols: number): { lines: number; exact: boolean } => {
   let lines = 0
   let exact = true
   for (const hard of text.split('\n')) {
@@ -575,7 +575,7 @@ const parseBlocks = (md: string): MdBlock[] => {
 
 /** The markdown body's height: blocks, one line between consecutive ones
  * (`.term-md .term-block + .term-block`). Exported for the dev audit only. */
-export function markdownHeight(md: string, m: CellMetrics, extraPx = 0): Acc {
+export const markdownHeight = (md: string, m: CellMetrics, extraPx = 0): Acc => {
   const bodyPx = m.width - extraPx - 2 * m.ch // the outer Row's gutter
   const cols = Math.floor(bodyPx / m.ch + EPS)
   const blocks = parseBlocks(md)
@@ -637,15 +637,17 @@ export function markdownHeight(md: string, m: CellMetrics, extraPx = 0): Acc {
         acc = add(acc, { px, exact })
         break
       }
-      case 'table':
+      case 'table': {
         // One line per row, always: no `max-width`, so a wide table scrolls
         // inside `.term-table-wrap` and a cell never wraps. See `terminal.css`
         // §Markdown.
         acc = add(acc, { px: block.rows * m.line, exact: true })
         break
-      case 'hr':
+      }
+      case 'hr': {
         acc = add(acc, { px: m.line, exact: true })
         break
+      }
     }
   }
   return { px: Math.max(acc.px, m.line), exact: acc.exact }
@@ -730,7 +732,7 @@ const nestedExtraPx = (item: TranscriptItem): number => ('parentToolUseId' in it
 
 /** One transcript item's height, in its default (collapsed, settled-or-not)
  * presentation. */
-export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight {
+export const itemHeight = (item: TranscriptItem, m: CellMetrics): ComputedHeight => {
   const extraPx = nestedExtraPx(item)
   switch (item.kind) {
     case 'user': {
@@ -745,12 +747,15 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
       }
       return acc
     }
-    case 'assistant_text':
+    case 'assistant_text': {
       return markdownHeight(item.text, m, extraPx)
-    case 'thinking':
+    }
+    case 'thinking': {
       return rowH(item.text, m, { extraPx })
-    case 'tool_call':
+    }
+    case 'tool_call': {
       return toolRowHeight(item, m, extraPx)
+    }
     case 'turn_result': {
       let acc = rowH(`${item.isError ? item.subtype : 'done'} · ${formatDuration(item.durationMs)} · ${formatCost(item.totalCostUsd)}`, m, {
         extraPx,
@@ -760,14 +765,16 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
       }
       return acc
     }
-    case 'notice':
+    case 'notice': {
       return rowH(item.text, m, { extraPx })
+    }
     case 'file_delivered': {
       const text = `${item.path} · ${formatBytes(item.bytes)}` + (item.description ? ` · ${item.description}` : '')
       return rowH(text, m, { extraPx })
     }
-    default:
+    default: {
       return { px: 0, exact: false }
+    }
   }
 }
 
@@ -777,7 +784,7 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
  * 2-cell-gutter `Row`. No expanded branch for the task block either: it is
  * always collapsed by default, which is the invariant that keeps every
  * unmounted row's estimate exact. */
-export function blockHeight(block: TerminalBlock, m: CellMetrics): ComputedHeight {
+export const blockHeight = (block: TerminalBlock, m: CellMetrics): ComputedHeight => {
   if ('task' in block) {
     return rowH(taskSummary(block.task, taskChildItems(block)), m)
   }

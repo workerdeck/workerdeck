@@ -7,13 +7,13 @@ import { json, readJsonBody } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
 import type { ServerContext } from '../context.ts'
 
-export async function handleJobs(
+export const handleJobs = async (
   ctx: ServerContext,
   req: IncomingMessage,
   res: ServerResponse,
   pathname: string,
   auth: AuthContext,
-): Promise<void> {
+): Promise<void> => {
   const { auth: authSvc, availability, basePath, factory, queue } = ctx
   if (!queue) {
     json(res, 404, { error: 'job queue not configured' })

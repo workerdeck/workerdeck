@@ -117,31 +117,37 @@ export const parseArgs = (argv: string[]): CliFlags => {
     const arg = argv[i]!
     switch (arg) {
       case '-h':
-      case '--help':
+      case '--help': {
         flags.help = true
         break
+      }
       case '-v':
-      case '--version':
+      case '--version': {
         flags.version = true
         break
+      }
       case '-c':
-      case '--config':
+      case '--config': {
         flags.config = next(i, arg)
         i++
         break
+      }
       case '-p':
-      case '--port':
+      case '--port': {
         flags.port = parsePort(next(i, arg), arg)
         i++
         break
-      case '--host':
+      }
+      case '--host': {
         flags.host = next(i, arg)
         i++
         break
-      case '--auth-key':
+      }
+      case '--auth-key': {
         flags.authKey = next(i, arg)
         i++
         break
+      }
       case '--profile': {
         // name=dir — a config dir is a credential store, so naming one is deliberate, never inferred.
         const raw = next(i, arg)
@@ -158,54 +164,68 @@ export const parseArgs = (argv: string[]): CliFlags => {
         flags.profiles.push({ name, configDir: resolve(dir) })
         break
       }
-      case '--cwd-root':
+      case '--cwd-root': {
         flags.cwdRoots.push(resolve(next(i, arg)))
         i++
         break
-      case '--fs-root':
+      }
+      case '--fs-root': {
         flags.fsRoots.push(resolve(next(i, arg)))
         i++
         break
-      case '--fs-write':
+      }
+      case '--fs-write': {
         flags.fsWrite = true
         break
-      case '--allowed-origin':
+      }
+      case '--allowed-origin': {
         flags.allowedOrigins.push(next(i, arg))
         i++
         break
-      case '--allowed-host':
+      }
+      case '--allowed-host': {
         flags.allowedHosts.push(next(i, arg))
         i++
         break
-      case '--insecure-host':
+      }
+      case '--insecure-host': {
         flags.insecureHosts.push(next(i, arg))
         i++
         break
-      case '--trust-proxy':
+      }
+      case '--trust-proxy': {
         flags.trustProxy = true
         break
-      case '--state-dir':
+      }
+      case '--state-dir': {
         flags.stateDir = resolve(next(i, arg))
         i++
         break
-      case '--no-parking-store':
+      }
+      case '--no-parking-store': {
         flags.parking = false
         break
-      case '--insecure':
+      }
+      case '--insecure': {
         flags.insecure = true
         break
-      case '--no-web':
+      }
+      case '--no-web': {
         flags.web = false
         break
-      case '--cors-origin':
+      }
+      case '--cors-origin': {
         flags.corsOrigins.push(next(i, arg))
         i++
         break
-      case '--open':
+      }
+      case '--open': {
         flags.open = true
         break
-      default:
+      }
+      default: {
         throw new ConfigError(`unknown option: ${arg}`)
+      }
     }
   }
   return flags

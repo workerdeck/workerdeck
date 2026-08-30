@@ -14,7 +14,7 @@ afterEach(async () => {
   }
 })
 
-async function stateDir(): Promise<string> {
+const stateDir = async (): Promise<string> => {
   const dir = await mkdtemp(join(tmpdir(), 'wd-auth-sessions-'))
   dirs.push(dir)
   return dir

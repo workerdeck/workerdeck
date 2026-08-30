@@ -11,9 +11,9 @@
  * whole — a row has to show something.
  */
 
-/** At most this many lines, however short they are. */
+// At most this many lines however short they are, and at most this many
+// characters — roughly four lines at a realistic terminal width.
 const PREVIEW_LINES = 4
-/** …and at most this many characters — roughly four lines at a realistic terminal width. */
 const PREVIEW_CHARS = 400
 
 export type CollapsedResult = {
@@ -34,7 +34,7 @@ export type CollapsedResult = {
  * Hidden amounts are reported in characters when the cut happened inside a
  * line, in lines otherwise.
  */
-export function collapsedResult(lines: string[], totalChars?: number): CollapsedResult {
+export const collapsedResult = (lines: string[], totalChars?: number): CollapsedResult => {
   const shown: string[] = []
   let chars = 0
   let cut = false
