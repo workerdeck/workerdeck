@@ -208,6 +208,15 @@ after a restart, and a session with no profile has no account state at all.
 renders windows off a merged transcript and the dashboard's profile page renders them off
 `ProfileInfo.usage` with no session in sight. Tests in `packages/react/test/usage.test.ts`;
 **no Swift mirror yet** — the phone still renders its session's own reading.
+`isJobRun` is the third of these rules and the one a client gets wrong silently. A job run is an
+ordinary registry session in every respect — `JobQueue`'s claim path creates it and stamps
+`meta.jobId` (nothing else in the tree may ever write that key), and `JobInfo.sessionId` points
+back at it. So a client that has its own jobs surface must not list it a second time among the
+sessions (the dashboard filters it out in `useSessions`), and a client with **no** jobs surface —
+the extension, the phone — must list it, or queued work runs where nobody can see it. `groupRows`
+sorts *rows* by `sortBy` but *groups* by their own facet rank: grouping by state while sorting by
+name must still put "Needs attention" first, so a group's position never comes from the order of
+the rows inside it.
 `ProjectInfo` (`SessionInfo.project`) is **what a folder is called**, and it is on the wire for
 the same reason `SubagentInfo` is: a client cannot work it out. A `.workerdeck.json` declares a
 name and an icon; the *gateway* finds it by ancestor walk from the session's realpath'd cwd,
