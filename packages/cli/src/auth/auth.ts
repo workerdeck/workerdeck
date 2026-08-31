@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Authenticator } from '@workerdeck/server'
+import { readBody, respondJson } from '../lib/http.ts'
 
 export type CliAuthOptions = {
   // Unset disables auth entirely; that the CLI then binds loopback only is enforced by the caller, not here.
@@ -312,38 +313,11 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
 
   const clearCookieValue = (req: IncomingMessage): string => [`${cookieName}=`, 'Max-Age=0', ...cookieAttributes(req)].join('; ')
 
-  const respondJson = (res: ServerResponse, status: number, body: Record<string, unknown>, headers?: Record<string, string>): void => {
-    res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers }).end(JSON.stringify(body))
-  }
-
   const respondRedirect = (res: ServerResponse, location: string, headers?: Record<string, string>): void => {
     res.writeHead(303, { location, 'cache-control': 'no-store', ...headers }).end()
   }
 
   const wantsJson = (req: IncomingMessage): boolean => (req.headers.accept ?? '').includes('application/json')
-
-  const readBody = (req: IncomingMessage, maxBytes: number): Promise<string | null> =>
-    new Promise((resolve) => {
-      const chunks: Buffer[] = []
-      let size = 0
-      let settled = false
-      const finish = (value: string | null): void => {
-        if (!settled) {
-          settled = true
-          resolve(value)
-        }
-      }
-      req.on('data', (chunk: Buffer) => {
-        size += chunk.length
-        if (size > maxBytes) {
-          finish(null)
-          return
-        }
-        chunks.push(chunk)
-      })
-      req.on('end', () => finish(Buffer.concat(chunks).toString('utf8')))
-      req.on('error', () => finish(null))
-    })
 
   const handleLogin = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const json = wantsJson(req)

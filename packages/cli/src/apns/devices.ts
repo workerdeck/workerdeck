@@ -2,6 +2,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
 import type { ApnsEnvironment } from './client.ts'
+import { readBody, respondJson } from '../lib/http.ts'
 
 export type DeviceRecord = {
   token: string
@@ -83,34 +84,6 @@ export async function createDeviceRegistry(options: {
   }
 }
 
-function respond(res: ServerResponse, status: number, body: Record<string, unknown>): void {
-  res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(body))
-}
-
-function readBody(req: IncomingMessage): Promise<string | null> {
-  return new Promise((resolve) => {
-    const chunks: Buffer[] = []
-    let size = 0
-    let settled = false
-    const finish = (value: string | null): void => {
-      if (!settled) {
-        settled = true
-        resolve(value)
-      }
-    }
-    req.on('data', (chunk: Buffer) => {
-      size += chunk.length
-      if (size > MAX_BODY_BYTES) {
-        finish(null)
-        return
-      }
-      chunks.push(chunk)
-    })
-    req.on('end', () => finish(Buffer.concat(chunks).toString('utf8')))
-    req.on('error', () => finish(null))
-  })
-}
-
 export function createDeviceRoute(
   registry: DeviceRegistry,
   authenticate: (req: IncomingMessage) => unknown,
@@ -132,13 +105,13 @@ export function createDeviceRoute(
     }
     // A device token is an address this gateway can buzz, so an unauthenticated register lets anyone reachable aim it.
     if (authenticate(req) === null) {
-      respond(res, 401, { error: 'unauthorized' })
+      respondJson(res, 401, { error: 'unauthorized' })
       return true
     }
 
-    const raw = await readBody(req)
+    const raw = await readBody(req, MAX_BODY_BYTES)
     if (raw === null) {
-      respond(res, 413, { error: 'body too large' })
+      respondJson(res, 413, { error: 'body too large' })
       res.once('finish', () => req.destroy())
       return true
     }
@@ -146,13 +119,13 @@ export function createDeviceRoute(
     try {
       body = JSON.parse(raw) as Record<string, unknown>
     } catch {
-      respond(res, 400, { error: 'invalid JSON body' })
+      respondJson(res, 400, { error: 'invalid JSON body' })
       return true
     }
 
     const token = body.token
     if (typeof token !== 'string' || !TOKEN_PATTERN.test(token)) {
-      respond(res, 400, { error: 'token must be a hex APNs device token' })
+      respondJson(res, 400, { error: 'token must be a hex APNs device token' })
       return true
     }
 
@@ -163,7 +136,7 @@ export function createDeviceRoute(
     }
 
     if (!isEnvironment(body.environment)) {
-      respond(res, 400, { error: "environment must be 'development' or 'production'" })
+      respondJson(res, 400, { error: "environment must be 'development' or 'production'" })
       return true
     }
     const optionalString = (value: unknown): string | undefined =>
@@ -176,7 +149,7 @@ export function createDeviceRoute(
       bundleId: optionalString(body.bundleId),
       platform: optionalString(body.platform),
     })
-    respond(res, 200, { registered: true, environment: body.environment })
+    respondJson(res, 200, { registered: true, environment: body.environment })
     return true
   }
 }
