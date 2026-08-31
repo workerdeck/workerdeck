@@ -39,6 +39,7 @@ import type {
   UpdateProfileRequest,
   ToolResultBlock,
 } from '@workerdeck/protocol'
+import { Emitter, reconnectDelay, type Listener } from './lib/emitter.ts'
 
 export type FetchBody = NonNullable<NonNullable<Parameters<typeof fetch>[1]>['body']>
 
@@ -77,14 +78,12 @@ export type SessionHandleEvents = {
   toolCallCanceled: { executionId: string; reason: string }
 }
 
-type Listener<T> = (payload: T) => void
-
 export class SessionHandle {
   readonly sessionId: string
   #client: WorkerDeckClient
   #options: Required<Pick<AttachOptions, 'reconnect'>> & AttachOptions
   #ws: WebSocket | undefined
-  #listeners = new Map<keyof SessionHandleEvents, Set<Listener<never>>>()
+  #events = new Emitter<SessionHandleEvents>()
   #lastSeq: number
   #closed = false
   #retries = 0
@@ -105,13 +104,7 @@ export class SessionHandle {
   }
 
   on<K extends keyof SessionHandleEvents>(kind: K, listener: Listener<SessionHandleEvents[K]>): () => void {
-    let set = this.#listeners.get(kind)
-    if (!set) {
-      set = new Set()
-      this.#listeners.set(kind, set)
-    }
-    set.add(listener as Listener<never>)
-    return () => set.delete(listener as Listener<never>)
+    return this.#events.on(kind, listener)
   }
 
   send(text: string, attachmentIds?: string[]): void {
@@ -175,18 +168,6 @@ export class SessionHandle {
     this.#ws = undefined
   }
 
-  #emit<K extends keyof SessionHandleEvents>(kind: K, payload: SessionHandleEvents[K]): void {
-    const set = this.#listeners.get(kind)
-    if (!set) {
-      return
-    }
-    for (const listener of set) {
-      try {
-        ;(listener as Listener<SessionHandleEvents[K]>)(payload)
-      } catch {}
-    }
-  }
-
   #sendFrame(frame: ClientFrame): void {
     const payload = JSON.stringify(frame)
     // readyState 1 === OPEN (avoid touching the WebSocket global; impl may be injected)
@@ -205,7 +186,7 @@ export class SessionHandle {
     this.#ws = ws
     ws.onopen = () => {
       this.#retries = 0
-      this.#emit('connectionChange', true)
+      this.#events.emit('connectionChange', true)
       for (const payload of this.#outbox.splice(0)) {
         ws.send(payload)
       }
@@ -213,28 +194,28 @@ export class SessionHandle {
     ws.onmessage = (msg: MessageEvent) => {
       const frame = JSON.parse(String(msg.data)) as ServerFrame
       if (frame.type === 'attached') {
-        this.#emit('attached', frame)
+        this.#events.emit('attached', frame)
       } else if (frame.type === 'event') {
         if (frame.event.seq <= this.#lastSeq) {
           return
         }
         this.#lastSeq = frame.event.seq
-        this.#emit('event', frame.event)
+        this.#events.emit('event', frame.event)
       } else if (frame.type === 'tool_call_request') {
-        this.#emit('toolCallRequest', frame)
+        this.#events.emit('toolCallRequest', frame)
       } else if (frame.type === 'tool_call_canceled') {
-        this.#emit('toolCallCanceled', { executionId: frame.executionId, reason: frame.reason })
+        this.#events.emit('toolCallCanceled', { executionId: frame.executionId, reason: frame.reason })
       } else if (frame.type === 'protocol_error') {
-        this.#emit('protocolError', frame.message)
+        this.#events.emit('protocolError', frame.message)
       }
     }
     ws.onclose = () => {
-      this.#emit('connectionChange', false)
+      this.#events.emit('connectionChange', false)
       if (this.#closed || !this.#options.reconnect) {
         return
       }
-      const delay = Math.min(500 * 2 ** this.#retries++, 10_000)
-      this.#emit('reconnectAttempt', this.#retries)
+      const delay = reconnectDelay(this.#retries++)
+      this.#events.emit('reconnectAttempt', this.#retries)
       this.#connectTimer = setTimeout(() => this.#connect(), delay)
     }
     ws.onerror = () => {}
@@ -252,7 +233,7 @@ export class QueueHandle {
   #client: WorkerDeckClient
   #reconnect: boolean
   #ws: WebSocket | undefined
-  #listeners = new Map<keyof QueueHandleEvents, Set<Listener<never>>>()
+  #events = new Emitter<QueueHandleEvents>()
   #closed = false
   #retries = 0
   #connectTimer: ReturnType<typeof setTimeout> | undefined
@@ -265,13 +246,7 @@ export class QueueHandle {
   }
 
   on<K extends keyof QueueHandleEvents>(kind: K, listener: Listener<QueueHandleEvents[K]>): () => void {
-    let set = this.#listeners.get(kind)
-    if (!set) {
-      set = new Set()
-      this.#listeners.set(kind, set)
-    }
-    set.add(listener as Listener<never>)
-    return () => set.delete(listener as Listener<never>)
+    return this.#events.on(kind, listener)
   }
 
   detach(): void {
@@ -279,18 +254,6 @@ export class QueueHandle {
     clearTimeout(this.#connectTimer)
     this.#ws?.close()
     this.#ws = undefined
-  }
-
-  #emit<K extends keyof QueueHandleEvents>(kind: K, payload: QueueHandleEvents[K]): void {
-    const set = this.#listeners.get(kind)
-    if (!set) {
-      return
-    }
-    for (const listener of set) {
-      try {
-        ;(listener as Listener<QueueHandleEvents[K]>)(payload)
-      } catch {}
-    }
   }
 
   #connect(): void {
@@ -301,25 +264,25 @@ export class QueueHandle {
     this.#ws = ws
     ws.onopen = () => {
       this.#retries = 0
-      this.#emit('connectionChange', true)
+      this.#events.emit('connectionChange', true)
     }
     ws.onmessage = (msg: MessageEvent) => {
       const frame = JSON.parse(String(msg.data)) as QueueServerFrame
       if (frame.type === 'queue_attached') {
-        this.#emit('attached', frame.stats)
-        this.#emit('stats', frame.stats)
+        this.#events.emit('attached', frame.stats)
+        this.#events.emit('stats', frame.stats)
       } else if (frame.type === 'job_event') {
-        this.#emit('event', frame.event)
+        this.#events.emit('event', frame.event)
       } else if (frame.type === 'queue_stats') {
-        this.#emit('stats', frame.stats)
+        this.#events.emit('stats', frame.stats)
       }
     }
     ws.onclose = () => {
-      this.#emit('connectionChange', false)
+      this.#events.emit('connectionChange', false)
       if (this.#closed || !this.#reconnect) {
         return
       }
-      const delay = Math.min(500 * 2 ** this.#retries++, 10_000)
+      const delay = reconnectDelay(this.#retries++)
       this.#connectTimer = setTimeout(() => this.#connect(), delay)
     }
     ws.onerror = () => {}
@@ -374,27 +337,17 @@ export class WorkerDeckClient {
   }
 
   async fetchSessionFile(sessionId: string, path: string): Promise<string> {
-    const res = await this.#fetch(this.sessionFileUrl(sessionId, path), {
-      headers: this.#options.headers,
-    })
-    if (!res.ok) {
-      const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      throw new WorkerDeckError(payload.error ?? `GET file failed with ${res.status}`, res.status)
-    }
+    const res = await this.#callRaw(this.sessionFileUrl(sessionId, path), { headers: this.#options.headers }, 'GET file failed')
     return await res.text()
   }
 
   async uploadAttachment(sessionId: string, file: { name: string; mediaType: string; data: FetchBody }): Promise<MessageAttachment> {
     const url = `${this.#options.baseUrl}/sessions/${encodeURIComponent(sessionId)}/attachments?name=${encodeURIComponent(file.name)}`
-    const res = await this.#fetch(url, {
-      method: 'POST',
-      headers: { ...this.#options.headers, 'content-type': file.mediaType },
-      body: file.data,
-    })
-    if (!res.ok) {
-      const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      throw new WorkerDeckError(payload.error ?? `upload failed with ${res.status}`, res.status)
-    }
+    const res = await this.#callRaw(
+      url,
+      { method: 'POST', headers: { ...this.#options.headers, 'content-type': file.mediaType }, body: file.data },
+      'upload failed',
+    )
     return ((await res.json()) as UploadAttachmentResponse).attachment
   }
 
@@ -407,13 +360,11 @@ export class WorkerDeckClient {
   }
 
   async readProducedFile(sessionId: string, fileId: string): Promise<Blob> {
-    const res = await this.#fetch(this.producedFileUrl(sessionId, fileId), {
-      headers: { ...this.#options.headers },
-    })
-    if (!res.ok) {
-      const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      throw new WorkerDeckError(payload.error ?? `produced file request failed with ${res.status}`, res.status)
-    }
+    const res = await this.#callRaw(
+      this.producedFileUrl(sessionId, fileId),
+      { headers: { ...this.#options.headers } },
+      'produced file request failed',
+    )
     return await res.blob()
   }
 
@@ -422,13 +373,11 @@ export class WorkerDeckClient {
   }
 
   async projectIcon(sessionId: string): Promise<Blob> {
-    const res = await this.#fetch(this.projectIconUrl(sessionId), {
-      headers: { ...this.#options.headers },
-    })
-    if (!res.ok) {
-      const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      throw new WorkerDeckError(payload.error ?? `project icon request failed with ${res.status}`, res.status)
-    }
+    const res = await this.#callRaw(
+      this.projectIconUrl(sessionId),
+      { headers: { ...this.#options.headers } },
+      'project icon request failed',
+    )
     return await res.blob()
   }
 
@@ -579,19 +528,27 @@ export class WorkerDeckClient {
   async toolResultImage(sessionId: string, seq: number, toolUseId: string, partIndex: number): Promise<Blob> {
     const path =
       `/sessions/${encodeURIComponent(sessionId)}/events/${seq}/result` + `?toolUseId=${encodeURIComponent(toolUseId)}&part=${partIndex}`
-    const res = await this.#fetch(`${this.#options.baseUrl}${path}`, {
-      headers: { ...this.#options.headers },
-    })
-    if (!res.ok) {
-      const payload = (await res.json().catch(() => ({}))) as { error?: string }
-      throw new WorkerDeckError(payload.error ?? `image part request failed with ${res.status}`, res.status)
-    }
+    const res = await this.#callRaw(
+      `${this.#options.baseUrl}${path}`,
+      { headers: { ...this.#options.headers } },
+      'image part request failed',
+    )
     return await res.blob()
   }
 
   openQueueSocket(): WebSocket {
     const url = this.#options.buildQueueWsUrl?.() ?? `${this.#options.baseUrl.replace(/^http/, 'ws')}/queue/ws`
     return new this.#WebSocketImpl(url)
+  }
+
+  /** The byte-serving routes' shared failure arm: `#call` owns the same rule for JSON routes. */
+  async #callRaw(url: string, init: NonNullable<Parameters<typeof fetch>[1]>, failure: string): Promise<Response> {
+    const res = await this.#fetch(url, init)
+    if (!res.ok) {
+      const payload = (await res.json().catch(() => ({}))) as { error?: string }
+      throw new WorkerDeckError(payload.error ?? `${failure} with ${res.status}`, res.status)
+    }
+    return res
   }
 
   async #call(method: string, path: string, body?: unknown): Promise<unknown> {
