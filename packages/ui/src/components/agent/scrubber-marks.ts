@@ -19,7 +19,7 @@ export type Cluster = {
   marks: { mark: Mark; y: number }[]
 }
 
-export const nearestMember = (cluster: Cluster, y: number): Mark | undefined => {
+export function nearestMember(cluster: Cluster, y: number): Mark | undefined {
   let best: { mark: Mark; y: number } | undefined
   for (const member of cluster.marks) {
     if (!best || Math.abs(member.y - y) < Math.abs(best.y - y)) {
@@ -67,10 +67,11 @@ export const KIND_NAME: Record<MarkKind, string> = {
 
 export const MIN_MARK = 2
 
-export const doneLine = (turn: Extract<TranscriptItem, { kind: 'turn_result' }>): string =>
-  `${turn.isError ? turn.subtype : 'done'} · ${formatDuration(turn.durationMs)} · ${formatCost(turn.totalCostUsd)}`
+export function doneLine(turn: Extract<TranscriptItem, { kind: 'turn_result' }>): string {
+  return `${turn.isError ? turn.subtype : 'done'} · ${formatDuration(turn.durationMs)} · ${formatCost(turn.totalCostUsd)}`
+}
 
-export const excerpt = (item: TranscriptItem): string => {
+export function excerpt(item: TranscriptItem): string {
   switch (item.kind) {
     case 'user':
     case 'assistant_text':
@@ -101,10 +102,10 @@ export interface BuildMarksOptions {
   recapItemIndex?: number
 }
 
-export const buildMarks = (
+export function buildMarks(
   items: readonly TranscriptItem[],
   { frameParentId, bookmarks = [], recapItemIndex }: BuildMarksOptions = {},
-): Mark[] => {
+): Mark[] {
   const marks: Mark[] = []
   const subagentParents = new Set<string>()
   for (const item of items) {
@@ -164,7 +165,7 @@ export const buildMarks = (
   return marks
 }
 
-export const clusterMarks = (marks: readonly Mark[], railH: number, itemCount: number): Cluster[] => {
+export function clusterMarks(marks: readonly Mark[], railH: number, itemCount: number): Cluster[] {
   const count = Math.max(1, itemCount)
   const h = Math.max(MIN_MARK, Math.round(railH / count))
   const lanes = new Map<Lane, { mark: Mark; y: number }[]>()
@@ -195,10 +196,12 @@ export const clusterMarks = (marks: readonly Mark[], railH: number, itemCount: n
   return clusters
 }
 
-export const approvalCluster = (railH: number): Cluster => ({
-  lane: LANE.approval,
-  kind: 'approval',
-  y: Math.max(0, railH - MIN_MARK),
-  h: MIN_MARK,
-  marks: [],
-})
+export function approvalCluster(railH: number): Cluster {
+  return {
+    lane: LANE.approval,
+    kind: 'approval',
+    y: Math.max(0, railH - MIN_MARK),
+    h: MIN_MARK,
+    marks: [],
+  }
+}

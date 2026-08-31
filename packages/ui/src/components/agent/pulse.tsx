@@ -5,7 +5,7 @@ export const PULSE_MS = 150
 
 export const PULSE_REST = PULSE_FRAMES[PULSE_FRAMES.length - 1]
 
-export const usePrefersReducedMotion = (): boolean => {
+export function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false)
   useEffect(() => {
     const query = window.matchMedia?.('(prefers-reduced-motion: reduce)')
@@ -20,7 +20,7 @@ export const usePrefersReducedMotion = (): boolean => {
   return reduced
 }
 
-export const usePulse = (animated: boolean): string => {
+export function usePulse(animated: boolean): string {
   const reduced = usePrefersReducedMotion()
   const running = animated && !reduced
   const [frame, setFrame] = useState(0)

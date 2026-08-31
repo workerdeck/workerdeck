@@ -158,7 +158,7 @@ export function FileTree({ tree, search, activePath, onOpenFile, onCollapse, sty
   )
 }
 
-const Row = ({
+function Row({
   label,
   detail,
   title,
@@ -176,7 +176,7 @@ const Row = ({
   indent?: number
   active?: boolean
   onClick: () => void
-}) => {
+}) {
   const ref = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (active) {
@@ -204,14 +204,16 @@ const Row = ({
   )
 }
 
-const fileName = (relative: string): string => relative.slice(relative.lastIndexOf('/') + 1)
+function fileName(relative: string): string {
+  return relative.slice(relative.lastIndexOf('/') + 1)
+}
 
-const directoryOf = (relative: string): string | undefined => {
+function directoryOf(relative: string): string | undefined {
   const cut = relative.lastIndexOf('/')
   return cut === -1 ? undefined : relative.slice(0, cut)
 }
 
-const EntryIcon = ({ type }: { type: HostDirEntry['type'] }) => {
+function EntryIcon({ type }: { type: HostDirEntry['type'] }) {
   if (type === 'symlink') {
     return <Link2 className="size-3.5 shrink-0 text-fg-4" />
   }

@@ -114,7 +114,7 @@ export function CodeEditor({ path, value, onChange, onSave, readOnly, className 
   )
 }
 
-const useDocumentTheme = (): string | null => {
+function useDocumentTheme(): string | null {
   const [theme, setTheme] = useState<string | null>(() =>
     typeof document === 'undefined' ? null : document.documentElement.getAttribute('data-theme'),
   )
@@ -129,10 +129,12 @@ const useDocumentTheme = (): string | null => {
   return theme
 }
 
-const monacoTheme = (theme: string | null): string => (theme === 'light' ? 'wd-light' : 'wd-dark')
+function monacoTheme(theme: string | null): string {
+  return theme === 'light' ? 'wd-light' : 'wd-dark'
+}
 
 let monacoPromise: Promise<typeof Monaco> | undefined
-const loadMonaco = (): Promise<typeof Monaco> => {
+function loadMonaco(): Promise<typeof Monaco> {
   monacoPromise ??= (async () => {
     const api = await import('monaco-editor')
     api.editor.defineTheme('wd-dark', {
@@ -152,7 +154,7 @@ const loadMonaco = (): Promise<typeof Monaco> => {
   return monacoPromise
 }
 
-const languageOf = (path: string): string => {
+function languageOf(path: string): string {
   const name = path.slice(path.lastIndexOf('/') + 1)
   const byName = FILENAME_LANGUAGES[name.toLowerCase()]
   if (byName) {

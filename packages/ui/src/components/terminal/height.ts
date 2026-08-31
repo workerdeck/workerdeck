@@ -21,11 +21,11 @@ export type HeightEpoch = CellMetrics & {
   cache: WeakMap<TranscriptItem, ComputedHeight>
 }
 
-export const createHeightEpoch = (width: number, ch: number, line: number): HeightEpoch => {
+export function createHeightEpoch(width: number, ch: number, line: number): HeightEpoch {
   return { width, ch, line, cache: new WeakMap() }
 }
 
-export const estimateBlockPx = (block: TerminalBlock, epoch: HeightEpoch): number => {
+export function estimateBlockPx(block: TerminalBlock, epoch: HeightEpoch): number {
   if (!('item' in block)) {
     return blockHeight(block, epoch).px
   }
@@ -40,13 +40,13 @@ export const estimateBlockPx = (block: TerminalBlock, epoch: HeightEpoch): numbe
 
 export const BRIEF_LINES = 4
 
-export const briefPx = (text: string, m: CellMetrics): number => {
+export function briefPx(text: string, m: CellMetrics): number {
   const cols = Math.max(1, Math.floor(m.width / m.ch + EPS))
   return (Math.min(textLines(text, cols).lines, BRIEF_LINES) + 1) * m.line
 }
 
 // Absolutely positioned so the probe adds no layout and cannot re-trigger the ResizeObserver that called it.
-export const measureCh = (surface: HTMLElement): number => {
+export function measureCh(surface: HTMLElement): number {
   const probe = document.createElement('span')
   probe.textContent = '0'.repeat(200)
   probe.style.position = 'absolute'
@@ -75,11 +75,13 @@ const WIDE_RANGES: [number, number][] = [
   [0x20000, 0x3fffd],
 ]
 
-const isWide = (cp: number): boolean => WIDE_RANGES.some(([lo, hi]) => cp >= lo && cp <= hi)
+function isWide(cp: number): boolean {
+  return WIDE_RANGES.some(([lo, hi]) => cp >= lo && cp <= hi)
+}
 
 const PICTOGRAPHIC = /\p{Extended_Pictographic}/u
 
-const clusterCells = (cluster: string): { w: number; exact: boolean } => {
+function clusterCells(cluster: string): { w: number; exact: boolean } {
   if (PICTOGRAPHIC.test(cluster) || cluster.includes('‍') || cluster.includes('️')) {
     return { w: 2, exact: false }
   }
@@ -104,7 +106,7 @@ const BREAK_AFTER = new Set(['-', '–', '—', '?'])
 const PLAIN_ASCII = /^[\x20-\x7e]*$/
 
 // Must stay semantically identical to `tokenize`; the height audit runs content that takes each path.
-const tokenizeAscii = (line: string): Token[] => {
+function tokenizeAscii(line: string): Token[] {
   const tokens: Token[] = []
   let wordW = 0
   const flushWord = () => {
@@ -137,7 +139,7 @@ const tokenizeAscii = (line: string): Token[] => {
   return tokens
 }
 
-const tokenize = (line: string): Token[] => {
+function tokenize(line: string): Token[] {
   if (PLAIN_ASCII.test(line)) {
     return tokenizeAscii(line)
   }
@@ -195,7 +197,7 @@ const tokenize = (line: string): Token[] => {
   return tokens
 }
 
-const wrapOne = (line: string, cols: number): { lines: number; exact: boolean } => {
+function wrapOne(line: string, cols: number): { lines: number; exact: boolean } {
   if (cols <= 0) {
     return { lines: 1, exact: false }
   }
@@ -230,7 +232,7 @@ const wrapOne = (line: string, cols: number): { lines: number; exact: boolean } 
   return { lines, exact }
 }
 
-export const textLines = (text: string, cols: number): { lines: number; exact: boolean } => {
+export function textLines(text: string, cols: number): { lines: number; exact: boolean } {
   let lines = 0
   let exact = true
   for (const hard of text.split('\n')) {
@@ -246,17 +248,19 @@ const EPS = 1e-4
 
 type Acc = { px: number; exact: boolean }
 
-const add = (a: Acc, b: Acc): Acc => ({ px: a.px + b.px, exact: a.exact && b.exact })
+function add(a: Acc, b: Acc): Acc {
+  return { px: a.px + b.px, exact: a.exact && b.exact }
+}
 
 // `indent` resolves against the row's own `--term-cell`, so `columns={3} indent={1}` loses 3ch to the indent and 3ch to the gutter.
-const rowH = (text: string, m: CellMetrics, { indentCells = 0, gutterCells = 2, extraPx = 0 } = {}): Acc => {
+function rowH(text: string, m: CellMetrics, { indentCells = 0, gutterCells = 2, extraPx = 0 } = {}): Acc {
   const bodyPx = m.width - extraPx - (indentCells + gutterCells) * m.ch
   const cols = Math.floor(bodyPx / m.ch + EPS)
   const { lines, exact } = textLines(text, cols)
   return { px: lines * m.line, exact }
 }
 
-const stripInline = (s: string): string => {
+function stripInline(s: string): string {
   return s
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
@@ -279,7 +283,7 @@ type MdBlock =
   | { t: 'hr' }
 
 // CommonMark: a trailing double space or backslash is a hard break; any other newline is soft and joins with a space.
-const hardLines = (source: string[]): string[] => {
+function hardLines(source: string[]): string[] {
   const out: string[] = []
   let current: string[] = []
   for (const raw of source) {
@@ -296,7 +300,7 @@ const hardLines = (source: string[]): string[] => {
   return out
 }
 
-const parseBlocks = (md: string): MdBlock[] => {
+function parseBlocks(md: string): MdBlock[] {
   const lines = md.split('\n')
   const blocks: MdBlock[] = []
   let i = 0
@@ -430,7 +434,7 @@ const parseBlocks = (md: string): MdBlock[] => {
   return blocks
 }
 
-export const markdownHeight = (md: string, m: CellMetrics, extraPx = 0): Acc => {
+export function markdownHeight(md: string, m: CellMetrics, extraPx = 0): Acc {
   const bodyPx = m.width - extraPx - 2 * m.ch
   const cols = Math.floor(bodyPx / m.ch + EPS)
   const blocks = parseBlocks(md)
@@ -505,7 +509,7 @@ export const markdownHeight = (md: string, m: CellMetrics, extraPx = 0): Acc => 
   return { px: Math.max(acc.px, m.line), exact: acc.exact }
 }
 
-const diffHeight = (patch: FilePatch, m: CellMetrics, extraPx = 0): Acc => {
+function diffHeight(patch: FilePatch, m: CellMetrics, extraPx = 0): Acc {
   const walk = (hunk: PatchHunk) => {
     let newLine = hunk.newStart
     let oldLine = hunk.oldStart
@@ -539,7 +543,7 @@ const diffHeight = (patch: FilePatch, m: CellMetrics, extraPx = 0): Acc => {
   return acc
 }
 
-const toolRowHeight = (item: ToolCallItem, m: CellMetrics, extraPx: number): Acc => {
+function toolRowHeight(item: ToolCallItem, m: CellMetrics, extraPx: number): Acc {
   const preview = toolInputPreview(item.input)
   const backend = item.backend && item.backend !== 'server' ? ` · ${item.backend}` : ''
   let acc = rowH(`${item.name}(${preview})${backend}`, m, { gutterCells: 2, extraPx })
@@ -567,9 +571,11 @@ const toolRowHeight = (item: ToolCallItem, m: CellMetrics, extraPx: number): Acc
 }
 
 // Nested rows are stepped in behind a rule: `border-l-2` (2px) + `pl-3` (12px) on the wrapper in `agent/Transcript.tsx`.
-const nestedExtraPx = (item: TranscriptItem): number => ('parentToolUseId' in item && item.parentToolUseId != null ? 14 : 0)
+function nestedExtraPx(item: TranscriptItem): number {
+  return 'parentToolUseId' in item && item.parentToolUseId != null ? 14 : 0
+}
 
-export const itemHeight = (item: TranscriptItem, m: CellMetrics): ComputedHeight => {
+export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight {
   const extraPx = nestedExtraPx(item)
   switch (item.kind) {
     case 'user': {
@@ -615,7 +621,7 @@ export const itemHeight = (item: TranscriptItem, m: CellMetrics): ComputedHeight
   }
 }
 
-export const blockHeight = (block: TerminalBlock, m: CellMetrics): ComputedHeight => {
+export function blockHeight(block: TerminalBlock, m: CellMetrics): ComputedHeight {
   if ('task' in block) {
     return rowH(taskSummary(block.task, taskChildItems(block)), m)
   }

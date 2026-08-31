@@ -26,12 +26,12 @@ export interface ScrubberProps {
   className?: string
 }
 
-const peekContent = (
+function peekContent(
   cluster: Cluster,
   first: Mark | undefined,
   items: readonly TranscriptItem[],
   pendingApprovals: readonly PermissionRequest[],
-): ReactNode => {
+): ReactNode {
   const more = cluster.marks.length > 1 ? ` · ${cluster.marks.length} marks` : ''
   let body: ReactNode = null
   if (cluster.kind === 'approval') {

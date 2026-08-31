@@ -19,7 +19,7 @@ export function ToolResultImageProvider({ value, children }: { value: ToolResult
   return <ImageContext.Provider value={value ?? noop}>{children}</ImageContext.Provider>
 }
 
-export const useToolResultImageLoader = (): ToolResultImageLoader => {
+export function useToolResultImageLoader(): ToolResultImageLoader {
   return useContext(ImageContext)
 }
 
@@ -27,7 +27,7 @@ const MOUNT_SETTLE_MS = 150
 
 export type ToolResultImageState = { src?: string; failed: boolean }
 
-export const useToolResultImageSrc = (ref: ToolResultImageRef): ToolResultImageState => {
+export function useToolResultImageSrc(ref: ToolResultImageRef): ToolResultImageState {
   const load = useToolResultImageLoader()
   const [state, setState] = useState<ToolResultImageState>({ failed: false })
   const { toolUseId, sourceSeq, partIndex, mediaType, bytes } = ref
@@ -59,7 +59,7 @@ const CACHE_BUDGET_BYTES = 64 * 1024 * 1024
 
 type Entry = { pending: Promise<string | undefined>; url?: string; bytes: number }
 
-export const useToolResultImages = (client: WorkerDeckClient, sessionId: string | undefined): ToolResultImageLoader => {
+export function useToolResultImages(client: WorkerDeckClient, sessionId: string | undefined): ToolResultImageLoader {
   const cache = useRef(new Map<string, Entry>())
   useEffect(
     () => () => {
@@ -109,7 +109,7 @@ export const useToolResultImages = (client: WorkerDeckClient, sessionId: string 
   )
 }
 
-const evict = (cache: Map<string, Entry>, keep: string): void => {
+function evict(cache: Map<string, Entry>, keep: string): void {
   let held = 0
   for (const entry of cache.values()) {
     held += entry.bytes

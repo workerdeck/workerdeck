@@ -65,7 +65,7 @@ export function SkillsDialog({ skills, open, onOpenChange, onUse, className }: S
   )
 }
 
-const SkillList = ({ skills, onSelect }: { skills: SkillInfo[] | undefined; onSelect: (name: string) => void }) => {
+function SkillList({ skills, onSelect }: { skills: SkillInfo[] | undefined; onSelect: (name: string) => void }) {
   if (!skills) {
     return <p className="py-6 text-center text-body-sm text-fg-4">Skills are listed once the session connects — send a message first.</p>
   }
@@ -110,7 +110,7 @@ const SkillList = ({ skills, onSelect }: { skills: SkillInfo[] | undefined; onSe
   )
 }
 
-const SkillView = ({ skill, onUse, onUsed }: { skill: SkillInfo; onUse?: (skill: SkillInfo) => void; onUsed: () => void }) => {
+function SkillView({ skill, onUse, onUsed }: { skill: SkillInfo; onUse?: (skill: SkillInfo) => void; onUsed: () => void }) {
   return (
     <div className="flex flex-col gap-4">
       <div>

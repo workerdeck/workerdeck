@@ -56,7 +56,7 @@ import {
 } from './transcript-variant.tsx'
 import { UsageDialog } from './UsageDialog.tsx'
 
-const PromptSurface = ({
+function PromptSurface({
   terminal,
   metrics,
   affordances,
@@ -66,7 +66,7 @@ const PromptSurface = ({
   metrics?: TerminalMetrics
   affordances?: TerminalAffordances | boolean
   children: ReactNode
-}) => {
+}) {
   if (!terminal) {
     return <div className="mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] flex-col gap-2">{children}</div>
   }
@@ -768,11 +768,11 @@ export function SessionPanel({
   )
 }
 
-const useHostImage = (
+function useHostImage(
   client: WorkerDeckClient,
   sessionId: string | undefined,
   producedFiles: Record<string, ProducedFileRef> | undefined,
-): ((path: string) => Promise<string | undefined>) => {
+): (path: string) => Promise<string | undefined> {
   const cache = useRef(new Map<string, Promise<string | undefined>>())
   const objectUrls = useRef<string[]>([])
   useEffect(
@@ -831,7 +831,7 @@ const IMAGE_MEDIA_TYPES: Record<string, string> = {
   webp: 'image/webp',
 }
 
-const Notice = ({ level, onDismiss, children }: { level: 'warning' | 'error'; onDismiss?: () => void; children: ReactNode }) => {
+function Notice({ level, onDismiss, children }: { level: 'warning' | 'error'; onDismiss?: () => void; children: ReactNode }) {
   return (
     <div className="px-3 pt-2">
       <div

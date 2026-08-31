@@ -10,9 +10,13 @@ export interface ContextDialogProps {
   className?: string
 }
 
-const cssColor = (color: string): string | undefined => (typeof CSS !== 'undefined' && CSS.supports('color', color) ? color : undefined)
+function cssColor(color: string): string | undefined {
+  return typeof CSS !== 'undefined' && CSS.supports('color', color) ? color : undefined
+}
 
-const usageTint = (pct: number) => (pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-warning' : 'bg-accent')
+function usageTint(pct: number) {
+  return pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-warning' : 'bg-accent'
+}
 
 export function ContextDialog({ usage, open, onOpenChange, className }: ContextDialogProps) {
   return (

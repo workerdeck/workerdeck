@@ -51,7 +51,7 @@ export interface ChoicesProps {
   label: string
 }
 
-const isTyping = (element: Element | null): boolean => {
+function isTyping(element: Element | null): boolean {
   if (!(element instanceof HTMLElement)) {
     return false
   }

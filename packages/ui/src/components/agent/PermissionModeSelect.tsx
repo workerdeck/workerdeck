@@ -59,7 +59,9 @@ export const PERMISSION_MODES: PermissionModeMeta[] = [
   },
 ]
 
-export const permissionModeMeta = (mode: PermissionMode): PermissionModeMeta | undefined => PERMISSION_MODES.find((m) => m.value === mode)
+export function permissionModeMeta(mode: PermissionMode): PermissionModeMeta | undefined {
+  return PERMISSION_MODES.find((m) => m.value === mode)
+}
 
 export type PermissionModeChoice = {
   value: PermissionMode
@@ -69,7 +71,7 @@ export type PermissionModeChoice = {
   disabled?: boolean
 }
 
-export const permissionModeChoices = (modes?: readonly PermissionMode[], canBypass?: boolean): PermissionModeChoice[] => {
+export function permissionModeChoices(modes?: readonly PermissionMode[], canBypass?: boolean): PermissionModeChoice[] {
   const offered = modes ? PERMISSION_MODES.filter((m) => modes.includes(m.value)) : PERMISSION_MODES
   return offered.map((m) => ({
     value: m.value,

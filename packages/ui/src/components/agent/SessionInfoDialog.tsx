@@ -57,7 +57,7 @@ export function SessionInfoDialog({ state, client, sessionId, open, onOpenChange
   )
 }
 
-const CopyRow = ({ label, value }: { label: string; value: string }) => {
+function CopyRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-2 py-1.5">
       <div className="min-w-0 flex-1">
@@ -69,7 +69,7 @@ const CopyRow = ({ label, value }: { label: string; value: string }) => {
   )
 }
 
-const SessionFiles = ({ client, sessionId, open }: { client: WorkerDeckClient; sessionId: string | undefined; open: boolean }) => {
+function SessionFiles({ client, sessionId, open }: { client: WorkerDeckClient; sessionId: string | undefined; open: boolean }) {
   const [files, setFiles] = useState<SessionFileInfo[] | undefined>()
   const [loading, setLoading] = useState(false)
 

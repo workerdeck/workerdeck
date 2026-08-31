@@ -113,6 +113,6 @@ export function FileViewer({
   )
 }
 
-const Centred = ({ children }: { children: ReactNode }) => (
-  <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6">{children}</div>
-)
+function Centred({ children }: { children: ReactNode }) {
+  return <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6">{children}</div>
+}

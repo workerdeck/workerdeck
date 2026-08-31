@@ -18,7 +18,7 @@ type Mark = {
 
 type Cluster = { lane: Lane; kind: MarkKind; y: number; h: number; marks: { mark: Mark; y: number }[] }
 
-const nearestMember = (cluster: Cluster, y: number): Mark | undefined => {
+function nearestMember(cluster: Cluster, y: number): Mark | undefined {
   let best: { mark: Mark; y: number } | undefined
   for (const member of cluster.marks) {
     if (!best || Math.abs(member.y - y) < Math.abs(best.y - y)) {
@@ -66,16 +66,17 @@ const KIND_NAME: Record<MarkKind, string> = {
 
 const MIN_MARK = 2
 
-export const railScale = (railH: number, totalSize: number, viewportH: number): number => {
+export function railScale(railH: number, totalSize: number, viewportH: number): number {
   return totalSize > 0 ? railH / Math.max(totalSize, viewportH) : 0
 }
 
 type Segment = { response?: number; turn?: number; failed?: boolean }
 
-const doneLine = (turn: Extract<TranscriptItem, { kind: 'turn_result' }>): string =>
-  `${turn.isError ? turn.subtype : 'done'} · ${formatDuration(turn.durationMs)} · ${formatCost(turn.totalCostUsd)}`
+function doneLine(turn: Extract<TranscriptItem, { kind: 'turn_result' }>): string {
+  return `${turn.isError ? turn.subtype : 'done'} · ${formatDuration(turn.durationMs)} · ${formatCost(turn.totalCostUsd)}`
+}
 
-const excerpt = (item: TranscriptItem): string => {
+function excerpt(item: TranscriptItem): string {
   switch (item.kind) {
     case 'user':
     case 'assistant_text':
@@ -118,7 +119,7 @@ export interface TerminalScrubberProps {
 }
 
 // Exported for `test/scrubber.test.ts` only, never from the package.
-export const buildClusters = (props: TerminalScrubberProps, railH: number): Cluster[] => {
+export function buildClusters(props: TerminalScrubberProps, railH: number): Cluster[] {
   const {
     items,
     bookmarks,
@@ -241,11 +242,7 @@ export const buildClusters = (props: TerminalScrubberProps, railH: number): Clus
   return clusters
 }
 
-const peekContent = (
-  cluster: Cluster,
-  first: Mark | undefined,
-  { items, pendingApprovals, recapRow }: TerminalScrubberProps,
-): ReactNode => {
+function peekContent(cluster: Cluster, first: Mark | undefined, { items, pendingApprovals, recapRow }: TerminalScrubberProps): ReactNode {
   const more = cluster.marks.length > 1 ? ` · ${cluster.marks.length} marks` : ''
   let body: ReactNode = null
   if (cluster.kind === 'approval') {

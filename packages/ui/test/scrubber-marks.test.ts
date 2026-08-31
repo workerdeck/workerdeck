@@ -3,38 +3,50 @@ import type { TranscriptItem } from '@workerdeck/react'
 import { buildMarks, clusterMarks, nearestMember } from '../src/components/agent/scrubber-marks.ts'
 
 let seq = 0
-const user = (text: string): TranscriptItem => ({ kind: 'user', id: `u${++seq}`, text })
-const assistant = (text: string, parentToolUseId: string | null = null): TranscriptItem => ({
-  kind: 'assistant_text',
-  id: `a${++seq}`,
-  text,
-  streaming: false,
-  parentToolUseId,
-})
-const turn = (isError = false): TranscriptItem => ({
-  kind: 'turn_result',
-  id: `r${++seq}`,
-  subtype: isError ? 'error_during_execution' : 'success',
-  isError,
-  durationMs: 1000,
-  totalCostUsd: 0.01,
-})
-const errorNotice = (text: string): TranscriptItem => ({
-  kind: 'notice',
-  id: `n${++seq}`,
-  level: 'error',
-  text,
-})
-const toolCall = (status: 'running' | 'settled' | 'failed', parentToolUseId: string | null = null, id = `t${++seq}`): TranscriptItem => ({
-  kind: 'tool_call',
-  id,
-  name: 'Bash',
-  input: {},
-  parentToolUseId,
-  status,
-})
+function user(text: string): TranscriptItem {
+  return { kind: 'user', id: `u${++seq}`, text }
+}
+function assistant(text: string, parentToolUseId: string | null = null): TranscriptItem {
+  return {
+    kind: 'assistant_text',
+    id: `a${++seq}`,
+    text,
+    streaming: false,
+    parentToolUseId,
+  }
+}
+function turn(isError = false): TranscriptItem {
+  return {
+    kind: 'turn_result',
+    id: `r${++seq}`,
+    subtype: isError ? 'error_during_execution' : 'success',
+    isError,
+    durationMs: 1000,
+    totalCostUsd: 0.01,
+  }
+}
+function errorNotice(text: string): TranscriptItem {
+  return {
+    kind: 'notice',
+    id: `n${++seq}`,
+    level: 'error',
+    text,
+  }
+}
+function toolCall(status: 'running' | 'settled' | 'failed', parentToolUseId: string | null = null, id = `t${++seq}`): TranscriptItem {
+  return {
+    kind: 'tool_call',
+    id,
+    name: 'Bash',
+    input: {},
+    parentToolUseId,
+    status,
+  }
+}
 
-const kinds = (items: TranscriptItem[]) => buildMarks(items).map((m) => `${m.kind}@${m.itemIndex}`)
+function kinds(items: TranscriptItem[]) {
+  return buildMarks(items).map((m) => `${m.kind}@${m.itemIndex}`)
+}
 
 describe('buildMarks', () => {
   it('marks a prompt and its turn as one right-lane mark anchored on the answer', () => {

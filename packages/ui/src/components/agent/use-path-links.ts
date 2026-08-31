@@ -9,7 +9,7 @@ const FILE_RE = /^([\w.@-]+\.[A-Za-z0-9]{1,10})(?::(\d+))?$/
 
 const COVERAGE = 0.6
 
-export const matchPath = (text: string, inCode: boolean): PathHit | undefined => {
+export function matchPath(text: string, inCode: boolean): PathHit | undefined {
   const trimmed = text.trim()
   if (!trimmed || trimmed.endsWith('/')) {
     return undefined
@@ -21,7 +21,7 @@ export const matchPath = (text: string, inCode: boolean): PathHit | undefined =>
   return { path: hit[1]!, line: hit[2] ? Number(hit[2]) : undefined }
 }
 
-const hitFor = (element: HTMLElement | undefined): PathHit | undefined => {
+function hitFor(element: HTMLElement | undefined): PathHit | undefined {
   if (!element) {
     return undefined
   }
@@ -37,7 +37,7 @@ const hitFor = (element: HTMLElement | undefined): PathHit | undefined => {
   return hit
 }
 
-export const usePathLinks = ({
+export function usePathLinks({
   container,
   onOpen,
   enabled = true,
@@ -47,7 +47,7 @@ export const usePathLinks = ({
   onOpen: (hit: PathHit) => void
   enabled?: boolean
   ignore?: string
-}) => {
+}) {
   useEffect(() => {
     const root = container.current
     if (!root || !enabled) {
@@ -118,7 +118,7 @@ export const usePathLinks = ({
   }, [container, onOpen, enabled, ignore])
 }
 
-export const resolveAgainstCwd = (path: string, cwd: string | undefined): string => {
+export function resolveAgainstCwd(path: string, cwd: string | undefined): string {
   if (path.startsWith('/')) {
     return path
   }

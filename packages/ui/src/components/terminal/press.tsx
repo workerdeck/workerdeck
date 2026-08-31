@@ -49,7 +49,7 @@ export function Pressable({
   )
 }
 
-export const useRevealOnOpen = (open: boolean) => {
+export function useRevealOnOpen(open: boolean) {
   const ref = useRef<HTMLDivElement>(null)
   const previous = useRef(open)
   useEffect(() => {
@@ -80,7 +80,7 @@ export const useRevealOnOpen = (open: boolean) => {
   return ref
 }
 
-const scrollParent = (from: HTMLElement): HTMLElement | null => {
+function scrollParent(from: HTMLElement): HTMLElement | null {
   let node = from.parentElement
   while (node) {
     const overflow = getComputedStyle(node).overflowY

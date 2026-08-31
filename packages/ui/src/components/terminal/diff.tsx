@@ -3,9 +3,11 @@ import { Row } from './row.tsx'
 
 type LineKind = 'context' | 'add' | 'remove'
 
-const kindOf = (line: string): LineKind => (line.startsWith('+') ? 'add' : line.startsWith('-') ? 'remove' : 'context')
+function kindOf(line: string): LineKind {
+  return line.startsWith('+') ? 'add' : line.startsWith('-') ? 'remove' : 'context'
+}
 
-const hunkRows = (hunk: PatchHunk): { kind: LineKind; number: number; text: string }[] => {
+function hunkRows(hunk: PatchHunk): { kind: LineKind; number: number; text: string }[] {
   let oldLine = hunk.oldStart
   let newLine = hunk.newStart
   const rows = []
@@ -27,7 +29,7 @@ const hunkRows = (hunk: PatchHunk): { kind: LineKind; number: number; text: stri
 
 const MARKER = { context: ' ', add: '+', remove: '-' } as const
 
-export const previewPatch = (input: unknown): FilePatch | undefined => {
+export function previewPatch(input: unknown): FilePatch | undefined {
   const edit = input as { file_path?: unknown; old_string?: unknown; new_string?: unknown } | null
   const before = typeof edit?.old_string === 'string' ? edit.old_string : undefined
   const after = typeof edit?.new_string === 'string' ? edit.new_string : undefined

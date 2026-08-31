@@ -1,12 +1,12 @@
 import { useEffect, useState, type RefObject } from 'react'
 import { createHeightEpoch, measureCh, type HeightEpoch } from '../terminal/height.ts'
 
-export const useHeightEpoch = (options: {
+export function useHeightEpoch(options: {
   terminal: boolean
   fontSize?: number
   lineHeight?: number
   rowsRef: RefObject<HTMLDivElement | null>
-}): HeightEpoch | null => {
+}): HeightEpoch | null {
   const { terminal, fontSize, lineHeight, rowsRef } = options
   const [epoch, setEpoch] = useState<HeightEpoch | null>(null)
   useEffect(() => {

@@ -6,35 +6,43 @@ import { taskSummary } from '../src/components/terminal/tool-run.ts'
 import { gapBefore, positionInRow, rowIndexForItem, rowItem, type TranscriptRow } from '../src/components/agent/transcript-rows.ts'
 
 let seq = 0
-const tool = (name: string, parentToolUseId: string | null = null, id = `t${++seq}`): TranscriptItem => ({
-  kind: 'tool_call',
-  id,
-  name,
-  input: {},
-  parentToolUseId,
-  status: 'settled',
-})
-const text = (body: string, parentToolUseId: string | null = null): TranscriptItem => ({
-  kind: 'assistant_text',
-  id: `a${++seq}`,
-  text: body,
-  streaming: false,
-  parentToolUseId,
-})
-const user = (body: string, parent?: string): TranscriptItem => ({
-  kind: 'user',
-  id: `u${++seq}`,
-  text: body,
-  ...(parent !== undefined ? { parentToolUseId: parent } : {}),
-})
-const task = (id: string, input: unknown = {}): TranscriptItem => ({
-  kind: 'tool_call',
-  id,
-  name: 'Task',
-  input,
-  parentToolUseId: null,
-  status: 'settled',
-})
+function tool(name: string, parentToolUseId: string | null = null, id = `t${++seq}`): TranscriptItem {
+  return {
+    kind: 'tool_call',
+    id,
+    name,
+    input: {},
+    parentToolUseId,
+    status: 'settled',
+  }
+}
+function text(body: string, parentToolUseId: string | null = null): TranscriptItem {
+  return {
+    kind: 'assistant_text',
+    id: `a${++seq}`,
+    text: body,
+    streaming: false,
+    parentToolUseId,
+  }
+}
+function user(body: string, parent?: string): TranscriptItem {
+  return {
+    kind: 'user',
+    id: `u${++seq}`,
+    text: body,
+    ...(parent !== undefined ? { parentToolUseId: parent } : {}),
+  }
+}
+function task(id: string, input: unknown = {}): TranscriptItem {
+  return {
+    kind: 'tool_call',
+    id,
+    name: 'Task',
+    input,
+    parentToolUseId: null,
+    status: 'settled',
+  }
+}
 
 // Each is a shape the stream can really take; `parallel` is the one the contiguous model breaks on.
 const TRANSCRIPTS: Record<string, TranscriptItem[]> = {
@@ -56,16 +64,17 @@ const TRANSCRIPTS: Record<string, TranscriptItem[]> = {
   grandchild: [task('A'), tool('Task', 'A', 'B'), tool('Read', 'B'), text('done')],
 }
 
-const buildRows = (items: TranscriptItem[], boundary?: number): TranscriptRow[] =>
-  boundary === undefined
+function buildRows(items: TranscriptItem[], boundary?: number): TranscriptRow[] {
+  return boundary === undefined
     ? terminalBlocks(items, 0, true)
     : [
         ...terminalBlocks(items.slice(0, boundary), 0, true),
         { key: 'recap' as const, line: 'check' },
         ...terminalBlocks(items.slice(boundary), boundary, true),
       ]
+}
 
-const contains = (row: TranscriptRow, item: TranscriptItem): boolean => {
+function contains(row: TranscriptRow, item: TranscriptItem): boolean {
   if ('run' in row) {
     return (row.run as TranscriptItem[]).includes(item)
   }

@@ -8,7 +8,7 @@ export function TranscriptVariantProvider({ value, children }: { value: Transcri
   return <VariantContext.Provider value={value}>{children}</VariantContext.Provider>
 }
 
-export const useTranscriptVariant = (): TranscriptVariant => {
+export function useTranscriptVariant(): TranscriptVariant {
   return useContext(VariantContext)
 }
 
@@ -20,7 +20,7 @@ export function TranscriptDensityProvider({ value, children }: { value: Transcri
   return <DensityContext.Provider value={value}>{children}</DensityContext.Provider>
 }
 
-export const useTranscriptDensity = (): TranscriptDensity => {
+export function useTranscriptDensity(): TranscriptDensity {
   return useContext(DensityContext)
 }
 

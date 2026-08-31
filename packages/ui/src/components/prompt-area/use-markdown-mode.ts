@@ -38,7 +38,7 @@ import { useCallback, useMemo, useState } from 'react'
 export type PromptAreaMode = 'markdown' | 'plain'
 
 /** Returns the other mode. Pure — handy for building custom toggles. */
-export const oppositeMode = (mode: PromptAreaMode): PromptAreaMode => {
+export function oppositeMode(mode: PromptAreaMode): PromptAreaMode {
   return mode === 'markdown' ? 'plain' : 'markdown'
 }
 
@@ -67,7 +67,7 @@ export type MarkdownModeState = {
   toggle: () => void
 }
 
-export const useMarkdownMode = (options: UseMarkdownModeOptions = {}): MarkdownModeState => {
+export function useMarkdownMode(options: UseMarkdownModeOptions = {}): MarkdownModeState {
   const { initialMode = 'markdown', mode: controlledMode, onModeChange } = options
   const isControlled = controlledMode !== undefined
 

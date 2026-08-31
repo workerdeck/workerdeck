@@ -9,6 +9,6 @@ export function ToolResultFetchProvider({ value, children }: { value: ToolResult
   return <FetchContext.Provider value={value ?? noop}>{children}</FetchContext.Provider>
 }
 
-export const useToolResultFetcher = (): ToolResultFetcher => {
+export function useToolResultFetcher(): ToolResultFetcher {
   return useContext(FetchContext)
 }

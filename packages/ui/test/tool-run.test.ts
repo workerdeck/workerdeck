@@ -15,14 +15,16 @@ import {
 type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
 
 let seq = 0
-const call = (name: string, parentToolUseId: string | null = null): ToolCallItem => ({
-  kind: 'tool_call',
-  id: `t${++seq}`,
-  name,
-  input: {},
-  parentToolUseId,
-  status: 'settled',
-})
+function call(name: string, parentToolUseId: string | null = null): ToolCallItem {
+  return {
+    kind: 'tool_call',
+    id: `t${++seq}`,
+    name,
+    input: {},
+    parentToolUseId,
+    status: 'settled',
+  }
+}
 
 describe('toolFamily', () => {
   it('collapses both engines’ shell tools to one family', () => {
@@ -95,15 +97,17 @@ describe('foldsTogether', () => {
   })
 })
 
-const taskCall = (over: Partial<ToolCallItem> = {}): ToolCallItem => ({
-  kind: 'tool_call',
-  id: 'task-1',
-  name: 'Task',
-  input: { subagent_type: 'Explore', description: 'find the auth check' },
-  parentToolUseId: null,
-  status: 'settled',
-  ...over,
-})
+function taskCall(over: Partial<ToolCallItem> = {}): ToolCallItem {
+  return {
+    kind: 'tool_call',
+    id: 'task-1',
+    name: 'Task',
+    input: { subagent_type: 'Explore', description: 'find the auth check' },
+    parentToolUseId: null,
+    status: 'settled',
+    ...over,
+  }
+}
 const brief: TranscriptItem = {
   kind: 'user',
   id: 'u1',

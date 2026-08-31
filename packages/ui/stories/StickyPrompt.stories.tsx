@@ -4,7 +4,7 @@ import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 import { Transcript } from '../src/components/agent/Transcript.tsx'
 import { TranscriptDensityProvider, TranscriptVariantProvider } from '../src/components/agent/transcript-variant.tsx'
 
-const mockItems = (): TranscriptItem[] => {
+function mockItems(): TranscriptItem[] {
   const items: TranscriptItem[] = []
   items.push({
     kind: 'user',

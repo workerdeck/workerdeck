@@ -42,8 +42,9 @@ export interface SessionBrowserProps {
   className?: string
 }
 
-export const rowShapeClass = (active: boolean): string =>
-  cn('px-2 py-1.5 hover:bg-row-hover', active ? 'mr-1 ml-0 rounded-r-md border-l-4 border-l-accent' : 'mx-1 rounded-md')
+export function rowShapeClass(active: boolean): string {
+  return cn('px-2 py-1.5 hover:bg-row-hover', active ? 'mr-1 ml-0 rounded-r-md border-l-4 border-l-accent' : 'mx-1 rounded-md')
+}
 
 export function SessionBrowser({
   rows,
@@ -227,7 +228,7 @@ export function SessionBrowser({
   )
 }
 
-const iconSrcOf = (row: SessionRow | undefined, icons: Record<string, string> | undefined): string | undefined => {
+function iconSrcOf(row: SessionRow | undefined, icons: Record<string, string> | undefined): string | undefined {
   const icon = row?.info.project?.icon
   return icon?.type === 'image' ? icons?.[icon.hash] : undefined
 }
@@ -247,7 +248,7 @@ interface SessionRowItemProps {
   onRevealStep?: (row: SessionRow, toolUseId: string) => void
 }
 
-const SessionRowItem = ({
+function SessionRowItem({
   row,
   active,
   activeSubagentId,
@@ -260,7 +261,7 @@ const SessionRowItem = ({
   onClearContext,
   onSelectSubagent,
   onRevealStep,
-}: SessionRowItemProps) => {
+}: SessionRowItemProps) {
   const { info } = row
   const [editing, setEditing] = useState(false)
 
@@ -306,7 +307,7 @@ const SessionRowItem = ({
   )
 }
 
-const RowAction = ({ label, title, onClick, children }: { label: string; title?: string; onClick: () => void; children: ReactNode }) => {
+function RowAction({ label, title, onClick, children }: { label: string; title?: string; onClick: () => void; children: ReactNode }) {
   return (
     <Button
       variant="ghost"
@@ -324,7 +325,7 @@ const RowAction = ({ label, title, onClick, children }: { label: string; title?:
   )
 }
 
-const FilterRow = ({ label, children }: { label: string; children: React.ReactNode }) => {
+function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2">
       <span aria-hidden className="w-14 shrink-0 truncate text-label text-fg-3">
@@ -335,7 +336,7 @@ const FilterRow = ({ label, children }: { label: string; children: React.ReactNo
   )
 }
 
-const FacetSelect = ({
+function FacetSelect({
   label,
   value,
   options,
@@ -345,7 +346,7 @@ const FacetSelect = ({
   value: string[]
   options: { value: string; label: string }[]
   onChange: (value: string[]) => void
-}) => {
+}) {
   return (
     <div className="flex items-center gap-1">
       <Select multiple value={value} onValueChange={(v) => onChange(v as string[])}>
@@ -375,7 +376,7 @@ const FacetSelect = ({
   )
 }
 
-const OneOfSelect = ({
+function OneOfSelect({
   label,
   value,
   options,
@@ -385,7 +386,7 @@ const OneOfSelect = ({
   value: string
   options: readonly { value: string; label: string }[]
   onChange: (value: string) => void
-}) => {
+}) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as string)}>
       <SelectTrigger aria-label={label} className="w-full min-w-0">

@@ -13,12 +13,12 @@ export type GridReport = {
 
 const SELECTOR = '.term-row, .term-block, .term-blank, .term-li, tr'
 
-const offGrid = (value: number, step: number): number => {
+function offGrid(value: number, step: number): number {
   const remainder = ((value % step) + step) % step
   return Math.min(remainder, step - remainder)
 }
 
-export const auditGrid = (surface: HTMLElement): GridReport => {
+export function auditGrid(surface: HTMLElement): GridReport {
   const style = getComputedStyle(surface)
   const line = Number.parseFloat(style.getPropertyValue('--term-line'))
   // From the content top, not the border box, so the report is independent of the surface's own padding.

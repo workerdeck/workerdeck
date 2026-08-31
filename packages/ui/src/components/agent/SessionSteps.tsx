@@ -15,7 +15,7 @@ export type Step = {
   onSelect: () => void
 }
 
-export const sessionSteps = (info: SessionInfo, onSelect: (toolUseId: string, kind: Step['kind']) => void): Step[] => {
+export function sessionSteps(info: SessionInfo, onSelect: (toolUseId: string, kind: Step['kind']) => void): Step[] {
   const steps = (info.subagents ?? []).map((sub) => {
     const kind = isAgentRecord(sub) ? ('agent' as const) : ('task' as const)
     return {
@@ -32,7 +32,7 @@ export const sessionSteps = (info: SessionInfo, onSelect: (toolUseId: string, ki
   return [...steps.filter((s) => s.kind === 'agent'), ...steps.filter((s) => s.kind === 'task')]
 }
 
-const stepState = (status: SubagentInfo['status']): Step['state'] => {
+function stepState(status: SubagentInfo['status']): Step['state'] {
   switch (status) {
     case 'running': {
       return 'running'
@@ -46,7 +46,9 @@ const stepState = (status: SubagentInfo['status']): Step['state'] => {
   }
 }
 
-export const runningSteps = (steps: readonly Step[]): number => steps.filter((s) => s.state === 'running').length
+export function runningSteps(steps: readonly Step[]): number {
+  return steps.filter((s) => s.state === 'running').length
+}
 
 export function StepToggle({
   expanded,
@@ -114,7 +116,7 @@ export function StepRow({ step, active = false, onSelect }: { step: Step; active
   )
 }
 
-const StepIcon = ({ state, kind }: { state: Step['state']; kind: Step['kind'] }) => {
+function StepIcon({ state, kind }: { state: Step['state']; kind: Step['kind'] }) {
   if (kind === 'task' && state !== 'running' && state !== 'failed') {
     return <Dot className="size-[11px] shrink-0" />
   }

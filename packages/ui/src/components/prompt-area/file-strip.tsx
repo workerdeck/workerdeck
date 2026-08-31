@@ -35,38 +35,48 @@ const FileBody = (
   </>
 )
 
-const File = ({ className }: IconProps) => <Svg className={className}>{FileBody}</Svg>
-const FileText = ({ className }: IconProps) => (
-  <Svg className={className}>
-    {FileBody}
-    <path d="M10 9H8" />
-    <path d="M16 13H8" />
-    <path d="M16 17H8" />
-  </Svg>
-)
-const FileSpreadsheet = ({ className }: IconProps) => (
-  <Svg className={className}>
-    {FileBody}
-    <path d="M8 13h2" />
-    <path d="M14 13h2" />
-    <path d="M8 17h2" />
-    <path d="M14 17h2" />
-  </Svg>
-)
-const FileCode = ({ className }: IconProps) => (
-  <Svg className={className}>
-    {FileBody}
-    <path d="M10 12.5 8 15l2 2.5" />
-    <path d="m14 12.5 2 2.5-2 2.5" />
-  </Svg>
-)
-const ImageIcon = ({ className }: IconProps) => (
-  <Svg className={className}>
-    <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-    <circle cx="9" cy="9" r="2" />
-    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-  </Svg>
-)
+function File({ className }: IconProps) {
+  return <Svg className={className}>{FileBody}</Svg>
+}
+function FileText({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      {FileBody}
+      <path d="M10 9H8" />
+      <path d="M16 13H8" />
+      <path d="M16 17H8" />
+    </Svg>
+  )
+}
+function FileSpreadsheet({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      {FileBody}
+      <path d="M8 13h2" />
+      <path d="M14 13h2" />
+      <path d="M8 17h2" />
+      <path d="M14 17h2" />
+    </Svg>
+  )
+}
+function FileCode({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      {FileBody}
+      <path d="M10 12.5 8 15l2 2.5" />
+      <path d="m14 12.5 2 2.5-2 2.5" />
+    </Svg>
+  )
+}
+function ImageIcon({ className }: IconProps) {
+  return (
+    <Svg className={className}>
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+    </Svg>
+  )
+}
 
 type FileStripProps = {
   files: PromptAreaFile[]
@@ -79,7 +89,7 @@ type FileStripProps = {
 const COLLAPSE_THRESHOLD = 3
 
 /** Pick a lucide icon key based on MIME type. */
-const getFileIconKey = (type?: string): 'pdf' | 'spreadsheet' | 'code' | 'image' | 'default' => {
+function getFileIconKey(type?: string): 'pdf' | 'spreadsheet' | 'code' | 'image' | 'default' {
   if (!type) {
     return 'default'
   }
@@ -107,7 +117,7 @@ const FILE_ICONS = {
 } as const
 
 /** Format bytes into a human-readable string. */
-const formatFileSize = (bytes: number): string => {
+function formatFileSize(bytes: number): string {
   if (bytes < 1024) {
     return `${bytes} B`
   }
@@ -121,7 +131,7 @@ const formatFileSize = (bytes: number): string => {
 }
 
 /** Extract a short extension label from a filename (e.g., "PDF", "CSV"). */
-const getExtensionLabel = (name: string): string | null => {
+function getExtensionLabel(name: string): string | null {
   const dot = name.lastIndexOf('.')
   if (dot === -1 || dot === name.length - 1) {
     return null

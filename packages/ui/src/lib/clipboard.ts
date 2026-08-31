@@ -1,4 +1,4 @@
-export const copyText = async (value: string): Promise<boolean> => {
+export async function copyText(value: string): Promise<boolean> {
   // Optional-chained, not `in`-checked: some embedded webviews expose a `clipboard` object whose `writeText` rejects.
   try {
     if (navigator.clipboard?.writeText) {
@@ -9,7 +9,7 @@ export const copyText = async (value: string): Promise<boolean> => {
   return legacyCopy(value)
 }
 
-const legacyCopy = (value: string): boolean => {
+function legacyCopy(value: string): boolean {
   if (typeof document === 'undefined') {
     return false
   }

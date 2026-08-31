@@ -18,7 +18,7 @@ export const QUESTION_BEHAVIORS: QuestionBehaviorMeta[] = [
   { value: 'deny', label: 'Disabled', description: 'the agent is told to decide on its own' },
 ]
 
-export const parseUserQuestions = (input: Record<string, unknown>): UserQuestion[] => {
+export function parseUserQuestions(input: Record<string, unknown>): UserQuestion[] {
   const raw = Array.isArray(input.questions) ? input.questions : []
   return raw.flatMap((entry): UserQuestion[] => {
     const q = entry as Partial<UserQuestion>
@@ -44,7 +44,7 @@ type Selection = { labels: string[]; other: string; otherActive: boolean }
 
 const EMPTY_SELECTION: Selection = { labels: [], other: '', otherActive: false }
 
-const answerFor = (selection: Selection): string => {
+function answerFor(selection: Selection): string {
   const parts = [...selection.labels]
   if (selection.otherActive && selection.other.trim()) {
     parts.push(selection.other.trim())

@@ -43,7 +43,7 @@ export function EditorTabs({ files, activePath, onActivate, onClose, className }
   )
 }
 
-const Tab = ({
+function Tab({
   file,
   active,
   onActivate,
@@ -55,7 +55,7 @@ const Tab = ({
   onActivate: () => void
   onClose: () => void
   onArrow: (direction: 1 | -1) => void
-}) => {
+}) {
   const dirty = isDirty(file)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {

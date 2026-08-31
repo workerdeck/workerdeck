@@ -31,7 +31,7 @@ import { TerminalSurface } from '../terminal/surface.tsx'
 import { BriefRow, TaskRow, TerminalItemView } from '../terminal/TerminalTranscript.tsx'
 import { ROW_GAP, TranscriptVariantProvider, type TranscriptDensity, type TranscriptVariant } from './transcript-variant.tsx'
 
-const TurnResultRow = ({ item }: { item: Extract<TranscriptItem, { kind: 'turn_result' }> }) => {
+function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_result' }> }) {
   return (
     <div data-slot="turn-result" className="py-1">
       <div className="flex items-center gap-2">
@@ -54,7 +54,7 @@ const TurnResultRow = ({ item }: { item: Extract<TranscriptItem, { kind: 'turn_r
   )
 }
 
-const NoticeRow = ({ item }: { item: Extract<TranscriptItem, { kind: 'notice' }> }) => {
+function NoticeRow({ item }: { item: Extract<TranscriptItem, { kind: 'notice' }> }) {
   return (
     <div
       data-slot="notice"
@@ -68,7 +68,7 @@ const NoticeRow = ({ item }: { item: Extract<TranscriptItem, { kind: 'notice' }>
   )
 }
 
-const TranscriptItemView = ({
+function TranscriptItemView({
   item,
   fileUrl,
   attachmentUrl,
@@ -80,7 +80,7 @@ const TranscriptItemView = ({
   attachmentUrl?: (attachmentId: string) => string
   hostImage?: (path: string) => Promise<string | undefined>
   terminal?: boolean
-}) => {
+}) {
   if (terminal) {
     return <TerminalItemView item={item} fileUrl={fileUrl} />
   }
@@ -127,7 +127,7 @@ const TranscriptItemView = ({
   }
 }
 
-const RecapRow = ({ line, since, terminal }: { line: string; since?: number; terminal?: boolean }) => {
+function RecapRow({ line, since, terminal }: { line: string; since?: number; terminal?: boolean }) {
   const away = since === undefined ? undefined : formatRelativeTime(since)
   const text = away ? `${line} · last here ${away}` : line
 
@@ -150,7 +150,7 @@ const RecapRow = ({ line, since, terminal }: { line: string; since?: number; ter
   )
 }
 
-const useRunStart = (status: TranscriptState['status']): number | undefined => {
+function useRunStart(status: TranscriptState['status']): number | undefined {
   const running = status === 'running' || status === 'starting'
   const [startedAt, setStartedAt] = useState<number | undefined>(undefined)
   useEffect(() => {
@@ -159,7 +159,7 @@ const useRunStart = (status: TranscriptState['status']): number | undefined => {
   return running ? startedAt : undefined
 }
 
-const showLoader = (state: TranscriptState): boolean => {
+function showLoader(state: TranscriptState): boolean {
   if (state.status !== 'running' && state.status !== 'starting') {
     return false
   }
@@ -176,13 +176,13 @@ const showLoader = (state: TranscriptState): boolean => {
   return last.kind !== 'turn_result' || state.status === 'running'
 }
 
-const SentAttachments = ({
+function SentAttachments({
   attachments,
   attachmentUrl,
 }: {
   attachments: MessageAttachment[]
   attachmentUrl?: (attachmentId: string) => string
-}) => {
+}) {
   return (
     <div className="mb-1 flex flex-wrap justify-start gap-1.5">
       {attachments.map((attachment) => {
@@ -199,7 +199,7 @@ const SentAttachments = ({
   )
 }
 
-const TerminalShell = ({
+function TerminalShell({
   active,
   fontSize,
   lineHeight,
@@ -211,7 +211,7 @@ const TerminalShell = ({
   lineHeight?: number
   affordances?: TerminalAffordances | boolean
   children: ReactNode
-}) => {
+}) {
   if (!active) {
     return <>{children}</>
   }
@@ -222,9 +222,11 @@ const TerminalShell = ({
   )
 }
 
-const read = (boundary: number | undefined, index: number): boolean => boundary !== undefined && index < boundary
+function read(boundary: number | undefined, index: number): boolean {
+  return boundary !== undefined && index < boundary
+}
 
-const nestedClass = (item: TranscriptItem, frameParentId?: string): string | undefined => {
+function nestedClass(item: TranscriptItem, frameParentId?: string): string | undefined {
   const parent = 'parentToolUseId' in item ? item.parentToolUseId : undefined
   const nested = parent != null && parent !== frameParentId
   return nested ? 'border-l-2 border-border pl-3' : undefined
@@ -232,10 +234,11 @@ const nestedClass = (item: TranscriptItem, frameParentId?: string): string | und
 
 export { rowIndexForItem, type TranscriptRow } from './transcript-rows.ts'
 
-const promptHeadText = (item: Extract<TranscriptItem, { kind: 'user' }>): string =>
-  item.text || (item.attachments ?? []).map((attachment) => attachment.name).join(', ')
+function promptHeadText(item: Extract<TranscriptItem, { kind: 'user' }>): string {
+  return item.text || (item.attachments ?? []).map((attachment) => attachment.name).join(', ')
+}
 
-const StickyPromptLane = ({
+function StickyPromptLane({
   top,
   height,
   gapClass,
@@ -257,7 +260,7 @@ const StickyPromptLane = ({
   measureRef: (element: HTMLDivElement | null) => void
   head: ReactNode
   content: ReactNode
-}) => {
+}) {
   const headRef = useRef<HTMLDivElement | null>(null)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -294,7 +297,7 @@ const StickyPromptLane = ({
   )
 }
 
-const TranscriptRows = ({
+function TranscriptRows({
   rows,
   boundary,
   since,
@@ -340,7 +343,7 @@ const TranscriptRows = ({
   jumpToRecapRef?: RefObject<(() => void) | null>
   repinRef?: RefObject<(() => void) | null>
   reveal?: { toolUseId: string; nonce: number }
-}) => {
+}) {
   const stick = useStickToBottomContext()
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null)
   const promptRows = useMemo(

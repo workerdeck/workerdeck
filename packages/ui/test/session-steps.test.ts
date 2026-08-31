@@ -4,13 +4,15 @@ import type { SubagentInfo } from '@workerdeck/protocol'
 import { sessionSteps } from '../src/components/agent/SessionSteps.tsx'
 import type { SessionInfo } from '@workerdeck/protocol'
 
-const sub = (over: Partial<SubagentInfo>): SubagentInfo => ({
-  toolUseId: 't1',
-  status: 'running',
-  startedAt: 0,
-  toolCount: 0,
-  ...over,
-})
+function sub(over: Partial<SubagentInfo>): SubagentInfo {
+  return {
+    toolUseId: 't1',
+    status: 'running',
+    startedAt: 0,
+    toolCount: 0,
+    ...over,
+  }
+}
 
 describe('isAgentRecord', () => {
   it('is an agent when it carries a subagent type', () => {

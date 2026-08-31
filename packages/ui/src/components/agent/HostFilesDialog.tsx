@@ -187,7 +187,7 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
   )
 }
 
-const EntryIcon = ({ type }: { type: HostDirEntry['type'] }) => {
+function EntryIcon({ type }: { type: HostDirEntry['type'] }) {
   if (type === 'dir') {
     return <Folder className="size-3.5 shrink-0 text-accent" />
   }

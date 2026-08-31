@@ -17,7 +17,7 @@ const RESULT_PREVIEW_CHARS = 2000
 
 const IMAGE_TOOLS = new Set(['CodexImageGeneration', 'CodexImageView'])
 
-const imagePathOf = (item: ToolCallItem): string | undefined => {
+function imagePathOf(item: ToolCallItem): string | undefined {
   if (!IMAGE_TOOLS.has(item.name)) {
     return undefined
   }
@@ -82,7 +82,7 @@ const EXTENSION_LANGUAGE: Record<string, string> = {
   patch: 'diff',
 }
 
-const resultLanguage = (item: ToolCallItem): string | undefined => {
+function resultLanguage(item: ToolCallItem): string | undefined {
   if (item.name === 'Bash' || item.name === 'CodexCommand') {
     return 'bash'
   }
@@ -198,13 +198,13 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
   )
 }
 
-const PlainPayload = ({ code, label, className }: { code: string; label: string; language?: string; className?: string }) => {
+function PlainPayload({ code, label, className }: { code: string; label: string; language?: string; className?: string }) {
   return <CodeBlock code={code} label={label} variant="panel" className={className} />
 }
 
 type ToolResultImage = NonNullable<NonNullable<ToolCallItem['result']>['images']>[number]
 
-const ResultImage = ({ toolUseId, image }: { toolUseId: string; image: ToolResultImage }) => {
+function ResultImage({ toolUseId, image }: { toolUseId: string; image: ToolResultImage }) {
   const { src, failed } = useToolResultImageSrc({ toolUseId, ...image })
   return (
     <div className="flex h-60 items-start overflow-hidden rounded-md border border-border bg-surface-hover">
@@ -217,7 +217,7 @@ const ResultImage = ({ toolUseId, image }: { toolUseId: string; image: ToolResul
   )
 }
 
-const HostImage = ({ path, load }: { path: string; load: (path: string) => Promise<string | undefined> }) => {
+function HostImage({ path, load }: { path: string; load: (path: string) => Promise<string | undefined> }) {
   const [src, setSrc] = useState<string | undefined>()
   useEffect(() => {
     let cancelled = false

@@ -24,7 +24,7 @@ const PATHS: Record<string, { title: string; d: string }> = {
   },
 }
 
-export const engineMark = (engine: string, model?: string): string | undefined => {
+export function engineMark(engine: string, model?: string): string | undefined {
   if (engine === 'claude') {
     return 'claude'
   }
@@ -61,9 +61,13 @@ const VENDOR_TEXT: Record<string, string> = {
   claude: 'text-vendor-claude',
 }
 
-export const vendorMarkClass = (engine: string, model?: string): string => VENDOR_MARK[engineMark(engine, model) ?? ''] ?? 'text-fg-3'
+export function vendorMarkClass(engine: string, model?: string): string {
+  return VENDOR_MARK[engineMark(engine, model) ?? ''] ?? 'text-fg-3'
+}
 
-export const vendorTextClass = (engine: string, model?: string): string => VENDOR_TEXT[engineMark(engine, model) ?? ''] ?? 'text-fg-3'
+export function vendorTextClass(engine: string, model?: string): string {
+  return VENDOR_TEXT[engineMark(engine, model) ?? ''] ?? 'text-fg-3'
+}
 
 export function EngineIcon({ engine, model, className }: { engine: string; model?: string; className?: string }) {
   const mark = PATHS[engineMark(engine, model) ?? '']

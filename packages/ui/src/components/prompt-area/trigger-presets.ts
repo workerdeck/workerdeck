@@ -36,7 +36,7 @@ export type MentionTriggerOptions = TriggerPresetOptions & {
  * Defaults: `position: 'any'`, `mode: 'dropdown'`, `chipStyle: 'pill'`,
  * accessible label `"mention"`.
  */
-export const mentionTrigger = (opts: MentionTriggerOptions = {}): TriggerConfig => {
+export function mentionTrigger(opts: MentionTriggerOptions = {}): TriggerConfig {
   const { char = '@', ...rest } = opts
   return {
     char,
@@ -71,7 +71,7 @@ export type CommandTriggerOptions = TriggerPresetOptions & {
  * By default commands work everywhere in the input. Pass `position: 'start'`
  * to limit them to the start of a line.
  */
-export const commandTrigger = (opts: CommandTriggerOptions = {}): TriggerConfig => {
+export function commandTrigger(opts: CommandTriggerOptions = {}): TriggerConfig {
   const { char = '/', position = 'any', ...rest } = opts
   return {
     char,
@@ -96,7 +96,7 @@ export type HashtagTriggerOptions = TriggerPresetOptions & {
  * Defaults: `position: 'any'`, `mode: 'dropdown'`, `chipStyle: 'pill'`,
  * `resolveOnSpace: true`, accessible label `"tag"`.
  */
-export const hashtagTrigger = (opts: HashtagTriggerOptions = {}): TriggerConfig => {
+export function hashtagTrigger(opts: HashtagTriggerOptions = {}): TriggerConfig {
   const { char = '#', ...rest } = opts
   return {
     char,
@@ -122,7 +122,7 @@ export type CallbackTriggerOptions = Omit<Partial<TriggerConfig>, 'mode'> & {
  *
  * Defaults: `position: 'start'`, `mode: 'callback'`.
  */
-export const callbackTrigger = (opts: CallbackTriggerOptions): TriggerConfig => {
+export function callbackTrigger(opts: CallbackTriggerOptions): TriggerConfig {
   const { char, ...rest } = opts
   return {
     char,

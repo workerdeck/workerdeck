@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import { Composer } from '../src/components/agent/Composer.tsx'
 import { TranscriptVariantProvider, TranscriptDensityProvider } from '../src/components/agent/transcript-variant.tsx'
 
-const noop = () => {}
+function noop() {}
 
 const meta: Meta<typeof Composer> = {
   title: 'Agent/Composer',

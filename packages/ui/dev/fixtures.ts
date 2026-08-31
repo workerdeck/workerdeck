@@ -7,20 +7,24 @@ let seq = 0
 // `Omit` must distribute over the union by hand: applied to the union directly it collapses to the members' common keys.
 type ItemDraft = TranscriptItem extends infer T ? (T extends object ? Omit<T, 'id'> : never) : never
 
-const item = (draft: ItemDraft): TranscriptItem => ({ ...draft, id: `f${++seq}` }) as TranscriptItem
+function item(draft: ItemDraft): TranscriptItem {
+  return { ...draft, id: `f${++seq}` } as TranscriptItem
+}
 
-const base = (items: TranscriptItem[], status: TranscriptState['status']): TranscriptState => ({
-  status,
-  items,
-  cwd: '/Users/atomic/projects/silkweave',
-  model: 'claude-opus-5',
-  engine: 'claude',
-  capabilities: ENGINE_CAPABILITIES.claude,
-  contextUsage: { categories: [], totalTokens: 49_000, maxTokens: 200_000, percentage: 24.5 },
-  pendingApprovals: [],
-  totalCostUsd: 0.42,
-  lastSeq: items.length,
-})
+function base(items: TranscriptItem[], status: TranscriptState['status']): TranscriptState {
+  return {
+    status,
+    items,
+    cwd: '/Users/atomic/projects/silkweave',
+    model: 'claude-opus-5',
+    engine: 'claude',
+    capabilities: ENGINE_CAPABILITIES.claude,
+    contextUsage: { categories: [], totalTokens: 49_000, maxTokens: 200_000, percentage: 24.5 },
+    pendingApprovals: [],
+    totalCostUsd: 0.42,
+    lastSeq: items.length,
+  }
+}
 
 const run: TranscriptItem[] = [
   item({ kind: 'user', text: 'Set up prettier for the repo, but only for code — markdown and JSON churn buys nothing.' }),
@@ -591,7 +595,9 @@ export const QUESTIONS: PermissionRequest = {
   },
 }
 
-const withId = (id: string, draft: ItemDraft): TranscriptItem => ({ ...draft, id }) as TranscriptItem
+function withId(id: string, draft: ItemDraft): TranscriptItem {
+  return { ...draft, id } as TranscriptItem
+}
 
 const subagents: TranscriptItem[] = [
   item({ kind: 'user', text: 'Find every place we parse a permission mode, and check the docs match.' }),

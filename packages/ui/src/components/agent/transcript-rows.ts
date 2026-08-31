@@ -6,7 +6,7 @@ const positionCache = new WeakMap<readonly TranscriptRow[], Map<number, RowPosit
 
 export type TranscriptRow = TerminalBlock | { key: 'recap'; line: string } | { key: 'brief'; text: string }
 
-export const rowItem = (row: TranscriptRow | undefined): TranscriptItem | undefined => {
+export function rowItem(row: TranscriptRow | undefined): TranscriptItem | undefined {
   if (!row) {
     return undefined
   }
@@ -22,7 +22,7 @@ export const rowItem = (row: TranscriptRow | undefined): TranscriptItem | undefi
   return undefined
 }
 
-export const gapBefore = (rows: TranscriptRow[], index: number): boolean => {
+export function gapBefore(rows: TranscriptRow[], index: number): boolean {
   const before = rowItem(rows[index - 1])
   const after = rowItem(rows[index])
   if (!before || !after) {
@@ -31,7 +31,7 @@ export const gapBefore = (rows: TranscriptRow[], index: number): boolean => {
   return needsBlank(before, after)
 }
 
-const absorbedRows = (rows: readonly TranscriptRow[]): Map<number, number> => {
+function absorbedRows(rows: readonly TranscriptRow[]): Map<number, number> {
   const hit = absorbedCache.get(rows)
   if (hit) {
     return hit
@@ -48,7 +48,7 @@ const absorbedRows = (rows: readonly TranscriptRow[]): Map<number, number> => {
   return map
 }
 
-export const rowIndexForItem = (rows: readonly TranscriptRow[], itemIndex: number): number => {
+export function rowIndexForItem(rows: readonly TranscriptRow[], itemIndex: number): number {
   const absorbed = absorbedRows(rows).get(itemIndex)
   if (absorbed !== undefined) {
     return absorbed
@@ -80,7 +80,7 @@ export const rowIndexForItem = (rows: readonly TranscriptRow[], itemIndex: numbe
 
 export type RowPosition = { ordinal: number; count: number }
 
-const rowPositions = (rows: readonly TranscriptRow[]): Map<number, RowPosition> => {
+function rowPositions(rows: readonly TranscriptRow[]): Map<number, RowPosition> {
   const hit = positionCache.get(rows)
   if (hit) {
     return hit
@@ -99,6 +99,6 @@ const rowPositions = (rows: readonly TranscriptRow[]): Map<number, RowPosition> 
   return map
 }
 
-export const positionInRow = (rows: readonly TranscriptRow[], itemIndex: number): RowPosition | undefined => {
+export function positionInRow(rows: readonly TranscriptRow[], itemIndex: number): RowPosition | undefined {
   return rowPositions(rows).get(itemIndex)
 }

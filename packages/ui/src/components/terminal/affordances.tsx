@@ -11,11 +11,11 @@ const DEFAULTS: Required<TerminalAffordances> = { hover: true, actions: true }
 
 const AffordanceContext = createContext<Required<TerminalAffordances>>(DEFAULTS)
 
-export const useAffordances = (): Required<TerminalAffordances> => {
+export function useAffordances(): Required<TerminalAffordances> {
   return useContext(AffordanceContext)
 }
 
-export const resolveAffordances = (value: TerminalAffordances | boolean | undefined): Required<TerminalAffordances> => {
+export function resolveAffordances(value: TerminalAffordances | boolean | undefined): Required<TerminalAffordances> {
   if (value === false) {
     return { hover: false, actions: false }
   }

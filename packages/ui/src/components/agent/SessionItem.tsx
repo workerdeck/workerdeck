@@ -218,11 +218,11 @@ export function SessionItem({
   )
 }
 
-const Gutter = ({ children }: { children: ReactNode }) => (
-  <span className="flex size-4 shrink-0 items-center justify-center">{children}</span>
-)
+function Gutter({ children }: { children: ReactNode }) {
+  return <span className="flex size-4 shrink-0 items-center justify-center">{children}</span>
+}
 
-const NameEditor = ({ initial, onCommit, onCancel }: { initial: string; onCommit: (title: string) => void; onCancel: () => void }) => {
+function NameEditor({ initial, onCommit, onCancel }: { initial: string; onCommit: (title: string) => void; onCancel: () => void }) {
   const [value, setValue] = useState(initial)
   const ref = useRef<HTMLInputElement>(null)
   useEffect(() => {

@@ -11,11 +11,15 @@ export interface ModelSelectProps {
   className?: string
 }
 
-const isDefaultOption = (value: string) => value === 'default'
+function isDefaultOption(value: string) {
+  return value === 'default'
+}
 
-const dropVariant = (id: string) => id.replace(/\[.*\]$/, '')
+function dropVariant(id: string) {
+  return id.replace(/\[.*\]$/, '')
+}
 
-const family = (id: string): string => {
+function family(id: string): string {
   const parts = id.toLowerCase().split('-')
   if (parts[0] === 'claude') {
     parts.shift()
@@ -23,7 +27,7 @@ const family = (id: string): string => {
   return parts[0] ?? ''
 }
 
-const optionMatches = (option: ModelOption, model: string): boolean => {
+function optionMatches(option: ModelOption, model: string): boolean {
   if (model === option.value || model === option.resolvedModel) {
     return true
   }
@@ -35,7 +39,7 @@ const optionMatches = (option: ModelOption, model: string): boolean => {
   return token !== '' && token === family(dropVariant(option.value))
 }
 
-const matchModel = (models: ModelOption[], model?: string): ModelOption | undefined => {
+function matchModel(models: ModelOption[], model?: string): ModelOption | undefined {
   if (!model) {
     return undefined
   }

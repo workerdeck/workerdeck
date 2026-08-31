@@ -16,7 +16,7 @@ const WD = {
   icon: { type: 'glyph', name: 'layers' },
 }
 
-export const makeInfo = (patch: Partial<SessionInfo> & { id: string }): SessionInfo => {
+export function makeInfo(patch: Partial<SessionInfo> & { id: string }): SessionInfo {
   return {
     engine: 'claude',
     status: 'running',
@@ -32,7 +32,7 @@ export const makeInfo = (patch: Partial<SessionInfo> & { id: string }): SessionI
   } as unknown as SessionInfo
 }
 
-export const makeRow = (patch: Partial<SessionInfo> & { id: string }, unseen = 0): SessionRow => {
+export function makeRow(patch: Partial<SessionInfo> & { id: string }, unseen = 0): SessionRow {
   const info = makeInfo(patch)
   return {
     hostId: 'local',

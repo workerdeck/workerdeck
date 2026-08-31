@@ -10,7 +10,7 @@ import { chipNodeToSegment, getChipDisplay, getChipTrigger, getSelectionRange, i
 import { mergeAdjacentTextSegments } from './prompt-area-engine.ts'
 import { getTextLengthInRange } from './cursor-helpers.ts'
 
-const isRecord = (value: unknown): value is Record<string, unknown> => {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
@@ -35,7 +35,7 @@ type FragmentVisitor = {
  * Both fragment serializers share this single traversal so they cannot drift
  * on which nodes count as chips/breaks or how nested decorations are unwrapped.
  */
-const walkFragmentNodes = (fragment: DocumentFragment, visitor: FragmentVisitor): void => {
+function walkFragmentNodes(fragment: DocumentFragment, visitor: FragmentVisitor): void {
   const walk = (node: Node): void => {
     if (node.nodeType === Node.TEXT_NODE) {
       visitor.onText(node.textContent ?? '')
@@ -55,7 +55,7 @@ const walkFragmentNodes = (fragment: DocumentFragment, visitor: FragmentVisitor)
  * Serializes a DocumentFragment (from selection) to plain text,
  * converting chip elements to their `trigger + displayText` form.
  */
-export const serializeFragmentToPlainText = (fragment: DocumentFragment): string => {
+export function serializeFragmentToPlainText(fragment: DocumentFragment): string {
   let text = ''
 
   walkFragmentNodes(fragment, {
@@ -77,7 +77,7 @@ export const serializeFragmentToPlainText = (fragment: DocumentFragment): string
  * Serializes a DocumentFragment to an array of Segment objects,
  * preserving chip data for internal copy/paste.
  */
-export const serializeFragmentToSegments = (fragment: DocumentFragment): Segment[] => {
+export function serializeFragmentToSegments(fragment: DocumentFragment): Segment[] {
   const segments: Segment[] = []
 
   walkFragmentNodes(fragment, {
@@ -103,7 +103,7 @@ export const serializeFragmentToSegments = (fragment: DocumentFragment): Segment
 /**
  * Parses segment JSON from the clipboard. Returns null if invalid.
  */
-export const parseSegmentsFromClipboard = (json: string): Segment[] | null => {
+export function parseSegmentsFromClipboard(json: string): Segment[] | null {
   try {
     const parsed: unknown = JSON.parse(json)
     if (!Array.isArray(parsed)) {
@@ -149,7 +149,7 @@ export const parseSegmentsFromClipboard = (json: string): Segment[] | null => {
  * Splits any text segment that straddles the cursor so the pasted content lands
  * exactly at the cursor and nothing before or after is lost.
  */
-export const insertSegmentsAtCursor = (currentSegments: Segment[], pastedSegments: Segment[], editor: HTMLElement): Segment[] => {
+export function insertSegmentsAtCursor(currentSegments: Segment[], pastedSegments: Segment[], editor: HTMLElement): Segment[] {
   const range = getSelectionRange()
   if (!range) {
     return [...currentSegments, ...pastedSegments]

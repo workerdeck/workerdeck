@@ -27,7 +27,7 @@ export interface StatusBarProps {
   className?: string
 }
 
-const useNow = (intervalMs = 30_000): number => {
+function useNow(intervalMs = 30_000): number {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), intervalMs)
@@ -36,9 +36,11 @@ const useNow = (intervalMs = 30_000): number => {
   return now
 }
 
-const cssColor = (color: string): string | undefined => (typeof CSS !== 'undefined' && CSS.supports('color', color) ? color : undefined)
+function cssColor(color: string): string | undefined {
+  return typeof CSS !== 'undefined' && CSS.supports('color', color) ? color : undefined
+}
 
-const ContextMeter = ({ usage }: { usage: ContextUsage }) => {
+function ContextMeter({ usage }: { usage: ContextUsage }) {
   return (
     <Tip
       content={
@@ -66,7 +68,7 @@ const ContextMeter = ({ usage }: { usage: ContextUsage }) => {
   )
 }
 
-const RateLimitMeter = ({ label, info, now }: { label: string; info: RateLimitInfo; now: number }) => {
+function RateLimitMeter({ label, info, now }: { label: string; info: RateLimitInfo; now: number }) {
   const pct = info.utilization
   const resetsAtMs = info.resetsAt !== undefined ? info.resetsAt * 1000 : undefined
   return (
@@ -103,7 +105,7 @@ const RateLimitMeter = ({ label, info, now }: { label: string; info: RateLimitIn
   )
 }
 
-const Slot = ({ onClick, hint, children }: { onClick?: () => void; hint: string; children: ReactNode }) => {
+function Slot({ onClick, hint, children }: { onClick?: () => void; hint: string; children: ReactNode }) {
   if (!onClick) {
     return <>{children}</>
   }

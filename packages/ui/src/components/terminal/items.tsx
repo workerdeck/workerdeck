@@ -34,7 +34,7 @@ export const PROMPT_GLYPH = '❯'
 
 export const RESULT_PREVIEW_CHARS = 2000
 
-const clipToChars = (lines: string[], maxChars: number): string[] => {
+function clipToChars(lines: string[], maxChars: number): string[] {
   const out: string[] = []
   let chars = 0
   for (const line of lines) {
@@ -275,7 +275,7 @@ export function FileRow({ item, href }: { item: Extract<TranscriptItem, { kind: 
   )
 }
 
-export const useTicker = (on: boolean): number => {
+export function useTicker(on: boolean): number {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!on) {

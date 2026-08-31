@@ -17,13 +17,13 @@ import { isHTMLElement, isTextNode } from './dom-helpers.ts'
 // Inline style / emphasis detection
 
 /** Reads a single declaration value from an inline `style` attribute string. */
-const getStyleValue = (style: string, prop: string): string => {
+function getStyleValue(style: string, prop: string): string {
   const match = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`, 'i').exec(style)
   return match ? match[1].trim().toLowerCase() : ''
 }
 
 /** Whether a CSS font-weight value is bold (`bold`, `bolder`, or >= 600). */
-const isBoldWeight = (value: string): boolean => {
+function isBoldWeight(value: string): boolean {
   if (value === 'bold' || value === 'bolder') {
     return true
   }
@@ -58,19 +58,19 @@ function inlineEmphasis(node: HTMLElement): { prefix: string; suffix: string } {
 // Text handling
 
 /** Collapses HTML whitespace runs (incl. `&nbsp;` -> U+00A0) to single spaces. */
-const collapseWhitespace = (text: string): string => {
+function collapseWhitespace(text: string): string {
   return text.replace(/\s+/g, ' ')
 }
 
 /** Escapes literal `*` from HTML text so prose isn't re-read as emphasis. */
-const escapeText = (text: string): string => {
+function escapeText(text: string): string {
   return text.replace(/\*/g, '\\*')
 }
 
 // Block serializers
 
 /** Derives a fenced-block language from `class="language-ts"` or `lang="ts"`. */
-const detectCodeLang = (pre: HTMLElement): string => {
+function detectCodeLang(pre: HTMLElement): string {
   const code = pre.querySelector('code')
   const classNames = `${pre.className} ${code?.className ?? ''}`
   const fromClass = /(?:language|lang)-([\w-]+)/.exec(classNames)
@@ -80,13 +80,13 @@ const detectCodeLang = (pre: HTMLElement): string => {
   return pre.getAttribute('lang') ?? code?.getAttribute('lang') ?? ''
 }
 
-const serializePre = (pre: HTMLElement): string => {
+function serializePre(pre: HTMLElement): string {
   const lang = detectCodeLang(pre)
   const raw = (pre.textContent ?? '').replace(/\n$/, '')
   return `\n\n\`\`\`${lang}\n${raw}\n\`\`\`\n\n`
 }
 
-const serializeInlineCode = (node: HTMLElement): string => {
+function serializeInlineCode(node: HTMLElement): string {
   const content = node.textContent ?? ''
   if (content.includes('`')) {
     return `\`\` ${content} \`\``
@@ -95,11 +95,11 @@ const serializeInlineCode = (node: HTMLElement): string => {
 }
 
 /** http(s)/mailto only; drops `#`, empty, and `javascript:` hrefs. */
-const isSafeHref = (href: string): boolean => {
+function isSafeHref(href: string): boolean {
   return /^(https?:|mailto:)/i.test(href)
 }
 
-const serializeAnchor = (node: HTMLElement, depth: number): string => {
+function serializeAnchor(node: HTMLElement, depth: number): string {
   const href = node.getAttribute('href') ?? ''
   const label = serializeChildren(node, depth).trim()
   if (!isSafeHref(href)) {
@@ -111,7 +111,7 @@ const serializeAnchor = (node: HTMLElement, depth: number): string => {
   return `[${label}](${href})`
 }
 
-const serializeImage = (node: HTMLElement): string => {
+function serializeImage(node: HTMLElement): string {
   const src = node.getAttribute('src') ?? ''
   // Gate the src through the same allow-list as anchors: only http(s)/mailto
   // survive, so a `javascript:`/`vbscript:`/`data:` src never reaches the
@@ -122,7 +122,7 @@ const serializeImage = (node: HTMLElement): string => {
   return `![${node.getAttribute('alt') ?? ''}](${src})`
 }
 
-const serializeBlockquote = (node: HTMLElement, depth: number): string => {
+function serializeBlockquote(node: HTMLElement, depth: number): string {
   const inner = serializeChildren(node, depth).trim()
   const quoted = inner
     .split('\n')
@@ -136,7 +136,7 @@ const serializeBlockquote = (node: HTMLElement, depth: number): string => {
  * own inline content becomes the marker line; a nested `<ul>`/`<ol>` child is
  * serialized at `depth + 1` and appended indented below its parent item.
  */
-const serializeList = (list: HTMLElement, depth: number): string => {
+function serializeList(list: HTMLElement, depth: number): string {
   const ordered = list.tagName === 'OL'
   const start = Number.parseInt(list.getAttribute('start') ?? '', 10)
   let index = Number.isNaN(start) ? 1 : start
@@ -166,7 +166,7 @@ const serializeList = (list: HTMLElement, depth: number): string => {
   return lines.join('\n')
 }
 
-const serializeTable = (table: HTMLElement, depth: number): string => {
+function serializeTable(table: HTMLElement, depth: number): string {
   const rows = Array.from(table.querySelectorAll('tr'))
   if (rows.length === 0) {
     return ''
@@ -187,7 +187,7 @@ const serializeTable = (table: HTMLElement, depth: number): string => {
 
 // Recursive walker
 
-const serializeChildren = (node: Node, depth: number): string => {
+function serializeChildren(node: Node, depth: number): string {
   let out = ''
   node.childNodes.forEach((child) => {
     out += serializeNode(child, depth)
@@ -195,7 +195,7 @@ const serializeChildren = (node: Node, depth: number): string => {
   return out
 }
 
-const serializeNode = (node: Node, depth: number): string => {
+function serializeNode(node: Node, depth: number): string {
   if (isTextNode(node)) {
     return escapeText(collapseWhitespace(node.textContent ?? ''))
   }
@@ -272,7 +272,7 @@ const serializeNode = (node: Node, depth: number): string => {
 // Output normalization
 
 /** Trims trailing spaces and caps consecutive blank lines at one. */
-const normalizeOutput = (markdown: string): string => {
+function normalizeOutput(markdown: string): string {
   return markdown
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n[ \t]*\n[ \t\n]*/g, '\n\n')
@@ -287,7 +287,7 @@ const normalizeOutput = (markdown: string): string => {
  * links) is emitted as literal markdown text — that is the editor's intended
  * display; only `*`/`**`/`***` and bare URLs get visually decorated inline.
  */
-export const htmlToMarkdown = (html: string): string => {
+export function htmlToMarkdown(html: string): string {
   if (!html) {
     return ''
   }

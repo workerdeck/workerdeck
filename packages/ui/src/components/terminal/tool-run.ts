@@ -4,11 +4,11 @@ import { isShellTool } from '../../lib/tool-icon.ts'
 
 type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
 
-export const foldsTogether = (a: ToolCallItem, b: ToolCallItem): boolean => {
+export function foldsTogether(a: ToolCallItem, b: ToolCallItem): boolean {
   return a.parentToolUseId === b.parentToolUseId
 }
 
-export const toolFamily = (name: string): string => {
+export function toolFamily(name: string): string {
   if (isShellTool(name)) {
     return 'shell'
   }
@@ -19,7 +19,7 @@ export const toolFamily = (name: string): string => {
   return name.toLowerCase()
 }
 
-export const runSummary = (items: readonly ToolCallItem[], busy: boolean): string => {
+export function runSummary(items: readonly ToolCallItem[], busy: boolean): string {
   const verb = busy ? 'Running ' : 'Ran '
   const tail = busy ? '…' : ''
   const n = items.length
@@ -39,15 +39,19 @@ export const runSummary = (items: readonly ToolCallItem[], busy: boolean): strin
   return `${verb}${n} tool${n === 1 ? '' : 's'} · ${breakdown}${tail}`
 }
 
-const clip = (text: string, max = 80): string => (text.length > max ? text.slice(0, max - 1) + '…' : text)
+function clip(text: string, max = 80): string {
+  return text.length > max ? text.slice(0, max - 1) + '…' : text
+}
 
-const trimmed = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined)
+function trimmed(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+}
 
-export const taskLabel = (task: ToolCallItem): string => {
+export function taskLabel(task: ToolCallItem): string {
   return `${task.name}(${taskIdentity(task)})`
 }
 
-export const taskIdentity = (task: ToolCallItem): string => {
+export function taskIdentity(task: ToolCallItem): string {
   const input = task.input as { description?: unknown; subagent_type?: unknown } | null
   const description = trimmed(input?.description)
   const agent = trimmed(input?.subagent_type)
@@ -56,29 +60,33 @@ export const taskIdentity = (task: ToolCallItem): string => {
     : (agent ?? (description ? clip(description) : toolInputPreview(task.input)))
 }
 
-export const taskBrief = (task: ToolCallItem): string | undefined => {
+export function taskBrief(task: ToolCallItem): string | undefined {
   const input = task.input as { prompt?: unknown } | null
   return trimmed(input?.prompt)
 }
 
-const callBusy = (call: ToolCallItem): boolean => call.status === 'running' || call.status === 'pending'
+function callBusy(call: ToolCallItem): boolean {
+  return call.status === 'running' || call.status === 'pending'
+}
 
-export const callFailed = (call: ToolCallItem): boolean => call.status === 'failed' || call.result?.isError === true
+export function callFailed(call: ToolCallItem): boolean {
+  return call.status === 'failed' || call.result?.isError === true
+}
 
-export const runFailed = (items: readonly ToolCallItem[]): boolean => {
+export function runFailed(items: readonly ToolCallItem[]): boolean {
   const last = items[items.length - 1]
   return last !== undefined && callFailed(last)
 }
 
-export const taskBusy = (task: ToolCallItem, children: readonly TranscriptItem[]): boolean => {
+export function taskBusy(task: ToolCallItem, children: readonly TranscriptItem[]): boolean {
   return callBusy(task) || children.some((child) => child.kind === 'tool_call' && callBusy(child))
 }
 
-export const taskFailed = (task: ToolCallItem): boolean => {
+export function taskFailed(task: ToolCallItem): boolean {
   return callFailed(task)
 }
 
-export const taskSummary = (task: ToolCallItem, children: readonly TranscriptItem[]): string => {
+export function taskSummary(task: ToolCallItem, children: readonly TranscriptItem[]): string {
   const busy = taskBusy(task, children)
   const calls = children.reduce((n, child) => n + (child.kind === 'tool_call' ? 1 : 0), 0)
   const label = taskLabel(task)

@@ -117,7 +117,7 @@ export function McpDialog({ client, sessionId, open, onOpenChange, canManageServ
   )
 }
 
-const ServerList = ({
+function ServerList({
   servers,
   loading,
   onSelect,
@@ -125,7 +125,7 @@ const ServerList = ({
   servers: McpServerStatusInfo[] | undefined
   loading: boolean
   onSelect: (name: string) => void
-}) => {
+}) {
   if (loading && !servers) {
     return (
       <div className="py-6 text-center">
@@ -168,7 +168,7 @@ const ServerList = ({
   )
 }
 
-const ServerView = ({
+function ServerView({
   server,
   busy,
   canManage,
@@ -180,7 +180,7 @@ const ServerView = ({
   canManage: boolean
   onAct: (action: McpServerActionRequest['action']) => void
   onSelectTool: (name: string) => void
-}) => {
+}) {
   const disabled = server.status === 'disabled'
   return (
     <div className="flex flex-col gap-4">
@@ -251,7 +251,7 @@ const ServerView = ({
   )
 }
 
-const ToolView = ({ tool }: { tool: McpServerToolInfo }) => {
+function ToolView({ tool }: { tool: McpServerToolInfo }) {
   const annotations = tool.annotations
   return (
     <div className="flex flex-col gap-3">
@@ -283,7 +283,7 @@ const ToolView = ({ tool }: { tool: McpServerToolInfo }) => {
   )
 }
 
-const safeSchema = (schema: unknown): string => {
+function safeSchema(schema: unknown): string {
   try {
     return JSON.stringify(schema, null, 2)
   } catch {

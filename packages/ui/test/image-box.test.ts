@@ -6,22 +6,26 @@ import { itemHeight, type CellMetrics } from '../src/components/terminal/height.
 
 const m: CellMetrics = { width: 800, ch: 8, line: 18 }
 
-const image = (partIndex: number, bytes = 344_064) => ({
-  partIndex,
-  mediaType: 'image/png',
-  bytes,
-  sourceSeq: 40 + partIndex,
-})
+function image(partIndex: number, bytes = 344_064) {
+  return {
+    partIndex,
+    mediaType: 'image/png',
+    bytes,
+    sourceSeq: 40 + partIndex,
+  }
+}
 
-const call = (images?: ReturnType<typeof image>[], text = ''): TranscriptItem => ({
-  kind: 'tool_call',
-  id: 'toolu_1',
-  name: 'Read',
-  input: { file_path: '/tmp/shot.png' },
-  parentToolUseId: null,
-  status: 'settled',
-  result: { text, isError: false, ...(images ? { images } : {}) },
-})
+function call(images?: ReturnType<typeof image>[], text = ''): TranscriptItem {
+  return {
+    kind: 'tool_call',
+    id: 'toolu_1',
+    name: 'Read',
+    input: { file_path: '/tmp/shot.png' },
+    parentToolUseId: null,
+    status: 'settled',
+    result: { text, isError: false, ...(images ? { images } : {}) },
+  }
+}
 
 describe('imagePlaceholder', () => {
   it('spells the box label exactly', () => {

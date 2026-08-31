@@ -2,7 +2,9 @@ import type { TranscriptState } from '@workerdeck/react'
 import { blockHeight, measureCh, type CellMetrics } from '../src/components/terminal/height.ts'
 import { terminalBlocks, type TerminalBlock } from '../src/components/terminal/items.tsx'
 
-const round = (n: number): number => Math.round(n * 100) / 100
+function round(n: number): number {
+  return Math.round(n * 100) / 100
+}
 
 export type HeightAuditRow = {
   index: number
@@ -29,7 +31,7 @@ export type HeightAuditReport = {
   byKind: Record<string, { total: number; exact: number; maxDelta: number }>
 }
 
-const recapRowIndex = (blocks: TerminalBlock[], from: number | undefined): number => {
+function recapRowIndex(blocks: TerminalBlock[], from: number | undefined): number {
   if (from === undefined) {
     return Infinity
   }
@@ -37,7 +39,7 @@ const recapRowIndex = (blocks: TerminalBlock[], from: number | undefined): numbe
   return at < 0 ? Infinity : at
 }
 
-export const auditHeights = (state: TranscriptState, root: HTMLElement, catchUpFrom?: number): HeightAuditReport => {
+export function auditHeights(state: TranscriptState, root: HTMLElement, catchUpFrom?: number): HeightAuditReport {
   const surface = root.querySelector<HTMLElement>('[data-terminal]')
   if (!surface) {
     throw new Error('no [data-terminal] surface mounted')
@@ -109,7 +111,7 @@ export const auditHeights = (state: TranscriptState, root: HTMLElement, catchUpF
   return { line, ch: round(ch), width, rows, summary, byKind }
 }
 
-const previewOf = (item: { kind: string } & Record<string, unknown>): string => {
+function previewOf(item: { kind: string } & Record<string, unknown>): string {
   const text = item.text ?? item.name ?? item.path ?? item.subtype ?? ''
   return typeof text === 'string' ? text.replace(/\s+/g, ' ') : String(text)
 }

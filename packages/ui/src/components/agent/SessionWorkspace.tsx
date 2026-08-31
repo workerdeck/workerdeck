@@ -237,7 +237,7 @@ export function SessionWorkspace({
   )
 }
 
-const useElementHeight = (ref: RefObject<HTMLElement | null>): number => {
+function useElementHeight(ref: RefObject<HTMLElement | null>): number {
   const [height, setHeight] = useState(0)
   useLayoutEffect(() => {
     const element = ref.current
@@ -255,7 +255,7 @@ const useElementHeight = (ref: RefObject<HTMLElement | null>): number => {
   return height
 }
 
-const useIsWide = (): boolean => {
+function useIsWide(): boolean {
   const [wide, setWide] = useState(true)
   useEffect(() => {
     const query = window.matchMedia('(min-width: 768px)')

@@ -4,7 +4,7 @@ import { cn } from '../../lib/utils.ts'
 import { CopyAction, WithActions } from './affordances.tsx'
 import { Band } from './row.tsx'
 
-const codeText = (node: ReactNode): string => {
+function codeText(node: ReactNode): string {
   if (node === null || node === undefined || typeof node === 'boolean') {
     return ''
   }
@@ -18,7 +18,7 @@ const codeText = (node: ReactNode): string => {
   return element.props ? codeText(element.props.children) : ''
 }
 
-const fenceLanguage = (node: ReactNode): string | undefined => {
+function fenceLanguage(node: ReactNode): string | undefined {
   const child = Array.isArray(node) ? node.find(Boolean) : node
   const className = (child as { props?: { className?: string } } | undefined)?.props?.className
   const match = /language-([\w-]+)/.exec(className ?? '')
@@ -35,14 +35,15 @@ function CodeBand({ code, language }: { code: string; language?: string }) {
   )
 }
 
-const heading = (tone: 'bright' | 'fg'): Components['h1'] =>
-  function Heading({ children }) {
+function heading(tone: 'bright' | 'fg'): Components['h1'] {
+  return function Heading({ children }) {
     return (
       <div className="term-block" data-tone={tone} data-weight="bold">
         {children}
       </div>
     )
   }
+}
 
 const TERMINAL_COMPONENTS: Components = {
   p: ({ children }) => <div className="term-block">{children}</div>,

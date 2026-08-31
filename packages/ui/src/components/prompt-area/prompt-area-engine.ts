@@ -10,7 +10,7 @@ import type { Segment, ChipSegment, TriggerConfig, TriggerPosition, ActiveTrigge
  * Converts an array of segments to a plain text string.
  * Chips are represented as `{trigger}{displayText}` (e.g., "@Alice").
  */
-export const segmentsToPlainText = (segments: Segment[]): string => {
+export function segmentsToPlainText(segments: Segment[]): string {
   return segments
     .map((seg) => {
       if (seg.type === 'text') {
@@ -25,7 +25,7 @@ export const segmentsToPlainText = (segments: Segment[]): string => {
  * Converts plain text into a single text segment.
  * Used for initial value conversion from plain strings.
  */
-export const plainTextToSegments = (text: string): Segment[] => {
+export function plainTextToSegments(text: string): Segment[] {
   if (!text) {
     return []
   }
@@ -38,7 +38,7 @@ export const plainTextToSegments = (text: string): Segment[] => {
  * is sliced to fit, and a chip that would cross the limit is dropped (a chip
  * can't be partially represented).
  */
-export const truncateSegmentsToLength = (segments: Segment[], maxLength: number): Segment[] => {
+export function truncateSegmentsToLength(segments: Segment[], maxLength: number): Segment[] {
   if (maxLength <= 0) {
     return []
   }
@@ -81,7 +81,7 @@ export const truncateSegmentsToLength = (segments: Segment[], maxLength: number)
  * call sites from silently drifting apart (e.g. one handling tabs and the
  * others not).
  */
-export const isInlineWhitespace = (char: string | undefined): boolean => {
+export function isInlineWhitespace(char: string | undefined): boolean {
   return char === ' ' || char === '\n' || char === '\t'
 }
 
@@ -90,7 +90,7 @@ export const isInlineWhitespace = (char: string | undefined): boolean => {
  * share a character the first one wins, preserving the previous `Array.find`
  * semantics while turning the per-character scan into an O(1) map read.
  */
-const buildTriggerCharMap = (triggers: TriggerConfig[]): Map<string, TriggerConfig> => {
+function buildTriggerCharMap(triggers: TriggerConfig[]): Map<string, TriggerConfig> {
   const map = new Map<string, TriggerConfig>()
   for (const trigger of triggers) {
     if (!map.has(trigger.char)) {
@@ -110,7 +110,7 @@ const buildTriggerCharMap = (triggers: TriggerConfig[]): Map<string, TriggerConf
  * @param charIndex - The index of the trigger character in the text
  * @param position - The position rule to validate against
  */
-export const isValidTriggerPosition = (text: string, charIndex: number, position: TriggerPosition): boolean => {
+export function isValidTriggerPosition(text: string, charIndex: number, position: TriggerPosition): boolean {
   if (charIndex === 0) {
     return true
   }
@@ -137,7 +137,7 @@ export const isValidTriggerPosition = (text: string, charIndex: number, position
  * @param cursorPos - The cursor position (character offset from start)
  * @param triggers - Available trigger configurations
  */
-export const detectActiveTrigger = (text: string, cursorPos: number, triggers: TriggerConfig[]): ActiveTrigger | null => {
+export function detectActiveTrigger(text: string, cursorPos: number, triggers: TriggerConfig[]): ActiveTrigger | null {
   if (!text || cursorPos === 0 || triggers.length === 0) {
     return null
   }
@@ -348,7 +348,7 @@ export function resolveText(
  * @param index - The segment index to remove
  * @returns New segments array with the chip removed
  */
-export const removeChipAtIndex = (segments: Segment[], index: number): Segment[] => {
+export function removeChipAtIndex(segments: Segment[], index: number): Segment[] {
   if (index < 0 || index >= segments.length) {
     return segments
   }
@@ -392,7 +392,7 @@ export function revertChipAtIndex(segments: Segment[], index: number): { segment
  * whitespace, or after a newline. This avoids false positives like email
  * addresses (user@example.com).
  */
-export const resolveTriggersInSegments = (segments: Segment[], triggers: TriggerConfig[]): Segment[] => {
+export function resolveTriggersInSegments(segments: Segment[], triggers: TriggerConfig[]): Segment[] {
   const autoResolveTriggers = triggers.filter((t) => t.resolveOnSpace)
   if (autoResolveTriggers.length === 0) {
     return segments
@@ -419,7 +419,7 @@ export const resolveTriggersInSegments = (segments: Segment[], triggers: Trigger
  * A trigger pattern is: (start-of-string | whitespace) + trigger_char + word_chars
  * followed by whitespace or end-of-string.
  */
-const splitTextByTriggerPatterns = (text: string, triggerByChar: Map<string, TriggerConfig>): Segment[] => {
+function splitTextByTriggerPatterns(text: string, triggerByChar: Map<string, TriggerConfig>): Segment[] {
   if (!text) {
     return []
   }
@@ -484,7 +484,7 @@ const splitTextByTriggerPatterns = (text: string, triggerByChar: Map<string, Tri
  * @param replacement - The replacement text
  * @returns New segments array with the replacement applied
  */
-export const replaceTextRange = (segments: Segment[], start: number, end: number, replacement: string): Segment[] => {
+export function replaceTextRange(segments: Segment[], start: number, end: number, replacement: string): Segment[] {
   const newSegments: Segment[] = []
   let offset = 0
   let inserted = false
@@ -624,7 +624,7 @@ export type MarkdownToken =
  * Parses text for simple inline markdown: bold, italic, bold-italic, and URLs.
  * Does NOT handle block-level markdown (lists, headings, etc.).
  */
-export const parseInlineMarkdown = (text: string): MarkdownToken[] => {
+export function parseInlineMarkdown(text: string): MarkdownToken[] {
   if (!text) {
     return []
   }
@@ -676,7 +676,7 @@ export const parseInlineMarkdown = (text: string): MarkdownToken[] => {
  * Compares type, text, trigger, value, displayText, and autoResolved fields.
  * Avoids JSON.stringify overhead for the common case.
  */
-export const segmentsEqual = (a: Segment[], b: Segment[]): boolean => {
+export function segmentsEqual(a: Segment[], b: Segment[]): boolean {
   if (a === b) {
     return true
   }
@@ -713,7 +713,7 @@ export const segmentsEqual = (a: Segment[], b: Segment[]): boolean => {
  * Merges adjacent text segments into single text segments.
  * Also removes empty text segments.
  */
-export const mergeAdjacentTextSegments = (segments: Segment[]): Segment[] => {
+export function mergeAdjacentTextSegments(segments: Segment[]): Segment[] {
   const result: Segment[] = []
 
   for (const seg of segments) {

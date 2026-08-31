@@ -132,7 +132,7 @@ export function TaskRow({
   )
 }
 
-const useRunStart = (status: TranscriptState['status']): number | undefined => {
+function useRunStart(status: TranscriptState['status']): number | undefined {
   const running = status === 'running' || status === 'starting'
   const [startedAt, setStartedAt] = useState<number | undefined>(undefined)
   useEffect(() => {
@@ -141,7 +141,7 @@ const useRunStart = (status: TranscriptState['status']): number | undefined => {
   return running ? startedAt : undefined
 }
 
-const working = (state: TranscriptState): boolean => {
+function working(state: TranscriptState): boolean {
   if (state.status !== 'running' && state.status !== 'starting') {
     return false
   }

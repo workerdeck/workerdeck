@@ -22,7 +22,7 @@ const LIST_INDENT_PATTERN = /(^|\n)([ \t]+)(?=(?:[•\-*] |\d+\. ))/g
 /**
  * Type guard: checks if a DOM node is an HTMLElement.
  */
-export const isHTMLElement = (node: Node): node is HTMLElement => {
+export function isHTMLElement(node: Node): node is HTMLElement {
   return node instanceof HTMLElement
 }
 
@@ -30,21 +30,21 @@ export const isHTMLElement = (node: Node): node is HTMLElement => {
  * Type guard: checks if a DOM node is a chip element
  * (an HTMLElement with data-chip-trigger attribute).
  */
-export const isChipElement = (node: Node): node is HTMLElement => {
+export function isChipElement(node: Node): node is HTMLElement {
   return node instanceof HTMLElement && node.dataset.chipTrigger !== undefined
 }
 
 /**
  * Type guard: checks if a DOM node is a BR element.
  */
-export const isBRElement = (node: Node): node is HTMLBRElement => {
+export function isBRElement(node: Node): node is HTMLBRElement {
   return node instanceof HTMLBRElement
 }
 
 /**
  * Type guard: checks if a DOM node is a Text node.
  */
-export const isTextNode = (node: Node): node is Text => {
+export function isTextNode(node: Node): node is Text {
   return node instanceof Text
 }
 
@@ -52,7 +52,7 @@ export const isTextNode = (node: Node): node is Text => {
  * Checks whether a chip element was auto-resolved (created by pressing space
  * on resolveOnSpace triggers, rather than explicit dropdown selection).
  */
-export const getChipAutoResolved = (node: Node): boolean => {
+export function getChipAutoResolved(node: Node): boolean {
   return isChipElement(node) && node.dataset.chipAutoResolved === 'true'
 }
 
@@ -60,7 +60,7 @@ export const getChipAutoResolved = (node: Node): boolean => {
  * Type guard: checks if a DOM node is a URL link element
  * (an HTMLAnchorElement with data-url attribute).
  */
-export const isLinkElement = (node: Node): node is HTMLAnchorElement => {
+export function isLinkElement(node: Node): node is HTMLAnchorElement {
   return node instanceof HTMLAnchorElement && node.dataset.url === 'true'
 }
 
@@ -70,7 +70,7 @@ export const isLinkElement = (node: Node): node is HTMLAnchorElement => {
  * Safely parses a JSON string, returning `unknown` instead of `any`.
  * Returns `undefined` if parsing fails.
  */
-export const safeJsonParse = (json: string): unknown => {
+export function safeJsonParse(json: string): unknown {
   try {
     // JSON.parse returns `any` by default. We narrow it to `unknown`
     // which is the safest pattern — callers must validate before use.
@@ -84,7 +84,7 @@ export const safeJsonParse = (json: string): unknown => {
 /**
  * Safely serializes a value to JSON, returning undefined on failure.
  */
-export const safeJsonStringify = (value: unknown): string | undefined => {
+export function safeJsonStringify(value: unknown): string | undefined {
   try {
     return JSON.stringify(value)
   } catch {
@@ -98,7 +98,7 @@ export const safeJsonStringify = (value: unknown): string | undefined => {
  * Reads the chip trigger character from a chip element's dataset.
  * Returns undefined if the node is not a chip element.
  */
-export const getChipTrigger = (node: Node): string | undefined => {
+export function getChipTrigger(node: Node): string | undefined {
   if (!isChipElement(node)) {
     return undefined
   }
@@ -108,7 +108,7 @@ export const getChipTrigger = (node: Node): string | undefined => {
 /**
  * Reads the chip value from a chip element's dataset.
  */
-export const getChipValue = (node: Node): string | undefined => {
+export function getChipValue(node: Node): string | undefined {
   if (!isChipElement(node)) {
     return undefined
   }
@@ -118,7 +118,7 @@ export const getChipValue = (node: Node): string | undefined => {
 /**
  * Reads the chip display text from a chip element's dataset.
  */
-export const getChipDisplay = (node: Node): string | undefined => {
+export function getChipDisplay(node: Node): string | undefined {
   if (!isChipElement(node)) {
     return undefined
   }
@@ -128,7 +128,7 @@ export const getChipDisplay = (node: Node): string | undefined => {
 /**
  * Reads and safely parses the chip data from a chip element's dataset.
  */
-export const getChipData = (node: Node): unknown => {
+export function getChipData(node: Node): unknown {
   if (!isChipElement(node)) {
     return undefined
   }
@@ -147,7 +147,7 @@ export const getChipData = (node: Node): unknown => {
  * how chips are rendered: `chipDisplay` is always set, but we degrade to
  * `textContent` for resilience against externally-mutated nodes.
  */
-export const chipNodeTextLength = (node: HTMLElement): number => {
+export function chipNodeTextLength(node: HTMLElement): number {
   const trigger = node.dataset.chipTrigger ?? ''
   const display = node.dataset.chipDisplay ?? node.textContent ?? ''
   return trigger.length + display.length
@@ -162,7 +162,7 @@ export const chipNodeTextLength = (node: HTMLElement): number => {
  * delegation, and clipboard serialization, so they cannot diverge on which
  * fields are required or how optional `data` / `autoResolved` are attached.
  */
-export const chipNodeToSegment = (node: Node): ChipSegment | null => {
+export function chipNodeToSegment(node: Node): ChipSegment | null {
   if (!isChipElement(node)) {
     return null
   }
@@ -193,7 +193,7 @@ export const chipNodeToSegment = (node: Node): ChipSegment | null => {
  * Finds the index of a direct child node within a parent element.
  * Returns -1 if not found.
  */
-export const indexOfChildNode = (parent: HTMLElement, child: Node): number => {
+export function indexOfChildNode(parent: HTMLElement, child: Node): number {
   const children = parent.childNodes
   for (let i = 0; i < children.length; i++) {
     if (children[i] === child) {
@@ -215,7 +215,7 @@ export const indexOfChildNode = (parent: HTMLElement, child: Node): number => {
  * counts if `chipNodeToSegment` would actually accept it — the reader skips a
  * chip missing a required attribute (trigger/value/display), so this must too.
  */
-export const childProducesSegment = (child: Node): boolean => {
+export function childProducesSegment(child: Node): boolean {
   if (child.nodeType === Node.TEXT_NODE) {
     return (child.textContent ?? '') !== ''
   }
@@ -239,7 +239,7 @@ export const childProducesSegment = (child: Node): boolean => {
  * Keeping this in one place ensures chip-removal, chip-revert, and chip
  * in-place replacement all agree on the exact same mapping rules as the reader.
  */
-export const domChildIndexToSegmentIndex = (editor: HTMLElement, childIndex: number): number => {
+export function domChildIndexToSegmentIndex(editor: HTMLElement, childIndex: number): number {
   let segIdx = 0
   for (let i = 0; i < childIndex; i++) {
     if (childProducesSegment(editor.childNodes[i])) {
@@ -254,7 +254,7 @@ export const domChildIndexToSegmentIndex = (editor: HTMLElement, childIndex: num
  * Walks up from descendant until we find a node whose parent is ancestor.
  * Returns null if descendant is not inside ancestor.
  */
-export const getDirectChildContaining = (ancestor: HTMLElement, descendant: Node): Node | null => {
+export function getDirectChildContaining(ancestor: HTMLElement, descendant: Node): Node | null {
   let node: Node | null = descendant
   while (node !== null) {
     if (node.parentNode === ancestor) {
@@ -269,7 +269,7 @@ export const getDirectChildContaining = (ancestor: HTMLElement, descendant: Node
  * Unwraps a block element (div, p) by replacing it with its child nodes
  * plus a trailing BR. Used for browser DOM normalization.
  */
-export const unwrapBlockElement = (parent: HTMLElement, block: HTMLElement): void => {
+export function unwrapBlockElement(parent: HTMLElement, block: HTMLElement): void {
   const fragment = document.createDocumentFragment()
 
   while (block.firstChild) {
@@ -294,7 +294,7 @@ export const unwrapBlockElement = (parent: HTMLElement, block: HTMLElement): voi
  * - <br> elements
  * - Chip <span> elements (with data-chip-trigger)
  */
-export const normalizeEditorDOM = (editor: HTMLElement): boolean => {
+export function normalizeEditorDOM(editor: HTMLElement): boolean {
   let changed = false
   const blockTags = new Set(['DIV', 'P', 'SECTION', 'ARTICLE', 'BLOCKQUOTE'])
 
@@ -355,7 +355,7 @@ export const normalizeEditorDOM = (editor: HTMLElement): boolean => {
  * @param editor - The contentEditable root element
  * @returns Whether any decorations were applied
  */
-export const decorateURLsInEditor = (editor: HTMLElement): boolean => {
+export function decorateURLsInEditor(editor: HTMLElement): boolean {
   let decorated = false
 
   // Collect text nodes first (avoid modifying while iterating)
@@ -456,7 +456,7 @@ export const decorateURLsInEditor = (editor: HTMLElement): boolean => {
  * @param editor - The contentEditable root element
  * @returns Whether any decorations were applied
  */
-export const decorateMarkdownInEditor = (editor: HTMLElement): boolean => {
+export function decorateMarkdownInEditor(editor: HTMLElement): boolean {
   let decorated = false
 
   // Collect text nodes first (avoid modifying while iterating)
@@ -577,7 +577,7 @@ export const decorateMarkdownInEditor = (editor: HTMLElement): boolean => {
  * @param editor - The contentEditable root element
  * @returns Whether any decorations were applied
  */
-export const decorateBulletsInEditor = (editor: HTMLElement): boolean => {
+export function decorateBulletsInEditor(editor: HTMLElement): boolean {
   let decorated = false
 
   const textNodes: Text[] = []
@@ -648,7 +648,7 @@ export const decorateBulletsInEditor = (editor: HTMLElement): boolean => {
  *
  * @returns Whether any decorations were applied
  */
-export const decorateListIndentInEditor = (editor: HTMLElement): boolean => {
+export function decorateListIndentInEditor(editor: HTMLElement): boolean {
   let decorated = false
 
   const textNodes: Text[] = []
@@ -719,7 +719,7 @@ export const decorateListIndentInEditor = (editor: HTMLElement): boolean => {
  * fragment starting with whitespace would let the indent regex's `^` anchor
  * false-match non-line-leading whitespace (e.g. `see http://x   1. y`).
  */
-export const decorateEditor = (editor: HTMLElement, markdownEnabled: boolean): void => {
+export function decorateEditor(editor: HTMLElement, markdownEnabled: boolean): void {
   // Whole-line passes run FIRST, while each direct-child text node is still a
   // full line. The URL and markdown passes split text nodes mid-line, so a tail
   // fragment beginning with "•" would let the bullet regex's `^` anchor
@@ -740,7 +740,7 @@ export const decorateEditor = (editor: HTMLElement, markdownEnabled: boolean): v
  * Returns the first Range from the current window selection, or null if
  * there is no selection or it has no ranges.
  */
-export const getSelectionRange = (): Range | null => {
+export function getSelectionRange(): Range | null {
   const sel = window.getSelection()
   if (!sel || sel.rangeCount === 0) {
     return null

@@ -9,7 +9,7 @@ import {
   type TranscriptVariant,
 } from '../src/components/agent/transcript-variant.tsx'
 
-const richItems = (): TranscriptItem[] => {
+function richItems(): TranscriptItem[] {
   const items: TranscriptItem[] = []
 
   items.push({
@@ -303,19 +303,21 @@ type AgentViewArgs = {
 
 type Story = StoryObj<AgentViewArgs>
 
-const Template = (args: AgentViewArgs) => (
-  <AgentViewShell variant={args.variant} density={args.density} fontSize={args.fontSize}>
-    <Transcript
-      state={state}
-      variant={args.variant}
-      density={args.density}
-      stickyPrompt={args.stickyPrompt}
-      scrubber={args.scrubber}
-      affordances={args.affordances}
-      fontSize={args.fontSize}
-    />
-  </AgentViewShell>
-)
+function Template(args: AgentViewArgs) {
+  return (
+    <AgentViewShell variant={args.variant} density={args.density} fontSize={args.fontSize}>
+      <Transcript
+        state={state}
+        variant={args.variant}
+        density={args.density}
+        stickyPrompt={args.stickyPrompt}
+        scrubber={args.scrubber}
+        affordances={args.affordances}
+        fontSize={args.fontSize}
+      />
+    </AgentViewShell>
+  )
+}
 
 export const Default: Story = {
   render: Template,

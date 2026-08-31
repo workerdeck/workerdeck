@@ -4,39 +4,48 @@ import { blockNeedsBlank, terminalBlocks } from '../src/components/terminal/item
 import { subagentItems } from '../src/components/terminal/blocks.ts'
 
 let seq = 0
-const tool = (name: string, parentToolUseId: string | null = null, id = `t${++seq}`): TranscriptItem => ({
-  kind: 'tool_call',
-  id,
-  name,
-  input: {},
-  parentToolUseId,
-  status: 'settled',
-})
-const text = (body: string, parentToolUseId: string | null = null): TranscriptItem => ({
-  kind: 'assistant_text',
-  id: `a${++seq}`,
-  text: body,
-  streaming: false,
-  parentToolUseId,
-})
-const user = (body: string, parent?: string): TranscriptItem => ({
-  kind: 'user',
-  id: `u${++seq}`,
-  text: body,
-  // The brief's shape exactly: the key exists only on a subagent's brief.
-  ...(parent !== undefined ? { parentToolUseId: parent } : {}),
-})
-const task = (id: string, input: unknown = {}): TranscriptItem => ({
-  kind: 'tool_call',
-  id,
-  name: 'Task',
-  input,
-  parentToolUseId: null,
-  status: 'running',
-})
+function tool(name: string, parentToolUseId: string | null = null, id = `t${++seq}`): TranscriptItem {
+  return {
+    kind: 'tool_call',
+    id,
+    name,
+    input: {},
+    parentToolUseId,
+    status: 'settled',
+  }
+}
+function text(body: string, parentToolUseId: string | null = null): TranscriptItem {
+  return {
+    kind: 'assistant_text',
+    id: `a${++seq}`,
+    text: body,
+    streaming: false,
+    parentToolUseId,
+  }
+}
+function user(body: string, parent?: string): TranscriptItem {
+  return {
+    kind: 'user',
+    id: `u${++seq}`,
+    text: body,
+    // The brief's shape exactly: the key exists only on a subagent's brief.
+    ...(parent !== undefined ? { parentToolUseId: parent } : {}),
+  }
+}
+function task(id: string, input: unknown = {}): TranscriptItem {
+  return {
+    kind: 'tool_call',
+    id,
+    name: 'Task',
+    input,
+    parentToolUseId: null,
+    status: 'running',
+  }
+}
 
-const shape = (blocks: ReturnType<typeof terminalBlocks>) =>
-  blocks.map((b) => ('run' in b ? `run(${b.run.length})` : 'task' in b ? `task(${b.childIndices.length})` : b.item.kind))
+function shape(blocks: ReturnType<typeof terminalBlocks>) {
+  return blocks.map((b) => ('run' in b ? `run(${b.run.length})` : 'task' in b ? `task(${b.childIndices.length})` : b.item.kind))
+}
 
 describe('terminalBlocks', () => {
   it('folds a run of consecutive tool calls into one block', () => {

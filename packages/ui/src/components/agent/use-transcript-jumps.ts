@@ -7,7 +7,7 @@ import { gapBefore, type TranscriptRow } from './transcript-rows.ts'
 const AIM_PASSES = 4
 const AIM_SETTLE_MS = 50
 
-export const useTranscriptJumps = (options: {
+export function useTranscriptJumps(options: {
   rows: TranscriptRow[]
   terminal: boolean
   stickyPrompt: boolean
@@ -19,7 +19,7 @@ export const useTranscriptJumps = (options: {
   stick: ReturnType<typeof useStickToBottomContext>
   jumpToRecapRef?: RefObject<(() => void) | null>
   repinRef?: RefObject<(() => void) | null>
-}): ((rowIndex: number, align?: 'start' | 'center') => void) => {
+}): (rowIndex: number, align?: 'start' | 'center') => void {
   const { rows, terminal, stickyPrompt, epoch, promptRows, scrollElement, rowsRef, virtualizer, stick, jumpToRecapRef, repinRef } = options
 
   const aimTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)

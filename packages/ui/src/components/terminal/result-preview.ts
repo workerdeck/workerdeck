@@ -6,7 +6,7 @@ export type CollapsedResult = {
   more?: string
 }
 
-export const collapsedResult = (lines: string[], totalChars?: number): CollapsedResult => {
+export function collapsedResult(lines: string[], totalChars?: number): CollapsedResult {
   const shown: string[] = []
   let chars = 0
   let cut = false

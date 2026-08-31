@@ -62,7 +62,7 @@ type UndoState = {
  * Encapsulates all edge-case event handlers for the prompt area component:
  * paste, copy, cut, drag/drop, IME composition, blur, and undo/redo.
  */
-export const usePromptAreaEvents = (deps: EventHandlerDeps): PromptAreaEventHandlers => {
+export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHandlers {
   const {
     editorRef,
     readSegmentsFromDOM,

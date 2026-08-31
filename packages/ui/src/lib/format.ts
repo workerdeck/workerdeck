@@ -1,4 +1,4 @@
-export const formatCost = (usd: number | undefined): string => {
+export function formatCost(usd: number | undefined): string {
   if (usd === undefined || Number.isNaN(usd)) {
     return '—'
   }
@@ -11,7 +11,7 @@ export const formatCost = (usd: number | undefined): string => {
   return `$${usd.toFixed(2)}`
 }
 
-export const formatDuration = (ms: number): string => {
+export function formatDuration(ms: number): string {
   if (ms < 1000) {
     return `${Math.round(ms)}ms`
   }
@@ -23,7 +23,7 @@ export const formatDuration = (ms: number): string => {
   return `${m}m ${Math.round(s % 60)}s`
 }
 
-export const formatTokens = (tokens: number): string => {
+export function formatTokens(tokens: number): string {
   if (tokens >= 1_000_000) {
     return `${(tokens / 1_000_000).toFixed(1)}M`
   }
@@ -33,7 +33,7 @@ export const formatTokens = (tokens: number): string => {
   return String(Math.round(tokens))
 }
 
-export const formatBytes = (bytes: number): string => {
+export function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
@@ -43,7 +43,7 @@ export const formatBytes = (bytes: number): string => {
   return `${bytes} B`
 }
 
-export const formatCountdown = (untilEpochMs: number, now = Date.now()): string => {
+export function formatCountdown(untilEpochMs: number, now = Date.now()): string {
   const remaining = untilEpochMs - now
   if (remaining <= 0) {
     return 'now'
@@ -62,7 +62,7 @@ export const formatCountdown = (untilEpochMs: number, now = Date.now()): string 
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
 }
 
-export const formatRelativeTime = (epochMs: number | undefined, now = Date.now()): string => {
+export function formatRelativeTime(epochMs: number | undefined, now = Date.now()): string {
   if (!epochMs) {
     return '—'
   }
@@ -83,7 +83,7 @@ export const formatRelativeTime = (epochMs: number | undefined, now = Date.now()
   return `${d}d ago`
 }
 
-export const formatRateLimitWindow = (key: string): string => {
+export function formatRateLimitWindow(key: string): string {
   if (key === 'five_hour') {
     return '5h'
   }
@@ -94,7 +94,7 @@ export const formatRateLimitWindow = (key: string): string => {
   return key.startsWith('seven_day_') ? `7d ${spaced.slice('seven day '.length)}` : spaced
 }
 
-export const formatRateLimitWindowLong = (key: string): string => {
+export function formatRateLimitWindowLong(key: string): string {
   if (key === 'five_hour') {
     return '5-hour session'
   }
@@ -111,7 +111,7 @@ export const formatRateLimitWindowLong = (key: string): string => {
   return `Weekly · ${capitalize(key.slice('seven_day_'.length).replaceAll('_', ' '))}`
 }
 
-export const rateLimitWindowSeconds = (key: string): number | undefined => {
+export function rateLimitWindowSeconds(key: string): number | undefined {
   if (key === 'five_hour') {
     return 5 * 3600
   }
@@ -121,7 +121,7 @@ export const rateLimitWindowSeconds = (key: string): number | undefined => {
   return undefined
 }
 
-export const formatAgoPrecise = (epochMs: number, now = Date.now()): string => {
+export function formatAgoPrecise(epochMs: number, now = Date.now()): string {
   const seconds = Math.max(0, Math.floor((now - epochMs) / 1000))
   if (seconds < 60) {
     return `${seconds} sec${seconds === 1 ? '' : 's'} ago`
@@ -134,7 +134,7 @@ export const formatAgoPrecise = (epochMs: number, now = Date.now()): string => {
   return `${hours} hour${hours === 1 ? '' : 's'} ago`
 }
 
-export const toolInputPreview = (input: unknown, max = 80): string => {
+export function toolInputPreview(input: unknown, max = 80): string {
   if (input === null || input === undefined) {
     return ''
   }
@@ -160,7 +160,7 @@ const MODEL_FAMILIES: Record<string, { name: string; joiner?: string }> = {
   grok: { name: 'Grok' },
 }
 
-export const friendlyModel = (id: string | undefined): string | undefined => {
+export function friendlyModel(id: string | undefined): string | undefined {
   if (!id) {
     return undefined
   }

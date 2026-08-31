@@ -41,14 +41,16 @@ export interface ComposerProps {
   ref?: Ref<ComposerHandle>
 }
 
-const cleanName = (name: string) => name.replace(/\s*\(MCP\)$/i, '')
+function cleanName(name: string) {
+  return name.replace(/\s*\(MCP\)$/i, '')
+}
 
-export const skillPrompt = (skill: SkillInfo): string => {
+export function skillPrompt(skill: SkillInfo): string {
   const base = skill.defaultPrompt?.trim() || `$${skill.name}`
   return /\s$/.test(base) ? base : base + ' '
 }
 
-const matchScore = (query: string, haystacks: string[]): number => {
+function matchScore(query: string, haystacks: string[]): number {
   const needle = query.toLowerCase()
   const lowered = haystacks.map((s) => s.toLowerCase())
   if (lowered.some((h) => h.startsWith(needle))) {
@@ -399,7 +401,7 @@ export function Composer({
   )
 }
 
-const GlyphButton = ({
+function GlyphButton({
   tone,
   label,
   disabled,
@@ -415,7 +417,7 @@ const GlyphButton = ({
   gutter?: boolean
   className?: string
   children: ReactNode
-}) => {
+}) {
   return (
     <button
       type="button"
@@ -432,7 +434,7 @@ const GlyphButton = ({
   )
 }
 
-const AttachmentStrip = ({ attachments }: { attachments: UseAttachmentsResult }) => {
+function AttachmentStrip({ attachments }: { attachments: UseAttachmentsResult }) {
   const terminal = useTranscriptVariant() === 'terminal'
   return (
     <div className={cn('flex gap-2 overflow-x-auto', terminal ? 'term-attachments' : 'border-b border-border px-2 py-2')}>
@@ -502,7 +504,7 @@ function AttachmentChip({ item, onRetry, onRemove }: { item: StagedAttachment; o
   )
 }
 
-const extensionOf = (name: string) => {
+function extensionOf(name: string) {
   const dot = name.lastIndexOf('.')
   return dot > 0 ? name.slice(dot + 1).toUpperCase() : 'FILE'
 }

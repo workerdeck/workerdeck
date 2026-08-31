@@ -4,7 +4,7 @@ import { RotateCcw } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
 import { formatAgoPrecise, formatCountdown, formatRateLimitWindowLong, rateLimitWindowSeconds } from '../../lib/format.ts'
 
-export const useMinuteClock = (active = true): number => {
+export function useMinuteClock(active = true): number {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!active) {
@@ -17,7 +17,9 @@ export const useMinuteClock = (active = true): number => {
   return now
 }
 
-const usageTint = (pct: number) => (pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-warning' : 'bg-accent')
+function usageTint(pct: number) {
+  return pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-warning' : 'bg-accent'
+}
 
 export function UsageMeters({ windows, now, className }: { windows: UsageWindowRow[]; now?: number; className?: string }) {
   const ownClock = useMinuteClock(now === undefined)
@@ -31,7 +33,7 @@ export function UsageMeters({ windows, now, className }: { windows: UsageWindowR
   )
 }
 
-const UsageMeter = ({ window, now }: { window: UsageWindowRow; now: number }) => {
+function UsageMeter({ window, now }: { window: UsageWindowRow; now: number }) {
   const { key: windowKey, info, updatedAt, inferredReset } = window
   const utilization = info.utilization ?? 0
   const resetsAtMs = info.resetsAt !== undefined ? info.resetsAt * 1000 : undefined

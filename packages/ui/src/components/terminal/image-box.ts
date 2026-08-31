@@ -2,7 +2,7 @@ import { formatBytes } from '../../lib/format.ts'
 
 export const IMAGE_BOX_LINES = 12
 
-export const imagePlaceholder = (image: { bytes: number }): string => {
+export function imagePlaceholder(image: { bytes: number }): string {
   return `image · ${formatBytes(image.bytes)}`
 }
 

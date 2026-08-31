@@ -23,7 +23,7 @@ const STATUS_META: Record<SessionStatus, StatusPresentation> = {
   closed: { icon: 'circle-slash', label: 'Closed', severity: 'none' },
 }
 
-export const statusPresentation = (vitals: StatusReadings | undefined): StatusPresentation => {
+export function statusPresentation(vitals: StatusReadings | undefined): StatusPresentation {
   if (!vitals) {
     return { icon: 'hubot', label: 'Connecting…', severity: 'none' }
   }
@@ -36,7 +36,7 @@ export const statusPresentation = (vitals: StatusReadings | undefined): StatusPr
   return STATUS_META[vitals.status] ?? { icon: 'hubot', label: vitals.status, severity: 'none' }
 }
 
-export const meterSeverity = (pct: number | undefined): StatusSeverity => {
+export function meterSeverity(pct: number | undefined): StatusSeverity {
   if (pct === undefined) {
     return 'none'
   }
@@ -51,10 +51,10 @@ export const meterSeverity = (pct: number | undefined): StatusSeverity => {
 
 export type UsageLane = 'session' | 'weekly' | 'model'
 
-export const usageWindow = (
+export function usageWindow(
   rateLimits: Record<string, RateLimitInfo> | undefined,
   lane: UsageLane,
-): { key: string; info: RateLimitInfo } | undefined => {
+): { key: string; info: RateLimitInfo } | undefined {
   if (!rateLimits) {
     return undefined
   }
@@ -72,7 +72,7 @@ export const usageWindow = (
   return tightestWindow(scoped)
 }
 
-export const tightestWindow = (rateLimits: Record<string, RateLimitInfo> | undefined): { key: string; info: RateLimitInfo } | undefined => {
+export function tightestWindow(rateLimits: Record<string, RateLimitInfo> | undefined): { key: string; info: RateLimitInfo } | undefined {
   const entries = Object.entries(rateLimits ?? {})
   if (entries.length === 0) {
     return undefined
@@ -93,7 +93,7 @@ export const tightestWindow = (rateLimits: Record<string, RateLimitInfo> | undef
   return best
 }
 
-export const windowLabel = (key: string): string => {
+export function windowLabel(key: string): string {
   if (key === 'five_hour') {
     return 'Session'
   }
@@ -107,7 +107,7 @@ export const windowLabel = (key: string): string => {
 
 export type ModelReadings = { model?: string; models: readonly ModelOption[] }
 
-export const currentModel = (vitals: ModelReadings | undefined): ModelOption | undefined => {
+export function currentModel(vitals: ModelReadings | undefined): ModelOption | undefined {
   const id = vitals?.model
   if (!id) {
     return undefined
@@ -117,18 +117,18 @@ export const currentModel = (vitals: ModelReadings | undefined): ModelOption | u
   return vitals.models.find((m) => bare(m.value) === wanted || (m.resolvedModel && bare(m.resolvedModel) === wanted))
 }
 
-export const modelLabel = (vitals: ModelReadings | undefined): string => {
+export function modelLabel(vitals: ModelReadings | undefined): string {
   if (!vitals?.model) {
     return 'Default'
   }
   return currentModel(vitals)?.displayName ?? vitals.model
 }
 
-export const contextSeverity = (usage: { percentage: number } | undefined): StatusSeverity => {
+export function contextSeverity(usage: { percentage: number } | undefined): StatusSeverity {
   return meterSeverity(usage?.percentage)
 }
 
-export const meterColorClass = (pct: number | undefined): string => {
+export function meterColorClass(pct: number | undefined): string {
   const severity = meterSeverity(pct)
   return severity === 'error' ? 'text-danger' : severity === 'warning' ? 'text-warning' : 'text-fg-3'
 }

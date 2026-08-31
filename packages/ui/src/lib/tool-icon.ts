@@ -18,7 +18,7 @@ import {
   Wrench,
 } from 'lucide-react'
 
-export const toolIcon = (toolName: string): LucideIcon => {
+export function toolIcon(toolName: string): LucideIcon {
   switch (toolName) {
     case 'Bash':
     case 'BashOutput':
@@ -81,11 +81,11 @@ export const toolIcon = (toolName: string): LucideIcon => {
 }
 
 // `BashOutput`/`KillShell` are excluded on purpose: they manage a background shell rather than run one.
-export const isShellTool = (toolName: string): boolean => {
+export function isShellTool(toolName: string): boolean {
   return toolName === 'Bash' || toolName === 'CodexCommand'
 }
 
-export const isMutatingTool = (toolName: string): boolean => {
+export function isMutatingTool(toolName: string): boolean {
   switch (toolName) {
     case 'Write':
     case 'Edit':

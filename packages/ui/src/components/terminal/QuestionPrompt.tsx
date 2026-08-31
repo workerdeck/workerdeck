@@ -8,7 +8,7 @@ type Selection = { labels: string[]; other: string; otherActive: boolean }
 
 const EMPTY: Selection = { labels: [], other: '', otherActive: false }
 
-const answerFor = (selection: Selection): string => {
+function answerFor(selection: Selection): string {
   const parts = [...selection.labels]
   if (selection.otherActive && selection.other.trim()) {
     parts.push(selection.other.trim())

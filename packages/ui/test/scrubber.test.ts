@@ -4,62 +4,77 @@ import type { TranscriptItem } from '@workerdeck/react'
 import { buildClusters, railScale, type TerminalScrubberProps } from '../src/components/terminal/scrubber.tsx'
 
 let seq = 0
-const user = (text: string): TranscriptItem => ({ kind: 'user', id: `u${++seq}`, text })
-const assistant = (text: string, parentToolUseId: string | null = null): TranscriptItem => ({
-  kind: 'assistant_text',
-  id: `a${++seq}`,
-  text,
-  streaming: false,
-  parentToolUseId,
-})
-const turn = (isError = false): TranscriptItem => ({
-  kind: 'turn_result',
-  id: `r${++seq}`,
-  subtype: isError ? 'error_during_execution' : 'success',
-  isError,
-  durationMs: 1000,
-  totalCostUsd: 0.01,
-})
-const notice = (level: 'info' | 'error', text: string): TranscriptItem => ({
-  kind: 'notice',
-  id: `n${++seq}`,
-  level,
-  text,
-})
-const toolCall = (status: 'running' | 'settled' | 'failed', result?: { text: string; isError: boolean }): TranscriptItem => ({
-  kind: 'tool_call',
-  id: `t${++seq}`,
-  name: 'Bash',
-  input: {},
-  parentToolUseId: null,
-  status,
-  ...(result ? { result } : {}),
-})
+function user(text: string): TranscriptItem {
+  return { kind: 'user', id: `u${++seq}`, text }
+}
+function assistant(text: string, parentToolUseId: string | null = null): TranscriptItem {
+  return {
+    kind: 'assistant_text',
+    id: `a${++seq}`,
+    text,
+    streaming: false,
+    parentToolUseId,
+  }
+}
+function turn(isError = false): TranscriptItem {
+  return {
+    kind: 'turn_result',
+    id: `r${++seq}`,
+    subtype: isError ? 'error_during_execution' : 'success',
+    isError,
+    durationMs: 1000,
+    totalCostUsd: 0.01,
+  }
+}
+function notice(level: 'info' | 'error', text: string): TranscriptItem {
+  return {
+    kind: 'notice',
+    id: `n${++seq}`,
+    level,
+    text,
+  }
+}
+function toolCall(status: 'running' | 'settled' | 'failed', result?: { text: string; isError: boolean }): TranscriptItem {
+  return {
+    kind: 'tool_call',
+    id: `t${++seq}`,
+    name: 'Bash',
+    input: {},
+    parentToolUseId: null,
+    status,
+    ...(result ? { result } : {}),
+  }
+}
 
 // One row per item, 100px each — so a mark's y is its index × 10 at this scale, and two marks five items apart do not merge.
 const ROW = 100
 const RAIL = 100
 
-const props = (items: TranscriptItem[], extra: Partial<TerminalScrubberProps> = {}): TerminalScrubberProps => ({
-  items,
-  pendingApprovals: [],
-  bookmarks: [],
-  rowIndexFor: (i) => i,
-  offsetOfRow: (row) => row * ROW,
-  sizeOfRow: () => ROW,
-  totalSize: Math.max(items.length, 1) * ROW,
-  scrollOffset: 0,
-  viewportH: 200,
-  onJumpToRow: () => {},
-  interactive: true,
-  ...extra,
-})
+function props(items: TranscriptItem[], extra: Partial<TerminalScrubberProps> = {}): TerminalScrubberProps {
+  return {
+    items,
+    pendingApprovals: [],
+    bookmarks: [],
+    rowIndexFor: (i) => i,
+    offsetOfRow: (row) => row * ROW,
+    sizeOfRow: () => ROW,
+    totalSize: Math.max(items.length, 1) * ROW,
+    scrollOffset: 0,
+    viewportH: 200,
+    onJumpToRow: () => {},
+    interactive: true,
+    ...extra,
+  }
+}
 
 // Every mark with the lane its cluster drew it in — clusters merge, so a cluster-level filter silently loses the quieter member.
-const members = (clusters: ReturnType<typeof buildClusters>) => clusters.flatMap((c) => c.marks.map((m) => ({ lane: c.lane, ...m.mark })))
+function members(clusters: ReturnType<typeof buildClusters>) {
+  return clusters.flatMap((c) => c.marks.map((m) => ({ lane: c.lane, ...m.mark })))
+}
 
-const kinds = (items: TranscriptItem[], extra?: Partial<TerminalScrubberProps>) =>
-  buildClusters(props(items, extra), RAIL).map((c) => `${c.lane}:${c.kind}`)
+function kinds(items: TranscriptItem[], extra?: Partial<TerminalScrubberProps>) {
+  return buildClusters(props(items, extra), RAIL).map((c) => `${c.lane}:${c.kind}`)
+}
 
 describe('inside a sub-agent frame', () => {
   const framed = (text: string) => assistant(text, 'task-1')

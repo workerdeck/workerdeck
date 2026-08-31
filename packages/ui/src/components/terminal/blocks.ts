@@ -4,16 +4,16 @@ import { foldsTogether } from './tool-run.ts'
 export type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
 
 // `user` items carry `parentToolUseId` only optionally (only a subagent's brief has the key); the other kinds carry it as `string | null`.
-export const parentOf = (item: TranscriptItem): string | undefined => {
+export function parentOf(item: TranscriptItem): string | undefined {
   const parent = 'parentToolUseId' in item ? item.parentToolUseId : undefined
   return parent ?? undefined
 }
 
-export const subagentItems = (items: readonly TranscriptItem[], parentToolUseId: string): TranscriptItem[] => {
+export function subagentItems(items: readonly TranscriptItem[], parentToolUseId: string): TranscriptItem[] {
   return items.filter((item) => parentOf(item) === parentToolUseId)
 }
 
-export const isRunCall = (item: TranscriptItem): item is ToolCallItem => {
+export function isRunCall(item: TranscriptItem): item is ToolCallItem {
   return item.kind === 'tool_call'
 }
 
@@ -36,11 +36,11 @@ export type TaskBlock = {
 
 export type TerminalBlock = ItemBlock | RunBlock | TaskBlock
 
-export const taskChildItems = (block: TaskBlock): TranscriptItem[] => {
+export function taskChildItems(block: TaskBlock): TranscriptItem[] {
   return block.children.flatMap((child) => ('run' in child ? child.run : [child.item]))
 }
 
-const pushLeaf = (out: LeafBlock[], item: TranscriptItem, index: number): void => {
+function pushLeaf(out: LeafBlock[], item: TranscriptItem, index: number): void {
   const previous = out.at(-1)
   if (isRunCall(item)) {
     if (previous && 'run' in previous && foldsTogether(previous.run[0]!, item)) {
@@ -54,7 +54,7 @@ const pushLeaf = (out: LeafBlock[], item: TranscriptItem, index: number): void =
   out.push({ key: `${item.kind}:${item.id}`, item, index })
 }
 
-export const terminalBlocks = (items: readonly TranscriptItem[], offset = 0, fold = true): TerminalBlock[] => {
+export function terminalBlocks(items: readonly TranscriptItem[], offset = 0, fold = true): TerminalBlock[] {
   if (!fold) {
     return items.map((item, position) => ({
       key: `${item.kind}:${item.id}`,
@@ -111,14 +111,14 @@ export const terminalBlocks = (items: readonly TranscriptItem[], offset = 0, fol
   return out
 }
 
-export const needsBlank = (previous: TranscriptItem, next: TranscriptItem): boolean => {
+export function needsBlank(previous: TranscriptItem, next: TranscriptItem): boolean {
   if (previous.kind === 'tool_call' && next.kind === 'tool_call') {
     return false
   }
   return true
 }
 
-export const blockNeedsBlank = (previous: TerminalBlock, next: TerminalBlock): boolean => {
+export function blockNeedsBlank(previous: TerminalBlock, next: TerminalBlock): boolean {
   const kind = (block: TerminalBlock) => ('item' in block ? block.item.kind : 'tool_call')
   return !(kind(previous) === 'tool_call' && kind(next) === 'tool_call')
 }
