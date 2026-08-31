@@ -18,24 +18,7 @@ import {
 } from '@workerdeck/ui'
 import { Plus } from 'lucide-react'
 import { client } from '@/lib/client.ts'
-
-const CAPABILITIES: SessionCapability[] = ['web_search', 'download', 'web_fetch', 'deliver_file']
-
-function commaList(value: string): string[] {
-  return value
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex min-w-0 flex-1 flex-col gap-1">
-      <span className="text-label font-medium text-fg-3">{label}</span>
-      {children}
-    </label>
-  )
-}
+import { CAPABILITIES, Field, commaList } from '@/components/profile-fields.tsx'
 
 // No field here carries a credential: `apiKeyEnv` is a variable name the server resolves, and a config directory is
 // a path bounded by the server's `allowedConfigDirRoots`.

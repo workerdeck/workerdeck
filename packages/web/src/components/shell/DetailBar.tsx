@@ -41,3 +41,13 @@ export function DetailBody({ children }: { children: ReactNode }) {
     </div>
   )
 }
+
+/** One label/value line inside a {@link DetailBody} — the detail pages' only row shape. */
+export function DetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-1.5">
+      <span className="shrink-0 text-label font-medium text-fg-3">{label}</span>
+      <span className="min-w-0 text-right text-body-sm text-fg-1">{children}</span>
+    </div>
+  )
+}

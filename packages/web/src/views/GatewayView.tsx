@@ -1,20 +1,11 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, toast } from '@workerdeck/ui'
 import { Trash2 } from 'lucide-react'
 import { ConfirmRemoveGateway, GatewayFields } from '@/components/GatewayForm.tsx'
-import { DetailBar, DetailBody } from '@/components/shell/DetailBar.tsx'
+import { DetailBar, DetailBody, DetailRow } from '@/components/shell/DetailBar.tsx'
 import { isLocal, useHosts } from '@/lib/hosts.ts'
 import { useSessions } from '@/hooks/useSessions.ts'
-
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 py-1.5">
-      <span className="shrink-0 text-label font-medium text-fg-3">{label}</span>
-      <span className="min-w-0 text-right text-body-sm text-fg-1">{children}</span>
-    </div>
-  )
-}
 
 export function GatewayView() {
   const { hostId } = useParams({ from: '/gateways/$hostId' })
@@ -64,7 +55,7 @@ export function GatewayView() {
             <CardTitle>Connection</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col divide-y divide-border">
-            <Row label="Status">
+            <DetailRow label="Status">
               {state === 'ok' ? (
                 <Badge variant="success" dot>
                   Connected
@@ -78,21 +69,21 @@ export function GatewayView() {
                   Connecting…
                 </Badge>
               )}
-            </Row>
+            </DetailRow>
             {snapshot?.error ? (
-              <Row label="Last error">
+              <DetailRow label="Last error">
                 <span className="text-danger">{snapshot.error}</span>
-              </Row>
+              </DetailRow>
             ) : null}
-            <Row label="Live sessions">{snapshot ? snapshot.sessions.length : <span className="text-fg-4">—</span>}</Row>
-            <Row label="Reachability">{isLocal(host) ? 'This machine (loopback)' : 'Remote'}</Row>
-            <Row label="Credential">
+            <DetailRow label="Live sessions">{snapshot ? snapshot.sessions.length : <span className="text-fg-4">—</span>}</DetailRow>
+            <DetailRow label="Reachability">{isLocal(host) ? 'This machine (loopback)' : 'Remote'}</DetailRow>
+            <DetailRow label="Credential">
               {host.implicit ? (
                 <span className="text-fg-4">the login cookie it set — same origin</span>
               ) : (
                 <span className="text-fg-4">an auth key held in this browser</span>
               )}
-            </Row>
+            </DetailRow>
           </CardContent>
         </Card>
 

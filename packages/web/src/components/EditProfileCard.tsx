@@ -5,24 +5,7 @@ import { Save } from 'lucide-react'
 import { client } from '@/lib/client.ts'
 import { ModelPicker } from '@/components/ModelPicker.tsx'
 import { engineFormOptions } from '@/lib/engine.ts'
-
-const CAPABILITIES: SessionCapability[] = ['web_search', 'download', 'web_fetch', 'deliver_file']
-
-function commaList(value: string): string[] {
-  return value
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex min-w-0 flex-1 flex-col gap-1">
-      <span className="text-label font-medium text-fg-3">{label}</span>
-      {children}
-    </label>
-  )
-}
+import { CAPABILITIES, Field, commaList } from '@/components/profile-fields.tsx'
 
 export function EditProfileCard({ profile, onSaved }: { profile: ProfileInfo; onSaved: (profile: ProfileInfo) => void }) {
   const isProvider = profile.engine === 'provider'
