@@ -69,6 +69,11 @@ The supporting rules:
   lifecycle), it must reach `docs/` — and if it cannot be placed immediately, it goes in
   `_docs/DOC-DEBT.md` (gitignored scratch) so the next pass covers it, never straight to /dev/null. Be strict about what qualifies: most comments
   are restating the code and simply go.
+- **Tests are held to the rule too**, with one allowance: a single-line `//` may stay where a
+  fixture, a timing dependency or a scenario's setup is genuinely non-obvious from the test name.
+  A comment that restates what the assertion already says still goes. (`**/test/**` is exempt from
+  `wd/max-comment-lines` in `.oxlintrc.json`; that exemption is about the old line-count rule, not
+  a licence for prose.)
 
 Why the rule reads this way: an earlier attempt enforced "comments under 12 lines" with a lint
 rule, and the threshold became the target. 58 blocks ended up at exactly 12 lines against 3 at 13,

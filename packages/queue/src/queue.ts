@@ -13,84 +13,39 @@ import type {
 import { InMemoryQueueAdapter, type JobRecord, type QueueAdapter } from './adapter.ts'
 
 export type JobQueueOptions = {
-  /** Turn a session config into a live runner — typically the server registry's create(),
-   * so job sessions are ordinary sessions clients can attach to and watch. May be
-   * async: engines whose assembly awaits (a provider session's MCP connect) resolve
-   * here, and a rejection fails the job like any other start error. */
   createRunner: (config: SessionRunnerConfig) => Runner | Promise<Runner>
-  /** Storage/claiming backend. Defaults to the in-memory adapter (single process). */
   adapter?: QueueAdapter
-  /** Concurrent job sessions. Default 1. */
   maxConcurrency?: number
-  /** Token cap per job session; exceeding it interrupts the run and fails the job. */
   sessionTokenLimit?: number
-  /** Global token budget per UTC day; when exhausted, queued jobs are held until the
-   * day rolls over (running jobs finish and are accounted). */
   dailyTokenLimit?: number
-  /** Wall-clock cap per job run; exceeding it interrupts the run and fails the job.
-   * The watchdog for stuck CLIs — without it, a run that never yields a result keeps
-   * its job (and concurrency slot) forever. Time spent parked on a deferred
-   * execution does not count against it: the run isn't stuck, it's waiting. */
   maxJobDurationMs?: number
-  /** Cap on time parked on a deferred execution, across all parks of one run.
-   * Exceeding it fails the job (the execution's own watchdog, when the backend set
-   * one, usually fires first and lets the agent adapt instead). Unset = unbounded. */
   maxParkedDurationMs?: number
-  /** How long a killed run (token/duration limit) may wind down after interrupt()
-   * before the queue force-finalizes it and closes the session. Default 5000. */
   killGraceMs?: number
-  /** Expire terminal jobs: prune those finished more than `maxAgeMs` ago, sweeping
-   * every `sweepIntervalMs` (default min(maxAgeMs, 60s)) and after each completion.
-   * Unset = keep forever (the in-memory adapter then grows unboundedly). */
   retention?: { maxAgeMs: number; sweepIntervalMs?: number }
-  /** Patch job session configs (inject queryFn, env, tool policy) before they run. */
   buildRunnerConfig?: (req: CreateSessionRequest) => SessionRunnerConfig
-  /**
-   * Drop a parked session's persisted state: the run ended (cancel, kill, retry)
-   * while parked, so nothing will ever rehydrate it. The host that parks sessions
-   * — {@link JobQueue.onSessionParking}'s caller — wires this to its session store.
-   */
   discardSession?: (sessionId: string) => void | Promise<void>
-  /** Webhook transport. Defaults to global fetch. */
   fetchImpl?: typeof fetch
-  /** Webhook delivery attempts per event (exponential backoff). Default 3. */
   webhookAttempts?: number
-  /** Initial backoff between webhook attempts. Default 500ms. */
   webhookRetryDelayMs?: number
-  /** Local observer invoked for every job event (in addition to any webhook). */
   onEvent?: (event: JobEvent) => void
 }
 
 type RunningJob = {
   record: JobRecord
-  /** Rebuilt on every resume: a rehydrated session is a NEW runner object under
-   * the same session id, so nothing may hold the old reference. */
   runner: Runner
   unsubscribe: () => void
-  /** Highest event seq seen. A resumed run re-subscribes from here, so the parked
-   * session's replayed log doesn't re-deliver a turn the queue already acted on. */
   lastSeq: number
-  /** Mid-run token estimate from assistant-message usage (enforcement + progress). */
   estimatedTokens: number
-  /** Set when the queue killed the run (limits, cancel) — decides the terminal status. */
   killReason?: string
   canceled: boolean
   finalized: boolean
-  /** Per-job webhook chain so deliveries stay ordered. */
   deliveries: Promise<void>
-  /** Watchdog: fires killReason when the run exceeds its wall-clock cap. */
   durationTimer?: ReturnType<typeof setTimeout>
-  /** Backstop after a kill: force-finalizes if interrupt() never yields a result. */
   forceTimer?: ReturnType<typeof setTimeout>
-  /** Wall-clock actually spent running (parked stretches excluded), plus when the
-   * current running leg started. Together they bound the duration watchdog across
-   * any number of parks. */
   runningMs: number
   legStartedAt: number
-  /** Set while parked: when it parked and what it waits on. */
   parkedAt?: number
   parkedExecutionId?: string
-  /** Watchdog on total parked time (maxParkedDurationMs). */
   parkTimer?: ReturnType<typeof setTimeout>
   parkedMs: number
 }
@@ -129,24 +84,15 @@ const textPreview = (message: ApiMessage, max = 140): JobProgress | null => {
   return null
 }
 
-/**
- * One-shot job execution over the session runner: submitted jobs run `session.prompt`
- * unattended, bounded by `maxConcurrency` and token budgets, and report progress and
- * completion through webhooks (plus `onEvent` locally). Job state lives in the
- * {@link QueueAdapter}; this class owns scheduling and the live runs.
- */
 export class JobQueue {
   #options: JobQueueOptions
   #adapter: QueueAdapter
   #running = new Map<string, RunningJob>()
-  /** Runs waiting on a deferred execution: alive, but holding no concurrency slot
-   * and no live runner. Keyed by job id like `#running`. */
   #parked = new Map<string, RunningJob>()
   #pumping = false
   #closed = false
   #offWork: (() => void) | undefined
   #sweepTimer: ReturnType<typeof setInterval> | undefined
-  /** Pending retry-backoff wakeups, cleared on close(). */
   #retryTimers = new Set<ReturnType<typeof setTimeout>>()
 
   constructor(options: JobQueueOptions) {
@@ -168,10 +114,6 @@ export class JobQueue {
     if (!request.session?.prompt?.trim()) {
       throw new Error('session.prompt is required')
     }
-    // No `cwd` check: whether one is required depends on the engine's
-    // capability record, which the gateway resolves at the door (see the
-    // server's `checkCwd`). A second, engine-blind copy of the rule here would
-    // refuse the filesystem-less engine outright.
     if (request.session.resume || request.session.forkSession) {
       throw new Error('resume/forkSession are not supported for queued jobs')
     }
@@ -193,8 +135,6 @@ export class JobQueue {
       maxAttempts: attempts,
       usage: { tokens: 0, totalCostUsd: 0, numTurns: 0 },
       meta: request.meta,
-      // Copied so the job routes gate on the same rule as the session routes; the
-      // run's session inherits it at claim time via `record.request.session`.
       scope: request.session.scope,
     }
     const record: JobRecord = { info, request }
@@ -214,16 +154,6 @@ export class JobQueue {
     return (await this.#adapter.list()).map((j) => j.info)
   }
 
-  /**
-   * A run's session is about to be parked on a deferred execution: the host has
-   * snapshotted it and is tearing the live runner down. The queue drops its
-   * subscription to the doomed runner, frees the concurrency slot, and stops the
-   * duration clock.
-   *
-   * Returns false when the queue refuses the park — the run is already finalizing
-   * or has been killed, so the host must leave the session alone. A session that
-   * belongs to no job accepts trivially (there is nothing to account for).
-   */
   onSessionParking(sessionId: string, executionId: string): boolean {
     const job = this.#bySession(this.#running, sessionId)
     if (!job) {
@@ -263,19 +193,9 @@ export class JobQueue {
       job.record = updated
     }
     this.#emit(job.record, { type: 'job_parked', job: job.record.info, executionId, ts: Date.now() }, job)
-    // The slot is free now — let a queued job take it.
     void this.#pump()
   }
 
-  /**
-   * The parked session was rehydrated (same session id, new runner object) because
-   * its execution's result arrived. Re-subscribe and restart the clock with the
-   * budget the run had left.
-   *
-   * A resume takes its slot back immediately, so a burst of resumes can transiently
-   * exceed `maxConcurrency` — the alternative would be holding a result the agent
-   * loop has already been handed.
-   */
   onSessionResumed(sessionId: string, runner: Runner): void {
     const job = this.#bySession(this.#parked, sessionId)
     if (!job || job.finalized) {
@@ -300,9 +220,6 @@ export class JobQueue {
       )
       job.durationTimer.unref?.()
     }
-    // From lastSeq, not 0: the rehydrated runner replays the whole persisted log,
-    // and re-handling those events would double-count tokens and could re-finalize
-    // the job on an old turn_result.
     job.unsubscribe = runner.subscribe((event) => void this.#handleEvent(job, event), job.lastSeq)
     void this.#recordResume(job, executionId)
   }
@@ -328,7 +245,6 @@ export class JobQueue {
     return undefined
   }
 
-  /** Cancel a queued, running, or parked job. Returns the job, or null if unknown. */
   async cancel(id: string): Promise<JobInfo | null> {
     const record = await this.#adapter.get(id)
     if (!record) {
@@ -375,8 +291,6 @@ export class JobQueue {
     }
   }
 
-  /** Stop scheduling new jobs. Running jobs keep finalizing (e.g. when the host closes
-   * their sessions); job state stays in the adapter. */
   close(): void {
     this.#closed = true
     this.#offWork?.()
@@ -392,9 +306,7 @@ export class JobQueue {
     if (!retention) {
       return
     }
-    this.#adapter.prune(retention.maxAgeMs).catch(() => {
-      // sweep failures must not break the queue; the next sweep retries
-    })
+    this.#adapter.prune(retention.maxAgeMs).catch(() => {})
   }
 
   async #pump(): Promise<void> {
@@ -425,9 +337,6 @@ export class JobQueue {
     const build = this.#options.buildRunnerConfig ?? ((req: CreateSessionRequest) => req)
     let runner: Runner
     try {
-      // A job run is an ordinary registry session — attachable, listable,
-      // indistinguishable — so `meta.jobId` is how a client with its own jobs
-      // surface knows not to show it twice (`isJobRun` spells the key).
       const request: CreateSessionRequest = {
         ...record.request.session,
         meta: { ...record.request.session.meta, jobId: id },
@@ -474,16 +383,12 @@ export class JobQueue {
     job.unsubscribe = runner.subscribe((event) => void this.#handleEvent(job, event))
   }
 
-  /** Kill a run: interrupt it and, if the CLI never yields a result (stuck process),
-   * force-finalize after the grace period so the job can't hang forever. */
   #kill(job: RunningJob, reason: string): void {
     if (job.finalized || job.killReason) {
       return
     }
     job.killReason = reason
     if (job.parkedAt !== undefined) {
-      // Parked: there is no live runner to interrupt and no result coming, so the
-      // grace period would just be dead time.
       void this.#finalize(job, {
         usage: { tokens: job.estimatedTokens, totalCostUsd: 0, numTurns: 0 },
         status: job.canceled ? 'canceled' : 'failed',
@@ -528,8 +433,6 @@ export class JobQueue {
         return
       }
       case 'permission_requested': {
-        // The full request rides along so webhook consumers can answer it over REST
-        // (questions, approvals) instead of only seeing a preview string.
         this.#progress(job, {
           kind: 'permission_requested',
           preview: event.request.title ?? event.request.toolName,
@@ -542,7 +445,6 @@ export class JobQueue {
         return
       }
       case 'turn_result': {
-        // One job = one unattended run: the first result is the outcome.
         const tokens = sumUsage(event.usage) || job.estimatedTokens
         await this.#finalize(job, {
           usage: {
@@ -594,9 +496,6 @@ export class JobQueue {
     return limits.length > 0 ? Math.min(...limits) : undefined
   }
 
-  /** End the current run. `patch.usage` is this attempt's usage alone — prior attempts'
-   * totals live on the stored info and are folded in here. A failed (not canceled) run
-   * with attempts left re-queues with backoff instead of completing. */
   async #finalize(job: RunningJob, patch: Partial<JobInfo>): Promise<void> {
     if (job.finalized) {
       return
@@ -610,13 +509,9 @@ export class JobQueue {
     const wasParked = this.#parked.delete(job.record.info.id)
     job.runner.close('server')
     if (wasParked && job.record.info.sessionId) {
-      // The live runner is already gone; what survives the run is the persisted
-      // snapshot, and nothing will ever rehydrate it now.
       try {
         void Promise.resolve(this.#options.discardSession?.(job.record.info.sessionId)).catch(() => {})
-      } catch {
-        // discard failures must not break finalization
-      }
+      } catch {}
     }
     const attemptUsage = patch.usage ?? { tokens: 0, totalCostUsd: 0, numTurns: 0 }
     if (attemptUsage.tokens > 0) {
@@ -665,8 +560,6 @@ export class JobQueue {
     })
     if (updated) {
       job.record = updated
-      // Pass the job so the completion webhook stays ordered behind its progress
-      // deliveries (the running-map entry is already gone).
       this.#emit(job.record, { type: 'job_completed', job: updated.info, ts: Date.now() }, job)
     }
     this.#sweep()
@@ -675,25 +568,19 @@ export class JobQueue {
 
   #progress(job: RunningJob, progress: JobProgress): void {
     const event: JobEvent = { type: 'job_progress', job: job.record.info, progress, ts: Date.now() }
-    // 'completion' granularity: local observers still see progress; the webhook doesn't.
     if (job.record.request.webhook?.progress === 'completion') {
       try {
         this.#options.onEvent?.(event)
-      } catch {
-        // observer errors must not break the queue
-      }
+      } catch {}
       return
     }
     this.#emit(job.record, event, job)
   }
 
-  /** Notify the local observer and, when configured, the job's webhook (ordered per job). */
   #emit(record: JobRecord, event: JobEvent, chainOwner?: RunningJob, { skipWebhook = false }: { skipWebhook?: boolean } = {}): void {
     try {
       this.#options.onEvent?.(event)
-    } catch {
-      // observer errors must not break the queue
-    }
+    } catch {}
     const webhook = record.request.webhook
     if (!webhook || skipWebhook) {
       return
@@ -721,13 +608,10 @@ export class JobQueue {
         if (res.ok) {
           return
         }
-      } catch {
-        // network error — retry below
-      }
+      } catch {}
       if (attempt < attempts - 1) {
         await new Promise((resolve) => setTimeout(resolve, baseDelay * 2 ** attempt))
       }
     }
-    // Deliveries are best-effort; clients can always poll GET /jobs/:id.
   }
 }

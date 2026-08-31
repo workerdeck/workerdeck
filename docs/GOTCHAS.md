@@ -673,6 +673,10 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   imports no model SDK, (b) the gateway process holds no credential material, (c) provider
   credential resolution stays in host code. Codex satisfies all three the same way claude does:
   the binary resolves its own auth from the session env.
+- **`JobQueue.submit` deliberately does not validate `cwd`, and must not start.** Whether a
+  session needs one is the engine's capability record (`EngineCapabilities.hostCwd`), which the
+  gateway resolves at the door via the session factory's `checkCwd`. A second, engine-blind copy
+  of the rule inside the queue would refuse the filesystem-less provider engine outright.
 - `ProfileEngine` stays a **closed union** on purpose: both clients switch exhaustively, the
   Swift mirror ships in lockstep, and a closed set is what lets protocol carry browser-safe
   per-engine defaults. Adding an engine is a versioned protocol event, not a string.

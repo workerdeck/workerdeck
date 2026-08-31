@@ -1,19 +1,10 @@
-/**
- * Per-call in-memory scratch filesystem — never backed by host paths. A plain
- * path→content map on purpose: this package must run unpolyfilled in the
- * browser, and a node-flavored fs emulation drags `node:buffer` in with it.
- */
 export type SandboxVfs = {
   read(path: string): string | undefined
   write(path: string, content: string): void
-  /** File paths under `dir` (recursive), sorted. */
   list(dir?: string): string[]
-  /** Full path → content map (e.g. to collect results after a run). */
   snapshot(): Record<string, string>
 }
 
-/** Collapse '.', '..' and empty segments into a rooted absolute path — the VFS
- * has no host backing to escape into, so this is path hygiene, not a sandbox. */
 export const normalizeVfsPath = (path: string): string => {
   const out: string[] = []
   for (const part of path.split('/')) {

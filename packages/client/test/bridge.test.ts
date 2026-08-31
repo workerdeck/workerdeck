@@ -4,11 +4,6 @@ import { createWorkerServer, type WorkerServer } from '@workerdeck/server'
 import type { ToolExecutionResult } from '@workerdeck/core'
 import { WorkerDeckClient, type SessionHandle } from '../src/index.ts'
 
-/**
- * The bridge tests never drive the model — the session just needs to exist.
- * Typed structurally rather than against the Agent SDK: this package must never
- * import it, tests included.
- */
 const idleQueryFn = () => {
   const query = {
     [Symbol.asyncIterator]() {
@@ -47,7 +42,6 @@ const start = async (bridgeTimeoutMs?: number) => {
   const { port } = await running.listen(0, '127.0.0.1')
   const client = new WorkerDeckClient({
     baseUrl: `http://127.0.0.1:${port}/v1`,
-    // Node has no global WebSocket in every supported version — inject ws.
     WebSocketImpl: WebSocket as unknown as typeof globalThis.WebSocket,
   })
   const session = await client.createSession({ cwd: '/tmp/project' })

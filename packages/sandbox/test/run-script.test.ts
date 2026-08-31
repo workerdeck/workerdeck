@@ -60,8 +60,6 @@ describe('runScript', () => {
     expect((result as { error: string }).error).toContain('boom')
   })
 
-  // -- red team (SM-2) ------------------------------------------------------
-
   it('red team: prototype-chain walk to the Function constructor stays inside the guest realm', async () => {
     const result = await runScript(await engine(), {
       script: `
@@ -95,11 +93,8 @@ describe('runScript', () => {
     expect(Date.now() - started).toBeLessThan(5000)
   })
 
-  // Outer timeout > the guest deadline granted below, or vitest's 5s default
-  // decides the outcome instead of the interpreter's memory cap — which is the
-  // thing under test. That mismatch made this flake on CI roughly every other
-  // run while passing locally. Bigger chunks reach the cap in far fewer
-  // iterations; what is asserted is the shape of the result, not the speed.
+  // The outer timeout must exceed the guest deadline below, or vitest's 5s default decides the outcome instead of the memory cap
+  // under test — which flaked on CI about every other run. Big chunks reach the cap in few iterations; only the result shape is asserted.
   it('red team: runaway allocation hits the memory cap as a failed result, not a host crash', async () => {
     const result = await runScript(await engine(), {
       script: 'const a = []; while (true) { a.push(new Uint8Array(512 * 1024)) }',

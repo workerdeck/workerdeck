@@ -6,8 +6,6 @@ import {
 } from 'quickjs-emscripten-core'
 import type { SandboxVfs } from './vfs.ts'
 
-/** Trusted prelude, evaluated before the untrusted script. Everything crossing the
- * boundary is a string: by-value marshalling, never a host object reference. */
 const PRELUDE = `
 "use strict";
 (() => {
@@ -30,15 +28,8 @@ const PRELUDE = `
 })();
 `
 
-/**
- * The guest engine, loaded from an injected WASM variant so server (Node
- * asyncify) and browser (singlefile asyncify) share this package unchanged.
- * Load once and reuse — the module is stateless; runtimes/contexts are per call.
- */
 export type SandboxEngine = { module: QuickJSAsyncWASMModule }
 
-/** The variant itself, a `{ default }` module namespace, or a promise of either —
- * so a caller can pass `import('...')` whatever its bundler did to the interop. */
 export type SandboxVariantInput =
   | QuickJSAsyncVariant
   | { default: QuickJSAsyncVariant }
@@ -53,23 +44,11 @@ export const loadEngine = async (variant: SandboxVariantInput): Promise<SandboxE
 export type SandboxLog = { level: 'log' | 'warn' | 'error'; text: string }
 
 export type RunScriptOptions = {
-  /** Untrusted, typically LLM-generated source. Evaluated as global code. */
   script: string
-  /** Scratch filesystem exposed to the guest as `vfs.read/write/list`. */
   vfs?: SandboxVfs
-  /**
-   * Host-gated network capability, exposed to the guest as `fetchText(url)`.
-   * The CALLER owns the allowlist, credential injection, and a per-call
-   * timeout — the guest never holds a credential and this module never
-   * touches the network itself. Unset = `fetchText` throws in the guest.
-   */
   fetchText?: (url: string) => Promise<string>
-  /** QuickJS allocator cap. Guest OOM is a failed result, not a host crash. Default 64 MiB. */
   memoryLimitBytes?: number
-  /** Wall-clock deadline enforced by the interrupt handler between bytecode ops.
-   * Does NOT cover time inside host functions — bound those caller-side. Default 5000. */
   timeoutMs?: number
-  /** Guest stack cap. Default 1 MiB. */
   maxStackSizeBytes?: number
   signal?: AbortSignal
 }
@@ -83,11 +62,6 @@ export type RunScriptResult =
       logs: SandboxLog[]
     }
 
-/**
- * Evaluate one untrusted script in a fresh QuickJS context: deny-by-default (no
- * ambient fs/network/host access — only the granted bridge), interpreter-enforced
- * memory and time limits, everything disposed afterwards.
- */
 export const runScript = async (engine: SandboxEngine, options: RunScriptOptions): Promise<RunScriptResult> => {
   const logs: SandboxLog[] = []
   const deadline = Date.now() + (options.timeoutMs ?? 5000)
@@ -161,7 +135,6 @@ export const runScript = async (engine: SandboxEngine, options: RunScriptOptions
       evaluated.error.dispose()
       return failure(error, interruptedBy, logs)
     }
-    // resolvePromise() takes ownership of the handle it is given — never dispose that one again.
     runtime.executePendingJobs()
     const evaluatedValue = evaluated.value
     const state = context.getPromiseState(evaluatedValue)

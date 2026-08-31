@@ -3,7 +3,6 @@ import type { SessionRunner } from '@workerdeck/core'
 import type { CreateJobRequest, JobEvent, SessionEvent, SessionEventBody } from '@workerdeck/protocol'
 import { InMemoryQueueAdapter, JobQueue, type JobQueueOptions } from '../src/index.ts'
 
-/** Stand-in for a SessionRunner: the queue only subscribes, closes, and interrupts. */
 class FakeRunner {
   static count = 0
   id = `runner-${++FakeRunner.count}`
@@ -42,22 +41,8 @@ class FakeRunner {
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
-/**
- * `vi.waitFor` with a deadline that survives the full suite running in
- * parallel.
- *
- * Every wait in this file asserts that something *eventually* settles — a retry
- * respawns, a status flips — never that it happens quickly. `vi.waitFor`'s
- * 1000ms default quietly turns each one into a latency assertion, and under
- * seven concurrent vitest workers on a CI runner the event loop can starve a
- * 1ms retry timer past that. That is the flake that failed the v0.9.0 publish
- * (`fails terminally once attempts are exhausted`, waiting on the second
- * runner, 1067ms — the deadline expiring, not the queue misbehaving).
- *
- * A generous deadline costs nothing when the code is correct: these resolve in
- * milliseconds. It only spends time when something is genuinely broken, which
- * is when waiting is worth it.
- */
+// A deadline, not a latency assertion: every wait here asserts something eventually settles, and vi.waitFor's 1s default
+// starved a 1ms retry timer under parallel CI workers — the flake that failed the v0.9.0 publish.
 const settles = <T>(assertion: () => T | Promise<T>): Promise<T> => vi.waitFor(assertion, { timeout: 15_000, interval: 10 })
 
 const jobRequest = (overrides: Partial<CreateJobRequest> = {}): CreateJobRequest => ({
@@ -126,7 +111,6 @@ describe('JobQueue', () => {
     const b = await queue.submit(jobRequest({ meta: { n: 2 } }))
     await tick()
 
-    // only one slot: job b waits
     expect(runners).toHaveLength(1)
     expect((await queue.get(b.id))?.status).toBe('queued')
     expect((await queue.get(a.id))?.status).toBe('running')
@@ -145,7 +129,6 @@ describe('JobQueue', () => {
     expect(doneA?.finishedAt).toBeDefined()
     expect(runners[0]!.closed).toBe(true)
 
-    // slot freed → b starts
     await settles(async () => expect((await queue.get(b.id))?.status).toBe('running'))
     expect(runners).toHaveLength(2)
 
@@ -218,7 +201,6 @@ describe('JobQueue', () => {
     expect(runners[0]!.interrupt).not.toHaveBeenCalled()
     runners[0]!.emit(assistantWithUsage(80))
     expect(runners[0]!.interrupt).toHaveBeenCalled()
-    // the interrupted run still reports a result; the kill reason wins
     runners[0]!.emit({
       type: 'turn_result',
       subtype: 'error_during_execution',
@@ -248,13 +230,13 @@ describe('JobQueue', () => {
     const { queue, runners } = makeQueue({ adapter, dailyTokenLimit: 80, maxConcurrency: 1 })
     const first = await queue.submit(jobRequest())
     await tick()
-    runners[0]!.emit(successResult(100)) // blows the 80-token day budget
+    runners[0]!.emit(successResult(100))
     await tick()
     expect((await queue.get(first.id))?.status).toBe('succeeded')
 
     const second = await queue.submit(jobRequest())
     await tick()
-    expect(runners).toHaveLength(1) // never started
+    expect(runners).toHaveLength(1)
     expect((await queue.get(second.id))?.status).toBe('queued')
     const stats = await queue.stats()
     expect(stats).toMatchObject({ paused: true, dailyTokensUsed: 100, queued: 1, running: 0 })
@@ -294,7 +276,6 @@ describe('JobQueue', () => {
       kind: 'assistant_text',
       preview: 'first I will look around',
     })
-    // one failed attempt + three successes
     expect(fetchImpl).toHaveBeenCalledTimes(4)
   })
 
@@ -324,7 +305,7 @@ describe('JobQueue', () => {
     const { queue, runners, events } = makeQueue()
     const job = await queue.submit(jobRequest({ attempts: 2, retryDelayMs: 5 }))
     await tick()
-    runners[0]!.emit(assistantWithUsage(90)) // 100 estimated tokens for attempt 1
+    runners[0]!.emit(assistantWithUsage(90))
     runners[0]!.emit(errorResult())
     await tick()
 
@@ -340,13 +321,11 @@ describe('JobQueue', () => {
     expect(events.some((e) => e.type === 'job_retrying')).toBe(true)
     expect(events.some((e) => e.type === 'job_completed')).toBe(false)
 
-    // backoff elapses → a fresh session runs attempt 2
     await settles(() => expect(runners).toHaveLength(2))
     runners[1]!.emit(successResult(100))
     await tick()
     const done = await queue.get(job.id)
     expect(done).toMatchObject({ status: 'succeeded', attempt: 2 })
-    // usage accumulates across attempts (100 estimated + 100 from the result)
     expect(done?.usage.tokens).toBe(200)
     expect(done?.usage.numTurns).toBe(4)
     expect(done?.usage.totalCostUsd).toBeCloseTo(0.25)
@@ -380,7 +359,6 @@ describe('JobQueue', () => {
     const job = await queue.submit(jobRequest())
     await tick()
     await settles(() => expect(runners[0]!.interrupt).toHaveBeenCalled())
-    // stuck CLI: no turn_result ever arrives → force-finalized after the grace period
     await settles(async () => {
       expect((await queue.get(job.id))?.status).toBe('failed')
     })
@@ -405,7 +383,6 @@ describe('JobQueue', () => {
     const job = await queue.submit(jobRequest())
     await tick()
     runners[0]!.emit(successResult())
-    // the post-completion sweep expires it (maxAgeMs 0 = immediately)
     await settles(async () => expect(await queue.get(job.id)).toBeNull())
 
     const fresh = await queue.submit(jobRequest())
@@ -427,7 +404,6 @@ describe('JobQueue', () => {
     await settles(() => {
       expect(delivered.map((e) => e.type)).toEqual(['job_started', 'job_completed'])
     })
-    // the local observer still sees progress
     expect(events.some((e) => e.type === 'job_progress')).toBe(true)
   })
 
@@ -439,19 +415,16 @@ describe('JobQueue', () => {
       await tick()
       expect(runners).toHaveLength(1)
 
-      // The host parked a's session: state persisted, runner torn down.
       expect(queue.onSessionParking(runners[0]!.id, 'exec-1')).toBe(true)
       await settles(async () => expect((await queue.get(a.id))?.status).toBe('parked'))
       expect(await queue.get(a.id)).toMatchObject({ parkedExecutionId: 'exec-1' })
       expect(events.find((e) => e.type === 'job_parked')).toMatchObject({ executionId: 'exec-1' })
 
-      // Slot freed: b runs while a waits.
       await settles(() => expect(runners).toHaveLength(2))
       const stats = await queue.stats()
       expect(stats).toMatchObject({ running: 1, parked: 1 })
       expect((await queue.get(b.id))?.status).toBe('running')
 
-      // The result arrived: the host rebuilt the session as a NEW runner object.
       const resumed = new FakeRunner()
       queue.onSessionResumed(runners[0]!.id, resumed as unknown as SessionRunner)
       await settles(async () => expect((await queue.get(a.id))?.status).toBe('running'))
@@ -463,8 +436,6 @@ describe('JobQueue', () => {
     })
 
     it('re-subscribes past the replayed log so a resume does not re-deliver progress', async () => {
-      // The rehydrated runner replays its whole persisted log. Re-handling it
-      // would re-fire job_progress for the entire transcript on every resume.
       const { queue, runners, events } = makeQueue()
       await queue.submit(jobRequest())
       await tick()
@@ -476,7 +447,6 @@ describe('JobQueue', () => {
       queue.onSessionParking(runners[0]!.id, 'exec-1')
       await tick()
 
-      // Same id, same log: the resumed runner carries the pre-park events.
       const resumed = new FakeRunner()
       resumed.id = runners[0]!.id
       resumed.emit(assistantWithUsage(20, 'before the park'))
@@ -496,17 +466,14 @@ describe('JobQueue', () => {
 
         queue.onSessionParking(runners[0]!.id, 'exec-1')
         await vi.advanceTimersByTimeAsync(0)
-        // Parked far longer than the cap: waiting is not being stuck.
         await vi.advanceTimersByTimeAsync(60_000)
         expect((await queue.get(job.id))?.status).toBe('parked')
 
         const resumed = new FakeRunner()
         queue.onSessionResumed(runners[0]!.id, resumed as unknown as SessionRunner)
         await vi.advanceTimersByTimeAsync(0)
-        // 600ms of the budget was already spent; 300 more is still inside it.
         await vi.advanceTimersByTimeAsync(300)
         expect((await queue.get(job.id))?.status).toBe('running')
-        // ...and the remaining 100 tips it over.
         await vi.advanceTimersByTimeAsync(200)
         await vi.advanceTimersByTimeAsync(6000)
         expect((await queue.get(job.id))?.status).toBe('failed')
@@ -553,8 +520,6 @@ describe('JobQueue', () => {
     })
 
     it('refuses a park for a run that is already being killed', async () => {
-      // Between the kill and the run winding down, parking would persist a
-      // session nothing will ever wake.
       const { queue, runners } = makeQueue({ sessionTokenLimit: 30 })
       await queue.submit(jobRequest())
       await tick()
@@ -563,7 +528,6 @@ describe('JobQueue', () => {
       expect(runners[0]!.interrupt).toHaveBeenCalled()
 
       expect(queue.onSessionParking(runners[0]!.id, 'exec-1')).toBe(false)
-      // A session that belongs to no job has nothing to object to.
       expect(queue.onSessionParking('not-a-job-session', 'exec-2')).toBe(true)
     })
   })

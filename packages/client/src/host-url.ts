@@ -1,12 +1,5 @@
-/**
- * Pure URL logic for gateway hosts — what an operator types, turned into the
- * `baseUrl` a `WorkerDeckClient` takes. Every host that lets someone type a gateway
- * address must normalize it identically, or the same gateway saved on two devices
- * is two gateways.
- */
 export type HostUrl = { baseUrl: string }
 
-/** Normalized REST base for `WorkerDeckClient`, or undefined if unparseable. */
 export const apiUrl = (host: HostUrl): string | undefined => {
   let text = host.baseUrl.trim()
   while (text.endsWith('/')) {
@@ -15,8 +8,7 @@ export const apiUrl = (host: HostUrl): string | undefined => {
   if (text === '') {
     return undefined
   }
-  // A bare `mac.tailnet.ts.net:8787` is a host:port, not a scheme — tailnet
-  // gateways are plain http, so that is the default to assume.
+  // A bare `mac.tailnet.ts.net:8787` is a host:port, not a scheme, and tailnet gateways are plain http.
   if (!text.includes('://')) {
     text = 'http://' + text
   }
@@ -32,10 +24,6 @@ export const apiUrl = (host: HostUrl): string | undefined => {
   return text
 }
 
-/**
- * Whether this gateway is the machine the caller runs on. Decided from the URL,
- * never by probing paths for existence — two checkouts of the same repo would lie.
- */
 export const isLoopbackHost = (host: HostUrl): boolean => {
   const api = apiUrl(host)
   if (!api) {

@@ -390,7 +390,9 @@ human — parks the session instead of blocking it:
    watchdog's `timeout` failure) rebuilds the session under its own id from the snapshot,
    re-subscribes the queue past the replayed log, and hands the result to the agent loop →
    `job_resumed`. The turn continues as if it had never stopped; its `durationMs` excludes the
-   parked stretch.
+   parked stretch. A resume takes its concurrency slot back **immediately**, so a burst of resumes
+   can transiently exceed `maxConcurrency` — the alternative is holding a result the agent loop has
+   already been handed.
 
 Results are applied idempotently by `executionId`: a duplicate, or one racing the watchdog,
 answers `applied: false` rather than applying twice. Because the park is only a persistence
