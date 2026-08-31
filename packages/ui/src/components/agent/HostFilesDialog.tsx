@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import type { HostDirEntry, HostFileMatch } from '@workerdeck/protocol'
-import { ChevronLeft, File, Folder, Link2, Search } from 'lucide-react'
+import { ChevronLeft, File, Search } from 'lucide-react'
 import { Button } from '../ui/Button.tsx'
 import { CodeBlock } from '../ui/CodeBlock.tsx'
 import { Dialog, DialogBody, DialogContent, DialogHeader } from '../ui/Dialog.tsx'
 import { Input } from '../ui/Input.tsx'
 import { Spinner } from '../ui/Spinner.tsx'
 import { formatBytes } from '../../lib/format.ts'
+import { EntryIcon } from './EntryIcon.tsx'
 
 export interface HostFilesDialogProps {
   client: WorkerDeckClient
@@ -185,14 +186,4 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
       </DialogContent>
     </Dialog>
   )
-}
-
-function EntryIcon({ type }: { type: HostDirEntry['type'] }) {
-  if (type === 'dir') {
-    return <Folder className="size-3.5 shrink-0 text-accent" />
-  }
-  if (type === 'symlink') {
-    return <Link2 className="size-3.5 shrink-0 text-fg-4" />
-  }
-  return <File className="size-3.5 shrink-0 text-fg-4" />
 }

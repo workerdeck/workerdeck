@@ -3,6 +3,7 @@ import type { UsageWindowRow } from '@workerdeck/protocol'
 import { RotateCcw } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
 import { formatAgoPrecise, formatCountdown, formatRateLimitWindowLong, rateLimitWindowSeconds } from '../../lib/format.ts'
+import { meterTintClass } from '../../lib/status.ts'
 
 export function useMinuteClock(active = true): number {
   const [now, setNow] = useState(() => Date.now())
@@ -15,10 +16,6 @@ export function useMinuteClock(active = true): number {
     return () => clearInterval(timer)
   }, [active])
   return now
-}
-
-function usageTint(pct: number) {
-  return pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-warning' : 'bg-accent'
 }
 
 export function UsageMeters({ windows, now, className }: { windows: UsageWindowRow[]; now?: number; className?: string }) {
@@ -53,7 +50,7 @@ function UsageMeter({ window, now }: { window: UsageWindowRow; now: number }) {
       </div>
       <div className="relative mt-2 h-2 rounded-full bg-border">
         <div
-          className={cn('h-full rounded-full', usageTint(utilization))}
+          className={cn('h-full rounded-full', meterTintClass(utilization))}
           style={{ width: `${Math.min(100, Math.max(2, utilization))}%` }}
         />
         {pace !== undefined ? (

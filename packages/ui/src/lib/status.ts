@@ -132,3 +132,12 @@ export function meterColorClass(pct: number | undefined): string {
   const severity = meterSeverity(pct)
   return severity === 'error' ? 'text-danger' : severity === 'warning' ? 'text-warning' : 'text-fg-3'
 }
+
+/**
+ * The fill colour for a meter bar. Deliberately a different ramp from
+ * {@link meterColorClass}: a bar reads as alarming later than a number does, so the tint
+ * turns at 70/90 where the text severity turns at 80/95.
+ */
+export function meterTintClass(pct: number): string {
+  return pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-warning' : 'bg-accent'
+}

@@ -2,20 +2,14 @@ import type { ContextUsage } from '@workerdeck/protocol'
 import { Dialog, DialogBody, DialogContent, DialogHeader } from '../ui/Dialog.tsx'
 import { cn } from '../../lib/utils.ts'
 import { formatTokens } from '../../lib/format.ts'
+import { cssColor } from '../../lib/css.ts'
+import { meterTintClass } from '../../lib/status.ts'
 
 export interface ContextDialogProps {
   usage?: ContextUsage
   open: boolean
   onOpenChange: (open: boolean) => void
   className?: string
-}
-
-function cssColor(color: string): string | undefined {
-  return typeof CSS !== 'undefined' && CSS.supports('color', color) ? color : undefined
-}
-
-function usageTint(pct: number) {
-  return pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-warning' : 'bg-accent'
 }
 
 export function ContextDialog({ usage, open, onOpenChange, className }: ContextDialogProps) {
@@ -38,7 +32,7 @@ export function ContextDialog({ usage, open, onOpenChange, className }: ContextD
               </div>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-border">
                 <div
-                  className={cn('h-full rounded-full', usageTint(usage.percentage))}
+                  className={cn('h-full rounded-full', meterTintClass(usage.percentage))}
                   style={{ width: `${Math.min(100, Math.max(2, usage.percentage))}%` }}
                 />
               </div>

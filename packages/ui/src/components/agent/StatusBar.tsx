@@ -9,6 +9,7 @@ import { Tip } from '../ui/Tooltip.tsx'
 import { cn } from '../../lib/utils.ts'
 import { formatCost, formatCountdown, formatTokens } from '../../lib/format.ts'
 import { meterColorClass } from '../../lib/status.ts'
+import { cssColor } from '../../lib/css.ts'
 import { STATUS_META } from './status.ts'
 import { useTranscriptVariant } from './transcript-variant.tsx'
 
@@ -34,10 +35,6 @@ function useNow(intervalMs = 30_000): number {
     return () => clearInterval(timer)
   }, [intervalMs])
   return now
-}
-
-function cssColor(color: string): string | undefined {
-  return typeof CSS !== 'undefined' && CSS.supports('color', color) ? color : undefined
 }
 
 function ContextMeter({ usage }: { usage: ContextUsage }) {

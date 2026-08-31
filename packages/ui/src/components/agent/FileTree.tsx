@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { UseHostFileSearchResult, UseHostFileTreeResult } from '@workerdeck/react'
-import type { HostDirEntry, HostFileMatch } from '@workerdeck/protocol'
-import { ChevronRight, File, Folder, FolderOpen, Link2, PanelLeftClose, RefreshCw, Search, X } from 'lucide-react'
+import type { HostFileMatch } from '@workerdeck/protocol'
+import { ChevronRight, File, Folder, FolderOpen, PanelLeftClose, RefreshCw, Search, X } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
 import { Button } from '../ui/Button.tsx'
 import { Input } from '../ui/Input.tsx'
 import { Spinner } from '../ui/Spinner.tsx'
+import { EntryIcon } from './EntryIcon.tsx'
 
 export interface FileTreeProps {
   tree: UseHostFileTreeResult
@@ -211,11 +212,4 @@ function fileName(relative: string): string {
 function directoryOf(relative: string): string | undefined {
   const cut = relative.lastIndexOf('/')
   return cut === -1 ? undefined : relative.slice(0, cut)
-}
-
-function EntryIcon({ type }: { type: HostDirEntry['type'] }) {
-  if (type === 'symlink') {
-    return <Link2 className="size-3.5 shrink-0 text-fg-4" />
-  }
-  return <File className="size-3.5 shrink-0 text-fg-4" />
 }
