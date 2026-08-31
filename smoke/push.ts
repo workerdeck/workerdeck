@@ -1,36 +1,9 @@
-/**
- * A real APNs push, on demand, through the real payload builder.
- *
- *   pnpm smoke:push <host> [sessionId] [seq]
- *   pnpm smoke:push toby.example.ts.net:8788
- *   pnpm smoke:push 127.0.0.1:8787 a8cabb30-6ee9-449d-9819-8877b44a8416
- *   pnpm smoke:push toby.example.ts.net:8787 a8cabb30-… 1800   # land mid-transcript
- *
- * **This exists because push is the one surface that cannot be tested by
- * waiting**: everything else answers a request, but a notification only happens
- * when a session raises one, so "does a tap open the right session" is otherwise
- * only observable by accident (see `docs/GOTCHAS.md`, §APNs push).
- *
- * It goes through `buildPush`, not a hand-written `aps` dictionary: a hand-rolled
- * payload carries no `sessionId`, so `PushPayload.init?` returns nil and the tap
- * routes nowhere — which reads exactly like a broken deep link and is not one.
- *
- * Reads the device registry the gateway itself writes, so it pushes to whatever
- * is really registered. Requires an `apns`-configured gateway (a gateway
- * without one answers `/apns/devices` with 404 and has no registry at all).
- *
- * **`[seq]` is what makes the deep link testable.** Without it the push carries the
- * session's `lastSeq` — the tail — and a client that lands on the right row is
- * indistinguishable from one that ignores `seq` and scrolls to the bottom. Pass a seq
- * from the *middle* of a long session and the answer is unambiguous.
- *
- * Two things that will 401 you against a real gateway, both learned here:
- * `WD_AUTH_KEY` (the gateway's own operator secret, `<state-dir>/auth-key`) is
- * needed the moment `--auth-key` is in play, and the host **must be spelled the
- * way the gateway was started** — the Host-header guard rejects the tailnet IP
- * of a gateway launched with `--host <name>`, and it answers `unauthorized`
- * rather than anything that mentions hosts.
- */
+// pnpm smoke:push <host> [sessionId] [seq]     — a real push to whatever the gateway's own registry holds.
+//
+// Needs an `apns`-configured gateway: without one there is no `/apns/devices` route and no registry to read.
+// `[seq]` is what makes the deep link testable — the default is the session's tail, where a client that lands on the
+// right row is indistinguishable from one that ignores `seq` and scrolls to the bottom. `docs/GOTCHAS.md` §APNs push
+// has the two ways this 401s.
 import { readFile } from 'node:fs/promises'
 import type { SessionInfo } from '@workerdeck/protocol'
 import { createApnsClient, loadApnsKey } from '../packages/cli/src/apns/client.ts'
@@ -55,8 +28,6 @@ if (wantedSeq !== undefined && !/^\d+$/.test(wantedSeq)) {
   process.exit(2)
 }
 
-// The registry path and the key are the operator's: this script is deliberately not
-// a second place that knows how to mint a credential.
 const stateDir = process.env.WD_STATE_DIR ?? '/tmp/workerdeck-prod'
 const keyFile = process.env.WD_APNS_KEY
 const keyId = process.env.WD_APNS_KEY_ID
@@ -71,8 +42,7 @@ if (keyFile === undefined || keyId === undefined || teamId === undefined || topi
 }
 
 const base = host.startsWith('http') ? host : `http://${host}`
-// The gateway's own operator secret, never a model credential (root CLAUDE.md, auth
-// red lines). Absent is normal — a gateway started without `--auth-key` wants none.
+// The gateway's own operator secret, never a model credential. Absent is normal: a keyless gateway wants none.
 const authKey = process.env.WD_AUTH_KEY
 const listed = await fetch(`${base}/v1/sessions`, {
   headers: authKey === undefined ? {} : { authorization: `Bearer ${authKey}` },
@@ -97,7 +67,6 @@ if (session === undefined) {
 }
 
 const registry = JSON.parse(await readFile(`${stateDir}/apns-devices.json`, 'utf8')) as Registry
-// The tail unless told otherwise — see the `[seq]` note at the top of this file.
 const seq = wantedSeq === undefined ? session.lastSeq : Number(wantedSeq)
 console.log(
   `session ${session.id} — seq ${seq}${seq === session.lastSeq ? ' (the tail)' : ` of ${session.lastSeq}`}` +

@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type User } from '../lib/api.ts'
 
-/**
- * Pick one of three users. No password: this stands in for whatever real auth an
- * embedder already has, and everything downstream deals in a resolved user.
- */
 export function LoginView({ onSignedIn }: { onSignedIn: (user: User) => void }) {
   const [users, setUsers] = useState<User[]>([])
   const [busy, setBusy] = useState<string | undefined>()

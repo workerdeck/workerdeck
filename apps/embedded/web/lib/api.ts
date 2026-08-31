@@ -1,13 +1,5 @@
 import type { AgentConfigResponse, Doc, MeResponse, User } from '../../src/shared.ts'
 
-/**
- * The app's non-data endpoints: login, agent config, and the UI-state channel. The
- * wiki's documents are tRPC procedures inferred from the server's actions
- * (`web/lib/trpc.ts`), not here.
- *
- * Same origin as the gateway, so the session cookie rides every call.
- */
-
 const call = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const res = await fetch(path, {
     ...init,
@@ -28,7 +20,6 @@ const errorText = async (res: Response): Promise<string> => {
   }
 }
 
-/** Carries the status, so a caller can tell "signed out" from "it broke". */
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -47,11 +38,9 @@ export const api = {
 
   agent: () => call<AgentConfigResponse>('/api/agent'),
 
-  /** Tell the server what is on screen, so the agent's `whoami` can answer. */
   setUiState: (openDocId: string | undefined) => call<void>('/api/ui-state', { method: 'PUT', body: JSON.stringify({ openDocId }) }),
 }
 
-/** What the agent asks the app to do, streamed from `/api/ui-events`. */
 export type UiIntent = { type: 'open_doc'; docId: string } | { type: 'doc_deleted'; docId: string }
 
 export type { Doc, User }

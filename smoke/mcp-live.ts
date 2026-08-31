@@ -1,18 +1,8 @@
-/**
- * Manual smoke for LIVE MCP: connectMcpTools against a real remote server
- * (DeepWiki — free, no auth), its tools granted to a real provider session,
- * and a prompt only answerable through them.
- *
- *   pnpm smoke:mcp --probe                     # connect + list tools, no model, FREE
- *   MOONSHOT_API_KEY=...  pnpm smoke:mcp       # Kimi K3 (default) — costs tokens
- *   OPENAI_API_KEY=...    pnpm smoke:mcp openai
- *   ANTHROPIC_API_KEY=... pnpm smoke:mcp anthropic
- *
- * The unit tests cover connectMcpTools against a stub; this is the only place a
- * real streamable-http MCP connection is exercised end to end (SM-3's MCP leg):
- * tools arrive namespaced (`deepwiki__ask_question`), stay authoritative
- * (server-side execute, never bridged), and the turn completes on their output.
- */
+// pnpm smoke:mcp --probe                  # connect + list tools against the real DeepWiki server, no model, FREE
+// pnpm smoke:mcp [provider] [model-id]    # the same tools granted to a real session — costs tokens
+//
+// The only place a real streamable-http MCP connection is exercised end to end: tools arrive namespaced, stay
+// authoritative (server-side execute, never bridged), and the turn completes on their output.
 import type { LanguageModel } from 'ai'
 import type { SessionEvent, ToolUseBlock } from '@workerdeck/protocol'
 import { connectMcpTools, createEngineSession, type ToolExecutor } from '@workerdeck/core'
@@ -43,8 +33,6 @@ if (probeOnly) {
   console.log('\n✅ Probe passed: live connection, namespaced tools, clean close.\n')
   process.exit(0)
 }
-
-// ---------------------------------------------------------------- provider ----
 
 type ProviderName = 'moonshot' | 'openai' | 'anthropic'
 const PROVIDERS: Record<ProviderName, { env: string; defaultModel: string; load: () => Promise<unknown> }> = {
@@ -82,8 +70,6 @@ const model = factory(modelId)
 
 console.log(`\nProvider: ${providerName}   Model: ${modelId}`)
 console.log('='.repeat(60))
-
-// ------------------------------------------------------------------ session ----
 
 // No sandboxed executions expected here; a stub keeps the wiring honest.
 const noExecutor: ToolExecutor = {
@@ -137,8 +123,6 @@ const deadline = Date.now() + 180_000
 while (!completed && Date.now() < deadline) {
   await new Promise((r) => setTimeout(r, 100))
 }
-
-// ------------------------------------------------------------------ verdict ----
 
 console.log('\n' + '='.repeat(60))
 const fail = (message: string): never => {

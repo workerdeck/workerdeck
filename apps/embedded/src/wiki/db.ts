@@ -4,18 +4,8 @@ import { DatabaseSync } from 'node:sqlite'
 import { randomUUID } from 'node:crypto'
 import type { Doc } from '../shared.ts'
 
-/**
- * The wiki's storage: `node:sqlite`, so the reference app carries no database
- * dependency at all.
- *
- * `.embedded/` is **data, not build output** — nothing automated may delete it
- * (`pnpm clean` removes `dist`; wiping the wiki is the explicit `pnpm reset`).
- *
- * **Every query takes a `userId` and every WHERE clause carries it**, deliberately
- * duplicating the gateway's session scoping rather than substituting for it: the
- * gateway decides who may drive a session, this decides whose documents a tool call
- * can reach, so an agent that talked its way into the wrong arguments comes up empty.
- */
+// Every query takes a `userId` and every WHERE clause carries it — a second check on a different question to the
+// gateway's session scoping, never a substitute for it.
 export type WikiDb = {
   listDocs(userId: string): Doc[]
   getDoc(userId: string, id: string): Doc | undefined

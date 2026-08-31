@@ -3,24 +3,17 @@ import type { Doc } from '../lib/api.ts'
 
 export type DocEditorProps = {
   doc: Doc
-  /** Must resolve with the document the **server** now holds — see `save` below. */
+  // Must resolve with the document the server now holds — see `save` below.
   onSave: (patch: { title?: string; body?: string }) => Promise<Doc>
-  /** Re-read from the server, discarding the draft. */
   onReload: () => void
 }
 
-/**
- * Title bar and a textarea. The agent can write this document *while it is open*, so
- * the editor keeps the loaded copy and the draft apart — the same split
- * `useOpenFiles` makes in `@workerdeck/react` — and offers the choice when they
- * disagree; silently overwriting either side is what makes an agent feel unsafe.
- */
+// The agent can write this document while it is open, so the loaded copy and the draft are kept apart.
 export function DocEditor({ doc, onSave, onReload }: DocEditorProps) {
   const [title, setTitle] = useState(doc.title)
   const [body, setBody] = useState(doc.body ?? '')
   const [saving, setSaving] = useState(false)
-  // What the server last told us this document was, compared against the props to
-  // notice a write that did not come from this textarea.
+  // What the server last told us this document was, compared against the props to spot a write from elsewhere.
   const known = useRef({ id: doc.id, title: doc.title, body: doc.body ?? '' })
   const dirty = title !== known.current.title || body !== known.current.body
 
@@ -29,7 +22,6 @@ export function DocEditor({ doc, onSave, onReload }: DocEditorProps) {
   useEffect(() => {
     const incoming = { id: doc.id, title: doc.title, body: doc.body ?? '' }
     if (incoming.id !== known.current.id) {
-      // A different document: adopt it wholesale.
       known.current = incoming
       setTitle(incoming.title)
       setBody(incoming.body)
@@ -42,7 +34,6 @@ export function DocEditor({ doc, onSave, onReload }: DocEditorProps) {
     }
     known.current = incoming
     if (dirty) {
-      // Keep the draft and say so — the reader is mid-sentence.
       setConflict(true)
       return
     }
@@ -53,9 +44,8 @@ export function DocEditor({ doc, onSave, onReload }: DocEditorProps) {
   const save = async () => {
     setSaving(true)
     try {
-      // Adopt the server's answer, not what was sent: otherwise the next render still
-      // carries the pre-save `doc` prop, the effect above reads the difference as "the
-      // agent changed it", and restores the old text over the save that just succeeded.
+      // Adopt the server's answer, not what was sent: the next render still carries the pre-save `doc` prop, which the
+      // effect above would read as "the agent changed it" and restore over the save that just succeeded.
       const saved = await onSave({ title: title.trim() || 'Untitled', body })
       known.current = { id: saved.id, title: saved.title, body: saved.body ?? '' }
       setTitle(saved.title)

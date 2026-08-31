@@ -1,40 +1,22 @@
-/**
- * Manual smoke for MESSAGE ATTACHMENTS against a real engine:
- *
- *   generated file → POST /sessions/:id/attachments → user_message(attachmentIds)
- *   → Runner → CLI → the model actually describing what it was shown
- *
- * Spends tokens — never part of `pnpm test`.
- *
- *   pnpm smoke:media                      # claude, all three kinds
- *   pnpm smoke:media image                # claude, just one
- *   pnpm smoke:media --engine codex       # codex: image + text through, PDF refused
- *   pnpm smoke:media text --engine codex  # both filters
- *
- * The fakes in `pnpm test` prove the server builds the right content blocks but not
- * that the engine *accepts* them — a CLI dropping non-text blocks looks exactly like
- * a model ignoring the picture. Each case asks a question whose answer is only in the
- * attachment, so a dropped block fails loudly instead of producing a plausible
- * sentence.
- *
- * **The refusal is a case too.** Cases are checked against
- * `ENGINE_CAPABILITIES[engine].attachments`, never a hard-coded engine name: a kind
- * the record forswears must be refused with **415** and a message naming the engine,
- * and one it claims must reach the model — so a record change needs no edit here.
- *
- * The files are generated here, not committed: a PNG built byte by byte and a
- * one-page PDF with computed xref offsets, so the repo carries no binaries and
- * the magic words can't leak into the prompt.
- */
+// pnpm smoke:media [image|pdf|text] [--engine codex]   — spends tokens, never part of `pnpm test`.
+//
+// generated file → POST /sessions/:id/attachments → user_message(attachmentIds) → Runner → CLI → the model actually
+// describing what it was shown. The fakes in `pnpm test` prove the server builds the right content blocks but not that
+// the engine accepts them, and a CLI dropping non-text blocks looks exactly like a model ignoring the picture.
+//
+// The refusal is a case too, and both halves are read off `ENGINE_CAPABILITIES[engine].attachments` rather than a
+// hard-coded engine name: a kind the record forswears must be refused with 415 and a message naming the engine, and
+// one it claims must reach the model — so a record change needs no edit here.
+//
+// The files are generated, not committed, so the repo carries no binaries and the magic words cannot leak into the
+// prompt.
 import { deflateSync } from 'node:zlib'
 import WebSocket from 'ws'
 import { WorkerDeckClient } from '@workerdeck/client'
 import { createWorkerServer } from '@workerdeck/server'
 import { ENGINE_CAPABILITIES, type SessionEvent } from '@workerdeck/protocol'
 
-// ------------------------------------------------------------- fixtures ----
-
-/** CRC-32 (the PNG/zlib one), table built on first use. */
+// CRC-32, the PNG/zlib one.
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
   let c = n
   for (let k = 0; k < 8; k++) {
@@ -60,7 +42,7 @@ const pngChunk = (type: string, data: Buffer): Buffer => {
   return Buffer.concat([length, typed, crc])
 }
 
-/** A solid-colour RGB PNG, `size`×`size`. */
+// A solid-colour RGB PNG, `size`×`size`.
 const solidPng = (size: number, [r, g, b]: [number, number, number]): Buffer => {
   const ihdr = Buffer.alloc(13)
   ihdr.writeUInt32BE(size, 0)
@@ -78,8 +60,8 @@ const solidPng = (size: number, [r, g, b]: [number, number, number]): Buffer => 
   ])
 }
 
-/** A one-page PDF showing `text`. Offsets are computed as the objects are laid
- * out — a hand-guessed xref is the usual reason a minimal PDF is rejected. */
+// A one-page PDF showing `text`. Offsets are computed as the objects are laid out — a hand-guessed xref is the usual
+// reason a minimal PDF is rejected.
 const onePagePdf = (text: string): Buffer => {
   const stream = `BT /F1 36 Tf 60 500 Td (${text}) Tj ET`
   const objects = [
@@ -110,7 +92,7 @@ type Case = {
   mediaType: string
   data: Buffer
   prompt: string
-  /** The answer must contain one of these, case-insensitively. */
+  // The answer must contain one of these, case-insensitively.
   expect: string[]
 }
 
@@ -155,13 +137,10 @@ if (cases.length === 0) {
   process.exit(1)
 }
 
-/** What this engine's record claims it can be sent. */
 const ACCEPTED: readonly string[] = ENGINE_CAPABILITIES[ENGINE as 'claude'].attachments
 
-// --------------------------------------------------------------- harness ----
-
-// A single declared profile is implicit on create, so the codex leg sends no profile
-// name — but the profile must exist: the engine is a property of it, not of the request.
+// A single declared profile is implicit on create, so the codex leg sends no profile name — but the profile must
+// exist: the engine is a property of it, not of the request.
 const server = createWorkerServer({
   allowUnauthenticated: true,
   allowedCwdRoots: ['/tmp'],
@@ -184,7 +163,6 @@ const session = await client.createSession({
 })
 const handle = client.attach(session.id)
 
-/** Collected assistant text for the turn in flight, resolved on turn_result. */
 let inFlight: { text: string[]; done: (text: string) => void } | null = null
 handle.on('event', (event: SessionEvent) => {
   if (!inFlight) {
@@ -222,11 +200,8 @@ const ask = async (prompt: string, attachmentIds: string[]): Promise<string> => 
   })
 }
 
-/**
- * A kind the record forswears must die at the door. Raw `fetch` rather than
- * `client.uploadAttachment`, which throws the status away — and the status is half
- * the claim: 415 says "wrong kind", 400/500 says the route failed to cope.
- */
+// Raw `fetch` rather than `client.uploadAttachment`, which throws the status away — and the status is half the claim:
+// 415 says "wrong kind", 400/500 says the route failed to cope.
 const expectRefused = async (testCase: Case): Promise<string | null> => {
   const url = `http://127.0.0.1:${port}/v1/sessions/${session.id}/attachments?name=${encodeURIComponent(testCase.name)}`
   const res = await fetch(url, {

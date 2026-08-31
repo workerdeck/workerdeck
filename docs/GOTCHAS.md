@@ -1822,13 +1822,24 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 
 ## APNs push (the CLI's forwarder)
 
+- **The `apns.topic` is the iOS app's bundle id, and the two halves live in files that never see
+  each other.** It must equal `PRODUCT_BUNDLE_IDENTIFIER` in `apps/ios/project.yml`; there is no
+  shared constant and no validation, and Apple's answer to a wrong topic is a rejected push rather
+  than anything that names the topic. `keyFile` is a **path**, resolved relative to the config
+  file, and never key contents — gitignore is not the plan for the `.p8`, which belongs in the
+  password manager (it downloads exactly once, and a team gets only two active keys). There is
+  deliberately no `environment` key: that is a property of each device token.
+  `examples/dev-server.config.mjs` is the worked example.
 - **The push `category` is a wire contract with the iOS app, and breaking it fails silently.**
   `forwarder.ts` sends `PERMISSION_REQUEST` for a permission request and `SESSION_EVENT` for
   everything else; the app registers its Approve/Deny actions under those exact strings
   (`PushPayload.swift`). There is no shared type between the halves and neither side errors on a
   mismatch — the notification simply arrives with no buttons on it, which reads as "approval from
   the lock screen is broken" rather than as a typo. Renaming one half means shipping both, and an
-  older app keeps the old string.
+  older app keeps the old string. The same applies to the payload as a whole, which is why
+  `pnpm smoke:push` goes through `buildPush` rather than a hand-written `aps` dictionary: a
+  hand-rolled payload carries no `sessionId`, `PushPayload.init?` returns nil, and the tap routes
+  nowhere — which reads exactly like a broken deep link and is not one.
 
 - **Sandbox and production are different token *namespaces*, not just different URLs.** A build
   run from Xcode gets a sandbox token; a TestFlight or App Store build gets a production one.

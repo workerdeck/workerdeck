@@ -10,13 +10,6 @@ import { createWikiApi } from './wiki/trpc.ts'
 import { createWikiMcp } from './wiki/mcp.ts'
 import type { AgentConfigResponse } from './shared.ts'
 
-/**
- * The whole embedded instance in one process on one port: `/v1/*` is the WorkerDeck gateway, and
- * everything else (`/trpc`, `/mcp`, `/api/*`, the built SPA) is served through its `fallback`.
- * One port is load-bearing — a browser cannot header a WS upgrade and a cookie only rides
- * same-origin requests. See `docs/CLIENTS.md` §`apps/embedded`.
- */
-
 const port = Number(process.env.PORT ?? 8788)
 const host = process.env.HOST ?? '127.0.0.1'
 const dbFile = process.env.EMBEDDED_DB ?? fileURLToPath(new URL('../.embedded/wiki.db', import.meta.url))
@@ -25,8 +18,6 @@ const webRoot = fileURLToPath(new URL('../dist', import.meta.url))
 const stateDir = fileURLToPath(new URL('../.embedded', import.meta.url))
 
 const db = openWikiDb(dbFile)
-// Persisted, not per-process: a fresh secret on every boot signs everyone out,
-// and a signed-out user cannot see the sessions the restart just preserved.
 const auth = createCookieAuth(resolveSecret(`${stateDir}/cookie-secret`))
 const state = createAppState()
 const wikiMcp = createWikiMcp(db, state, USERS)
@@ -53,8 +44,7 @@ const gateway = await createEmbeddedGateway({
   get mcpUrl() {
     return mcpUrl
   },
-  // `/trpc` is checked first because silkweave's node handler slices its own prefix
-  // off unconditionally: it must only ever see URLs that belong to it.
+  // `/trpc` is checked first: silkweave's node handler slices its own prefix off unconditionally.
   fallback: (req, res) => {
     if (req.url === '/trpc' || req.url?.startsWith('/trpc/') || req.url?.startsWith('/trpc?')) {
       wikiApi.handler(req, res)

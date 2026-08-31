@@ -11,12 +11,6 @@ export type DocListProps = {
   onSignOut: () => void
 }
 
-/**
- * The left rail: the signed-in user's documents, flat and newest-first.
- *
- * Rename is a double-click on the title — a single click navigates, so the first
- * click of a double-click would otherwise have already left the row.
- */
 export function DocList({ docs, selectedId, user, onSelect, onCreate, onRename, onSignOut }: DocListProps) {
   const [editing, setEditing] = useState<string | undefined>()
 

@@ -1,11 +1,5 @@
-// WorkerDeck's own lint rules — the conventions docs/CODE-STYLE.md states that no
-// off-the-shelf rule covers. Loaded via `jsPlugins` in .oxlintrc.json.
-
 const isPascalCase = (name) => /^[A-Z]/.test(name)
 
-/** Module-level helpers are arrow-function consts; `function` declarations are
- * reserved for PascalCase React components (and generators, which cannot be
- * arrows). docs/CODE-STYLE.md § Conventions. */
 const moduleFuncStyle = {
   create(context) {
     const check = (node) => {
@@ -29,9 +23,6 @@ const moduleFuncStyle = {
   },
 }
 
-/** Two doc-comment blocks stacked on one declaration: one of them documents the
- * wrong symbol or is stale. Found attached to the wrong symbols six times in the
- * 2026-08 cleanup sweep. */
 const noStackedJsdoc = {
   create(context) {
     return {
@@ -61,8 +52,6 @@ const noStackedJsdoc = {
 
 const MAX_COMMENT_LINES = 12
 
-/** A comment longer than this is documentation wearing a comment's clothes — it
- * belongs in docs/ (GOTCHAS.md, PACKAGES.md, ...) with a one-line pointer here. */
 const maxCommentLines = {
   create(context) {
     return {

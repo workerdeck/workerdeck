@@ -92,6 +92,16 @@ engine's process contract can't either**: any change to `CodexRunner`'s spawn op
 handshake, or event mapping needs `pnpm smoke:codex`. Smokes live in `smoke/`: `smoke:sandbox` and
 `smoke:codex --canary` are free; `smoke:live`, `smoke:sdk`, `smoke:media` (the only check that
 the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:codex` are not.
+Three more the list above omits. `smoke:mcp --probe` is **free** — it connects to the real
+DeepWiki server, asserts the tools come back namespaced, and exits before touching a model;
+without `--probe` it grants those tools to a real session and costs tokens. `smoke:restart` spawns
+its **own** gateway on its own port and state dir (never the one you are running) and is the only
+thing that shows a real `claude`/`codex` resume works — `server/test/dormant.test.ts` drives a fake
+engine, so it proves the record and the routes, not the feature. `smoke:attach` costs nothing and
+attaches to a session that already exists: **run it before calling any new replay rule finished.**
+It keeps text and non-text parts apart, which is the measurement `truncateResults` shipped
+without, and `--capture <file>` dumps every frame as JSONL so a control session can be diffed
+byte-for-byte across a rule change.
 **Anything touching the APNs payload, the device route or the app's tap handling needs
 `pnpm smoke:push`** — it costs no tokens, but it is the only way to raise a notification without
 waiting for a session to decide to, and a tap is the only gate the delegate's main-thread contract

@@ -1,41 +1,13 @@
-/**
- * smoke:codex — everything a fake cannot validate about the Codex engine.
- *
- *   pnpm smoke:codex [model]        # full run — needs codex auth, costs plan/API usage
- *   pnpm smoke:codex --canary       # the free auth-drift canaries only (network, no tokens)
- *
- * Auth — ONE route (verified 2026-08-05 against 0.146.0 by driving the raw
- * app-server; the exec-era matrix does NOT carry over): `codex login` in YOUR
- * terminal (ChatGPT plan, or `codex login --with-api-key` to persist a key
- * into CODEX_HOME). The env keys are dead ends on this surface — CODEX_API_KEY
- * is read only by `codex exec` (retired), OPENAI_API_KEY by neither; the
- * app-server sends NO credential from either, and canaries 1–2 are the alarm
- * for the release where that changes.
- *
- * The canaries drive the REAL binary through the real `CodexRunner` +
- * `connectAppServer`, so a free run also exercises the spawn contract, the
- * initialize/initialized handshake, and thread/start — drift in any of those
- * fails a canary before it costs a token.
- *
- * The free canaries also pin the two APPROVAL gates (discovered by trial):
- * `initialize` accepting `capabilities.experimentalApi: true`, and
- * `thread/start` accepting the granular `approvalPolicy` object — WorkerDeck
- * has no non-experimental fallback, so losing either gate breaks approvals
- * outright. And `skills/list`'s shape, which is free for the same reason (a
- * local directory scan, no model call) and is hand-mirrored in
- * `engines/codex/types.ts` — an unmapped field there is a panel that silently
- * loses a column.
- *
- * The paid part is the drift alarm for the app-server JSON-RPC v2 vocabulary
- * (pre-1.0, regenerable from the binary — the schema promises drift): token
- * deltas actually arriving (the reason this transport exists), a real command
- * execution with its exit code, the usage-relation asserts on the summed
- * tokenUsage/updated stream, resume continuity, interrupt behavior +
- * post-interrupt resumability, the approval flow under 'default' mode (the
- * sandbox refusal surfacing as a real permission_requested, denied, with the
- * turn surviving), and a `localImage` attachment. Any change to CodexRunner's
- * spawn options, handshake, or event mapping requires a run.
- */
+// pnpm smoke:codex [model]     # the full run — needs `codex login` in YOUR terminal, costs plan/API usage
+// pnpm smoke:codex --canary    # the free drift canaries only (network, no tokens)
+// pnpm smoke:codex --clear     # the clear scenario alone, two turns
+//
+// Everything a fake cannot validate about the Codex engine, and any change to `CodexRunner`'s spawn options,
+// handshake or event mapping requires a run (`docs/GOTCHAS.md` §Codex engine).
+//
+// The canaries drive the REAL binary through the real `CodexRunner` + `connectAppServer`, so a free run also
+// exercises the spawn contract, the initialize/initialized handshake and thread/start — drift in any of those fails
+// a canary before it costs a token.
 import { execFile } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -46,7 +18,6 @@ import type { PermissionRequest, SessionEvent } from '@workerdeck/protocol'
 
 const MODEL = process.argv.find((a) => !a.startsWith('-') && a.includes('gpt')) ?? 'gpt-5.6-luna'
 const CANARY_ONLY = process.argv.includes('--canary')
-/** Just the clear scenario (VERIFICATION-DEBT item 9) — two turns, not six. */
 const CLEAR_ONLY = process.argv.includes('--clear')
 
 const execFileP = promisify(execFile)
@@ -61,7 +32,7 @@ const codexBin = resolveBundledCodexExecutable()
 
 type RunnerHarness = { runner: CodexRunner; events: SessionEvent[] }
 
-/** Complete child env (codex replaces, never merges) with a scratch home. */
+// A COMPLETE child env — codex replaces, never merges — with a scratch home.
 const scratchEnv = (extra: Record<string, string | undefined> = {}): Record<string, string> => {
   const home = mkdtempSync(join(tmpdir(), 'codex-smoke-home-'))
   const env: Record<string, string> = {}
@@ -103,7 +74,6 @@ const makeRunner = (cwd: string, overrides: Record<string, unknown> = {}): Runne
 const turnResults = (events: SessionEvent[]) =>
   events.filter((e): e is Extract<SessionEvent, { type: 'turn_result' }> => e.type === 'turn_result')
 
-/** Poll until `pred` holds; throws with `what` in the message on timeout. */
 const waitFor = async (pred: () => boolean, timeoutMs: number, what: string): Promise<void> => {
   const deadline = Date.now() + timeoutMs
   for (;;) {
@@ -123,12 +93,9 @@ const userTexts = (events: SessionEvent[]) =>
     .map((e) => JSON.stringify(e.message.content))
     .join('\n')
 
-/**
- * One throwaway app-server turn through the real runner; returns the terminal
- * failure message ('' = completed). Handshake/spawn failures surface here too,
- * as the turn's error — which is exactly what makes the canaries a drift alarm
- * for the spawn contract as well as the auth chain.
- */
+// One throwaway app-server turn through the real runner; returns the terminal failure message ('' = completed).
+// Handshake and spawn failures surface here too, as the turn's error, which is what makes the canaries a drift alarm
+// for the spawn contract as well as for the auth chain.
 const probeTurn = async (env: Record<string, string>): Promise<string> => {
   const cwd = mkdtempSync(join(tmpdir(), 'codex-smoke-probe-'))
   const { runner, events } = makeRunner(cwd, { prompt: 'say hi', model: undefined, env })
@@ -150,9 +117,6 @@ const probeTurn = async (env: Record<string, string>): Promise<string> => {
 const canaries = async (): Promise<void> => {
   console.log('\n— free auth-drift canaries (fake keys, scratch CODEX_HOME, no tokens) —')
 
-  // 1. OPENAI_API_KEY alone must still be a no-op ("Missing bearer" — no
-  //    credential was sent). The day this fails with invalid_api_key instead,
-  //    codex started honoring the var and the probe's hint is stale.
   const viaOpenai = await probeTurn(scratchEnv({ OPENAI_API_KEY: 'sk-smoke-fake' }))
   if (viaOpenai.includes('Missing bearer')) {
     pass('OPENAI_API_KEY ignored', 'app-server sent no credential (Missing bearer)')
@@ -166,11 +130,8 @@ const canaries = async (): Promise<void> => {
     fail('OPENAI_API_KEY ignored', `unexpected failure shape: ${viaOpenai.slice(0, 120)}`)
   }
 
-  // 2. CODEX_API_KEY must still be exec-only, i.e. a no-op for the app-server
-  //    (established 2026-08-05: the exec surface DID send it as a bearer, this
-  //    surface does not). The probe therefore trusts `login status` alone —
-  //    the day this fails with invalid_api_key, app-server started honoring
-  //    the env key and the probe under-claims: restore a presence rule.
+  // The exec surface DID send this one as a bearer; this surface does not, which is why the probe trusts
+  // `login status` alone.
   const viaCodexKey = await probeTurn(scratchEnv({ CODEX_API_KEY: 'sk-smoke-fake' }))
   if (viaCodexKey.includes('Missing bearer')) {
     pass('CODEX_API_KEY exec-only', 'app-server sent no credential (Missing bearer)')
@@ -184,8 +145,6 @@ const canaries = async (): Promise<void> => {
     fail('CODEX_API_KEY exec-only', `unexpected failure shape: ${viaCodexKey.slice(0, 120)}`)
   }
 
-  // 3. `login status` still exit-codes its verdict on an empty home — what the
-  //    availability probe's rule 3 reads (exit code + fixed line, nothing else).
   if (!codexBin) {
     fail('login status verdict', 'could not resolve the bundled codex binary')
   } else {
@@ -203,14 +162,7 @@ const canaries = async (): Promise<void> => {
     }
   }
 
-  // 4+5. The two approval gates, discovered by trial and easy to lose in a
-  //      release: `initialize` must accept `capabilities.experimentalApi:
-  //      true`, and `thread/start` must accept the GRANULAR approvalPolicy
-  //      object (the string vocabulary never asks — measured). Both are free:
-  //      no turn, no tokens, no auth (thread/start is local; credentials are
-  //      first consulted at turn/start). WorkerDeck runs ONE code path — there
-  //      is no non-experimental fallback — so either gate failing here means
-  //      approvals are broken until the runner is updated.
+  // Both approval gates are free to check: thread/start is local, and credentials are first consulted at turn/start.
   if (!codexBin) {
     fail('experimentalApi gate', 'could not resolve the bundled codex binary')
   } else {
@@ -246,13 +198,8 @@ const canaries = async (): Promise<void> => {
         fail('granular approvalPolicy gate', `thread/start rejected the granular approvalPolicy: ${(error as Error).message}`)
       }
 
-      // 6. `skills/list` — the shape `engines/codex/types.ts` mirrors by hand.
-      //    Free (a local directory scan, no model call) and worth pinning: an
-      //    unmapped field here is a skills panel that silently loses a column,
-      //    and `interface.defaultPrompt` in particular is the whole reason the
-      //    composer can offer skills without pretending they are commands.
-      //    Asserted structurally, never on *which* skills exist — this machine's
-      //    CODEX_HOME is not the contract.
+      // The shape `engines/codex/types.ts` mirrors by hand. Asserted structurally, never on WHICH skills exist —
+      // this machine's CODEX_HOME is not the contract.
       try {
         const listed = (await connection.request('skills/list', {})) as {
           data?: Array<{
@@ -273,8 +220,7 @@ const canaries = async (): Promise<void> => {
           } else if (named.length !== skills.length) {
             fail('skills/list shape', 'a skill came back without a string `name`')
           } else {
-            // `enabled` may be absent (the runner defaults it true); `interface`
-            // may be absent; neither may be a different *kind* of thing.
+            // Either may be absent; neither may be a different KIND of thing.
             const wrongEnabled = skills.find((s) => s.enabled !== undefined && typeof s.enabled !== 'boolean')
             const wrongInterface = skills.find(
               (s) => s.interface !== undefined && (typeof s.interface !== 'object' || s.interface === null),
@@ -302,18 +248,9 @@ const canaries = async (): Promise<void> => {
         )
       }
 
-      // 7. `config/read` — the source the runner restates on every turn/start.
-      //    turn/start's object-form sandbox policy is serde-defaulted FIELD BY
-      //    FIELD, so `{type:'workspaceWrite'}` bare silently resets the
-      //    operator's `[sandbox_workspace_write]` — network_access back to
-      //    false, writable_roots back to empty — every turn. Measured against
-      //    0.149.0 with `network_access = true`: bare → `curl: (6) Could not
-      //    resolve host`, fully stated → `200`. We cannot fix that by omitting
-      //    the policy (restating it is what makes a between-turns mode switch
-      //    take effect), so the runner reads it here instead. Free: a local
-      //    config resolve, no model call. If this ever stops reporting the
-      //    block, the runner falls back to the bare shape and the operator's
-      //    network_access is silently gone again.
+      // The source the runner restates on every turn/start, because turn/start's sandbox policy is serde-defaulted
+      // field by field (`docs/GOTCHAS.md` §Codex engine). Stop reporting the block and the operator's
+      // network_access is silently gone again.
       try {
         const read = (await connection.request('config/read', { cwd: gateCwd })) as {
           config?: { sandbox_workspace_write?: Record<string, unknown> | null } | null
@@ -326,8 +263,7 @@ const canaries = async (): Promise<void> => {
               "operator's network_access/writable_roots and will clobber them on every turn",
           )
         } else if (block === null) {
-          // Nothing configured in this scratch home: a legitimate answer, and
-          // the key's presence is the contract, not its value.
+          // Nothing configured in this scratch home: the key's presence is the contract, not its value.
           pass('config/read sandbox_workspace_write', 'key present, null (nothing configured)')
         } else {
           const keys = ['writable_roots', 'network_access', 'exclude_tmpdir_env_var', 'exclude_slash_tmp']
@@ -360,32 +296,13 @@ const canaries = async (): Promise<void> => {
   await threadItemUnionCanary()
 }
 
-/**
- * The `ThreadItem` union, pinned.
- *
- * This is the drift alarm the canaries were missing, and its absence has already
- * cost us twice: `imageGeneration` went unnoticed until someone saw a blank row,
- * and `collabAgentToolCall` / `subAgentActivity` — codex's entire multi-agent
- * surface — have been arriving as invisible `sdk_event`s since 0.146.0 without
- * anyone knowing they existed. An unmapped item is not merely unstyled, it is
- * gone from the transcript (`docs/GOTCHAS.md` §codex), so "we render everything
- * codex can say" is a claim only a pin can keep honest.
- *
- * Free, and free for a good reason: `generate-json-schema` is a local dump out of
- * the binary we already ship — no network, no auth, no tokens — so this belongs
- * in the canary set rather than the paid run.
- *
- * **A new variant is a FAIL and an unmapped one is a warning**, which is the
- * honest split: the first means the protocol moved under us, the second is a
- * standing decision recorded below. Mapping every variant is not the goal —
- * knowing about each one is.
- */
+// A new variant is a FAIL and an unmapped one is a warning: the first means the protocol moved under us, the second
+// is the standing decision recorded below. Mapping every variant is not the goal — knowing about each one is.
 const threadItemUnionCanary = async (): Promise<void> => {
   if (!codexBin) {
     return
   }
-  // Every variant present in 0.146.0. Adding to this list is the deliberate act
-  // of saying "we have looked at this one".
+  // Every variant present in 0.146.0. Adding to this list is the deliberate act of saying "we looked at this one".
   const KNOWN = new Set([
     'userMessage',
     'hookPrompt',
@@ -406,11 +323,8 @@ const threadItemUnionCanary = async (): Promise<void> => {
     'exitedReviewMode',
     'contextCompaction',
   ])
-  // What `AppServerItem` in `engines/codex/types.ts` actually models. Everything
-  // else falls through `#handleItemCompleted` into an `sdk_event` and draws
-  // nothing. The multi-agent pair is mapped as of the sub-agent attribution
-  // work (`engines/codex/subagents.ts`): `subAgentActivity` is the spawn
-  // signal the whole design keys off, `collabAgentToolCall` a plain tool card.
+  // What `AppServerItem` in `engines/codex/types.ts` models. Everything else falls through `#handleItemCompleted`
+  // into an `sdk_event` and draws nothing.
   const MAPPED = new Set([
     'agentMessage',
     'reasoning',
@@ -467,8 +381,7 @@ const threadItemUnionCanary = async (): Promise<void> => {
   }
 }
 
-/** The auth this run will use, mirroring the availability probe's chain:
- * `login status` alone — the env keys are not read by the app-server. */
+// Mirrors the availability probe's chain: `login status` alone — the env keys are not read by the app-server.
 const detectAuth = async (): Promise<string | null> => {
   if (!codexBin) {
     return null
@@ -481,13 +394,9 @@ const detectAuth = async (): Promise<string | null> => {
   }
 }
 
-/**
- * The clear, against the real binary — VERIFICATION-DEBT item 9. Split out so
- * `pnpm smoke:codex --clear` can pay for these two turns alone.
- */
 const clearScenario = async (cwd: string): Promise<void> => {
-  // A timeout in here used to leave the codex children running, which kept the
-  // process alive long past the failure it was trying to report.
+  // A timeout in here used to leave the codex children running, which kept the process alive long past the failure
+  // it was trying to report.
   const open: CodexRunner[] = []
   try {
     await runClearScenario(cwd, open)
@@ -499,23 +408,15 @@ const clearScenario = async (cwd: string): Promise<void> => {
 }
 
 const runClearScenario = async (cwd: string, open: CodexRunner[]): Promise<void> => {
-  // The scripted peer can prove the runner's bookkeeping and nothing about
-  // the only thing that matters: that a fresh `thread/start` actually yields
-  // an EMPTY model context. Only a codeword the model cannot produce by
-  // chance can tell "the context was cleared" apart from "the transcript was
-  // hidden", so that is what this asks for. Two tiny turns.
-  //
-  // The two RESUMES at the end are free — a promptless resume backfills the
-  // thread's history and runs no turn — which is what makes "the old thread
-  // is not deleted" cheap to assert rather than merely documented.
+  // The scripted peer can prove the runner's bookkeeping and nothing about the only thing that matters: that a fresh
+  // `thread/start` yields an EMPTY model context. Only a codeword the model cannot produce by chance tells "the
+  // context was cleared" apart from "the transcript was hidden". The two resumes at the end are free — a promptless
+  // resume backfills history and runs no turn.
   const CODEWORD = 'ORRERY-4417'
   const clearRun = makeRunner(cwd, {})
   open.push(clearRun.runner)
   const started = Date.now()
-  // The post-clear turn hung once (2026-08-24) and the run had nothing to say
-  // about why, so the timeline is always available behind an env var rather
-  // than reconstructed after the fact. Pair it with `WORKERDECK_CODEX_TRACE`
-  // for the inbound wire.
+  // Pair `WD_SMOKE_DEBUG` with `WORKERDECK_CODEX_TRACE` for the inbound wire.
   if (process.env.WD_SMOKE_DEBUG) {
     clearRun.runner.subscribe((e) =>
       console.log(
@@ -533,15 +434,13 @@ const runClearScenario = async (cwd: string, open: CodexRunner[]): Promise<void>
     throw new Error('no thread id after the pre-clear turn')
   }
 
-  // The literal `/clear` a user types, not the route — deliberately the same
-  // call, so this exercises both entry points at once.
+  // The literal `/clear` a user types, not the route — the same call in the runner, so this covers both entry points.
   clearRun.runner.sendMessage('/clear')
   await waitFor(() => clearRun.events.some((e) => e.type === 'conversation_reset'), 60_000, 'conversation_reset')
   const newThread = clearRun.runner.sdkSessionId
   if (newThread && newThread !== clearedThread) {
-    // The LAST octet, not the first: codex thread ids are time-ordered, so two
-    // threads started a minute apart share a long prefix and `slice(0, 8)`
-    // renders a genuine change as no change at all.
+    // The LAST octet, not the first: codex thread ids are time-ordered, so two threads started a minute apart share
+    // a long prefix and `slice(0, 8)` renders a genuine change as no change at all.
     pass('clear starts a new thread', `…${clearedThread.slice(-8)} → …${newThread.slice(-8)}`)
   } else {
     fail('clear starts a new thread', newThread ? 'the thread id did not change — this was a resume, not a start' : 'no new thread id')
@@ -569,15 +468,8 @@ const runClearScenario = async (cwd: string, open: CodexRunner[]): Promise<void>
     )
   }
   const readingAfter = clearRun.runner.info().contextUsage
-  // **The reading cannot prove a clear, and this is the run that showed why.**
-  // A fresh codex thread already reads ~14k tokens before anyone types: the
-  // system prompt, the tool schemas and the skill list are the floor of the
-  // window. Two tiny turns therefore both read ≈ the baseline, and "small
-  // rather than continuing the first" is indistinguishable from noise at that
-  // scale (measured 2026-08-24: 13909 → 14028, a fresh thread reading HIGHER
-  // than the one it replaced, purely because the second prompt is longer).
-  // So this reports the pair, and only fails on growth big enough to mean the
-  // conversation actually carried over. The codeword above is the proof.
+  // The reading cannot witness a clear (`docs/GOTCHAS.md` §Codex engine), so this reports the pair and only fails on
+  // growth big enough to mean the conversation actually carried over. The codeword above is the proof.
   if (readingBefore && readingAfter) {
     const growth = (readingAfter.totalTokens - readingBefore.totalTokens) / readingBefore.totalTokens
     console.log(
@@ -597,8 +489,6 @@ const runClearScenario = async (cwd: string, open: CodexRunner[]): Promise<void>
   }
   clearRun.runner.close()
 
-  // Both threads, resumed. Free: a promptless resume backfills history and
-  // runs no turn.
   if (newThread) {
     const resumedNew = makeRunner(cwd, { resume: newThread })
     open.push(resumedNew.runner)
@@ -675,11 +565,8 @@ const paid = async (): Promise<void> => {
       fail('command output', 'echo output did not reach a tool_result')
     }
 
-    // Token streaming — the reason the app-server transport is THE transport.
-    // exec's JSONL never carried a partial message (the old smoke asserted the
-    // absence); the positive counterpart is now load-bearing: text deltas must
-    // arrive before the completed item, in more than one piece, and agree with
-    // the final answer the completed item supersedes them with.
+    // Token streaming is the reason this transport exists, so the positive assertion is load-bearing: deltas must
+    // arrive before the completed item, in more than one piece, and agree with the answer that supersedes them.
     const textDeltas = events
       .filter((e): e is Extract<SessionEvent, { type: 'stream_delta' }> => e.type === 'stream_delta')
       .map((e) => (e.event as { delta?: { type?: string; text?: string } }).delta)
@@ -695,15 +582,10 @@ const paid = async (): Promise<void> => {
         'no stream_delta at all — item/agentMessage/delta never fired; the capability record ' + "(streaming: 'token') is now a lie",
       )
     }
-    // Agreement is asserted PER MESSAGE, not across the turn — a turn with a
-    // tool call emits several agent messages (codex narrates "I'm running the
-    // requested shell command…" before the echo, then answers after it), so
-    // concatenating every delta and comparing to the last message's text
-    // compares a preamble+answer against an answer and fails by construction.
-    // The invariant that is actually true, and the one both reducers implement
-    // ("the full message supersedes any in-flight streamed text"): the deltas
-    // accumulated since the previous completed message reconstruct the next
-    // one. That is what a client renders, so that is what is checked.
+    // Agreement is asserted PER MESSAGE, not across the turn: a turn with a tool call emits several agent messages,
+    // so concatenating every delta and comparing to the last one's text compares preamble+answer against answer and
+    // fails by construction. The true invariant, and the one both reducers implement, is that the deltas accumulated
+    // since the previous completed message reconstruct the next one.
     let pending = ''
     let matched = 0
     const mismatches: string[] = []
@@ -740,10 +622,8 @@ const paid = async (): Promise<void> => {
       fail('delta/final agreement', 'no completed message was preceded by deltas')
     }
 
-    // Usage asserts — `turn/completed` carries no usage on this surface; the
-    // runner sums `thread/tokenUsage/updated.last` across the turn and applies
-    // the Anthropic-convention subtraction. Recover the raw relation from the
-    // normalized fields: raw input = input + cache_read.
+    // `turn/completed` carries no usage on this surface, so the runner sums `thread/tokenUsage/updated.last` across
+    // the turn and applies the Anthropic-convention subtraction. Raw input = input + cache_read.
     const usage = result.usage as Record<string, number> | undefined
     if (!usage) {
       fail('usage', 'turn_result carried no usage — tokenUsage/updated never arrived')
@@ -768,8 +648,7 @@ const paid = async (): Promise<void> => {
     }
     runner.close()
 
-    // Turn 2: resume continuity (a fresh child + thread/resume) + the
-    // cache-heavy usage relation.
+    // Turn 2: resume continuity — a fresh child + thread/resume — plus the cache-heavy usage relation.
     const resumed = makeRunner(cwd, {
       prompt: 'What exact string did I ask you to echo earlier? Reply with just the string.',
       resume: threadId,
@@ -783,9 +662,8 @@ const paid = async (): Promise<void> => {
     }
     const u2 = turn2?.usage as Record<string, number> | undefined
     if (u2 && u2.input_tokens! >= 0) {
-      // The subtraction assumes OpenAI-convention inputTokens INCLUDES cached.
-      // If that were wrong, a cache-heavy resume turn would clamp at 0 with a
-      // large cache_read — flag the suspicious shape instead of proving it.
+      // The subtraction assumes OpenAI-convention inputTokens INCLUDES cached. If that were wrong, a cache-heavy
+      // resume turn would clamp at 0 with a large cache_read — flag the shape rather than claim to have proven it.
       if (u2.input_tokens === 0 && (u2.cache_read_input_tokens ?? 0) > 0) {
         fail(
           'usage relation (cache-heavy)',
@@ -801,8 +679,7 @@ const paid = async (): Promise<void> => {
     }
     resumed.runner.close()
 
-    // Turn 3: interrupt lands cleanly (turn/interrupt → status 'interrupted'),
-    // and the thread survives it.
+    // Turn 3: interrupt lands cleanly (turn/interrupt → status 'interrupted'), and the thread survives it.
     const spinner = makeRunner(cwd, {
       prompt: 'Count from 1 to 500 out loud, one number per line, without using any tools.',
       resume: threadId,
@@ -832,13 +709,8 @@ const paid = async (): Promise<void> => {
     }
     afterInterrupt.runner.close()
 
-    // Turn 4: the approval flow, end to end, in 'default' mode (read-only
-    // sandbox + granular ask). The write attempt is refused by the sandbox and
-    // must now surface as a real permission_requested — codex's escalation
-    // ("command failed; retry without sandbox?") — which the smoke DENIES, so
-    // the file must still not exist and the turn must complete anyway. This is
-    // the check the scripted peer cannot make: that the real binary actually
-    // asks under the granular policy, and that a decline lands cleanly.
+    // Turn 4: the approval flow in 'default' mode. The check the scripted peer cannot make is that the REAL binary
+    // asks under the granular policy at all, and that a decline lands cleanly.
     const readonly = makeRunner(cwd, {
       prompt:
         'Create a file named smoke-write-test.txt containing "x" in the current directory ' +
@@ -884,12 +756,9 @@ const paid = async (): Promise<void> => {
     }
     readonly.runner.close()
 
-    // Turn 5: an image attachment reaches the model as `localImage` — the one
-    // input shape no unit test can prove the binary accepts. The pixel is
-    // RGBA(255,0,0,127) — decoded from these bytes, not assumed; the first
-    // exec-era paid run (2026-08-05) caught an "expected blue" assertion that
-    // had never executed. A model that never received the attachment cannot
-    // name it.
+    // Turn 5: `localImage` is the one input shape no unit test can prove the binary accepts. The pixel is
+    // RGBA(255,0,0,127), decoded from these bytes rather than assumed — the first paid run caught an "expected blue"
+    // assertion that had never executed.
     const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
     const vision = makeRunner(cwd, {})
     void vision.runner.start()

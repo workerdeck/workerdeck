@@ -1,12 +1,5 @@
-/**
- * Manual smoke for the QuickJS sandbox boundary. No API key, no network, no cost.
- *
- *   pnpm smoke:sandbox            # run the built-in scenarios
- *   pnpm smoke:sandbox 'vfs.list("/")'   # run your own script in the sandbox
- *
- * Every scenario prints what it proves, so a green run is readable as evidence
- * rather than a pile of PASS lines.
- */
+// pnpm smoke:sandbox                    # the built-in scenarios; no API key, no network, no cost
+// pnpm smoke:sandbox 'vfs.list("/")'    # your own script, against a VFS seeded with /docs/example.txt
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
 import { createVfs, loadEngine, runScript, type RunScriptResult } from '@workerdeck/sandbox'
 
@@ -136,8 +129,7 @@ await scenario('Network: deny by default', 'no network unless the host grants it
 await scenario('Network: granted, but host-gated', 'the allowlist is enforced host-side; the guest never holds a credential', async () => {
   const seen: string[] = []
   const result = await runScript(engine, {
-    // Stands in for QuickJsExecutor's gate: the host decides, and could attach a
-    // credential here that the guest never sees.
+    // Stands in for QuickJsExecutor's gate: the host decides, and could attach a credential the guest never sees.
     fetchText: async (url) => {
       seen.push(url)
       if (!url.startsWith('https://allowed.example/')) {

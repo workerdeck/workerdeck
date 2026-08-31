@@ -1,15 +1,3 @@
-/**
- * The `'provider'`-engine example: how a HOST wires the model-agnostic engine through the
- * `createEngineRunner` hook — the escape hatch for engines the repo ships no adapter for (claude
- * and codex profiles need none of this). A bare gateway, not the CLI, so it serves no dashboard:
- *   pnpm example:server    # port 8787, NO AUTH, loopback only; reads .env for provider keys
- *   pnpm dev:web           # then open http://localhost:5191
- *
- * Declares one claude profile plus a provider profile per API key found in the environment
- * (`ANTHROPIC_API_KEY` → anthropic, `OPENAI_API_KEY` → openai, `MOONSHOT_API_KEY` → moonshot),
- * with a file-backed profile store at `.workerdeck/profiles.json`. There is no server-side
- * sandbox executor here, so `eval_script` crosses the WS bridge and runs IN YOUR BROWSER TAB.
- */
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -22,9 +10,6 @@ import { createFileProfileStore, createWorkerServer } from '@workerdeck/server'
 type ProviderSetup = {
   env: string
   model: string
-  /** Extra model ids the dashboard's picker offers for this profile. Operator-
-   * declared: provider engines have no equivalent of the CLI's supportedModels().
-   * Left unset here for the others, so the picker's default-only fallback shows too. */
   models?: string[]
   load: () => Promise<unknown>
 }
@@ -48,7 +33,6 @@ const PROVIDERS: Record<string, ProviderSetup> = {
   },
 }
 
-// One model factory per provider that actually has a key.
 const factories = new Map<string, (id: string) => LanguageModel>()
 const profiles: ProfileInfo[] = []
 
@@ -61,11 +45,7 @@ if (existsSync(claudeConfigDir)) {
   })
 }
 
-// One shared connection for the whole process: sessions must NOT close it — it
-// outlives them and dies with the process. (A per-session connect is possible —
-// `createEngineRunner` may be async, disposed via `AiSdkRunnerConfig.onClose` —
-// shared is simply right for a dev server hitting one public endpoint.) Unreachable
-// just means no MCP tools; the dev server still starts.
+// One shared connection for the whole process: a session must NOT close it, unlike the per-session connect `onClose` disposes.
 const mcp = await connectMcpTools(process.env.NO_MCP ? {} : { deepwiki: { type: 'http', url: 'https://mcp.deepwiki.com/mcp' } }, {
   onError: (name, error) => console.warn(`[provider-example] MCP '${name}' unavailable: ${String(error)}`),
 })
@@ -90,10 +70,6 @@ for (const [name, setup] of Object.entries(PROVIDERS)) {
     engine: 'provider',
     provider: { id: name, model: setup.model, models: setup.models, apiKeyEnv: setup.env },
     description: `Model-agnostic engine (${setup.model}); eval_script runs in your browser tab`,
-    // What sessions under this profile get. The runner factory below wires the
-    // backends; this decides which of them are granted, so withholding one is a
-    // profile edit rather than a code change. MCP is named, never configured
-    // here — the transport config (and any credentials in it) stays server-side.
     session: {
       capabilities: ['web_fetch', 'deliver_file'],
       mcpServers: ['deepwiki'],
@@ -108,20 +84,11 @@ if (profiles.length === 0) {
 }
 
 const { listen } = createWorkerServer({
-  // Loopback dev server: accept every caller, and let them manage profiles so the
-  // Profiles view is exercisable end to end. A real deployment derives
-  // `canManageProfiles` from its own identity system — see docs/guides/profiles.
   authenticate: () => ({ canManageProfiles: true }),
   profiles,
-  // Managed profiles persist next to the repo, so one survives a restart.
   profileStore: createFileProfileStore(join(process.cwd(), '.workerdeck', 'profiles.json')),
-  // A managed Claude profile may point anywhere under your home directory here;
-  // a real deployment scopes this much more tightly.
   allowedConfigDirRoots: [homedir()],
   createEngineRunner: ({ config, profile, bridge, restore }) => {
-    // Dashboard-created profiles can name any provider, but factories exist only for
-    // the keys present at startup. Say which key is missing: the rejection surfaces as
-    // the create's 500 body, so a bare TypeError is all the operator would ever see.
     const providerId = profile.provider!.id
     const factory = factories.get(providerId)
     if (!factory) {
@@ -142,30 +109,23 @@ const { listen } = createWorkerServer({
           'set a model on the profile (or pass one when creating the session).',
       )
     }
-    // On a rehydrated session the snapshot's filesystem wins — seeding here would undo
-    // whatever the parked turn already wrote.
+    // On a rehydrated session the snapshot's filesystem wins — seeding here would undo what the parked turn wrote.
     const vfs = restore
       ? undefined
       : createVfs({
           '/leads/acme.txt': 'company: Acme Corp\nrevenue: 4173\nemployees: 12\n',
         })
-    // The runner's id does not exist yet at assembly time, so resolve the session's
-    // bridge executor at dispatch time from the call's own sessionId.
+    // The runner's id does not exist yet at assembly time, so the executor resolves the bridge per call instead.
     const toBrowser: ToolExecutor = {
       dispatch: (call) => bridge.executorFor(call.sessionId).dispatch(call),
     }
-    // No permission-mode coercion here: the create form only offers what this
-    // engine runs, and the gateway rejects the CLI-only modes with a 400.
     return createEngineSession({
-      // `restore` is what makes a parked session come back as itself: same id, same
-      // event log, same history, mid-task.
       config: { ...config, languageModel: factory(modelId), vfs, restore },
       profile,
       resolveModel: (_profile, c) => factory(c.model ?? modelId),
       selectExecutor: () => toBrowser,
       backend: 'browser',
-      // Backends, not grants: the profile's `session` block above decides which of
-      // these a session actually gets.
+      // Backends, not grants: the profile's `session` block above decides which of these a session gets.
       capabilities: { webFetch: {} },
       mcpTools: mcp.tools,
       executionLimits: { timeoutMs: 15_000 },

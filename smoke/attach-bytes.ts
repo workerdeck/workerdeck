@@ -1,26 +1,13 @@
-/**
- * What an attach is actually made of, on the wire. No API key, no cost — it
- * attaches to a session that already exists on a running gateway.
- *
- *   pnpm smoke:attach <host> <sessionId> [truncate] [refs] [--capture <file>]
- *   pnpm smoke:attach 127.0.0.1:8787 abc123
- *   pnpm smoke:attach 127.0.0.1:8787 abc123 truncate refs
- *
- * **This exists because a replay rule's justification is not its measurement.**
- * `truncateResults` shipped on a projection of 68% and was worth 0.3% when it
- * was finally run: the projection had measured `JSON.stringify(content).length`
- * and so counted base64 image parts as text. This script keeps text and
- * non-text parts apart precisely so that mistake cannot be repeated — run it
- * before calling any new replay rule finished (see `docs/PACKAGES.md`, the
- * `packages/protocol` section, for the family of rules it applies to).
- *
- * `--capture <file>` writes every frame as JSONL instead of summarising, which
- * is how you prove a control session is byte-identical across a rule:
- *
- *   pnpm smoke:attach $HOST $ID --capture /tmp/before.jsonl
- *   pnpm smoke:attach $HOST $ID refs --capture /tmp/after.jsonl
- *   diff /tmp/before.jsonl /tmp/after.jsonl     # must be empty on a no-image session
- */
+// What an attach is made of on the wire. No API key, no cost — it attaches to a session that already exists.
+// Run it before calling any new replay rule finished: this keeps text and non-text parts apart, which is the
+// measurement `truncateResults` shipped without (`docs/GOTCHAS.md` §Attach replay).
+//
+// `--capture <file>` writes every frame as JSONL instead of summarising, which is how a control session is proven
+// byte-identical across a rule:
+//
+//   pnpm smoke:attach $HOST $ID --capture /tmp/before.jsonl
+//   pnpm smoke:attach $HOST $ID refs --capture /tmp/after.jsonl
+//   diff /tmp/before.jsonl /tmp/after.jsonl     # must be empty on a no-image session
 import { writeFileSync } from 'node:fs'
 import WebSocket from 'ws'
 
@@ -78,8 +65,7 @@ ws.on('message', (buf: Buffer) => {
   byType.set(event.type, (byType.get(event.type) ?? 0) + buf.length)
   largestFrames.push({ seq: event.seq, type: event.type, bytes: buf.length })
 
-  // Tool results ride on `user_message`; a block's `content` is either a plain
-  // string or an array of parts, only some of which are text.
+  // Tool results ride on `user_message`, and a block's `content` is either a string or an array of mixed parts.
   if (event.type === 'user_message' && Array.isArray(event.message?.content)) {
     for (const block of event.message.content) {
       if (block.type !== 'tool_result') {

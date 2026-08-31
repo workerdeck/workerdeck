@@ -4,24 +4,12 @@ import type { AppState } from '../app/state.ts'
 import type { WikiDb } from './db.ts'
 import type { User } from '../shared.ts'
 
-/**
- * The wiki's operations, written **once** as silkweave actions and projected onto two transports
- * by `wiki/mcp.ts` (the agent) and `wiki/trpc.ts` (the SPA). **Identity never comes from the
- * caller's input**: every action reads its user from `context.get('auth')`, which each adapter
- * resolves its own way, and no action takes a `userId` an argument could choose.
- * See `docs/CLIENTS.md` §`apps/embedded`.
- */
-
 type AuthInfo = { token: string; userId: string }
 
 const userOf = (context: { get: <T>(key: string) => T }): string => context.get<AuthInfo>('auth').userId
 
-/**
- * Treat a blank optional string as absent. A model asked to omit an optional field
- * sends `""` or (observed live) `" "` instead, and some providers rewrite the schema
- * so every property is required, leaving it no way to omit anything. `.min(1)` is not
- * the fix — a single space has length 1 — so no optional string is trusted as given.
- */
+// A model asked to omit an optional field sends `""` or (observed live) `" "` instead. `.min(1)` is not the fix — a
+// single space has length 1 — so no optional string is trusted as given.
 const text = (value: string | undefined): string | undefined => {
   const trimmed = value?.trim()
   return trimmed ? trimmed : undefined
@@ -40,10 +28,7 @@ const docBody = z.object({
   updatedAt: z.number(),
 })
 
-/**
- * The CRUD core, shared by both adapters. The descriptions are written for the model
- * — a tool description is prompt, not documentation — and cost the SPA nothing.
- */
+// The descriptions are written for the model — a tool description is prompt, not documentation.
 export const createWikiActions = (db: WikiDb, state: AppState) => {
   const listDocs = createAction({
     name: 'list_docs',
@@ -68,8 +53,7 @@ export const createWikiActions = (db: WikiDb, state: AppState) => {
     annotations: { readOnlyHint: true },
     run: async (input, context) => {
       const userId = userOf(context)
-      // `id: " "` would otherwise select the id branch and turn a good title lookup
-      // into a not-found.
+      // `id: " "` would otherwise select the id branch and turn a good title lookup into a not-found.
       const id = text(input.id)
       const title = text(input.title)
       if (!id && !title) {
@@ -83,13 +67,6 @@ export const createWikiActions = (db: WikiDb, state: AppState) => {
     },
   })
 
-  /**
-   * **No operation may infer its intent from an absent field.** These were one
-   * `write_doc` that created when `id` was missing and overwrote when it was present;
-   * a live model sent `id: " "` twenty times and every create tried to overwrite a
-   * document named `" "`. Two tools with required arguments state the intent in the
-   * name, where it cannot be lost. See {@link text}.
-   */
   const createDoc = createAction({
     name: 'create_doc',
     description:
@@ -162,16 +139,8 @@ export const createWikiActions = (db: WikiDb, state: AppState) => {
     },
   })
 
-  /**
-   * **Takes an id and nothing else**, unlike `read_doc`: the title lookup is
-   * case-insensitive and returns the first of any duplicates, which is a convenience
-   * for reading and a way to destroy the wrong document for deleting. Resolving via
-   * `list_docs` first also puts the id into the transcript where the user sees it.
-   *
-   * There is no confirmation prompt to gate this behind — the provider engine's
-   * capability record says `interactiveApprovals: false`, so the honest options are
-   * to grant it or not.
-   */
+  // Takes an id and nothing else, unlike `read_doc`: a case-insensitive title lookup returning the first of any
+  // duplicates is a convenience for reading and a way to destroy the wrong document for deleting.
   const deleteDoc = createAction({
     name: 'delete_doc',
     description:
@@ -190,15 +159,12 @@ export const createWikiActions = (db: WikiDb, state: AppState) => {
       if (!id) {
         throw badRequest('pass the id of the document to delete')
       }
-      // Read first, so the answer can name what went and another user's id is a plain
-      // not-found rather than a delete reporting zero rows.
+      // Read first, so the answer can name what went and another user's id is a plain not-found, not zero rows.
       const doc = db.getDoc(userId, id)
       if (!doc) {
         throw notFound(`no such document: ${id}`)
       }
       db.deleteDoc(userId, id)
-      // The tab is now looking at a document that does not exist; tell it rather than
-      // leaving it to notice on its next fetch.
       if (state.get(userId).openDocId === id) {
         state.set(userId, { ...state.get(userId), openDocId: undefined })
       }
@@ -207,16 +173,10 @@ export const createWikiActions = (db: WikiDb, state: AppState) => {
     },
   })
 
-  // `as const` keeps each action's literal `name`, which is what lets
-  // `InferTrpcRouter` type the SPA's router precisely.
+  // `as const` keeps each action's literal `name`, which is what lets `InferTrpcRouter` type the SPA's router.
   return [listDocs, readDoc, createDoc, updateDoc, renameDoc, deleteDoc] as const
 }
 
-/**
- * Agent-only: the actions that make the loop aware of the *app* rather than only of
- * its data. Deliberately not on the tRPC router — the SPA knows which document it is
- * showing. A shared action set is not an identical one.
- */
 export const createAgentActions = (db: WikiDb, state: AppState, users: readonly User[]) => {
   const whoAmI = createAction({
     name: 'whoami',
@@ -243,8 +203,7 @@ export const createAgentActions = (db: WikiDb, state: AppState, users: readonly 
       return {
         userId,
         name: users.find((u) => u.id === userId)?.name ?? userId,
-        // A since-deleted doc resolves to null rather than a dangling id the model
-        // would then try to read.
+        // A since-deleted doc resolves to null rather than a dangling id the model would then try to read.
         openDoc: open ? { id: open.id, title: open.title } : null,
         docCount: db.listDocs(userId).length,
       }
@@ -264,7 +223,7 @@ export const createAgentActions = (db: WikiDb, state: AppState, users: readonly 
     output: z.object({
       id: z.string(),
       title: z.string(),
-      /** False when nothing was listening — see {@link AppState.dispatch}. */
+      // False when no tab was listening.
       shown: z.boolean(),
     }),
     annotations: { readOnlyHint: false },
@@ -279,8 +238,7 @@ export const createAgentActions = (db: WikiDb, state: AppState, users: readonly 
       if (!doc) {
         throw notFound(`no such document: ${id || title}`)
       }
-      // Recorded even with no tab listening: an agent working while the tab is closed
-      // should still leave the user on the right document.
+      // Recorded even with no tab listening: an agent working while the tab is closed still leaves the user in place.
       state.set(userId, { ...state.get(userId), openDocId: doc.id })
       const reached = state.dispatch(userId, { type: 'open_doc', docId: doc.id })
       return { id: doc.id, title: doc.title, shown: reached > 0 }

@@ -1,18 +1,7 @@
-/**
- * Manual smoke for the model-agnostic runner against a REAL provider.
- * Spends tokens — never part of `pnpm test`.
- *
- *   MOONSHOT_API_KEY=... pnpm smoke:live            # Kimi K3 (default)
- *   OPENAI_API_KEY=...   pnpm smoke:live openai
- *   ANTHROPIC_API_KEY=... pnpm smoke:live anthropic
- *   ... pnpm smoke:live <provider> <model-id>       # pin a specific model
- *
- * Runs the full loop the PRD describes: the model calls an execute-less
- * `eval_script`, the loop parks, the host executes it in the QuickJS sandbox
- * against a scoped VFS, and the result re-enters the loop by message-state
- * replay. This is what the fake-model unit tests cannot validate: real tool-call
- * payload shapes and provider event drift.
- */
+// pnpm smoke:live [provider] [model-id]   — spends tokens, never part of `pnpm test`.
+//
+// The park → host-execute → message-state-replay loop against a real provider: what the fake-model unit tests cannot
+// validate is real tool-call payload shapes and provider event drift.
 import { tool } from 'ai'
 import { z } from 'zod'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
@@ -68,8 +57,7 @@ const factory = (await provider.load()) as (id: string) => never
 const engine = await loadEngine(variant)
 const executor = new QuickJsExecutor({ engine })
 
-// The document the model must actually read to answer correctly. The value is
-// deliberately odd so a hallucinated answer is obvious.
+// The value is deliberately odd so a hallucinated answer is obvious.
 const vfs = createVfs({
   '/leads/acme.txt': 'company: Acme Corp\nrevenue: 4173\nemployees: 12\n',
 })
@@ -120,7 +108,6 @@ runner.subscribe((event: SessionEvent) => {
 void runner.start()
 runner.sendMessage('Read /leads/acme.txt and tell me the revenue per employee, rounded to the nearest whole number.')
 
-// Drive the park → execute → replay cycle until the turn completes.
 const deadline = Date.now() + 120_000
 let executions = 0
 let completed = false

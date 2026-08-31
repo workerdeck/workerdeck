@@ -7,14 +7,6 @@ import { DocEditor } from './components/DocEditor.tsx'
 import { DocList } from './components/DocList.tsx'
 import { LoginView } from './components/LoginView.tsx'
 
-/**
- * Documents on the left, the open one in the middle, the agent on the right.
- *
- * The app holds no agent state beyond "which session is showing" — the transcript,
- * the connection and the approvals live inside `SessionPanel`, and the sessions live
- * in the gateway. The documents come from the *same* actions the agent calls over
- * MCP, so an agent write and a user write are one server path and two invalidations.
- */
 export function App() {
   const [user, setUser] = useState<User | null | undefined>()
   const [openId, setOpenId] = useState<string | undefined>()
@@ -43,24 +35,18 @@ export function App() {
   const updateDoc = useMutation(trpc.updateDoc.mutationOptions({ onSuccess: refresh }))
   const renameDoc = useMutation(trpc.renameDoc.mutationOptions({ onSuccess: refresh }))
 
-  // Select the first document once the list arrives, without clobbering a selection
-  // the user (or the agent) has since made.
   useEffect(() => {
     if (!openId && docList.length > 0) {
       setOpenId(docList[0]!.id)
     }
   }, [openId, docList])
 
-  // `readDoc` answers NOT_FOUND rather than an empty document when the agent (or
-  // another tab) deleted what we are showing — the signal to pick the next one.
   useEffect(() => {
     if (openDoc.error && isNotFound(openDoc.error)) {
       setOpenId(undefined)
     }
   }, [openDoc.error])
 
-  // Push what is on screen up to the server, so `whoami` can answer "the document I'm
-  // looking at" without being able to see the screen.
   useEffect(() => {
     if (!user) {
       return
@@ -68,8 +54,6 @@ export function App() {
     void api.setUiState(openId).catch(() => {})
   }, [user, openId])
 
-  // …and take navigation the other way. `EventSource` handles its own reconnect,
-  // which is most of why this is SSE rather than a second socket.
   useEffect(() => {
     if (!user) {
       return
@@ -81,9 +65,6 @@ export function App() {
         setOpenId(intent.docId)
         refresh()
       } else if (intent.type === 'doc_deleted') {
-        // Clear the editor first: a deleted document left on screen invites an
-        // edit-and-save against an id that no longer exists, which reads as the app
-        // being broken rather than the document being gone.
         setOpenId((current) => (current === intent.docId ? undefined : current))
         refresh()
       }
@@ -129,8 +110,6 @@ export function App() {
         <DocEditor
           doc={openDoc.data}
           onSave={async (patch) => {
-            // `update_doc` cannot create, so a stale id fails loudly instead of
-            // forking a new document.
             await updateDoc.mutateAsync({
               id: openDoc.data.id,
               title: patch.title,

@@ -6,22 +6,10 @@ import { api } from '../lib/api.ts'
 import type { AgentConfigResponse } from '../../src/shared.ts'
 
 export type AgentSidebarProps = {
-  /** Bumped by the app whenever a session event suggests the wiki changed. */
   onWikiMaybeChanged: () => void
 }
 
-/**
- * The right-hand rail: the user's agent sessions, and the live one. Three things
- * here are the embedding pattern rather than app code:
- *
- * - **One client for the whole tab** (`baseUrl: '/v1'`, same origin, so the wiki's
- *   cookie authenticates the REST calls and the WS upgrade). A second client would
- *   open a second socket and split the panel's "first attached client" in two.
- * - **`listSessions()` needs no filter** and must not grow one: the principal carries
- *   `scope: { user }`, and a check the client performs is a check the client can skip.
- * - **Switching sessions is a remount**, via `key` — the panel owns one attach for
- *   its lifetime.
- */
+// One client for the whole tab: a second would open a second socket and split the bridge's "first attached client".
 export function AgentSidebar({ onWikiMaybeChanged }: AgentSidebarProps) {
   const [config, setConfig] = useState<AgentConfigResponse | undefined>()
   const [sessions, setSessions] = useState<SessionInfo[]>([])
@@ -68,8 +56,7 @@ export function AgentSidebar({ onWikiMaybeChanged }: AgentSidebarProps) {
     setCreating(true)
     setError(undefined)
     try {
-      // No `cwd` (`EngineCapabilities.hostCwd === false`) and no `scope` — the gateway
-      // stamps it from the principal.
+      // No `cwd` (`EngineCapabilities.hostCwd === false`) and no `scope` — the gateway stamps it from the principal.
       const session = await client.createSession({ profile: config.profile })
       setActiveId(session.id)
       await refresh()
@@ -138,15 +125,10 @@ export function AgentSidebar({ onWikiMaybeChanged }: AgentSidebarProps) {
             client={client}
             sessionId={activeId}
             className="h-full"
-            // A 26rem rail has no room for cards; the terminal theme is the densest
-            // thing there is. (Density reaches `cards` only, so nothing to set beside it.)
             transcriptVariant="terminal"
-            // The model and permission pickers move into the panel's own status bar;
-            // this app's chrome has nowhere to put them.
             controlsSurface="status"
             focusComposerOnClick
-            // The wiki tools are the only writers, so a finished turn is the moment to
-            // re-read the document list.
+            // The wiki tools are the only writers, so a finished turn is the moment to re-read the document list.
             onVitals={(vitals) => {
               if (vitals.status === 'idle') {
                 onWikiMaybeChanged()
