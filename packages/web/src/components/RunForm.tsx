@@ -20,7 +20,7 @@ import { useProfileChoice } from '@/hooks/useProfiles.ts'
 
 const CWD_KEY = 'workerdeck.last-cwd'
 
-const useCwdCandidates = (sessions: SessionInfo[]): string[] => {
+function useCwdCandidates(sessions: SessionInfo[]): string[] {
   const [roots, setRoots] = useState<string[]>([])
   useEffect(() => {
     client()
@@ -48,7 +48,7 @@ const MODE_FALLBACK: Record<DefaultsKind, PermissionMode> = {
 
 export type RunForm = ReturnType<typeof useRunForm>
 
-export const useRunForm = (kind: DefaultsKind) => {
+export function useRunForm(kind: DefaultsKind) {
   const [cwd, setCwd] = useState(() => localStorage.getItem(CWD_KEY) ?? '')
   const [prompt, setPrompt] = useState('')
   // Empty means "whatever the profile says": the gateway fills any omitted field from `ProfileInfo.defaults`.

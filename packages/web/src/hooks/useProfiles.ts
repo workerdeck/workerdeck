@@ -7,7 +7,7 @@ let cache: ListProfilesResponse | undefined
 let inflight: Promise<ListProfilesResponse> | undefined
 const subscribers = new Set<(value: ListProfilesResponse) => void>()
 
-const load = async (): Promise<ListProfilesResponse> => {
+async function load(): Promise<ListProfilesResponse> {
   // No gateway yet, because the probe is still out or none is configured: answer empty rather than throw.
   const loaded = await (client()
     ?.listProfiles()
@@ -19,7 +19,7 @@ const load = async (): Promise<ListProfilesResponse> => {
   return loaded
 }
 
-export const useProfileList = (): ListProfilesResponse & { refresh: () => Promise<void> } => {
+export function useProfileList(): ListProfilesResponse & { refresh: () => Promise<void> } {
   const [value, setValue] = useState<ListProfilesResponse>(cache ?? EMPTY)
 
   useEffect(() => {
@@ -40,11 +40,13 @@ export const useProfileList = (): ListProfilesResponse & { refresh: () => Promis
   return { ...value, refresh }
 }
 
-export const useProfiles = (): ProfileInfo[] => useProfileList().profiles
+export function useProfiles(): ProfileInfo[] {
+  return useProfileList().profiles
+}
 
 const CHOICE_KEY = 'workerdeck.last-profile'
 
-export const useProfileChoice = () => {
+export function useProfileChoice() {
   const profiles = useProfiles()
   const [choice, setChoice] = useState(() => localStorage.getItem(CHOICE_KEY) ?? '')
   const profile = profiles.some((p) => p.name === choice) ? choice : (profiles[0]?.name ?? '')

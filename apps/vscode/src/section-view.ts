@@ -92,7 +92,7 @@ export class SectionViewProvider implements vscode.WebviewViewProvider, vscode.D
   }
 }
 
-const headerDescription = (kind: SectionKind, state: SidebarState, vitals: SessionVitals | undefined): string | undefined => {
+function headerDescription(kind: SectionKind, state: SidebarState, vitals: SessionVitals | undefined): string | undefined {
   const selected = state.selected
   const info = selected ? state.sessions[selected.hostId]?.find((s) => s.id === selected.sessionId) : undefined
   if (!info) {

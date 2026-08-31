@@ -25,7 +25,7 @@ export {
 } from '@workerdeck/protocol'
 export type { Facet, GroupBy, SessionGroup, SessionRow, SessionState, SortBy, SubsetSummary, ViewConfig } from '@workerdeck/protocol'
 
-export const buildRows = (state: SidebarState | undefined): SessionRow[] => {
+export function buildRows(state: SidebarState | undefined): SessionRow[] {
   if (!state) {
     return []
   }

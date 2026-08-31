@@ -1,7 +1,7 @@
 import { Empty } from '@workerdeck/ui'
 import { UsersRound } from 'lucide-react'
 
-export const openInVsCode = (path: string): void => {
+export function openInVsCode(path: string): void {
   window.location.href = `vscode://file${path}`
 }
 

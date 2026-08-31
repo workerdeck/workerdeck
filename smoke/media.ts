@@ -25,7 +25,7 @@ const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
   return c >>> 0
 })
 
-const crc32 = (buf: Buffer): number => {
+function crc32(buf: Buffer): number {
   let c = 0xff_ff_ff_ff
   for (const byte of buf) {
     c = CRC_TABLE[(c ^ byte) & 0xff]! ^ (c >>> 8)
@@ -33,7 +33,7 @@ const crc32 = (buf: Buffer): number => {
   return (c ^ 0xff_ff_ff_ff) >>> 0
 }
 
-const pngChunk = (type: string, data: Buffer): Buffer => {
+function pngChunk(type: string, data: Buffer): Buffer {
   const length = Buffer.alloc(4)
   length.writeUInt32BE(data.length)
   const typed = Buffer.concat([Buffer.from(type, 'ascii'), data])
@@ -43,7 +43,7 @@ const pngChunk = (type: string, data: Buffer): Buffer => {
 }
 
 // A solid-colour RGB PNG, `size`×`size`.
-const solidPng = (size: number, [r, g, b]: [number, number, number]): Buffer => {
+function solidPng(size: number, [r, g, b]: [number, number, number]): Buffer {
   const ihdr = Buffer.alloc(13)
   ihdr.writeUInt32BE(size, 0)
   ihdr.writeUInt32BE(size, 4)
@@ -62,7 +62,7 @@ const solidPng = (size: number, [r, g, b]: [number, number, number]): Buffer => 
 
 // A one-page PDF showing `text`. Offsets are computed as the objects are laid out — a hand-guessed xref is the usual
 // reason a minimal PDF is rejected.
-const onePagePdf = (text: string): Buffer => {
+function onePagePdf(text: string): Buffer {
   const stream = `BT /F1 36 Tf 60 500 Td (${text}) Tj ET`
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
@@ -185,7 +185,7 @@ handle.on('event', (event: SessionEvent) => {
   }
 })
 
-const ask = async (prompt: string, attachmentIds: string[]): Promise<string> => {
+async function ask(prompt: string, attachmentIds: string[]): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('timed out waiting for the turn')), 120_000)
     inFlight = {
@@ -202,7 +202,7 @@ const ask = async (prompt: string, attachmentIds: string[]): Promise<string> => 
 
 // Raw `fetch` rather than `client.uploadAttachment`, which throws the status away — and the status is half the claim:
 // 415 says "wrong kind", 400/500 says the route failed to cope.
-const expectRefused = async (testCase: Case): Promise<string | null> => {
+async function expectRefused(testCase: Case): Promise<string | null> {
   const url = `http://127.0.0.1:${port}/v1/sessions/${session.id}/attachments?name=${encodeURIComponent(testCase.name)}`
   const res = await fetch(url, {
     method: 'POST',

@@ -14,13 +14,15 @@ afterEach(async () => {
   }
 })
 
-const stateDir = async (): Promise<string> => {
+async function stateDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'wd-auth-sessions-'))
   dirs.push(dir)
   return dir
 }
 
-const file = (dir: string): string => join(dir, 'auth-sessions.json')
+function file(dir: string): string {
+  return join(dir, 'auth-sessions.json')
+}
 
 describe('createAuthSessionStore', () => {
   it('starts empty, then round-trips rows through the file', async () => {

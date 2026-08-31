@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { hostnameOf, isLoopbackHostname, parseArgs, resolveInstanceConfig } from '../src/config.ts'
 import { createHostGuard } from '../src/lib/instance.ts'
 
-const req = (host?: string): IncomingMessage => ({ headers: host === undefined ? {} : { host } }) as unknown as IncomingMessage
+function req(host?: string): IncomingMessage {
+  return { headers: host === undefined ? {} : { host } } as unknown as IncomingMessage
+}
 
 const noConfig = { path: null, options: {} }
 

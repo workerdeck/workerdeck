@@ -14,7 +14,7 @@ export type AppRoutesDeps = {
   agentConfig: () => AgentConfigResponse
 }
 
-export const createAppRoutes = (deps: AppRoutesDeps): Express => {
+export function createAppRoutes(deps: AppRoutesDeps): Express {
   const app = express()
   app.disable('x-powered-by')
 

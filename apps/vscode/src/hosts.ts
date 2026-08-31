@@ -8,7 +8,9 @@ export type GatewayHost = {
 }
 
 const HOSTS_KEY = 'workerdeck.hosts'
-const secretKey = (id: string) => `workerdeck.host.${id}.authKey`
+function secretKey(id: string) {
+  return `workerdeck.host.${id}.authKey`
+}
 
 export class HostStore {
   readonly #state: vscode.Memento

@@ -41,15 +41,15 @@ const CANCEL = Symbol('cancel')
 const BACK = Symbol('back')
 type Answer<T> = T | typeof CANCEL | typeof BACK
 
-export const createSession = async (deps: NewSessionDeps): Promise<void> => {
+export async function createSession(deps: NewSessionDeps): Promise<void> {
   await run(deps, { resume: false })
 }
 
-export const resumeSession = async (deps: NewSessionDeps): Promise<void> => {
+export async function resumeSession(deps: NewSessionDeps): Promise<void> {
   await run(deps, { resume: true })
 }
 
-const run = async (deps: NewSessionDeps, options: { resume: boolean }): Promise<void> => {
+async function run(deps: NewSessionDeps, options: { resume: boolean }): Promise<void> {
   const adapters = await loadAdapters(deps)
   if (adapters === undefined) {
     return
@@ -104,7 +104,7 @@ const run = async (deps: NewSessionDeps, options: { resume: boolean }): Promise<
   }
 }
 
-const loadAdapters = async (deps: NewSessionDeps): Promise<AdapterChoice[] | undefined> => {
+async function loadAdapters(deps: NewSessionDeps): Promise<AdapterChoice[] | undefined> {
   const hosts = deps.state().hosts.filter((h) => h.probe === 'connected')
   if (hosts.length === 0) {
     return []
@@ -138,7 +138,7 @@ const loadAdapters = async (deps: NewSessionDeps): Promise<AdapterChoice[] | und
 
 type AdapterItem = vscode.QuickPickItem & { choice: AdapterChoice }
 
-const pickAdapter = async (adapters: readonly AdapterChoice[], current: AdapterChoice | undefined): Promise<Answer<AdapterChoice>> => {
+async function pickAdapter(adapters: readonly AdapterChoice[], current: AdapterChoice | undefined): Promise<Answer<AdapterChoice>> {
   const multiGateway = new Set(adapters.map((a) => a.host.id)).size > 1
   const items: AdapterItem[] = adapters.map((choice) => {
     const engine = choice.profile.engine ?? 'claude'
@@ -161,7 +161,7 @@ const pickAdapter = async (adapters: readonly AdapterChoice[], current: AdapterC
   return picked === CANCEL || picked === BACK ? picked : picked.choice
 }
 
-const pickFolder = async (deps: NewSessionDeps, adapter: AdapterChoice, current: string | undefined): Promise<Answer<string>> => {
+async function pickFolder(deps: NewSessionDeps, adapter: AdapterChoice, current: string | undefined): Promise<Answer<string>> {
   const host = adapter.host
   const candidates: { path: string; hint: string; verified: boolean }[] = []
   const add = (path: string, hint: string, verified: boolean) => {
@@ -247,7 +247,7 @@ const pickFolder = async (deps: NewSessionDeps, adapter: AdapterChoice, current:
   return picked.path!
 }
 
-const hostRoots = async (deps: NewSessionDeps, host: WireHost): Promise<HostFileRoot[]> => {
+async function hostRoots(deps: NewSessionDeps, host: WireHost): Promise<HostFileRoot[]> {
   const client = await clientFor(deps.store, host)
   if (!client) {
     return []
@@ -259,7 +259,7 @@ const hostRoots = async (deps: NewSessionDeps, host: WireHost): Promise<HostFile
   }
 }
 
-const browseLocally = async (start: string | undefined): Promise<string | undefined> => {
+async function browseLocally(start: string | undefined): Promise<string | undefined> {
   const chosen = await vscode.window.showOpenDialog({
     canSelectFolders: true,
     canSelectFiles: false,
@@ -270,7 +270,7 @@ const browseLocally = async (start: string | undefined): Promise<string | undefi
   return chosen?.[0]?.fsPath
 }
 
-const browseGateway = async (deps: NewSessionDeps, host: WireHost, roots: readonly HostFileRoot[]): Promise<string | undefined> => {
+async function browseGateway(deps: NewSessionDeps, host: WireHost, roots: readonly HostFileRoot[]): Promise<string | undefined> {
   const client = await clientFor(deps.store, host)
   if (!client) {
     return undefined
@@ -333,7 +333,7 @@ const browseGateway = async (deps: NewSessionDeps, host: WireHost, roots: readon
   }
 }
 
-const lastSessionOf = (deps: NewSessionDeps, adapter: AdapterChoice): SessionInfo | undefined => {
+function lastSessionOf(deps: NewSessionDeps, adapter: AdapterChoice): SessionInfo | undefined {
   const engine = adapter.profile.engine ?? 'claude'
   return (
     (deps.state().sessions[adapter.host.id] ?? [])
@@ -347,7 +347,7 @@ const lastSessionOf = (deps: NewSessionDeps, adapter: AdapterChoice): SessionInf
   )
 }
 
-const pickModelAndCreate = async (deps: NewSessionDeps, adapter: AdapterChoice, cwd: string): Promise<Answer<void>> => {
+async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, cwd: string): Promise<Answer<void>> {
   const previous = lastSessionOf(deps, adapter)
   const mode = resolveMode(adapter, previous)
   const models = adapter.profile.models ?? []
@@ -395,7 +395,7 @@ const pickModelAndCreate = async (deps: NewSessionDeps, adapter: AdapterChoice, 
   return undefined
 }
 
-const resolveMode = (adapter: AdapterChoice, previous: SessionInfo | undefined): PermissionMode | undefined => {
+function resolveMode(adapter: AdapterChoice, previous: SessionInfo | undefined): PermissionMode | undefined {
   const pinned = vscode.workspace.getConfiguration('workerdeck').get<string>('newSession.permissionMode', 'remember')
   const wanted =
     pinned && pinned !== 'remember' ? (pinned as PermissionMode) : (previous?.permissionMode ?? adapter.profile.defaults?.permissionMode)
@@ -408,7 +408,7 @@ const resolveMode = (adapter: AdapterChoice, previous: SessionInfo | undefined):
   return caps.permissionModes.includes(wanted) ? wanted : undefined
 }
 
-const modeLabel = (mode: PermissionMode | undefined): string => {
+function modeLabel(mode: PermissionMode | undefined): string {
   // 'default' is spelled "Manual" everywhere a person reads it (PERMISSION_MODES in ui):
   // the wire name would read as "the default", the opposite of what it means.
   if (mode === undefined || mode === 'default') {
@@ -426,7 +426,7 @@ const modeLabel = (mode: PermissionMode | undefined): string => {
   return mode.charAt(0).toUpperCase() + mode.slice(1)
 }
 
-const pickAndResume = async (deps: NewSessionDeps, adapter: AdapterChoice, cwd: string): Promise<Answer<void>> => {
+async function pickAndResume(deps: NewSessionDeps, adapter: AdapterChoice, cwd: string): Promise<Answer<void>> {
   const caps = adapter.profile.capabilities ?? ENGINE_CAPABILITIES[adapter.profile.engine ?? 'claude']
   if (!caps.listSessions) {
     void vscode.window.showInformationMessage(`WorkerDeck: ${adapter.profile.engine ?? 'claude'} cannot list stored sessions.`)
@@ -486,7 +486,7 @@ const pickAndResume = async (deps: NewSessionDeps, adapter: AdapterChoice, cwd: 
   return undefined
 }
 
-const create = async (deps: NewSessionDeps, adapter: AdapterChoice, body: CreateBody): Promise<void> => {
+async function create(deps: NewSessionDeps, adapter: AdapterChoice, body: CreateBody): Promise<void> {
   const client = await clientFor(deps.store, adapter.host)
   if (!client) {
     return
@@ -520,11 +520,11 @@ const create = async (deps: NewSessionDeps, adapter: AdapterChoice, body: Create
   }
 }
 
-const message = (err: unknown): string => {
+function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
-const showPick = <T extends vscode.QuickPickItem>(items: readonly T[], options: PickOptions<T>): Promise<Answer<T>> => {
+function showPick<T extends vscode.QuickPickItem>(items: readonly T[], options: PickOptions<T>): Promise<Answer<T>> {
   return new Promise((resolve) => {
     const pick = vscode.window.createQuickPick<T>()
     pick.title = options.title

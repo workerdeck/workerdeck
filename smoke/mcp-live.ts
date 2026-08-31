@@ -125,7 +125,7 @@ while (!completed && Date.now() < deadline) {
 }
 
 console.log('\n' + '='.repeat(60))
-const fail = (message: string): never => {
+function fail(message: string): never {
   console.error(`\n❌ ${message}\n`)
   process.exit(1)
 }

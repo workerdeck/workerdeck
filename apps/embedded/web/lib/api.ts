@@ -1,6 +1,6 @@
 import type { AgentConfigResponse, Doc, MeResponse, User } from '../../src/shared.ts'
 
-const call = async <T>(path: string, init?: RequestInit): Promise<T> => {
+async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
     headers: { 'content-type': 'application/json', ...init?.headers },
@@ -11,7 +11,7 @@ const call = async <T>(path: string, init?: RequestInit): Promise<T> => {
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T)
 }
 
-const errorText = async (res: Response): Promise<string> => {
+async function errorText(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { error?: string }
     return body.error ?? res.statusText

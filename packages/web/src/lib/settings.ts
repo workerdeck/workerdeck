@@ -15,33 +15,43 @@ export type TranscriptDensity = 'comfortable' | 'compact'
 
 const DENSITY_KEY = 'workerdeck.transcript-density'
 
-export const getTranscriptDensity = (): TranscriptDensity => (localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable')
+export function getTranscriptDensity(): TranscriptDensity {
+  return localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable'
+}
 
-export const setTranscriptDensity = (density: TranscriptDensity): void => localStorage.setItem(DENSITY_KEY, density)
+export function setTranscriptDensity(density: TranscriptDensity): void {
+  return localStorage.setItem(DENSITY_KEY, density)
+}
 
 export type TranscriptVariant = 'cards' | 'terminal'
 
 const VARIANT_KEY = 'workerdeck.transcript-variant'
 
-export const getTranscriptVariant = (): TranscriptVariant => {
+export function getTranscriptVariant(): TranscriptVariant {
   const stored = localStorage.getItem(VARIANT_KEY)
   // `lines` was the retired no-boxes variant, and someone who turned boxes off keeps them off.
   return stored === 'terminal' || stored === 'lines' ? 'terminal' : 'cards'
 }
 
-export const setTranscriptVariant = (variant: TranscriptVariant): void => localStorage.setItem(VARIANT_KEY, variant)
+export function setTranscriptVariant(variant: TranscriptVariant): void {
+  return localStorage.setItem(VARIANT_KEY, variant)
+}
 
 export type TranscriptFont = 'sans' | 'mono'
 
 const FONT_KEY = 'workerdeck.transcript-font'
 
-export const getTranscriptFont = (): TranscriptFont => (localStorage.getItem(FONT_KEY) === 'mono' ? 'mono' : 'sans')
+export function getTranscriptFont(): TranscriptFont {
+  return localStorage.getItem(FONT_KEY) === 'mono' ? 'mono' : 'sans'
+}
 
-export const setTranscriptFont = (font: TranscriptFont): void => localStorage.setItem(FONT_KEY, font)
+export function setTranscriptFont(font: TranscriptFont): void {
+  return localStorage.setItem(FONT_KEY, font)
+}
 
 const FONT_SIZE_KEY = 'workerdeck.font-size'
 
-export const getFontSize = (): number | undefined => {
+export function getFontSize(): number | undefined {
   const raw = localStorage.getItem(FONT_SIZE_KEY)
   if (raw === null) {
     return undefined
@@ -50,7 +60,7 @@ export const getFontSize = (): number | undefined => {
   return Number.isFinite(n) && n >= 8 && n <= 24 ? Math.round(n) : undefined
 }
 
-export const setFontSize = (size: number | undefined): void => {
+export function setFontSize(size: number | undefined): void {
   if (size === undefined) {
     localStorage.removeItem(FONT_SIZE_KEY)
   } else {

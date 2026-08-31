@@ -30,12 +30,12 @@ const store: WatermarkStore = {
 
 const watermarks = new Watermarks(store)
 
-const subscribe = (listener: () => void): (() => void) => {
+function subscribe(listener: () => void): () => void {
   listeners.add(listener)
   return () => void listeners.delete(listener)
 }
 
-export const useUnseen = () => {
+export function useUnseen() {
   // `Watermarks` mutates the marks in place, so a version counter is the only thing React can compare.
   useSyncExternalStore(
     subscribe,
@@ -56,13 +56,13 @@ export const useUnseen = () => {
   return { unseenFor, watermarks }
 }
 
-export const unseenSince = (hostId: string, sessionId: string): { itemCount: number; since: number } | undefined => {
+export function unseenSince(hostId: string, sessionId: string): { itemCount: number; since: number } | undefined {
   const mark = watermarks.get(hostId, sessionId)
   return mark ? { itemCount: mark.itemCount, since: mark.seenAt } : undefined
 }
 
 // A background tab is not being read, and marking it read anyway is how an unread badge quietly stops working.
-export const useMarkSeen = (hostId: string, sessionId: string | undefined) => {
+export function useMarkSeen(hostId: string, sessionId: string | undefined) {
   const seen = useRef<{ itemCount?: number; activity?: number; turns?: number }>({})
   return useCallback(
     (reading: { itemCount?: number; activity?: number; turns?: number }) => {
@@ -76,7 +76,7 @@ export const useMarkSeen = (hostId: string, sessionId: string | undefined) => {
   )
 }
 
-export const useUnseenTotal = (rows: { hostId: string; info: SessionInfo }[]): number => {
+export function useUnseenTotal(rows: { hostId: string; info: SessionInfo }[]): number {
   const { unseenFor } = useUnseen()
   return useMemo(() => rows.reduce((total, r) => total + unseenFor(r.hostId, r.info), 0), [rows, unseenFor])
 }

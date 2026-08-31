@@ -7,4 +7,6 @@ export const USERS: readonly User[] = [
   { id: 'alan', name: 'Alan Turing', avatar: '🧩' },
 ]
 
-export const userById = (id: string | undefined): User | undefined => USERS.find((u) => u.id === id)
+export function userById(id: string | undefined): User | undefined {
+  return USERS.find((u) => u.id === id)
+}

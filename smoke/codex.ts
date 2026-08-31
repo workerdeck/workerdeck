@@ -22,8 +22,10 @@ const CLEAR_ONLY = process.argv.includes('--clear')
 
 const execFileP = promisify(execFile)
 let failures = 0
-const pass = (name: string, detail: string) => console.log(`  PASS  ${name} — ${detail}`)
-const fail = (name: string, detail: string) => {
+function pass(name: string, detail: string) {
+  return console.log(`  PASS  ${name} — ${detail}`)
+}
+function fail(name: string, detail: string) {
   failures += 1
   console.error(`  FAIL  ${name} — ${detail}`)
 }
@@ -33,7 +35,7 @@ const codexBin = resolveBundledCodexExecutable()
 type RunnerHarness = { runner: CodexRunner; events: SessionEvent[] }
 
 // A COMPLETE child env — codex replaces, never merges — with a scratch home.
-const scratchEnv = (extra: Record<string, string | undefined> = {}): Record<string, string> => {
+function scratchEnv(extra: Record<string, string | undefined> = {}): Record<string, string> {
   const home = mkdtempSync(join(tmpdir(), 'codex-smoke-home-'))
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(process.env)) {
@@ -56,7 +58,7 @@ const scratchEnv = (extra: Record<string, string | undefined> = {}): Record<stri
   return env
 }
 
-const makeRunner = (cwd: string, overrides: Record<string, unknown> = {}): RunnerHarness => {
+function makeRunner(cwd: string, overrides: Record<string, unknown> = {}): RunnerHarness {
   if (!codexBin) {
     throw new Error('bundled codex binary not resolvable — is @openai/codex installed?')
   }
@@ -71,10 +73,11 @@ const makeRunner = (cwd: string, overrides: Record<string, unknown> = {}): Runne
   return { runner, events }
 }
 
-const turnResults = (events: SessionEvent[]) =>
-  events.filter((e): e is Extract<SessionEvent, { type: 'turn_result' }> => e.type === 'turn_result')
+function turnResults(events: SessionEvent[]) {
+  return events.filter((e): e is Extract<SessionEvent, { type: 'turn_result' }> => e.type === 'turn_result')
+}
 
-const waitFor = async (pred: () => boolean, timeoutMs: number, what: string): Promise<void> => {
+async function waitFor(pred: () => boolean, timeoutMs: number, what: string): Promise<void> {
   const deadline = Date.now() + timeoutMs
   for (;;) {
     if (pred()) {
@@ -87,16 +90,17 @@ const waitFor = async (pred: () => boolean, timeoutMs: number, what: string): Pr
   }
 }
 
-const userTexts = (events: SessionEvent[]) =>
-  events
+function userTexts(events: SessionEvent[]) {
+  return events
     .filter((e): e is Extract<SessionEvent, { type: 'user_message' }> => e.type === 'user_message')
     .map((e) => JSON.stringify(e.message.content))
     .join('\n')
+}
 
 // One throwaway app-server turn through the real runner; returns the terminal failure message ('' = completed).
 // Handshake and spawn failures surface here too, as the turn's error, which is what makes the canaries a drift alarm
 // for the spawn contract as well as for the auth chain.
-const probeTurn = async (env: Record<string, string>): Promise<string> => {
+async function probeTurn(env: Record<string, string>): Promise<string> {
   const cwd = mkdtempSync(join(tmpdir(), 'codex-smoke-probe-'))
   const { runner, events } = makeRunner(cwd, { prompt: 'say hi', model: undefined, env })
   const timeout = setTimeout(() => runner.close(), 90_000)
@@ -114,7 +118,7 @@ const probeTurn = async (env: Record<string, string>): Promise<string> => {
   }
 }
 
-const canaries = async (): Promise<void> => {
+async function canaries(): Promise<void> {
   console.log('\n— free auth-drift canaries (fake keys, scratch CODEX_HOME, no tokens) —')
 
   const viaOpenai = await probeTurn(scratchEnv({ OPENAI_API_KEY: 'sk-smoke-fake' }))
@@ -298,7 +302,7 @@ const canaries = async (): Promise<void> => {
 
 // A new variant is a FAIL and an unmapped one is a warning: the first means the protocol moved under us, the second
 // is the standing decision recorded below. Mapping every variant is not the goal — knowing about each one is.
-const threadItemUnionCanary = async (): Promise<void> => {
+async function threadItemUnionCanary(): Promise<void> {
   if (!codexBin) {
     return
   }
@@ -382,7 +386,7 @@ const threadItemUnionCanary = async (): Promise<void> => {
 }
 
 // Mirrors the availability probe's chain: `login status` alone — the env keys are not read by the app-server.
-const detectAuth = async (): Promise<string | null> => {
+async function detectAuth(): Promise<string | null> {
   if (!codexBin) {
     return null
   }
@@ -394,7 +398,7 @@ const detectAuth = async (): Promise<string | null> => {
   }
 }
 
-const clearScenario = async (cwd: string): Promise<void> => {
+async function clearScenario(cwd: string): Promise<void> {
   // A timeout in here used to leave the codex children running, which kept the process alive long past the failure
   // it was trying to report.
   const open: CodexRunner[] = []
@@ -407,7 +411,7 @@ const clearScenario = async (cwd: string): Promise<void> => {
   }
 }
 
-const runClearScenario = async (cwd: string, open: CodexRunner[]): Promise<void> => {
+async function runClearScenario(cwd: string, open: CodexRunner[]): Promise<void> {
   // The scripted peer can prove the runner's bookkeeping and nothing about the only thing that matters: that a fresh
   // `thread/start` yields an EMPTY model context. Only a codeword the model cannot produce by chance tells "the
   // context was cleared" apart from "the transcript was hidden". The two resumes at the end are free — a promptless
@@ -515,7 +519,7 @@ const runClearScenario = async (cwd: string, open: CodexRunner[]): Promise<void>
   resumedOld.runner.close()
 }
 
-const paid = async (): Promise<void> => {
+async function paid(): Promise<void> {
   const auth = await detectAuth()
   if (!auth) {
     fail(

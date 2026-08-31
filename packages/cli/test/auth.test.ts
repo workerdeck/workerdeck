@@ -6,13 +6,13 @@ import { createCliAuth, type CliAuth, type CliPrincipal, type CliSessionStore, t
 const SECRET = 'correct-horse-battery-staple'
 
 // Node lowercases incoming header names; fakes must match or lookups miss.
-const fakeReq = (init: {
+function fakeReq(init: {
   method?: string
   url?: string
   headers?: Record<string, string>
   remoteAddress?: string
   encrypted?: boolean
-}): IncomingMessage => {
+}): IncomingMessage {
   return {
     method: init.method ?? 'GET',
     url: init.url ?? '/v1/sessions',
@@ -29,7 +29,7 @@ afterEach(async () => {
 })
 
 // Wired in the CLI request handler's order: auth routes, then `authenticate`, then `hasValidSession`.
-const startHost = async (auth: CliAuth): Promise<string> => {
+async function startHost(auth: CliAuth): Promise<string> {
   const server = createServer((req, res) => {
     void (async () => {
       if (await auth.handleAuthRequest(req, res)) {
@@ -61,7 +61,7 @@ const startHost = async (auth: CliAuth): Promise<string> => {
 type RawResponse = { status: number; headers: IncomingMessage['headers']; setCookies: string[]; body: string }
 
 // Raw node:http instead of fetch: the fetch spec marks Origin a forbidden request header, and these tests send arbitrary ones.
-const request = (url: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<RawResponse> => {
+function request(url: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<RawResponse> {
   return new Promise((resolve, reject) => {
     const req = httpRequest(url, { method: init.method ?? 'GET', headers: init.headers, agent: false }, (res) => {
       const chunks: Buffer[] = []
@@ -80,7 +80,7 @@ const request = (url: string, init: { method?: string; headers?: Record<string, 
   })
 }
 
-const login = async (base: string, secret: string): Promise<{ res: RawResponse; cookie: string }> => {
+async function login(base: string, secret: string): Promise<{ res: RawResponse; cookie: string }> {
   const res = await request(`${base}/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -89,7 +89,9 @@ const login = async (base: string, secret: string): Promise<{ res: RawResponse; 
   return { res, cookie: res.setCookies[0]?.split(';')[0] ?? '' }
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 describe('disabled mode (no secret)', () => {
   it('accepts everything and reports the state honestly', async () => {

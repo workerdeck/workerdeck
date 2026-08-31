@@ -110,7 +110,9 @@ export function CreateGatewayDialog({
   )
 }
 
-const newDraft = (): GatewayHost => ({ id: newHostId(), name: '', baseUrl: '' })
+function newDraft(): GatewayHost {
+  return { id: newHostId(), name: '', baseUrl: '' }
+}
 
 export function ConfirmRemoveGateway({ host, onClose, onRemoved }: { host: GatewayHost; onClose: () => void; onRemoved: () => void }) {
   return (

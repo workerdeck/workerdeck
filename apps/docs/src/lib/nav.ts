@@ -19,11 +19,11 @@ const GROUPS: Array<{ dir: string; label: string }> = [
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '')
 
-export const docHref = (slug: string): string => {
+export function docHref(slug: string): string {
   return `${base}/docs/${slug}/`
 }
 
-export const buildNav = async (): Promise<NavGroup[]> => {
+export async function buildNav(): Promise<NavGroup[]> {
   const entries = await getCollection('docs')
   return GROUPS.map(({ dir, label }) => ({
     label,
@@ -35,7 +35,7 @@ export const buildNav = async (): Promise<NavGroup[]> => {
 }
 
 /** Flat ordered list for prev/next pagination. */
-export const flatNav = async (): Promise<NavItem[]> => {
+export async function flatNav(): Promise<NavItem[]> {
   const groups = await buildNav()
   return groups.flatMap((g) => g.items)
 }

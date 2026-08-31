@@ -105,9 +105,11 @@ ws.on('error', (err: Error) => {
   process.exit(1)
 })
 
-const KB = (bytes: number) => `${(bytes / 1024).toFixed(0)} KB`
+function KB(bytes: number) {
+  return `${(bytes / 1024).toFixed(0)} KB`
+}
 
-const finish = (): void => {
+function finish(): void {
   if (done) {
     return
   }

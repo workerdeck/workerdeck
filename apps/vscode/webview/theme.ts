@@ -1,4 +1,4 @@
-export const syncVsCodeTheme = (): void => {
+export function syncVsCodeTheme(): void {
   const apply = () => {
     const cls = document.body.classList
     const dark = cls.contains('vscode-dark') || cls.contains('vscode-high-contrast')

@@ -25,7 +25,7 @@ const UNREAD_WATCHER = 'workerdeck.statusBar.unread'
 
 const ACTIVE_SESSION_KEY = 'workerdeck.activeSession'
 
-export const activate = (context: vscode.ExtensionContext): void => {
+export function activate(context: vscode.ExtensionContext): void {
   const store = new HostStore(context)
   const model = new SessionsModel(store)
   const fs = new WorkerdeckFileSystem(store)
@@ -333,4 +333,4 @@ export const activate = (context: vscode.ExtensionContext): void => {
   )
 }
 
-export const deactivate = (): void => {}
+export function deactivate(): void {}

@@ -25,7 +25,7 @@ export type PathMatch = {
   length: number
 }
 
-export const matchPath = (text: string | null | undefined): PathMatch | undefined => {
+export function matchPath(text: string | null | undefined): PathMatch | undefined {
   const match = PATH_PATTERN.exec(text ?? '')
   if (!match) {
     return undefined

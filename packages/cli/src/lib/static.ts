@@ -24,7 +24,7 @@ const CONTENT_TYPES: Record<string, string> = {
   '.txt': 'text/plain; charset=utf-8',
 }
 
-export const contentTypeFor = (pathname: string): string => {
+export function contentTypeFor(pathname: string): string {
   const dot = pathname.lastIndexOf('.')
   if (dot < 0) {
     return 'application/octet-stream'
@@ -32,7 +32,7 @@ export const contentTypeFor = (pathname: string): string => {
   return CONTENT_TYPES[pathname.slice(dot).toLowerCase()] ?? 'application/octet-stream'
 }
 
-export const looksLikeAsset = (pathname: string): boolean => {
+export function looksLikeAsset(pathname: string): boolean {
   const dot = pathname.lastIndexOf('.')
   if (dot < 0) {
     return false
@@ -40,7 +40,7 @@ export const looksLikeAsset = (pathname: string): boolean => {
   return pathname.slice(dot).toLowerCase() in CONTENT_TYPES
 }
 
-export const resolveWithinRoot = (root: string, pathname: string): string | null => {
+export function resolveWithinRoot(root: string, pathname: string): string | null {
   let decoded: string
   try {
     decoded = decodeURIComponent(pathname)
@@ -60,7 +60,7 @@ export const resolveWithinRoot = (root: string, pathname: string): string | null
   return candidate
 }
 
-export const sendHtml = (req: IncomingMessage, res: ServerResponse, status: number, html: string, cache: string): void => {
+export function sendHtml(req: IncomingMessage, res: ServerResponse, status: number, html: string, cache: string): void {
   const body = Buffer.from(html, 'utf8')
   res.writeHead(status, {
     'content-type': 'text/html; charset=utf-8',
@@ -76,12 +76,12 @@ export const sendHtml = (req: IncomingMessage, res: ServerResponse, status: numb
 
 export type ServeResult = 'served' | 'not-found' | 'method-not-allowed'
 
-export const serveFile = async (
+export async function serveFile(
   req: IncomingMessage,
   res: ServerResponse,
   filePath: string,
   options: { immutable?: boolean } = {},
-): Promise<ServeResult> => {
+): Promise<ServeResult> {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return 'method-not-allowed'
   }

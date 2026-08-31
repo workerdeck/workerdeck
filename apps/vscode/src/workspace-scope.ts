@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 import { WorkerdeckFileSystem } from './fsp.ts'
 import type { ScopeRoot, WorkspaceScope } from './bridge-protocol.ts'
 
-export const workspaceScope = (): WorkspaceScope | undefined => {
+export function workspaceScope(): WorkspaceScope | undefined {
   const folders = vscode.workspace.workspaceFolders ?? []
   const roots: ScopeRoot[] = []
   for (const folder of folders) {

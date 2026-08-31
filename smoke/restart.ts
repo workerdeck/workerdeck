@@ -20,7 +20,9 @@ import type { ServerFrame, SessionEvent, SessionInfo } from '@workerdeck/protoco
 
 const [engineArg = 'claude', ...extras] = process.argv.slice(2)
 const engine = engineArg === 'codex' ? 'codex' : 'claude'
-const wants = (name: string) => extras.includes(name) || extras.includes('all')
+function wants(name: string) {
+  return extras.includes(name) || extras.includes('all')
+}
 
 // A word the model cannot produce by chance, so "it recalled the thread" is not confusable with "it answered well".
 const WORD = 'ORRERY'
@@ -36,19 +38,23 @@ mkdirSync(workDir, { recursive: true })
 
 let pass = 0
 let fail = 0
-const ok = (what: string, detail = '') => {
+function ok(what: string, detail = '') {
   pass++
   console.log(`  [32m✓[0m ${what}${detail ? ` [2m${detail}[0m` : ''}`)
 }
-const bad = (what: string, detail = '') => {
+function bad(what: string, detail = '') {
   fail++
   console.log(`  [31m✗[0m ${what}${detail ? ` [2m${detail}[0m` : ''}`)
 }
-const step = (what: string) => console.log(`\n[1m${what}[0m`)
+function step(what: string) {
+  return console.log(`\n[1m${what}[0m`)
+}
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms))
+}
 
-const api = async <T>(path: string, init?: RequestInit): Promise<T> => {
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${base}${path}`, {
     ...init,
     headers: { 'content-type': 'application/json', ...init?.headers },
@@ -60,7 +66,7 @@ const api = async <T>(path: string, init?: RequestInit): Promise<T> => {
 }
 
 // Written per run, so the "deleted profile" variant is a second file rather than an edit to something checked in.
-const writeConfig = (profiles: string[]): void => {
+function writeConfig(profiles: string[]): void {
   const decls = profiles
     .map((name) =>
       name === 'codex' ? `{ name: 'codex', engine: 'codex' }` : `{ name: 'claude', configDir: \`\${process.env.HOME}/.claude\` }`,
@@ -76,7 +82,7 @@ const writeConfig = (profiles: string[]): void => {
 
 let child: ChildProcess | undefined
 
-const startGateway = async (): Promise<void> => {
+async function startGateway(): Promise<void> {
   child = spawn(
     process.execPath,
     [
@@ -121,7 +127,7 @@ const startGateway = async (): Promise<void> => {
 
 // Waits for the process to actually be gone, not merely signalled: returning early races the next `listen` onto a
 // port still held.
-const stopGateway = async (): Promise<void> => {
+async function stopGateway(): Promise<void> {
   if (!child) {
     return
   }
@@ -137,7 +143,7 @@ const stopGateway = async (): Promise<void> => {
 
 type AttachResult = { text: string; events: SessionEvent[]; replayed: number; replayingFrom?: number }
 
-const attach = async (id: string, prompt?: string, timeoutMs = 120_000): Promise<AttachResult> => {
+async function attach(id: string, prompt?: string, timeoutMs = 120_000): Promise<AttachResult> {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}/v1/sessions/${id}/ws?afterSeq=0`)
   const events: SessionEvent[] = []
   let replayed = 0
@@ -208,7 +214,7 @@ const attach = async (id: string, prompt?: string, timeoutMs = 120_000): Promise
 }
 
 // Returns whether the record ever appeared, so the caller can say so rather than guess.
-const waitForRecord = async (id: string, timeoutMs: number): Promise<boolean> => {
+async function waitForRecord(id: string, timeoutMs: number): Promise<boolean> {
   const dir = join(stateDir, 'parked')
   const deadline = Date.now() + timeoutMs
   for (;;) {
@@ -225,7 +231,7 @@ const waitForRecord = async (id: string, timeoutMs: number): Promise<boolean> =>
   }
 }
 
-const main = async (): Promise<void> => {
+async function main(): Promise<void> {
   console.log(`\n[1mThe restart, end to end[0m — engine: ${engine}, port ${PORT}`)
   console.log(`[2mstate ${stateDir}[0m`)
 
@@ -306,7 +312,7 @@ const main = async (): Promise<void> => {
 
 // Reports rather than asserts, because the predicted behaviour is not what happens (`docs/GOTCHAS.md` §Claude engine).
 // Claude only: the store is a slug of the cwd, and the cwd is a temp dir this run created.
-const sweptStore = async (id: string): Promise<void> => {
+async function sweptStore(id: string): Promise<void> {
   step('7. A swept engine store')
   if (engine !== 'claude') {
     console.log('  [2m— skipped: only wired for claude[0m')
@@ -357,7 +363,7 @@ const sweptStore = async (id: string): Promise<void> => {
 // The one clear path with no eager `thread/start` to save it: with the child dead the engine session id is simply
 // dropped, so the record still naming the cleared conversation has to be deleted. Asserts on the record and the
 // restart, not a turn, and costs no model tokens.
-const clearNoChild = async (id: string): Promise<void> => {
+async function clearNoChild(id: string): Promise<void> {
   step('5. A clear with no live child, across a restart')
   if (engine !== 'codex') {
     console.log(
@@ -435,7 +441,7 @@ const clearNoChild = async (id: string): Promise<void> => {
 
 // Not `attach()`: a clear produces no `turn_result`, so that helper would sit on its timeout. The typed `/clear`
 // rather than the `clear_context` command because both are the same call in the runner.
-const clearOverWs = async (id: string): Promise<boolean> => {
+async function clearOverWs(id: string): Promise<boolean> {
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}/v1/sessions/${id}/ws?afterSeq=0`)
   let sawReset = false
   const done = new Promise<void>((resolve) => {
@@ -463,7 +469,7 @@ const clearOverWs = async (id: string): Promise<boolean> => {
 }
 
 // `buildRunner` throws `unknown profile`, the row stays and the attach fails. No model tokens.
-const deletedProfile = async (id: string): Promise<void> => {
+async function deletedProfile(id: string): Promise<void> {
   step('6. A profile deleted between restarts')
   await stopGateway()
   writeConfig([engine === 'claude' ? 'codex' : 'claude'])

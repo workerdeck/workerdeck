@@ -19,7 +19,7 @@ export type Instance = {
   close: () => Promise<void>
 }
 
-export const resolveWebRoot = (): string => {
+export function resolveWebRoot(): string {
   if (existsSync(join(dashboardDir, 'index.html'))) {
     return dashboardDir
   }
@@ -28,7 +28,7 @@ export const resolveWebRoot = (): string => {
 
 // Loopback *names* are what is checked, never the socket: a DNS-rebinding attacker's connection really does arrive
 // on 127.0.0.1, and the browser's Host header is the one thing they cannot control.
-export const createHostGuard = (allowedHosts: Set<string> | null): ((req: IncomingMessage) => boolean) => {
+export function createHostGuard(allowedHosts: Set<string> | null): (req: IncomingMessage) => boolean {
   if (allowedHosts === null) {
     return () => true
   }
@@ -46,7 +46,7 @@ export const createHostGuard = (allowedHosts: Set<string> | null): ((req: Incomi
   }
 }
 
-const pathnameOf = (req: IncomingMessage): string | null => {
+function pathnameOf(req: IncomingMessage): string | null {
   try {
     return new URL(req.url ?? '/', 'http://internal').pathname
   } catch {
@@ -56,12 +56,12 @@ const pathnameOf = (req: IncomingMessage): string | null => {
 
 // The order here is the contract: auth endpoints first (they are how a browser gets a session at all), then the APNs
 // route, then assets — ungated, being the app's own code — and documents last, the one place the auth decision is made.
-const createFallback = (
+function createFallback(
   auth: CliAuth,
   webRoot: string | undefined,
   hostAllowed: (req: IncomingMessage) => boolean,
   apnsRoute?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>,
-): ((req: IncomingMessage, res: ServerResponse) => Promise<void>) => {
+): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   return async (req, res) => {
     if (!hostAllowed(req)) {
       res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' })
@@ -137,7 +137,7 @@ const createFallback = (
   }
 }
 
-export const startInstance = async (config: ResolvedConfig, options: { quiet?: boolean } = {}): Promise<Instance> => {
+export async function startInstance(config: ResolvedConfig, options: { quiet?: boolean } = {}): Promise<Instance> {
   const webRoot = config.web ? (config.webRoot ?? resolveWebRoot()) : undefined
   const generated: MaterializedAuthKey | null =
     config.generateAuthKey && !config.hostAuthenticates ? await materializeAuthKey(config.stateDir) : null

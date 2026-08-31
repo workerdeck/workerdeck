@@ -6,7 +6,7 @@ import { userById } from './users.ts'
 export const SESSION_COOKIE = 'embedded_user'
 
 // The random default secret is for a throwaway caller (a test); a real one must outlive the process (`resolveSecret`).
-export const createCookieAuth = (secret: string = randomBytes(32).toString('hex')) => {
+export function createCookieAuth(secret: string = randomBytes(32).toString('hex')) {
   const sign = (value: string): string => createHmac('sha256', secret).update(value).digest('base64url')
 
   return {
@@ -44,7 +44,7 @@ export type CookieAuth = ReturnType<typeof createCookieAuth>
 // The CSRF guard every cookie-authenticated surface here must apply: `SameSite=Lax` stops cross-site only, and a page
 // on another port of the same site rides this cookie unpreflighted. Callers decline rather than throw, so a forged
 // request falls through to a plain 401.
-export const sameOrigin = (req: Pick<IncomingMessage, 'headers'>): boolean => {
+export function sameOrigin(req: Pick<IncomingMessage, 'headers'>): boolean {
   const site = req.headers['sec-fetch-site']
   // 'none' is a direct navigation; 'same-origin' is the SPA's own fetch.
   if (typeof site === 'string') {
@@ -62,7 +62,7 @@ export const sameOrigin = (req: Pick<IncomingMessage, 'headers'>): boolean => {
   return false
 }
 
-export const readCookie = (header: string | undefined, name: string): string | undefined => {
+export function readCookie(header: string | undefined, name: string): string | undefined {
   if (!header) {
     return undefined
   }

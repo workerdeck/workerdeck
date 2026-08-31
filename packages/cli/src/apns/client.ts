@@ -48,9 +48,11 @@ export type ApnsClient = {
   close(): void
 }
 
-const base64url = (input: Buffer | string): string => Buffer.from(input).toString('base64url')
+function base64url(input: Buffer | string): string {
+  return Buffer.from(input).toString('base64url')
+}
 
-export const loadApnsKey = async (keyFile: string): Promise<KeyObject> => {
+export async function loadApnsKey(keyFile: string): Promise<KeyObject> {
   let pem: string
   try {
     pem = await readFile(keyFile, 'utf8')
@@ -74,7 +76,7 @@ export const loadApnsKey = async (keyFile: string): Promise<KeyObject> => {
   return key
 }
 
-export const createProviderToken = (key: KeyObject, keyId: string, teamId: string): { get(now?: number): string; invalidate(): void } => {
+export function createProviderToken(key: KeyObject, keyId: string, teamId: string): { get(now?: number): string; invalidate(): void } {
   let cached: { token: string; issuedAt: number } | null = null
   return {
     get(now = Date.now()) {
@@ -98,15 +100,13 @@ export const createProviderToken = (key: KeyObject, keyId: string, teamId: strin
   }
 }
 
-const createSessionPool = (
-  hosts: Record<ApnsEnvironment, string>,
-): {
+function createSessionPool(hosts: Record<ApnsEnvironment, string>): {
   get(environment: ApnsEnvironment): ClientHttp2Session
   lastFailure(environment: ApnsEnvironment): string | undefined
   // Only ever called on a *connecting* session: destroying a connected one cancels its siblings mid-flight.
   discard(environment: ApnsEnvironment, session: ClientHttp2Session): void
   close(): void
-} => {
+} {
   const sessions = new Map<ApnsEnvironment, ClientHttp2Session>()
   const failures = new Map<ApnsEnvironment, string>()
   const drop = (environment: ApnsEnvironment, session: ClientHttp2Session): void => {
@@ -156,7 +156,7 @@ const createSessionPool = (
   }
 }
 
-const describeStreamError = (error: Error): string => {
+function describeStreamError(error: Error): string {
   const cause = (error as Error & { cause?: unknown }).cause
   if (!(cause instanceof AggregateError)) {
     return error.message
@@ -172,12 +172,12 @@ type Retry = 'never' | 'now' | 'redial'
 
 type Attempt = { result: ApnsResult; retry: Retry }
 
-export const createApnsClient = (
+export function createApnsClient(
   config: ApnsConfig,
   key: KeyObject,
   // Test seam only. The real endpoints are deliberately not configurable: redirecting them would exfiltrate every push.
   options: { hosts?: Record<ApnsEnvironment, string>; retryDelayMs?: number } = {},
-): ApnsClient => {
+): ApnsClient {
   const providerToken = createProviderToken(key, config.keyId, config.teamId)
   const pool = createSessionPool(options.hosts ?? HOSTS)
   const retryDelayMs = options.retryDelayMs ?? 1000

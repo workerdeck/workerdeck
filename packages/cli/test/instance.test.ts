@@ -13,7 +13,7 @@ import { startInstance, type Instance } from '../src/lib/instance.ts'
 
 const SECRET = 'a-long-enough-test-secret'
 
-const fakeQueryFn = () => {
+function fakeQueryFn() {
   const messages: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
   let done = false
@@ -70,7 +70,7 @@ afterEach(async () => {
 })
 
 // A dashboard build stand-in: the real one is only present after a prepack.
-const fakeWebRoot = async (): Promise<string> => {
+async function fakeWebRoot(): Promise<string> {
   const dir = await mkdtemp(join(import.meta.dirname, '.tmp-web-'))
   dirs.push(dir)
   await mkdir(join(dir, 'assets'))
@@ -80,10 +80,10 @@ const fakeWebRoot = async (): Promise<string> => {
 }
 
 // `overrides` lands after resolution, so a test can get routable-host semantics while still binding loopback.
-const start = async (
+async function start(
   argv: string[],
   overrides: Partial<ResolvedConfig> = {},
-): Promise<{ base: string; wsBase: string; stateDir: string | null }> => {
+): Promise<{ base: string; wsBase: string; stateDir: string | null }> {
   const webRoot = await fakeWebRoot()
   const stateDir = await mkdtemp(join(import.meta.dirname, '.tmp-state-'))
   dirs.push(stateDir)
@@ -104,7 +104,7 @@ const start = async (
   }
 }
 
-const rawGet = (port: number, path: string, host: string): Promise<{ status: number }> => {
+function rawGet(port: number, path: string, host: string): Promise<{ status: number }> {
   return new Promise((resolve, reject) => {
     const req = request({ host: '127.0.0.1', port, path, method: 'GET', headers: { host } }, (res) => {
       res.resume()
@@ -115,13 +115,13 @@ const rawGet = (port: number, path: string, host: string): Promise<{ status: num
   })
 }
 
-const cookieFrom = (res: Response): string => {
+function cookieFrom(res: Response): string {
   const raw = res.headers.get('set-cookie')
   expect(raw).toBeTruthy()
   return raw!.split(';')[0]!
 }
 
-const login = async (base: string): Promise<string> => {
+async function login(base: string): Promise<string> {
   const res = await fetch(`${base}/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },

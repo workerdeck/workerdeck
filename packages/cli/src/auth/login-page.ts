@@ -6,10 +6,11 @@ export type LoginPageOptions = {
   redirectField?: string
 }
 
-const escapeHtml = (value: string): string =>
-  value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
+}
 
-export const renderLoginPage = (options: LoginPageOptions): string => {
+export function renderLoginPage(options: LoginPageOptions): string {
   const { action, field, error, redirectTo, redirectField } = options
   const hidden =
     redirectField && redirectTo ? `<input type="hidden" name="${escapeHtml(redirectField)}" value="${escapeHtml(redirectTo)}">` : ''

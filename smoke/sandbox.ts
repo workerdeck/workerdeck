@@ -7,7 +7,7 @@ const engine = await loadEngine(variant)
 
 let failures = 0
 
-const report = (result: RunScriptResult): void => {
+function report(result: RunScriptResult): void {
   if (result.ok) {
     console.log('  value:', JSON.stringify(result.value))
   } else {
@@ -18,7 +18,7 @@ const report = (result: RunScriptResult): void => {
   }
 }
 
-const scenario = async (title: string, proves: string, run: () => Promise<{ ok: boolean; detail: string }>): Promise<void> => {
+async function scenario(title: string, proves: string, run: () => Promise<{ ok: boolean; detail: string }>): Promise<void> {
   process.stdout.write(`\n▸ ${title}\n  proves: ${proves}\n`)
   const started = Date.now()
   try {

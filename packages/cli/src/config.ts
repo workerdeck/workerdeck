@@ -51,7 +51,7 @@ export type CliFlags = {
 
 export class ConfigError extends Error {}
 
-const parsePort = (raw: string, source: string): number => {
+function parsePort(raw: string, source: string): number {
   const port = Number(raw)
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new ConfigError(`${source}: not a valid port: ${raw}`)
@@ -59,7 +59,7 @@ const parsePort = (raw: string, source: string): number => {
   return port
 }
 
-export const parseArgs = (argv: string[]): CliFlags => {
+export function parseArgs(argv: string[]): CliFlags {
   const flags: CliFlags = {
     profiles: [],
     cwdRoots: [],
@@ -201,7 +201,7 @@ export type LoadedConfig = {
 }
 
 // An implicit config is looked up in cwd only: walking parents would make what a command does depend on where it was run.
-export const loadConfigFile = async (explicit?: string, cwd = process.cwd()): Promise<LoadedConfig> => {
+export async function loadConfigFile(explicit?: string, cwd = process.cwd()): Promise<LoadedConfig> {
   let path: string | null = null
   if (explicit) {
     path = isAbsolute(explicit) ? explicit : resolve(cwd, explicit)
@@ -235,7 +235,9 @@ export const loadConfigFile = async (explicit?: string, cwd = process.cwd()): Pr
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost', '::ffff:127.0.0.1'])
 
-export const isLoopback = (host: string): boolean => LOOPBACK.has(host)
+export function isLoopback(host: string): boolean {
+  return LOOPBACK.has(host)
+}
 
 export type ResolvedConfig = {
   port: number
@@ -257,10 +259,11 @@ export type ResolvedConfig = {
   options: WorkerServerOptions
 }
 
-export const defaultStateDir = (configPath: string | null): string =>
-  configPath ? join(dirname(configPath), '.workerdeck') : join(homedir(), '.workerdeck')
+export function defaultStateDir(configPath: string | null): string {
+  return configPath ? join(dirname(configPath), '.workerdeck') : join(homedir(), '.workerdeck')
+}
 
-export const hostnameOf = (hostHeader: string): string => {
+export function hostnameOf(hostHeader: string): string {
   try {
     return new URL(`http://${hostHeader}`).hostname.replace(/^\[|\]$/g, '').toLowerCase()
   } catch {
@@ -268,7 +271,7 @@ export const hostnameOf = (hostHeader: string): string => {
   }
 }
 
-export const isLoopbackHostname = (hostname: string): boolean => {
+export function isLoopbackHostname(hostname: string): boolean {
   if (LOOPBACK.has(hostname)) {
     return true
   }
@@ -277,7 +280,7 @@ export const isLoopbackHostname = (hostname: string): boolean => {
 
 // An entry with a port could never match what the guard compares, so it is rejected rather than normalized into a gate
 // that looks armed and is not. Bare IPv6 is bracketed first because WHATWG URL requires it.
-const normalizeInsecureHost = (raw: string): string => {
+function normalizeInsecureHost(raw: string): string {
   const entry = raw.trim()
   const looksLikeNamePort = /^[^:]+:\d+$/.test(entry)
   const candidate = entry.includes(':') && !entry.startsWith('[') && !looksLikeNamePort ? `[${entry}]` : entry
@@ -296,12 +299,12 @@ const normalizeInsecureHost = (raw: string): string => {
   return url.hostname.replace(/^\[|\]$/g, '').toLowerCase()
 }
 
-export const resolveInstanceConfig = (
+export function resolveInstanceConfig(
   flags: CliFlags,
   loaded: LoadedConfig,
   env: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
-): ResolvedConfig => {
+): ResolvedConfig {
   const envPort = env.WORKERDECK_PORT ? parsePort(env.WORKERDECK_PORT, 'WORKERDECK_PORT') : undefined
   const port = flags.port ?? envPort ?? loaded.options.port ?? 8787
   const host = flags.host ?? env.WORKERDECK_HOST ?? loaded.options.host ?? '127.0.0.1'
@@ -428,7 +431,7 @@ export const resolveInstanceConfig = (
 }
 
 // A relative `keyFile` resolves against the config file's directory, never the cwd, so a deployment stays self-contained.
-const resolveApns = (loaded: LoadedConfig): ApnsConfig | undefined => {
+function resolveApns(loaded: LoadedConfig): ApnsConfig | undefined {
   const apns = loaded.options.apns
   if (!apns) {
     return undefined

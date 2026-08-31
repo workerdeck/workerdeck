@@ -15,7 +15,7 @@ type State = {
 let state: State = { jobs: [], stats: undefined, enabled: true, live: false, error: undefined }
 const listeners = new Set<() => void>()
 
-const emit = (next: Partial<State>): void => {
+function emit(next: Partial<State>): void {
   state = { ...state, ...next }
   for (const listener of listeners) {
     listener()
@@ -24,7 +24,7 @@ const emit = (next: Partial<State>): void => {
 
 let inFlight: Promise<void> | undefined
 
-export const refreshJobs = (): Promise<void> => {
+export function refreshJobs(): Promise<void> {
   inFlight ??= (async () => {
     try {
       const gateway = client()
@@ -52,7 +52,7 @@ let subscribers = 0
 let timer: ReturnType<typeof setInterval> | undefined
 let detach: (() => void) | undefined
 
-const subscribe = (listener: () => void): (() => void) => {
+function subscribe(listener: () => void): () => void {
   listeners.add(listener)
   if (++subscribers === 1) {
     void refreshJobs()
@@ -72,7 +72,7 @@ const subscribe = (listener: () => void): (() => void) => {
 
 // Attached only once REST has confirmed a queue exists: a queue-less server refuses the upgrade and the handle would
 // loop on reconnect. Driven from the hook because `enabled`/`stats` arrive after the first subscriber does.
-const ensureAttached = (): void => {
+function ensureAttached(): void {
   if (detach || !state.enabled || state.stats === undefined || subscribers === 0) {
     return
   }
@@ -102,7 +102,7 @@ const ensureAttached = (): void => {
   }
 }
 
-export const useJobs = (): State & { refresh: () => Promise<void> } => {
+export function useJobs(): State & { refresh: () => Promise<void> } {
   const value = useSyncExternalStore(
     subscribe,
     () => state,

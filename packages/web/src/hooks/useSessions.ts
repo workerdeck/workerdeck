@@ -20,7 +20,7 @@ type State = { snapshots: HostSnapshot[]; loaded: boolean }
 let state: State = { snapshots: [], loaded: false }
 const listeners = new Set<() => void>()
 
-const emit = (next: State): void => {
+function emit(next: State): void {
   state = next
   for (const listener of listeners) {
     listener()
@@ -32,7 +32,7 @@ let lastFetchAt = 0
 let nudgeTimer: ReturnType<typeof setTimeout> | undefined
 
 // Concurrent callers share the one pass in flight.
-export const refreshSessions = (): Promise<void> => {
+export function refreshSessions(): Promise<void> {
   inFlight ??= (async () => {
     lastFetchAt = Date.now()
     try {
@@ -65,7 +65,7 @@ export const refreshSessions = (): Promise<void> => {
 }
 
 // Coalesced and rate limited, so it is safe to call from a streaming callback.
-export const nudgeSessions = (): void => {
+export function nudgeSessions(): void {
   if (nudgeTimer !== undefined) {
     return
   }
@@ -76,7 +76,7 @@ export const nudgeSessions = (): void => {
   }, wait)
 }
 
-const subscribe = (listener: () => void): (() => void) => {
+function subscribe(listener: () => void): () => void {
   listeners.add(listener)
   return () => void listeners.delete(listener)
 }
@@ -86,7 +86,7 @@ let pollRegime: number | undefined
 
 // One timer for the whole app, re-armed only when the regime changes: a fresh timer per response drifts toward
 // continuous polling.
-const arm = (busy: boolean): void => {
+function arm(busy: boolean): void {
   const interval = busy ? BUSY_MS : IDLE_MS
   if (pollTimer !== undefined && pollRegime === interval) {
     return
@@ -98,7 +98,7 @@ const arm = (busy: boolean): void => {
   pollTimer = setInterval(() => void refreshSessions(), interval)
 }
 
-export const useSessions = () => {
+export function useSessions() {
   const snapshot = useSyncExternalStore(
     subscribe,
     () => state,
@@ -124,7 +124,7 @@ export const useSessions = () => {
 }
 
 // Job runs are left out because this dashboard gives them their own section; the omission is this composition's.
-export const useSessionRows = (snapshots: HostSnapshot[]): SessionRow[] => {
+export function useSessionRows(snapshots: HostSnapshot[]): SessionRow[] {
   const { unseenFor } = useUnseen()
   return useMemo(
     () =>

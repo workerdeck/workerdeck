@@ -5,7 +5,7 @@ import type { ViewConfig } from '@workerdeck/protocol'
 const KEY = 'workerdeck.view-config'
 
 // `search` always starts empty and `scoped` is forced off: a dashboard has no open folders for it to mean anything against.
-export const useViewConfig = () => {
+export function useViewConfig() {
   const [config, setConfig] = useState<ViewConfig>(() => {
     try {
       const raw = localStorage.getItem(KEY)

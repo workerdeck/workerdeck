@@ -6,8 +6,8 @@ import type { WikiDb } from './db.ts'
 import { type CookieAuth, sameOrigin } from '../auth/cookie.ts'
 import { createWikiActions } from './actions.ts'
 
-const buildServer = (api: TrpcNodeAdapter, db: WikiDb, state: AppState) =>
-  silkweave({
+function buildServer(api: TrpcNodeAdapter, db: WikiDb, state: AppState) {
+  return silkweave({
     name: 'wiki-api',
     description: "The signed-in user's wiki documents.",
     version: '1.0.0',
@@ -16,6 +16,7 @@ const buildServer = (api: TrpcNodeAdapter, db: WikiDb, state: AppState) =>
   })
     .adapter(api.adapter)
     .actions(createWikiActions(db, state))
+}
 
 export type WikiRouter = InferTrpcRouter<ReturnType<typeof buildServer>>
 
@@ -26,7 +27,7 @@ export type WikiApi = {
   start: () => Promise<void>
 }
 
-export const createWikiApi = (db: WikiDb, state: AppState, auth: CookieAuth): WikiApi => {
+export function createWikiApi(db: WikiDb, state: AppState, auth: CookieAuth): WikiApi {
   const api = trpcNode({
     endpoint: '/trpc',
     // Declining (`null`) rather than throwing falls through to the bearer path and answers a plain 401.

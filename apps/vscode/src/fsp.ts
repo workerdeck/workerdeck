@@ -140,7 +140,7 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
   }
 }
 
-const fileType = (entry: HostDirEntry): vscode.FileType => {
+function fileType(entry: HostDirEntry): vscode.FileType {
   switch (entry.type) {
     case 'dir': {
       return vscode.FileType.Directory
@@ -157,7 +157,7 @@ const fileType = (entry: HostDirEntry): vscode.FileType => {
   }
 }
 
-const statOf = (entry: HostDirEntry): vscode.FileStat => {
+function statOf(entry: HostDirEntry): vscode.FileStat {
   return {
     type: fileType(entry),
     ctime: 0,
@@ -166,7 +166,7 @@ const statOf = (entry: HostDirEntry): vscode.FileStat => {
   }
 }
 
-const toFsError = (err: unknown, uri: vscode.Uri): Error => {
+function toFsError(err: unknown, uri: vscode.Uri): Error {
   if (err instanceof WorkerDeckError) {
     if (err.status === 404) {
       return vscode.FileSystemError.FileNotFound(uri)

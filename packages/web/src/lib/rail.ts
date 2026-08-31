@@ -4,7 +4,7 @@ export type Rail = { width: number; collapsed: boolean }
 
 const DEFAULT: Rail = { width: 260, collapsed: false }
 
-export const getRail = (): Rail => {
+export function getRail(): Rail {
   try {
     const raw = localStorage.getItem(KEY)
     const stored = raw ? (JSON.parse(raw) as Partial<Rail>) : {}
@@ -17,7 +17,7 @@ export const getRail = (): Rail => {
   }
 }
 
-export const setRail = (rail: Rail): void => {
+export function setRail(rail: Rail): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(rail))
   } catch {}

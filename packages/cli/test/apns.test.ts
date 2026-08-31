@@ -9,7 +9,7 @@ import { createDeviceRegistry, createDeviceRoute } from '../src/apns/devices.ts'
 import { buildPush } from '../src/apns/forwarder.ts'
 
 const created: string[] = []
-const tempDir = async (): Promise<string> => {
+async function tempDir(): Promise<string> {
   const dir = await mkdtemp(join(import.meta.dirname, '.tmp-apns-'))
   created.push(dir)
   return dir
@@ -57,9 +57,9 @@ describe('provider token', () => {
 
 // A local HTTP/2 server standing in for APNs, so headers and error classification are exercised for real.
 type Recorded = { headers: Record<string, unknown>; body: string }
-const startFakeApns = async (
+async function startFakeApns(
   respond: (recorded: Recorded, stream: ServerHttp2Stream) => void,
-): Promise<{ server: Http2Server; hosts: Record<ApnsEnvironment, string>; seen: Recorded[] }> => {
+): Promise<{ server: Http2Server; hosts: Record<ApnsEnvironment, string>; seen: Recorded[] }> {
   const seen: Recorded[] = []
   const server = createServer()
   server.on('stream', (stream, headers) => {
@@ -276,8 +276,9 @@ const session = {
   lastSeq: 7,
 } as unknown as SessionNotification['session']
 
-const notification = (over: Partial<SessionNotification>): SessionNotification =>
-  ({ type: 'turn_completed', sessionId: 'sess_1', session, seq: 7, ts: 0, ...over }) as SessionNotification
+function notification(over: Partial<SessionNotification>): SessionNotification {
+  return { type: 'turn_completed', sessionId: 'sess_1', session, seq: 7, ts: 0, ...over } as SessionNotification
+}
 
 describe('buildPush', () => {
   it('carries requestId and the permission category, and never collapses', () => {
@@ -350,12 +351,12 @@ describe('device registry', () => {
   })
 })
 
-const call = async (
+async function call(
   route: ReturnType<typeof createDeviceRoute>,
   method: string,
   url: string,
   body?: unknown,
-): Promise<{ consumed: boolean; status: number; json: unknown }> => {
+): Promise<{ consumed: boolean; status: number; json: unknown }> {
   const listeners = new Map<string, ((value?: unknown) => void)[]>()
   const req = {
     method,

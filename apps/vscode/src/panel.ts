@@ -299,7 +299,7 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
 }
 
 // In a Remote SSH window "this machine" is the remote box, which is exactly where a loopback gateway's files are.
-const openTranscriptPath = async (active: ActiveSession | undefined, clicked: string, line: number | undefined): Promise<void> => {
+async function openTranscriptPath(active: ActiveSession | undefined, clicked: string, line: number | undefined): Promise<void> {
   if (!active) {
     return
   }
@@ -319,7 +319,7 @@ const openTranscriptPath = async (active: ActiveSession | undefined, clicked: st
   }
 }
 
-const resolveAgainstCwd = (clicked: string, cwd: string | undefined): string | undefined => {
+function resolveAgainstCwd(clicked: string, cwd: string | undefined): string | undefined {
   if (clicked.startsWith('/')) {
     return normalizePosix(clicked)
   }
@@ -329,7 +329,7 @@ const resolveAgainstCwd = (clicked: string, cwd: string | undefined): string | u
   return normalizePosix(`${cwd.replace(/\/+$/, '')}/${clicked}`)
 }
 
-const normalizePosix = (path: string): string => {
+function normalizePosix(path: string): string {
   const out: string[] = []
   for (const part of path.split('/')) {
     if (part === '' || part === '.') {

@@ -24,12 +24,14 @@ const FILENAME = 'apns-devices.json'
 const TOKEN_PATTERN = /^[0-9a-fA-F]{32,200}$/
 const MAX_BODY_BYTES = 4096
 
-const isEnvironment = (value: unknown): value is ApnsEnvironment => value === 'development' || value === 'production'
+function isEnvironment(value: unknown): value is ApnsEnvironment {
+  return value === 'development' || value === 'production'
+}
 
-export const createDeviceRegistry = async (options: {
+export async function createDeviceRegistry(options: {
   dir: string | null
   onError?: (error: unknown, context: { op: string; path: string }) => void
-}): Promise<DeviceRegistry> => {
+}): Promise<DeviceRegistry> {
   const path = options.dir === null ? null : join(options.dir, FILENAME)
   const devices = new Map<string, DeviceRecord>()
 
@@ -81,12 +83,12 @@ export const createDeviceRegistry = async (options: {
   }
 }
 
-const respond = (res: ServerResponse, status: number, body: Record<string, unknown>): void => {
+function respond(res: ServerResponse, status: number, body: Record<string, unknown>): void {
   res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(body))
 }
 
-const readBody = (req: IncomingMessage): Promise<string | null> =>
-  new Promise((resolve) => {
+function readBody(req: IncomingMessage): Promise<string | null> {
+  return new Promise((resolve) => {
     const chunks: Buffer[] = []
     let size = 0
     let settled = false
@@ -107,11 +109,12 @@ const readBody = (req: IncomingMessage): Promise<string | null> =>
     req.on('end', () => finish(Buffer.concat(chunks).toString('utf8')))
     req.on('error', () => finish(null))
   })
+}
 
-export const createDeviceRoute = (
+export function createDeviceRoute(
   registry: DeviceRegistry,
   authenticate: (req: IncomingMessage) => unknown,
-): ((req: IncomingMessage, res: ServerResponse) => Promise<boolean>) => {
+): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   return async (req, res) => {
     let pathname: string
     try {

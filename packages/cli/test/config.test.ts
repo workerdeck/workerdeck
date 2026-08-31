@@ -8,7 +8,7 @@ const noConfig = { path: null, options: {} }
 // Fixtures live under the package because vitest loads them through vite's module graph, which will not read a file
 // outside the project root. The CLI itself has no such limit.
 const created: string[] = []
-const tempConfigDir = async (): Promise<string> => {
+async function tempConfigDir(): Promise<string> {
   const dir = await mkdtemp(join(import.meta.dirname, '.tmp-config-'))
   created.push(dir)
   return dir

@@ -21,11 +21,12 @@ import { client } from '@/lib/client.ts'
 
 const CAPABILITIES: SessionCapability[] = ['web_search', 'download', 'web_fetch', 'deliver_file']
 
-const commaList = (value: string): string[] =>
-  value
+function commaList(value: string): string[] {
+  return value
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean)
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

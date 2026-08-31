@@ -25,7 +25,7 @@ type Verdict = {
 
 class GuardError extends Error {}
 
-export const runGuard = async (argv: string[]): Promise<number> => {
+export async function runGuard(argv: string[]): Promise<number> {
   let values: {
     url: string
     token?: string

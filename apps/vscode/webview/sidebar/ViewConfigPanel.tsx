@@ -127,7 +127,7 @@ export function ViewConfigPanel({
 
 type Option<T extends string> = { value: T; label: string }
 
-const labelledOptions = <T extends string>(labels: Record<T, string>): Option<T>[] => {
+function labelledOptions<T extends string>(labels: Record<T, string>): Option<T>[] {
   return (Object.keys(labels) as T[]).map((value) => ({ value, label: labels[value] }))
 }
 

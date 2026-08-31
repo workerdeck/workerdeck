@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 export type ReloadableView = { reloadWebview: () => void }
 
-export const startDevReload = (context: vscode.ExtensionContext, views: readonly ReloadableView[]): vscode.Disposable => {
+export function startDevReload(context: vscode.ExtensionContext, views: readonly ReloadableView[]): vscode.Disposable {
   const enabled =
     context.extensionMode === vscode.ExtensionMode.Development &&
     vscode.workspace.getConfiguration('workerdeck').get<boolean>('dev.autoReload', true)

@@ -24,7 +24,7 @@ import {
 
 type Persisted = { config?: ViewConfig }
 
-const iconSrcOf = (info: SessionInfo | undefined, icons: Record<string, string>): string | undefined => {
+function iconSrcOf(info: SessionInfo | undefined, icons: Record<string, string>): string | undefined {
   const icon = info?.project?.icon
   return icon?.type === 'image' ? icons[icon.hash] : undefined
 }

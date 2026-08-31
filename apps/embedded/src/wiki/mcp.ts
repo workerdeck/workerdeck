@@ -15,7 +15,7 @@ export type WikiMcp = {
   issueToken(userId: string): { token: string; revoke: () => void }
 }
 
-export const createWikiMcp = (db: WikiDb, state: AppState, users: readonly User[]): WikiMcp => {
+export function createWikiMcp(db: WikiDb, state: AppState, users: readonly User[]): WikiMcp {
   const tokens = new Map<string, string>()
 
   const transport = mcpTransport(

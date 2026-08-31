@@ -74,7 +74,7 @@ const { port: bound } = await gateway.server.listen(port, host).catch((error: un
 })
 mcpUrl = `http://${host}:${bound}/mcp`
 
-const shutdown = async (): Promise<void> => {
+async function shutdown(): Promise<void> {
   await gateway.server.close().catch(() => {})
   db.close()
   process.exit(0)

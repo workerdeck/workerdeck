@@ -11,7 +11,9 @@ const base = {
   pendingPermissionCount: 0,
 } as never
 
-const mk = (o: Record<string, unknown>) => ({ ...(base as object), ...o }) as never
+function mk(o: Record<string, unknown>) {
+  return { ...(base as object), ...o } as never
+}
 
 // `agentType`, not `name`: that is what `isAgentRecord` reads, and with `name` these records all draw as tasks.
 // The last one drops `agentType` on purpose, so the preview carries one real task beside the agents.

@@ -13,7 +13,7 @@ export type EngineFormOptions = {
 
 // Derived from the profile's capability record and served catalog, never from the engine name. Both form choices are
 // sticky across profile switches, so coerce them rather than submit something the gateway will reject.
-export const engineFormOptions = (profile: ProfileInfo | undefined, mode: PermissionMode, model: string): EngineFormOptions => {
+export function engineFormOptions(profile: ProfileInfo | undefined, mode: PermissionMode, model: string): EngineFormOptions {
   const capabilities = profile?.capabilities ?? ENGINE_CAPABILITIES[profile?.engine ?? 'claude']
   const safeMode = capabilities.permissionModes.includes(mode) ? mode : capabilities.defaultPermissionMode
 

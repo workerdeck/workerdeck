@@ -77,7 +77,7 @@ Credentials
   gateway, nothing else.
 `
 
-const readVersion = async (): Promise<string> => {
+async function readVersion(): Promise<string> {
   // src/cli.ts and build/cli.mjs are both one level under the package root.
   const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json')
   try {
@@ -88,7 +88,7 @@ const readVersion = async (): Promise<string> => {
   }
 }
 
-const openInBrowser = (url: string): void => {
+function openInBrowser(url: string): void {
   const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open'
   try {
     const child = spawn(command, [url], {
@@ -101,7 +101,7 @@ const openInBrowser = (url: string): void => {
   } catch {}
 }
 
-const main = async (argv: string[]): Promise<number> => {
+async function main(argv: string[]): Promise<number> {
   if (argv[0] === 'guard') {
     const { runGuard } = await import('./lib/guard.ts')
     return await runGuard(argv.slice(1))

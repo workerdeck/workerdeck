@@ -18,14 +18,16 @@ export type WikiDb = {
 
 type Row = { id: string; title: string; body: string; updated_at: number }
 
-const toDoc = (row: Row, withBody: boolean): Doc => ({
-  id: row.id,
-  title: row.title,
-  updatedAt: row.updated_at,
-  ...(withBody ? { body: row.body } : {}),
-})
+function toDoc(row: Row, withBody: boolean): Doc {
+  return {
+    id: row.id,
+    title: row.title,
+    updatedAt: row.updated_at,
+    ...(withBody ? { body: row.body } : {}),
+  }
+}
 
-export const openWikiDb = (file: string): WikiDb => {
+export function openWikiDb(file: string): WikiDb {
   if (file !== ':memory:') {
     mkdirSync(dirname(file), { recursive: true })
   }

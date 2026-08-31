@@ -13,7 +13,7 @@ export type AuthSessionStoreOptions = {
 
 type FileShape = { version: number; sessions: [string, number][] }
 
-const parseSessions = (raw: string, now: number): [string, StoredSession][] => {
+function parseSessions(raw: string, now: number): [string, StoredSession][] {
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
@@ -41,7 +41,7 @@ const parseSessions = (raw: string, now: number): [string, StoredSession][] => {
   return entries
 }
 
-export const createAuthSessionStore = async (options: AuthSessionStoreOptions): Promise<CliSessionStore> => {
+export async function createAuthSessionStore(options: AuthSessionStoreOptions): Promise<CliSessionStore> {
   const now = options.now ?? Date.now
   const warn = options.warn ?? ((message: string) => process.stderr.write(`[workerdeck] ${message}\n`))
   const path = join(options.stateDir, FILE_NAME)

@@ -11,13 +11,16 @@ import type { SessionEvent } from '@workerdeck/protocol'
 
 type ProviderName = 'moonshot' | 'openai' | 'anthropic'
 
-const indent = (text: string): string =>
-  text
+function indent(text: string): string {
+  return text
     .split('\n')
     .map((line) => '   │ ' + line)
     .join('\n')
+}
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
 
 const PROVIDERS: Record<ProviderName, { env: string; defaultModel: string; load: () => Promise<unknown> }> = {
   moonshot: {

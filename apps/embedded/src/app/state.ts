@@ -15,7 +15,7 @@ export type AppState = {
   subscribe(userId: string, listener: (intent: UiIntent) => void): () => void
 }
 
-export const createAppState = (): AppState => {
+export function createAppState(): AppState {
   const states = new Map<string, UiState>()
   const listeners = new Map<string, Set<(intent: UiIntent) => void>>()
 

@@ -1,27 +1,27 @@
 import * as vscode from 'vscode'
 
-export const fontMode = (): 'editor' | 'sans' => {
+export function fontMode(): 'editor' | 'sans' {
   return vscode.workspace.getConfiguration('workerdeck').get<'editor' | 'sans'>('fontFamily') === 'sans' ? 'sans' : 'editor'
 }
 
-export const transcriptDensity = (): 'comfortable' | 'compact' => {
+export function transcriptDensity(): 'comfortable' | 'compact' {
   return vscode.workspace.getConfiguration('workerdeck').get<'comfortable' | 'compact'>('transcriptDensity') === 'compact'
     ? 'compact'
     : 'comfortable'
 }
 
-export const transcriptVariant = (): 'terminal' | 'cards' => {
+export function transcriptVariant(): 'terminal' | 'cards' {
   // Anything not `cards` resolves to `terminal`, which is what carries a settings file still holding the retired `lines` value.
   return vscode.workspace.getConfiguration('workerdeck').get<'terminal' | 'cards'>('transcriptVariant') === 'cards' ? 'cards' : 'terminal'
 }
 
-export const panelFontSize = (): number => {
+export function panelFontSize(): number {
   const wd = vscode.workspace.getConfiguration('workerdeck')
   const editor = vscode.workspace.getConfiguration('editor')
   return Math.round(wd.get<number>('fontSize') || editor.get<number>('fontSize') || 13)
 }
 
-export const terminalMetrics = (): { fontSize: number; lineHeight: number } => {
+export function terminalMetrics(): { fontSize: number; lineHeight: number } {
   const wd = vscode.workspace.getConfiguration('workerdeck')
   const editor = vscode.workspace.getConfiguration('editor')
   const fontSize = wd.get<number>('terminal.fontSize') || panelFontSize()
@@ -30,11 +30,11 @@ export const terminalMetrics = (): { fontSize: number; lineHeight: number } => {
   return { fontSize: Math.round(fontSize), lineHeight: Math.round(lineHeight) }
 }
 
-export const terminalAffordances = (): boolean => {
+export function terminalAffordances(): boolean {
   return vscode.workspace.getConfiguration('workerdeck').get<boolean>('terminal.affordances') !== false
 }
 
-export const webviewHtml = (
+export function webviewHtml(
   webview: vscode.Webview,
   dist: vscode.Uri,
   script: string,
@@ -42,7 +42,7 @@ export const webviewHtml = (
   // Bumped by the dev reloader: identical HTML would not re-fetch the bundle.
   version = 0,
   options: { font?: boolean } = {},
-): string => {
+): string {
   const bust = version ? `?v=${version}` : ''
   const scriptUri = `${webview.asWebviewUri(vscode.Uri.joinPath(dist, script))}${bust}`
   const attrs = Object.entries(rootAttrs)

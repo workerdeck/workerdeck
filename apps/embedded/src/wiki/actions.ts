@@ -6,11 +6,13 @@ import type { User } from '../shared.ts'
 
 type AuthInfo = { token: string; userId: string }
 
-const userOf = (context: { get: <T>(key: string) => T }): string => context.get<AuthInfo>('auth').userId
+function userOf(context: { get: <T>(key: string) => T }): string {
+  return context.get<AuthInfo>('auth').userId
+}
 
 // A model asked to omit an optional field sends `""` or (observed live) `" "` instead. `.min(1)` is not the fix — a
 // single space has length 1 — so no optional string is trusted as given.
-const text = (value: string | undefined): string | undefined => {
+function text(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   return trimmed ? trimmed : undefined
 }
@@ -29,7 +31,7 @@ const docBody = z.object({
 })
 
 // The descriptions are written for the model — a tool description is prompt, not documentation.
-export const createWikiActions = (db: WikiDb, state: AppState) => {
+export function createWikiActions(db: WikiDb, state: AppState) {
   const listDocs = createAction({
     name: 'list_docs',
     kind: 'query',
@@ -177,7 +179,7 @@ export const createWikiActions = (db: WikiDb, state: AppState) => {
   return [listDocs, readDoc, createDoc, updateDoc, renameDoc, deleteDoc] as const
 }
 
-export const createAgentActions = (db: WikiDb, state: AppState, users: readonly User[]) => {
+export function createAgentActions(db: WikiDb, state: AppState, users: readonly User[]) {
   const whoAmI = createAction({
     name: 'whoami',
     kind: 'query',

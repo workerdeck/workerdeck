@@ -52,9 +52,11 @@ const MAX_SESSIONS = 100
 const MAX_LOGIN_BODY_BYTES = 4096
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
-const sha256 = (value: string): Buffer => createHash('sha256').update(value).digest()
+function sha256(value: string): Buffer {
+  return createHash('sha256').update(value).digest()
+}
 
-export const createCliAuth = (options: CliAuthOptions = {}): CliAuth => {
+export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
   const { secret } = options
   const enabled = secret !== undefined
   if (secret !== undefined && secret.length < MIN_SECRET_LENGTH) {

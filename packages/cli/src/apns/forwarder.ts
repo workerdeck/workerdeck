@@ -21,7 +21,7 @@ const CATEGORY = {
   event: 'SESSION_EVENT',
 } as const
 
-const label = (session: SessionInfo): string => {
+function label(session: SessionInfo): string {
   const title = session.title?.trim()
   if (title !== undefined && title !== '') {
     return title
@@ -30,15 +30,17 @@ const label = (session: SessionInfo): string => {
   return leaf !== undefined && leaf !== '' ? leaf : session.id
 }
 
-const oneLine = (text: string | undefined, limit = BODY_LIMIT): string => {
+function oneLine(text: string | undefined, limit = BODY_LIMIT): string {
   const flat = (text ?? '').replace(/\s+/g, ' ').trim()
   return flat.length <= limit ? flat : `${flat.slice(0, limit - 1)}…`
 }
 
 // Hashed rather than truncated to 64 bytes: two session ids sharing a prefix must not collapse into each other.
-const collapseKey = (sessionId: string): string => createHash('sha256').update(sessionId).digest('base64url').slice(0, 32)
+function collapseKey(sessionId: string): string {
+  return createHash('sha256').update(sessionId).digest('base64url').slice(0, 32)
+}
 
-const titleFor = (notification: SessionNotification, name: string): string => {
+function titleFor(notification: SessionNotification, name: string): string {
   switch (notification.type) {
     case 'permission_requested': {
       return `Approval needed — ${name}`
@@ -58,7 +60,7 @@ const titleFor = (notification: SessionNotification, name: string): string => {
   }
 }
 
-const bodyFor = (notification: SessionNotification): string => {
+function bodyFor(notification: SessionNotification): string {
   const preview = oneLine(notification.preview)
   if (preview !== '') {
     return preview
@@ -80,10 +82,7 @@ const bodyFor = (notification: SessionNotification): string => {
 }
 
 // The payload carries routing only — never transcript text — and `requestId` is what a lock-screen Approve has to POST to.
-export const buildPush = (
-  notification: SessionNotification,
-  hostId: string | undefined,
-): Omit<ApnsRequest, 'deviceToken' | 'environment'> => {
+export function buildPush(notification: SessionNotification, hostId: string | undefined): Omit<ApnsRequest, 'deviceToken' | 'environment'> {
   const permission = notification.type === 'permission_requested'
   const name = label(notification.session)
   let body = bodyFor(notification)
@@ -120,12 +119,12 @@ export const buildPush = (
   }
 }
 
-export const createApnsForwarder = async (options: {
+export async function createApnsForwarder(options: {
   config: ApnsConfig
   stateDir: string | null
   authenticate: (req: IncomingMessage) => unknown
   warn?: (message: string) => void
-}): Promise<ApnsForwarder> => {
+}): Promise<ApnsForwarder> {
   const warn = options.warn ?? ((message: string) => process.stderr.write(`[workerdeck] apns: ${message}\n`))
   const key = await loadApnsKey(options.config.keyFile)
   const client: ApnsClient = createApnsClient(options.config, key)

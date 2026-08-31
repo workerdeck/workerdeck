@@ -30,7 +30,7 @@ const USAGE_BADGES: readonly { badge: StatusBadge; lane: UsageLane }[] = [
 
 const BADGE_DEFAULT: Partial<Record<StatusBadge, boolean>> = { modelUsage: false }
 
-const severityBackground = (severity: StatusSeverity): vscode.ThemeColor | undefined => {
+function severityBackground(severity: StatusSeverity): vscode.ThemeColor | undefined {
   if (severity === 'warning') {
     return new vscode.ThemeColor('statusBarItem.warningBackground')
   }
@@ -40,11 +40,11 @@ const severityBackground = (severity: StatusSeverity): vscode.ThemeColor | undef
   return undefined
 }
 
-const statusForeground = (status: string | undefined): vscode.ThemeColor | undefined => {
+function statusForeground(status: string | undefined): vscode.ThemeColor | undefined {
   return status === 'running' || status === 'starting' ? new vscode.ThemeColor('charts.blue') : undefined
 }
 
-const contextTooltip = (usage: ContextUsage): vscode.MarkdownString => {
+function contextTooltip(usage: ContextUsage): vscode.MarkdownString {
   const md = new vscode.MarkdownString()
   md.appendMarkdown(`**Context** — ${usage.percentage.toFixed(0)}% of the window\n\n`)
   for (const category of usage.categories) {
@@ -54,7 +54,7 @@ const contextTooltip = (usage: ContextUsage): vscode.MarkdownString => {
   return md
 }
 
-const usageTooltip = (rateLimits: Record<string, RateLimitInfo>, now: number): vscode.MarkdownString => {
+function usageTooltip(rateLimits: Record<string, RateLimitInfo>, now: number): vscode.MarkdownString {
   const md = new vscode.MarkdownString()
   md.appendMarkdown('**Plan usage**\n\n')
   for (const [key, info] of Object.entries(rateLimits)) {
@@ -73,7 +73,7 @@ const usageTooltip = (rateLimits: Record<string, RateLimitInfo>, now: number): v
   return md
 }
 
-export const badgeEnabled = (badge: StatusBadge): boolean => {
+export function badgeEnabled(badge: StatusBadge): boolean {
   return vscode.workspace.getConfiguration('workerdeck.statusBar').get<boolean>(badge, BADGE_DEFAULT[badge] ?? true)
 }
 

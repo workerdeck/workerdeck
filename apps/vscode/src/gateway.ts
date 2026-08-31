@@ -3,7 +3,7 @@ import { WorkerDeckClient } from '@workerdeck/client'
 import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl } from './hosts.ts'
 
-export const clientFor = async (store: HostStore, host: GatewayHost): Promise<WorkerDeckClient | undefined> => {
+export async function clientFor(store: HostStore, host: GatewayHost): Promise<WorkerDeckClient | undefined> {
   const base = apiUrl(host)
   if (!base) {
     return undefined
@@ -20,7 +20,7 @@ export const clientFor = async (store: HostStore, host: GatewayHost): Promise<Wo
 
 export type ProbeResult = 'connected' | 'unauthorized' | 'unreachable'
 
-export const probe = async (client: WorkerDeckClient): Promise<ProbeResult> => {
+export async function probe(client: WorkerDeckClient): Promise<ProbeResult> {
   try {
     await client.listSessions()
     return 'connected'

@@ -70,7 +70,7 @@ type ModelFactory = {
   build: (id: string) => LanguageModel
 }
 
-const resolveModelFactory = (): ModelFactory => {
+function resolveModelFactory(): ModelFactory {
   const modelId = process.env.EMBEDDED_MODEL ?? 'gpt-5.6-luna'
   const apiKey = process.env.OPENAI_API_KEY
   const provider = createOpenAI({ apiKey })
@@ -90,7 +90,7 @@ export type EmbeddedGateway = {
   unavailableReason?: string
 }
 
-export const createEmbeddedGateway = async (deps: GatewayDeps): Promise<EmbeddedGateway> => {
+export async function createEmbeddedGateway(deps: GatewayDeps): Promise<EmbeddedGateway> {
   const model = resolveModelFactory()
   const quickjs = new QuickJsExecutor({
     engine: await loadEngine(variant),

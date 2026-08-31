@@ -8,18 +8,20 @@ export type MaterializedAuthKey = {
   path: string | null
 }
 
-const generateKey = (): string => randomBytes(24).toString('hex')
+function generateKey(): string {
+  return randomBytes(24).toString('hex')
+}
 
 // One printable-ASCII line of at least 12 chars, so a truncated or garbage file regenerates rather than half-working.
-const usableStoredKey = (raw: string): string | null => {
+function usableStoredKey(raw: string): string | null {
   const line = raw.split('\n', 1)[0]?.trim() ?? ''
   return line.length >= 12 && /^[\x21-\x7e]+$/.test(line) ? line : null
 }
 
-export const materializeAuthKey = async (
+export async function materializeAuthKey(
   stateDir: string | null,
   options: { warn?: (message: string) => void } = {},
-): Promise<MaterializedAuthKey> => {
+): Promise<MaterializedAuthKey> {
   const warn = options.warn ?? ((message: string) => process.stderr.write(`[workerdeck] ${message}\n`))
   if (stateDir === null) {
     return { key: generateKey(), source: 'ephemeral', path: null }

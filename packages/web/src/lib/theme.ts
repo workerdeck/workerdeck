@@ -2,7 +2,7 @@ export type Theme = 'light' | 'dark'
 
 const KEY = 'workerdeck.theme'
 
-export const getTheme = (): Theme => {
+export function getTheme(): Theme {
   try {
     const stored = localStorage.getItem(KEY)
     if (stored === 'light' || stored === 'dark') {
@@ -12,16 +12,18 @@ export const getTheme = (): Theme => {
   return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-export const applyTheme = (theme: Theme = getTheme()): void => document.documentElement.setAttribute('data-theme', theme)
+export function applyTheme(theme: Theme = getTheme()): void {
+  return document.documentElement.setAttribute('data-theme', theme)
+}
 
-export const setTheme = (theme: Theme): void => {
+export function setTheme(theme: Theme): void {
   try {
     localStorage.setItem(KEY, theme)
   } catch {}
   applyTheme(theme)
 }
 
-export const toggleTheme = (): Theme => {
+export function toggleTheme(): Theme {
   const next: Theme = getTheme() === 'dark' ? 'light' : 'dark'
   setTheme(next)
   return next

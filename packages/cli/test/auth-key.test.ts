@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest'
 import { materializeAuthKey } from '../src/auth/auth-key.ts'
 
 const created: string[] = []
-const tempStateDir = async (): Promise<string> => {
+async function tempStateDir(): Promise<string> {
   const dir = await mkdtemp(join(import.meta.dirname, '.tmp-key-'))
   created.push(dir)
   return dir

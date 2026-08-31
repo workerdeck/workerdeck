@@ -203,7 +203,7 @@ export class BridgedWebSocket {
   }
 }
 
-const bodyToB64 = async (body: BodyInit): Promise<string> => {
+async function bodyToB64(body: BodyInit): Promise<string> {
   if (typeof body === 'string') {
     return b64FromBytes(new TextEncoder().encode(body))
   }
@@ -219,7 +219,7 @@ const bodyToB64 = async (body: BodyInit): Promise<string> => {
   throw new TypeError('unsupported request body type for the workerdeck bridge')
 }
 
-const b64FromBytes = (bytes: Uint8Array): string => {
+function b64FromBytes(bytes: Uint8Array): string {
   let binary = ''
   const chunk = 0x8000
   for (let i = 0; i < bytes.length; i += chunk) {
@@ -228,7 +228,7 @@ const b64FromBytes = (bytes: Uint8Array): string => {
   return btoa(binary)
 }
 
-const bytesFromB64 = (b64: string): Uint8Array<ArrayBuffer> => {
+function bytesFromB64(b64: string): Uint8Array<ArrayBuffer> {
   const binary = atob(b64)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) {

@@ -19,15 +19,15 @@ export const trpcClient = createTRPCClient<WikiRouter>({
 
 export const trpc = createTRPCOptionsProxy<WikiRouter>({ client: trpcClient, queryClient })
 
-export const isUnauthorized = (error: unknown): boolean => {
+export function isUnauthorized(error: unknown): boolean {
   return dataCode(error) === 'UNAUTHORIZED'
 }
 
-export const isNotFound = (error: unknown): boolean => {
+export function isNotFound(error: unknown): boolean {
   return dataCode(error) === 'NOT_FOUND'
 }
 
-const dataCode = (error: unknown): string | undefined => {
+function dataCode(error: unknown): string | undefined {
   const data = (error as { data?: { code?: unknown } } | null)?.data
   return typeof data?.code === 'string' ? data.code : undefined
 }
