@@ -4,7 +4,6 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   ENGINE_CAPABILITIES,
-  PROTOCOL_VERSION,
   type ContentBlock,
   type CreateSessionRequest,
   type FilePatch,
@@ -25,6 +24,7 @@ import type { PermissionDecision, Runner, SessionEventListener } from '../../run
 import { EventLog } from '../../lib/event-log.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { sessionTitle, withTitle } from '../../lib/title.ts'
+import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
 import { JsonRpcError } from './jsonrpc.ts'
 import { CodexAgentTracker, type CodexAgent } from './subagents.ts'
 import { untrustedProjectNotice } from './trust.ts'
@@ -588,17 +588,7 @@ export class CodexRunner implements Runner {
   }
 
   #childEnv(): Record<string, string> {
-    const base = this.#config.env ?? process.env
-    const env: Record<string, string> = {}
-    for (const [key, value] of Object.entries(base)) {
-      if (value !== undefined) {
-        env[key] = value
-      }
-    }
-    if (this.#config.codexHome) {
-      env.CODEX_HOME = this.#config.codexHome
-    }
-    return env
+    return codexChildEnv(this.#config.env ?? process.env, this.#config.codexHome)
   }
 
   get status(): SessionStatus {
@@ -704,14 +694,7 @@ export class CodexRunner implements Runner {
   async #openScratchConnection(): Promise<AppServerConnection> {
     const connection = this.#config.connectFn({ env: this.#childEnv() })
     try {
-      await connection.request('initialize', {
-        clientInfo: {
-          name: 'workerdeck',
-          title: 'WorkerDeck',
-          version: `protocol-${PROTOCOL_VERSION}`,
-        },
-        capabilities: { experimentalApi: true },
-      })
+      await connection.request('initialize', INITIALIZE_PARAMS)
       connection.notify('initialized')
       return connection
     } catch (error) {
@@ -978,14 +961,7 @@ export class CodexRunner implements Runner {
         this.#activeTurn?.reject(new Error(message))
       })
       try {
-        await connection.request('initialize', {
-          clientInfo: {
-            name: 'workerdeck',
-            title: 'WorkerDeck',
-            version: `protocol-${PROTOCOL_VERSION}`,
-          },
-          capabilities: { experimentalApi: true },
-        })
+        await connection.request('initialize', INITIALIZE_PARAMS)
       } catch (error) {
         // Don't leave a half-initialized child around: the next message must respawn from scratch.
         connection.close()

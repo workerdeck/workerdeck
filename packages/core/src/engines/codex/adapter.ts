@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { ENGINE_CAPABILITIES, PROTOCOL_VERSION, type ProfileInfo, type SdkSessionSummary } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, type ProfileInfo, type SdkSessionSummary } from '@workerdeck/protocol'
 import type { EngineAdapter, EngineAvailability } from '../adapter.ts'
 import { CodexRunner } from './runner.ts'
 import { CODEX_CATALOG } from './catalog.ts'
+import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
 import { connectAppServer } from './process.ts'
 import type { AppServerConnectFn, AppServerThreadListResponse, AppServerThreadSummary } from './types.ts'
 
@@ -57,15 +58,7 @@ const checkCodexAvailability = async (
   if (!executable) {
     return { available: false, reason: NOT_INSTALLED }
   }
-  const childEnv: Record<string, string> = {}
-  for (const [key, value] of Object.entries(env)) {
-    if (value !== undefined) {
-      childEnv[key] = value
-    }
-  }
-  if (profile.codexHome) {
-    childEnv.CODEX_HOME = profile.codexHome
-  }
+  const childEnv = codexChildEnv(env, profile.codexHome)
   return new Promise((resolve) => {
     execFile(executable, ['login', 'status'], { env: childEnv, timeout: options.timeoutMs ?? 10_000 }, (error, stdout, stderr) => {
       if (!error) {
@@ -136,26 +129,11 @@ export const listCodexSessions = async (options: {
   limit?: number
   offset?: number
 }): Promise<SdkSessionSummary[]> => {
-  const childEnv: Record<string, string> = {}
-  for (const [key, value] of Object.entries(options.env)) {
-    if (value !== undefined) {
-      childEnv[key] = value
-    }
-  }
-  if (options.profile?.codexHome) {
-    childEnv.CODEX_HOME = options.profile.codexHome
-  }
+  const childEnv = codexChildEnv(options.env, options.profile?.codexHome)
   const connection = options.connectFn({ env: childEnv })
   const rows: AppServerThreadSummary[] = []
   try {
-    await connection.request('initialize', {
-      clientInfo: {
-        name: 'workerdeck',
-        title: 'WorkerDeck',
-        version: `protocol-${PROTOCOL_VERSION}`,
-      },
-      capabilities: { experimentalApi: true },
-    })
+    await connection.request('initialize', INITIALIZE_PARAMS)
     connection.notify('initialized')
     const base: Record<string, unknown> = {
       limit: LIST_PAGE_SIZE,
