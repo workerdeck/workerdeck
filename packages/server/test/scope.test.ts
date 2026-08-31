@@ -9,6 +9,7 @@ import { ParkableRunner } from './parkable-runner.ts'
 import {
   createFileSessionStore,
   createWorkerServer,
+  MemorySessionStore,
   sandboxedProviderProfile,
   type EngineRunnerContext,
   type WorkerServer,
@@ -480,6 +481,49 @@ describe('session scope', () => {
 
     expect((await post('alice-a', 'exec-1')).status).toBe(200)
     expect(parkable.at(-1)!.settled.map((s) => s.executionId)).toEqual(['exec-1'])
+  })
+
+  it('404s an orphaned execution byte-identically, never disclosing its owner', async () => {
+    // The exposed state: parking still maps the execution to its owner while the session is in neither registry nor store (record lost).
+    // The first refused submit settles the id; the second must not answer 200 with the sessionId.
+    const store = new MemorySessionStore()
+    const parkable: ParkableRunner[] = []
+    running = createWorkerServer({
+      authenticate: (req) => PRINCIPALS[(req.headers.authorization ?? '').replace(/^Bearer /, '')] ?? null,
+      profiles: [sandboxed()],
+      parking: { parkDelayMs: 10, store },
+      createEngineRunner: ({ config, restore }) => {
+        const runner = new ParkableRunner(restore?.id ?? `q${parkable.length + 1}`, config, restore)
+        parkable.push(runner)
+        return runner
+      },
+    })
+    const { port } = await running.listen(0, '127.0.0.1')
+    const base = `http://127.0.0.1:${port}/v1`
+
+    const id = await sessionIdOf(await createSession(base, 'alice-a'))
+    parkable[0]!.defer('exec-9')
+    await vi.waitFor(async () => expect(await store.get(id)).not.toBeNull())
+    await store.delete(id)
+
+    const post = (token: string, executionId: string): Promise<Response> =>
+      fetch(`${base}/executions/${executionId}/result`, {
+        method: 'POST',
+        ...as(token),
+        body: JSON.stringify({ status: 'ok', output: { value: 'forged' } }),
+      })
+
+    const expected = await (await post('carol-b', 'no-such-exec')).text()
+    const first = await post('carol-b', 'exec-9')
+    const second = await post('carol-b', 'exec-9')
+    const secondText = await second.text()
+    expect(secondText).not.toContain(id)
+    expect(second.status).toBe(404)
+    expect(secondText).toBe(expected)
+    expect(first.status).toBe(404)
+    expect(await first.text()).toBe(expected)
+    expect((await post('alice-a', 'exec-9')).status).toBe(404)
+    expect(parkable.some((r) => r.settled.length > 0)).toBe(false)
   })
 
   it('refuses a runner that does not echo its scope', async () => {

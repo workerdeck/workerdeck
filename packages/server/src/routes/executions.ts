@@ -46,10 +46,12 @@ export const handleExecutionResult = async (
     const info = owner === undefined ? undefined : (registry.get(owner)?.info() ?? (await parking.get(owner))?.info)
     const profile = info?.profile
     // Indistinguishable from an unknown id on purpose: whether an execution exists elsewhere is not this caller's business.
+    // A vanished session (`info === undefined`) refuses too — nobody passed canSee, and submitResult would disclose the owner id.
     const refused =
       owner === undefined ||
+      info === undefined ||
       (auth.allowedProfiles !== undefined && profile !== undefined && !auth.allowedProfiles.includes(profile)) ||
-      (info !== undefined && !authSvc.canSee(auth, info))
+      !authSvc.canSee(auth, info)
     if (refused) {
       json(res, 404, { error: 'execution not found' })
       return
