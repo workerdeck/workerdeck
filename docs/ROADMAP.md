@@ -200,10 +200,12 @@ ships inside 0.15.0. Do not publish a v0.14.0 after the fact.
   window. The `+` in a view title is the only way to create: no body grows a second button, so
   empty states point at it in words. Plus **four separate section views** — Session Info, Context, Usage, MCP Servers — each
   its own VS Code view off one shared bundle, so collapse/reorder/drag-anywhere are VS Code's
-  own. They are **always contributed and start collapsed** rather than appearing and
-  disappearing on `when` clauses — a sidebar that changes shape under the pointer as sessions
-  are selected is worse than one that says "no session" in a header description — and a view
-  the engine's capability record forswears renders an empty state instead of vanishing. The agent panel
+  own. All four are gated on `when: workerdeck.hasSession`, so they arrive and leave together with
+  a session rather than churning per selection (only Session Info also starts `collapsed`). Once
+  contributed they never vanish again: a view cannot be disabled or collapsed through the VS Code
+  API, so "inert" is said the only two ways that exist — the header's `description` (`no session`,
+  `not reported`, `not supported`) and an empty state in the body. A view the engine's capability
+  record forswears therefore renders that empty state instead of disappearing. The agent panel
   is purely the conversation: `SessionPanel` grew `panelSurface: 'external'` + `onOpenPanel`
   + `onVitals` seams in `ui`, so the panel renders no dialogs and relays intents and live
   vitals outward instead. The status bar went the same way — `statusSurface: 'external'`

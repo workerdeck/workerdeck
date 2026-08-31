@@ -382,10 +382,22 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   the command *unsandboxed*, a bigger grant than approving one Claude edit, which is why the
   request carries codex's own escalation sentence. `acceptEdits` auto-runs in-workspace writes
   (the sandbox allows them, so nothing asks) and still asks for what the sandbox refuses.
-  `plan`/`dontAsk`/`auto` are still not offered — they name CLI workflows codex cannot deliver.
+  `plan`/`dontAsk` are still not offered — they name CLI workflows codex cannot deliver.
   Each policy is stated twice on the wire — `thread/start` takes `sandbox` (string) +
   `approvalPolicy`, `turn/start` takes `sandboxPolicy` (object) + `approvalPolicy` — keep all
   four in lockstep.
+- **`auto` IS offered, and it is a THIRD axis — *who reviews* — not a fourth sandbox.**
+  `ENGINE_CAPABILITIES.codex.permissionModes` carries it. Codex's own "Approve for me" is
+  workspace-write + ask — the same sandbox and the same granular flags as `acceptEdits`, because
+  without the flags there is no request for a reviewer to answer — plus
+  `approvalsReviewer: 'auto_review'` on `thread/start` *and* `turn/start`, which routes every
+  approval to codex's risk-assessing subagent instead of to the user. The reviewer is stated
+  explicitly for every mode (`'user'` for the other three) rather than omitted for the default: a
+  thread inherits it across turns, so leaving it unset lets a stale `auto_review` survive a switch
+  back to a user-reviewed mode. **The semantic gap no client may paper over**: the Claude engine's
+  `auto` classifier is operator-configurable (`autoMode.environment`, allow/soft_deny/hard_deny),
+  while codex's reviewer is a fixed, OpenAI-prompted subagent with no configuration surface at
+  all. Same mode name, different tunability — say so wherever the mode is explained.
 - **Network access is NOT an approval question, and `turn/start`'s object-form sandbox policy
   will silently take it away.** Codex has three independent axes, not two: sandbox mode, approval
   policy, and — inside workspace-write only — `network_access`, which is **off by default** and
@@ -482,7 +494,9 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `explicitRequestOnly`, so a user who asks for sub-agents gets them. A spawned agent announces
   itself as a `subAgentActivity` item on the root thread (`{id, kind, agentThreadId, agentPath}`;
   `kind` is `started|interacted|interrupted` — **there is no `completed`**, the child thread's
-  `turn/completed` is the finish), and thereafter its items, its deltas, its token usage and its
+  `turn/completed` is the finish; codex sends no `tool_use` for a spawn either, so the runner
+  authors the anchor call itself as `CODEX_AGENT_TOOL`, which is what every agent affordance
+  downstream keys off), and thereafter its items, its deltas, its token usage and its
   own turn lifecycle all arrive on the **same JSON-RPC connection**, distinguished only by the
   `threadId` every notification carries. Two consequences, and the first shipped as a bug:
   **(a) thread-scoped notifications must be read off the root thread only.** `turn/started`,
@@ -1001,7 +1015,22 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   it ever made. (3) The `SessionInfo` snapshot is taken a microtask after the event, since
   listeners run *inside* `#emit`, before the runner has applied what the event means — read
   synchronously, a `session_closed` notification reports `status: 'starting'`. Seq and ts still
-  come from the event, so identity and ordering are untouched.
+  come from the event, so identity and ordering are untouched. Two more rules on that snapshot:
+  `runner.info()` is read at **send** time, not delivery time — the payload must describe the
+  session as the event left it, not as it is after three webhook retries — and the notifier's
+  webhook delivery is a deliberate near-copy of the queue's job-webhook delivery rather than a
+  shared helper, because coupling them would let a change to job deliveries silently change
+  session ones.
+- **Two CSRF details in `createCliAuth` sit beside the `Origin` rule above.** (a) The origin
+  verdict is **tri-state** — `absent` / `ok` / `foreign` — because absence means different things
+  per call site: every current browser sends `Origin` on cross-site POSTs and on every WS
+  handshake, so absent means a non-browser client, which carries no ambient cookie. Login and
+  logout therefore allow absent-Origin (curl-style provisioning) while unsafe methods and upgrades
+  on a *cookie*-authenticated request require it present. (b) The cookie is `SameSite=Lax`, not
+  Strict, on purpose: Strict drops the cookie on a top-level navigation from an external link,
+  landing a logged-in operator on the login page, and buys nothing the explicit Origin check does
+  not already cover — the real surfaces are same-site-different-port and the WS handshake, both of
+  which need that check whatever `SameSite` says.
 
 ## Host filesystem (`/v1/fs/*`)
 
@@ -1228,6 +1257,11 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   holding by construction, which a flag whose meaning grew after shipping would destroy. The live
   half is `SubscriberSet` (`core/src/lib/subscribers.ts`), which is also where the answer to "which
   filters reach live events" is now written down once instead of three times.
+  **Why the live path too, and not just replay**: bytes on a live event have only two fates on the
+  client, and both are worse than an address. Discarded, they were 335 KB (median) delivered once
+  per attached watcher for nothing; kept, they need a second decode-from-event render path, which
+  pins megabytes of base64 inside `TranscriptState` — and the transcript LRU then retains that
+  across session switches. That is the disease relocated, not cured.
 
 - **A truncating replay is the fourth filter, and the only one that changes an event's
   *content*.** With `truncateResults`, a `tool_result` block over
@@ -1308,7 +1342,14 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   line appears and vanishes inside ~0.5s, which is the flicker the hold exists to remove, moved
   to the top of the panel. `wd-hold-appear` holds it at `opacity: 0` and fades it in only after
   600ms, so a healthy attach never paints it. The general rule: do not announce a wait too short
-  to notice.
+  to notice. (`visibility` is also the one hiding property a descendant can turn back **on**,
+  which is how that line stays visible inside a hidden root.)
+- **The reveal must paint already at the bottom, and the follow spring cannot do it.** Even
+  `scrollToBottom('instant')` defers behind a `requestAnimationFrame` — one frame after the
+  reveal's paint, measured as a revealTop of 33,037 against a final 34,459 on the 600-row fixture,
+  i.e. a visible jump. What lands in the same frame is a layout effect on the hold's falling edge
+  pressing `use-stick-to-bottom`'s own `state.scrollTop` setter (recorded in `ignoreScrollToTop`
+  so the write is not read back as user intent).
 
 - **`truncateResults` is replay-only, and the two "+N chars" markers are indistinguishable on
   screen.** A result that arrives while you watch is never truncated (`packages/core/src/lib/
@@ -1359,6 +1400,60 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   grid" button. Re-run the audits after any change to row structure — both instrument bugs found
   building the scrubber inflated *coverage* rather than accuracy and would have read as
   calculator bugs.
+
+- **The scrubber's right lane anchors on the answer, not the turn end.** Building marks from
+  `turn_result` items alone is silently history-blind: `#backfillHistory` maps only `user` and
+  `assistant` entries, so a resumed session — or any session replayed after a gateway restart —
+  carries no turn rows at all and the whole right lane comes back empty while the blue lane
+  survives, which reads as a rendering bug rather than a missing input. The rule: emit the turn
+  mark for the last top-level assistant message of each segment and let a `turn_result`, where it
+  exists, *decorate* it (failed colour, peek done-line). Both this and the unmarked-live-answer
+  bug were pure logic, and the scrubber unit tests now pin them.
+
+- **What pins the sticky prompt is a one-line `overflow: hidden` head, and the browser does the
+  pinning.** The head re-renders the same row laid exactly over the real row's first line,
+  `aria-hidden` with no pointer events (the real row keeps interaction and the a11y tree). Each
+  prompt row renders inside a **lane** — an absolutely positioned strip spanning its turn — with
+  the head `position: sticky` inside it: `sticky` is inert *on* an absolutely positioned element
+  but works unchanged on a child *of* one, confined to the lane's box. An earlier version clamped
+  the row's transform from render and paid for it every frame; any JS-written pin runs behind the
+  compositor, so the row wobbled under momentum scroll. Three edges: the head must ride in its
+  **own absolutely positioned sub-lane**, never in flow with its footprint cancelled by a negative
+  bottom margin (sticky confinement clamps the *margin* box, so a zero-height margin box lets the
+  head overshoot the lane's end by its own height and puts two pinned prompts on screen during the
+  handoff); the lane is positioned with `top`, **not** the `translateY` every other row gets
+  (sticky resolves at layout time, a transform is paint-only, so under a translate the head sticks
+  against the lane's un-translated box and never pins at all); and `rangeExtractor`, which forces
+  the pinned row into the virtual range, must compute the active prompt from the virtualizer
+  instance's own offset — the range pass runs before the render that would refresh a ref, so a
+  value computed outside the callback is one scroll event stale.
+
+- **A focus-takeover guard keys on where the keyboard IS, not on how many times an effect ran.**
+  A `mounted` ref (refuse the first pass, follow after) is unsafe under React StrictMode, whose
+  dev-only mount/unmount/remount preserves refs: the second pass sees `mounted === true`, skips
+  the guard, and steals focus from a half-written message — correct in production, wrong in dev.
+  Related, and the other half of the same rule: `isTyping` tests the field's *content*, not its
+  focus. VS Code keeps the composer focused at all times (on session show, and on any dead-space
+  click), so guarding on focus alone means the approval prompt can never take the keyboard. An
+  empty field has nothing to lose; a half-typed message wins.
+
+- **The pulse frames `⋄ ◇ ◈ ◆` (`U+25C6/7/8`) are East-Asian *ambiguous width*.** Under an
+  East-Asian locale a terminal may render them double-width and shift every line carrying them, so
+  they are safe only where the glyph sits centred in a fixed-width box — which is exactly what the
+  terminal theme's gutter cell (`.term-gutter`, one `--term-cell` wide) is. **Anything writing to
+  a real terminal must use the ASCII set instead.** Frames are 150ms so one cycle is the 0.6s
+  clock `icon-loading.svg` pulses on, and the rest frame is the complete mark, so stopping never
+  lands on a half-drawn one.
+
+- **The vendored prompt-area's list continuation rewrites `- ` to `• ` in the MODEL, not just on
+  screen** — a bulleted message reached the agent as `• item`, which is a list to no markdown
+  parser and a glyph the character grid has no cell for. It is switched off in `Composer`; the
+  convenience survives because `insertListContinuation` keys on `[•\-*] ` and reuses the line's own
+  marker, so Enter after `- item` still inserts `\n- ` and Enter on an empty item still leaves the
+  list. Relatedly the terminal composer's gutter interrupt is `✕`, not `■`: the square reads as a
+  *state* in a column where `●` and `◆` really are states, and `✕` is one of the few candidates
+  that measures exactly 1ch in JetBrains Mono (`⏹`, `⏸`, `⏻` are 1.05–1.31 cells and break the
+  grid).
 
 - **iOS: a tap that stopped a scroll is not a press.** `TerminalRowCell` puts a
   `UITapGestureRecognizer` on the cell, and `allowableMovement` does not cover this on its own — a
@@ -1434,8 +1529,40 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   there and `navigator.clipboard.writeText(...)` throws outright. Copy through `copyText`
   (`ui/src/lib/clipboard.ts`), which falls back to `document.execCommand('copy')` over an
   off-screen textarea: deprecated, universally implemented, and the only thing that works here.
-  The textarea must be *off-screen* rather than `display: none` — a hidden element cannot hold a
-  selection, so the copy would silently do nothing.
+  The textarea must be *off-screen* rather than `display: none`/`visibility: hidden` — a hidden
+  element cannot hold a selection, so the copy would silently do nothing. Every new copy
+  affordance routes through `copyText`; note `CopyAction` in `terminal/affordances.tsx` still
+  calls `navigator.clipboard` directly and so no-ops on LAN HTTP.
+- **`crypto.randomUUID()` is gated on a secure context too, so it is `undefined` on exactly the
+  deployment multi-gateway exists for**: a dashboard served over plain HTTP on a Tailscale name.
+  (`localhost` counts as secure, which is why it only breaks off the machine.) `newHostId()`
+  therefore builds a v4 from `crypto.getRandomValues`, which carries no such gate, and uses
+  `randomUUID` only where it happens to exist — the id keys a localStorage record, so uniqueness
+  within one browser is the entire requirement.
+- **The sub-agent frame round-trips through the URL, and three rules keep it from looping.**
+  `SessionView` navigates `?subagent=<toolUseId>&sn=<n>` into the panel and folds the panel's
+  `onSubagentChange` report back into the same param, so the URL stays the one truth about what is
+  on screen (the sidebar's secondary selection reads it, a copied link reproduces it,
+  Back/Forward drive the frame through `openSubagent`'s withdrawal semantics). (1) **No-op on
+  match** — the commonest report is the echo of our own request, and navigating again for it
+  starts a URL → panel → URL cycle with nothing to say. (2) **`sn` rides through unchanged** when
+  the panel entered a frame the URL didn't ask for (a Task row pressed in the transcript): the
+  panel's request effect keys on the nonce, so an unchanged one makes our write inert on arrival
+  while a fresh nonce re-requests the very frame we are merely describing — a fresh nonce per
+  report *is* the loop. (3) **`replace`, never push** — a report is bookkeeping about state
+  already on screen, so Escape does not mint a history entry per press. The visible consequence: a
+  frame entered from inside the transcript leaves no history entry, so Back from it exits the page
+  rather than the frame; the strip's Back and Escape are the frame's own way out.
+  `?reveal=<toolUseId>&rn=<n>` is a separate pair, not a flag — a **task** has no agent behind it,
+  so framing its tool-use id selects no items and draws an empty agent view.
+- **The VS Code webview stamps its first paint into the HTML, and has no `connect-src` at all.**
+  Every byte to a gateway rides postMessage, so the shared skeleton declares no external
+  `connect-src`; `img-src` allows http(s) for inline images on **keyless** gateways only, because
+  header auth cannot ride an `<img>` (the same trade the iOS client makes). Everything the first
+  paint needs — font mode, density, variant, terminal cell, affordances, panel font size — is
+  stamped on `<html>`/`#root` rather than pushed over the bridge: a postMessage arrives one tick
+  late and these decide every row's height, so a late reading reflows the whole transcript in
+  front of the reader. Changing any of them re-renders the HTML.
 - **The dashboard is a build artifact; the packages are not.** `pnpm dev:server` is
   `pnpm dashboard && pnpm cli …`, so the gateway serves `packages/web/dist/` while every package
   resolves to source through the `@workerdeck/source` condition. A long-running `pnpm dev:server`
@@ -1478,9 +1605,24 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `escapedFromLock` from `handleScroll`'s reading of user *intent*, so a test that "scrolls up" by
   assigning `scrollTop` leaves the reader still locked and proves nothing about the pin; escape it
   with a synthetic `WheelEvent`. And the library's resize guard (`state.resizeDifference`) watches
-  the **content**, while the composer shedding lines resizes the **scroller** — a class of size
-  change that guard structurally cannot cover, though it has not been caught breaking the pin in
-  the `packages/ui/dev` harness.
+  the **content**, while a composer that grows resizes the **scroller** — the two are siblings in
+  the panel's flex column, so typing a newline shrinks the scroller and the row being read slides
+  under the fold, with the content unchanged and no scroll event to notice it by. That class of
+  size change the guard structurally cannot cover, hence a `ResizeObserver` of our own on the
+  scroller's box, re-pinning **only when already pinned**.
+- **A new height epoch invalidates every remembered size, the *measurements* included** — they
+  were taken at the old width. `virtualizer.measure()` clears the size cache, but a row re-enters
+  it only when its ResizeObserver fires, which needs a *size change*: a mounted row whose height
+  happens to survive the width change (short lines that never rewrap) keeps its estimate forever,
+  and wherever the estimate is off the transcript grows a phantom tail — measured at 2,052px of
+  scrollable nothing after one sidebar toggle on a real session. So the mounted rows are fed
+  straight back in, with two sharp edges. **Order**: `resizeItem` diffs a measure against
+  `measurementsCache`, which straight after `measure()` is still the pre-wipe array, so an
+  unchanged row diffs to zero and the write is skipped — reading any measurement first (e.g.
+  `getTotalSize()`) rebuilds the array from estimates and the diff is real again. **`resizeItem`
+  directly, never `measureElement(element)`**: the latter is gated on the scroll state and
+  silently drops a measure that lands while a scroll is still hot, which a resize's own scroll
+  anchoring makes routine.
 - **`useFlushSync` looks like dead weight and is not.** It draws a React "flushSync was called
   from inside a lifecycle method" error — corrections fire from `measureElement`'s ref callback,
   inside the commit — which in an embedder's console reads as a WorkerDeck bug. Turning it off
@@ -1578,6 +1720,11 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   answer that 404, because the catch-all below will otherwise answer for it — and it will answer
   405 or a 200 with an HTML document, both of which read as a broken gateway rather than an absent
   feature. Only reachable with the dashboard on; `--no-web` 404s and hid it.
+- **Two things 401 `pnpm smoke:push` against a real gateway.** `WD_AUTH_KEY` (the gateway's own
+  operator secret, `<state-dir>/auth-key`) is needed the moment `--auth-key` is in play; and the
+  host must be spelled **the way the gateway was started** — the Host-header guard rejects the
+  tailnet IP of a gateway launched with `--host <name>`, and it answers `unauthorized` rather than
+  anything that mentions hosts.
 - `fetch`/undici will not do: APNs is HTTP/2 only, hence `node:http2` directly.
 - The APNs key's **environment and restriction scope cannot be changed after the key is created**
   (the portal now forces the choice at creation, and a team gets only two active keys). WorkerDeck's
@@ -1642,6 +1789,27 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   lists what the engine store holds, and a create with `resume: <id>` and *no* first prompt
   replays the whole thread — the engine backfills, no turn is sent, no tokens are spent. A real
   ~1000-row transcript lands in seconds, which is the thing worth scrolling in a perf sweep.
+- **`@workerdeck/ui/workspace` is a separate entry point purely so Monaco stays unreachable from
+  the root entry**, and `sideEffects: false` is not what saves you. Rollup does drop `CodeEditor`
+  from a `SessionPanel`-only bundle, but Vite resolves Monaco's `new Worker(new URL(…,
+  import.meta.url))` calls during *transform*, before tree-shaking runs, and emits ~9MB of
+  language-service workers as assets that are never retracted. Unreachability from the root entry
+  is the thing that prevents it — which is also why `monaco-editor` is an **optional peer**:
+  importing the workspace entry means installing it, importing only the root entry means not
+  having to.
+- **The dashboard aliases away Monaco's four worker-backed language services** (TypeScript, JSON,
+  CSS, HTML): 8.8MB of the build, `ts.worker` alone 6.7MB of the TypeScript compiler, buying
+  IntelliSense and schema validation in a pane whose job is reading and small edits. Monarch
+  highlighting for ~90 languages is unaffected — a separate main-thread mechanism
+  (`languages/definitions/*`). It is an alias rather than a hand-written Monaco entry because such
+  an entry must import `codicon.css`, and monaco-editor's exports map (`"./*": "./esm/vs/*.js"`)
+  cannot resolve a `.css` subpath at all; an embedder who wants IntelliSense simply omits the
+  alias. The alias regex matches the **whole** specifier, not a suffix — Vite substitutes only the
+  matched span, so a partial match leaves the `./` prefix glued to an absolute replacement path.
+  Separately, `optimizeDeps.exclude: ['monaco-editor']` is load-bearing: the dev dep optimizer
+  rewrites the package into `.vite/deps/`, where the `new URL(…, import.meta.url)` worker paths
+  404, and Monaco then logs "Failed to load worker script" and silently runs the worker on the
+  main thread — exactly the UI freeze the worker exists to avoid.
 - A package that imports a workspace sibling needs the vitest workspace-source alias (see
   `packages/core/vitest.config.ts`) — the `@workerdeck/source` condition alone isn't enough,
   vite-node externalizes siblings to their unbuilt `build/` entries.

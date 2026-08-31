@@ -314,7 +314,11 @@ everyone would silently skip a park. `src/lib/replay.ts` is the backwards scan b
 untrusted-code boundary: QuickJS-NG WASM guest, in-memory map VFS (not a
 node-fs emulation — the tab-side host runs it unpolyfilled), by-value host bridge,
 interpreter-enforced limits. Leaf like `protocol`; engine variant injected, so server and
-browser share one guest.
+browser share one guest. The VFS is **per call** — seeded from the task's documents, discarded
+when the call ends, and reachable from the guest only through the by-value bridge (`vfs.read` /
+`write` / `list` over the `__host_vfs_*` host functions). The tab-side tool host builds one per
+bridged call, which is the reason it must stay a plain path→content map: a node-flavored fs
+emulation drags `node:buffer` in with it, and that package must run unpolyfilled.
 ## `packages/queue`
 
 `JobQueue` + `QueueAdapter` (in-memory bundled; `claimNext` must stay atomic
@@ -326,7 +330,10 @@ HTTP + WS gateway (`node:http` + `ws`): session registry, auth hook,
 profiles served with their engine's **capability record, static model catalog, and
 availability verdict** from the first request (`forResponse`; probes are adapter-run, gated on
 `checkCredentials`, ~60s TTL, display-only — only the *default* model is still learned from
-sessions, because it is the operator's CLI config),
+sessions, because it is the operator's CLI config; `GET /profiles/:name` serves the **same**
+decoration as the list, having once served the bare record, which made the detail route answer
+*less* about a profile than the list it was opened from — a client could reach the usage state
+only by listing),
 **plan usage per profile** (`profile-usage.ts` → `ProfileInfo.usage`), because usage had only
 ever lived in session transcripts: a session's own reading is refreshed by nothing but a turn,
 so one idle since yesterday replays yesterday's number as current, and a session opened today
@@ -376,7 +383,12 @@ capability-record request gating (`checkEngineGrants` 400s what the engine's rec
 `stripInertFields` drops `questionBehavior` where no approval channel exists),
 `SessionNotifier` (`notifications.ts`) — server-wide session webhooks for the four
 human-attention moments, subscribed through `SessionRegistry`'s `onRegister` so a rebuilt
-parked session is covered too; transport-agnostic on purpose (no push credentials here),
+parked session is covered too; transport-agnostic on purpose (no push credentials here).
+`onRegister` fires per runner **object**, not per `register` call, and every watcher that
+subscribes in it depends on exactly that: re-registering the same runner (`prepare()` lists it,
+then the caller registers what it returned) does not re-fire, while a *different* object under a
+known id — the rebuild of a parked or dormant session — is a new runner and does, so a rebuilt
+session is covered once and only once,
 **session scope** — `CreateSessionRequest.scope`, opaque string tags assigned at create,
 immutable after, echoed on `SessionInfo`, and the only intra-deployment scoping primitive there
 is. The split is the design: WorkerDeck stores and *enforces* the tags, the embedder's
@@ -460,23 +472,67 @@ caller tell "this server has no such route" (404 — stop asking) from "that fil
 `AttachOptions.truncateResults` + `client.toolResult(...)` are the client half of the truncating
 replay, and the default is off **on purpose and permanently**: only the unit that renders may ask
 for heads, since a caller that cannot fetch them back would present one as the whole result.
+The sizing evidence behind the two replay-slimming flags is worth keeping, because it says which
+one to reach for: `truncateResults` was designed against a projected 68% cut and measured
+**0.3%** on a real session — the projection had counted base64 as text. `imageRefs` is where the
+bytes actually are: across 214 local sessions **91% of all tool-result payload is base64 no
+client renders** (489 MB against 44 MB of text, two thirds of it `Read` looking at a PNG), and
+one session's attach fell from 4,550 KB to 771 KB with no image in it. It is its own flag rather
+than a widening of `truncateResults` because "additive at protocol 7" then rests on a client that
+never asked being unable to receive one *by construction*, not by release archaeology.
 `buildWsUrl` took an optional third parameter rather than becoming an options object, so every
 existing implementation still typechecks — and a custom one that ignores it merely gets a full
 replay, which is safe because every client keys its rendering off the server's own marker and
 never off what it asked for.
-`projectIcon(sessionId)` is the third blob-returning method beside `readProducedFile` and
-`toolResultImage`, and the one whose existence a client settled rather than convenience: a VS
-Code webview has **no external `connect-src` at all**, so it cannot point an `<img src>` at a
-gateway even in principle and the bytes must ride the bridged fetch. Cache by
-`ProjectIcon.image.hash`, never by session — that is what the hash is on the wire for.
-It also owns `apiUrl`/`isLoopbackHost` (`src/host-url.ts`): what an operator types turned into
-a `baseUrl`, and whether that gateway is this machine — decided from the URL, never by probing
-paths. Here because every host that lets someone type a gateway address must normalize it
-identically, or the same gateway saved twice is two gateways.
+The three blob-returning methods — `readProducedFile`, `toolResultImage`, `projectIcon` — all
+**fetch bytes rather than hand back a URL**, and that is the whole reason each exists. A gateway
+URL in an `<img src>` carries a credential in exactly one of this project's four clients (the
+dashboard, same-origin, where the cookie rides along); everywhere else — an added cross-origin
+gateway on a Bearer header, iOS, and above all a VS Code webview, which has **no external
+`connect-src` at all** and so cannot point at a gateway even in principle — the URL is
+unauthenticated and the picture is a broken icon. Fetched, then handed to `URL.createObjectURL`.
+Cache an icon by `ProjectIcon.image.hash`, never by session — that is what the hash is on the
+wire for.
+`WorkerDeckClient.identityKey` (base URL plus auth headers, order-insensitive) is for
+client-side caches that must survive the client *instance* being rebuilt — a `useMemo` recreating
+it when a view switches gateways — without ever sharing an entry across gateways (a session id is
+unique only within one) or across credentials. Auth riding outside `headers` (a same-origin
+cookie, a host-side fetch shim) is chosen per origin in every such host, so the base URL still
+separates principals; an embedder whose principal varies some other way on one base URL must not
+key anything on it.
+It also owns `apiUrl`/`isLoopbackHost` (`src/host-url.ts`) and `hostAuth` (`src/host-auth.ts`),
+and they sit together for one reason: every host that lets someone type a gateway address **and**
+a key has to normalize and present both identically, or the same gateway works in one client and
+not another (and the same gateway saved twice is two gateways). `isLoopbackHost` decides from the
+URL, **never by probing paths for existence** — two checkouts of the same repo would lie — and in
+a remote development window the caller runs on the remote box, so "loopback" correctly means
+*that* machine and its paths are real files there. `host-url.ts` was extracted because two copies
+already existed (iOS `Host.apiURL`, the extension's port) and a third was coming. `hostAuth` is
+browser-shaped on purpose: a Node host such as the extension sends the key as a header on both
+transports and needs none of it. Should a gateway ever mint short-lived WS tickets, only the body
+of `buildWsUrl` changes and callers do not.
 ## `packages/react`
 
 headless: `useClaudeSession`, the pure transcript reducer
-(`src/lib/transcript.ts`, framework-free, unit-tested — keep rendering out), the two halves of
+(`src/lib/transcript.ts`, framework-free, unit-tested — keep rendering out). Two reducer rules
+are not readable off the types. **Streaming is per agent, not per session**: the in-flight ids
+are `streaming` / `streaming-thinking` on the main thread and `streaming:<parentToolUseId>` /
+`streaming-thinking:<parentToolUseId>` inside a subagent, because a forwarded subagent streams
+*concurrently* with its parent — under one id three parallel Tasks weld into a single row and the
+first `assistant_message` to land wipes them all, including ones still being written. And
+`turn_result` finalizes **every** agent's in-flight stream under stable ids
+(`text-<seq>[-<parent>]` / `thinking-<seq>[-<parent>]`): an interrupted or failed turn never
+sends the superseding `assistant_message`, so a leftover streaming item would be wiped by the
+next turn's message and glued onto by the next turn's deltas, and a leftover
+`streaming:<id>` would be adopted by the next `Task` reusing that id. The stable id carries the
+agent because two agents finalizing on one `turn_result` would otherwise collide — upsert keys by
+id. A person's **slash command** arrives as a user message wrapped in
+`<command-message>/<command-name>/<command-args>` markup; the reducer renders the typed command
+line and never the wrapper, and it must not be suppressed here *or* in the runner — hiding it
+erases the turn's cause, and protocol's `transcriptActivity` counts a non-synthetic user message
+as one row, so suppression would silently disagree with the unread count. CLI-side local command
+output arrives as user text in `<local-command-stdout|stderr>` tags and renders as an info/error
+notice. Also the two halves of
 **opening a session without flicker** (the ask was "no travel, no flash, no visible DOM
 append", and scroll position was never the problem — the attach replays hundreds of rows in
 bursts and you watch them stream past a correctly-pinned viewport): `replaying`, a hold on the
@@ -484,7 +540,13 @@ exact signal that `AttachedFrame` arrives *before* the replayed events and names
 end on — never a quiet-window heuristic, which is what the deleted `useSettled` was — bounded
 by a backstop because a blank panel forever beats no fix at all; and `src/lib/transcript-cache.ts`,
 a bounded LRU of `TranscriptState` keyed by *(gateway identity, session id)* so a switch-back
-attaches with `afterSeq` and replays only the gap. That cache's whole risk is `staleAttach`: a
+attaches with `afterSeq` and replays only the gap. The bound is `MAX_ENTRIES = 5` and the
+asymmetry is deliberate: five covers the working set (an operator alternating between the handful
+of sessions running at once) while keeping the pathological case — five perf-fixture transcripts
+of ~4k items each — in the tens of megabytes, a few times what one mounted panel already holds.
+Too small degrades to a replay on switch-back; too large is memory held forever in a webview.
+Eviction is least-recently-**stored**, which needs no read-side bookkeeping because every detach
+stores, so store recency *is* viewing recency. That cache's whole risk is `staleAttach`: a
 seq from a *different* log (a dormant rebuild starts at 0) delivers **nothing**, leaving stale
 rows standing with no error — which was already reachable on a plain reconnect after a restart,
 so the check fixes more than it costs. The two halves of **on-demand tool results** (`result.truncated`/`totalChars`/`sourceSeq`, set
@@ -528,7 +590,24 @@ always populated, and is what every surface renders from (see `docs/GOTCHAS.md`)
 
 styled layer (Tailwind v4 + `@base-ui/react` + cva): `src/components/ui`
 primitives, `src/components/agent` components, vendored prompt-area composer (MIT). Ships source
-styles (`theme.css` + `@source`-scanned classnames; wiring in its README). `SessionPanel` is the
+styles (`theme.css` + `@source`-scanned classnames; wiring in its README). Two primitives carry
+rules of their own. `PortalScope` re-establishes the `.wd-root` styling scope inside a portal:
+`@workerdeck/ui/scoped.css` rewrites every rule to live under `.wd-root`, and Base UI popups
+(Menu, Dialog, AlertDialog, Select, Tooltip) portal to `document.body`, *outside* the embedder's
+wrapper, so without it they render unstyled or host-styled. `display: contents` — inline, so no
+stylesheet has to have loaded — makes the element generate no box, leaving positioning,
+hit-testing and the popup's own layout untouched while still carrying the class, so tokens
+declared on `.wd-root` inherit through it and every `.wd-root <x>` rule matches below it. Dark
+mode survives because the dark token block matches `[data-theme='dark']` on **any** ancestor and
+`document.body` sits under the host's themed `<html>`; under the classic `theme.css` integration
+the class matches nothing and the element is inert, which is why the wrapper is unconditional.
+`Empty` takes **at most one action, and never one the view header already offers** — creating a
+session and adding a gateway are the native title bar's `+`, exclusively, and those empty states
+point at it in words rather than growing a second button doing the same thing two inches lower. A
+button here is for the way out of a state the header has no answer to: clearing a filter,
+widening a scope. It lives in `ui/` rather than in one client because every panel that can be
+empty should be empty the same way — the extension's views and the dashboard's four sidebars are
+the same shape of thing. `SessionPanel` is the
 whole session surface — transcript, composer (attachments, `/` and `@` completion), and the
 panels behind its status bar and `⋯` menu (session info, context, plan usage, MCP, project
 files) — each gated on the capability record, so one component is correct for every engine.
@@ -663,7 +742,17 @@ load-bearing rather than tidy: `height.ts` sizes the row as one wrapped `taskSum
 live signal is *in* the collapsed line (the pulse, a climbing count), never an auto-expansion.
 A childless Task stays a plain call, and an **orphan child** — parent outside the slice, which is
 what a recap boundary and a compaction leave — keeps its own stepped-in row rather than vanishing
-into a block above the seam. **None of it renders without
+into a block above the seam. Two more edges of the absorption rule (a block forms for a top-level
+call with ≥1 child in the slice; an item is absorbed iff its parent is such a call) are decided
+rather than incidental: a **grandchild** — a nested sidechain, unreachable from today's engines —
+renders top-level and stepped in, because an unmapped item must be visible and never gone; and
+two top-level calls separated **only** by absorbed items fold together, since once the children
+are inside the block the calls are adjacent on screen and the count has to match what the reader
+sees. A `Task` also splices in `taskBrief` only where the stream carries no brief of its own, and
+`description` is deliberately never the fallback — it is the 3–5 word label the header already
+prints, not the instruction. Codex has no brief at all to splice (its `spawn_agent` message is an
+encrypted blob on the wire), so the brief row is simply not drawn there. **None of it renders
+without
 `forwardSubagentText`** (see `packages/core`): a nested transcript built on the SDK's default
 stream is a list of tool names. `terminalBlocks` is the
 one implementation of it: the virtualized shell folds each side of the boundary through the same
@@ -811,7 +900,13 @@ DOM that none of `.term-md`'s rules reach, which left it drawing the browser's `
 browser's list margins, the second of which took the typed row off `--term-line`. Its lists are
 therefore styled separately and to the same numbers (`- ` at 2ch, `1. ` at 3ch, hanging indent,
 markers as `::before` so nothing enters the message and `html-to-markdown.ts` still serializes
-the real `<li>`s). Staged **attachments** ride above it as squared 1px cells with the `✕` tucked
+the real `<li>`s). Under `submitOnEnter`, Enter submits **unconditionally**
+(`use-prompt-area.ts`): it once tried a list continuation first, so after typing a bullet the
+send key silently stopped sending — every Enter added another empty bullet and the only way out
+was to clear the list. Enter is the send key in a chat composer, and a key that does something
+else depending on what the line above starts with is not one; the continuation lives on
+Shift+Enter, which is the newline key under `submitOnEnter`. Without it, Enter *is* the newline
+key and keeps the continuation. Staged **attachments** ride above it as squared 1px cells with the `✕` tucked
 *inside* each one's top-right corner (two rules, no badge hanging off an edge), and the strip
 draws no rule of its own — the composer's own frame is directly beneath it, and two rules a few
 pixels apart is the box this theme exists not to have. It is bracketed by **two rules**, top and bottom, both
@@ -891,7 +986,11 @@ and the lenient `[1m]`-stripping `currentModel`/`modelLabel` — typed structura
 hand-kept copies that agreed on the model (`SessionRow`, `sessionSteps`, `sessionState`) and
 disagreed on every measurement — different gutters, type sizes and selection — so the two lists
 read as two products. One component, two thin hosts, is what keeps them one. iOS mirrors this
-file's geometry rather than either copy. A 4px-padded, 4px-rounded card whose whole surface is the
+file's geometry rather than either copy. The original frame is Figma node `28:675` in the
+WorkerDeck file (`sn8cy5m6eXneXLvKCXq5xt`), but **this section outranks it**: the frame is the
+source for geometry only, and several rules below were decided after it was drawn (the 6px
+in-row gaps that replaced its transparent glyph padding, the 16px project glyph, agents sorted
+above tasks). A 4px-padded, 4px-rounded card whose whole surface is the
 hit target, holding two 20px lines: **line one is state and identity** — the status glyph leads
 (this *reverses* the old row's "state last" rule, and knowingly: a trailing glyph has no fixed x,
 so a list of thirty gives the eye nothing to run down), then the title, then the two readings that
@@ -944,7 +1043,13 @@ once it has settled, because a list where every finished session still shouted i
 where the blue stopped meaning anything. `--row-selected`, `--row-selected-weak` and
 `--badge`/`--badge-fg` are new in `theme.css` for this, beside the flattened `--row-hover` and the
 11px `--text-micro`; the extension repoints the three fills and the badge pair at `--vscode-list-*`
-/ `--vscode-badge-*`. `SessionStatusIcon` (16px) lives in its own module beside
+/ `--vscode-badge-*`. `SessionStatusIcon` (16px) reads **`row.state`, not `info.status`**, and
+that distinction is the point of the row model: `sessionState` folds in the arm the glyph cannot
+see for itself, since a *background* sub-agent outlives its turn by design, so the turn ends,
+`status` comes to rest at `idle`, and the agent keeps working. Reading the raw status drew a moon
+on a row filed under the "Working" header — the list contradicting itself on one line. The
+terminal statuses still come off `info.status`, because `ended` collapses `failed` and `closed`
+into one bucket and those are worth telling apart. It lives in its own module beside
 the card for the same reason the card does — the extension's list draws it too — and `SessionBrowser`
 re-exports it only so the package's public surface does not shift under a host importing it from
 there. `expanded`/`editing` are uncontrolled by default and `renameOn` chooses the trigger:
@@ -1055,6 +1160,20 @@ A session at the project root has nothing to add and the slot disappears rather 
 name already on screen. (It used to fall back to the cwd basename, which under a project group
 meant every row still drew a folder name the header had covered.) `projectIcons` is handed in rather than fetched (`useProjectIcons`), for the reason
 `ProjectIcon` states: the wire carries an address and who can fetch it differs per client.
+`ProjectIcon`'s glyph arm is a **curated set**, never a namespace import over lucide. Measured
+against the VS Code sidebar bundle: `sidebar.js` is 31 KB with one glyph, 77 KB with the ~110
+curated ones (~400 bytes each) and 927 KB with `import * as` over lucide's ~1,600, because a
+namespace import defeats tree-shaking by construction; `DynamicIcon` is worse in a different
+currency, ~1,600 chunk files shipped inside the `.vsix`. The gateway validates a glyph name by
+*shape* only (lucide's lowercase-kebab convention) and declines to grow an icon catalog, so the
+contract already says a client must fall back on a name it does not know — an unlisted-but-valid
+name draws `Folder`. Grow the set freely. The **image arm** takes resolved bytes as `src` rather
+than fetching, for the reason `packages/client` states, and renders nothing when `src` is absent
+rather than a placeholder box. One thing an image icon cannot do and a glyph can: **take the
+row's colour** — an `<img>`-embedded SVG is its own document, so `currentColor` does not reach it
+and its own `prefers-color-scheme` resolves against the *OS* rather than the host's theme
+(measured). A repo that wants a mark always matching its row declares a glyph; one that wants its
+brand declares the image and accepts that it is a picture.
 `SessionList` stays beside it for the plain fixed-set case.
 The file rail reads in the **UI font, never mono** — it is workbench chrome you scan, and the
 editors it sits beside set filenames in their UI face; mono is for content on a grid and nothing
@@ -1077,8 +1196,15 @@ keeps its child index across that transition, because remounting it drops the WS
 whole transcript. The embedder's `header` is portalled out of the panel to the top of the
 workspace, since only the panel can build the `⋯` menu it is handed. The editor is **Monaco**
 (`CodeEditor.tsx`), `import()`ed so it is a lazy chunk — the dashboard's first paint is unchanged
-and its ~100 language grammars load per file type. One Monaco model per path, kept across tab
-switches so undo history survives. Monaco reaches its workers with `new URL(…, import.meta.url)`,
+and its ~100 language grammars load per file type (themselves lazy, so opening a `.ts` file
+fetches the TypeScript grammar and nothing else). One Monaco model per path, kept across tab
+switches so undo history and view state survive. **No `MonacoEnvironment` is configured, and none
+is needed**: workers in a published library become every embedder's bootstrapping problem, and
+`packages/web` ships prebuilt static files at a domain root, which is exactly where a hardcoded
+worker URL breaks — so the editor is configured never to ask for one (`wordBasedSuggestions` and
+`quickSuggestions` off, no diff editor). A host that wants worker-backed language services sets
+`MonacoEnvironment` itself before the first file is opened; Monaco is a singleton and nothing
+here fights that. Monaco reaches its workers with `new URL(…, import.meta.url)`,
 which Rollup resolves at build time but **Vite's dev dep-optimizer breaks** by rewriting the
 package into `.vite/deps/` — hence `optimizeDeps.exclude: ['monaco-editor']` in `web`, without
 which Monaco silently runs its worker code on the main thread. Any Vite-based embedder needs the
@@ -1230,7 +1356,16 @@ serves unauthenticated — `insecureHosts` entries double as accepted Host heade
 resolve/materialize seam has an assert that must stay: see `docs/GOTCHAS.md`. The web
 dashboard is a real runtime dep on `@workerdeck/web` — `resolveWebRoot()` is just its exported
 `dashboardDir` — so there is one dashboard, versioned in lockstep, not a vendored copy. Also
-hosts `workerdeck guard`, and `src/apns/` — the **only push credential in the project**: a
+hosts `workerdeck guard` — *policy*, not a server route, and the enumeration of what a restart
+costs: an in-flight turn dies with the process (the CLI subprocess and the provider request both
+go), a pending permission request dies with it, and a running job is left claimed. Two more
+depend on configuration rather than state, so each has an opt-out flag by which the operator
+**asserts durability**: `--allow-parked` (parked sessions survive only under a durable
+`SessionStore`, not the in-memory default — and it covers the *session*, while a parked job's
+queue-side record lives in the `QueueAdapter`, so with the bundled in-memory adapter the woken
+session completes with no job attached to finish) and `--allow-queued` (queued jobs survive only
+in a durable `QueueAdapter`). Exit codes are 0 safe, 1 busy, 2 could not tell (bad URL, auth, an
+unexpected response) — 2 is **never** treated as safe. Also `src/apns/` — the **only push credential in the project**: a
 hand-rolled APNs client (`node:http2` + ES256 JWT, zero deps), a device registry mounted at
 `POST/DELETE /apns/devices` through the same `fallback` seam that serves the dashboard, and a
 forwarder hooked to `notifications.onNotification` in-process. It lives here and not in

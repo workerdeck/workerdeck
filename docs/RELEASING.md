@@ -442,6 +442,16 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   with `packages/*/package.json`, and skipping versions already on the registry — a half-failed
   run is safe to re-run, and a prerelease tag goes out under `next`. Manual fallback is `pnpm
   publish:all`. Gatekeeper audit first. MIT (ui ships `src/` — allowlisted in gatekeeper.json).
+- catalogs: when `@openai/codex` moves, refresh `packages/core/src/engines/codex/catalog.ts` —
+  the model table is extracted from the JSON embedded in the *platform binary*, and the file's
+  header comment carries the brace-matching `node -e` script verbatim. The **two-hop resolve is
+  not optional**: under pnpm's strict layout `@openai/codex-<platform>` resolves only from
+  `@openai/codex`'s own location, never the repo root (the same two hops
+  `resolveBundledCodexExecutable` makes). Mapping rules when diffing: drop the internal
+  `codex-auto-review` row, `primary` mirrors the binary's `visibility` field, `reasoningEfforts`
+  carries `supported_reasoning_levels` verbatim (it includes `max`/`ultra` beyond the SDK union —
+  trust the binary, keep the strings open). Restate `provenance` with the binary version and the
+  extraction date.
 - docs: root CLAUDE.md + README.md + docs/ + apps/docs (keep site content in sync with README)
 - frontend_smoke: no (manual via `pnpm dev:server` + `pnpm dev:web`, which bind `$WD_DEV_HOST`
   and default to loopback — set it in your shell to reach them from a phone or tailnet, never in

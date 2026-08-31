@@ -99,7 +99,10 @@ Session Info → Gateways. The four detail views are `when`-gated on `workerdeck
 they are *about the thing you have open*, which is Outline and Timeline's shape. That gating
 reverses the earlier "views must not appear and disappear under the pointer" rule on
 purpose; Sessions and Gateways stay ungated, which is what keeps both containers' shape
-stable. `viewsContainers.secondarySidebar` is what sets `engines.vscode` to **`^1.106.0`**:
+stable. A view that *is* contributed cannot be disabled or collapsed through the API, so a
+section with nothing to say says it the only two ways that exist — the header's
+`description` (`no session`, `not reported`, `not supported`) and an empty state in the body.
+`viewsContainers.secondarySidebar` is what sets `engines.vscode` to **`^1.106.0`**:
 it was proposed-only in 1.104/1.105 and finalized in 1.106, and the schema is
 `additionalProperties: false`, so on an older build the key is dropped and the five views do
 not exist at all. That floor is the whole cost of the layout, and it is what would keep the
@@ -119,8 +122,11 @@ showing** — the webview mirrors its view config to the host (`wd-view-config`,
 the shared rules moved to `src/view-config.ts` so both sides filter identically), because a
 badge counting rows in hidden sessions sends you looking for something that isn't there.
 Two things the move bought: the count no longer needs the Sessions webview to have been
-resolved (there is no `#view` guard on `refreshUnread`, and `#viewConfig` is restored from
-globalState for exactly that case), and sessions awaiting a human can *colour* it amber
+resolved (`refreshUnread` is gated on **neither `#ready` nor `#view`** — gating on `#ready` is
+how the count came to sit stale until the sidebar was next opened, reading a session in the
+panel moving its watermark with no model change announcing it, and gating on `#view` is what
+the old `view.badge` required; `#viewConfig` is restored from globalState for exactly that
+case), and sessions awaiting a human can *colour* it amber
 rather than only leading its tooltip. `SubagentStatusItem`
 (`workerdeck.statusBar.subagents`) sits beside it on the same argument — it is about *every*
 session and is most worth showing when nothing is open, since a window with no panel up can be
@@ -149,9 +155,14 @@ one's own tail is the pair that changes while you *look*: the unread badge and t
 Grouping by project **suppresses it on the row** and
 hands the slot back to the basename — `ui`, `server`, `web` under one WorkerDeck heading, which
 is the one thing the header cannot say — exactly the rule `hostName` already followed one facet
-over, and the answer to "what about the subdirectory". Icon bytes come from the host
-(`src/project-icons.ts`, keyed by content hash, cached forever because a hash cannot go stale,
-failures cached too), pushed as their own `wd-project-icons` message rather than on
+over, and the answer to "what about the subdirectory". Icon bytes come from the host as a
+consequence rather than a preference: the webview CSP has no external `connect-src`, so an
+`<img src>` pointed at a gateway cannot load with or without a credential, and the host is
+where the gateway key lives anyway (`src/project-icons.ts`, keyed by the wire's
+`ProjectIcon.image.hash`, cached forever because a hash names its bytes — editing an icon
+arrives as a new key — and failures cached too, the route's 404 being the uniform "no icon"
+and a retry one request per session per poll for a picture that is never coming), pushed as
+their own `wd-project-icons` message rather than on
 `SidebarState`: the state rides a 1.2s poll and an icon is hundreds of kilobytes that changes
 when someone edits a repo. That coral survives this webview's `--term-mark` repoint
 ("a single coral element in an otherwise theme-following surface looks like a stray token")
@@ -285,7 +296,11 @@ cannot swap extension code in a live host).
 one: a wiki SPA whose right-hand rail is a sandboxed agent, with the gateway inside the app's
 own server. Everything non-`/v1` (the `/api` wiki, the MCP endpoint, the built SPA) is served
 through the gateway's `fallback`, so it is **one port** — a tab cannot header a WS upgrade, so a
-cookie is the only credential an attach can carry and a cookie is per-origin. `authenticate`
+cookie is the only credential an attach can carry and a cookie is per-origin. An express app is
+a `(req, res)` handler, so the `fallback` can simply *be* one: no proxy hop, no second port, no
+WS upgrade to forward. It checks `/trpc` **before** handing off to express, because silkweave's
+`trpcNode` handler slices its own endpoint prefix off unconditionally and must only ever see
+URLs that belong to it. `authenticate`
 turns the app's cookie into `{ scope: { user } }` and that is the *entire* ownership model: the
 SPA calls `listSessions()` with no filter, because a check the client performs is a check the
 client can skip. The agent runs the provider engine under `sandboxedProviderProfile()` raised
@@ -300,8 +315,15 @@ operation spelled twice. **Identity resolves per adapter onto the same context k
 per-session bearer token minted in `createEngineRunner` off `config.scope.user` (revoked in
 `onClose`) for MCP, the login cookie in `trpcNode`'s `authenticate` for the browser — so an
 action's `run()` cannot tell which caller it serves, and no wiki tool takes a `userId` the model
-could choose. `whoami`/`open_doc` are MCP-only: a shared action set is not an identical one, and
-the SPA knows what it is showing. The cookie makes `/trpc` CSRF-able, so `sameOrigin()` checks
+could choose. Below that, **every `WikiDb` query takes a `userId` and every WHERE clause carries
+it** — deliberate duplication of the gateway's session scoping rather than a substitute for it:
+the gateway decides who may *drive a session*, the db decides whose *documents* a call can
+reach, and an agent that talked its way into the wrong tool arguments must still come up empty.
+Two independent checks on two different questions is the whole reason both exist. It is also
+where the 404-not-403 rule lives — another user's document is a plain not-found, matching the
+gateway's uniform disclosure for an out-of-scope session.
+`whoami`/`open_doc` are MCP-only: a shared action set is not an identical one, and the SPA
+knows what it is showing. The cookie makes `/trpc` CSRF-able, so `sameOrigin()` checks
 `Sec-Fetch-Site` (falling back to `Origin`) and **declines** rather than throws — a forged
 request falls through to a plain 401. **No operation depends on a field being absent**: `write_doc` (create when `id`
 was missing, overwrite when present) was split into `create_doc`/`update_doc` after a live model
@@ -326,7 +348,12 @@ is easy to miss — the cookie secret is **persisted** (`auth/secret.ts`, `EMBED
 0600 file beside the database) rather than per-process, because a scoped session 404s for
 anyone else, so signing everyone out on boot would preserve every conversation and make each one
 unreachable. Storage is `node:sqlite`, one file,
-zero deps. `EMBEDDED_MODEL` (default `gpt-5.6-luna`) is env, not a constant; there is **one**
+zero deps. **`.embedded/` is data, not build output, and nothing automated may delete it**:
+`pnpm clean` removes `dist` only, and wiping the wiki is the separate, explicit `pnpm reset`.
+That is not a tidiness rule — the two were once the same script, and it cost someone their
+documents. Under `parking.persistLive` the parked records in `.embedded/sessions` hold each
+session's whole transcript in plaintext, so they want the same protection as the database
+beside them. `EMBEDDED_MODEL` (default `gpt-5.6-luna`) is env, not a constant; there is **one**
 provider and one key, deliberately — the openai-compatible branch was removed because every
 branch in a reference app is a branch a reader must hold that teaches nothing about embedding.
 The one thing still deferred upstream is an express-free

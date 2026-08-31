@@ -38,9 +38,10 @@ signal to its children; the check is one line: start `pnpm dev`, kill the `pnpm`
 (port 6006, `storybook:build` for a static copy) is the **component catalog**: does every state of
 a component look right, in both themes, at the width it ships at. `packages/ui/dev/` (`pnpm dev`,
 port 5193) is unchanged and stays the **measurement** harness for the terminal renderer — the
-character-cell overlay, the height audit, the perf sweep — which are questions about one running
-surface, not about a component's states, and which `dev/` could only have answered for components
-by growing a second app inside itself. `.storybook/main.ts` resolves the `@workerdeck/source`
+character-cell overlay (`dev/grid-audit.ts`), the height audit against real DOM
+(`dev/height-audit.ts`), the scroll perf sweep (`dev/perf-audit.ts`) — which are questions about
+one running surface, not about a component's states, and which `dev/` could only have answered
+for components by growing a second app inside itself. `.storybook/main.ts` resolves the `@workerdeck/source`
 condition like every other dev entry, so there is no build step between an edit and the story;
 `.storybook/preview.tsx` puts **theme** (dark/light, set on `document.documentElement.dataset.theme`
 because half the tokens are declared on `:root` and would not follow a scoped wrapper) and
