@@ -51,8 +51,7 @@ describe('createHostGuard', () => {
     })
 
     it('rejects a rebound public name — the whole point of the guard', () => {
-      // The connection really does arrive on 127.0.0.1 (the attacker controls
-      // their own DNS); what they cannot forge is the Host the browser sends.
+      // The connection really does arrive on 127.0.0.1; the Host header is the part the attacker cannot forge.
       expect(guard(req('attacker.example:8787'))).toBe(false)
     })
 
@@ -100,8 +99,7 @@ describe('resolveInstanceConfig and the host guard', () => {
   })
 
   it('lowercases allowed hosts so they can actually match a Host header', () => {
-    // hostnameOf lowercases what the guard compares, so an uppercase entry
-    // would otherwise be a gate that looks armed and never opens.
+    // The fixture is deliberately mixed-case: `hostnameOf` lowercases what the guard compares.
     const config = resolveInstanceConfig(parseArgs(['--allowed-host', 'DevBox.Local']), noConfig, {})
     const guard = createHostGuard(config.allowedHosts)
     expect(guard(req('devbox.local:8787'))).toBe(true)

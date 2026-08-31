@@ -18,7 +18,7 @@ afterAll(async () => {
   await Promise.all(created.map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
-/** A stand-in for the `.p8`: same curve, same PKCS#8 PEM shape, no Apple. */
+// A stand-in for the `.p8`: same curve, same PKCS#8 PEM shape, no Apple.
 const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
 const KEY_PEM = privateKey.export({ type: 'pkcs8', format: 'pem' }) as string
 const KEY = createPrivateKey(KEY_PEM)
@@ -34,9 +34,6 @@ const TOKEN = 'a'.repeat(64)
 
 describe('provider token', () => {
   it('signs ES256 as a raw r||s pair, not the DER sequence node defaults to', () => {
-    // The failure this guards: `sign()` without `dsaEncoding` produces a DER
-    // SEQUENCE, JWS requires the concatenated pair, and Apple's answer to the
-    // difference is a bare 403 with nothing to debug from.
     const jwt = createProviderToken(KEY, CONFIG.keyId, CONFIG.teamId).get()
     const [header, claims, signature] = jwt.split('.')
     expect(JSON.parse(Buffer.from(header!, 'base64url').toString())).toEqual({
@@ -51,8 +48,6 @@ describe('provider token', () => {
   })
 
   it('reuses one token rather than re-signing per push', () => {
-    // Apple rate-limits provider-token refreshes; re-signing per push is what
-    // earns `TooManyProviderTokenUpdates`.
     const token = createProviderToken(KEY, CONFIG.keyId, CONFIG.teamId)
     const first = token.get(1_000_000)
     expect(token.get(1_000_000 + 60_000)).toBe(first)
@@ -60,8 +55,7 @@ describe('provider token', () => {
   })
 })
 
-/** A local HTTP/2 server standing in for APNs, so the request line, the headers
- * and the error classification are exercised for real rather than mocked. */
+// A local HTTP/2 server standing in for APNs, so headers and error classification are exercised for real.
 type Recorded = { headers: Record<string, unknown>; body: string }
 const startFakeApns = async (
   respond: (recorded: Recorded, stream: ServerHttp2Stream) => void,
@@ -69,8 +63,7 @@ const startFakeApns = async (
   const seen: Recorded[] = []
   const server = createServer()
   server.on('stream', (stream, headers) => {
-    // Closing a server stream with an RST code errors the server's own stream
-    // object too; without a listener that would take the test process down.
+    // Closing a server stream with an RST code errors the server's own stream object too, taking the test process down.
     stream.on('error', () => {})
     const chunks: Buffer[] = []
     stream.on('data', (chunk: Buffer) => chunks.push(chunk))
@@ -145,9 +138,6 @@ describe('apns client', () => {
   })
 
   it('reports why the connection died, not just that the stream was canceled', async () => {
-    // A stream that never left the queue reports only ERR_HTTP2_STREAM_CANCEL,
-    // which is useless for telling a DNS failure from a TLS problem from APNs
-    // hanging up on a throttled client. The session knows; the result must say.
     const dead = await startFakeApns(() => {})
     const { port } = dead.server.address() as { port: number }
     await new Promise((resolve) => dead.server.close(resolve))
@@ -170,14 +160,8 @@ describe('apns client', () => {
   })
 
   it('names the refusal even when every address family fails at once', async () => {
-    // The production failure this pins: a fresh dial to api.push.apple.com
-    // (A + AAAA records) fails on every family, net aggregates the attempts
-    // into an AggregateError whose own message is EMPTY, and the gateway
-    // logged "The pending stream has been canceled (caused by: ) (0)" — a
-    // lost push with nothing to debug from. `localhost` resolves to both
-    // families here too, so the same shape reproduces locally; on a
-    // v4-only resolver this degrades to the single-error case, which the
-    // test above already pins.
+    // Depends on `localhost` resolving to both families, which is what makes net aggregate the attempts; on a v4-only
+    // resolver this degrades to the single-error case the test above already pins.
     const probe = await startFakeApns(() => {})
     const { port } = probe.server.address() as { port: number }
     await new Promise((resolve) => probe.server.close(resolve))
@@ -197,10 +181,6 @@ describe('apns client', () => {
   })
 
   it('redials and delivers a push whose first dial never connected', async () => {
-    // The stream was still pending — its HEADERS frame never reached the
-    // transport — so a retry cannot duplicate anything, and losing the push
-    // is the only alternative. The server comes back between the attempts,
-    // standing in for a network blip passing.
     const fake = await startFakeApns((_recorded, stream) => {
       stream.respond({ ':status': 200, 'apns-id': 'id-redial' })
       stream.end()
@@ -212,8 +192,7 @@ describe('apns client', () => {
       hosts: { development: url, production: url },
       retryDelayMs: 400,
     })
-    // The first attempt fails in milliseconds (local refusal); the server is
-    // back well inside the 400ms redial pause.
+    // The first attempt fails in milliseconds (local refusal), so the server is back well inside the 400ms redial pause.
     setTimeout(() => fake.server.listen(port), 100)
     const result = await client.send({
       deviceToken: TOKEN,
@@ -222,15 +201,11 @@ describe('apns client', () => {
     })
     client.close()
     expect(result).toEqual({ ok: true, apnsId: 'id-redial' })
-    // The first attempt never connected, so the server saw exactly one push.
     expect(fake.seen).toHaveLength(1)
     await new Promise((resolve) => fake.server.close(resolve))
   })
 
   it('retries once when APNs refused the stream before processing it', async () => {
-    // REFUSED_STREAM is the routine GOAWAY-rebalance race: Apple guarantees
-    // the stream was not processed, so the retry is duplicate-safe and rides
-    // the same client — before this, the push was silently dropped.
     let calls = 0
     const fake = await startFakeApns((_recorded, stream) => {
       calls += 1
@@ -250,10 +225,6 @@ describe('apns client', () => {
   })
 
   it('does not retry a stream Apple may already have processed', async () => {
-    // Anything other than "provably never sent" risks a duplicate
-    // notification — permission requests carry no collapse id on purpose, so
-    // a duplicate is a real second banner on someone's lock screen. An
-    // INTERNAL_ERROR reset after the request went up gives no such proof.
     let calls = 0
     const fake = await startFakeApns((_recorded, stream) => {
       calls += 1
@@ -322,8 +293,6 @@ describe('buildPush', () => {
     expect(payload.requestId).toBe('req_9')
     expect(payload.hostId).toBe('host-a')
     expect((payload.aps as Record<string, unknown>).category).toBe('PERMISSION_REQUEST')
-    // Each request is a distinct question the operator still owes an answer to;
-    // collapsing would silently drop one.
     expect(push.collapseId).toBeUndefined()
     expect(push.priority).toBe(10)
     expect(push.expiration).toBe(5000)
@@ -376,14 +345,11 @@ describe('device registry', () => {
     const before = await readFile(path, 'utf8')
     await registry.register({ token: TOKEN, environment: 'development', hostId: 'host-a' })
     expect(await readFile(path, 'utf8')).toBe(before)
-    // A changed environment is a different token namespace, so it must land.
     await registry.register({ token: TOKEN, environment: 'production', hostId: 'host-a' })
     expect(JSON.parse(await readFile(path, 'utf8')).devices[0].environment).toBe('production')
   })
 })
 
-/** Minimal req/res doubles: the route only reads url/method and writes a status
- * plus a JSON body, so a real socket buys nothing here. */
 const call = async (
   route: ReturnType<typeof createDeviceRoute>,
   method: string,
@@ -418,7 +384,7 @@ const call = async (
   } as never
 
   const pending = route(req, res)
-  // Feed the body after the handler has subscribed.
+  // The body has to be fed after the handler has subscribed.
   await Promise.resolve()
   if (body !== undefined) {
     for (const handler of listeners.get('data') ?? []) {

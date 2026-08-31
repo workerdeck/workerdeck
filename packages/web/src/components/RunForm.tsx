@@ -18,27 +18,15 @@ import { engineFormOptions } from '@/lib/engine.ts'
 import { type DefaultsKind } from '@/lib/settings.ts'
 import { useProfileChoice } from '@/hooks/useProfiles.ts'
 
-/**
- * The half of a run a session and a queue job describe identically: where it runs,
- * what to do, and which engine settings it starts with. The one real difference —
- * an interactive operator is present, an unattended job's is not — stays a
- * *parameter* (`allowBypass`) rather than being flattened away.
- */
 const CWD_KEY = 'workerdeck.last-cwd'
 
-/**
- * Where a run's directory can plausibly be, best first: last used, then the
- * directories sessions already run in, then the gateway's roots — authoritative
- * and the only source that works on a fresh install, but the least specific.
- * A datalist rather than a browser, so the field stays typeable.
- */
 const useCwdCandidates = (sessions: SessionInfo[]): string[] => {
   const [roots, setRoots] = useState<string[]>([])
   useEffect(() => {
     client()
       ?.listHostRoots()
       .then((r) => setRoots(r.roots.map((root) => root.path)))
-      // A gateway serving no host files is the normal case; the field still takes a typed path.
+      // A gateway serving no host files is the normal case, and the field still takes a typed path.
       .catch(() => setRoots([]))
   }, [])
   return useMemo(() => {
@@ -52,11 +40,7 @@ const useCwdCandidates = (sessions: SessionInfo[]): string[] => {
   }, [sessions, roots])
 }
 
-/**
- * Where the permission mode lands when neither the run nor its profile says. Not
- * configurable: an operator is watching an interactive session, so it asks; an
- * unattended job that stops at every file write has not run.
- */
+// Deliberately not configurable: an unattended job that stops at every file write has not run.
 const MODE_FALLBACK: Record<DefaultsKind, PermissionMode> = {
   session: 'default',
   job: 'acceptEdits',
@@ -67,24 +51,18 @@ export type RunForm = ReturnType<typeof useRunForm>
 export const useRunForm = (kind: DefaultsKind) => {
   const [cwd, setCwd] = useState(() => localStorage.getItem(CWD_KEY) ?? '')
   const [prompt, setPrompt] = useState('')
-  // Empty means "whatever the profile says": the gateway fills any field the request omits
-  // from `ProfileInfo.defaults`, so an unset picker is a real choice.
+  // Empty means "whatever the profile says": the gateway fills any omitted field from `ProfileInfo.defaults`.
   const [model, setModel] = useState('')
   const [modeChoice, setModeChoice] = useState<PermissionMode | undefined>(undefined)
   const [effort, setEffort] = useState('')
   const { profiles, profile, selected, select: selectProfile } = useProfileChoice()
-  // Most specific first: this run's pick, the profile's default, the per-kind fallback.
   const mode = modeChoice ?? selected?.defaults?.permissionMode ?? MODE_FALLBACK[kind]
   const engine = engineFormOptions(selected, mode, model)
 
-  /**
-   * The engine-shaped half of a `CreateSessionRequest`. `allowBypass` is the
-   * caller's call: an interactive session pre-authorizes `bypassPermissions`
-   * because the CLI refuses the switch mid-session, a job makes it an opt-in.
-   */
+  // `allowBypass` is the caller's: an interactive session pre-authorizes `bypassPermissions` because the CLI refuses
+  // the switch mid-session, while a job makes it an opt-in.
   const sessionFields = (options: { prompt?: string; resume?: string; allowBypass?: boolean }): CreateSessionRequest => ({
-    // Omitted for an engine with no host filesystem: sending one would put a path on a session
-    // that never opens a directory, and drag it through `allowedCwdRoots` for nothing.
+    // Omitted for an engine with no host filesystem, which would otherwise drag a never-opened path through `allowedCwdRoots`.
     cwd: engine.capabilities.hostCwd === false ? undefined : cwd.trim(),
     profile: profile || undefined,
     prompt: options.prompt,
@@ -101,7 +79,6 @@ export const useRunForm = (kind: DefaultsKind) => {
       : {}),
   })
 
-  /** Remember the directory a run actually used, for the next form. */
   const rememberCwd = (used: string) => localStorage.setItem(CWD_KEY, cwd.trim() || used)
 
   return {
@@ -126,14 +103,10 @@ export const useRunForm = (kind: DefaultsKind) => {
 
 export interface RunFormFieldsProps {
   form: RunForm
-  /** Live sessions, for the directory candidates. */
   sessions: SessionInfo[]
   promptLabel: string
   promptPlaceholder?: string
-  /** Rendered inside the controls row, after the permission mode — where the
-   * job form's Questions select goes. */
   extras?: React.ReactNode
-  /** Rendered at the end of the controls row: the submit button. */
   actions?: React.ReactNode
   onProfileChange?: (name: string) => void
 }
@@ -194,7 +167,6 @@ export function RunFormFields({
           <span className="text-label font-medium text-fg-3">Model</span>
           <ModelPicker value={engine.model} onChange={form.setModel} models={engine.models} className="min-w-40" />
         </label>
-        {/* Only when the record or the model's catalog row declares efforts: never a dead control. */}
         {engine.reasoningEfforts.length > 0 ? (
           <label className="flex min-w-0 flex-col gap-1">
             <span className="text-label font-medium text-fg-3">Effort</span>

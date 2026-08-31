@@ -4,12 +4,7 @@ import type { ViewConfig } from '@workerdeck/protocol'
 
 const KEY = 'workerdeck.view-config'
 
-/**
- * The sessions list's filter/group/sort, remembered across visits. Two deliberate
- * departures from the stored value: `search` always starts empty, and `scoped` is
- * forced off because a dashboard has no open folders for it to mean anything
- * against — the field stays so one `ViewConfig` can serve every client.
- */
+// `search` always starts empty and `scoped` is forced off: a dashboard has no open folders for it to mean anything against.
 export const useViewConfig = () => {
   const [config, setConfig] = useState<ViewConfig>(() => {
     try {
@@ -25,9 +20,7 @@ export const useViewConfig = () => {
     setConfig(next)
     try {
       localStorage.setItem(KEY, JSON.stringify(next))
-    } catch {
-      /* private mode — the choice still holds for this session */
-    }
+    } catch {}
   }, [])
 
   return [config, update] as const

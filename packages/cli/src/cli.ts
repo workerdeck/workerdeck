@@ -88,7 +88,6 @@ const readVersion = async (): Promise<string> => {
   }
 }
 
-/** Best-effort: a browser that won't open is a convenience missed, not a failure. */
 const openInBrowser = (url: string): void => {
   const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open'
   try {
@@ -99,9 +98,7 @@ const openInBrowser = (url: string): void => {
     })
     child.on('error', () => {})
     child.unref()
-  } catch {
-    // ignored
-  }
+  } catch {}
 }
 
 const main = async (argv: string[]): Promise<number> => {
@@ -138,7 +135,7 @@ const main = async (argv: string[]): Promise<number> => {
   process.on('SIGINT', () => shutdown('SIGINT'))
   process.on('SIGTERM', () => shutdown('SIGTERM'))
 
-  // Resolves only on close; the process stays up serving.
+  // Resolves only on close: until then the process stays up, serving.
   await instance.closed
   return 0
 }

@@ -17,8 +17,6 @@ describe('resolveWithinRoot', () => {
   })
 
   it('refuses an escape hidden in percent-encoding', () => {
-    // The decode happens before the containment check, so `%2e%2e` gets no
-    // further than a literal `..` would.
     expect(resolveWithinRoot(root, '/%2e%2e/%2e%2e/etc/passwd')).toBeNull()
   })
 
@@ -70,9 +68,6 @@ describe('contentTypeFor', () => {
 
 describe('the bundled dashboard contract', () => {
   it('serves index.html for a path with no extension (hash history)', async () => {
-    // Not a server test — just pinning the rule the fallback depends on: the SPA
-    // routes on `#/…`, which never reaches the server, so every non-asset path
-    // is the same document.
     const dir = await mkdtemp(join(tmpdir(), 'cw-web-'))
     await writeFile(join(dir, 'index.html'), '<!doctype html><title>x</title>')
     expect(resolveWithinRoot(dir, '/index.html')).toBe(resolve(dir, 'index.html'))

@@ -1,8 +1,3 @@
-/**
- * Library surface of the turnkey instance, for hosts that want the same wiring
- * (single-port gateway + dashboard + shared-secret auth) inside their own
- * process rather than as a child. The `bin` is a thin shell over exactly this.
- */
 export { startInstance, resolveWebRoot, createHostGuard } from './lib/instance.ts'
 export type { Instance } from './lib/instance.ts'
 export {

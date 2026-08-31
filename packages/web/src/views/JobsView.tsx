@@ -43,7 +43,6 @@ export function QueueStatsStrip({ stats }: { stats: QueueStats }) {
       <span>
         Queued <span className="font-mono text-fg-1">{stats.queued}</span>
       </span>
-      {/* Only worth the space once something is waiting on an external execution. */}
       {stats.parked > 0 ? (
         <span>
           Parked <span className="font-mono text-fg-1">{stats.parked}</span>
@@ -74,7 +73,6 @@ export function QueueStatsStrip({ stats }: { stats: QueueStats }) {
 }
 
 function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
-  // Jobs are the primary gateway's, so the cwd suggestions come from its sessions.
   const { snapshots } = useSessions()
   const sessions = snapshots.find((snap) => snap.host.id === primaryHost()?.id)?.sessions ?? []
   const form = useRunForm('job')
@@ -107,12 +105,11 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
       await client()!.createJob({
         session: {
           ...form.sessionFields({
-            // Opt-in per job: nobody is present to make the call, so this must be deliberate.
+            // Opt-in per job, because nobody is present to make the call.
             allowBypass,
           }),
-          // A job's prompt is required — it is the whole job — where a session's is optional.
+          // Required here, unlike a session's: the prompt is the whole job.
           prompt: form.prompt.trim(),
-          // Meaningless without an approval channel — the record decides.
           questionBehavior: engine.capabilities.interactiveApprovals ? questions : undefined,
         },
         maxTokens: tokens,
@@ -136,7 +133,6 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
         sessions={sessions}
         promptLabel="Prompt (the task — runs unattended)"
         extras={
-          // Questions ride the approval channel; without one there is nothing to configure.
           engine.capabilities.interactiveApprovals ? (
             <label className="flex min-w-0 flex-col gap-1">
               <span className="text-label font-medium text-fg-3">Questions</span>
@@ -198,7 +194,6 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
           </>
         }
       />
-      {/* The capability is a CLI spawn flag; the record says where it applies. */}
       {!engine.capabilities.settingSources ? null : (
         <label
           className="flex w-fit cursor-pointer items-center gap-2 text-body-sm text-fg-2"
@@ -223,7 +218,6 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
   )
 }
 
-/** The `+` in the Jobs sidebar header opens this. */
 export function ScheduleJobDialog({
   open,
   onOpenChange,
@@ -243,7 +237,6 @@ export function ScheduleJobDialog({
   )
 }
 
-/** What fills the detail pane when no job is selected: the queue's own health. */
 export function JobsView() {
   const { stats, enabled, error } = useJobs()
   return (

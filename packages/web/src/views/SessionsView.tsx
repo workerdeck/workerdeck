@@ -37,10 +37,9 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
         ...form.sessionFields({
           prompt: resume ? undefined : form.prompt.trim() || undefined,
           resume: resume?.sessionId,
-          // The operator is present, and the CLI refuses this switch mid-session.
           allowBypass: true,
         }),
-        // A resumed session runs where it was stored, not where the form points.
+        // A resumed session runs where it was stored, not where the form currently points.
         cwd: dir,
       })
       onCreated(session.id)
@@ -58,7 +57,7 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
     }
     setLoadingSdk(true)
     try {
-      // Named, so the server lists the CHOSEN profile's engine store rather than claude's.
+      // Named, so the server lists the chosen profile's engine store rather than claude's.
       setSdkSessions(
         await client()!.listSdkSessions({
           dir: form.cwd.trim(),
@@ -79,7 +78,7 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
         form={form}
         sessions={sessions}
         promptLabel="Initial prompt (optional)"
-        // Per-profile: another profile's rows would offer resumes this engine can't honor.
+        // Per-profile, because another profile's rows would offer resumes this engine cannot honor.
         onProfileChange={() => setSdkSessions(undefined)}
         actions={
           <Button className="ml-auto" onClick={() => void create()} disabled={creating}>
@@ -89,8 +88,6 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
         }
       />
 
-      {/* Resume is a peer of create — same directory, same profile — and needs the engine to
-          have a browsable session store. */}
       {!engine.capabilities.listSessions ? null : (
         <div className="mt-1 border-t border-border pt-3">
           <div className="flex items-center justify-between">
@@ -128,7 +125,6 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
   )
 }
 
-/** The create-session dialog, raised from the sidebar's `+` (which is shell, not route). */
 export function CreateSessionDialog({
   open,
   onOpenChange,
@@ -152,7 +148,6 @@ export function CreateSessionDialog({
   )
 }
 
-/** What fills the editor area when no session is open — the list itself is the sidebar. */
 export function SessionsView() {
   return (
     <div className="flex flex-1 items-center justify-center p-8">

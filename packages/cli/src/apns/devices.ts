@@ -3,22 +3,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
 import type { ApnsEnvironment } from './client.ts'
 
-/**
- * The device-token registry, and the route that fills it — mounted by the CLI
- * through the server's `fallback` hook so `packages/server` stays credential-free.
- * Stored 0600 under the state dir: a token is not a secret like the auth key, but
- * the file is a list of which phones belong to the operator.
- */
-
 export type DeviceRecord = {
-  /** Hex APNs device token. */
   token: string
   environment: ApnsEnvironment
-  /**
-   * Opaque to us: the client's own id for this gateway, echoed back in every
-   * payload. It is what lets an app configured with two gateways tell which one
-   * woke it — we store the string and never interpret it.
-   */
+  // The client's own id for this gateway, echoed back in every payload so an app with two gateways knows which woke it; never interpreted here.
   hostId?: string
   bundleId?: string
   platform?: string
@@ -32,13 +20,12 @@ export type DeviceRegistry = {
 }
 
 const FILENAME = 'apns-devices.json'
-/** 64 hex chars today; the upper bound is loose because Apple reserved the right to grow them. */
+// 64 hex chars today; the upper bound is loose because Apple reserved the right to grow the token.
 const TOKEN_PATTERN = /^[0-9a-fA-F]{32,200}$/
 const MAX_BODY_BYTES = 4096
 
 const isEnvironment = (value: unknown): value is ApnsEnvironment => value === 'development' || value === 'production'
 
-/** `dir` null keeps the registry in memory: a restart then goes quiet until each phone is next opened. */
 export const createDeviceRegistry = async (options: {
   dir: string | null
   onError?: (error: unknown, context: { op: string; path: string }) => void
@@ -55,8 +42,7 @@ export const createDeviceRegistry = async (options: {
         }
       }
     } catch {
-      // Missing, unreadable and corrupt all mean "start empty": push is a side channel and must
-      // never refuse a boot. Every client re-registers anyway.
+      // Missing, unreadable and corrupt all mean "start empty": push is a side channel and must never refuse a boot.
     }
   }
 
@@ -69,7 +55,7 @@ export const createDeviceRegistry = async (options: {
       await writeFile(path, `${JSON.stringify({ devices: [...devices.values()] }, null, 2)}\n`, {
         mode: 0o600,
       })
-      // writeFile's mode applies only on creation; an existing file would keep its looser bits.
+      // writeFile's mode applies only on creation, so an existing file would keep its looser bits.
       await chmod(path, 0o600)
     } catch (error) {
       options.onError?.(error, { op: 'write', path })
@@ -81,7 +67,6 @@ export const createDeviceRegistry = async (options: {
     async register(record) {
       const existing = devices.get(record.token)
       devices.set(record.token, { ...record, updatedAt: Date.now() })
-      // The app re-registers on every launch, so a no-change repeat is the common case.
       if (existing !== undefined && existing.environment === record.environment && existing.hostId === record.hostId) {
         return
       }
@@ -123,13 +108,6 @@ const readBody = (req: IncomingMessage): Promise<string | null> =>
     req.on('error', () => finish(null))
   })
 
-/**
- * `POST /apns/devices` registers a token, `DELETE` drops one; returns true when it
- * consumed the request. Deliberately outside `/v1` — this is the forwarder's own
- * surface, and a 404 here means a gateway running without push configured (which
- * the fallback must claim rather than let the SPA catch-all answer 405;
- * `docs/GOTCHAS.md` §APNs).
- */
 export const createDeviceRoute = (
   registry: DeviceRegistry,
   authenticate: (req: IncomingMessage) => unknown,
@@ -149,8 +127,7 @@ export const createDeviceRoute = (
       res.writeHead(405, { allow: 'POST, DELETE' }).end()
       return true
     }
-    // A device token is an address this gateway can buzz: accepting one unauthenticated would
-    // let anyone who can reach the port aim it.
+    // A device token is an address this gateway can buzz, so an unauthenticated register lets anyone reachable aim it.
     if (authenticate(req) === null) {
       respond(res, 401, { error: 'unauthorized' })
       return true
@@ -196,7 +173,6 @@ export const createDeviceRoute = (
       bundleId: optionalString(body.bundleId),
       platform: optionalString(body.platform),
     })
-    // Echo the environment: the one fact that is expensive to get wrong and invisible otherwise.
     respond(res, 200, { registered: true, environment: body.environment })
     return true
   }

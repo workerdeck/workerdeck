@@ -12,19 +12,12 @@ import { useJobs } from '@/hooks/useJobs.ts'
 export const JOB_STATUS_META: Record<JobStatus, { label: string; variant: BadgeProps['variant']; busy?: boolean }> = {
   queued: { label: 'Queued', variant: 'neutral' },
   running: { label: 'Running', variant: 'info', busy: true },
-  // Waiting on an external execution: still live, but nothing is burning here.
   parked: { label: 'Parked', variant: 'accent' },
   succeeded: { label: 'Succeeded', variant: 'success' },
   failed: { label: 'Failed', variant: 'danger' },
   canceled: { label: 'Canceled', variant: 'warning' },
 }
 
-/**
- * Jobs are kept after they finish, so this list only grows; search and the
- * active-only toggle are what keep it usable. Its own model rather than the
- * sessions list's, because a job's statuses are the *queue's*, not a session
- * lifecycle, and collapsing them loses the distinction the queue is about.
- */
 const ACTIVE_JOB_STATUSES: JobStatus[] = ['queued', 'running', 'parked']
 
 export function JobsSidebar() {
@@ -138,7 +131,6 @@ export function JobsSidebar() {
                   onChanged={() => void refresh()}
                 />
               ))}
-              {/* Whenever the list is shorter than the queue: a short list must explain itself. */}
               {hiding > 0 ? (
                 <p className="px-1 pt-2 text-center text-label text-fg-4">
                   {shown.length} of {jobs.length}
@@ -163,10 +155,8 @@ export function JobsSidebar() {
 
 function JobRow({ job, active, onOpen, onChanged }: { job: JobInfo; active: boolean; onOpen: () => void; onChanged: () => void }) {
   const meta = JOB_STATUS_META[job.status]
-  // Parked jobs are live too — cancelling one is how you abandon a wait.
+  // Parked jobs are live too, and cancelling one is how you abandon a wait.
   const cancellable = job.status === 'queued' || job.status === 'running' || job.status === 'parked'
-  // The age rides the description line: a job's status is a *word*, not a glyph, and a badge
-  // plus a timestamp leaves the prompt — the only thing telling two jobs apart — truncated away.
   const details = [
     formatRelativeTime(job.finishedAt ?? job.startedAt ?? job.createdAt),
     job.cwd.split('/').filter(Boolean).pop() ?? job.cwd,

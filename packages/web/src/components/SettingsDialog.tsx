@@ -26,11 +26,8 @@ import {
   type TranscriptVariant,
 } from '@/lib/settings.ts'
 
-/**
- * One reader preference, one select. All of them read their stored value **on
- * open** rather than tracking it live: the panel stamps variant, density and font
- * at mount, and reshaping every row under a reader is not worth the jump.
- */
+// Reads its stored value on open rather than tracking it live: the panel stamps these at mount, and reshaping every
+// row under a reader is not worth the jump.
 function PrefSelect<T extends string>({
   label,
   options,
@@ -42,8 +39,6 @@ function PrefSelect<T extends string>({
   options: { value: T; label: string }[]
   read: () => T
   write: (value: T) => void
-  /** For a preference other rows depend on — the variant, which decides whether
-   * density and font mean anything at all. */
   onChange?: (value: T) => void
 }) {
   const [value, setValue] = useState<T>(read)
@@ -70,7 +65,6 @@ function PrefSelect<T extends string>({
   )
 }
 
-/** A label and nothing else: a box around a list of one-line controls claims they are a thing. */
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-3">
@@ -80,19 +74,10 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-/**
- * Settings as a dialog, not a destination: these are this browser's preferences,
- * and a modal returns you to what you were doing when you close it.
- */
 export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  // Held here, not in the select, because the two rows below are only meaningful under `cards`
-  // — the terminal theme has one line height and one face by construction, and a control that
-  // changes nothing invites you to keep pressing it.
   const [variant, setVariant] = useState<TranscriptVariant>(getTranscriptVariant)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* Sized to the widest control, not to a reading measure: wider and each label drifts
-          away from the select it names. */}
       <DialogContent size="md" className="w-[min(30rem,calc(100vw-2rem))]">
         <DialogHeader
           title="Settings"

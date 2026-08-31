@@ -19,8 +19,6 @@ import {
 import { Plus } from 'lucide-react'
 import { client } from '@/lib/client.ts'
 
-/** Capabilities a provider profile can grant. The server's engine factory is the
- * real ceiling — granting one it never wired simply yields no tool. */
 const CAPABILITIES: SessionCapability[] = ['web_search', 'download', 'web_fetch', 'deliver_file']
 
 const commaList = (value: string): string[] =>
@@ -38,11 +36,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-/**
- * Create a store-managed profile. The fields here carry **no credentials**:
- * `apiKeyEnv` is a variable name the server resolves, and a config directory is a
- * path bounded by the server's `allowedConfigDirRoots`.
- */
+// No field here carries a credential: `apiKeyEnv` is a variable name the server resolves, and a config directory is
+// a path bounded by the server's `allowedConfigDirRoots`.
 function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void }) {
   const [engine, setEngine] = useState<ProfileEngine>('provider')
   const [name, setName] = useState('')

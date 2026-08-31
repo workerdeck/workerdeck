@@ -2,102 +2,42 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Authenticator } from '@workerdeck/server'
 
-/**
- * Gateway auth for the turnkey CLI: one shared operator secret over three
- * transports — a header for services, a login cookie for the dashboard this
- * gateway serves, and `?key=` **on WebSocket upgrades only** for a browser on
- * another origin. The cookie is ambient authority and the WS handshake is exempt
- * from CORS, so the explicit Origin check below is the actual CSRF defense.
- * `docs/GOTCHAS.md` §Server, profiles & auth has the full rationale for all three.
- *
- * This file guards the operator's own gateway and nothing else; it never sees a
- * model-provider credential (root CLAUDE.md, auth red lines).
- */
-
 export type CliAuthOptions = {
-  /**
-   * The shared operator secret. Unset disables auth entirely (the CLI then
-   * refuses to bind anything but loopback — enforced by the caller, not here).
-   * An empty or short value is a config accident, not a choice: anything under
-   * 12 characters throws rather than standing up a guessable gateway.
-   */
+  // Unset disables auth entirely; that the CLI then binds loopback only is enforced by the caller, not here.
   secret?: string
-  /** Default 'workerdeck_session'. No `__Host-` prefix — it requires
-   * `Secure`, and plain-HTTP localhost is the primary deployment. */
+  // No `__Host-` prefix: it requires `Secure`, and plain-HTTP localhost is the primary deployment.
   cookieName?: string
-  /**
-   * Browser session lifetime, default 7 days. Fixed, not sliding: the auth hooks
-   * only see the request, so a renewed cookie has nowhere to ride. Expiry lands
-   * the operator back on the login page, as does a restart without a `sessions` store.
-   */
+  // Fixed, never sliding: the auth hooks only see the request, so a renewed cookie has nowhere to ride back on.
   ttlMs?: number
-  /**
-   * Trust the `x-forwarded-*` headers from exactly one reverse proxy; the *last*
-   * value of each is used, the only position a client cannot forge. Off by
-   * default — these are attacker-writable on a directly exposed port. Behind TLS
-   * termination it must be on, or `Secure` is skipped and the Origin check
-   * computes `http://` where the browser says `https://`.
-   */
+  // Attacker-writable on a directly exposed port, hence off by default — but behind TLS termination it must be on,
+  // or `Secure` is skipped and the Origin check computes `http://` where the browser says `https://`.
   trustProxy?: boolean
-  /**
-   * Origins accepted in addition to the request's own (scheme + Host). Needed
-   * when the proxy rewrites Host so the external origin no longer matches what
-   * this process sees. Entries must be full origins ('https://ops.example.com');
-   * invalid ones throw at startup rather than silently never matching.
-   */
   allowedOrigins?: string[]
-  /** Login throttle tuning; defaults: 15 min window, 10 failures per IP, 100
-   * globally. Exposed mainly so tests need not wait out real windows. */
   throttle?: { windowMs?: number; maxFailuresPerIp?: number; maxFailuresGlobal?: number }
-  /**
-   * Makes browser logins survive a restart. Absent, the session table is
-   * in-memory and a restart signs every browser out — see the table's own note.
-   * `createAuthSessionStore` is the CLI's file-backed implementation.
-   */
   sessions?: CliSessionStore
 }
 
-/** One session-table row as it is handed to a store; the key is opaque here. */
 export type StoredSession = { expiresAt: number }
 
-/**
- * The durability seam for browser logins: fire-and-forget by contract. The auth
- * paths are synchronous, so a store may not make them wait, and one that cannot
- * write must degrade to "logins do not survive a restart", never refuse a login.
- */
 export type CliSessionStore = {
-  /** Rows recovered at startup, already pruned of expired ones. */
   initial?: Iterable<[string, StoredSession]>
-  /** The whole live table after a mutation. Must not throw. */
   save(entries: [string, StoredSession][]): void
-  /** Resolves once queued writes have landed — for tests and shutdown. */
   flush?(): Promise<void>
 }
 
-/** What `authenticate` hands the worker server as the request principal. */
 export type CliPrincipal = {
-  /** Which transport authenticated the request; 'open' when auth is disabled. */
   via: 'header' | 'cookie' | 'open'
-  /** One secret, one trust level: whoever holds it is the operator, so the
-   * dashboard may manage provider profiles (still bounded by the server's
-   * `allowedConfigDirRoots`). */
+  // One secret, one trust level: whoever holds it is the operator (still bounded by `allowedConfigDirRoots`).
   canManageProfiles: true
 }
 
 export type CliAuth = {
   enabled: boolean
-  /** Hand straight to `createWorkerServer({ authenticate })` — it guards both
-   * REST and the WS upgrade, which is exactly why the Origin policy lives in it. */
   authenticate: Authenticator
-  /** Claims `/auth` and everything under it (login/logout/status); returns true
-   * when it consumed the request. The static host must call this first. */
+  // Claims `/auth` and everything under it; the static host must call this before anything else.
   handleAuthRequest(req: IncomingMessage, res: ServerResponse): boolean | Promise<boolean>
-  /** Cookie-only check for the static host: login page or SPA? Gating the SPA
-   * shell is UX, not security — every byte of data sits behind `authenticate`. */
+  // Gating the SPA shell is UX, not security: every byte of data sits behind `authenticate`.
   hasValidSession(req: IncomingMessage): boolean
-  /** What the login page needs to render for this request. The endpoint path,
-   * field name, and the `?auth=` redirect params are all this module's wire
-   * format, so the page learns them here instead of hardcoding them. */
   loginPage(req: IncomingMessage): { action: string; field: string; error?: string }
 }
 
@@ -107,8 +47,7 @@ const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const DEFAULT_THROTTLE_WINDOW_MS = 15 * 60 * 1000
 const DEFAULT_MAX_FAILURES_PER_IP = 10
 const DEFAULT_MAX_FAILURES_GLOBAL = 100
-/** Only successful logins insert, so this cap only fences the secret-holder's
- * own memory use (every login within the ttl is a live entry). Oldest goes. */
+// Only successful logins insert, so this cap fences the secret-holder's own memory use and nobody else's.
 const MAX_SESSIONS = 100
 const MAX_LOGIN_BODY_BYTES = 4096
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
@@ -143,17 +82,11 @@ export const createCliAuth = (options: CliAuthOptions = {}): CliAuth => {
     }),
   )
 
-  /** Secret and session tokens are only ever compared as fixed-length digests
-   * (timingSafeEqual / digest-keyed lookup): no path compares secret material with an early exit. */
+  // Secret and session tokens are only ever compared as fixed-length digests, so no path compares secret material with an early exit.
   const secretDigest = secret === undefined ? undefined : sha256(secret)
   const secretMatches = (candidate: string): boolean => secretDigest !== undefined && timingSafeEqual(sha256(candidate), secretDigest)
 
-  /**
-   * A server-side table, not signed tokens, because logout must actually
-   * invalidate. Keys are `HMAC-SHA256(secret, token)` and that keying does three
-   * jobs at once — do not "simplify" it to a plain digest; `docs/GOTCHAS.md`
-   * §Server, profiles & auth.
-   */
+  // Keys are `HMAC-SHA256(secret, token)`; never "simplify" that to a plain digest (`docs/GOTCHAS.md`).
   const sessions = new Map<string, StoredSession>()
   const store = options.sessions
   const tokenKey = (token: string): string =>
@@ -168,8 +101,6 @@ export const createCliAuth = (options: CliAuthOptions = {}): CliAuth => {
     }
   }
 
-  // Every mutation republishes the whole table: it is capped at MAX_SESSIONS,
-  // and a diff protocol would be a second source of truth to keep honest.
   const persist = (): void => store?.save([...sessions])
 
   const createSession = (): string => {
@@ -220,8 +151,7 @@ export const createCliAuth = (options: CliAuthOptions = {}): CliAuth => {
     return true
   }
 
-  /** Last value of a possibly comma-joined forwarded header — the one appended
-   * (or set) by the trusted proxy; every earlier position is client-writable. */
+  // The last value is the one the trusted proxy appended; every earlier position is client-writable.
   const forwardedLast = (value: string | string[] | undefined): string | undefined => {
     if (value === undefined) {
       return undefined
@@ -238,8 +168,6 @@ export const createCliAuth = (options: CliAuthOptions = {}): CliAuth => {
     return trustProxy && forwardedLast(req.headers['x-forwarded-proto'])?.toLowerCase() === 'https'
   }
 
-  /** The origin this server believes it is being served as, from the request's
-   * own Host (or the proxy's forwarded host) — the only self-knowledge we have. */
   const expectedOrigin = (req: IncomingMessage): string | null => {
     const host = (trustProxy ? forwardedLast(req.headers['x-forwarded-host']) : undefined) ?? req.headers.host
     if (host === undefined || host === '') {
@@ -252,15 +180,8 @@ export const createCliAuth = (options: CliAuthOptions = {}): CliAuth => {
     }
   }
 
-  /**
-   * The CSRF core. `SameSite=Lax` is not enough: same *site* is not same *origin*
-   * (another port on localhost is same-site and cookies attach), and the WS
-   * handshake is exempt from CORS. So Origin is checked explicitly against the
-   * request's own origin or the operator's allowlist; `null` and unparseable are
-   * foreign. Tri-state because absence means a non-browser client — every browser
-   * sends Origin on cross-site POSTs and every upgrade — and each call site below
-   * decides what to do with that.
-   */
+  // Tri-state on purpose: absence means a non-browser client, because a browser sends Origin on every cross-site POST
+  // and every upgrade. Each call site decides what to make of that; `null` and unparseable are foreign.
   const originVerdict = (req: IncomingMessage): 'absent' | 'ok' | 'foreign' => {
     const raw = req.headers.origin
     if (raw === undefined) {
@@ -301,12 +222,8 @@ export const createCliAuth = (options: CliAuthOptions = {}): CliAuth => {
     return typeof upgrade === 'string' && upgrade.toLowerCase().includes('websocket')
   }
 
-  /**
-   * The secret from `?key=` — **accepted on WebSocket upgrades only**, because a
-   * browser cannot header an upgrade. A query-string key lands in proxy access
-   * logs, so confining it here keeps a leaked URL worth one attach: a REST call
-   * carrying `?key=` is *not* authenticated by it, and must stay that way.
-   */
+  // Upgrades only. A query-string key lands in proxy access logs, so a REST call carrying `?key=` is not
+  // authenticated by it and must stay that way: a leaked URL then buys one attach and nothing more.
   const querySecret = (req: IncomingMessage): string | undefined => {
     if (!isUpgradeRequest(req)) {
       return undefined
@@ -319,8 +236,8 @@ export const createCliAuth = (options: CliAuthOptions = {}): CliAuth => {
     if (!enabled) {
       return openPrincipal
     }
-    // Header first: the secret is not ambient — the sender chose to attach it — so no Origin
-    // check applies. A present-but-wrong header is a rejection, never a fall-through to the cookie.
+    // The secret is not ambient — the sender chose to attach it — so no Origin check applies, and a
+    // present-but-wrong header is a rejection rather than a fall-through to the cookie.
     const provided = headerSecret(req) ?? querySecret(req)
     if (provided !== undefined) {
       return secretMatches(provided) ? ({ via: 'header', canManageProfiles: true } satisfies CliPrincipal) : null
@@ -343,12 +260,7 @@ export const createCliAuth = (options: CliAuthOptions = {}): CliAuth => {
     return { via: 'cookie', canManageProfiles: true } satisfies CliPrincipal
   }
 
-  /**
-   * The secret is the only factor, so guessing must be rate-limited: per-IP inside
-   * a fixed window, with a global cap behind it so rotating IPs (trivial over
-   * IPv6) buys nothing. Only wrong secrets count — malformed and foreign-Origin
-   * posts are refused earlier so a hostile page cannot burn a victim IP's budget.
-   */
+  // A global cap sits behind the per-IP one because rotating IPs is trivial over IPv6.
   const failures = new Map<string, { count: number; windowStart: number }>()
   const globalFailures = { count: 0, windowStart: 0 }
 
@@ -384,9 +296,8 @@ export const createCliAuth = (options: CliAuthOptions = {}): CliAuth => {
   }
 
   const cookieAttributes = (req: IncomingMessage): string[] => {
-    // Lax over Strict: Strict drops the cookie on an external top-level navigation, landing a
-    // logged-in operator on the login page, and buys nothing the Origin check does not already
-    // cover — the real CSRF surfaces are same-site-different-port and the WS handshake.
+    // Lax over Strict: Strict drops the cookie on an external top-level navigation, and buys nothing
+    // the Origin check does not already cover.
     const attrs = ['Path=/', 'HttpOnly', 'SameSite=Lax']
     if (isSecure(req)) {
       attrs.push('Secure')
@@ -407,9 +318,6 @@ export const createCliAuth = (options: CliAuthOptions = {}): CliAuth => {
     res.writeHead(303, { location, 'cache-control': 'no-store', ...headers }).end()
   }
 
-  /** JSON responses when the client asks for them, 303 redirects otherwise —
-   * so a dependency-free `<form method="post">` login page works without JS,
-   * and a fetch()-based one gets real status codes. */
   const wantsJson = (req: IncomingMessage): boolean => (req.headers.accept ?? '').includes('application/json')
 
   const readBody = (req: IncomingMessage, maxBytes: number): Promise<string | null> =>
@@ -461,8 +369,7 @@ export const createCliAuth = (options: CliAuthOptions = {}): CliAuth => {
     const body = await readBody(req, MAX_LOGIN_BODY_BYTES)
     if (body === null) {
       respondJson(res, 413, { error: 'body too large' })
-      // The socket cannot be reused: the rest of an oversized request desyncs the next
-      // keep-alive exchange. Destroy once the response has flushed.
+      // The unread rest of an oversized request would desync the next keep-alive exchange on this socket.
       res.once('finish', () => req.destroy())
       return
     }
@@ -506,13 +413,13 @@ export const createCliAuth = (options: CliAuthOptions = {}): CliAuth => {
   const handleLogout = (req: IncomingMessage, res: ServerResponse): void => {
     const json = wantsJson(req)
     if (enabled) {
-      // A forged logout is a nuisance, not a breach: absent Origin allowed, foreign refused.
+      // A forged logout is a nuisance, not a breach, so an absent Origin is allowed here.
       if (originVerdict(req) === 'foreign') {
         respondJson(res, 403, { error: 'origin not allowed' })
         return
       }
       const token = cookieToken(req)
-      // Deleting the table entry is the invalidation; clearing the cookie is tidiness.
+      // Deleting the table row is the invalidation; clearing the cookie is only tidiness.
       if (token !== undefined && token !== '' && sessions.delete(tokenKey(token))) {
         persist()
       }
@@ -560,16 +467,13 @@ export const createCliAuth = (options: CliAuthOptions = {}): CliAuth => {
     } catch {
       return false
     }
-    // Claim the whole /auth prefix (unknown subpaths 404 here) so nothing under
-    // it ever falls through to the SPA's catch-all.
+    // The whole prefix is claimed, unknown subpaths included, so nothing under it falls through to the SPA catch-all.
     if (pathname !== '/auth' && !pathname.startsWith('/auth/')) {
       return false
     }
     return handleAuthRoute(pathname, req, res).then(() => true)
   }
 
-  // Failure detail rides the redirect query, not a flash store: the login page is stateless and
-  // the message never says more than the status already did.
   const loginPage = (req: IncomingMessage): { action: string; field: string; error?: string } => {
     let reason: string | null = null
     try {

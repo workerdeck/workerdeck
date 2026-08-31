@@ -20,35 +20,18 @@ const indexRoute = createRoute({
   },
 })
 
-/**
- * Every section is a pair: a list route whose component is the empty detail
- * pane (the list itself is the shell's sidebar), and a detail route under it.
- */
 const sessionsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions',
   component: SessionsView,
 })
 
-/**
- * The gateway is part of a session's address, because a session id is only
- * unique *within* one gateway — two of them can hand out the same id, and a
- * bare `/sessions/:id` would open whichever happened to answer first.
- */
+// The gateway is part of a session's address because a session id is unique only within one gateway.
 const sessionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions/$hostId/$sessionId',
   component: SessionView,
-  /**
-   * `?subagent=<toolUseId>` frames one sub-agent's work; `?reveal=<toolUseId>`
-   * stays on the conversation and travels to a row in it. Two pairs, not a flag,
-   * because they mean different things to the panel — a **task** has no agent
-   * behind it, so framing its tool-use id draws an empty agent view.
-   *
-   * In the URL rather than component state so the takeover survives the route
-   * change the sidebar navigates across. `sn`/`rn` are nonces: without them a
-   * repeat of the same id is a props-equal no-op, and asking twice must count twice.
-   */
+  // `sn`/`rn` are nonces: without them a repeat of the same id is a props-equal no-op, and asking twice must count twice.
   validateSearch: (search: Record<string, unknown>): { subagent?: string; sn?: number; reveal?: string; rn?: number } => ({
     subagent: typeof search.subagent === 'string' ? search.subagent : undefined,
     sn: typeof search.sn === 'number' ? search.sn : undefined,
@@ -57,7 +40,6 @@ const sessionRoute = createRoute({
   }),
 })
 
-/** Pre-multi-gateway address, kept as a redirect: it can only ever have meant the serving gateway. */
 const legacySessionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions/$sessionId',
@@ -106,7 +88,6 @@ const profileRoute = createRoute({
   component: ProfileView,
 })
 
-/** Settings is a dialog now, but this was a real bookmark. */
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
@@ -129,7 +110,6 @@ export const router = createRouter({
     profileRoute,
     settingsRoute,
   ]),
-  // Static bundle with no server SPA fallback — hash history keeps deep links working.
   history: createHashHistory(),
 })
 

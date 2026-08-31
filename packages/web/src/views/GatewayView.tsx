@@ -16,11 +16,6 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-/**
- * One gateway: how it is doing, plus the form that edits it — except for the
- * implicit gateway, whose address is this page's origin and whose credential is
- * the cookie it already set, so there is nothing to edit.
- */
 export function GatewayView() {
   const { hostId } = useParams({ from: '/gateways/$hostId' })
   const navigate = useNavigate()
@@ -90,8 +85,6 @@ export function GatewayView() {
               </Row>
             ) : null}
             <Row label="Live sessions">{snapshot ? snapshot.sessions.length : <span className="text-fg-4">—</span>}</Row>
-            {/* Decided from the URL, never by probing paths — the rule
-                `isLoopbackHost` exists to keep identical across clients. */}
             <Row label="Reachability">{isLocal(host) ? 'This machine (loopback)' : 'Remote'}</Row>
             <Row label="Credential">
               {host.implicit ? (
@@ -114,9 +107,7 @@ export function GatewayView() {
               <CardTitle>Settings</CardTitle>
             </CardHeader>
             <CardContent>
-              {/* Keyed on the host id so switching gateways in the sidebar
-                  re-seeds the fields instead of leaving the previous one's
-                  values in a form now labelled with a different name. */}
+              {/* Keyed on the host id so switching gateways re-seeds the fields instead of leaving the previous one's values. */}
               <GatewayFields key={host.id} host={host} onSaved={(saved) => toast.success(`Saved ${saved.name}`)} />
             </CardContent>
           </Card>

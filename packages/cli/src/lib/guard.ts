@@ -1,17 +1,5 @@
 import { parseArgs } from 'node:util'
 
-/**
- * Restart guard for a deploy: ask a running instance whether anything would be
- * lost by stopping it, and exit non-zero while the answer is yes.
- *
- *   workerdeck guard --wait 300 --allow-parked && launchctl kickstart -k …
- *
- * Exit codes: 0 safe to restart, 1 still busy, 2 could not tell (bad URL, auth,
- * or an unexpected response — never treated as safe). `--allow-parked` /
- * `--allow-queued` are the operator asserting a durable SessionStore / durable
- * QueueAdapter; see `docs/PACKAGES.md`.
- */
-
 const BUSY_STATUSES = new Set(['starting', 'running', 'awaiting_approval'])
 
 const HELP = `usage: workerdeck guard [--url URL] [--token TOKEN] [--header name=value]
@@ -79,9 +67,6 @@ export const runGuard = async (argv: string[]): Promise<number> => {
 
   const base = values.url.replace(/\/$/, '')
   const headers: Record<string, string> = { accept: 'application/json' }
-  // The token covers the common `Authorization: Bearer` case, including this
-  // CLI's own --auth-key; --header covers hosts whose `authenticate` hook reads
-  // something else.
   if (values.token) {
     headers.authorization = `Bearer ${values.token}`
   }
@@ -116,7 +101,7 @@ export const runGuard = async (argv: string[]): Promise<number> => {
     try {
       res = await fetch(base + path, { headers })
     } catch (error) {
-      // Nothing listening on the URL we were pointed at: there is no session to lose.
+      // Nothing listening on the URL we were pointed at, so there is no session to lose.
       const code = (error as { cause?: { code?: string } })?.cause?.code
       if (code === 'ECONNREFUSED') {
         return { ok: false, status: 'unreachable' }
@@ -133,7 +118,6 @@ export const runGuard = async (argv: string[]): Promise<number> => {
     }
   }
 
-  /** One look at the server. Returns the reasons a restart would cost something. */
   const inspect = async (): Promise<Verdict> => {
     const sessions = await get('/sessions')
     if (!sessions.ok && 'status' in sessions) {
@@ -149,7 +133,7 @@ export const runGuard = async (argv: string[]): Promise<number> => {
     const all = listed as { id: string; status: string }[]
 
     const reasons: string[] = []
-    /** Worth saying out loud, but not worth blocking a deploy over. */
+    // Worth printing, but never worth blocking a deploy over.
     const notes: string[] = []
     for (const session of all.filter((s) => BUSY_STATUSES.has(s.status))) {
       reasons.push(`session ${session.id} is ${session.status}`)
@@ -162,7 +146,7 @@ export const runGuard = async (argv: string[]): Promise<number> => {
       )
     }
 
-    // A queue is optional: 404 here means this server declares none.
+    // A queue is optional, so a 404 here means this server declares none.
     const queue = await get('/queue')
     if (!queue.ok && !('status' in queue) && queue.code !== 404) {
       return { error: `GET ${base}/queue → ${queue.detail}`, reasons: [], notes: [] }
@@ -178,7 +162,6 @@ export const runGuard = async (argv: string[]): Promise<number> => {
       )
     }
     if ((stats?.parked ?? 0) > 0 && values['allow-parked']) {
-      // Not blocking — the operator has said parks are durable; session durability is not job durability.
       notes.push(
         `${stats!.parked} parked job(s): their queue-side records are the QueueAdapter's, ` +
           "not the SessionStore's — with the in-memory adapter they never finish",

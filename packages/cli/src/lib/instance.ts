@@ -15,12 +15,10 @@ export type Instance = {
   server: WorkerServer
   url: string
   port: number
-  /** Resolves when the instance stops serving. */
   closed: Promise<void>
   close: () => Promise<void>
 }
 
-/** The prebuilt dashboard `@workerdeck/web` ships. In a checkout it exists only once built. */
 export const resolveWebRoot = (): string => {
   if (existsSync(join(dashboardDir, 'index.html'))) {
     return dashboardDir
@@ -28,12 +26,8 @@ export const resolveWebRoot = (): string => {
   throw new Error(`no dashboard build at ${dashboardDir}\n` + `  in a checkout: pnpm --filter @workerdeck/web run build`)
 }
 
-/**
- * The Host-header gate for an unauthenticated instance (`allowedHosts` is null
- * whenever auth is on, and this becomes the identity function). Loopback *names*
- * are what's checked, not the socket: a DNS-rebinding attacker's connection really
- * does arrive on 127.0.0.1 — what they cannot control is the browser's Host header.
- */
+// Loopback *names* are what is checked, never the socket: a DNS-rebinding attacker's connection really does arrive
+// on 127.0.0.1, and the browser's Host header is the one thing they cannot control.
 export const createHostGuard = (allowedHosts: Set<string> | null): ((req: IncomingMessage) => boolean) => {
   if (allowedHosts === null) {
     return () => true
@@ -52,7 +46,6 @@ export const createHostGuard = (allowedHosts: Set<string> | null): ((req: Incomi
   }
 }
 
-/** Null when the target is malformed enough that `URL` refuses it: a fixed-route match wants a miss, not a throw. */
 const pathnameOf = (req: IncomingMessage): string | null => {
   try {
     return new URL(req.url ?? '/', 'http://internal').pathname
@@ -61,19 +54,10 @@ const pathnameOf = (req: IncomingMessage): string | null => {
   }
 }
 
-/**
- * Everything outside `/v1`, and the order is the contract: auth endpoints first
- * (they are how a browser gets a session at all), then the APNs route, then
- * assets — which stay ungated, being the app's own code — and documents last,
- * the single place the auth decision is made. `/apns/devices` is claimed
- * **whether or not a forwarder exists**: unclaimed, it reaches the SPA catch-all
- * and a registration POST draws 405 instead of the documented 404, which every
- * client reads as a broken gateway (`docs/GOTCHAS.md` §APNs).
- */
+// The order here is the contract: auth endpoints first (they are how a browser gets a session at all), then the APNs
+// route, then assets — ungated, being the app's own code — and documents last, the one place the auth decision is made.
 const createFallback = (
   auth: CliAuth,
-  /** Undefined when the dashboard is switched off — everything below the auth
-   * and APNs routes then 404s, and `/v1` is unaffected. */
   webRoot: string | undefined,
   hostAllowed: (req: IncomingMessage) => boolean,
   apnsRoute?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>,
@@ -101,8 +85,7 @@ const createFallback = (
       return
     }
 
-    // After the auth and APNs routes: turning the *dashboard* off must not turn off the
-    // gateway's own surfaces, and `/v1` never reaches this hook at all.
+    // Below the auth and APNs routes, because turning the *dashboard* off must not turn off the gateway's own surfaces.
     if (webRoot === undefined) {
       res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
       res.end('the web dashboard is disabled on this gateway\n')
@@ -118,7 +101,6 @@ const createFallback = (
         res.end('bad request')
         return
       }
-      // Hashed filenames are immutable by construction; index.html is served below as a document.
       const result = await serveFile(req, res, filePath, {
         immutable: pathname.startsWith('/assets/'),
       })
@@ -146,8 +128,6 @@ const createFallback = (
       return
     }
 
-    // The SPA uses hash history, so every route is `#/…` and only the entry document is ever
-    // served — no rewrite rules. `no-cache` on it is what lets an update land.
     const entry = join(webRoot, 'index.html')
     const result = await serveFile(req, res, entry, { immutable: false })
     if (result !== 'served') {
@@ -158,7 +138,6 @@ const createFallback = (
 }
 
 export const startInstance = async (config: ResolvedConfig, options: { quiet?: boolean } = {}): Promise<Instance> => {
-  // Lazy: `resolveWebRoot` throws when there is no build, and `--no-web` needs none to exist.
   const webRoot = config.web ? (config.webRoot ?? resolveWebRoot()) : undefined
   const generated: MaterializedAuthKey | null =
     config.generateAuthKey && !config.hostAuthenticates ? await materializeAuthKey(config.stateDir) : null
@@ -167,22 +146,18 @@ export const startInstance = async (config: ResolvedConfig, options: { quiet?: b
     : generated
       ? { ...config.auth, secret: generated.key }
       : config.auth
-  // Browser logins persist beside the key they were granted against: a restart must not
-  // un-pair every client. Only meaningful with a secret to log in with and somewhere to write.
   const sessions =
     authOptions.secret !== undefined && config.stateDir ? await createAuthSessionStore({ stateDir: config.stateDir }) : undefined
   const auth = createCliAuth(sessions ? { ...authOptions, sessions } : authOptions)
-  // Keep this assert. It is the only thing standing between "config stood the Host-header guard
-  // down expecting auth" and "createCliAuth got no secret" — an instance wide open while
-  // reporting itself authenticated. Every start passes through here.
+  // Keep this assert: it is the only thing between "the config stood the Host-header guard down expecting auth" and
+  // "createCliAuth got no secret", which is an instance wide open while reporting itself authenticated.
   if (config.allowedHosts === null && !config.hostAuthenticates && !auth.enabled) {
     throw new Error(
       'refusing to serve: the resolved config expects auth but no shared secret was ' +
         'materialized — this instance would be open while believing itself authenticated',
     )
   }
-  // Sibling of the assert above: CORS on an open gateway lets any allowlisted page drive it
-  // with no credential at all.
+  // Sibling of the assert above: CORS on an open gateway lets any allowlisted page drive it with no credential.
   if (config.corsOrigins.length > 0 && !config.hostAuthenticates && !auth.enabled) {
     throw new Error(
       'refusing to serve: corsOrigins is set but this instance has no auth — ' +
@@ -191,15 +166,13 @@ export const startInstance = async (config: ResolvedConfig, options: { quiet?: b
   }
   const hostAllowed = createHostGuard(config.allowedHosts)
 
-  // The only push credential in the project, here and not in `packages/server` by design.
-  // A bad key path throws before we listen: better a refusal than a phone that never buzzes.
+  // A bad key path throws before we listen: better a refusal at startup than a phone that never buzzes.
   const apns =
     config.apns === undefined
       ? undefined
       : await createApnsForwarder({
           config: config.apns,
           stateDir: config.stateDir,
-          // The same principal check as everything else on this origin.
           authenticate: (req) => (hostAllowed(req) ? auth.authenticate(req) : null),
         })
 
@@ -220,8 +193,7 @@ export const startInstance = async (config: ResolvedConfig, options: { quiet?: b
 
   const server = createWorkerServer({
     ...config.options,
-    // On by default here (off in the library): a mispointed config dir should say so at startup,
-    // not as the first session's "Not logged in" error.
+    // On by default here, off in the library: a mispointed config dir should say so at startup.
     checkCredentials: config.options.checkCredentials ?? true,
     parking,
     // Composed, not replaced: turning push on must not unhook a config file's own observer.
@@ -237,9 +209,8 @@ export const startInstance = async (config: ResolvedConfig, options: { quiet?: b
           },
     fallback,
     ...(config.corsOrigins.length ? { cors: { origins: config.corsOrigins } } : {}),
-    // A config file's own `authenticate` wins outright — mixing two auth schemes on one hook is
-    // a bypass nobody meant to write. The unauthenticated case still supplies an `authenticate`
-    // rather than `allowUnauthenticated`, because the Host check has to cover `/v1` too.
+    // A config file's own `authenticate` wins outright: mixing two auth schemes on one hook is a bypass nobody meant to
+    // write. The unauthenticated case still supplies one rather than `allowUnauthenticated`, so the Host check covers `/v1`.
     authenticate: config.hostAuthenticates
       ? (req) => (hostAllowed(req) ? config.options.authenticate!(req) : null)
       : (req) => (hostAllowed(req) ? auth.authenticate(req) : null),
@@ -261,7 +232,6 @@ export const startInstance = async (config: ResolvedConfig, options: { quiet?: b
     if (config.hostAuthenticates) {
       line('  auth: the config file supplies its own `authenticate`')
     } else if (generated?.source === 'created') {
-      // Printed exactly once, at creation: later starts point at the file instead of the secret.
       line(`  auth: generated key  ${generated.key}`)
       line(`        stored in ${generated.path} — later starts reuse it without printing it`)
     } else if (generated?.source === 'ephemeral') {
@@ -302,9 +272,8 @@ export const startInstance = async (config: ResolvedConfig, options: { quiet?: b
     closed,
     close: async () => {
       await server.close()
-      // The session table's writes are queued, not awaited by the request that caused them, so
-      // shutdown is where the queue must drain — otherwise a last-moment login is lost and
-      // `close()` resolves with a `writeFile` still in flight.
+      // The session table's writes are queued rather than awaited by the request that caused them, so a last-moment
+      // login is lost unless the queue drains here.
       await sessions?.flush?.()
       apns?.close()
       resolveClosed()

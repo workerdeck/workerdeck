@@ -22,11 +22,8 @@ import { getRail, setRail } from '@/lib/rail.ts'
 import { useMarkSeen, unseenSince } from '@/hooks/useUnseen.ts'
 import { nudgeSessions, useSessions } from '@/hooks/useSessions.ts'
 
-/**
- * Resolves the route's gateway before anything below it runs. Split in two so the
- * inner view can take a *defined* client — a link can outlive the gateway it
- * named, and hooks cannot be skipped while we find that out.
- */
+// Split in two so the inner view takes a *defined* client: a link can outlive the gateway it named, and hooks cannot
+// be skipped while we find that out.
 export function SessionView() {
   const { hostId, sessionId } = useParams({ from: '/sessions/$hostId/$sessionId' })
   const { ready } = useHosts()
@@ -34,8 +31,8 @@ export function SessionView() {
   const client = clientFor(hostId)
 
   useEffect(() => {
-    // Not until the probe has answered: the implicit gateway does not exist at first paint,
-    // and bouncing off it would break every bookmark on the way in.
+    // Not until the probe has answered: the implicit gateway does not exist at first paint, and bouncing off it here
+    // would break every bookmark on the way in.
     if (!ready || client) {
       return
     }
@@ -51,21 +48,18 @@ export function SessionView() {
 
 function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessionId: string; client: WorkerDeckClient }) {
   const navigate = useNavigate()
-  // The sub-agent takeover, addressed in the URL — see the route's `validateSearch`.
   const { subagent, sn, reveal, rn } = useSearch({ from: '/sessions/$hostId/$sessionId' })
-  // The workspace asks for this record too and nothing de-dupes, but one small GET beats
-  // threading the panel's session state back out through a prop nobody else wants.
+  // The workspace asks for this record too and nothing de-dupes, but one small GET beats threading the panel's
+  // session state back out through a prop nobody else wants.
   const { info, error } = useSessionInfo(client, sessionId)
   const markSeen = useMarkSeen(hostId, sessionId)
-  // Read ONCE, on mount: re-reading it as the mark moves would walk the catch-up row down
-  // the transcript under the reader.
+  // Read once, at mount: re-reading it as the mark moves would walk the catch-up row down the transcript under the reader.
   const [unseen] = useState(() => unseenSince(hostId, sessionId))
   const [density] = useState(getTranscriptDensity)
   const [variant] = useState(getTranscriptVariant)
   const [font] = useState(getTranscriptFont)
   const [panelFontSize] = useState(getFontSize)
-  // Read once: the workspace owns the live value, and re-seeding mid-session would yank the
-  // splitter out from under a drag.
+  // Read once: the workspace owns the live value, and re-seeding mid-session would yank the splitter out from under a drag.
   const [rail] = useState(getRail)
 
   useEffect(() => {
@@ -76,8 +70,8 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
     void navigate({ to: '/sessions' })
   }, [error, navigate])
 
-  // **State**, not a read of `document.hidden`: marks are refused while hidden, so without
-  // something re-running on the way back, a session left mid-turn keeps its badge.
+  // State, rather than a read of `document.hidden`: marks are refused while hidden, so with nothing re-running on the
+  // way back a session left mid-turn keeps its badge forever.
   const [visible, setVisible] = useState(() => !document.hidden)
   useEffect(() => {
     const sync = () => setVisible(!document.hidden)
@@ -85,9 +79,8 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
     return () => document.removeEventListener('visibilitychange', sync)
   }, [])
 
-  // Mark off the SAME record the badge counts from — the polled sessions list — which closes
-  // the loop by construction. `onVitals` and `useSessionInfo` both look right here and are
-  // not; see `docs/PACKAGES.md` §packages/web.
+  // Mark off the same record the badge counts from, the polled sessions list. `onVitals` and `useSessionInfo` both
+  // look right here and are not.
   const { snapshots } = useSessions()
   const polled = useMemo(
     () => snapshots.find((s) => s.host.id === hostId)?.sessions.find((s) => s.id === sessionId),
@@ -103,13 +96,10 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
   const close = async () => {
     try {
       await client.deleteSession(sessionId)
-    } catch {
-      // already gone
-    }
+    } catch {}
     void navigate({ to: '/sessions' })
   }
 
-  // The project name: the full path is a line of monospace nobody reads.
   const project = info?.cwd?.split('/').filter(Boolean).pop()
 
   return (
@@ -122,15 +112,9 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
       transcriptFont={font}
       fontSize={panelFontSize}
       openSubagent={subagent ? { toolUseId: subagent, nonce: sn ?? 0 } : undefined}
-      // Travel to a row without framing anything — where a **task** press lands. Its own nonce,
-      // so asking twice scrolls twice, and inside the panel `reveal` beats a standing frame.
       reveal={reveal ? { toolUseId: reveal, nonce: rn ?? 0 } : undefined}
-      // The panel's report of what it framed, folded back into the param the request travels
-      // in, so the URL stays the one truth about what is on screen. Three rules keep the
-      // round-trip from becoming a loop: **no-op on match** (the commonest report is the echo
-      // of our own request), **`sn` rides through unchanged** (the panel's request effect keys
-      // on the nonce, so a fresh one here re-requests the frame we are merely describing), and
-      // **`replace`, never push** (a report is bookkeeping, not travel).
+      // Three rules keep this report → URL → panel round-trip from looping: no-op on match, `sn` rides through
+      // unchanged, and `replace` rather than push.
       onSubagentChange={(toolUseId) => {
         if (toolUseId === subagent) {
           return
@@ -142,27 +126,21 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
           replace: true,
         })
       }}
-      // The overview ruler; inert under `cards`.
       scrubber
       stickyPrompt
       statusPlacement="bottom"
-      // Model and mode ride the status bar, beside the readings they act on.
       controlsSurface="status"
       defaultRailWidth={rail.width}
       defaultRailCollapsed={rail.collapsed}
       onRailChange={setRail}
       unseen={unseen}
       onVitals={(vitals) => {
-        // Only `itemCount`: the socket is its sole source and the catch-up row reads it.
-        // `activity`/`turns` ride the effect above, off the record the badge counts from.
+        // Only `itemCount`: the socket is its sole source, and `activity`/`turns` ride the effect above instead.
         markSeen({ itemCount: vitals.itemCount })
-        // This socket knows a turn started before any poll could; the nudge is coalesced.
         nudgeSessions()
       }}
-      // A function, so the panel hands over its `⋯` menu: this app has a real top bar.
       header={({ actions }) => (
         <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2">
-          {/* No back button: the sessions sidebar never leaves the screen. */}
           <span className="truncate text-body-sm font-medium text-fg-1">{info?.title ?? project ?? sessionId.slice(0, 8)}</span>
           {info?.engine && info.engine !== 'claude' ? (
             <Badge variant="neutral" className="shrink-0">
@@ -198,7 +176,6 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
               </div>
             </AlertDialogContent>
           </AlertDialog>
-          {/* The panel builds it — it needs the capability record and the host-file verdict. */}
           {actions}
         </div>
       )}

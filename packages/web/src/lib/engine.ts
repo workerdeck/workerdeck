@@ -1,44 +1,22 @@
-/**
- * Engine-aware create-form options, derived from the profile's **capability
- * record** and served **model catalog** — never from the engine name. The
- * record answers "what can this form offer" (modes, resume browsing, CLI-only
- * sections, the effort control); the catalog answers "which models". Both are
- * stamped on `GET /profiles` from the first request; the protocol's
- * ENGINE_CAPABILITIES is the fallback for a server that predates the field.
- */
-
 import { ENGINE_CAPABILITIES, type EngineCapabilities, type ModelOption, type PermissionMode, type ProfileInfo } from '@workerdeck/protocol'
 import { MODEL_OPTIONS } from './settings.ts'
 
 export type EngineFormOptions = {
-  /** The record the form renders around (wire copy, else the static default). */
   capabilities: EngineCapabilities
-  /** Modes to offer — always the record's list, never "everything". */
   modes: readonly PermissionMode[]
-  /** Model rows to offer, led by a "Profile default" sentinel row. */
   models: ModelOption[]
-  /** The form's mode, coerced to the record's default when this engine can't
-   * run the stored choice. */
   mode: PermissionMode
-  /** The form's model, coerced to '' (= the profile's default) when off-list. */
   model: string
-  /** Reasoning efforts offerable for the chosen model; empty = hide the
-   * control. Per-model when the catalog row declares them, else the engine's
-   * record-level set. */
+  // Empty means hide the control.
   reasoningEfforts: readonly string[]
 }
 
-/**
- * Reconcile the form's stored choices with the selected profile. Both are sticky
- * across profile switches, so a Claude alias or a CLI-only mode can arrive at any
- * profile — coerce rather than submit something the gateway will reject.
- */
+// Derived from the profile's capability record and served catalog, never from the engine name. Both form choices are
+// sticky across profile switches, so coerce them rather than submit something the gateway will reject.
 export const engineFormOptions = (profile: ProfileInfo | undefined, mode: PermissionMode, model: string): EngineFormOptions => {
   const capabilities = profile?.capabilities ?? ENGINE_CAPABILITIES[profile?.engine ?? 'claude']
   const safeMode = capabilities.permissionModes.includes(mode) ? mode : capabilities.defaultPermissionMode
 
-  // The server-stamped catalog when present, else the operator-declared provider ids, else the
-  // static Claude fallback for a profile-less server.
   let rows: ModelOption[]
   let defaultHint: string | undefined
   if (profile?.models?.length) {

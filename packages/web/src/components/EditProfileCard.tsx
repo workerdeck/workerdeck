@@ -23,11 +23,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-/**
- * Edit a store-managed profile. Name and engine are immutable: a rename would
- * orphan every session and job already pinned to the old one, and an engine
- * switch would leave the profile's other half meaningless.
- */
 export function EditProfileCard({ profile, onSaved }: { profile: ProfileInfo; onSaved: (profile: ProfileInfo) => void }) {
   const isProvider = profile.engine === 'provider'
   const [description, setDescription] = useState(profile.description ?? '')
@@ -40,10 +35,8 @@ export function EditProfileCard({ profile, onSaved }: { profile: ProfileInfo; on
   const [instructions, setInstructions] = useState(profile.session?.instructions ?? '')
   const [saving, setSaving] = useState(false)
 
-  // The same resolver the create forms use, so "what this profile offers" has one answer.
   const form = engineFormOptions(profile, mode ?? 'default', defaultModel)
-  // Its empty row is named "Profile default", which is circular inside the profile editor:
-  // here it means *this* setting is unset and the engine decides.
+  // The resolver's empty row is named "Profile default", which is circular here: inside the editor it means unset.
   const modelRows = form.models.map((row) =>
     row.value === 'default'
       ? {
@@ -69,8 +62,7 @@ export function EditProfileCard({ profile, onSaved }: { profile: ProfileInfo; on
         model: model.trim() || undefined,
         models: commaList(models).length > 0 ? commaList(models) : undefined,
       }
-      // Undeclared and empty are different: undefined inherits whatever the
-      // server's engine factory wired, [] would grant nothing at all.
+      // Undeclared and empty differ: undefined inherits whatever the server's engine factory wired, [] grants nothing.
       patch.session = {
         capabilities,
         mcpServers: commaList(mcpServers).length > 0 ? commaList(mcpServers) : undefined,
@@ -99,9 +91,7 @@ export function EditProfileCard({ profile, onSaved }: { profile: ProfileInfo; on
         </Field>
         <div className="flex flex-wrap items-end gap-3">
           <Field label="Default model">
-            {/* This profile's OWN catalog: a free-text field could name a model the engine has
-                never heard of, failing at spawn rather than where it was typed. A provider
-                profile still declaring its ids below has nothing to list, so it keeps the box. */}
+            {/* A free-text box would let you name a model the engine has never heard of, failing at spawn rather than here. */}
             {modelRows.length > 1 ? (
               <ModelPicker value={defaultModel} onChange={setDefaultModel} models={modelRows} />
             ) : (
@@ -114,13 +104,7 @@ export function EditProfileCard({ profile, onSaved }: { profile: ProfileInfo; on
             )}
           </Field>
           <Field label="Default permission mode">
-            <PermissionModeSelect
-              variant="form"
-              mode={mode}
-              onModeChange={setMode}
-              // The record, not the engine name: the one truth about which modes this engine honors.
-              modes={form.modes}
-            />
+            <PermissionModeSelect variant="form" mode={mode} onModeChange={setMode} modes={form.modes} />
           </Field>
         </div>
 

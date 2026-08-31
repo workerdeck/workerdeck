@@ -4,27 +4,11 @@ import { ChevronRight } from 'lucide-react'
 
 export type Crumb = {
   label: string
-  /** Absent on the last crumb — it is where you already are. */
+  // Absent on the last crumb, which is where you already are.
   to?: string
 }
 
-/**
- * The top bar every detail page wears: breadcrumbs left, the page's actions right,
- * outside the scroll area so neither scrolls away. The first crumb links back to
- * the section even though its list never left the sidebar — clicking it clears the
- * selection, which is the one thing the sidebar cannot do for you.
- */
-export function DetailBar({
-  crumbs,
-  actions,
-  children,
-}: {
-  crumbs: Crumb[]
-  /** Buttons at the right end of the bar. */
-  actions?: ReactNode
-  /** Anything between the crumbs and the actions — a status badge, a path. */
-  children?: ReactNode
-}) {
+export function DetailBar({ crumbs, actions, children }: { crumbs: Crumb[]; actions?: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-surface px-3">
       <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1">
@@ -50,8 +34,6 @@ export function DetailBar({
   )
 }
 
-/** The scrolling body under a {@link DetailBar} — the column width every detail
- * page shares, so three pages don't each pick their own measure. */
 export function DetailBody({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">

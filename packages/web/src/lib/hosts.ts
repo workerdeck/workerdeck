@@ -1,39 +1,22 @@
 import { useSyncExternalStore } from 'react'
 import { WorkerDeckClient, apiUrl, hostAuth, isLoopbackHost } from '@workerdeck/client'
 
-/**
- * The gateways this dashboard talks to — the mirror of `apps/vscode/src/hosts.ts`
- * and iOS's `HostStore`, with the difference a browser forces: no SecretStorage,
- * so an added gateway's key lives in `localStorage` where any script on this
- * origin can read it. The **implicit** host (the gateway that served this page)
- * therefore stores no key at all: same origin, so the HttpOnly login cookie rides
- * its REST *and* its upgrades. `docs/PACKAGES.md` §packages/web has the full shape.
- */
 export type GatewayHost = {
   id: string
   name: string
-  /** What the operator typed. `apiUrl()` turns it into the API root. */
   baseUrl: string
-  /**
-   * True for the gateway that served this page. Not editable, not removable,
-   * and credential-free — its auth is the cookie it already set.
-   */
+  // The gateway that served this page: not editable, not removable, and credential-free, since its auth is the cookie.
   implicit?: boolean
 }
 
 const HOSTS_KEY = 'workerdeck.hosts.v1'
 const keyKey = (id: string) => `workerdeck.host.${id}.key`
 
-/**
- * The implicit host's id is the string the single-gateway build already used,
- * so every watermark written before this existed keeps counting against the
- * same gateway instead of resetting to unread.
- */
+// The string the single-gateway build used, so watermarks written before this existed keep counting.
 export const IMPLICIT_HOST_ID = 'gateway'
 
 type State = {
   hosts: GatewayHost[]
-  /** False until the same-origin probe has answered — the list is not yet final. */
   ready: boolean
 }
 
@@ -52,8 +35,7 @@ const readStored = (): GatewayHost[] => {
   try {
     const raw = localStorage.getItem(HOSTS_KEY)
     const parsed = raw ? (JSON.parse(raw) as GatewayHost[]) : []
-    // Never trust a stored `implicit`: that flag is decided by the probe, and a
-    // hand-edited entry claiming it would be a host with no credential path.
+    // Never trust a stored `implicit`: the probe decides it, and a hand-edited entry claiming it has no credential path.
     return Array.isArray(parsed) ? parsed.map(({ implicit: _, ...h }) => h) : []
   } catch {
     return []
@@ -63,17 +45,11 @@ const readStored = (): GatewayHost[] => {
 const persist = (hosts: GatewayHost[]): void => {
   try {
     localStorage.setItem(HOSTS_KEY, JSON.stringify(hosts.filter((h) => !h.implicit)))
-  } catch {
-    /* private mode — the list holds for this page only */
-  }
+  } catch {}
 }
 
-/**
- * **Not `crypto.randomUUID()`**: it is gated on a secure context, so it is
- * `undefined` on exactly the deployment this feature exists for — a dashboard
- * served over plain HTTP on a Tailscale name. `getRandomValues` carries no such
- * gate, and uniqueness within this browser is the whole requirement.
- */
+// Not `crypto.randomUUID()`: it is gated on a secure context, so it is undefined on exactly the deployment this exists
+// for — a dashboard served over plain HTTP on a tailnet name. `getRandomValues` carries no such gate.
 export const newHostId = (): string => {
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
@@ -100,20 +76,12 @@ const setKey = (id: string, key: string): void => {
     } else {
       localStorage.setItem(keyKey(id), key)
     }
-  } catch {
-    /* private mode */
-  }
+  } catch {}
 }
-
-// ── clients ────────────────────────────────────────────────────────────────
 
 const clients = new Map<string, WorkerDeckClient>()
 
-/**
- * One client per host id. Cached because two clients for one gateway would open
- * two sockets and split the tool bridge's "first attached client" between them.
- * Cleared whenever the host list changes: an edited address or key is a different client.
- */
+// One client per host id: two for one gateway would open two sockets and split the tool bridge's "first attached client".
 export const clientFor = (hostId: string): WorkerDeckClient | undefined => {
   const cached = clients.get(hostId)
   if (cached) {
@@ -129,7 +97,6 @@ export const clientFor = (hostId: string): WorkerDeckClient | undefined => {
   }
   const client = new WorkerDeckClient({
     baseUrl: base,
-    // The implicit host authenticates with the cookie the gateway set, which rides on its own.
     ...(host.implicit ? {} : hostAuth({ baseUrl: base, key: keyFor(host.id) })),
   })
   clients.set(hostId, client)
@@ -138,12 +105,6 @@ export const clientFor = (hostId: string): WorkerDeckClient | undefined => {
 
 export const hostById = (id: string): GatewayHost | undefined => state.hosts.find((h) => h.id === id)
 
-/**
- * The gateway answering for surfaces that are not (yet) per-gateway: jobs,
- * profiles, the create form's pickers. Implicit host when there is one, else the
- * first configured. Named rather than implied — anything calling this is *choosing*
- * a gateway, and should say so in its UI when the choice could surprise someone.
- */
 export const primaryHost = (): GatewayHost | undefined => state.hosts.find((h) => h.implicit) ?? state.hosts[0]
 
 export const primaryClient = (): WorkerDeckClient | undefined => {
@@ -151,10 +112,7 @@ export const primaryClient = (): WorkerDeckClient | undefined => {
   return host ? clientFor(host.id) : undefined
 }
 
-/** Decided from the URL, never by probing paths — the rule `isLoopbackHost` keeps identical across clients. */
 export const isLocal = (host: GatewayHost): boolean => isLoopbackHost(host)
-
-// ── mutations ──────────────────────────────────────────────────────────────
 
 export const saveHost = (host: GatewayHost, key: string): void => {
   const stored = readStored()
@@ -171,13 +129,7 @@ export const removeHost = (id: string): void => {
   emit({ ...state, hosts: [...state.hosts.filter((h) => h.implicit), ...next] })
 }
 
-// ── discovery ──────────────────────────────────────────────────────────────
-
-/**
- * Is this page being served *by* a gateway? The **shape** of `/auth/status` is
- * checked, not just the status: a generic static host answers anything with
- * `200 text/html`, and "it replied" is not "it is a gateway".
- */
+// The *shape* of `/auth/status` is checked, not just the status: "it replied 200" is not "it is a gateway".
 const probeOrigin = async (): Promise<boolean> => {
   try {
     const res = await fetch(`${location.origin}/auth/status`, {
@@ -204,8 +156,8 @@ const start = (): void => {
   }
   started = true
   const stored = readStored()
-  // Stored hosts render immediately; the implicit one joins when the probe answers. `ready`
-  // is what tells an empty list apart from an unasked question.
+  // Stored hosts render at once and the implicit one joins when the probe answers, so `ready` is what tells an
+  // empty list apart from an unasked question.
   state = { hosts: stored, ready: false }
   void probeOrigin().then((served) => {
     emit({
@@ -238,11 +190,9 @@ export const useHosts = (): State =>
     () => state,
   )
 
-/** Snapshot for non-React callers (the sessions poll). */
 export const currentHosts = (): GatewayHost[] => {
   start()
   return state.hosts
 }
 
-/** Subscribe outside React — the sessions store re-polls when gateways change. */
 export const onHostsChange = (listener: () => void): (() => void) => subscribe(listener)

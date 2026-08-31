@@ -8,9 +8,7 @@ export const getTheme = (): Theme => {
     if (stored === 'light' || stored === 'dark') {
       return stored
     }
-  } catch {
-    // storage unavailable
-  }
+  } catch {}
   return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
@@ -19,9 +17,7 @@ export const applyTheme = (theme: Theme = getTheme()): void => document.document
 export const setTheme = (theme: Theme): void => {
   try {
     localStorage.setItem(KEY, theme)
-  } catch {
-    // storage unavailable
-  }
+  } catch {}
   applyTheme(theme)
 }
 

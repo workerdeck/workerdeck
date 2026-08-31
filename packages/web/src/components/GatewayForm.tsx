@@ -3,10 +3,6 @@ import { apiUrl } from '@workerdeck/client'
 import { Button, Dialog, DialogBody, DialogContent, DialogHeader, Input, toast } from '@workerdeck/ui'
 import { keyFor, newHostId, removeHost, saveHost, type GatewayHost } from '@/lib/hosts.ts'
 
-/**
- * The gateway's three fields — name, address, key *is* the record — shared by the
- * create modal and the edit page, which differ only in the frame around them.
- */
 export function GatewayFields({
   host,
   submitLabel = 'Save',
@@ -16,7 +12,6 @@ export function GatewayFields({
   host: GatewayHost
   submitLabel?: string
   onSaved: (host: GatewayHost) => void
-  /** Extra buttons left of Save — Cancel in a modal, Remove on the page. */
   actions?: ReactNode
 }) {
   const [name, setName] = useState(host.name)
@@ -24,7 +19,6 @@ export function GatewayFields({
   const [key, setKey] = useState(() => keyFor(host.id))
 
   const submit = () => {
-    // Validated the way every other client validates it, so one address means one gateway.
     if (apiUrl({ baseUrl }) === undefined) {
       toast.error('That address is not a URL')
       return
@@ -63,7 +57,6 @@ export function GatewayFields({
           placeholder="Leave empty for an unauthenticated gateway"
           spellCheck={false}
         />
-        {/* A browser has no keychain; the operator should know where this ends up. */}
         <span className="text-label text-fg-4">
           Stored in this browser’s local storage, and sent on the WebSocket URL when attaching. Use a gateway you control, over a network
           you trust.
@@ -77,7 +70,6 @@ export function GatewayFields({
   )
 }
 
-/** Adding a gateway, as a modal — the shape every `+` in this app opens. */
 export function CreateGatewayDialog({
   open,
   onOpenChange,
@@ -87,8 +79,7 @@ export function CreateGatewayDialog({
   onOpenChange: (open: boolean) => void
   onCreated: (host: GatewayHost) => void
 }) {
-  // A fresh id per opening, so cancelling and reopening does not overwrite the entry an
-  // earlier attempt half-created.
+  // A fresh id per opening, so cancelling and reopening cannot overwrite what an earlier attempt half-created.
   const [draft, setDraft] = useState(() => newDraft())
   return (
     <Dialog
@@ -121,8 +112,6 @@ export function CreateGatewayDialog({
 
 const newDraft = (): GatewayHost => ({ id: newHostId(), name: '', baseUrl: '' })
 
-/** Removing one. Confirmed, because the key goes with it and this browser has
- * no other copy. */
 export function ConfirmRemoveGateway({ host, onClose, onRemoved }: { host: GatewayHost; onClose: () => void; onRemoved: () => void }) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>

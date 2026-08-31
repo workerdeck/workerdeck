@@ -33,10 +33,6 @@ function Chips({ items, empty }: { items: string[]; empty: string }) {
   )
 }
 
-/** Detail of one profile: its worker-level defaults, its provider/session grants,
- * and — for Claude profiles — a curated snapshot of the config directory
- * (settings.json, memory, skills, agents, commands). Store-managed profiles get an
- * editor; ones declared in server options stay read-only, since they are code. */
 export function ProfileView() {
   const { profileName } = useParams({ from: '/profiles/$profileName' })
   const navigate = useNavigate()
@@ -61,8 +57,8 @@ export function ProfileView() {
         })
     }
     load()
-    // The plan usage on the record is not static: it is the newest reading from any session
-    // on this account, and sessions this page knows nothing about keep spending.
+    // The plan usage on the record is not static: it is the newest reading from any session on this account, and
+    // sessions this page knows nothing about keep spending.
     const timer = setInterval(load, 60_000)
     return () => {
       alive = false
@@ -87,21 +83,16 @@ export function ProfileView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* No back link inside the body: the profiles list is the sidebar and
-          never left the screen, and the crumb names the section anyway. */}
       <DetailBar
         crumbs={[{ label: 'Profiles', to: '/profiles' }, { label: profileName }]}
         actions={
           <>
-            {/* Provider profiles have no config dir to open. */}
             {profile?.configDir ? (
               <Button variant="outline" size="xs" onClick={() => openInVsCode(profile.configDir!)}>
                 <Code className="size-3" />
                 Open in VSCode
               </Button>
             ) : null}
-            {/* Only store-backed profiles can be removed — declared ones live in
-                the server's options, where they are code. */}
             {profile?.managed ? (
               <Button variant="outline" size="xs" onClick={() => void remove()}>
                 <Trash2 className="size-3" />
@@ -148,8 +139,7 @@ export function ProfileView() {
                     <Row label="Models offered">
                       <Chips items={profile.provider?.models ?? []} empty="the default model only" />
                     </Row>
-                    {/* A variable NAME, never a key: credentials are resolved from
-                        the server's environment and never cross the wire. */}
+                    {/* A variable NAME, never a key: credentials are resolved from the server's environment and never cross the wire. */}
                     <Row label="API key variable">
                       {profile.provider?.apiKeyEnv ? (
                         <span className="font-mono text-label">{profile.provider.apiKeyEnv}</span>
@@ -162,12 +152,7 @@ export function ProfileView() {
               </CardContent>
             </Card>
 
-            {/* The plan behind the profile, not any one session's view of it:
-                the gateway keeps the newest reading each of this profile's
-                sessions reported, so this answers "how much is left on this
-                account" with nothing open. Absent means nothing has reported —
-                unknown, never 0% — so the card stays away rather than drawing
-                empty bars. */}
+            {/* Absent means nothing has reported — unknown, never 0% — so the card stays away rather than drawing empty bars. */}
             {usageWindows.length > 0 ? (
               <Card>
                 <CardHeader>
@@ -185,8 +170,6 @@ export function ProfileView() {
                   <CardTitle>Session grants</CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-col divide-y divide-border">
-                  {/* Undeclared ≠ nothing: it means the profile doesn't constrain
-                      what the server's engine factory wired. */}
                   <Row label="Capabilities">
                     <Chips items={profile.session?.capabilities ?? []} empty="not declared — whatever the server wired" />
                   </Row>
@@ -204,8 +187,6 @@ export function ProfileView() {
               </Card>
             ) : null}
 
-            {/* Provider profiles have no config dir — the whole card would read
-                'not found'. Their configuration is the provider block above. */}
             {profile.engine === 'provider' ? null : (
               <Card>
                 <CardHeader>

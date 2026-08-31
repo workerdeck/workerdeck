@@ -1476,7 +1476,15 @@ WorkerDeck`): gateway + dashboard on ONE port via the server's `fallback` hook. 
 is load-bearing, not cosmetic — a tab can't put a header on a WS handshake, so a cookie is the
 only credential it can present on an attach, and cookies are per-origin. `--auth-key` is one
 secret over two transports (login-page cookie for browsers, header for services); a config file
-supplying its own `authenticate` turns the built-in off entirely rather than layering. Browser
+supplying its own `authenticate` turns the built-in off entirely rather than layering. Option
+precedence is **narrowest wins — flags > env > config file > defaults** for every scalar (`port`,
+`host`, `authKey`, `stateDir`, `web`), but the *list* options deliberately do not all follow it,
+and the split is by what a half-applied value would mean. `allowedOrigins`, `allowedHosts` and
+`insecureHosts` **merge** flags into the config file's entries: each is one more thing to accept,
+so losing the file's half would silently narrow a gate the operator declared. `corsOrigins` and
+`cwdRoots`/`fsRoots` **replace** when the flag side is non-empty. `--profile` replaces too, and
+that one is a security decision rather than a convenience: a merged profile set is a credential
+mix-up, so naming any profile on the command line means the command line names them all. Browser
 logins are durable (`auth-sessions.ts` → `<stateDir>/auth-sessions.json`, 0600) and the table is
 keyed by `HMAC(secret, token)`, which is what makes the file worthless to a reader and makes key
 rotation invalidate every cookie for free — see `docs/GOTCHAS.md`. Loopback

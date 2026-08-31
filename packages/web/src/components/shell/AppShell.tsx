@@ -10,12 +10,6 @@ import { ProfilesSidebar } from './ProfilesSidebar.tsx'
 import { SessionsSidebar } from './SessionsSidebar.tsx'
 import { ThemeToggle } from './ThemeToggle.tsx'
 
-/**
- * The activity bar. Every entry is a *section* — a list on the left, a detail pane
- * beside it — which is why each names its own sidebar **here** rather than mounting
- * one from a route: navigating within a section must not replace the list you
- * picked from. Settings is absent on purpose; it is a dialog, not a section.
- */
 const NAV = [
   { id: 'sessions', label: 'Sessions', icon: SquareTerminal, path: '/sessions', sidebar: SessionsSidebar },
   { id: 'gateways', label: 'Gateways', icon: Plug, path: '/gateways', sidebar: GatewaysSidebar },
@@ -42,13 +36,10 @@ export function AppShell({ children }: { children?: ReactNode }) {
     setCollapsed((prev) => {
       try {
         localStorage.setItem(COLLAPSED_KEY, prev ? '0' : '1')
-      } catch {
-        // private mode etc. — the preference just won't persist
-      }
+      } catch {}
       return !prev
     })
   }
-  // One spelling for the three foot icons, so they answer the pointer identically.
   const footIconClass =
     'flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors outline-none hover:bg-row-hover hover:text-fg-1'
   const itemClass = (active: boolean) =>
@@ -71,8 +62,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
               to={item.path}
               title={collapsed ? item.label : undefined}
               aria-label={item.label}
-              // Already in this section: stay put. Navigating to the section root from inside
-              // it would close whatever you have open.
+              // Already in this section: navigating to its root from inside would close whatever you have open.
               onClick={(e) => {
                 if (item.id === section?.id) {
                   e.preventDefault()
@@ -85,8 +75,6 @@ export function AppShell({ children }: { children?: ReactNode }) {
             </Link>
           ))}
         </nav>
-        {/* Icons rather than nav rows: none of the three is a place you navigate to. Spread
-            across the bar's own axis — a column when collapsed, a row when not. */}
         <div className={cn('mt-1 grid place-items-center gap-1', collapsed ? 'grid-rows-3' : 'grid-cols-3')}>
           <button type="button" onClick={() => setSettingsOpen(true)} title="Settings" aria-label="Settings" className={footIconClass}>
             <Settings className="size-4" />
@@ -103,10 +91,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
           </button>
         </div>
       </aside>
-      {/* The sidebar and the editor area share ONE frame: two panes of the same surface, so a
-          seam of desktop between them would read as two windows. `overflow-hidden` clips the
-          sidebar into the rounded corners. Keyed on the section so switching mounts a fresh
-          sidebar rather than reconciling one list component into another's shape. */}
+      {/* Keyed on the section so switching mounts a fresh sidebar rather than reconciling one list into another's shape. */}
       <div className="app-frame frame-shine m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-xl">
         {Sidebar ? <Sidebar key={section?.id} /> : null}
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">{children ?? <Outlet />}</main>

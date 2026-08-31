@@ -2,9 +2,6 @@ import type { ModelOption } from '@workerdeck/protocol'
 import { ModelSelect } from '@workerdeck/ui'
 import { MODEL_OPTIONS } from '@/lib/settings.ts'
 
-/** Form-styled model dropdown. '' = the engine's default model — the CLI's for a
- * Claude profile, the profile's declared one for a provider profile. `models`
- * defaults to the static Claude alias list. */
 export function ModelPicker({
   value,
   onChange,

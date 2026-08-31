@@ -1012,6 +1012,14 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 
 ## Server, profiles & auth
 
+- **`writeFile`'s `mode` option applies only when the file is *created***, so a 0600 write over an
+  existing file silently keeps whatever bits that file already had. Every secret-adjacent write in
+  `packages/cli` therefore follows `writeFile` with an explicit `chmod`: `auth-key.ts` (which
+  regenerates over a file it has just judged corrupt — precisely the case where the old mode is not
+  ours), `auth-sessions.ts` (whose temp path is `${path}.${pid}.tmp` and can be reused by a later
+  run of the same pid), and `apns/devices.ts` (rewritten on every device registration). The `chmod`
+  reads as redundant beside the `mode` argument and is not.
+
 - `createWorkerServer` refuses to start without `authenticate` unless `allowUnauthenticated: true`
   (loopback dev only). Keep it that way.
 - **A browser cannot authenticate a WebSocket attach with a header** — the `WebSocket` constructor
@@ -1813,6 +1821,14 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   second menu.
 
 ## APNs push (the CLI's forwarder)
+
+- **The push `category` is a wire contract with the iOS app, and breaking it fails silently.**
+  `forwarder.ts` sends `PERMISSION_REQUEST` for a permission request and `SESSION_EVENT` for
+  everything else; the app registers its Approve/Deny actions under those exact strings
+  (`PushPayload.swift`). There is no shared type between the halves and neither side errors on a
+  mismatch — the notification simply arrives with no buttons on it, which reads as "approval from
+  the lock screen is broken" rather than as a typo. Renaming one half means shipping both, and an
+  older app keeps the old string.
 
 - **Sandbox and production are different token *namespaces*, not just different URLs.** A build
   run from Xcode gets a sandbox token; a TestFlight or App Store build gets a production one.

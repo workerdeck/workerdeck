@@ -13,32 +13,16 @@ import {
 } from '@/lib/sidebar.ts'
 
 export interface SidebarFrameProps {
-  /** Which sidebar this is — the key its width and collapsed state persist under. */
   section: SidebarSection
-  /** Small-caps view title, VS Code's shape. Not a page heading. */
   title: string
-  /** One fact worth having without expanding anything, beside the title — the
-   * connected-gateway count, the number of running jobs. */
   badge?: ReactNode
-  /** View actions, right of the title. The `+` that creates goes last, as it
-   * does in VS Code and in the extension. */
   actions?: ReactNode
   children: ReactNode
-  /**
-   * What the collapsed rail shows instead of the list. Optional, and its absence
-   * is meaningful: a section whose rows carry nothing legible at 44px collapses to
-   * the expand button rather than to a column of identical glyphs.
-   */
+  // Absence is meaningful: a section whose rows carry nothing legible at 44px collapses to the expand button alone.
   rail?: ReactNode
-  /** Rail actions above the rail body — usually the same `+`, icon-only. */
   railActions?: ReactNode
 }
 
-/**
- * The chrome every section sidebar shares: view header, collapse toggle, persisted
- * width, splitter. It deliberately owns nothing else — each section's rows,
- * filtering and empty state have nothing in common beyond sitting in this box.
- */
 export function SidebarFrame({ section, title, badge, actions, children, rail, railActions }: SidebarFrameProps) {
   const [width, setWidth] = useState(() => getSidebarWidth(section))
   const [collapsed, setCollapsed] = useState(() => getSidebarCollapsed(section))
@@ -91,7 +75,6 @@ export function SidebarFrame({ section, title, badge, actions, children, rail, r
   )
 }
 
-/** The scrolling body most sidebars want under the header. */
 export function SidebarBody({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn('min-h-0 flex-1 overflow-y-auto pb-2', className)}>{children}</div>
 }

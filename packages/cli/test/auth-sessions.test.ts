@@ -105,7 +105,6 @@ describe('createAuthSessionStore', () => {
     const store = await createAuthSessionStore({ stateDir: dir })
     const auth = createCliAuth({ secret: SECRET, sessions: store })
 
-    // Drive the login through the same path the dashboard does.
     const req = {
       method: 'POST',
       url: '/auth/login',

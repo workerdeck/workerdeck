@@ -3,12 +3,6 @@ import { stat } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join, resolve, sep } from 'node:path'
 
-/**
- * Static file serving for the bundled dashboard. Deliberately policy-free — what
- * counts as a document, and whether an unauthenticated visitor gets the app or a
- * login page, is `instance.ts`'s call.
- */
-
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -38,7 +32,6 @@ export const contentTypeFor = (pathname: string): string => {
   return CONTENT_TYPES[pathname.slice(dot).toLowerCase()] ?? 'application/octet-stream'
 }
 
-/** A request for a file rather than an app route: anything with a known extension. */
 export const looksLikeAsset = (pathname: string): boolean => {
   const dot = pathname.lastIndexOf('.')
   if (dot < 0) {
@@ -47,21 +40,18 @@ export const looksLikeAsset = (pathname: string): boolean => {
   return pathname.slice(dot).toLowerCase() in CONTENT_TYPES
 }
 
-/** Resolve `pathname` inside `root`, or null if it escapes. */
 export const resolveWithinRoot = (root: string, pathname: string): string | null => {
   let decoded: string
   try {
     decoded = decodeURIComponent(pathname)
   } catch {
-    return null // malformed percent-encoding
+    return null
   }
   if (decoded.includes('\0')) {
     return null
   }
-  // Joined *without* normalising `decoded` first: normalising an absolute
-  // pathname collapses its leading `..` segments, which quietly rebases an
-  // escape attempt inside the root and leaves the containment check below with
-  // nothing to catch. Let `join` resolve the traversal for real, then reject it.
+  // Never normalise `decoded` first: that collapses an absolute pathname's leading `..` segments and rebases the
+  // escape attempt inside the root, leaving the containment check below with nothing to catch.
   const candidate = resolve(join(root, decoded))
   const base = resolve(root)
   if (candidate !== base && !candidate.startsWith(base + sep)) {
@@ -76,8 +66,7 @@ export const sendHtml = (req: IncomingMessage, res: ServerResponse, status: numb
     'content-type': 'text/html; charset=utf-8',
     'content-length': body.byteLength,
     'cache-control': cache,
-    // The dashboard is same-origin with the API and holds an ambient session
-    // cookie; framing it elsewhere is only ever clickjacking.
+    // The dashboard holds an ambient session cookie, so framing it elsewhere is only ever clickjacking.
     'x-frame-options': 'DENY',
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'same-origin',
@@ -87,11 +76,6 @@ export const sendHtml = (req: IncomingMessage, res: ServerResponse, status: numb
 
 export type ServeResult = 'served' | 'not-found' | 'method-not-allowed'
 
-/**
- * Stream a file out of `root`. `immutable` is a promise about the URL, not the
- * file, so it is the caller's call: hashed assets cache forever, index.html must
- * revalidate or a deployed update never reaches a browser holding the old one.
- */
 export const serveFile = async (
   req: IncomingMessage,
   res: ServerResponse,

@@ -1,20 +1,8 @@
-/**
- * The login page belongs to the CLI, not the dashboard: an unauthenticated
- * document request gets this instead of index.html and nothing in the SPA
- * knows about it. Self-contained by necessity — it renders before any bundled
- * asset is worth fetching, and must not depend on the app it is gating.
- */
-
 export type LoginPageOptions = {
-  /** Where the form POSTs. Comes from the auth module, not hardcoded here. */
   action: string
-  /** Form field name carrying the secret. */
   field: string
-  /** Shown when a previous attempt failed. */
   error?: string
-  /** Where to send the browser after a successful login. */
   redirectTo?: string
-  /** Field name carrying the post-login redirect. */
   redirectField?: string
 }
 

@@ -8,7 +8,6 @@ import { RowAction, SidebarRow } from './SidebarRow.tsx'
 import { useHosts, type GatewayHost } from '@/lib/hosts.ts'
 import { useSessions } from '@/hooks/useSessions.ts'
 
-/** The configured gateways, as their own section sidebar. */
 export function GatewaysSidebar() {
   const navigate = useNavigate()
   const activeId = useRouterState({
@@ -44,7 +43,7 @@ export function GatewaysSidebar() {
       >
         <SidebarBody>
           {ready && hosts.length === 0 ? (
-            // No implicit localhost is invented, exactly as the extension refuses to.
+            // No implicit localhost is invented here, exactly as the extension refuses to.
             <Empty
               icon={<Server />}
               title="No gateways yet"
@@ -79,7 +78,6 @@ export function GatewaysSidebar() {
                 }
                 description={host.baseUrl}
                 actions={
-                  // The implicit gateway has nothing to remove: that would just be closing the tab.
                   host.implicit ? null : (
                     <RowAction label={`Remove ${host.name}`} onClick={() => setRemoving(host)}>
                       <Trash2 className="size-3" />

@@ -3,27 +3,12 @@ import { isJobRun, sessionState, type SessionInfo, type SessionRow } from '@work
 import { clientFor, currentHosts, isLocal, onHostsChange, type GatewayHost } from '../lib/hosts.ts'
 import { useUnseen } from './useUnseen.ts'
 
-/**
- * The session registry, polled at a rate that follows what it is showing (busy
- * tightens it, settled relaxes it) and **nudgeable** by anything that already
- * knows better — the session view's socket learns a turn started before any poll
- * could. Stays REST rather than a second socket: the list is a rollup, and the one
- * live attach per session belongs to the panel.
- *
- * A **module-scope store**, not per-hook state: two copies would poll on two
- * clocks, answer from two snapshots, and a nudge would reach only one of them.
- */
 const IDLE_MS = 5_000
 const BUSY_MS = 1_200
-/**
- * Floor between two nudged fetches: `onVitals` fires per streamed delta, so an
- * uncoalesced nudge would be a REST call per token. The poll runs underneath, so
- * dropping one costs latency, never freshness.
- */
+// `onVitals` fires per streamed delta, so an uncoalesced nudge would be a REST call per token.
 const NUDGE_MIN_GAP_MS = 700
 
-/** One gateway's slice of the list. Kept apart so one dead gateway cannot blank
- * the others — the same discipline `SessionListModel` and `SessionsModel` keep. */
+// One gateway's slice of the list, kept apart so one dead gateway cannot blank the others.
 export type HostSnapshot = {
   host: GatewayHost
   sessions: SessionInfo[]
@@ -46,7 +31,7 @@ let inFlight: Promise<void> | undefined
 let lastFetchAt = 0
 let nudgeTimer: ReturnType<typeof setTimeout> | undefined
 
-/** Fetch every gateway now. Concurrent callers share the one pass in flight. */
+// Concurrent callers share the one pass in flight.
 export const refreshSessions = (): Promise<void> => {
   inFlight ??= (async () => {
     lastFetchAt = Date.now()
@@ -62,7 +47,7 @@ export const refreshSessions = (): Promise<void> => {
           try {
             return { host, sessions: await client.listSessions() }
           } catch (e) {
-            // Keep this gateway's last good rows: one failed poll is a blip.
+            // Keep this gateway's last good rows, because one failed poll is a blip.
             return {
               host,
               sessions: previous.get(host.id)?.sessions ?? [],
@@ -79,10 +64,7 @@ export const refreshSessions = (): Promise<void> => {
   return inFlight
 }
 
-/**
- * "Something changed that the poll doesn't know about yet." Coalesced and rate
- * limited, so it is safe to call from a streaming callback.
- */
+// Coalesced and rate limited, so it is safe to call from a streaming callback.
 export const nudgeSessions = (): void => {
   if (nudgeTimer !== undefined) {
     return
@@ -102,10 +84,8 @@ const subscribe = (listener: () => void): (() => void) => {
 let pollTimer: ReturnType<typeof setInterval> | undefined
 let pollRegime: number | undefined
 
-/**
- * One timer for the whole app, re-armed only when the regime changes — a fresh
- * timer per response would drift toward continuous polling.
- */
+// One timer for the whole app, re-armed only when the regime changes: a fresh timer per response drifts toward
+// continuous polling.
 const arm = (busy: boolean): void => {
   const interval = busy ? BUSY_MS : IDLE_MS
   if (pollTimer !== undefined && pollRegime === interval) {
@@ -124,7 +104,6 @@ export const useSessions = () => {
     () => state,
     () => state,
   )
-  // Re-poll on a gateway change rather than waiting out the interval.
   useEffect(() => onHostsChange(() => void refreshSessions()), [])
 
   const busy = snapshot.snapshots.some((s) =>
@@ -144,14 +123,7 @@ export const useSessions = () => {
   return { ...snapshot, refresh: refreshSessions }
 }
 
-/**
- * Every gateway's sessions as one list of rows. The gateway is a **facet**, not
- * the frame — protocol's view model already groups, filters and sorts by `hostId`.
- *
- * Job runs are left out because this dashboard gives them their own section, where
- * they carry their queue state; the omission is *this composition's*, not the view
- * model's.
- */
+// Job runs are left out because this dashboard gives them their own section; the omission is this composition's.
 export const useSessionRows = (snapshots: HostSnapshot[]): SessionRow[] => {
   const { unseenFor } = useUnseen()
   return useMemo(
@@ -162,7 +134,6 @@ export const useSessionRows = (snapshots: HostSnapshot[]): SessionRow[] => {
           .map((info) => ({
             hostId: host.id,
             hostName: host.name,
-            // A session on a remote gateway runs on another machine, and its cwd is that machine's.
             local: isLocal(host),
             adapter: info.engine ?? 'claude',
             state: sessionState(info),

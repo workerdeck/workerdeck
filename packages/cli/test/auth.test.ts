@@ -28,8 +28,7 @@ afterEach(async () => {
   }
 })
 
-/** Wire the auth surface the way the CLI's request handler does: auth routes
- * first, then the gateway (authenticate), then the static host (hasValidSession). */
+// Wired in the CLI request handler's order: auth routes, then `authenticate`, then `hasValidSession`.
 const startHost = async (auth: CliAuth): Promise<string> => {
   const server = createServer((req, res) => {
     void (async () => {
@@ -61,8 +60,7 @@ const startHost = async (auth: CliAuth): Promise<string> => {
 
 type RawResponse = { status: number; headers: IncomingMessage['headers']; setCookies: string[]; body: string }
 
-// Raw node:http instead of fetch: the fetch spec marks Origin a forbidden
-// request header, and these tests exist to send arbitrary Origins.
+// Raw node:http instead of fetch: the fetch spec marks Origin a forbidden request header, and these tests send arbitrary ones.
 const request = (url: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<RawResponse> => {
   return new Promise((resolve, reject) => {
     const req = httpRequest(url, { method: init.method ?? 'GET', headers: init.headers, agent: false }, (res) => {
@@ -130,8 +128,6 @@ describe('header transport', () => {
     const principal = (await auth.authenticate(
       fakeReq({ method: 'POST', headers: { 'x-workerdeck-key': SECRET, origin: 'https://evil.example' } }),
     )) as CliPrincipal
-    // Not ambient authority: the sender chose to attach the secret, so a
-    // foreign Origin is irrelevant.
     expect(principal.via).toBe('header')
   })
 
@@ -163,9 +159,6 @@ describe('query-string transport (browser WS attach)', () => {
   })
 
   it('does NOT authenticate REST with ?key=', async () => {
-    // The whole point of confining it to upgrades: a credential in a URL is
-    // logged by proxies, so what a leaked URL buys must be one attach — never
-    // the run of the API.
     expect(await auth.authenticate(fakeReq({ url: `/v1/sessions?key=${encodeURIComponent(SECRET)}` }))).toBeNull()
     expect(await auth.authenticate(fakeReq({ method: 'POST', url: `/v1/sessions?key=${encodeURIComponent(SECRET)}` }))).toBeNull()
   })
@@ -177,8 +170,6 @@ describe('query-string transport (browser WS attach)', () => {
   })
 
   it('is off entirely when the host supplies its own auth (no secret)', async () => {
-    // Embedded deployments never see this transport: `createCliAuth` is built
-    // with `secret: undefined`, and `instance.ts` routes to the host's hook.
     const disabled = createCliAuth()
     const principal = (await disabled.authenticate(ws('/v1/sessions/abc/ws?key=anything'))) as CliPrincipal
     expect(principal.via).toBe('open')
@@ -197,7 +188,6 @@ describe('login and cookie flow', () => {
     expect(cookie).toContain('SameSite=Lax')
     expect(cookie).toContain('Path=/')
     expect(cookie).toContain('Max-Age=604800')
-    // Plain HTTP with no trusted proxy: Secure would make the browser drop it.
     expect(cookie).not.toContain('Secure')
   })
 
@@ -263,7 +253,6 @@ describe('login and cookie flow', () => {
     const base = await startHost(createCliAuth({ secret: SECRET }))
     expect((await request(`${base}/auth/login`)).status).toBe(405)
     expect((await request(`${base}/auth/status`, { method: 'POST' })).status).toBe(405)
-    // Claimed by the auth surface, not the SPA catch-all.
     expect((await request(`${base}/auth/nope`)).status).toBe(404)
   })
 })
@@ -281,8 +270,6 @@ describe('CSRF: the Origin policy', () => {
     const ok = await auth.authenticate(fakeReq({ method: 'POST', headers: { cookie, host, origin: `http://${host}` } }))
     expect(ok).toBeTruthy()
     expect(await auth.authenticate(fakeReq({ method: 'POST', headers: { cookie, host, origin: 'http://evil.example' } }))).toBeNull()
-    // Browsers always send Origin on POST; absence means a non-browser client
-    // replaying the cookie, which should use the header transport instead.
     expect(await auth.authenticate(fakeReq({ method: 'POST', headers: { cookie, host } }))).toBeNull()
   })
 
@@ -298,13 +285,13 @@ describe('CSRF: the Origin policy', () => {
     const { auth, cookie, host } = await cookieAuth()
     expect(await auth.authenticate(fakeReq({ headers: { cookie, host } }))).toBeTruthy()
     expect(await auth.authenticate(fakeReq({ headers: { cookie, host, origin: 'http://evil.example' } }))).toBeNull()
-    // 'Origin: null' (sandboxed iframe, data: URL) is foreign, not absent.
+    // 'null' is what a sandboxed iframe or a data: URL sends, and it is foreign rather than absent.
     expect(await auth.authenticate(fakeReq({ headers: { cookie, host, origin: 'null' } }))).toBeNull()
   })
 
   it('treats same host on a different port or scheme as foreign', async () => {
     const { auth, cookie, host } = await cookieAuth()
-    // Same-site for SameSite purposes — which is exactly why Lax alone fails.
+    // Another port on the same host is same-site for SameSite purposes, which is why Lax alone would pass this.
     expect(
       await auth.authenticate(fakeReq({ method: 'POST', headers: { cookie, host, origin: `http://${host.split(':')[0]}:9999` } })),
     ).toBeNull()
@@ -329,14 +316,13 @@ describe('CSRF: the Origin policy', () => {
       body: 'secret=guess',
     })
     expect(forged.status).toBe(403)
-    // The forged post did not count: one real failure is still available...
+    // The forged post must not have counted, so one real failure is still available here.
     const failed = await request(`${base}/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
       body: 'secret=wrong-wrong-wrong',
     })
     expect(failed.status).toBe(401)
-    // ...and only now is the budget spent.
     const blocked = await request(`${base}/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
@@ -382,8 +368,6 @@ describe('proxy trust', () => {
     const trustedBase = await startHost(trusted)
     const trustedCookie = (await login(trustedBase, SECRET)).cookie
     expect(await trusted.authenticate(makeReq(trustedCookie))).toBeTruthy()
-    // Without the opt-in the forwarded headers are attacker input: the check
-    // falls back to the socket's view (http://internal:8787) and refuses.
     const bare = createCliAuth({ secret: SECRET })
     const bareBase = await startHost(bare)
     const bareCookie = (await login(bareBase, SECRET)).cookie
@@ -404,7 +388,6 @@ describe('proxy trust', () => {
       })
     expect((await attempt('spoofed, 10.0.0.1')).status).toBe(401)
     expect((await attempt('other-spoof, 10.0.0.1')).status).toBe(429)
-    // A different real client is not caught in 10.0.0.1's lockout.
     expect((await attempt('spoofed, 10.0.0.2')).status).toBe(401)
   })
 })
@@ -448,7 +431,6 @@ describe('throttling', () => {
       })
     expect((await attempt('10.0.0.1')).status).toBe(401)
     expect((await attempt('10.0.0.2')).status).toBe(401)
-    // Rotating to a fresh IP buys nothing.
     expect((await attempt('10.0.0.3')).status).toBe(429)
   })
 
@@ -492,7 +474,6 @@ describe('expiry, logout, restart', () => {
     const out = await request(`${base}/auth/logout`, { method: 'POST', headers: { cookie } })
     expect(out.status).toBe(303)
     expect(out.setCookies[0]).toContain('Max-Age=0')
-    // The old token is dead even if a stale copy is replayed.
     expect((await request(`${base}/v1/sessions`, { headers: { cookie } })).status).toBe(401)
   })
 
@@ -512,7 +493,6 @@ describe('expiry, logout, restart', () => {
 })
 
 describe('durable sessions', () => {
-  /** The in-memory stand-in for `createAuthSessionStore`: same seam, no I/O. */
   function fakeStore(): CliSessionStore & { rows: [string, StoredSession][] } {
     const store = {
       rows: [] as [string, StoredSession][],
@@ -543,8 +523,6 @@ describe('durable sessions', () => {
     const base = await startHost(createCliAuth({ secret: SECRET, sessions: store }))
     const { cookie } = await login(base, SECRET)
 
-    // Rows are keyed by HMAC(secret, token), so a table written under the old
-    // secret can no longer be looked up — no revocation list needed.
     const rotated = createCliAuth({ secret: `${SECRET}-rotated`, sessions: store })
     expect(await rotated.authenticate(fakeReq({ headers: { cookie } }))).toBeNull()
   })

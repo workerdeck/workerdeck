@@ -2,63 +2,35 @@ import { createPrivateKey, type KeyObject, sign } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { type ClientHttp2Session, connect, constants, type SecureClientSessionOptions } from 'node:http2'
 
-/**
- * A minimal APNs provider client: an HTTP/2 POST carrying an ES256 JWT.
- * Hand-rolled to keep the published CLI dependency-free, and `fetch`/undici
- * cannot do it anyway — APNs is HTTP/2 only. Token auth, not certificates: one
- * `.p8` serves every app in the team and both environments, and never expires.
- * The failure modes this file is shaped around are in `docs/GOTCHAS.md` §APNs.
- */
-
 export type ApnsEnvironment = 'development' | 'production'
 
 export type ApnsConfig = {
-  /** Path to the `.p8`. A path, never the contents — a secret pasted into a
-   * config file is a secret in every backup of that file. */
+  // A path, never the contents: a secret pasted into a config file is a secret in every backup of it.
   keyFile: string
-  /** The 10-character Key ID shown beside the key in the developer portal. */
   keyId: string
-  /** The 10-character Team ID from the top right of the portal. */
   teamId: string
-  /** The APNs topic, which is the app's bundle id (`bi.atomic.workerdeck.ios`). */
   topic: string
-  /** Environment for a device that registered without naming one. Devices that
-   * do name one are always routed by their own answer — see the note on
-   * `ApnsEnvironment` below. */
+  // Only the fallback for a device that registered without naming one; a device that named one is always routed by its answer.
   production?: boolean
 }
 
-/**
- * Sandbox and production are different token *namespaces*, not just different
- * URLs: the environment is a property of each registered device (the app
- * declares it), never a server-wide flag. Cross them and Apple answers
- * `BadDeviceToken` forever.
- */
 const HOSTS: Record<ApnsEnvironment, string> = {
   development: 'https://api.sandbox.push.apple.com',
   production: 'https://api.push.apple.com',
 }
 
-/**
- * Apple rejects a provider token older than an hour and rate-limits refreshing
- * one (`TooManyProviderTokenUpdates`); 40 minutes sits in the middle of that
- * window. Never re-sign per push.
- */
 const TOKEN_TTL_MS = 40 * 60 * 1000
 const REQUEST_TIMEOUT_MS = 10_000
-/** Per-address dial budget. Node's 250ms default is under Apple's observed handshake; see the `connect()` call. */
 const DIAL_ATTEMPT_TIMEOUT_MS = 2_000
 
 export type ApnsRequest = {
   deviceToken: string
   environment: ApnsEnvironment
   payload: unknown
-  /** 10 for something a person is waiting on, 5 for everything else. */
   priority?: 5 | 10
-  /** Unix seconds after which Apple stops trying. 0 means "one attempt". */
+  // Unix seconds after which Apple stops trying; 0 is not "no expiry" but "attempt once, never store".
   expiration?: number
-  /** Later pushes with the same id replace an undelivered earlier one. Max 64
-   * bytes, so never pass a raw identifier of unbounded length. */
+  // Apple caps this at 64 bytes, so never pass an identifier of unbounded length.
   collapseId?: string
 }
 
@@ -68,8 +40,6 @@ export type ApnsResult =
       ok: false
       status: number
       reason: string
-      /** The token is dead: drop it from the registry rather than retrying it
-       * forever. The app re-registers on its next launch anyway. */
       unregistered: boolean
     }
 
@@ -80,7 +50,6 @@ export type ApnsClient = {
 
 const base64url = (input: Buffer | string): string => Buffer.from(input).toString('base64url')
 
-/** Loaded once at startup, so a mistyped path is a launch error rather than a push that silently never arrives. */
 export const loadApnsKey = async (keyFile: string): Promise<KeyObject> => {
   let pem: string
   try {
@@ -105,10 +74,6 @@ export const loadApnsKey = async (keyFile: string): Promise<KeyObject> => {
   return key
 }
 
-/**
- * A cached provider JWT. JWS wants the raw `r||s` pair — `sign()` produces a DER
- * SEQUENCE unless told otherwise, which Apple rejects with a bare 403.
- */
 export const createProviderToken = (key: KeyObject, keyId: string, teamId: string): { get(now?: number): string; invalidate(): void } => {
   let cached: { token: string; issuedAt: number } | null = null
   return {
@@ -133,19 +98,12 @@ export const createProviderToken = (key: KeyObject, keyId: string, teamId: strin
   }
 }
 
-/**
- * One long-lived HTTP/2 session per environment, reconnected on demand. APNs
- * sends GOAWAY routinely to rebalance, so a dead session is normal, not an error.
- */
 const createSessionPool = (
   hosts: Record<ApnsEnvironment, string>,
 ): {
   get(environment: ApnsEnvironment): ClientHttp2Session
-  /** Why the last connection died. Only failures that *precede* the stream's own death land here —
-   * the session 'error' fires a tick after the stream it kills settles. See `describeStreamError`. */
   lastFailure(environment: ApnsEnvironment): string | undefined
-  /** Put down a session a failed send has proven is not progressing. Only ever called on a
-   * *connecting* session: destroying a connected one would cancel siblings mid-flight. */
+  // Only ever called on a *connecting* session: destroying a connected one cancels its siblings mid-flight.
   discard(environment: ApnsEnvironment, session: ClientHttp2Session): void
   close(): void
 } => {
@@ -163,28 +121,22 @@ const createSessionPool = (
         return existing
       }
       const session = connect(hosts[environment], {
-        // Node's Happy Eyeballs gives each address 250ms by default and Apple does not always
-        // answer in it — measured 0/5 dials on the default against 5/5 at 2s (`docs/GOTCHAS.md`
-        // §APNs). The cast is @types/node not surfacing the net/tls options http2 forwards.
+        // The cast is @types/node not surfacing the net/tls options http2 forwards.
         autoSelectFamilyAttemptTimeout: DIAL_ATTEMPT_TIMEOUT_MS,
       } as SecureClientSessionOptions)
       sessions.set(environment, session)
       failures.delete(environment)
-      // Without an error listener a GOAWAY-then-error would take the whole
-      // process down; the forwarder is a side channel and must never do that.
+      // Without this listener a GOAWAY-then-error takes the whole process down, and push is a side channel.
       session.on('error', (error) => {
         failures.set(environment, `${(error as NodeJS.ErrnoException).code ?? 'error'}: ${error.message}`)
         drop(environment, session)
       })
-      // GOAWAY is routine rebalancing, but it is also how Apple hangs up on a client it is
-      // throttling for pushing to invalid tokens. The debug data carries the reason when there is one.
       session.on('goaway', (code, _lastStreamId, data) => {
         const detail = data !== undefined && data.length > 0 ? `: ${data.toString('utf8').slice(0, 200)}` : ''
         failures.set(environment, `GOAWAY ${code}${detail}`)
         drop(environment, session)
       })
       session.on('close', () => drop(environment, session))
-      // An idle gateway pushes nothing; let the socket go rather than pinning it open all night.
       session.setTimeout(5 * 60_000, () => session.close())
       return session
     },
@@ -204,11 +156,6 @@ const createSessionPool = (
   }
 }
 
-/**
- * A stream that never left this machine is destroyed with ERR_HTTP2_STREAM_CANCEL,
- * whose `cause` — when every address failed — is an AggregateError with an EMPTY
- * message, logging "(caused by: )" and naming nothing. Mine the aggregate instead.
- */
 const describeStreamError = (error: Error): string => {
   const cause = (error as Error & { cause?: unknown }).cause
   if (!(cause instanceof AggregateError)) {
@@ -221,12 +168,6 @@ const describeStreamError = (error: Error): string => {
   return `${error.message.replace(' (caused by: )', '')} (caused by: ${parts.join('; ')})`
 }
 
-/**
- * Whether a failed attempt may be retried without risking a duplicate notification on someone's
- * lock screen — only with proof Apple never processed it. `'now'` is a refusal before processing
- * (REFUSED_STREAM, or a cached session found closed), `'redial'` is a connect that never produced
- * a stream id, `'never'` is everything else. See `docs/GOTCHAS.md` §APNs push.
- */
 type Retry = 'never' | 'now' | 'redial'
 
 type Attempt = { result: ApnsResult; retry: Retry }
@@ -234,10 +175,7 @@ type Attempt = { result: ApnsResult; retry: Retry }
 export const createApnsClient = (
   config: ApnsConfig,
   key: KeyObject,
-  /** Test seam: point the two environments at a local HTTP/2 server, and
-   * shorten the redial pause so a test does not sit out the real one. Nothing
-   * in production should pass this — the real endpoints are not configurable,
-   * and an operator who could redirect them could exfiltrate every push. */
+  // Test seam only. The real endpoints are deliberately not configurable: redirecting them would exfiltrate every push.
   options: { hosts?: Record<ApnsEnvironment, string>; retryDelayMs?: number } = {},
 ): ApnsClient => {
   const providerToken = createProviderToken(key, config.keyId, config.teamId)
@@ -262,7 +200,6 @@ export const createApnsClient = (
           ...(request.collapseId === undefined ? {} : { 'apns-collapse-id': request.collapseId }),
         })
       } catch (error) {
-        // request() refuses on a closed session before creating a stream: nothing reached the wire.
         resolve({
           result: {
             ok: false,
@@ -287,8 +224,6 @@ export const createApnsClient = (
         resolve({ result, retry })
       }
 
-      /** `pending` is true only while the stream has no id — HEADERS never reached nghttp2, so a
-       * retry cannot duplicate. REFUSED_STREAM is Apple's "received but not processed". */
       const transportRetry = (): Retry => {
         if (stream.pending) {
           return 'redial'
@@ -298,8 +233,6 @@ export const createApnsClient = (
         }
         return 'never'
       }
-      /** A stream still pending when its attempt dies marks a doomed dial; without this, every
-       * later push (and the retry) queues behind it until the OS gives up. */
       const dropDoomedDial = (): void => {
         if (stream.pending && session.connecting) {
           pool.discard(request.environment, session)
@@ -321,8 +254,6 @@ export const createApnsClient = (
       stream.on('error', (error) => {
         const retry = transportRetry()
         dropDoomedDial()
-        // A canceled stream says only that. A failure that *preceded* it is on the session's
-        // record; one that killed both has not emitted there yet, so mine the stream error.
         const cause = pool.lastFailure(request.environment)
         const message = describeStreamError(error)
         settle(
@@ -346,20 +277,15 @@ export const createApnsClient = (
           if (typeof parsed.reason === 'string') {
             reason = parsed.reason
           }
-        } catch {
-          // A non-JSON body from APNs is exotic; the status still classifies it.
-        }
+        } catch {}
         settle({
           ok: false,
           status,
           reason,
-          // Unregistered = app deleted; BadDeviceToken = wrong topic or environment. Neither
-          // will ever work, and the app writes a fresh token on its next launch.
           unregistered: reason === 'Unregistered' || reason === 'BadDeviceToken',
         })
       })
-      // Last resort: a stream torn down with neither an error nor a response ('end' never fires
-      // on a destroyed readable) must still settle, or the delivery chain hangs on it forever.
+      // 'end' never fires on a destroyed readable, so without this last-resort settle the send hangs forever.
       stream.on('close', () => {
         const retry = transportRetry()
         settle(
@@ -380,9 +306,6 @@ export const createApnsClient = (
   return {
     async send(request) {
       let attempt = await post(request, providerToken.get())
-      // Retried exactly once, and only with proof Apple never processed it. 'never' failures
-      // stay unretried: permission pushes carry no collapse id, so a duplicate is a second
-      // banner asking for the same decision.
       if (!attempt.result.ok && attempt.retry !== 'never') {
         if (attempt.retry === 'redial') {
           await wait(retryDelayMs)
@@ -390,7 +313,7 @@ export const createApnsClient = (
         attempt = await post(request, providerToken.get())
       }
       const first = attempt.result
-      // The one *response* worth an automatic retry: the cached JWT aged out against Apple's clock.
+      // The one *response* worth a retry: the cached JWT aged out against Apple's clock, so no duplicate is possible.
       if (!first.ok && first.reason === 'ExpiredProviderToken') {
         providerToken.invalidate()
         return (await post(request, providerToken.get())).result

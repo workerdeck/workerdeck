@@ -1,4 +1,3 @@
-/** The workerdeck "Iso Deck" mark — see docs/assets/BRAND.md. */
 export function BrandMark({ className }: { className?: string }) {
   return (
     <svg

@@ -2,22 +2,12 @@ import { useEffect, useSyncExternalStore } from 'react'
 import type { JobInfo, QueueStats } from '@workerdeck/protocol'
 import { client } from '../lib/client.ts'
 
-/**
- * Live view of the primary gateway's job queue: jobs stream in over `/queue/ws`
- * (upserted by id), with a slow REST poll as a safety net and for the initial list.
- *
- * A **module-scope store**, not per-hook state: the jobs sidebar, the empty detail
- * pane and a job's own page mount this at once, and three copies would be three
- * queue sockets answering from three snapshots.
- */
 const FALLBACK_INTERVAL_MS = 15_000
 
 type State = {
   jobs: JobInfo[]
   stats: QueueStats | undefined
-  /** False once the server has told us it has no queue configured. */
   enabled: boolean
-  /** The queue socket is connected — otherwise the poll is carrying it. */
   live: boolean
   error: string | undefined
 }
@@ -34,7 +24,6 @@ const emit = (next: Partial<State>): void => {
 
 let inFlight: Promise<void> | undefined
 
-/** Re-list now. Concurrent callers share the one pass in flight. */
 export const refreshJobs = (): Promise<void> => {
   inFlight ??= (async () => {
     try {
@@ -81,12 +70,8 @@ const subscribe = (listener: () => void): (() => void) => {
   }
 }
 
-/**
- * Attach the queue socket, but only once REST has confirmed a queue exists — a
- * queue-less server refuses the upgrade and the handle would loop on reconnect.
- * Driven from the hook rather than from `subscribe` because `enabled`/`stats`
- * arrive after the first subscriber does.
- */
+// Attached only once REST has confirmed a queue exists: a queue-less server refuses the upgrade and the handle would
+// loop on reconnect. Driven from the hook because `enabled`/`stats` arrive after the first subscriber does.
 const ensureAttached = (): void => {
   if (detach || !state.enabled || state.stats === undefined || subscribers === 0) {
     return
@@ -97,7 +82,7 @@ const ensureAttached = (): void => {
   }
   const handle = gateway.attachQueue()
   const offs = [
-    // Reconnects have no replay: re-list to catch anything missed while detached.
+    // Reconnects carry no replay, so re-list to catch whatever was missed while detached.
     handle.on('attached', () => void refreshJobs()),
     handle.on('stats', (stats) => emit({ stats })),
     handle.on('connectionChange', (live) => emit({ live })),

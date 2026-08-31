@@ -5,11 +5,8 @@ import { ConfigError, defaultStateDir, isLoopback, loadConfigFile, parseArgs, re
 
 const noConfig = { path: null, options: {} }
 
-/**
- * Config fixtures live under the package rather than in os tmpdir: vitest loads
- * them through vite's module graph, which will not read a file outside the
- * project root. The CLI itself has no such limit — it runs on plain Node.
- */
+// Fixtures live under the package because vitest loads them through vite's module graph, which will not read a file
+// outside the project root. The CLI itself has no such limit.
 const created: string[] = []
 const tempConfigDir = async (): Promise<string> => {
   const dir = await mkdtemp(join(import.meta.dirname, '.tmp-config-'))
@@ -82,8 +79,6 @@ describe('resolveInstanceConfig', () => {
     const config = resolveInstanceConfig(parseArgs(['--host', '0.0.0.0']), noConfig, {})
     expect(config.generateAuthKey).toBe(true)
     expect(config.authKey).toBeUndefined()
-    // The Host-header guard stands down on the promise of that key —
-    // startInstance asserts the promise was kept before serving.
     expect(config.allowedHosts).toBeNull()
   })
 
@@ -134,8 +129,6 @@ describe('resolveInstanceConfig', () => {
   })
 
   it('leaves hostFiles unset when nothing narrows it — the server inherits the cwd roots', () => {
-    // --fs-root narrows file access; --cwd-root is what enables reading it, and
-    // that inheritance lives in the server rather than being baked in here.
     const config = resolveInstanceConfig(parseArgs(['--cwd-root', '/tmp/a']), noConfig, {})
     expect(config.options.allowedCwdRoots).toEqual([resolve('/tmp/a')])
     expect(config.options.hostFiles).toBeUndefined()
@@ -178,7 +171,6 @@ describe('insecureHosts', () => {
     const config = resolveInstanceConfig(parseArgs(['--host', 'toby']), withInsecure(['toby']), {})
     expect(config.generateAuthKey).toBe(false)
     expect(config.authKey).toBeUndefined()
-    // One declaration, both roles: the entry also joins the Host-header gate.
     expect(config.allowedHosts?.has('toby')).toBe(true)
     expect(config.allowedHosts?.has('localhost')).toBe(true)
   })
@@ -198,7 +190,6 @@ describe('insecureHosts', () => {
   })
 
   it('matches the bind host literally — a declaration is not a wildcard', () => {
-    // 'toby' is declared but 0.0.0.0 is what would be exposed: auth stays on.
     const config = resolveInstanceConfig(parseArgs(['--host', '0.0.0.0']), withInsecure(['toby']), {})
     expect(config.generateAuthKey).toBe(true)
     expect(config.allowedHosts).toBeNull()
@@ -207,8 +198,6 @@ describe('insecureHosts', () => {
   it('accepts 0.0.0.0 as "every interface", with the Host gate still fenced', () => {
     const config = resolveInstanceConfig(parseArgs(['--host', '0.0.0.0']), withInsecure(['0.0.0.0', 'toby']), {})
     expect(config.generateAuthKey).toBe(false)
-    // The layered defence survives: loopback + declared names only, so a
-    // rebound public name still bounces off the Host-header guard.
     expect(config.allowedHosts?.has('0.0.0.0')).toBe(true)
     expect(config.allowedHosts?.has('toby')).toBe(true)
     expect(config.allowedHosts?.has('attacker.example')).toBe(false)
@@ -232,8 +221,6 @@ describe('insecureHosts', () => {
 
   it('weakens nothing when auth is on', () => {
     const config = resolveInstanceConfig(parseArgs(['--host', 'toby', '--auth-key', 'long-enough-secret']), withInsecure(['toby']), {})
-    // A key wins: the instance authenticates, and allowedHosts stays null — a
-    // rebound origin holds no cookie, so the Host gate has nothing to add.
     expect(config.authKey).toBe('long-enough-secret')
     expect(config.generateAuthKey).toBe(false)
     expect(config.allowedHosts).toBeNull()

@@ -7,10 +7,6 @@ import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
 import { SidebarRow } from './SidebarRow.tsx'
 import { useProfileList } from '@/hooks/useProfiles.ts'
 
-/**
- * The profiles the primary gateway declares. A profile is what a session *runs
- * as*, so the engine mark is the fact worth carrying on the row.
- */
 export function ProfilesSidebar() {
   const navigate = useNavigate()
   const activeName = useRouterState({
@@ -19,7 +15,7 @@ export function ProfilesSidebar() {
   const { profiles, canManage, refresh } = useProfileList()
   const [creating, setCreating] = useState(false)
 
-  // `+` only where the server accepts one: a create form behind a 403 is worse than no button.
+  // A `+` only where the server accepts one: a create form behind a 403 is worse than no button.
   const create = canManage ? (
     <Button variant="ghost" size="icon-sm" aria-label="New profile" onClick={() => setCreating(true)}>
       <Plus className="size-4" />
@@ -76,8 +72,7 @@ export function ProfilesSidebar() {
                     {profile.configDir ??
                       (profile.provider
                         ? `${profile.provider.id}${profile.provider.model ? ` · ${profile.provider.model}` : ''}`
-                        : // A codex profile has neither a config dir nor a provider block, and a
-                          // mark alone on an empty line reads as a row that failed to load.
+                        : // A codex profile has neither a config dir nor a provider block, and a mark on an empty line reads as a broken row.
                           (profile.engine ?? 'claude'))}
                   </span>
                 </>
