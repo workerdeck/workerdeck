@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo } from 'react'
 import { isJobRun, sessionState, type SessionInfo, type SessionRow } from '@workerdeck/protocol'
 import { clientFor, currentHosts, isLocal, onHostsChange, type GatewayHost } from '../lib/hosts.ts'
+import { createStore } from '../lib/store.ts'
 import { useUnseen } from './useUnseen.ts'
 
 const IDLE_MS = 5_000
@@ -17,15 +18,8 @@ export type HostSnapshot = {
 
 type State = { snapshots: HostSnapshot[]; loaded: boolean }
 
-let state: State = { snapshots: [], loaded: false }
-const listeners = new Set<() => void>()
-
-function emit(next: State): void {
-  state = next
-  for (const listener of listeners) {
-    listener()
-  }
-}
+const store = createStore<State>({ snapshots: [], loaded: false })
+const emit = store.set
 
 let inFlight: Promise<void> | undefined
 let lastFetchAt = 0
@@ -37,7 +31,7 @@ export function refreshSessions(): Promise<void> {
     lastFetchAt = Date.now()
     try {
       const hosts = currentHosts()
-      const previous = new Map(state.snapshots.map((s) => [s.host.id, s]))
+      const previous = new Map(store.get().snapshots.map((s) => [s.host.id, s]))
       const snapshots = await Promise.all(
         hosts.map(async (host): Promise<HostSnapshot> => {
           const client = clientFor(host.id)
@@ -76,11 +70,6 @@ export function nudgeSessions(): void {
   }, wait)
 }
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => void listeners.delete(listener)
-}
-
 let pollTimer: ReturnType<typeof setInterval> | undefined
 let pollRegime: number | undefined
 
@@ -99,11 +88,7 @@ function arm(busy: boolean): void {
 }
 
 export function useSessions() {
-  const snapshot = useSyncExternalStore(
-    subscribe,
-    () => state,
-    () => state,
-  )
+  const snapshot = store.use()
   useEffect(() => onHostsChange(() => void refreshSessions()), [])
 
   const busy = snapshot.snapshots.some((s) =>
@@ -115,7 +100,7 @@ export function useSessions() {
 
   useEffect(() => {
     arm(busy)
-    if (!state.loaded) {
+    if (!store.get().loaded) {
       void refreshSessions()
     }
   }, [busy])

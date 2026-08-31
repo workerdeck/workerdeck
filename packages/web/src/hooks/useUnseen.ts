@@ -1,39 +1,27 @@
-import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { Watermarks, unseenCount } from '@workerdeck/protocol'
 import type { SessionInfo, Watermark, WatermarkStore } from '@workerdeck/protocol'
 import { readJson, writeJson } from '../lib/storage.ts'
+import { createStore } from '../lib/store.ts'
 
 const KEY = 'workerdeck.watermarks.v1'
 
-const listeners = new Set<() => void>()
-let version = 0
+// `Watermarks` mutates the marks in place, so a version counter is the only thing React can compare.
+const versionStore = createStore(0)
 
 const store: WatermarkStore = {
   // Losing the marks costs one over-counted badge, which is why readJson swallows rather than throws.
   read: () => readJson<Record<string, Watermark> | undefined>(KEY, undefined),
   write: (marks) => {
     writeJson(KEY, marks)
-    version += 1
-    for (const listener of listeners) {
-      listener()
-    }
+    versionStore.set(versionStore.get() + 1)
   },
 }
 
 const watermarks = new Watermarks(store)
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => void listeners.delete(listener)
-}
-
 export function useUnseen() {
-  // `Watermarks` mutates the marks in place, so a version counter is the only thing React can compare.
-  useSyncExternalStore(
-    subscribe,
-    () => version,
-    () => version,
-  )
+  versionStore.use()
 
   const unseenFor = useCallback(
     (hostId: string, info: SessionInfo) =>

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { WorkerDeckClient, apiUrl, hostAuth, isLoopbackHost } from '@workerdeck/client'
 import { readJson, readPref, writeJson, writePref } from './storage.ts'
+import { createStore } from './store.ts'
 
 export type GatewayHost = {
   id: string
@@ -23,15 +24,12 @@ type State = {
   ready: boolean
 }
 
-let state: State = { hosts: [], ready: false }
-const listeners = new Set<() => void>()
+const store = createStore<State>({ hosts: [], ready: false })
 
+// Clearing the client cache is part of publishing hosts: a client is bound to a base URL and a key.
 function emit(next: State): void {
-  state = next
   clients.clear()
-  for (const listener of listeners) {
-    listener()
-  }
+  store.set(next)
 }
 
 function readStored(): GatewayHost[] {
@@ -76,7 +74,7 @@ export function clientFor(hostId: string): WorkerDeckClient | undefined {
   if (cached) {
     return cached
   }
-  const host = state.hosts.find((h) => h.id === hostId)
+  const host = store.get().hosts.find((h) => h.id === hostId)
   if (!host) {
     return undefined
   }
@@ -93,11 +91,11 @@ export function clientFor(hostId: string): WorkerDeckClient | undefined {
 }
 
 export function hostById(id: string): GatewayHost | undefined {
-  return state.hosts.find((h) => h.id === id)
+  return store.get().hosts.find((h) => h.id === id)
 }
 
 export function primaryHost(): GatewayHost | undefined {
-  return state.hosts.find((h) => h.implicit) ?? state.hosts[0]
+  return store.get().hosts.find((h) => h.implicit) ?? store.get().hosts[0]
 }
 
 export function primaryClient(): WorkerDeckClient | undefined {
@@ -114,14 +112,14 @@ export function saveHost(host: GatewayHost, key: string): void {
   const next = stored.some((h) => h.id === host.id) ? stored.map((h) => (h.id === host.id ? host : h)) : [...stored, host]
   persist(next)
   setKey(host.id, key)
-  emit({ ...state, hosts: [...state.hosts.filter((h) => h.implicit), ...next] })
+  emit({ ...store.get(), hosts: [...store.get().hosts.filter((h) => h.implicit), ...next] })
 }
 
 export function removeHost(id: string): void {
   const next = readStored().filter((h) => h.id !== id)
   persist(next)
   setKey(id, '')
-  emit({ ...state, hosts: [...state.hosts.filter((h) => h.implicit), ...next] })
+  emit({ ...store.get(), hosts: [...store.get().hosts.filter((h) => h.implicit), ...next] })
 }
 
 // The *shape* of `/auth/status` is checked, not just the status: "it replied 200" is not "it is a gateway".
@@ -153,7 +151,7 @@ function start(): void {
   const stored = readStored()
   // Stored hosts render at once and the implicit one joins when the probe answers, so `ready` is what tells an
   // empty list apart from an unasked question.
-  state = { hosts: stored, ready: false }
+  emit({ hosts: stored, ready: false })
   void probeOrigin().then((served) => {
     emit({
       hosts: served
@@ -172,23 +170,19 @@ function start(): void {
   })
 }
 
+// Subscribing is what starts the store: nothing polls hosts, the first reader triggers the probe.
 function subscribe(listener: () => void): () => void {
   start()
-  listeners.add(listener)
-  return () => void listeners.delete(listener)
+  return store.subscribe(listener)
 }
 
 export function useHosts(): State {
-  return useSyncExternalStore(
-    subscribe,
-    () => state,
-    () => state,
-  )
+  return useSyncExternalStore(subscribe, store.get, store.get)
 }
 
 export function currentHosts(): GatewayHost[] {
   start()
-  return state.hosts
+  return store.get().hosts
 }
 
 export function onHostsChange(listener: () => void): () => void {
