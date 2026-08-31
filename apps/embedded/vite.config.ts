@@ -17,7 +17,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 5193,
+    port: 5194,
     strictPort: true,
     fs: { allow: ['../../..'] },
     // Every prefix the app server owns must be listed: a missing one gets `index.html` with a 200, not a failure.

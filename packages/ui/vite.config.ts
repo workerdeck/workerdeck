@@ -20,6 +20,9 @@ export default defineConfig({
   },
   server: {
     port: 5193,
+    // Strict: dev/height-audit.ts and dev/perf-audit.ts point at this exact port, so silently
+    // serving on 5194 would measure nothing.
+    strictPort: true,
     // The fixtures import from ../src, and fontsource lives in the workspace store.
     fs: { allow: ['../..'] },
   },

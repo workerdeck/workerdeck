@@ -24,7 +24,7 @@ pnpm --filter @workerdeck/embedded-example dev
 # → http://127.0.0.1:8788, sign in as Ada, Grace or Alan
 ```
 
-`pnpm dev` runs the server (`:8788`) and Vite (`:5193`) together. For the production shape — one
+`pnpm dev` runs the server (`:8788`) and Vite (`:5194`) together. For the production shape — one
 port, no Vite — `pnpm build && pnpm start`. If 8788 is taken (this repo runs several gateways),
 the server says so and suggests the next port; `PORT=8790 pnpm dev` moves it.
 
