@@ -1,14 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { filePatchFromToolResult, parseUnifiedDiff } from '../src/lib/patch.ts'
 
-/**
- * These two functions are the only reason a client can print a line number, so
- * they are tested for the properties a renderer depends on: the engine's own
- * numbers survive intact, the file contents that must not reach the wire are
- * dropped, and anything that is not really a patch answers `undefined` rather
- * than a plausible-looking one.
- */
-
 describe('filePatchFromToolResult', () => {
   const hunk = {
     oldStart: 6,
@@ -63,8 +55,6 @@ describe('filePatchFromToolResult', () => {
   it('answers undefined for output that is not a file edit', () => {
     expect(filePatchFromToolResult(undefined)).toBeUndefined()
     expect(filePatchFromToolResult({ stdout: 'ok' })).toBeUndefined()
-    // A malformed hunk is not a hunk: better no diff than one whose line
-    // numbers are NaN.
     expect(filePatchFromToolResult({ structuredPatch: [{ lines: ['+x'] }] })).toBeUndefined()
   })
 
@@ -108,8 +98,7 @@ describe('parseUnifiedDiff', () => {
   })
 
   it('keeps a blank line as context', () => {
-    // A context line that was only a space often arrives stripped. Dropping it
-    // would shift every line number below it in the hunk.
+    // A context line that is only a space often arrives stripped.
     const patch = parseUnifiedDiff('@@ -1,3 +1,3 @@\n a\n\n+b')
     expect(patch?.hunks[0]?.lines).toEqual([' a', ' ', '+b'])
   })

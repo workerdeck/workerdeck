@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { modelOptionsFromSdk, rateLimitEventsFromUsage } from '../src/lib/normalize.ts'
 
 describe('modelOptionsFromSdk', () => {
-  // What a real CLI reports, copied off the wire — note the names: the family
-  // alone, or a variant instead of a version.
   const reported = [
     {
       value: 'default',
@@ -41,8 +39,6 @@ describe('modelOptionsFromSdk', () => {
   })
 
   it("keeps the CLI's name when a derived one would be ambiguous", () => {
-    // Two rows for the same model differ only by variant; "Opus 5" twice would
-    // make the pair unpickable.
     const options = modelOptionsFromSdk([
       { value: 'opus[1m]', resolvedModel: 'claude-opus-5[1m]', displayName: 'Opus (1M context)' },
       { value: 'opus', resolvedModel: 'claude-opus-5', displayName: 'Opus' },
@@ -92,8 +88,6 @@ describe('rateLimitEventsFromUsage', () => {
         },
       },
       { type: 'rate_limit', info: { status: 'allowed', rateLimitType: 'seven_day', utilization: 61 } },
-      // Per-model buckets are keyed under the weekly prefix, so a client grouping
-      // on it keeps them with the other weekly windows.
       {
         type: 'rate_limit',
         info: { status: 'allowed', rateLimitType: 'seven_day_fable', utilization: 94 },
@@ -102,8 +96,7 @@ describe('rateLimitEventsFromUsage', () => {
   })
 
   it('reports nothing rather than zero for a window with no utilization', () => {
-    // An API-key session has no plan limits at all; a window the CLI knows about
-    // but has no number for is unknown, and 0% would read as "plenty left".
+    // A window the CLI names but has no number for is unknown; 0% would read as "plenty left".
     expect(rateLimitEventsFromUsage({ rate_limits_available: false, rate_limits: null })).toEqual([])
     expect(rateLimitEventsFromUsage({})).toEqual([])
     expect(

@@ -5,13 +5,6 @@ import { SessionRunner } from './runner.ts'
 import type { EngineAdapter } from '../adapter.ts'
 import { CLAUDE_CATALOG } from './catalog.ts'
 
-/**
- * The Claude engine as an adapter — a thin, behaviourally inert wrapper:
- * `SessionRunner` unchanged, `checkClaudeAuth` as the probe, the static
- * catalog for create forms. Exists so catalogs, capabilities and availability
- * have one shape across engines; the runner itself is exactly what
- * `registry.prepare()` builds.
- */
 export const claudeAdapter: EngineAdapter = {
   engine: 'claude',
   capabilities: ENGINE_CAPABILITIES.claude,
@@ -38,12 +31,6 @@ export const claudeAdapter: EngineAdapter = {
     }
     return new SessionRunner(config, id)
   },
-  /**
-   * The Agent SDK's on-disk session store, mapped browser-safe. The SDK reads
-   * the store of the *process* environment — it takes no config dir — so a
-   * profile pin cannot narrow this listing; that matches the route's
-   * pre-adapter behavior exactly (the listing was always process-global).
-   */
   async listSessions({ dir, limit, offset }) {
     const sessions = await sdkListSessions({ dir, limit, offset })
     return sessions.map((s) => ({

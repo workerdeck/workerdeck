@@ -1,9 +1,4 @@
 export { SessionRunner } from './engines/claude/runner.ts'
-/** The one replay body every runner delivers through, and the truncation it can
- * apply. Exported because the property that matters — what a truncated replay
- * does to a *fold* — can only be proven in `packages/react`, which owns the
- * reducer and cannot be imported from here. Same split as the rest of this
- * family. */
 export { replaySlice, truncateResultBlocks } from './lib/replay.ts'
 export { AiSdkRunner } from './engines/provider/runner.ts'
 export type { AiSdkRunnerConfig, AiSdkSessionState, PendingToolCall, ToolCallOutput } from './engines/provider/runner.ts'
@@ -20,9 +15,6 @@ export { DeferredExecutor } from './executors/deferred-executor.ts'
 export type { DeferredDispatch, DeferredExecutorOptions } from './executors/deferred-executor.ts'
 export { connectMcpTools, createEngineSession } from './engines/provider/session.ts'
 export type { EngineSessionOptions, McpConnection } from './engines/provider/session.ts'
-/** Re-exported so a host wiring the provider engine can type its model factory
- * and tool sets without reaching past this package for the AI SDK itself —
- * `core` is the only package in the graph that depends on it. */
 export type { LanguageModel, Tool, ToolSet } from 'ai'
 export { createToolContext, withHostTools, withMcpTools } from './engines/provider/tools.ts'
 export type { HostToolDefinition, ToolContext, ToolContextOptions, ToolDefinition, ToolTrust } from './engines/provider/tools.ts'

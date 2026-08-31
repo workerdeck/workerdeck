@@ -1,16 +1,9 @@
-/**
- * Image parts replayed as references — the seventh rule of the family, and like
- * truncation it is stated **honestly**: this is not fold-equal, it loses bytes on
- * purpose. What it must not lose is the address to get them back, the order and
- * count of the parts around them, anything that is not a base64 image, or the
- * stored log.
- */
 import { describe, expect, it } from 'vitest'
 import { TOOL_RESULT_HEAD_CHARS, type SessionEvent } from '@workerdeck/protocol'
 import { refImageParts, replaySlice } from '../src/lib/replay.ts'
 
 const png = (n: number) => {
-  // Exact decoded size, padding included, so an asserted `bytes` is the real one.
+  // Base64 of exactly n decoded bytes, padding included, so an asserted `bytes` is the real one.
   const pad = n % 3 === 0 ? 0 : n % 3 === 1 ? 2 : 1
   return 'A'.repeat(Math.ceil(n / 3) * 4 - pad) + '='.repeat(pad)
 }
@@ -54,7 +47,6 @@ describe('refImageParts', () => {
     const parts = partsOf(event)
     expect(parts).toHaveLength(4)
     expect(parts.map((p) => p.type)).toEqual(['text', 'image_ref', 'tool_reference', 'text'])
-    // The narrowness is the point: 122 KB of tool_reference across 214 sessions.
     expect(parts[2]).toEqual({ type: 'tool_reference', tool_name: 'Read' })
     expect(parts[3]).toEqual({ type: 'text', text: 'after' })
   })
@@ -78,8 +70,6 @@ describe('refImageParts', () => {
   })
 
   it('returns the SAME OBJECT when there is no image to ref', () => {
-    // Identity, not equality: an event carrying an image at all is the
-    // exception, so the common path must not allocate.
     const event = resultEvent(1, [toolResult('a', [{ type: 'text', text: 'hi' }])])
     expect(refImageParts(event)).toBe(event)
     const plain = { seq: 2, ts: 2, type: 'status_changed', status: 'idle' } as unknown as SessionEvent
@@ -103,9 +93,6 @@ describe('replaySlice — the two rules composed', () => {
   const composed = (blocks: unknown[]) => replaySlice([resultEvent(1, blocks)], { afterSeq: 0, imageRefs: true, truncateResults: true })[0]!
 
   it('keeps the image address even when the text is truncated away past it', () => {
-    // The bug this ordering exists to prevent: `headOf` drops every non-text
-    // part, so refs computed after truncation would name the wrong part — and
-    // refs dropped BY truncation would lose every picture with no marker.
     const parts = partsOf(composed([toolResult('a', [{ type: 'text', text: big }, image(png(700))])]))
     expect(parts.map((p) => p.type)).toEqual(['text', 'image_ref'])
     expect(parts[1]!.part_index).toBe(1)
@@ -113,8 +100,7 @@ describe('replaySlice — the two rules composed', () => {
   })
 
   it('addresses by the stored index, not the delivered position', () => {
-    // Stored: [image, text(big), image]. Truncation renumbers what is delivered;
-    // the stamped addresses must still name 0 and 2.
+    // Stored: [image, text(big), image] — truncation renumbers what is delivered.
     const parts = partsOf(composed([toolResult('a', [image(png(100)), { type: 'text', text: big }, image(png(200))])]))
     expect(parts.filter((p) => p.type === 'image_ref').map((p) => p.part_index)).toEqual([0, 2])
   })
@@ -122,12 +108,10 @@ describe('replaySlice — the two rules composed', () => {
   it('a truncate-only socket is byte-identical to before this rule existed', () => {
     const stored = [resultEvent(1, [toolResult('a', [{ type: 'text', text: big }, image(png(700))])])]
     const only = replaySlice(stored, { afterSeq: 0, truncateResults: true })[0]!
-    // Raw `image` parts keep being dropped from a head exactly as Part 4 shipped.
     expect(partsOf(only).map((p) => p.type)).toEqual(['text'])
   })
 
   it('still delivers the highest-seq event, and still refs it', () => {
-    // A session that ends on a screenshot puts its 665 KB exactly there.
     const events = [
       { seq: 1, ts: 1, type: 'status_changed', status: 'running' } as unknown as SessionEvent,
       resultEvent(2, [toolResult('a', [image(png(665_000))])]),

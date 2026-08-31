@@ -7,12 +7,11 @@ type HarnessCapabilities = {
   models?: Array<{ value: string; displayName: string; description: string }>
   commands?: Array<{ name: string; description: string; argumentHint: string }>
   contextUsage?: Record<string, unknown>
-  /** Stands in for the CLI's experimental structured `/usage` control request. */
   usage?: Record<string, unknown>
 }
 
-/** Controllable stand-in for the SDK: emit SDKMessages, capture options + streamed input.
- * Pass `capabilities` to also implement supportedModels/supportedCommands. */
+// Controllable stand-in for the SDK: emit SDKMessages, capture options + streamed input.
+// Pass `capabilities` to also implement supportedModels/supportedCommands.
 const fakeHarness = (capabilities?: HarnessCapabilities) => {
   const messages: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
@@ -339,7 +338,6 @@ describe('SessionRunner', () => {
       resolvedBy: 'policy',
     })
 
-    // Ordinary tools still go through the pending-approval flow.
     void harness.captured.options!.canUseTool!(
       'Bash',
       { command: 'ls' },
@@ -427,7 +425,6 @@ describe('SessionRunner', () => {
     await tick()
 
     const usage = events.find((e) => e.type === 'context_usage')
-    // SDK-only fields (gridRows, rawMaxTokens, ...) must not leak onto the wire.
     expect(usage).toMatchObject({
       usage: {
         categories: [
@@ -473,7 +470,6 @@ describe('SessionRunner', () => {
         isUsingOverage: false,
       },
     })
-    // SDK-only fields stay off the wire.
     expect((rateLimit as { info: Record<string, unknown> }).info.overageStatus).toBeUndefined()
     expect(events.some((e) => e.type === 'sdk_event')).toBe(false)
   })
@@ -496,9 +492,7 @@ describe('SessionRunner', () => {
     harness.emit(resultMessage)
     await tick()
 
-    // The plan is a session-long fact — polled every turn, emitted on change.
     expect(events.filter((e) => e.type === 'plan_info')).toEqual([expect.objectContaining({ type: 'plan_info', subscriptionType: 'max' })])
-    // The windows are not: every poll re-reports them.
     expect(events.filter((e) => e.type === 'rate_limit').length).toBeGreaterThan(1)
     expect(events.find((e) => e.type === 'rate_limit')).toMatchObject({
       info: { rateLimitType: 'five_hour', utilization: 6, status: 'allowed' },
@@ -525,8 +519,6 @@ describe('SessionRunner', () => {
   })
 
   it('fetches capabilities eagerly for promptless sessions, emitting only once', async () => {
-    // The CLI answers control requests before the init handshake — a promptless
-    // session must not sit blank (no models/commands) until its first message.
     const { harness, runner, events } = makeRunner(
       {},
       {
@@ -540,7 +532,6 @@ describe('SessionRunner', () => {
     expect(events.some((e) => e.type === 'capabilities')).toBe(true)
     expect(events.some((e) => e.type === 'system_init')).toBe(false)
 
-    // init later must not duplicate the capabilities event
     harness.emit(initMessage)
     await tick()
     expect(events.filter((e) => e.type === 'capabilities')).toHaveLength(1)
@@ -563,11 +554,6 @@ describe('SessionRunner', () => {
   })
 
   it('a coalesced replay drops the stream deltas the reducer discards', async () => {
-    // `replayRetains`. The rule's value is measured rather than assumed: over one
-    // real 1,270-row session the delta run was 774 KB and ~85% of it was frames
-    // the reducer reads and throws away — a tool call's `input_json_delta`
-    // arguments above all. Live delivery is untouched; this is the buffered
-    // replay alone.
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)
@@ -594,10 +580,7 @@ describe('SessionRunner', () => {
 
     const deltas = (list: SessionEvent[]) => list.filter((e) => e.type === 'stream_delta')
     expect(deltas(full)).toHaveLength(5)
-    // Only the two kinds the reducer models survive.
     expect(deltas(thin)).toHaveLength(2)
-    // And the log's last event is delivered whatever the rule says — a client's
-    // replay hold waits for it and would hang on a blank panel forever.
     expect(thin.at(-1)?.seq).toBe(full.at(-1)?.seq)
   })
 
@@ -648,7 +631,6 @@ describe('SessionRunner', () => {
     expect(info.numTurns).toBe(1)
     expect(info.lastActivityAt).toBeGreaterThan(0)
 
-    // meta.title beats the derived prompt title.
     const { runner: named } = makeRunner({ prompt: 'p', meta: { title: 'My session' } })
     expect(named.info().title).toBe('My session')
   })
@@ -658,8 +640,6 @@ describe('SessionRunner', () => {
       vi.fn(async () => ({ sessionId: 'sdk-session-1', lastModified: 0, ...info }) as never)
 
     it('adopts the generated summary, and prefers a /rename over it', async () => {
-      // Not observable on the message stream — no member of the SDK's
-      // `SDKMessage` union carries a title — so it is read at init and turn end.
       const sessionInfoFn = sessionInfo({
         summary: 'Fixing the scrubber lane',
         firstPrompt: 'the right lane mark never grows, have a look',
@@ -674,7 +654,6 @@ describe('SessionRunner', () => {
       expect(runner.info().title).toBe('Fixing the scrubber lane')
       expect(sessionInfoFn).toHaveBeenCalledWith('sdk-session-1', { dir: '/tmp/project' })
 
-      // The CLI's /rename wins over its own generated summary.
       const renamed = makeRunner({
         prompt: 'p',
         sessionInfoFn: sessionInfo({ summary: 'Generated', customTitle: 'What I called it' }),
@@ -686,8 +665,6 @@ describe('SessionRunner', () => {
     })
 
     it('leaves a summary that is just the first prompt to the prompt fallback', async () => {
-      // `SDKSessionInfo.summary` falls back to the first prompt before the
-      // session has a real title; taking it would only change how it truncates.
       const { harness, runner } = makeRunner({
         prompt: 'do the thing',
         sessionInfoFn: sessionInfo({ summary: 'do the thing', firstPrompt: 'do the thing' }),
@@ -699,8 +676,6 @@ describe('SessionRunner', () => {
     })
 
     it('never reads it while the host has named the session', async () => {
-      // A person's rename is not something a model may overwrite — and it is
-      // not fetched *at all*, so nothing is waiting to resurface.
       const sessionInfoFn = sessionInfo({ summary: 'Generated', firstPrompt: 'p' })
       const { harness, runner } = makeRunner({
         prompt: 'p',
@@ -714,7 +689,6 @@ describe('SessionRunner', () => {
       expect(sessionInfoFn).not.toHaveBeenCalled()
       expect(runner.info().title).toBe('My session')
 
-      // Cleared, the generated title is picked up on the next turn.
       runner.setTitle(undefined)
       harness.emit(resultMessage)
       await tick()
@@ -765,16 +739,10 @@ describe('SessionRunner', () => {
     expect(replayUser.uuid).toBe('uuid-h1')
     const replayAssistant = events[1] as Extract<SessionEvent, { type: 'assistant_message' }>
     expect(replayAssistant.replay).toBe(true)
-    // system entries are skipped
     expect(events).toHaveLength(events.filter((e) => e.type !== 'sdk_event').length)
   })
 
   it("stamps the harness's own wrapper messages synthetic on backfill", async () => {
-    // A stored message carries none of `isMeta`/`origin`/`promptSource` — the
-    // SDK's `SessionMessage` drops every one of them — so the wrapper text is
-    // the only thing left to tell a background task reporting in from a person
-    // typing. Unstamped, these came back as blue user rows *and* were counted as
-    // unread work by `transcriptActivity`.
     const entry = (uuid: string, content: unknown) => ({
       type: 'user' as const,
       uuid,
@@ -786,10 +754,9 @@ describe('SessionRunner', () => {
     const history = [
       entry('h-task', '<task-notification>\n<task-id>abc</task-id>\n</task-notification>'),
       entry('h-caveat', '<local-command-caveat>Caveat: the messages below…</local-command-caveat>'),
-      // Not synthetic: the reducer renders this as the command line a person ran.
+      // Not synthetic: rendered as the command line a person ran.
       entry('h-command', '<command-name>/wrapup</command-name><command-args>ship it</command-args>'),
-      // Not synthetic either: the reducer turns it into a notice row, and
-      // hiding it would delete a row the live path shows.
+      // Not synthetic either: rendered as a notice row.
       entry('h-stdout', '<local-command-stdout>Set model to Fable 5</local-command-stdout>'),
       entry('h-typed', [{ type: 'text', text: 'a real prompt' }]),
     ]
@@ -849,11 +816,7 @@ describe('SessionRunner', () => {
 
       const reset = events.find((e): e is Extract<SessionEvent, { type: 'conversation_reset' }> => e.type === 'conversation_reset')
       expect(reset?.sdkSessionId).toBe('sdk-session-2')
-      // A dormant record written between the clear and the next prompt must
-      // resume the fresh conversation, not replay the cleared one.
       expect(runner.sdkSessionId).toBe('sdk-session-2')
-      // The count is an unread cursor, not an item count: winding it back would
-      // strand every stored watermark above it (see SessionInfo.activityCount).
       expect(runner.info().activityCount).toBe(activityBefore)
     })
 
@@ -871,16 +834,12 @@ describe('SessionRunner', () => {
       const replayed: SessionEvent[] = []
       runner.subscribe((e) => replayed.push(e))
       const types = replayed.map((e) => e.type)
-      // The cleared conversation does not come back…
       expect(types.filter((t) => t === 'assistant_message')).toHaveLength(1)
       expect(types).not.toContain('turn_result')
-      // …but the events a fresh attacher depends on — and which will not be
-      // re-emitted — all do.
       expect(types).toContain('system_init')
       expect(types).toContain('capabilities')
       expect(types).toContain('status_changed')
       expect(types).toContain('conversation_reset')
-      // The surviving assistant message is the post-reset one.
       const assistant = replayed.find((e): e is Extract<SessionEvent, { type: 'assistant_message' }> => e.type === 'assistant_message')
       expect(assistant?.uuid).toBe('uuid-a2')
     })
@@ -898,7 +857,6 @@ describe('SessionRunner', () => {
 
       const replayed: SessionEvent[] = []
       runner.subscribe((e) => replayed.push(e), detachedAt)
-      // The reset is what clears the stale rows the client still holds.
       expect(replayed.map((e) => e.type)).toContain('conversation_reset')
     })
 
@@ -929,12 +887,6 @@ describe('SessionRunner', () => {
   })
 })
 
-/**
- * A turn that ends under a standing approval must be *deferred*, not discarded:
- * status is edge-driven, so one dropped edge is permanent for the life of the
- * session (docs/GOTCHAS.md §Permissions). `awaiting_approval` still outranks
- * `idle` for display while the approval stands, which is asserted here too.
- */
 describe('status after a turn ends under a standing approval', () => {
   const askApproval = (harness: ReturnType<typeof makeRunner>['harness'], id: string): void =>
     void harness.captured.options!.canUseTool!(
@@ -954,14 +906,13 @@ describe('status after a turn ends under a standing approval', () => {
     askApproval(harness, 'creq-a')
     expect(runner.status).toBe('awaiting_approval')
 
-    // The turn ends while the approval still stands — what an interrupt does.
+    // The turn ends while the approval stands — what an interrupt does.
     harness.emit(resultMessage)
     await tick()
     expect(runner.status).toBe('awaiting_approval')
 
     runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'deny', message: 'no' })
     await tick()
-    // Was 'running', for a turn that had already produced its result.
     expect(runner.status).toBe('idle')
   })
 
@@ -1002,8 +953,8 @@ describe('status after a turn ends under a standing approval', () => {
     askApproval(harness, 'creq-d')
     harness.emit(resultMessage)
     await tick()
-    // Work resumes before the approval is answered, so the recorded turn-over
-    // belongs to a turn that is gone and must not outlive it.
+    // Work resumes before the approval is answered: the recorded turn-over belongs to a turn
+    // that is gone.
     harness.emit(stateChanged('running'))
     await tick()
 

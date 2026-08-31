@@ -65,7 +65,6 @@ describe('BrowserBridgeExecutor', () => {
     h.executor.resolve('exec-1', { reason: 'guest_error', error: 'boom' })
     await settle()
     expect(h.results[0]!.result).toMatchObject({ status: 'failed', reason: 'guest_error', error: 'boom' })
-    // The client told us; no need to tell it to stop.
     expect(h.canceled).toEqual([])
   })
 
@@ -92,7 +91,6 @@ describe('BrowserBridgeExecutor', () => {
     await vi.waitFor(() => expect(h.results).toHaveLength(1))
     expect(h.executor.resolve('exec-1', { output: { type: 'text', value: 'too late' } })).toBe(false)
     await settle()
-    // Still exactly one terminal result — the settled call did not re-open.
     expect(h.results).toHaveLength(1)
     expect(h.results[0]!.result).toMatchObject({ reason: 'timeout' })
   })

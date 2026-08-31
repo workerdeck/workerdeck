@@ -21,7 +21,6 @@ describe('ENGINE_CAPABILITIES invariants', () => {
 
   it('answers supportsPermissionMode exactly as before for claude and provider', () => {
     for (const mode of ALL_MODES) {
-      // Claude runs everything; absent engine means claude.
       expect(supportsPermissionMode('claude', mode)).toBe(true)
       expect(supportsPermissionMode(undefined, mode)).toBe(true)
       expect(supportsPermissionMode('provider', mode)).toBe(
@@ -31,8 +30,6 @@ describe('ENGINE_CAPABILITIES invariants', () => {
   })
 
   it('declares the codex quartet and nothing else', () => {
-    // 'auto' is codex's own "Approve for me": the acceptEdits sandbox with
-    // `approvalsReviewer: 'auto_review'`. plan/dontAsk remain claude-only.
     for (const mode of ALL_MODES) {
       expect(supportsPermissionMode('codex', mode)).toBe(
         (['default', 'acceptEdits', 'bypassPermissions', 'auto'] as PermissionMode[]).includes(mode),
@@ -41,13 +38,9 @@ describe('ENGINE_CAPABILITIES invariants', () => {
   })
 
   it('declares hostCwd for the engines that spawn a binary, and against the one that does not', () => {
-    // The gateway requires `cwd` off this flag, and both runners throw without
-    // one — so a record that got this wrong would 400 a legitimate create or
-    // let a broken one reach the constructor.
     expect(ENGINE_CAPABILITIES.claude.hostCwd).toBe(true)
     expect(ENGINE_CAPABILITIES.codex.hostCwd).toBe(true)
     expect(ENGINE_CAPABILITIES.provider.hostCwd).toBe(false)
-    // Absent must read as true (an older wire copy), never as "no filesystem".
     for (const engine of ENGINES) {
       expect(ENGINE_CAPABILITIES[engine].hostCwd).toBeDefined()
     }
@@ -55,10 +48,6 @@ describe('ENGINE_CAPABILITIES invariants', () => {
 
   it('declares approvals for claude and codex, and token streaming for codex', () => {
     expect(ENGINE_CAPABILITIES.claude.interactiveApprovals).toBe(true)
-    // Codex streams token-wise (app-server deltas) AND asks: the server→client
-    // ask channels are wired to the permission surface (granular approval
-    // policy under experimentalApi) — the record describes what ships, and
-    // what ships now includes approvals.
     expect(ENGINE_CAPABILITIES.codex.streaming).toBe('token')
     expect(ENGINE_CAPABILITIES.codex.interactiveApprovals).toBe(true)
     expect(ENGINE_CAPABILITIES.provider.interactiveApprovals).toBe(false)
@@ -67,8 +56,7 @@ describe('ENGINE_CAPABILITIES invariants', () => {
 
 describe('adapter conformance', () => {
   it('every adapter’s record IS the protocol record — the divergence guard', () => {
-    // Identity, not just equality: the protocol constant is the single place
-    // the values are written down, and adapters must reference it.
+    // Identity, not equality: adapters must reference the protocol constant, never copy it.
     expect(claudeAdapter.capabilities).toBe(ENGINE_CAPABILITIES.claude)
     expect(codexAdapter.capabilities).toBe(ENGINE_CAPABILITIES.codex)
     expect(providerAdapter.capabilities).toBe(ENGINE_CAPABILITIES.provider)
@@ -106,12 +94,8 @@ describe('model catalogs', () => {
     }
   })
 
-  /**
-   * The raw `supportedModels()` extraction the claude catalog was authored
-   * from (2026-08-05, SDK 0.3.221). Replayed through the live shaping rules so
-   * the catalog's current-model rows can never drift from what the runtime
-   * `capabilities` event would produce for the same input.
-   */
+  // The raw `supportedModels()` extraction the claude catalog was authored from (2026-08-05,
+  // SDK 0.3.221), replayed through the live shaping rules.
   const RAW_CLAUDE: SdkModelInfo[] = [
     {
       value: 'default',
@@ -152,8 +136,6 @@ describe('model catalogs', () => {
 
   it('claude catalog current rows match the live shaping of their extraction', () => {
     const shaped = modelOptionsFromSdk(RAW_CLAUDE)
-    // The catalog adds hand-maintained older rows; the rows that came from the
-    // extraction must be exactly what the runtime shaping produces.
     const currentRows = CLAUDE_CATALOG.models.filter((m) => RAW_CLAUDE.some((raw) => raw.value === m.value))
     expect(currentRows).toEqual(shaped)
   })
@@ -168,8 +150,6 @@ describe('model catalogs', () => {
     for (const model of CODEX_CATALOG.models) {
       expect(model.reasoningEfforts?.length).toBeGreaterThan(0)
     }
-    // The binary's own vocabulary outruns the SDK union — the reason efforts
-    // are open strings end to end.
     expect(CODEX_CATALOG.models[0]!.reasoningEfforts).toContain('ultra')
   })
 

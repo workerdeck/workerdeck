@@ -44,13 +44,6 @@ const waitFor = async (predicate: () => boolean, ms = 5000): Promise<void> => {
   }
 }
 
-/**
- * The M1+M2 seam end to end: the model calls an execute-less `eval_script`
- * tool, which parks the loop; the host dispatches it through the sandbox
- * backend against a scoped VFS; the result is fed back and the loop resumes by
- * message-state replay. This is the shape the browser-bridge and deferred
- * backends slot into unchanged — only the executor differs.
- */
 describe('agent loop + sandboxed tool execution', () => {
   it('parks on eval_script, executes it in the sandbox, and completes the turn', async () => {
     const model = new MockLanguageModelV3({
@@ -70,7 +63,7 @@ describe('agent loop + sandboxed tool execution', () => {
 
     const runner = new AiSdkRunner({
       languageModel: model,
-      // No `execute`: execution is the host's job, via the ToolExecutor seam.
+      // No `execute`: that halt is the ToolExecutor seam.
       tools: { eval_script: tool({ inputSchema: z.object({ script: z.string() }) }) },
     })
     const events: SessionEvent[] = []
@@ -82,7 +75,6 @@ describe('agent loop + sandboxed tool execution', () => {
 
     runner.sendMessage('evaluate the Acme lead')
 
-    // The loop parks: a pending execution, and no turn_result yet.
     await waitFor(() => runner.pendingToolCalls.length === 1)
     expect(events.some((e) => e.type === 'turn_result')).toBe(false)
 
@@ -98,7 +90,6 @@ describe('agent loop + sandboxed tool execution', () => {
     const result = (dispatch as { result: { status: string; output: unknown } }).result
     expect(result).toMatchObject({ status: 'ok', output: 'qualified' })
 
-    // Feed it back; the loop re-enters by replay and finishes the turn.
     expect(runner.resolveToolCall(pending.toolCallId, { type: 'json', value: result.output })).toBe(true)
     await waitFor(() => events.some((e) => e.type === 'turn_result'))
 
@@ -108,9 +99,7 @@ describe('agent loop + sandboxed tool execution', () => {
       result: 'Acme is qualified.',
     })
     expect(runner.info().status).toBe('idle')
-    // The script's side effect landed in the scoped VFS, not on the host disk.
     expect(vfs.read('/out/acme.json')).toBe('{"revenue":120}')
-    // The transcript shows the tool call and its result.
     const toolUse = events
       .filter((e) => e.type === 'assistant_message')
       .flatMap((e) => (e as { message: { content: unknown } }).message.content as Array<{ type: string }>)
@@ -149,7 +138,6 @@ describe('agent loop + sandboxed tool execution', () => {
     const result = (dispatch as { result: { status: string; reason?: string; error?: string } }).result
     expect(result).toMatchObject({ status: 'failed', reason: 'timeout' })
 
-    // A failed execution is ordinary loop input, not a session error.
     runner.resolveToolCall(pending.toolCallId, { type: 'text', value: `${result.reason}: ${result.error}` }, { isError: true })
     await waitFor(() => events.some((e) => e.type === 'turn_result'))
     expect(events.find((e) => e.type === 'turn_result')).toMatchObject({

@@ -2,7 +2,6 @@ import { PassThrough } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 import { JsonRpcError, JsonRpcStdioConnection } from '../src/engines/codex/jsonrpc.ts'
 
-/** A fake `codex app-server` on the other end of two in-memory pipes. */
 const harness = () => {
   const toClient = new PassThrough() // server stdout → client input
   const fromClient = new PassThrough() // client output → server stdin
@@ -29,8 +28,7 @@ describe('JsonRpcStdioConnection', () => {
     const promise = connection.request('initialize', { clientInfo: { name: 'x', version: '0' } })
     connection.notify('initialized')
     await vi.waitFor(() => expect(written).toHaveLength(2))
-    // The 0.146.0 binary's envelope: {id, method, params} — no `jsonrpc` key,
-    // and no params key at all when there are none.
+    // The 0.146.0 binary's envelope: no `jsonrpc` key, and no `params` key when there are none.
     expect(written[0]).toEqual({
       id: 1,
       method: 'initialize',
@@ -45,8 +43,7 @@ describe('JsonRpcStdioConnection', () => {
     const { connection, sendRaw } = harness()
     const first = connection.request('thread/start')
     const second = connection.request('turn/start')
-    // Answer the second request first, split mid-JSON across writes, with a
-    // notification interleaved on the same pipe.
+    // Out of order, split mid-JSON across writes, with a notification interleaved.
     sendRaw('{"id":2,"resu')
     sendRaw('lt":{"turn":{"id":"t"}}}\n{"method":"turn/started","params":{"x":1},"emittedAtMs":5}\n')
     sendRaw('{"id":1,"result":{"thread":{"id":"th"}}}\n')

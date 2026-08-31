@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createWebFetch, htmlToMarkdown, isPrivateAddress } from '../src/engines/provider/web-fetch.ts'
 
-/** Literal public IPs (TEST-NET) so the SSRF guard never touches real DNS. */
+// Literal public IPs (TEST-NET) so the SSRF guard never touches real DNS.
 const PAGE = 'http://203.0.113.5/page'
 
 const htmlResponse = (body: string, init: ResponseInit = {}): Response =>

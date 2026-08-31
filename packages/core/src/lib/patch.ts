@@ -1,26 +1,8 @@
-/**
- * Both engines' edit output → the wire's one {@link FilePatch} (Claude's
- * `structuredPatch` on `tool_use_result`, codex's unified-diff string on a
- * `fileChange`), so every client renders one shape with no per-engine branch and
- * no diff parser of its own. A client has never seen the file, so anything not
- * normalized here renders without line numbers.
- */
-
 import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
 
-/**
- * The most lines a patch may put on the wire.
- *
- * A patch is replayed on every attach and captured into parking snapshots, so
- * "the diff is big" must not become "this session is expensive to open forever".
- * Whole hunks are kept or dropped — half a hunk has misleading line numbers —
- * and the drop is flagged so a renderer can say the diff is partial instead of
- * presenting it as the whole change.
- */
 const MAX_PATCH_LINES = 400
 
-/** `@@ -oldStart,oldLines +newStart,newLines @@` — the counts are optional and
- * mean 1 when absent, which is what a single-line hunk looks like. */
+// `@@ -oldStart,oldLines +newStart,newLines @@` — an absent count means 1 (a single-line hunk).
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
 
 const capHunks = (hunks: PatchHunk[]): { hunks: PatchHunk[]; truncated?: boolean } => {
@@ -36,8 +18,6 @@ const capHunks = (hunks: PatchHunk[]): { hunks: PatchHunk[]; truncated?: boolean
   return { hunks: kept }
 }
 
-/** Structural, not `instanceof`: this reads a field the SDK types as `unknown`,
- * and a shape check is the only honest way to know what arrived. */
 const isHunk = (value: unknown): value is PatchHunk => {
   const hunk = value as Partial<PatchHunk> | null
   return (
@@ -51,14 +31,6 @@ const isHunk = (value: unknown): value is PatchHunk => {
   )
 }
 
-/**
- * A {@link FilePatch} from the Claude SDK's structured tool output
- * (`SDKUserMessage.tool_use_result` for Edit/Write/NotebookEdit).
- *
- * Everything else on that object is deliberately left behind — `originalFile`
- * alone is the entire pre-edit file, which is precisely what must not be logged
- * (see `FilePatch`'s own note).
- */
 export const filePatchFromToolResult = (result: unknown): FilePatch | undefined => {
   const output = result as { filePath?: unknown; structuredPatch?: unknown; originalFile?: unknown; type?: unknown } | null | undefined
   if (!output || !Array.isArray(output.structuredPatch)) {
@@ -71,10 +43,6 @@ export const filePatchFromToolResult = (result: unknown): FilePatch | undefined 
   const { hunks: kept, truncated } = capHunks(hunks)
   return {
     ...(typeof output.filePath === 'string' && { path: output.filePath }),
-    // Write reports `type: 'create' | 'update'` directly. Edit has no such
-    // field, but `originalFile` answers the same question: null means there was
-    // no file to edit. Absent entirely (neither field) leaves `kind` unset
-    // rather than assuming an update.
     ...(output.type === 'create' || output.originalFile === null
       ? ({ kind: 'create' } as const)
       : output.type === 'update' || typeof output.originalFile === 'string'
@@ -85,17 +53,6 @@ export const filePatchFromToolResult = (result: unknown): FilePatch | undefined 
   }
 }
 
-/**
- * A {@link FilePatch} from a unified diff — codex's `fileChange.diff`.
- *
- * Only the hunks are read. A diff's `---`/`+++` header names the file, but codex
- * already reports the path on the change itself, and a header path is often
- * relative or `/dev/null`, so the caller's path is the one worth trusting.
- *
- * Returns undefined when there is no hunk header at all: that is not a unified
- * diff, and inventing hunk numbers for it would put wrong line numbers on screen
- * — worse than none.
- */
 export const parseUnifiedDiff = (diff: string, path?: string): FilePatch | undefined => {
   const hunks: PatchHunk[] = []
   let current: PatchHunk | undefined
@@ -115,15 +72,11 @@ export const parseUnifiedDiff = (diff: string, path?: string): FilePatch | undef
     if (!current) {
       continue
     }
-    // Inside a hunk, a line belongs to it when it carries a diff prefix. A
-    // '\' line ("\ No newline at end of file") is a note about the previous
-    // line, not a line of the file, and is dropped.
     if (line.startsWith(' ') || line.startsWith('-') || line.startsWith('+')) {
       current.lines.push(line)
     } else if (line === '') {
-      // An empty line in a diff body is a context line whose trailing space was
-      // stripped somewhere between the engine and here — common enough that
-      // dropping it would silently shift every line number after it.
+      // A blank line is a context line whose trailing space was stripped in transit; dropping
+      // it would silently shift every line number after it.
       current.lines.push(' ')
     } else {
       current = undefined

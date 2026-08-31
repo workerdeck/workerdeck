@@ -18,8 +18,8 @@ const USAGE = {
   outputTokens: { total: 5, text: 5, reasoning: undefined },
   raw: undefined,
 }
-// Loop legs are streamed (doStream); generateSay is the doGenerate form for
-// plain generateText calls (the web_fetch digest pass).
+// Loop legs are streamed (doStream); `generateSay` is the doGenerate form the web_fetch
+// digest pass uses.
 const say = (t: string) => ({
   stream: convertArrayToReadableStream([
     { type: 'stream-start' as const, warnings: [] },
@@ -122,7 +122,6 @@ describe('createEngineSession', () => {
       bytes: 5,
       description: 'the summary',
     })
-    // The server's file routes read the delivered file straight off Runner.vfs.
     expect(runner.vfs?.read('/SUMMARY.md')).toBe('# Sum')
   }, 30_000)
 
@@ -130,7 +129,6 @@ describe('createEngineSession', () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
       doStream: [callTool('c1', 'web_fetch', { url: 'http://203.0.113.5/pricing', prompt: 'how much?' }), say('The page says $10/mo.')],
-      // The digest pass is a plain generateText on the same model.
       doGenerate: [generateSay('It costs $10/mo.')],
     })
     const fetchImpl = async () =>
@@ -154,8 +152,7 @@ describe('createEngineSession', () => {
     })
     const turn = events.find((e) => e.type === 'turn_result')!
     expect(turn).toMatchObject({ subtype: 'success', result: 'The page says $10/mo.' })
-    // Three generate calls hit the model (loop step, digest, final step) at
-    // 10 in / 5 out each — the digest's tokens must not be lost.
+    // Three model calls (loop step, digest, final step) at 10 in / 5 out each.
     expect(turn.type === 'turn_result' && turn.usage).toMatchObject({
       input_tokens: 30,
       output_tokens: 15,
@@ -185,18 +182,12 @@ describe('createEngineSession', () => {
     await vi.waitFor(() => expect(events.some((e) => e.type === 'turn_result')).toBe(true), {
       timeout: 15_000,
     })
-    // A file written by the authoritative fs_write tool is visible to the
-    // sandboxed script — same VFS, different trust levels.
     expect(events.find((e) => e.type === 'execution_result')).toMatchObject({
       output: { type: 'json', value: 'HELLO' },
     })
   }, 30_000)
 })
 
-/**
- * What reaches the model is the only honest measure of a grant: a capability
- * that is "withheld" but still in the tool set is not withheld at all.
- */
 describe('createEngineSession grants', () => {
   const assemble = async (
     options: Omit<Parameters<typeof createEngineSession>[0], 'resolveModel' | 'selectExecutor' | 'config'> & {
@@ -245,7 +236,6 @@ describe('createEngineSession grants', () => {
     expect(toolNames).not.toContain('web_search')
     expect(toolNames).not.toContain('download')
     expect(toolNames).not.toContain('deliver_file')
-    // The scratch filesystem and the sandbox are the engine, not a grant.
     expect(toolNames).toContain('eval_script')
     expect(toolNames).toContain('fs_write')
   }, 30_000)
@@ -257,7 +247,6 @@ describe('createEngineSession grants', () => {
         engine: 'provider',
         session: { capabilities: ['web_fetch', 'deliver_file'] },
       },
-      // Narrowing is the gateway's to police; core trusts the resolved request.
       config: { capabilities: ['deliver_file'] },
       capabilities: { webFetch: {} },
     })
@@ -272,7 +261,6 @@ describe('createEngineSession grants', () => {
       mcpTools: { wiki__ask: mcpTool(), crm__push: mcpTool() },
     })
     expect(toolNames).toContain('wiki__ask')
-    // An authoritative tool this profile was never granted must not be reachable.
     expect(toolNames).not.toContain('crm__push')
   }, 30_000)
 
@@ -285,12 +273,6 @@ describe('createEngineSession grants', () => {
   }, 30_000)
 })
 
-/**
- * A session's tools ARE its authority, and the two ways a host adds to them are
- * the two ways that authority can silently go wrong: a declared MCP server that
- * never connected (the agent quietly cannot do its job), and a host tool whose
- * declared trust does not match how it would actually run.
- */
 describe('createEngineSession host tools and MCP declarations', () => {
   const model = () => new MockLanguageModelV3({ modelId: 'mock-1', doStream: [say('ok')] })
   const build = (options: Partial<Parameters<typeof createEngineSession>[0]>) => {
@@ -348,7 +330,6 @@ describe('createEngineSession host tools and MCP declarations', () => {
       profile: { name: 'p', engine: 'provider', session: { mcpServers: ['wiki'] } },
       mcp,
     })
-    // A /mcp screen must not advertise a connection the session cannot reach.
     expect((await runner.mcpServers())?.map((s) => s.name)).toEqual(['wiki'])
   })
 
@@ -365,9 +346,6 @@ describe('createEngineSession host tools and MCP declarations', () => {
     const runner = createEngineSession({
       config: { cwd: '/tmp', languageModel: m },
       resolveModel: () => m,
-      // The seam under test: a host tool declared `sandboxed` must reach the
-      // executor, which is what makes it bridgeable to a tab. Nothing else in
-      // the API could express this — `mcpTools` is authoritative by construction.
       selectExecutor: () => ({
         dispatch: async (call: ToolExecutionCall) => {
           dispatched.push(call.tool)
@@ -379,7 +357,6 @@ describe('createEngineSession host tools and MCP declarations', () => {
         },
       }),
       tools: {
-        // No `execute` — that is what makes it the executor's to run.
         lookup: { trust: 'sandboxed', tool: tool({ inputSchema: z.object({ q: z.string() }) }) },
       },
     })
@@ -420,11 +397,6 @@ describe('createEngineSession host tools and MCP declarations', () => {
   })
 })
 
-/**
- * `seedVfs` and `id` exist because both were runtime-only correctness rules a
- * host had to know independently: seed over a restore and the parked turn's work
- * is gone; drop the id and the rebuilt session is a different session.
- */
 describe('createEngineSession rehydration', () => {
   const build = (options: Partial<Parameters<typeof createEngineSession>[0]>) => {
     const m = new MockLanguageModelV3({ modelId: 'mock-1', doStream: [say('ok')] })
@@ -454,7 +426,6 @@ describe('createEngineSession rehydration', () => {
     }
     const runner = build({ config: { cwd: '/tmp', restore: snapshot } as never, seedVfs: { '/README.md': 'hello' } })
     expect(runner.vfs?.read('/README.md')).toBe('written by the parked turn')
-    // And the identity comes back with it, seed or no seed.
     expect(runner.id).toBe('sess-1')
   })
 
@@ -477,17 +448,14 @@ describe('connectMcpTools', () => {
       { onError: (name) => errors.push(name) },
     )
     expect(connection.tools).toEqual({})
-    // onError may fire more than once for one server (transport-level retries
-    // report through onUncaughtError as well as the connect failure) — what
-    // matters is that it is reported and the session goes on without it.
+    // onError may fire more than once per server: transport retries report through
+    // onUncaughtError as well as the connect failure.
     expect(errors.length).toBeGreaterThan(0)
     expect(new Set(errors)).toEqual(new Set(['broken']))
   }, 20_000)
 
   it('reports every configured server, connected or not', async () => {
     const connection = await connectMcpTools({ broken: { type: 'http', url: 'http://127.0.0.1:1/mcp' } }, { onError: () => {} })
-    // The status list is the whole point of the loud path: "it degraded" has to
-    // be inspectable, not just logged.
     expect(connection.servers).toHaveLength(1)
     expect(connection.servers[0]).toMatchObject({
       name: 'broken',

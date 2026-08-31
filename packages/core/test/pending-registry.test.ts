@@ -34,7 +34,6 @@ describe('PendingRequestRegistry', () => {
     const registry = new PendingRequestRegistry()
     const pending = registry.register<string>({ id: 'a', kind: 'tool_call', timeoutMs: 20 })
     expect(await pending).toMatchObject({ ok: false, reason: 'timeout' })
-    // The client's answer arrives after the deadline — must be a no-op.
     expect(registry.settle('a', 'too late')).toBe(false)
     expect(registry.fail('a', 'x', 'y')).toBe(false)
   })

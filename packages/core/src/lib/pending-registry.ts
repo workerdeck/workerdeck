@@ -1,14 +1,5 @@
-/**
- * One registry for every request that leaves the runner and must come back:
- * permission approvals, browser-bridged tool calls, and deferred executions.
- * They differ only in who answers and how long that takes — the correlation,
- * timeout, idempotent settle, and provenance tagging are identical, so they
- * live here once.
- */
-
 export type PendingKind = 'approval' | 'tool_call' | 'execution'
 
-/** Who settled a request. Mirrors the existing approval vocabulary. */
 export type SettledBy = 'client' | 'timeout' | 'policy' | 'server'
 
 export type PendingOutcome<T> =
@@ -19,9 +10,7 @@ export type PendingEntry = {
   id: string
   kind: PendingKind
   createdAt: number
-  /** Epoch ms the timeout policy fires at, when one was set. */
   expiresAt?: number
-  /** Caller-supplied descriptor for display/rehydration (tool name, request, ...). */
   meta?: Record<string, unknown>
 }
 
@@ -33,11 +22,8 @@ type Slot<T> = PendingEntry & {
 export type RegisterOptions<T> = {
   id: string
   kind: PendingKind
-  /** Fail the request automatically after this long. Omit for no deadline
-   * (deferred executions whose watchdog lives elsewhere). */
   timeoutMs?: number
   meta?: Record<string, unknown>
-  /** Called when the entry settles, however it settled. For emitting events. */
   onSettle?: (outcome: PendingOutcome<T>, entry: PendingEntry) => void
 }
 
@@ -48,14 +34,8 @@ export class PendingRequestRegistry {
     return this.#slots.size
   }
 
-  /**
-   * Register a request and get a promise for its outcome. The promise **never
-   * rejects**: a timeout or cancellation resolves with `ok: false` so callers
-   * feed the failure back into the agent loop instead of unwinding it.
-   *
-   * Re-registering a live id throws — silently replacing it would strand the
-   * first waiter forever.
-   */
+  // The outcome promise never rejects: a timeout or cancellation resolves `ok: false`, so a
+  // caller feeds the failure back into the agent loop instead of unwinding it.
   register<T>(options: RegisterOptions<T>): Promise<PendingOutcome<T>> {
     if (this.#slots.has(options.id)) {
       throw new Error(`pending request '${options.id}' is already registered`)
@@ -90,13 +70,10 @@ export class PendingRequestRegistry {
     })
   }
 
-  /** Deliver a result. Returns false for unknown or already-settled ids —
-   * duplicate and late deliveries are no-ops, never a second application. */
   settle<T>(id: string, value: T, settledBy: SettledBy = 'client'): boolean {
     return this.#settle(id, { ok: true, value, settledBy })
   }
 
-  /** Fail a request. Same idempotence guarantee as {@link settle}. */
   fail(id: string, reason: string, error: string, settledBy: SettledBy = 'server'): boolean {
     return this.#settle(id, { ok: false, reason, error, settledBy })
   }
@@ -115,10 +92,9 @@ export class PendingRequestRegistry {
     return kind ? entries.filter((e) => e.kind === kind) : entries
   }
 
-  /** Fail everything (optionally of one kind) — session close, turn interrupt. */
   cancelAll(reason: string, error: string, kind?: PendingKind): number {
     let canceled = 0
-    // Snapshot ids first: settling mutates the map we would be iterating.
+    // Snapshot first: settling mutates the map being iterated.
     for (const slot of Array.from(this.#slots.values())) {
       if (kind && slot.kind !== kind) {
         continue

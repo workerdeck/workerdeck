@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { contextReading, transcriptActivity, transcriptContent, type SessionEventBody } from '@workerdeck/protocol'
 
-/**
- * `activityCount` is what a client diffs to answer "how much happened while I
- * wasn't looking", so the unit has to be the one the reader sees: transcript
- * rows. These cases are the ones that made the old turn-based badge wrong — a
- * turn full of tool calls is one turn and many rows.
- */
 describe('transcriptActivity', () => {
   const assistant = (content: unknown[]) =>
     ({
@@ -65,8 +59,6 @@ describe('transcriptActivity', () => {
       } as SessionEventBody),
     ).toBe(1)
     expect(transcriptActivity({ type: 'session_error', message: 'boom' })).toBe(1)
-    // Streamed tokens are the reason `lastSeq` cannot be used for this: hundreds
-    // of events per reply, none of them a new row.
     expect(
       transcriptActivity({
         type: 'stream_delta',
@@ -84,15 +76,9 @@ describe('transcriptActivity', () => {
         resolvedBy: 'client',
       } as SessionEventBody),
     ).toBe(0)
-    // Not a row: a reset is what removes rows, and counting it would advance
-    // the unread cursor for something nobody needs to read.
     expect(transcriptActivity({ type: 'conversation_reset' })).toBe(0)
   })
 
-  // A subagent's rows render *inside* the `Task` call that spawned them, which
-  // is itself a counted row. Scoring them too would have an unread badge
-  // announce dozens of rows the reader cannot see without expanding a block —
-  // and one Task can outnumber everything a person actually typed that day.
   it('scores a subagent’s own messages zero, however many rows they would be', () => {
     expect(
       transcriptActivity({
@@ -109,8 +95,6 @@ describe('transcriptActivity', () => {
         uuid: 'u9',
       } as SessionEventBody),
     ).toBe(0)
-    // The brief is a real, non-synthetic user message; it is still not a row of
-    // *this* conversation.
     expect(
       transcriptActivity({
         type: 'user_message',
@@ -119,8 +103,6 @@ describe('transcriptActivity', () => {
         uuid: 'u10',
       } as SessionEventBody),
     ).toBe(0)
-    // The `Task` call itself is the main thread's row and still counts — the
-    // badge must not go silent while a subagent works.
     expect(
       transcriptActivity({
         type: 'assistant_message',
@@ -135,16 +117,8 @@ describe('transcriptActivity', () => {
   })
 })
 
-/**
- * The replay-filter rule behind `conversation_reset` — which events the runner
- * may skip below a reset because the reducer would have cleared them anyway.
- * Deliberately broader than `transcriptActivity() > 0`: what matters is whether
- * the reducer *mutates items*, not whether a row is added.
- */
 describe('transcriptContent', () => {
   it('classifies everything that mutates items as content, even at zero rows', () => {
-    // Zero activity, but they mutate items: a delta builds the streaming row, a
-    // synthetic user message settles a tool call, execution events rewrite one.
     expect(
       transcriptContent({
         type: 'stream_delta',
@@ -168,8 +142,6 @@ describe('transcriptContent', () => {
         output: { type: 'text', value: 'ok' },
       }),
     ).toBe(true)
-    // The reset itself is content: a superseded reset is skipped with the
-    // conversation it cleared, and the strictly-below skip keeps the latest.
     expect(transcriptContent({ type: 'conversation_reset' })).toBe(true)
   })
 
@@ -182,25 +154,16 @@ describe('transcriptContent', () => {
     expect(transcriptContent({ type: 'plan_info', subscriptionType: 'max' })).toBe(false)
     expect(transcriptContent({ type: 'file_produced', fileId: 'f1', path: '/tmp/x.png' })).toBe(false)
     expect(transcriptContent({ type: 'rate_limit', info: { status: 'allowed' } })).toBe(false)
-    // Permission bookkeeping survives a reset: a still-pending request is the
-    // runner's, and skipping the `requested` half would hide it forever.
     expect(
       transcriptContent({
         type: 'permission_requested',
         request: { id: 'p1', toolName: 'Bash', input: {}, toolUseId: 't1' },
       }),
     ).toBe(false)
-    // Unknown/future types default to not-content: the safe failure is
-    // replaying a stale row, never withholding state.
     expect(transcriptContent({ type: 'sdk_event', payload: { type: 'x' } })).toBe(false)
   })
 })
 
-/**
- * The other rule that rides the sessions list. Same reason it lives in
- * `protocol`: three runners fold it, every client reads it, and a second
- * spelling of "which events move the reading" is a second answer.
- */
 describe('contextReading', () => {
   const usage = {
     type: 'context_usage',
@@ -222,8 +185,6 @@ describe('contextReading', () => {
   })
 
   it('answers undefined for every other event, a reset included', () => {
-    // The reset's clearing is the caller's half of the rule — this function
-    // says what an event claims the reading *is*, and a reset claims nothing.
     expect(contextReading({ type: 'conversation_reset' } as SessionEventBody)).toBeUndefined()
     expect(contextReading({ type: 'status_changed', status: 'idle' } as SessionEventBody)).toBeUndefined()
   })

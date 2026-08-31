@@ -1,18 +1,10 @@
-/**
- * The sub-agent rollup (`SessionInfo.subagents`) — what a sessions list, which
- * never attaches, can know about the agents running inside a session. Driven
- * through the runner rather than the tracker directly, because the claim under
- * test is that the one `#emit` chokepoint (live stream *and* resume backfill)
- * is enough to derive it: no event was added to the protocol for this.
- */
-
 import { describe, expect, it } from 'vitest'
 import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { SUBAGENT_HISTORY } from '@workerdeck/protocol'
 import { SessionRunner, type SessionRunnerConfig } from '../src/index.ts'
 
-/** Minimal stand-in for the SDK: emit SDKMessages, capture options + streamed
- * input (same shape as runner.test.ts's harness, without the control surface). */
+// Minimal stand-in for the SDK: emit SDKMessages, capture options + streamed input (the
+// runner.test.ts harness without its control surface).
 const fakeHarness = () => {
   const messages: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
@@ -110,7 +102,7 @@ const taskCall = (id: string, input: Record<string, unknown> = {}) => ({
   input,
 })
 
-/** The async spawner, as a captured real session spelled it (`Agent`, not `Task`). */
+// The async spawner, as a captured real session spelled it (`Agent`, not `Task`).
 const agentCall = (id: string, input: Record<string, unknown> = {}) => ({
   type: 'tool_use',
   id,
@@ -118,9 +110,8 @@ const agentCall = (id: string, input: Record<string, unknown> = {}) => ({
   input,
 })
 
-/** The launch receipt's wrapper text, verbatim from the captured session — the
- * tool_result that resolves the spawn call seconds after launch, long before
- * the agent has done anything. */
+// The launch receipt, verbatim from the captured session: it resolves the spawn call seconds
+// after launch, long before the agent has done anything.
 const ACK_TEXT =
   'Async agent launched successfully. (This tool result is internal metadata — never quote ' +
   'or paste any part of it, including the agentId below, into a user-facing reply.)\n' +
@@ -130,8 +121,8 @@ const ACK_TEXT =
 const launchAck = (toolUseId: string, uuid = nextUuid()) =>
   user([{ type: 'tool_result', tool_use_id: toolUseId, content: [{ type: 'text', text: ACK_TEXT }] }], null, uuid)
 
-/** The CLI's background-task lifecycle, live: system messages the runner passes
- * through as `sdk_event` bodies. Shapes from the captured session. */
+// The CLI's background-task lifecycle, live: system messages passed through as `sdk_event`
+// bodies. Shapes from the captured session.
 const taskStarted = (taskId: string, toolUseId: string, subagentType: string, description: string) =>
   ({
     type: 'system',
@@ -159,9 +150,8 @@ const taskNotification = (taskId: string, toolUseId: string, status: string) =>
     session_id: 'sdk-session-1',
   }) as unknown as SDKMessage
 
-/** The same fact as stored in the transcript a resume replays: a plain-string
- * user message wearing the `<task-notification>` wrapper (shape verbatim from
- * the captured session's JSONL — none of the system events above are stored). */
+// The same fact as a resume replays it: a plain-string user message wearing the
+// `<task-notification>` wrapper. None of the system events above are stored in the JSONL.
 const notificationText = (taskId: string, toolUseId: string, status: string) =>
   `<task-notification>\n<task-id>${taskId}</task-id>\n<tool-use-id>${toolUseId}</tool-use-id>\n` +
   `<output-file>/tmp/tasks/${taskId}.output</output-file>\n<status>${status}</status>\n` +
@@ -225,7 +215,6 @@ describe('SessionRunner sub-agent rollup', () => {
     harness.emit(initMessage)
     harness.emit(assistant([taskCall('task-1', { subagent_type: 'Explore', description: 'find the auth check' })]))
     await tick()
-    // Visible from the call, before any nested event arrives.
     expect(runner.info().subagents).toEqual([
       {
         toolUseId: 'task-1',
@@ -269,7 +258,6 @@ describe('SessionRunner sub-agent rollup', () => {
     void runner.start()
     harness.emit(initMessage)
     harness.emit(assistant([taskCall('task-1', { subagent_type: 'Explore' }), toolCall('main-1')]))
-    // The brief: a real user message inside the sidechain.
     harness.emit(user('Search the repo for X.', 'task-1'))
     harness.emit(assistant([{ type: 'text', text: 'Searching.' }, toolCall('c1', 'Grep'), toolCall('c2')], 'task-1'))
     harness.emit({
@@ -294,7 +282,6 @@ describe('SessionRunner sub-agent rollup', () => {
         taskCall('task-b', { subagent_type: 'Plan', description: 'B' }),
       ]),
     )
-    // Interleaved — grouping by adjacency would shear these apart.
     harness.emit(assistant([toolCall('a1')], 'task-a'))
     harness.emit(assistant([toolCall('b1')], 'task-b'))
     harness.emit(assistant([toolCall('a2'), toolCall('a3')], 'task-a'))
@@ -312,14 +299,12 @@ describe('SessionRunner sub-agent rollup', () => {
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)
-    // A renamed spawner: nested events arrive for an id we never saw opened.
     harness.emit(user('Do the thing.', 'task-x'))
     harness.emit(assistant([toolCall('x1')], 'task-x'))
     await tick()
     expect(runner.info().subagents).toMatchObject([{ toolUseId: 'task-x', status: 'running', toolCount: 1 }])
     expect(runner.info().subagents![0].agentType).toBeUndefined()
 
-    // The named call turning up fills labels in without resetting the count.
     harness.emit(assistant([taskCall('task-x', { subagent_type: 'Explore' })]))
     await tick()
     expect(runner.info().subagents).toMatchObject([{ toolUseId: 'task-x', agentType: 'Explore', status: 'running', toolCount: 1 }])
@@ -333,7 +318,6 @@ describe('SessionRunner sub-agent rollup', () => {
     harness.emit(assistant([toolCall('c1')], 'task-1'))
     await tick()
     expect(runner.info().subagents).toMatchObject([{ toolUseId: 'task-1', status: 'running' }])
-    // Interrupt: no tool_result ever arrives, just the turn ending.
     harness.emit(turnResult)
     await tick()
     expect(runner.info().subagents).toMatchObject([{ toolUseId: 'task-1', status: 'failed', toolCount: 1 }])
@@ -369,14 +353,13 @@ describe('SessionRunner sub-agent rollup', () => {
     }
     await tick()
     const records = runner.info().subagents!
-    // The two oldest-settled fell off; the running one is untouchable.
     expect(records.map((r) => r.toolUseId)).toEqual([...settled.slice(2), 'task-live'])
     expect(records.find((r) => r.toolUseId === 'task-live')).toMatchObject({ status: 'running' })
     expect(records.filter((r) => r.status !== 'running')).toHaveLength(SUBAGENT_HISTORY)
   })
 
   it('rebuilds from a resume backfill, and sweeps the Task the old process died inside', async () => {
-    // History: one Task settled clean, one still open when the process ended.
+    // One Task settled clean, one still open when the process ended.
     const history = [
       {
         type: 'user' as const,
@@ -435,14 +418,11 @@ describe('SessionRunner sub-agent rollup', () => {
     void runner.start()
     harness.emit(initMessage)
     await tick()
-    // No turn_result replays from history — the idle transition is the sweep.
     expect(runner.info().subagents).toMatchObject([
       { toolUseId: 'task-done', agentType: 'Explore', status: 'done', toolCount: 2 },
       { toolUseId: 'task-cut', agentType: 'Plan', status: 'failed', toolCount: 1 },
     ])
 
-    // The SDK re-streams user messages on resume; the duplicate result must not
-    // double-settle or reshuffle what is retained.
     harness.emit(user([{ type: 'tool_result', tool_use_id: 'task-done', content: 'report' }], null, 'h-u2'))
     await tick()
     expect(runner.info().subagents).toMatchObject([
@@ -452,15 +432,9 @@ describe('SessionRunner sub-agent rollup', () => {
   })
 })
 
-/**
- * Background (async) agents — event shapes condensed from a captured real
- * session (5c753c85…) in which the SDK spawned three Explore agents through a
- * tool named `Agent`, resolved each spawn call with an internal-metadata
- * launch receipt seconds later, ended THREE turns while the agents ran, and
- * delivered each verdict as a `task_notification` system event. Under the
- * Task-only, sweep-everything tracker all three read `failed` and label-less;
- * none had failed.
- */
+// Shapes condensed from a captured session (5c753c85…): three Explore agents spawned through
+// a tool named `Agent`, each spawn call resolved by a launch receipt, three turns ended while
+// they ran, and each verdict delivered as a `task_notification`.
 describe('SessionRunner background sub-agents', () => {
   it('survives the turn ending mid-flight, and settles on its notification — the captured shape', async () => {
     const { harness, runner } = makeRunner()
@@ -479,8 +453,6 @@ describe('SessionRunner background sub-agents', () => {
     harness.emit(taskStarted('a5ae18bf55ec3c1b1', id, 'Explore', 'Grep iOS terminal symbols'))
     harness.emit(launchAck(id))
     await tick()
-    // The receipt is a launch acknowledgement, not the agent's verdict:
-    // settling on it would read "0 of 3 running" while the agents work.
     expect(runner.info().subagents).toMatchObject([
       {
         toolUseId: id,
@@ -493,14 +465,10 @@ describe('SessionRunner background sub-agents', () => {
 
     harness.emit(assistant([toolCall('n1')], id))
     harness.emit(assistant([{ type: 'text', text: 'All three Explore agents are launched and running.' }]))
-    // The turn ends while the agent is mid-flight (and the runner's own idle
-    // transition follows it) — this is exactly where the old sweep re-branded
-    // a live, working agent as a failure.
     harness.emit(turnResult)
     await tick()
     expect(runner.info().subagents).toMatchObject([{ toolUseId: id, status: 'running' }])
 
-    // Still very much alive after the turn: the count keeps climbing.
     harness.emit(assistant([toolCall('n2'), toolCall('n3')], id))
     harness.emit(taskNotification('a5ae18bf55ec3c1b1', id, 'completed'))
     await tick()
@@ -537,11 +505,9 @@ describe('SessionRunner background sub-agents', () => {
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)
-    // A spawner name the allowlist has never heard of: no record from the block.
     harness.emit(assistant([toolCall('spawn-x', 'LaunchAgent')]))
     await tick()
     expect(runner.info().subagents).toBeUndefined()
-    // task_started positively names the id an agent runs under, brief included.
     harness.emit(taskStarted('t-x', 'spawn-x', 'Explore', 'find the auth check'))
     harness.emit(launchAck('spawn-x'))
     harness.emit(assistant([toolCall('x1')], 'spawn-x'))
@@ -561,13 +527,8 @@ describe('SessionRunner background sub-agents', () => {
   })
 
   it('rebuilds from a resume backfill: the stored notification is the verdict, and a never-notified agent died with its process', async () => {
-    // The stored transcript carries none of the CLI's system events and none of
-    // an async agent's sidechain — just the spawn blocks, the launch receipts
-    // and the `<task-notification>` wrappers (verified against the captured
-    // session's JSONL). The receipt's wrapper text is the only background
-    // signal the replayed path has, and background-by-replay is *not* spared by
-    // the at-rest sweep: the process that hosted the agent is gone, so one that
-    // never notified can never notify now.
+    // The stored JSONL carries no system events and no async sidechain — just spawn blocks,
+    // launch receipts and `<task-notification>` wrappers.
     const history = [
       {
         type: 'user' as const,
@@ -636,10 +597,6 @@ describe('SessionRunner background sub-agents', () => {
   })
 
   it('opens from the replayed receipt alone when the spawner name is unknown', async () => {
-    // Worst case on a rebuild: an unrecognized spawner and no sidechain to
-    // fall back on. The receipt's wrapper text still says an agent launched
-    // under this id, so the record exists (label-less) and settles at rest
-    // rather than vanishing.
     const history = [
       {
         type: 'user' as const,

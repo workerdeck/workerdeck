@@ -48,22 +48,13 @@ export type HistoryFn = (sdkSessionId: string, options: { dir?: string }) => Pro
 export type SessionInfoFn = (sdkSessionId: string, options: { dir?: string }) => Promise<SDKSessionInfo | undefined>
 
 export type SessionRunnerConfig = CreateSessionRequest & {
-  /** Injectable query implementation (tests, instrumentation). Defaults to the SDK's query(). */
   queryFn?: QueryFn
-  /** Environment for the spawned Claude Code process. Defaults to process.env. */
   env?: Record<string, string | undefined>
   pathToClaudeCodeExecutable?: string
-  /** Escape hatch merged last into the SDK Options. */
   extraOptions?: Partial<Options>
-  /** Timeout for pending approvals when the request itself doesn't set one. Default 300000. */
   defaultApprovalTimeoutMs?: number
-  /** With `resume`: emit the resumed session's history as replay events before the query
-   * starts, so late-attaching clients get a full transcript. Default true. */
   backfillHistory?: boolean
-  /** Injectable history reader (tests). Defaults to the SDK's getSessionMessages. */
   historyFn?: HistoryFn
-  /** Injectable session-metadata reader (tests). Defaults to the SDK's getSessionInfo —
-   * the only source of the CLI's own session title (no stream message carries it). */
   sessionInfoFn?: SessionInfoFn
 }
 
@@ -75,17 +66,11 @@ type PendingApproval = {
 
 const DEFAULT_APPROVAL_TIMEOUT_MS = 300_000
 
-/**
- * One live Agent SDK session: owns the query() call, the streaming input queue, the
- * pending-approval table, and a seq-numbered event log that subscribers can replay.
- * No transport — the server (or any host) subscribes and bridges to the wire.
- */
 export class SessionRunner implements Runner {
   readonly id: string
   readonly createdAt: number
 
   #config: SessionRunnerConfig
-  /** {@link SessionRunnerConfig.cwd}, checked once in the constructor. */
   readonly #cwd: string
   #log = new EventLog()
   #subscribers = new SubscriberSet()
@@ -96,31 +81,20 @@ export class SessionRunner implements Runner {
   #apiKeySource: string | undefined
   #permissionMode: PermissionMode | undefined
   #pending = new Map<string, PendingApproval>()
-  /** The turn ended while an approval was standing. Status is purely edge-driven,
-   * so the fact must be deferred, never dropped, and cleared the moment work
-   * resumes — see docs/GOTCHAS.md §Permissions. */
   #turnOverWhileBlocked = false
-  /** The read-time sub-agent rollup (`SessionInfo.subagents`), fed from #emit —
-   * the one chokepoint — so the resume backfill reconstructs it for free. */
   #subagents = new SubagentTracker()
   #totalCostUsd: number | undefined
   #numTurns: number | undefined
   #input = new InputQueue()
   #query: Query | undefined
   #capabilitiesEmitted = false
-  /** Last plan reported by the usage poll, so `plan_info` is emitted on change
-   * rather than once per turn. */
   #subscriptionType: string | undefined
-  /** The title the CLI gave this thread (see `#fetchEngineTitle`). Undefined
-   * until it has one — a session gets its summary a turn or two in. */
   #engineTitle: string | undefined
   #started = false
   #closed = false
   #runPromise: Promise<void> | undefined
 
   constructor(config: SessionRunnerConfig, id: string = randomUUID()) {
-    // Optional on the wire, required here: this engine spawns the CLI in a real
-    // directory. The gateway enforces it off `EngineCapabilities.hostCwd`.
     if (!config.cwd) {
       throw new Error('the claude engine requires a cwd')
     }
@@ -143,7 +117,6 @@ export class SessionRunner implements Runner {
     return this.#log.seq
   }
 
-  /** 'oauth' = claude.ai subscription credentials; other values are API-key provenance. */
   get apiKeySource(): string | undefined {
     return this.#apiKeySource
   }
@@ -163,8 +136,6 @@ export class SessionRunner implements Runner {
       capabilities: ENGINE_CAPABILITIES.claude,
       model: this.#model ?? this.#config.model,
       permissionMode: this.#permissionMode,
-      // Fixed at spawn (see #buildOptions); clients disable the mode instead of
-      // offering a switch the CLI will refuse.
       canBypassPermissions: this.#config.permissionMode === 'bypassPermissions' || this.#config.allowDangerouslySkipPermissions === true,
       apiKeySource: this.#apiKeySource,
       createdAt: this.createdAt,
@@ -186,7 +157,6 @@ export class SessionRunner implements Runner {
     this.#config = withTitle(this.#config, title)
   }
 
-  /** Begin the session. Idempotent; returns the run promise (resolves when the query ends). */
   start(): Promise<void> {
     if (this.#started) {
       return this.#runPromise!
@@ -199,16 +169,12 @@ export class SessionRunner implements Runner {
     return this.#runPromise
   }
 
-  /** Queue a user message for the session (starts the next turn when idle).
-   *
-   * `attachments` carry their own bytes; they reach the CLI as content blocks and
-   * are logged as references. A message may be attachments alone — an empty text
-   * block is not valid API input, so the text is only added when there is some. */
   sendMessage(text: string, attachments?: readonly AttachmentInput[]): void {
     if (this.#closed) {
       throw new Error('session is closed')
     }
     const blocks = attachments?.length ? attachmentContentBlocks(attachments) : []
+    // A message may be attachments alone; an empty text block is not valid API input.
     const content = blocks.length
       ? ([...blocks, ...(text ? [{ type: 'text', text }] : [])] as unknown as SDKUserMessage['message']['content'])
       : text
@@ -218,8 +184,6 @@ export class SessionRunner implements Runner {
       parent_tool_use_id: null,
       session_id: this.#sdkSessionId,
     })
-    // The SDK does not echo streamed-input user messages back, so the transcript
-    // would never show them — emit the event here (the one place input enters).
     this.#emit({
       type: 'user_message',
       message: { role: 'user', content: text },
@@ -229,9 +193,6 @@ export class SessionRunner implements Runner {
     })
   }
 
-  /** Live MCP server status, straight from the CLI. Undefined when the engine
-   * can't answer (an injected fake query in tests) — the caller 501s rather than
-   * pretending the session has no servers. */
   async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
     const query = this.#query
     if (typeof query?.mcpServerStatus !== 'function') {
@@ -256,7 +217,6 @@ export class SessionRunner implements Runner {
     await query.toggleMcpServer(name, enabled)
   }
 
-  /** Resolve a pending permission request. Returns false if the id is unknown (e.g. timed out). */
   resolvePermission(requestId: string, decision: PermissionDecision): boolean {
     const pending = this.#pending.get(requestId)
     if (!pending) {
@@ -270,14 +230,6 @@ export class SessionRunner implements Runner {
     await this.#query?.interrupt()
   }
 
-  /**
-   * Reset by sending the `/clear` the CLI already honors — deliberately not a
-   * second mechanism: the reset arrives from the SDK and `normalizeSdkMessage`
-   * maps it to `conversation_reset` (with the id adoption). Unlike the other
-   * engines this resolves when the `/clear` is handed to the CLI, not when the
-   * reset lands — the CLI queues its own streamed input, and no caller depends
-   * on the stronger settle.
-   */
   async clearContext(): Promise<void> {
     if (this.#status === 'closed' || this.#status === 'failed') {
       throw new Error('session is closed')
@@ -291,14 +243,12 @@ export class SessionRunner implements Runner {
     this.#emit({ type: 'permission_mode_changed', mode })
   }
 
-  /** Switch the model for subsequent responses; undefined = back to the default. */
   async setModel(model?: string): Promise<void> {
     await this.#query?.setModel(model)
     this.#model = model
     this.#emit({ type: 'model_changed', model })
   }
 
-  /** Emit a session_error and terminate. For host-enforced policy (e.g. requireApiKey). */
   fail(message: string): void {
     if (this.#closed) {
       return
@@ -308,7 +258,6 @@ export class SessionRunner implements Runner {
     this.close('error')
   }
 
-  /** Terminate the session and the underlying CLI subprocess. */
   close(reason: 'client' | 'server' | 'error' = 'client'): void {
     if (this.#closed) {
       return
@@ -323,20 +272,10 @@ export class SessionRunner implements Runner {
     this.#setStatus('closed')
   }
 
-  /** See `Runner.eventAt`. */
   eventAt(seq: number): SessionEvent | undefined {
     return this.#log.at(seq)
   }
 
-  /**
-   * Replay buffered events with seq > afterSeq, then deliver live events.
-   * Returns an unsubscribe function.
-   *
-   * Replay honours the reset watermark: transcript content strictly below the
-   * latest `conversation_reset` is skipped, state-bearing events (emitted once,
-   * never again) always replay, and the reset event itself replays — which is
-   * what clears a reconnecting client still holding pre-reset rows.
-   */
   subscribe(listener: SessionEventListener, afterSeq = 0, options?: SubscribeOptions): () => void {
     return this.#subscribers.subscribe(this.#log.events, listener, afterSeq, options, this.#log.resetSeq)
   }
@@ -349,9 +288,6 @@ export class SessionRunner implements Runner {
         return
       }
       this.#query = queryFn({ prompt: this.#input, options: this.#buildOptions() })
-      // Promptless: the CLI emits no init until the first message, so 'starting'
-      // would never resolve — but the control channel answers before init, so
-      // fetch capabilities, a context baseline and plan usage eagerly.
       if (!this.#config.prompt) {
         this.#setStatus('idle')
         void this.#fetchCapabilities()
@@ -379,12 +315,6 @@ export class SessionRunner implements Runner {
     }
   }
 
-  /**
-   * On resume, emit the prior session's transcript as replay events (seq'd before any
-   * live event). The SDK only re-streams *user* messages on resume; assistant history
-   * would otherwise be lost to clients attaching after a server restart. Duplicated
-   * user messages are deduped client-side by uuid.
-   */
   async #backfillHistory(): Promise<void> {
     const c = this.#config
     if (!c.resume || c.backfillHistory === false) {
@@ -395,7 +325,6 @@ export class SessionRunner implements Runner {
     try {
       messages = await historyFn(c.resume, { dir: this.#cwd })
     } catch {
-      // Best-effort: a missing/unreadable transcript must not block the resume itself.
       return
     }
     for (const m of messages) {
@@ -409,9 +338,6 @@ export class SessionRunner implements Runner {
           message,
           parentToolUseId: m.parent_tool_use_id,
           replay: true,
-          // A stored message carries no `isSynthetic`/`origin`; the wrapper text is
-          // the only signal left (`isSyntheticUserText`). Without it resumed
-          // harness blobs render as user rows and count as unread activity.
           synthetic: isSyntheticUserText(message) ? true : undefined,
           uuid: m.uuid,
         })
@@ -441,19 +367,12 @@ export class SessionRunner implements Runner {
       maxBudgetUsd: c.maxBudgetUsd,
       resume: c.resume,
       forkSession: c.forkSession,
-      // Open string on the wire; the SDK's union lags the CLI's vocabulary and
-      // the CLI silently downgrades an effort the model doesn't support.
       effort: c.reasoningEffort as Options['effort'],
       includePartialMessages: c.includePartialMessages ?? true,
-      // Off (the SDK default) the stream carries only a subagent's
-      // tool_use/tool_result blocks — no brief, thinking or final report.
-      // `extraOptions` is spread last so a host can turn it back off.
       forwardSubagentText: true,
       canUseTool: this.#canUseTool,
       env: c.env,
       pathToClaudeCodeExecutable: c.pathToClaudeCodeExecutable,
-      // The CLI refuses to *switch into* bypassPermissions unless it was spawned
-      // with the capability (smoke-verified refusal).
       ...(c.permissionMode === 'bypassPermissions' || c.allowDangerouslySkipPermissions ? { allowDangerouslySkipPermissions: true } : {}),
       ...c.extraOptions,
     }
@@ -484,14 +403,10 @@ export class SessionRunner implements Runner {
       void this.#fetchCapabilities()
       void this.#fetchContextUsage()
       void this.#fetchRateLimits()
-      // A resumed thread usually already has one; a fresh one will not for a
-      // turn or two, which is what the turn-end poll is for.
       void this.#fetchEngineTitle()
       return
     }
     if (msg.type === 'system' && msg.subtype === 'session_state_changed') {
-      // Authoritative turn-over signal — a pending approval outranks it for
-      // display, but the fact is deferred, not dropped (see #turnOverWhileBlocked).
       if (this.#pending.size > 0) {
         if (msg.state === 'idle') {
           this.#turnOverWhileBlocked = true
@@ -511,27 +426,19 @@ export class SessionRunner implements Runner {
     if (body) {
       this.#emit(body)
       if (body.type === 'conversation_reset') {
-        // Adopt the new conversation id now, not at the follow-up system_init
-        // (which only comes with the next prompt) — a dormant record written in
-        // between must resume the fresh conversation, not replay the cleared one.
         if (body.sdkSessionId) {
           this.#sdkSessionId = body.sdkSessionId
         }
-        // Re-poll: the cleared conversation's reading no longer applies.
         void this.#fetchContextUsage()
       }
       if (body.type === 'turn_result') {
-        // total_cost_usd / num_turns are session-cumulative on each result message.
         this.#totalCostUsd = body.totalCostUsd
         this.#numTurns = body.numTurns
-        // Fallback for SDK versions without session_state_changed, deferred
-        // under a standing approval for the reason above.
         if (this.#pending.size === 0) {
           this.#setStatus('idle')
         } else {
           this.#turnOverWhileBlocked = true
         }
-        // Context usage moves every turn; the poll is a cheap control request.
         void this.#fetchContextUsage()
         void this.#fetchRateLimits()
         void this.#fetchEngineTitle()
@@ -539,11 +446,6 @@ export class SessionRunner implements Runner {
     }
   }
 
-  /** Ask the CLI what models/commands it supports and surface them as an event
-   * (replayed to late attachers). Called eagerly for promptless sessions and again
-   * on init — the flag keeps it a single emit. Optional-chained: injected fake
-   * queries in tests may not implement these, and a failure must not affect the
-   * session. */
   async #fetchCapabilities(): Promise<void> {
     if (this.#capabilitiesEmitted) {
       return
@@ -569,19 +471,9 @@ export class SessionRunner implements Runner {
           aliases: c.aliases,
         })),
       })
-    } catch {
-      // Capabilities are best-effort decoration; the session works without them.
-    }
+    } catch {}
   }
 
-  /**
-   * Adopt the title the CLI gave this thread. A poll, not an observation — no
-   * `SDKMessage` carries it; only `getSessionInfo`/`listSessions` do. Two rules:
-   * never read while `meta.title` is set (a rename is a person's decision, and
-   * not fetching means nothing is stored waiting to resurface if it is cleared),
-   * and `summary` is taken only when it differs from `firstPrompt` (the SDK's
-   * fallback before a session has a real title). Best-effort throughout.
-   */
   async #fetchEngineTitle(): Promise<void> {
     if (hostTitle(this.#config.meta)) {
       return
@@ -601,13 +493,9 @@ export class SessionRunner implements Runner {
       if (title) {
         this.#engineTitle = title
       }
-    } catch {
-      // The title is decoration; a session with none works exactly as well.
-    }
+    } catch {}
   }
 
-  /** Snapshot the context window after a turn and surface it as an event. Optional-chained
-   * and best-effort for the same reasons as #fetchCapabilities. */
   async #fetchContextUsage(): Promise<void> {
     const query = this.#query
     if (typeof query?.getContextUsage !== 'function') {
@@ -632,17 +520,9 @@ export class SessionRunner implements Runner {
           model: usage.model,
         },
       })
-    } catch {
-      // Usage is best-effort decoration; the session works without it.
-    }
+    } catch {}
   }
 
-  /**
-   * Poll the plan's rate-limit windows and re-emit them as ordinary `rate_limit`
-   * events. The CLI only pushes a window when it changes — a watched session
-   * would show nothing otherwise. The control request is experimental, name
-   * included, so it is probed by name and every failure is silent.
-   */
   async #fetchRateLimits(): Promise<void> {
     const query = this.#query as { usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<unknown> } | undefined
     const fetchUsage = query?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET
@@ -654,7 +534,6 @@ export class SessionRunner implements Runner {
       if (this.#closed) {
         return
       }
-      // The plan names the windows, so it goes out ahead of them — on change only.
       const subscriptionType = usage.subscription_type
       if (subscriptionType && subscriptionType !== this.#subscriptionType) {
         this.#subscriptionType = subscriptionType
@@ -663,9 +542,7 @@ export class SessionRunner implements Runner {
       for (const body of rateLimitEventsFromUsage(usage)) {
         this.#emit(body)
       }
-    } catch {
-      // Best-effort, and experimental on top of that.
-    }
+    } catch {}
   }
 
   #canUseTool: CanUseTool = (toolName, input, options) => {
@@ -707,10 +584,6 @@ export class SessionRunner implements Runner {
     })
   }
 
-  /** 'auto'/'deny' sessions settle AskUserQuestion synchronously instead of pending:
-   * 'auto' picks each question's first (recommended) option, 'deny' sends the model
-   * back to decide for itself. Request/resolved events still fire so transcripts and
-   * job webhooks show what was chosen. */
   #resolveQuestionByPolicy(request: PermissionRequest, mode: 'auto' | 'deny'): PermissionResult {
     this.#emit({ type: 'permission_requested', request })
     if (mode === 'deny') {
@@ -743,8 +616,6 @@ export class SessionRunner implements Runner {
     if (decision.behavior === 'allow') {
       pending.resolve({
         behavior: 'allow',
-        // The SDK requires a record here even for an unmodified allow — echo the
-        // original input back when the client didn't rewrite it.
         updatedInput: decision.updatedInput ?? pending.request.input,
         toolUseID: pending.request.toolUseId,
       })
@@ -764,9 +635,6 @@ export class SessionRunner implements Runner {
       message: decision.behavior === 'deny' ? (decision.message ?? 'Denied') : undefined,
     })
     if (this.#pending.size === 0) {
-      // The deferred turn-over wins: this approval was the only thing standing
-      // between the session and the truth. Consumed either way, so a later
-      // approval in a live turn cannot inherit it.
       const endedWhileBlocked = this.#turnOverWhileBlocked
       this.#turnOverWhileBlocked = false
       if (endedWhileBlocked) {
@@ -781,7 +649,6 @@ export class SessionRunner implements Runner {
     if (this.#status === status && this.#statusDetail === detail) {
       return
     }
-    // Terminal states win.
     if (this.#status === 'closed' || this.#status === 'failed') {
       return
     }
@@ -792,15 +659,11 @@ export class SessionRunner implements Runner {
 
   #emit(body: SessionEventBody): void {
     const event = this.#log.append(body)
-    // Before fan-out: a listener reading info() on this event must see it folded in.
     this.#subagents.observe(body, event.ts)
     this.#subscribers.emit(event)
   }
 }
 
-/** Answer each AskUserQuestion question with its first option's label — the tool's
- * convention puts the recommended choice first. Keyed by question text, the shape the
- * CLI expects back in `updatedInput.answers`. */
 const recommendedAnswers = (input: Record<string, unknown>): Record<string, string> => {
   const answers: Record<string, string> = {}
   const questions = Array.isArray(input.questions) ? input.questions : []

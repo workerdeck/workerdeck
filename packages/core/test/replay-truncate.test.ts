@@ -1,9 +1,3 @@
-/**
- * Truncation on the replay path, stated **honestly**: unlike every other rule in
- * this family, it is *not* fold-equal. It loses characters on purpose. What it
- * must not lose is anything else — the event's identity, the other blocks in the
- * same message, the stored log, or the ability to get the rest back.
- */
 import { describe, expect, it } from 'vitest'
 import { TOOL_RESULT_HEAD_CHARS, type SessionEvent } from '@workerdeck/protocol'
 import { replaySlice, truncateResultBlocks } from '../src/lib/replay.ts'
@@ -50,8 +44,6 @@ describe('truncateResultBlocks', () => {
   })
 
   it('returns the SAME OBJECT when nothing is over budget', () => {
-    // Identity, not equality: an attach is mostly small events, and a fresh
-    // object for each would cost more than the feature saves.
     const event = resultEvent(1, [toolResult('a', 'small')])
     expect(truncateResultBlocks(event)).toBe(event)
   })
@@ -82,8 +74,6 @@ describe('replaySlice', () => {
   })
 
   it('truncates the HIGHEST-SEQ event too — a session ending on a `find /`', () => {
-    // It is delivered whatever the coalesce rule says (the replay hold waits for
-    // it), but "delivered" was never "delivered whole".
     const out = replaySlice(log(), { afterSeq: 0, truncateResults: true, coalesceReplay: true })
     const last = out[out.length - 1] as unknown as {
       seq: number
@@ -95,7 +85,6 @@ describe('replaySlice', () => {
 
   it('honours afterSeq and the reset watermark exactly as the three copies did', () => {
     expect(replaySlice(log(), { afterSeq: 2 }).map((e) => e.seq)).toEqual([3])
-    // Content below the reset is skipped; state-bearing events are not.
     expect(replaySlice(log(), { afterSeq: 0, resetSeq: 3 }).map((e) => e.seq)).toEqual([2, 3])
   })
 })

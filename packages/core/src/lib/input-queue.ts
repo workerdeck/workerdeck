@@ -1,9 +1,5 @@
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 
-/**
- * Push-based single-consumer AsyncIterable bridging imperative sendMessage() calls
- * into the streaming `prompt` the Agent SDK consumes.
- */
 export class InputQueue implements AsyncIterable<SDKUserMessage> {
   #buffer: SDKUserMessage[] = []
   #waiter: ((result: IteratorResult<SDKUserMessage>) => void) | null = null

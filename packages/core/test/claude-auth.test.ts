@@ -4,12 +4,6 @@ import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { checkClaudeAuth, resolveBundledClaudeExecutable } from '../src/index.ts'
 
-/**
- * The probe's contract is exercised against tiny shell fixtures, never the real
- * CLI — `pnpm test` spawns no Claude Code and spends no tokens. CI and dev are
- * POSIX-only (ubuntu/macOS), so `#!/bin/sh` fixtures are safe here.
- */
-
 const dir = mkdtempSync(join(tmpdir(), 'cw-auth-probe-'))
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
@@ -32,8 +26,6 @@ describe('checkClaudeAuth', () => {
   })
 
   it('forwards the caller env to the CLI', async () => {
-    // Verdict keyed off an env var: proves the probe runs on the exact env the
-    // session would get, which is the whole point of probing per profile.
     const executable = fixture(
       'env-keyed.sh',
       `if [ -n "$CW_TEST_CREDS" ]; then echo '{"loggedIn": true}'; else echo '{"loggedIn": false}'; fi`,
@@ -62,8 +54,6 @@ describe('checkClaudeAuth', () => {
 
 describe('resolveBundledClaudeExecutable', () => {
   it("finds the SDK's own platform binary in this workspace", () => {
-    // The SDK is a real dependency of core, so its platform package is always
-    // installed here — the resolver must find the same binary query() spawns.
     const path = resolveBundledClaudeExecutable()
     expect(path).toBeDefined()
     expect(path).toMatch(/claude-agent-sdk-.*[/\\]claude(\.exe)?$/)

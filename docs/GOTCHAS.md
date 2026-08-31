@@ -32,6 +32,12 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   ("Opus") or carries a variant instead of a version ("Opus (1M context)"), so rows are renamed
   from their resolved id. And the list is flat: `primary` (newest of each family) is derived here,
   because the CLI reports no grouping and every UI would otherwise guess differently.
+  Two more rules live in the same function. The list is **re-sorted into capability order**
+  (`FAMILY_ORDER`: fable, opus, sonnet, haiku) because the CLI reports no ranking field; a family
+  the list has never heard of sorts *after* the known ones rather than to the top, and ties keep
+  the CLI's own order. And a **derived name is used only when it is unambiguous** — two rows of one
+  model (a 1M-context variant beside a plain one) derive the same string, and there the CLI's own
+  names are the only thing that tells them apart.
 - The model list is **only ever current models** — the older versions Claude Code's own picker
   files under "more models" are in neither `supportedModels()` nor `initializationResult()`
   (checked directly against the SDK). Which model names you get is a function of the pinned SDK
@@ -667,6 +673,12 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 
 ## Engine adapters & capability records
 
+- **`checkAvailability` and `listSessions` take the profile's *complete* session environment,
+  never a delta.** `AvailabilityTracker` passes `sessionEnvFor(profile)` — the same assembly the
+  real create path produces. A delta would be a plausible-looking optimization and a broken one:
+  codex replaces its child env wholesale, so a delta strands `HOME`, `PATH` and the auth chain with
+  them, and the probe would answer about an environment no session ever runs in.
+
 - One engine = one `EngineAdapter` in `core/src/engines/` (capabilities, shipped model catalog,
   availability probe, runner factory), looked up via `getEngineAdapter`. The server consumes
   adapters directly — the invariant was never "server touches no engine"; it is (a) `server`
@@ -688,7 +700,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   briefly while codex had two transports and was removed with the second transport — one record
   per engine again, and a seam that varies nothing must not outlive its variance.)
 - Catalogs are versioned with releases; the release checklist re-runs each catalog's extraction
-  (documented in the catalog file headers) and diffs. Availability probing is gated on
+  (codex's is in that file's header, claude's in `docs/RELEASING.md`) and diffs. Availability probing is gated on
   `checkCredentials` (a library must spawn nothing in tests), cached ~60s, refreshed lazily on
   `GET /profiles`, and **display-only by default**: create against an unavailable profile still
   proceeds and fails with the engine's own error — a stale probe must never become an outage. That
@@ -827,6 +839,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   is the fix and is not built.
 
 ## Parking & bridged execution
+
+- **A `RunnerSnapshot` must round-trip `JSON.stringify` unchanged, `state` included.** The engine's
+  continuation state is typed `unknown` and opaque to the host precisely so `packages/server` never
+  resolves a model SDK — which also means nothing type-checks what is inside it. A `Date`, a `Map`
+  or a typed array in there rehydrates as something else, and the bundled in-memory store is the
+  one store that hides it: the bug appears only under a durable `SessionStore`, on a restart, as a
+  session that comes back subtly wrong rather than failing.
 
 - **`parking.touch()` writes *both* record kinds, and dropping either half is the same bug one
   engine over.** A session has exactly one of a dormant record and a live one, and the PATCH route

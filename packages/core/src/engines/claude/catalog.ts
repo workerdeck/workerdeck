@@ -1,17 +1,5 @@
 import type { ModelCatalog } from '../adapter.ts'
 
-/**
- * The Claude engine's model catalog — the create-form truth, before any session
- * has run; the live `capabilities` event stays the in-session truth (both are
- * load-bearing: docs/GOTCHAS.md §Claude engine). `defaultModel` is deliberately
- * absent (a claude profile's default is the operator's CLI config), and
- * hand-maintained older-model rows omit `reasoningEfforts`.
- *
- * **Refresh procedure** (release checklist): run `supportedModels()` on a
- * throwaway SDK query (no tokens spent) and re-apply `modelOptionsFromSdk`'s
- * shaping rules (`src/lib/normalize.ts`) at authoring time; a unit test replays
- * the raw extraction through it and asserts these rows match.
- */
 export const CLAUDE_CATALOG: ModelCatalog = {
   provenance:
     'supportedModels() of @anthropic-ai/claude-agent-sdk 0.3.221 (Claude Code CLI), ' +
@@ -33,7 +21,6 @@ export const CLAUDE_CATALOG: ModelCatalog = {
       primary: true,
       reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
-    // Older, still-servable ids the CLI no longer lists ("more models").
     {
       value: 'claude-opus-4-8',
       resolvedModel: 'claude-opus-4-8',
@@ -60,8 +47,7 @@ export const CLAUDE_CATALOG: ModelCatalog = {
       displayName: 'Haiku 4.5',
       description: 'Haiku 4.5 · Fastest for quick answers',
       primary: true,
-      // Explicitly none: the CLI reports no effort support for Haiku 4.5, and
-      // an absent field would wrongly imply the engine's default set.
+      // Explicitly none, not absent: an absent field means "the engine's default set".
       reasoningEfforts: [],
     },
   ],

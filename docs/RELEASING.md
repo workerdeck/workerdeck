@@ -452,6 +452,15 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   carries `supported_reasoning_levels` verbatim (it includes `max`/`ultra` beyond the SDK union —
   trust the binary, keep the strings open). Restate `provenance` with the binary version and the
   extraction date.
+  The **claude** catalog refreshes differently, and its procedure lives here rather than in the
+  file: run `supportedModels()` on a throwaway SDK query (no tokens spent) and re-apply
+  `modelOptionsFromSdk`'s shaping from `core/src/lib/normalize.ts`. `engine-capabilities.test.ts`
+  keeps a verbatim copy of the extraction it was authored from (`RAW_CLAUDE`) and asserts the
+  current-model rows still equal the live shaping of it, so a drift fails a unit test rather than
+  producing a wrong picker. Hand-maintained older rows (the CLI's "more models") sit outside that
+  comparison and carry no `reasoningEfforts`, and `defaultModel` is deliberately absent — a claude
+  profile's default is the operator's own CLI config. Restate `provenance` with the SDK version and
+  the extraction date.
 - docs: root CLAUDE.md + README.md + docs/ + apps/docs (keep site content in sync with README)
 - frontend_smoke: no (manual via `pnpm dev:server` + `pnpm dev:web`, which bind `$WD_DEV_HOST`
   and default to loopback — set it in your shell to reach them from a phone or tailnet, never in

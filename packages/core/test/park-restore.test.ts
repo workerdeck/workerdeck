@@ -35,12 +35,8 @@ const streamCalls = (calls: Array<{ id: string; tool: string; input: unknown }>)
   ]),
 })
 
-/**
- * A turn genuinely in flight: some text, then nothing until the abort signal
- * fires. It has to *watch* the signal — a stream that merely never closes hangs
- * the turn forever, because aborting the runner's controller cannot cancel a
- * stream that was never wired to it.
- */
+// A turn genuinely in flight. The fake stream has to *watch* the signal: one that merely
+// never closes hangs the turn, since the runner's abort cannot cancel an unwired stream.
 const streamStalls =
   (text: string) =>
   async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
@@ -76,9 +72,6 @@ const harness = (config: Partial<AiSdkRunnerConfig> & Pick<AiSdkRunnerConfig, 'l
 
 describe('deferred execution: park and rehydrate', () => {
   it('announces the park only once every call of the batch has been dispatched', async () => {
-    // The whole point of the signal: a host that parked on the first dispatch
-    // event would snapshot a session whose second call was still being handed
-    // over, and then dispatch it into a runner it had already discarded.
     const dispatched: DeferredDispatch[] = []
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
@@ -102,7 +95,6 @@ describe('deferred execution: park and rehydrate', () => {
     await h.waitFor(() => h.runner.info().status === 'parked')
 
     expect(dispatched.map((d) => d.executionId)).toEqual(['call-a', 'call-b'])
-    // Both were handed over before the session claimed to be parked.
     expect(parkedAtSignal).toEqual([2])
     expect(h.eventsOf('execution_dispatched')).toHaveLength(2)
     expect(h.eventsOf('execution_dispatched')[0]).toMatchObject({
@@ -126,13 +118,10 @@ describe('deferred execution: park and rehydrate', () => {
     expect(snapshot.engine).toBe('provider')
     expect(snapshot.parked).toEqual([{ executionId: 'call-1', toolName: 'remote_task', expiresAt: undefined }])
     expect(snapshot.vfs).toEqual({ '/notes.txt': 'keep me' })
-    // Parking is not closing: no session_closed, and the parked instance is inert.
     expect(h.eventsOf('session_closed')).toHaveLength(0)
     expect(h.runner.settleExecution('call-1', { status: 'ok', output: 42 })).toBe(false)
-    // Re-parking a parked instance yields nothing.
     expect(h.runner.park()).toBeUndefined()
 
-    // Rebuild — same id, same log, mid-task. The prompt must NOT be re-sent.
     const resumed = new AiSdkRunner({
       languageModel: model,
       tools: TOOLS,
@@ -152,7 +141,6 @@ describe('deferred execution: park and rehydrate', () => {
     expect(resumed.vfs?.read('/notes.txt')).toBe('keep me')
 
     expect(resumed.settleExecution('call-1', { status: 'ok', output: { answer: 42 } })).toBe(true)
-    // Idempotent: the same delivery a second time is a no-op, not a second turn.
     expect(resumed.settleExecution('call-1', { status: 'ok', output: { answer: 42 } })).toBe(false)
 
     const deadline = Date.now() + 2000
@@ -164,12 +152,8 @@ describe('deferred execution: park and rehydrate', () => {
     }
     const result = after.find((e) => e.type === 'turn_result')!
     expect(result).toMatchObject({ subtype: 'success', result: 'the remote worker said 42' })
-    // One turn total across the park, with both legs' tokens.
     expect(result).toMatchObject({ numTurns: 1, usage: { input_tokens: 20, output_tokens: 10 } })
-    // Seq numbering continues rather than restarting: a client reattaching with
-    // afterSeq must see one unbroken stream across the teardown.
     expect(Math.min(...after.map((e) => e.seq))).toBeGreaterThan(snapshot.seq)
-    // The user prompt was not replayed into the history.
     expect(resumed.messages.filter((m) => m.role === 'user')).toHaveLength(1)
   })
 
@@ -201,11 +185,9 @@ describe('deferred execution: park and rehydrate', () => {
     })
     void resumed.start()
     resumed.settleExecution('call-a', { status: 'ok', output: 'a done' })
-    // One down, one to go: still parked, and re-parkable for the rest.
     expect(resumed.info().status).toBe('parked')
     const second = resumed.park()!
     expect(second.parked).toEqual([{ executionId: 'call-b', toolName: 'remote_task', expiresAt: undefined }])
-    // The settled call's result rode along into the persisted history.
     const state = second.state as { messages: Array<{ role: string }> }
     expect(state.messages.some((m) => m.role === 'tool')).toBe(true)
   })
@@ -250,7 +232,6 @@ describe('deferred execution: park and rehydrate', () => {
       await new Promise((r) => setTimeout(r, 5))
     }
     expect(after.find((e) => e.type === 'execution_failed')).toMatchObject({ reason: 'timeout' })
-    // A failed execution is not a session error — the turn still succeeds.
     expect(after.find((e) => e.type === 'turn_result')).toMatchObject({ subtype: 'success' })
   })
 
@@ -263,8 +244,6 @@ describe('deferred execution: park and rehydrate', () => {
   })
 
   it('does not announce a park while an in-process execution is still in flight', async () => {
-    // A mixed batch: only the deferred call may park us — a result coming back to
-    // THIS runner would be stranded by a teardown.
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
       doStream: [
@@ -303,14 +282,12 @@ describe('deferred execution: park and rehydrate', () => {
     h.runner.sendMessage('hello')
     await h.waitFor(() => h.eventsOf('turn_result').length === 1)
 
-    // park() has nothing to wait for and says so; snapshot() is exactly this case.
     expect(h.runner.park()).toBeUndefined()
     const snapshot = h.runner.snapshot()!
     expect(snapshot).toBeDefined()
     expect(snapshot.parked).toEqual([])
     expect(snapshot.vfs).toEqual({ '/notes.txt': 'keep me' })
 
-    // …and it changed nothing: still live, still attached, still usable.
     expect(h.runner.info().status).toBe('idle')
     expect(h.eventsOf('session_closed')).toHaveLength(0)
     expect(h.eventsOf('status_changed').some((e) => 'status' in e && e.status === 'parked')).toBe(false)
@@ -329,12 +306,8 @@ describe('deferred execution: park and rehydrate', () => {
     const snapshot = h.runner.snapshot()!
     expect(h.eventsOf('stream_delta').length).toBeGreaterThan(0)
     expect(snapshot.events.some((e) => e.type === 'stream_delta')).toBe(false)
-    // Everything else survives, in order, with its seq intact…
     expect(snapshot.events.map((e) => e.type)).toEqual(h.events.filter((e) => e.type !== 'stream_delta').map((e) => e.type))
-    // …and the last event still carries the snapshot's own seq, which the
-    // client's replay hold waits to reach.
     expect(snapshot.events.at(-1)?.seq).toBe(snapshot.seq)
-    // The text is not lost with the deltas: the flushed message carries it.
     const message = snapshot.events.find((e) => e.type === 'assistant_message')
     expect(JSON.stringify(message)).toContain('hi there')
   })
@@ -344,8 +317,6 @@ describe('deferred execution: park and rehydrate', () => {
       modelId: 'mock-1',
       doStream: [streamCalls([{ id: 'call-fast', tool: 'remote_task', input: { task: 'fast' } }])],
     })
-    // An in-process execution: its result comes back to THIS runner and dies with
-    // the process, so a restore would wait on it forever.
     const h = harness({
       languageModel: model,
       executor: {
@@ -359,31 +330,22 @@ describe('deferred execution: park and rehydrate', () => {
   })
 
   it('does not re-run an interrupted turn when restored', async () => {
-    // The trap under this feature. An interrupt flushes a partial
-    // assistant_message for the transcript but never pushes the model's response
-    // messages, so the history ends on the USER's turn — and `#runTurn`'s
-    // "already answered" guard reads exactly that. A restore that scheduled a
-    // turn would silently re-run the very turn the user killed, on first attach,
-    // burning tokens and doing unrequested work.
     const stall = streamStalls('a long half-writ')
     let leg = 0
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      // The first turn stalls until interrupted; a second one — which must not
-      // happen — would answer immediately and be unmissable.
+      // Leg 0 stalls until interrupted; a second leg — which must not happen — answers
+      // immediately and is unmissable.
       doStream: (options) => (leg++ === 0 ? stall(options) : Promise.resolve(streamText('SHOULD NOT HAPPEN'))),
     })
     const h = harness({ languageModel: model })
     h.runner.sendMessage('write me an essay')
-    // Interrupted *mid-flight*, which is the whole point: a turn that already
-    // finished leaves the history ending on the assistant, and the guard in
-    // `#runTurn` would cover for a restore that wrongly scheduled one.
+    // Interrupted mid-flight: a turn that already finished leaves the history ending on the
+    // assistant, where `#runTurn`'s own guard would cover for a wrongly scheduled restore.
     await h.waitFor(() => h.eventsOf('stream_delta').length > 0)
     await h.runner.interrupt()
     await h.waitFor(() => h.eventsOf('turn_result').length === 1)
     expect(h.eventsOf('turn_result')[0]).toMatchObject({ isError: true })
-    // The history really does end on the user — this is what makes the bug
-    // reachable, and if it ever stops being true this test stops proving anything.
     expect(h.runner.messages.at(-1)?.role).toBe('user')
 
     const snapshot = h.runner.snapshot()!
@@ -398,7 +360,7 @@ describe('deferred execution: park and rehydrate', () => {
     const after: SessionEvent[] = []
     resumed.subscribe((e) => after.push(e), snapshot.seq)
     void resumed.start()
-    // Long enough for a scheduled turn to have started and emitted something.
+    // Long enough for a wrongly scheduled turn to have started and emitted something.
     await new Promise((r) => setTimeout(r, 50))
 
     expect(after.filter((e) => e.type === 'turn_result')).toHaveLength(0)

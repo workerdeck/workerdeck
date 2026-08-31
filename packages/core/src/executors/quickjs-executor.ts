@@ -1,37 +1,22 @@
 import { runScript, type SandboxEngine } from '@workerdeck/sandbox'
 import type { ToolExecutionCall, ToolExecutionDispatch, ToolExecutionResult, ToolExecutor } from './tool-executor.ts'
 
-/** Resolve a URL to text for the guest. Runs host-side with host authority —
- * this is where a credential may be attached, never inside the sandbox. */
 export type HostFetch = (url: string, signal: AbortSignal) => Promise<string>
 
 export type QuickJsExecutorOptions = {
   engine: SandboxEngine
-  /**
-   * Hostnames the guest may reach, exact or `*.example.com`. Empty/unset =
-   * no network at all (the guest's fetchText throws). Matched host-side; the
-   * guest is never told the allowlist and never holds a credential.
-   */
+  // Matched host-side: the guest is never told the allowlist and never holds a credential.
   allowedHosts?: string[]
-  /** Performs the actual request. Unset = global fetch, text body. */
   hostFetch?: HostFetch
-  /** Per-fetch cap. The guest deadline does NOT cover host-function time, so
-   * every capability needs its own bound. Default 10000. */
+  // The guest's interrupt deadline does not cover host-function time, so every granted
+  // capability needs its own bound. Default 10000.
   fetchTimeoutMs?: number
-  /** Default guest wall-clock limit when the call doesn't set one. Default 5000. */
   defaultTimeoutMs?: number
-  /** Default guest allocator cap when the call doesn't set one. Default 64 MiB. */
   defaultMemoryLimitBytes?: number
 }
 
-/** Tool input for `eval_script`. */
 type EvalScriptInput = { script?: unknown }
 
-/**
- * In-process execution backend: runs a tool's untrusted script in the QuickJS
- * WASM guest. Always settles inline — nothing downstream assumes that, which is
- * what lets a deferred backend replace it behind the same seam.
- */
 export class QuickJsExecutor implements ToolExecutor {
   #options: QuickJsExecutorOptions
 
@@ -83,7 +68,6 @@ export class QuickJsExecutor implements ToolExecutor {
     if (!isHostAllowed(url, this.#options.allowedHosts ?? [])) {
       throw new Error(`host not allowed: ${safeHost(url) ?? url}`)
     }
-    // The guest's interrupt deadline cannot preempt a host call — bound it here.
     const controller = new AbortController()
     const onOuterAbort = () => controller.abort()
     outer?.addEventListener('abort', onOuterAbort)
@@ -114,8 +98,6 @@ const safeHost = (url: string): string | undefined => {
   }
 }
 
-/** Exact hostname match, or a single leading `*.` wildcard covering subdomains
- * (not the bare parent). Only http(s) — no file:, data:, or other schemes. */
 export const isHostAllowed = (url: string, allowedHosts: string[]): boolean => {
   let parsed: URL
   try {

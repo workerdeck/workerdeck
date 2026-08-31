@@ -101,13 +101,12 @@ describe('QuickJsExecutor', () => {
     const result = await executor.dispatch(
       call({
         input: { script: 'try { fetchText("https://ok.example/slow") } catch (e) { "caught: " + e.message }' },
-        // Guest deadline is generous: the host-side bound is what must fire.
+        // Generous on purpose: the host-side bound is what must fire, and the 20s vitest
+        // timeout below keeps a regression an assertion failure rather than a hang.
         limits: { timeoutMs: 10_000 },
       }),
     )
     expect((result as { result: { output: string } }).result.output).toContain('caught:')
-    // Outer timeout > the 10s guest deadline above: if the host bound ever stops
-    // firing, this must fail on the assertion, not as an ambiguous vitest timeout.
   }, 20_000)
 })
 
@@ -117,7 +116,6 @@ describe('isHostAllowed', () => {
     expect(isHostAllowed('https://OK.example/p', ['ok.example'])).toBe(true)
     expect(isHostAllowed('https://a.ok.example/p', ['*.ok.example'])).toBe(true)
     expect(isHostAllowed('https://deep.a.ok.example/p', ['*.ok.example'])).toBe(true)
-    // The bare parent is not covered by a wildcard entry.
     expect(isHostAllowed('https://ok.example/p', ['*.ok.example'])).toBe(false)
   })
 

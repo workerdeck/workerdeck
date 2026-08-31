@@ -16,8 +16,6 @@ describe('attachmentKind', () => {
     expect(attachmentKind('application/pdf')).toBe('document')
     expect(attachmentKind('text/markdown')).toBe('text')
     expect(attachmentKind('application/json')).toBe('text')
-    // The one that matters most: an iPhone's own photo format is NOT accepted,
-    // which is why clients transcode before uploading.
     expect(attachmentKind('image/heic')).toBeNull()
     expect(attachmentKind('application/octet-stream')).toBeNull()
     expect(attachmentKind('video/mp4')).toBeNull()
