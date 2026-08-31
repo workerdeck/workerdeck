@@ -14,7 +14,9 @@ const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 
 const TOUCH_MS = 60_000
 
-export const watermarkKey = (hostId: string, sessionId: string) => `${hostId}:${sessionId}`
+export function watermarkKey(hostId: string, sessionId: string) {
+  return `${hostId}:${sessionId}`
+}
 
 export class Watermarks {
   readonly #store: WatermarkStore
@@ -76,7 +78,7 @@ export class Watermarks {
   }
 }
 
-export const unseenCount = (mark: Watermark | undefined, info: { activityCount?: number; turns?: number }): number => {
+export function unseenCount(mark: Watermark | undefined, info: { activityCount?: number; turns?: number }): number {
   if (!mark) {
     return 0
   }

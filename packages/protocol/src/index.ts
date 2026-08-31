@@ -25,12 +25,12 @@ export type ImageRefPart = {
   part_index: number
 }
 
-const base64Bytes = (data: string): number => {
+function base64Bytes(data: string): number {
   const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0
   return Math.max(0, Math.floor((data.length * 3) / 4) - padding)
 }
 
-export const imagePartRef = (part: { type?: string; [key: string]: unknown }, index: number): ImageRefPart | undefined => {
+export function imagePartRef(part: { type?: string; [key: string]: unknown }, index: number): ImageRefPart | undefined {
   if (part.type !== 'image') {
     return undefined
   }
@@ -450,7 +450,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
   },
 }
 
-export const supportsPermissionMode = (engine: ProfileEngine | undefined, mode: PermissionMode): boolean => {
+export function supportsPermissionMode(engine: ProfileEngine | undefined, mode: PermissionMode): boolean {
   return ENGINE_CAPABILITIES[engine ?? 'claude'].permissionModes.includes(mode)
 }
 
@@ -611,7 +611,7 @@ export type SessionInfo = {
   project?: ProjectInfo
 }
 
-export const contextReading = (body: SessionEventBody): ContextReading | undefined => {
+export function contextReading(body: SessionEventBody): ContextReading | undefined {
   if (body.type !== 'context_usage') {
     return undefined
   }
@@ -619,7 +619,7 @@ export const contextReading = (body: SessionEventBody): ContextReading | undefin
   return { totalTokens, maxTokens, percentage }
 }
 
-export const transcriptActivity = (body: SessionEventBody): number => {
+export function transcriptActivity(body: SessionEventBody): number {
   if ('parentToolUseId' in body && body.parentToolUseId != null) {
     return 0
   }
@@ -646,7 +646,7 @@ export const transcriptActivity = (body: SessionEventBody): number => {
   }
 }
 
-export const transcriptContent = (body: SessionEventBody): boolean => {
+export function transcriptContent(body: SessionEventBody): boolean {
   switch (body.type) {
     case 'user_message':
     case 'assistant_message':
@@ -667,7 +667,7 @@ export const transcriptContent = (body: SessionEventBody): boolean => {
   }
 }
 
-export const replayCoalesceKey = (body: SessionEventBody): string | undefined => {
+export function replayCoalesceKey(body: SessionEventBody): string | undefined {
   switch (body.type) {
     case 'context_usage': {
       return 'context_usage'
@@ -687,7 +687,7 @@ export const replayCoalesceKey = (body: SessionEventBody): string | undefined =>
   }
 }
 
-export const replayRetains = (body: SessionEventBody): boolean => {
+export function replayRetains(body: SessionEventBody): boolean {
   if (body.type !== 'stream_delta') {
     return true
   }
@@ -698,7 +698,7 @@ export const replayRetains = (body: SessionEventBody): boolean => {
   return delta.delta?.type === 'text_delta' || delta.delta?.type === 'thinking_delta'
 }
 
-export const snapshotRetains = (body: SessionEventBody): boolean => {
+export function snapshotRetains(body: SessionEventBody): boolean {
   return body.type !== 'stream_delta'
 }
 

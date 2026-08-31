@@ -5,7 +5,7 @@ export type SessionUsage = {
   updatedAt?: number
 }
 
-export const mergeUsage = (session: SessionUsage, profile: ProfileUsage | undefined): ProfileUsage => {
+export function mergeUsage(session: SessionUsage, profile: ProfileUsage | undefined): ProfileUsage {
   const out: ProfileUsage = {}
   for (const [key, info] of Object.entries(session.rateLimits ?? {})) {
     out[key] = { info, updatedAt: session.updatedAt ?? 0 }
@@ -23,7 +23,7 @@ export type UsageWindowRow = {
   inferredReset?: boolean
 }
 
-export const orderUsageWindows = (usage: ProfileUsage | undefined): UsageWindowRow[] => {
+export function orderUsageWindows(usage: ProfileUsage | undefined): UsageWindowRow[] {
   const all = Object.entries(usage ?? {})
     .filter(([, w]) => w.info.utilization !== undefined)
     .map(([key, w]) => ({ key, info: w.info, updatedAt: w.updatedAt, inferredReset: w.inferredReset }))
@@ -32,7 +32,7 @@ export const orderUsageWindows = (usage: ProfileUsage | undefined): UsageWindowR
   return [...named, ...perModel]
 }
 
-export const usageInfos = (usage: ProfileUsage | undefined): Record<string, RateLimitInfo> | undefined => {
+export function usageInfos(usage: ProfileUsage | undefined): Record<string, RateLimitInfo> | undefined {
   if (!usage) {
     return undefined
   }

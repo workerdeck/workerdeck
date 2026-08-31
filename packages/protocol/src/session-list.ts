@@ -11,7 +11,7 @@ export const STATE_LABELS: Record<SessionState, string> = {
   ended: 'Ended',
 }
 
-export const sessionState = (info: SessionInfo): SessionState => {
+export function sessionState(info: SessionInfo): SessionState {
   if (info.pendingPermissionCount > 0 || info.status === 'awaiting_approval') {
     return 'attention'
   }
@@ -27,15 +27,15 @@ export const sessionState = (info: SessionInfo): SessionState => {
   return 'idle'
 }
 
-export const runningSubagents = (info: SessionInfo): SubagentInfo[] => {
+export function runningSubagents(info: SessionInfo): SubagentInfo[] {
   return (info.subagents ?? []).filter((sub) => sub.status === 'running')
 }
 
-export const isAgentRecord = (sub: SubagentInfo): boolean => {
+export function isAgentRecord(sub: SubagentInfo): boolean {
   return (sub.agentType?.trim() ?? '') !== ''
 }
 
-export const subagentLabel = (sub: SubagentInfo): string => {
+export function subagentLabel(sub: SubagentInfo): string {
   const agent = sub.agentType?.trim()
   const description = sub.description?.trim()
   if (agent && description) {
@@ -86,11 +86,11 @@ export type SessionRow = {
 
 export type SessionGroup = { key: string; label?: string; rows: SessionRow[] }
 
-export const adaptersOf = (rows: readonly SessionRow[]): string[] => {
+export function adaptersOf(rows: readonly SessionRow[]): string[] {
   return [...new Set(rows.map((r) => r.adapter))].sort()
 }
 
-export const projectsOf = (rows: readonly SessionRow[]): { key: string; label: string }[] => {
+export function projectsOf(rows: readonly SessionRow[]): { key: string; label: string }[] {
   const byKey = new Map<string, string>()
   for (const row of rows) {
     byKey.set(projectKey(row), projectLabel(row))
@@ -98,15 +98,15 @@ export const projectsOf = (rows: readonly SessionRow[]): { key: string; label: s
   return [...byKey].map(([key, label]) => ({ key, label })).sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()))
 }
 
-export const sessionLabel = (info: SessionInfo): string => {
+export function sessionLabel(info: SessionInfo): string {
   return info.title ?? info.id.slice(0, 8)
 }
 
-export const projectKey = (row: SessionRow): string => {
+export function projectKey(row: SessionRow): string {
   return `${row.hostId}:${normalizePath(row.info.project?.root ?? row.info.cwd)}`
 }
 
-export const projectLabel = (row: Pick<SessionRow, 'info'>): string => {
+export function projectLabel(row: Pick<SessionRow, 'info'>): string {
   const name = row.info.project?.name
   if (name) {
     return name
@@ -115,7 +115,7 @@ export const projectLabel = (row: Pick<SessionRow, 'info'>): string => {
   return dir.slice(dir.lastIndexOf('/') + 1) || 'No project'
 }
 
-export const projectSubpath = (row: Pick<SessionRow, 'info'>): string | undefined => {
+export function projectSubpath(row: Pick<SessionRow, 'info'>): string | undefined {
   const root = row.info.project?.root
   if (root === undefined || !row.info.cwd) {
     return undefined
@@ -131,11 +131,11 @@ export const projectSubpath = (row: Pick<SessionRow, 'info'>): string | undefine
   return dir.slice(base.length + 1) || undefined
 }
 
-export const isJobRun = (info: SessionInfo): boolean => {
+export function isJobRun(info: SessionInfo): boolean {
   return typeof info.meta?.jobId === 'string'
 }
 
-const matchesSearch = (row: SessionRow, needle: string): boolean => {
+function matchesSearch(row: SessionRow, needle: string): boolean {
   if (!needle) {
     return true
   }
@@ -149,28 +149,28 @@ const matchesSearch = (row: SessionRow, needle: string): boolean => {
   )
 }
 
-const normalizePath = (path: string): string => {
+function normalizePath(path: string): string {
   return path.replace(/\\/g, '/').replace(/\/+$/, '')
 }
 
-const isWithin = (root: string, path: string): boolean => {
+function isWithin(root: string, path: string): boolean {
   const base = normalizePath(root)
   const dir = normalizePath(path)
   // The separator matters: /a/project must not swallow /a/project-2.
   return dir === base || dir.startsWith(`${base}/`)
 }
 
-export const inScope = (row: SessionRow, scope: WorkspaceScope): boolean => {
+export function inScope(row: SessionRow, scope: WorkspaceScope): boolean {
   return scope.roots.some(
     (root) => (root.hostId ? root.hostId.toLowerCase() === row.hostId.toLowerCase() : row.local) && isWithin(root.path, row.info.cwd),
   )
 }
 
-export const scopeActive = (config: ViewConfig, scope: WorkspaceScope | undefined): boolean => {
+export function scopeActive(config: ViewConfig, scope: WorkspaceScope | undefined): boolean {
   return config.scoped && scope !== undefined
 }
 
-export const filterRows = (rows: readonly SessionRow[], config: ViewConfig, scope?: WorkspaceScope): SessionRow[] => {
+export function filterRows(rows: readonly SessionRow[], config: ViewConfig, scope?: WorkspaceScope): SessionRow[] {
   const needle = config.search.trim().toLowerCase()
   const scoping = scopeActive(config, scope) ? scope : undefined
   return rows.filter(
@@ -184,11 +184,11 @@ export const filterRows = (rows: readonly SessionRow[], config: ViewConfig, scop
   )
 }
 
-const facetKey = (row: SessionRow, facet: Facet): string => {
+function facetKey(row: SessionRow, facet: Facet): string {
   return facet === 'gateway' ? row.hostId : facet === 'adapter' ? row.adapter : facet === 'project' ? projectKey(row) : row.state
 }
 
-const facetLabel = (row: SessionRow, facet: Facet): string => {
+function facetLabel(row: SessionRow, facet: Facet): string {
   return facet === 'gateway'
     ? row.hostName
     : facet === 'adapter'
@@ -198,17 +198,18 @@ const facetLabel = (row: SessionRow, facet: Facet): string => {
         : STATE_LABELS[row.state]
 }
 
-const facetRank = (row: SessionRow, facet: Facet): string => {
+function facetRank(row: SessionRow, facet: Facet): string {
   if (facet === 'state') {
     return String(STATE_ORDER.indexOf(row.state))
   }
   return facetLabel(row, facet).toLowerCase()
 }
 
-const byRecency = (a: SessionRow, b: SessionRow) =>
-  (b.info.lastActivityAt ?? b.info.createdAt) - (a.info.lastActivityAt ?? a.info.createdAt)
+function byRecency(a: SessionRow, b: SessionRow) {
+  return (b.info.lastActivityAt ?? b.info.createdAt) - (a.info.lastActivityAt ?? a.info.createdAt)
+}
 
-const compare = (a: SessionRow, b: SessionRow, sortBy: SortBy): number => {
+function compare(a: SessionRow, b: SessionRow, sortBy: SortBy): number {
   if (sortBy === 'recent') {
     return byRecency(a, b)
   }
@@ -222,7 +223,7 @@ const compare = (a: SessionRow, b: SessionRow, sortBy: SortBy): number => {
   return facetRank(a, sortBy).localeCompare(facetRank(b, sortBy)) || byRecency(a, b)
 }
 
-export const groupRows = (rows: readonly SessionRow[], config: ViewConfig): SessionGroup[] => {
+export function groupRows(rows: readonly SessionRow[], config: ViewConfig): SessionGroup[] {
   const sorted = [...rows].sort((a, b) => compare(a, b, config.sortBy))
   if (config.groupBy === 'none') {
     return sorted.length ? [{ key: 'all', rows: sorted }] : []
@@ -248,12 +249,12 @@ export const groupRows = (rows: readonly SessionRow[], config: ViewConfig): Sess
 
 export type SubsetSummary = { shown: number; total: number; causes: string[] }
 
-export const subsetSummary = (
+export function subsetSummary(
   config: ViewConfig,
   scope: WorkspaceScope | undefined,
   shown: number,
   total: number,
-): SubsetSummary | undefined => {
+): SubsetSummary | undefined {
   if (shown >= total) {
     return undefined
   }
@@ -272,7 +273,7 @@ export const subsetSummary = (
   return { shown, total, causes }
 }
 
-export const hasFacetFilter = (config: ViewConfig): boolean => {
+export function hasFacetFilter(config: ViewConfig): boolean {
   return (
     config.search.trim().length > 0 ||
     config.gateways.length > 0 ||
@@ -282,7 +283,7 @@ export const hasFacetFilter = (config: ViewConfig): boolean => {
   )
 }
 
-export const clearFilters = (config: ViewConfig): ViewConfig => {
+export function clearFilters(config: ViewConfig): ViewConfig {
   return {
     ...DEFAULT_VIEW_CONFIG,
     scoped: false,
