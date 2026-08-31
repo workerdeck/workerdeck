@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { CreateJobRequest } from '@workerdeck/protocol'
 import { json, readJsonBody } from '../lib/http.ts'
+import { vetCreateRequest } from './create-vet.ts'
 import type { AuthContext } from '../services/auth.ts'
 import type { ServerContext } from '../context.ts'
 
@@ -11,7 +12,7 @@ export const handleJobs = async (
   pathname: string,
   auth: AuthContext,
 ): Promise<void> => {
-  const { auth: authSvc, availability, basePath, factory, queue } = ctx
+  const { auth: authSvc, basePath, queue } = ctx
   if (!queue) {
     json(res, 404, { error: 'job queue not configured' })
     return
@@ -45,40 +46,11 @@ export const handleJobs = async (
         json(res, 400, { error: 'session.prompt is required' })
         return
       }
-      const refusedScope = factory.applyScope(body.session, auth)
-      if (refusedScope) {
-        json(res, refusedScope.status, { error: refusedScope.error })
+      const refusal = vetCreateRequest(ctx, body.session, auth)
+      if (refusal) {
+        json(res, refusal.status, { error: refusal.error })
         return
       }
-      const refused = factory.applyBypassPolicy(body.session)
-      if (refused) {
-        json(res, 403, { error: refused })
-        return
-      }
-      const resolved = factory.resolveProfile(body.session.profile, auth.allowedProfiles)
-      if (!resolved.ok) {
-        json(res, resolved.status, { error: resolved.error })
-        return
-      }
-      const unavailable = availability.checkAvailable(resolved.profile)
-      if (unavailable) {
-        json(res, unavailable.status, { error: unavailable.error })
-        return
-      }
-      const refusedCwd = factory.checkCwd(body.session, resolved.profile)
-      if (refusedCwd) {
-        json(res, refusedCwd.status, { error: refusedCwd.error })
-        return
-      }
-      const badRequest =
-        factory.checkPermissionMode(body.session.permissionMode, resolved.profile) ??
-        factory.checkEngineGrants(body.session, resolved.profile)
-      if (badRequest) {
-        json(res, 400, { error: badRequest })
-        return
-      }
-      factory.stripInertFields(body.session, resolved.profile)
-      body.session.profile = resolved.profile?.name
       try {
         json(res, 201, { job: await queue.submit(body) })
       } catch (error) {

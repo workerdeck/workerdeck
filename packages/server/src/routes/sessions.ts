@@ -5,6 +5,7 @@ import type { SessionRoute } from '../lib/parse-route.ts'
 import type { AuthContext } from '../services/auth.ts'
 import { isDormant } from '../services/session-store.ts'
 import type { ServerContext } from '../context.ts'
+import { vetCreateRequest } from './create-vet.ts'
 import { handleAttachments } from './attachments.ts'
 import { handleMcp } from './mcp.ts'
 import { handleProducedFiles } from './produced-files.ts'
@@ -18,7 +19,7 @@ export const handleSessions = async (
   route: SessionRoute,
   auth: AuthContext,
 ): Promise<void> => {
-  const { attachmentStore, auth: authSvc, availability, bridge, factory, parking, producedFiles, projects, registry } = ctx
+  const { attachmentStore, auth: authSvc, bridge, factory, parking, producedFiles, projects, registry } = ctx
 
   if (!route.id) {
     if (req.method === 'GET') {
@@ -30,39 +31,11 @@ export const handleSessions = async (
     }
     if (req.method === 'POST') {
       const body = (await readJsonBody(req, ctx.maxBodyBytes)) as CreateSessionRequest
-      const refusedScope = factory.applyScope(body, auth)
-      if (refusedScope) {
-        json(res, refusedScope.status, { error: refusedScope.error })
+      const refusal = vetCreateRequest(ctx, body, auth)
+      if (refusal) {
+        json(res, refusal.status, { error: refusal.error })
         return
       }
-      const refused = factory.applyBypassPolicy(body)
-      if (refused) {
-        json(res, 403, { error: refused })
-        return
-      }
-      const resolved = factory.resolveProfile(body.profile, auth.allowedProfiles)
-      if (!resolved.ok) {
-        json(res, resolved.status, { error: resolved.error })
-        return
-      }
-      const unavailable = availability.checkAvailable(resolved.profile)
-      if (unavailable) {
-        json(res, unavailable.status, { error: unavailable.error })
-        return
-      }
-      const refusedCwd = factory.checkCwd(body, resolved.profile)
-      if (refusedCwd) {
-        json(res, refusedCwd.status, { error: refusedCwd.error })
-        return
-      }
-      const badRequest =
-        factory.checkPermissionMode(body.permissionMode, resolved.profile) ?? factory.checkEngineGrants(body, resolved.profile)
-      if (badRequest) {
-        json(res, 400, { error: badRequest })
-        return
-      }
-      factory.stripInertFields(body, resolved.profile)
-      body.profile = resolved.profile?.name
       const runner = await factory.createRunner(factory.buildRunnerConfig(body))
       factory.watchAuthSource(runner)
       json(res, 201, { session: projects.withProject(runner.info()) })
