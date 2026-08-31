@@ -16,7 +16,9 @@ const extensionDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = resolve(extensionDir, '..', '..')
 const target = resolve(process.argv[2] ?? repoRoot)
 
-const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { stdio: 'inherit', cwd: extensionDir, ...opts })
+function run(cmd, args, opts = {}) {
+  return spawnSync(cmd, args, { stdio: 'inherit', cwd: extensionDir, ...opts })
+}
 
 if (run('pnpm', ['run', 'build']).status !== 0) {
   console.error('build failed — not launching')

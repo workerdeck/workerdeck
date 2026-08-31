@@ -1,24 +1,36 @@
-const isPascalCase = (name) => /^[A-Z]/.test(name)
-
 const moduleFuncStyle = {
   create(context) {
     const check = (node) => {
-      const fn = node.type === 'ExportNamedDeclaration' || node.type === 'ExportDefaultDeclaration' ? node.declaration : node
-      if (!fn || fn.type !== 'FunctionDeclaration' || !fn.id || fn.generator) {
+      const decl = node.type === 'ExportNamedDeclaration' ? node.declaration : node
+      if (!decl || decl.type !== 'VariableDeclaration' || decl.kind !== 'const') {
         return
       }
-      if (isPascalCase(fn.id.name)) {
-        return
+      for (const declarator of decl.declarations) {
+        if (declarator.id.type !== 'Identifier' || !declarator.init) {
+          continue
+        }
+        if (declarator.init.type !== 'ArrowFunctionExpression' && declarator.init.type !== 'FunctionExpression') {
+          continue
+        }
+        // An explicit annotation is the point of the declaration (FunctionComponent<Props> and
+        // friends, or a JSDoc `@type` tag in .mjs): it types the BINDING, so converting would
+        // throw the type away. Those stay consts.
+        if (declarator.id.typeAnnotation) {
+          continue
+        }
+        const leading = context.sourceCode.getCommentsBefore?.(node) ?? []
+        if (leading.some((comment) => comment.type === 'Block' && /@type\b/.test(comment.value))) {
+          continue
+        }
+        context.report({
+          node: declarator.id,
+          message: `Module-level '${declarator.id.name}' must be a 'function' declaration (docs/CODE-STYLE.md); arrow consts are for annotated bindings and non-module scope.`,
+        })
       }
-      context.report({
-        node: fn.id,
-        message: `Module-level helper '${fn.id.name}' must be an arrow-function const (docs/CODE-STYLE.md); 'function' declarations are for PascalCase components only.`,
-      })
     }
     return {
-      'Program > FunctionDeclaration': check,
+      'Program > VariableDeclaration': check,
       'Program > ExportNamedDeclaration': check,
-      'Program > ExportDefaultDeclaration': check,
     }
   },
 }

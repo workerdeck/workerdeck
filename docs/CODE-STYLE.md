@@ -32,15 +32,15 @@ that `pnpm format` + `pnpm lint --fix` converge the whole repo, and format-on-sa
   `disallowTypeAnnotations` is off because vitest's `importOriginal<typeof import('m')>()` is
   idiomatic).
 - **Custom rules** in `lint/wd-plugin.js` (loaded via `jsPlugins`):
-  - `wd/module-func-style` — module-level helpers must be arrow-function consts; `function`
-    declarations are reserved for PascalCase components and generators. Vendored code
-    (`packages/ui/src/components/prompt-area`) is exempt — it keeps its upstream shape.
+  - `wd/module-func-style` — module-level functions must be `function` declarations. The one
+    exemption is a binding whose *type* is the point: an explicit annotation
+    (`const C: FunctionComponent<Props> = …`) or a JSDoc `@type` tag in `.mjs`. Converting those
+    would throw the type away, so they stay arrow consts.
   - `wd/no-stacked-jsdoc` — two `/** */` blocks on one declaration is always a mistake: one of
     them documents the wrong symbol or went stale.
   - `wd/max-comment-lines` (warn) — a **smoke alarm only**, and a weak one: see § Comments below
     for the actual rule, which no line-count check can express. Vendored code
-    (`packages/ui/src/components/prompt-area`) is exempt for the same reason it is exempt from
-    `wd/module-func-style`, plus one of its own: most of those blocks are the upstream library's
+    (`packages/ui/src/components/prompt-area`) is exempt because most of those blocks are the upstream library's
     `@example` API docs, and rewriting them is pure diff noise against a tree we want to keep
     diffable. The few that carry WorkerDeck-added invariants stay at the call site deliberately —
     documenting vendored internals in our `docs/` is how the vendored boundary rots.
@@ -91,10 +91,19 @@ became 923 lines and **zero** comments, with no change to a single token of code
   probe cast like `block as { tool_use_id?: unknown }` may stay inline — a named interface there
   would imply more certainty about the shape than exists.
 - **Module-level `const`s at the top of the file** (after imports and type declarations).
-- **Module-level helpers are arrow-function consts** on a single-line signature:
-  `const fn = (a: string): R => { … }` — not `function` declarations. **PascalCase React
-  components are the exception**: `export function Component()` is the repo's component form.
-  (Both halves are enforced by `wd/module-func-style`.)
+- **Module-level functions are `function` declarations** on a single-line signature:
+  `function fn(a: string): R { … }` — not arrow consts. Two reasons: they hoist, so a helper can
+  sit below its caller and the file reads top-down; and a declaration carries its JSDoc naturally,
+  where an assignment documents a binding that happens to hold a function. React components use
+  the same form (`export function Component()`), so the component layer and the helper layer
+  finally read alike. **The exception is a binding whose type is the point** — an explicit
+  annotation like `const C: FunctionComponent<Props> = …`, or a JSDoc `@type` tag in `.mjs` —
+  because the annotation types the binding and converting would discard it. Enforced by
+  `wd/module-func-style`.
+
+  This flipped on 2026-08-31 (1124 call sites, via `_docs/tools/arrow-to-function.mjs`). Arrow
+  functions remain the form for everything that is a *value*: callbacks, object-literal members,
+  and anything relying on lexical `this`.
 - **Keep function signatures on one line.** Width 160 makes this the default; don't hand-wrap.
 
 ## Known formatter tradeoff
