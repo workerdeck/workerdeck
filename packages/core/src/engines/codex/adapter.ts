@@ -61,23 +61,14 @@ const platformPackageSuffix = (): string => {
 }
 
 /**
- * Availability, mirroring **the app-server surface's actual credential chain**
- * (verified 2026-08-05 against 0.146.0 by driving the raw binary): auth comes
- * solely from the CODEX_HOME auth store (`codex login`, file or keyring). The
- * env-key routes are dead ends here — `CODEX_API_KEY` is read only by
- * `codex exec` (a turn goes out with no credential at all: "Missing bearer"),
- * and `OPENAI_API_KEY` was never read by either surface. So, in order:
+ * Availability comes from `codex login status` alone: the app-server surface reads
+ * neither `CODEX_API_KEY` nor `OPENAI_API_KEY`, so no env key is a credential route
+ * here (docs/GOTCHAS.md §Codex engine). Anything unparseable is 'unknown', never a
+ * verdict — the `checkClaudeAuth` never-overclaim discipline.
  *
- * 1. Binary resolvable, else unavailable with the install reason;
- * 2. `codex login status` under the profile's complete session env:
- *    exit 0 → available; the "Not logged in" verdict → unavailable, with an
- *    exact remedy when a stranded env key explains the misconfiguration;
- *    anything else (a stray CODEX_ACCESS_TOKEN JWT error, a crashed spawn) →
- *    'unknown' — the checkClaudeAuth never-overclaim discipline.
- *
- * Only the exit code and the fixed verdict line are consulted — never
- * surfaced: `login status` output includes a masked key fragment. The
- * `smoke:codex --canary` run is the drift alarm for all of this.
+ * **Only the exit code and the fixed verdict line may be consulted, and neither
+ * `login status` line may be surfaced**: its success output carries a masked key
+ * fragment. `smoke:codex --canary` is the drift alarm.
  */
 const checkCodexAvailability = async (
   profile: ProfileInfo,

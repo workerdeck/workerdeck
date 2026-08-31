@@ -1,16 +1,9 @@
 /**
- * Turning an engine's edit output into the wire's {@link FilePatch}.
- *
- * Both engines know exactly which lines of which file changed, and both say so
- * in their own vocabulary: the Claude SDK hands over a `structuredPatch` array
- * on `SDKUserMessage.tool_use_result`, codex puts a unified diff string on each
- * `fileChange` item. A client can reconstruct neither — it has never seen the
- * file — so anything not normalized here is a diff that renders without line
- * numbers.
- *
- * Normalizing in the runner rather than in each client is the point: one shape
- * reaches the wire, and the dashboard, the extension and the phone all render
- * from it without a per-engine branch or a diff parser of their own.
+ * Both engines' edit output → the wire's one {@link FilePatch} (Claude's
+ * `structuredPatch` on `tool_use_result`, codex's unified-diff string on a
+ * `fileChange`), so every client renders one shape with no per-engine branch and
+ * no diff parser of its own. A client has never seen the file, so anything not
+ * normalized here renders without line numbers.
  */
 
 import type { FilePatch, PatchHunk } from '@workerdeck/protocol'

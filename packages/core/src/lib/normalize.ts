@@ -85,18 +85,14 @@ export type UsageRateLimits = {
 type UsageWindow = { utilization: number | null; resets_at?: string | null } | null | undefined
 
 /**
- * Plan rate-limit windows from the CLI's structured `/usage` data, as `rate_limit`
- * events — the same shape a live `rate_limit_event` produces.
+ * Plan rate-limit windows from the CLI's structured `/usage` poll, re-emitted as
+ * ordinary `rate_limit` events so replay and every client get them with no new
+ * protocol surface (the CLI itself pushes only on *change* — docs/GOTCHAS.md
+ * §Claude engine).
  *
- * Without this a client shows no usage at all until a window *changes*, which the
- * CLI only reports after a turn moves the needle, and never for a session that is
- * only being watched. Polling the snapshot and forwarding it through the existing
- * event means replay, the dashboard and the iOS app all get it for free, with no
- * new protocol surface.
- *
- * `status` is not per-window in the usage payload — 'allowed' is what a session
- * the CLI is running for us is, by construction. A window with no utilization is
- * unknown, not zero, and is dropped rather than reported at 0%.
+ * `status` is not per-window in the payload — 'allowed' is what a session the CLI
+ * is running for us is, by construction — and a window with no utilization is
+ * unknown, not zero, so it is dropped rather than reported at 0%.
  */
 export const rateLimitEventsFromUsage = (usage: UsageRateLimits): SessionEventBody[] => {
   if (!usage.rate_limits_available || !usage.rate_limits) {

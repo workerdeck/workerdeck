@@ -1,14 +1,20 @@
 import type { ModelCatalog } from '../adapter.ts'
 
 /**
- * The Codex engine's model catalog, seeded from the binary's own embedded
- * presets — `@openai/codex` ships its model table inside the executable
- * (see `provenance` for the extracted version), and that table (not the SDK's
- * stale `ModelReasoningEffort` union) is the truth about which reasoning
- * efforts each model takes.
+ * The Codex engine's model catalog, seeded from the binary's own embedded model
+ * table (see `provenance` for the version) — that table, not the SDK's stale
+ * `ModelReasoningEffort` union, is the truth about which reasoning efforts each
+ * model takes. Mapping decisions: the internal `codex-auto-review` row is dropped
+ * (the codex analogue of the CLI's `default` sentinel), `primary` mirrors the
+ * binary's own `visibility` field so both UIs group the way codex's picker does,
+ * and `reasoningEfforts` carries `supported_reasoning_levels` verbatim — `max`
+ * and `ultra` go beyond the SDK union, so trust the binary and keep strings open.
  *
- * **Refresh procedure** (release checklist): extract the embedded JSON from
- * the platform binary and diff —
+ * **Refresh procedure** (release checklist): extract the embedded JSON from the
+ * platform binary and diff. The two-hop resolve is NOT optional — under pnpm's
+ * strict layout the platform package is a dependency of `@openai/codex` and
+ * resolves only from that wrapper's location (MODULE_NOT_FOUND otherwise), the
+ * same two hops `resolveBundledCodexExecutable` makes.
  *
  *   node -e 'const d=require("fs").readFileSync(process.argv[1]);
  *     const s=d.indexOf(`{\n  "models": [`);
@@ -20,20 +26,6 @@ import type { ModelCatalog } from '../adapter.ts'
  *       const w=require.resolve("@openai/codex/package.json");
  *       createRequire(w).resolve("@openai/codex-darwin-arm64/package.json")
  *         .replace("package.json","vendor/aarch64-apple-darwin/bin/codex")')"
- *
- * The two-hop resolve is NOT optional: under pnpm's strict layout the platform
- * package is a dependency of `@openai/codex`, so it resolves only from that
- * wrapper's location, never from the repo root. Resolving it directly throws
- * MODULE_NOT_FOUND — the same two hops `resolveBundledCodexExecutable` makes.
- *
- * Mapping decisions:
- * - the internal `codex-auto-review` row is dropped (the codex analogue of
- *   dropping the CLI's `default` sentinel);
- * - `primary` mirrors the binary's own `visibility` field ('list' = shown in
- *   its picker, 'hide' = its "older models"), so both UIs group the way
- *   codex's own picker does;
- * - `reasoningEfforts` carries `supported_reasoning_levels` verbatim — note
- *   `max`/`ultra` beyond the SDK union; trust the binary, keep strings open.
  */
 export const CODEX_CATALOG: ModelCatalog = {
   provenance: 'embedded model presets of @openai/codex@0.149.0 (darwin-arm64 binary), extracted 2026-08-22',

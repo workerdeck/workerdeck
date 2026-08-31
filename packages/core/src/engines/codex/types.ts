@@ -1,20 +1,15 @@
 /**
- * Structural mirror of the slice of the `codex app-server` JSON-RPC v2 surface
- * this engine consumes. Local on purpose: no published client for this
- * protocol exists, the shapes are regenerated from the binary itself
- * (`codex app-server generate-json-schema --out <dir>`, verified 2026-08-05
- * against 0.146.0), and every open-ended axis is a plain string so a newer
- * binary degrades to the unknown-item path instead of a type error.
- *
- * Naming note: the v2 surface is camelCase (`aggregatedOutput`, `exitCode`,
- * `localImage`) where `codex exec`'s JSONL — the retired first transport, and
- * what OpenAI's own docs mostly show — is snake_case. The two vocabularies
- * look alike but are not interchangeable.
+ * Structural mirror of the `codex app-server` JSON-RPC v2 surface this engine
+ * consumes — local on purpose (no published client exists), every open-ended
+ * axis a plain string so a newer binary degrades to the unknown-item path
+ * rather than a type error. Regenerate from the binary itself:
+ * `codex app-server generate-json-schema --out <dir>` (verified 2026-08-05
+ * against 0.146.0). Beware the lookalikes: v2 is camelCase where `codex exec`'s
+ * retired JSONL was snake_case — docs/GOTCHAS.md §Codex engine.
  */
 
-// `TokenUsageBreakdown` — one entry of `thread/tokenUsage/updated`. OpenAI
-// accounting: `inputTokens` INCLUDES the cached share (the relation the runner's
-// subtraction assumes, asserted in `smoke:codex`).
+// One entry of `thread/tokenUsage/updated`; `inputTokens` INCLUDES the cached
+// share, the relation the runner's subtraction assumes (`smoke:codex` asserts it).
 export type AppServerTokenUsage = {
   inputTokens: number
   cachedInputTokens: number

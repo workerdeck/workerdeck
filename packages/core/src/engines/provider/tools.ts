@@ -254,19 +254,14 @@ export type HostToolDefinition = {
 }
 
 /**
- * Add host-supplied tools to a context at an explicit trust level.
+ * Add host-supplied tools to a context at an explicit trust level — the only way
+ * to express a sandboxed (therefore bridgeable) host tool, since
+ * {@link withMcpTools} produces authoritative tools by construction.
  *
- * The trust level is the whole point of the seam: {@link withMcpTools} can only
- * produce authoritative tools, so a host tool that *should* be sandboxed — and
- * therefore executable in the browser tab that asked for it — had no way to be
- * expressed at all. Here the host says which it is, and the contradictions are
- * refused rather than silently resolved:
- *
- * - a `sandboxed` tool carrying `execute` would run inline in this process with
- *   the gateway's ambient authority, which is exactly what sandboxing it was
- *   meant to prevent;
- * - an `authoritative` tool *without* `execute` would park the turn on a call no
- *   executor claims, and the session would simply stop.
+ * Both contradictions are refused here, at assembly, rather than discovered at
+ * runtime: `sandboxed` + `execute` would run inline with the gateway's ambient
+ * authority, `authoritative` without `execute` would park the turn on a call no
+ * executor claims. Full story: docs/GOTCHAS.md §Tool trust & the sandbox.
  */
 export const withHostTools = (context: ToolContext, hostTools: Record<string, HostToolDefinition>, kind = 'host tool'): ToolContext => {
   const entries = Object.entries(hostTools)

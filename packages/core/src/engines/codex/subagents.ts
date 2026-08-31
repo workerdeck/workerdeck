@@ -1,38 +1,16 @@
 import { SUBAGENT_HISTORY, type SubagentInfo } from '@workerdeck/protocol'
 
 /**
- * The codex side of `SessionInfo.subagents` — and the attribution table that
- * gives every event a spawned agent produces its `parentToolUseId`.
+ * The codex side of `SessionInfo.subagents`. Nothing is inferred (unlike
+ * `engines/claude/subagents.ts`): `subAgentActivity {kind: 'started'}` announces
+ * every agent, so a record is keyed by **thread id** — the wire's handle — while
+ * exposing the anchor **tool-use id** that `parentToolUseId` on nested events
+ * must equal for `subagentItems` to reassemble the sidechain.
  *
- * Codex's signal is stronger than the claude engine's, so this is deliberately
- * NOT that tracker generalised (`engines/claude/subagents.ts` infers spawns
- * from tool names and verdicts from result-text sniffing, ~290 lines of module
- * doc explaining the inference). Here nothing is inferred: `subAgentActivity
- * {kind: 'started'}` on the owning thread positively announces an agent, names
- * it (`agentPath`), keys it (`agentThreadId` — the id every one of its later
- * notifications carries) and hands over the model's own `spawn_agent` call id;
- * the agent's end is its own thread's `turn/completed`, status included. So a
- * record is keyed by **thread id** — the wire's handle — while exposing a
- * **tool-use id** — the protocol's: `parentToolUseId` on nested events must
- * equal the anchor `tool_use`'s id for `subagentItems` (the frame membership
- * rule every client shares) to reassemble the sidechain, and this map is where
- * the two vocabularies meet.
- *
- * Two decisions worth their prose:
- *
- * **A record survives the runner's turns.** Codex agents are designed to
- * outlive the root turn that spawned them (`sendInput`/`resumeAgent` address a
- * thread that kept existing), so — unlike a pending approval — nothing here is
- * swept when a root turn ends. What does end every agent is the app-server
- * process itself: the runner calls {@link sweep} when the child dies or the
- * session closes, because an agent whose host process is gone can never report,
- * and `running` on a closed session would be a lie a polled list re-renders
- * forever (the claude tracker's argument, inherited whole).
- *
- * **The settled tail is bounded, running records never are** — the same
- * {@link SUBAGENT_HISTORY} discipline as the claude tracker, and enforced at
- * settle time for the same reason: a settle happens once per agent, `list()`
- * once per row of a 1.2s-polled sessions list.
+ * A record survives the runner's turns (codex agents outlive the turn that
+ * spawned them) and ends only at {@link sweep}, when the app-server child dies.
+ * The settled tail is bounded by {@link SUBAGENT_HISTORY}; running records are not.
+ * Full story: docs/GOTCHAS.md §Codex engine.
  */
 export class CodexAgentTracker {
   #byThread = new Map<string, CodexAgent>()

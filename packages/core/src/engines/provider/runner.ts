@@ -3,9 +3,6 @@ import { ToolLoopAgent, generateText, isStepCount, type LanguageModel, type Mode
 import {
   ENGINE_CAPABILITIES,
   snapshotRetains,
-  contextReading,
-  type ContextReading,
-  transcriptActivity,
   type ContentBlock,
   type CreateSessionRequest,
   type McpServerStatusInfo,
@@ -22,7 +19,9 @@ import type { SandboxVfs } from '@workerdeck/sandbox'
 import { type AttachmentInput, attachmentRef, normalizeMediaType } from '../../lib/attachments.ts'
 import type { ParkedExecution, PermissionDecision, Runner, RunnerSnapshot, SessionEventListener } from '../../runner-interface.ts'
 import type { ToolExecutionCall, ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
+import { EventLog } from '../../lib/event-log.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
+import { sessionTitle, withTitle } from '../../lib/title.ts'
 
 /** Permission modes this engine can honor. The rest of the protocol vocabulary
  * (acceptEdits/plan/auto) is Claude Code CLI semantics with no meaning here —
@@ -152,27 +151,10 @@ export class AiSdkRunner implements Runner {
 
   #config: AiSdkRunnerConfig
   #model: LanguageModel
-  #events: SessionEvent[] = []
+  #log = new EventLog()
   #subscribers = new SubscriberSet()
-  #seq = 0
-  /**
-   * Latest context-window reading, retained from the last `context_usage` this
-   * runner emitted so `GET /sessions` can answer it without an attach — see
-   * `SessionInfo.contextUsage`. Folded in the emit path, so it is by
-   * construction the same number the transcript last drew.
-   */
-  #contextUsage: ContextReading | undefined
-  #activityCount = 0
-  /**
-   * Seq of the latest `conversation_reset` event, 0 when none. The log itself is
-   * never truncated — it still carries the state-bearing events (`capabilities`,
-   * `system_init`, …) a fresh attacher depends on and which are not re-emitted —
-   * but `subscribe()` skips transcript *content* strictly below this mark, so a
-   * replay does not resurrect a cleared conversation. A later reset supersedes
-   * an earlier one by overwriting it.
-   */
-  #resetSeq = 0
   #status: SessionStatus = 'starting'
+  #statusDetail: string | undefined
   #permissionMode: PermissionMode
   #messages: ModelMessage[] = []
   #pendingToolCalls = new Map<string, PendingToolCall>()
@@ -186,7 +168,6 @@ export class AiSdkRunner implements Runner {
   #turnAccum: { startedAt: number; input: number; output: number; cacheWrite: number; cacheRead: number } | undefined
   #numTurns = 0
   #totalUsage = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }
-  #lastActivityAt: number | undefined
   #started = false
   #closed = false
   /** Parked: state has been snapshotted and this instance is inert. Not closed —
@@ -234,26 +215,7 @@ export class AiSdkRunner implements Runner {
     if (!state || !Array.isArray(state.messages)) {
       throw new Error('session snapshot is missing its provider-engine state')
     }
-    this.#seq = snapshot.seq
-    this.#events = [...snapshot.events]
-    // Recomputed rather than carried in the snapshot: the log IS the count, and
-    // deriving it here means a rehydrated session cannot disagree with itself.
-    // The context reading is derived from the same walk, under the same rule the
-    // emit path uses — a session that parked with a reading must come back with
-    // it, or every parked row would show an empty ring until the next turn.
-    this.#activityCount = 0
-    for (const event of this.#events) {
-      this.#activityCount += transcriptActivity(event)
-      if (event.type === 'conversation_reset') {
-        // Recomputed for the same reason as the count: the log IS the mark, and
-        // a rehydrated session that forgot where its last reset was would
-        // replay the cleared conversation to the first client that attached.
-        this.#resetSeq = event.seq
-        this.#contextUsage = undefined
-      } else {
-        this.#contextUsage = contextReading(event) ?? this.#contextUsage
-      }
-    }
+    this.#log.restore(snapshot.events, snapshot.seq, state.lastActivityAt)
     this.#messages = [...state.messages]
     for (const call of state.pendingToolCalls) {
       this.#pendingToolCalls.set(call.toolCallId, call)
@@ -270,7 +232,6 @@ export class AiSdkRunner implements Runner {
       this.#turnAccum.startedAt += Date.now() - state.parkedAt
     }
     this.#permissionMode = state.permissionMode
-    this.#lastActivityAt = state.lastActivityAt
     this.#status = this.#pendingToolCalls.size > 0 ? 'parked' : 'idle'
     if (state.model !== undefined && state.model !== this.#modelAlias && this.#config.resolveModel) {
       this.#modelAlias = state.model
@@ -283,7 +244,7 @@ export class AiSdkRunner implements Runner {
   }
 
   get lastSeq(): number {
-    return this.#seq
+    return this.#log.seq
   }
 
   /** The session's durable state — persist to park, replay to rehydrate. */
@@ -322,15 +283,15 @@ export class AiSdkRunner implements Runner {
       model: this.#modelId(),
       permissionMode: this.#permissionMode,
       createdAt: this.createdAt,
-      lastSeq: this.#seq,
-      activityCount: this.#activityCount,
-      contextUsage: this.#contextUsage,
+      lastSeq: this.#log.seq,
+      activityCount: this.#log.activityCount,
+      contextUsage: this.#log.contextUsage,
       pendingPermissionCount: this.#pendingApprovals.size,
       meta: this.#config.meta,
       scope: this.#config.scope,
-      title: this.#title(),
+      title: sessionTitle(this.#config),
       numTurns: this.#numTurns || undefined,
-      lastActivityAt: this.#lastActivityAt,
+      lastActivityAt: this.#log.lastActivityAt,
     }
   }
 
@@ -388,31 +349,16 @@ export class AiSdkRunner implements Runner {
   }
 
   /**
-   * The same snapshot, taken without ending anything.
+   * `park()`'s value without its teardown: no status emit, no listener clear, no
+   * disposer, so the runner stays live and warm while the host writes the value
+   * through for restart-survival (docs/GOTCHAS.md §Parking).
    *
-   * `park()` and this are two operations that happen to produce the same value,
-   * and the difference is the whole point: `park()` *ends* the live runner
-   * (inert, listeners dropped, `onClose` called), which is right for deferred
-   * execution — the session has nothing to do for possibly days — and wrong for
-   * restart-survival, where the session is active and someone is mid-
-   * conversation. This one changes nothing at all: no status emit, no listener
-   * clear, no disposer. The host writes the value through to durable storage
-   * after each turn and keeps the runner live and warm, so a restart rebuilds
-   * from the last write through the existing `restore` path and the next message
-   * costs no wake.
-   *
-   * The gate is `park()`'s minus the requirement that there be something parked:
-   *
-   * - `#abort` set is refused for the reason it always was — a `generate()` in
-   *   flight has produced messages that are not in the history yet, so the
-   *   snapshot would be of a turn that half-happened.
-   * - Pending calls that are **not** all deferred are refused, which is
-   *   `park()`'s rule wearing a different hat. An in-process execution's result
-   *   is coming back to *this* runner and dies with the process; a restore would
-   *   wait on it forever, and `state.dispatched` is what would stop the rebuilt
-   *   runner from simply calling it again.
-   * - Idle with nothing pending — the case `park()` exists to refuse — is
-   *   exactly the case this exists to allow.
+   * The gate is `park()`'s minus the requirement that something be parked. A turn
+   * in flight is refused (its messages are not in the history yet, so the snapshot
+   * would be of a turn that half-happened), and so are pending calls that are not
+   * all deferred (an in-process result dies with the process, and a restore would
+   * wait on it forever); idle with nothing pending — the case `park()` exists to
+   * refuse — is exactly the case this exists to allow.
    */
   snapshot(): RunnerSnapshot | undefined {
     if (this.#closed || this.#parked || this.#abort) {
@@ -426,17 +372,11 @@ export class AiSdkRunner implements Runner {
 
   /**
    * The snapshot value itself, shared so a park and a write-through cannot
-   * disagree about what a session *is*.
-   *
-   * The event log is filtered through {@link snapshotRetains} — the persisted
-   * log drops stream deltas, which are superseded by the `assistant_message`
-   * that flushes them and would otherwise be tens of times the size of the text
-   * they spell. Parks get it too, and should: a park sits on disk for days.
-   *
-   * The `parked` list and `state.parkedAt` are honest under both callers. An
-   * idle write-through has no pending calls, so `parked` is empty and the host
-   * arms no watchdogs; `parkedAt` is "when this was taken", which is what
-   * `#restore` needs to discount a turn's clock either way.
+   * disagree about what a session *is*. The log is filtered through
+   * {@link snapshotRetains} (provider-only — see docs/GOTCHAS.md §Parking), and
+   * `parked` / `state.parkedAt` are honest under both callers: an idle
+   * write-through has no pending calls, and `parkedAt` is "when this was taken",
+   * which is what `#restore` discounts a turn's clock against either way.
    */
   #buildSnapshot(): RunnerSnapshot {
     const parked: ParkedExecution[] = [...this.#pendingToolCalls.values()].map((call) => ({
@@ -453,15 +393,15 @@ export class AiSdkRunner implements Runner {
       turnAccum: this.#turnAccum ? { ...this.#turnAccum } : undefined,
       permissionMode: this.#permissionMode,
       model: this.#modelAlias,
-      lastActivityAt: this.#lastActivityAt,
+      lastActivityAt: this.#log.lastActivityAt,
       parkedAt: Date.now(),
     }
     return {
       engine: 'provider',
       id: this.id,
       createdAt: this.createdAt,
-      seq: this.#seq,
-      events: this.#events.filter((event) => snapshotRetains(event)),
+      seq: this.#log.seq,
+      events: this.#log.events.filter((event) => snapshotRetains(event)),
       vfs: this.#config.vfs?.snapshot(),
       parked,
       state,
@@ -633,17 +573,13 @@ export class AiSdkRunner implements Runner {
   }
 
   /**
-   * Reset the conversation: drop the message array the next turn would have
-   * been built from. There is no engine round trip — this runner *is* where the
-   * transcript lives, so clearing it is the whole operation.
+   * Reset the conversation: drop the message array the next turn would have been
+   * built from. No engine round trip — this runner *is* where the transcript
+   * lives, so clearing it is the whole operation, and the event log's
+   * `conversation_reset` fold retires the context reading with it.
    *
-   * Two things ride along, both already written elsewhere and both load-bearing
-   * here. `#emit`'s `conversation_reset` arm retires `#contextUsage` (the
-   * reading described a conversation that no longer exists), and the same arm
-   * in `restore` keeps a parked session that comes back after a clear from
-   * resurrecting it. Pending tool calls are NOT swept: a parked call is work a
-   * backend still owes an answer for, and a clear is not an interrupt — the
-   * refusal below is what keeps the two apart.
+   * Pending tool calls are NOT swept: a parked call is work a backend still owes
+   * an answer for, and a clear is not an interrupt.
    */
   async clearContext(): Promise<void> {
     if (this.#status === 'closed' || this.#status === 'failed') {
@@ -753,15 +689,13 @@ export class AiSdkRunner implements Runner {
     }
   }
 
-  /** See `Runner.eventAt`. A linear scan: the one caller is a reader pressing
-   * "show everything" on one row, so a per-runner seq index would be a map
-   * maintained on every emit to save a walk nobody makes twice a minute. */
+  /** See `Runner.eventAt`. */
   eventAt(seq: number): SessionEvent | undefined {
-    return this.#events.find((event) => event.seq === seq)
+    return this.#log.at(seq)
   }
 
   subscribe(listener: SessionEventListener, afterSeq = 0, options?: SubscribeOptions): () => void {
-    return this.#subscribers.subscribe(this.#events, listener, afterSeq, options, this.#resetSeq)
+    return this.#subscribers.subscribe(this.#log.events, listener, afterSeq, options, this.#log.resetSeq)
   }
 
   #scheduleTurn(): void {
@@ -1248,18 +1182,6 @@ export class AiSdkRunner implements Runner {
     return (model as { modelId?: string }).modelId
   }
 
-  #title(): string | undefined {
-    const metaTitle = this.#config.meta?.title
-    if (typeof metaTitle === 'string' && metaTitle.length > 0) {
-      return metaTitle
-    }
-    const prompt = this.#config.prompt
-    if (!prompt) {
-      return undefined
-    }
-    return prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt
-  }
-
   /**
    * This session's MCP servers, as the host assembled them.
    *
@@ -1272,46 +1194,28 @@ export class AiSdkRunner implements Runner {
     return (await this.#config.reportMcpServers?.()) ?? []
   }
 
-  /** Host-facing rename: writes `meta.title`, which `#title()` prefers. Clearing
-   * it (undefined) restores the derived title. The engine is never told. */
   setTitle(title: string | undefined): void {
-    const meta = { ...this.#config.meta }
-    if (title) {
-      meta.title = title
-    } else {
-      delete meta.title
-    }
-    this.#config = { ...this.#config, meta }
+    this.#config = withTitle(this.#config, title)
   }
 
   #setStatus(status: SessionStatus, detail?: string): void {
-    if (this.#status === status) {
+    // Deduped on the (status, detail) PAIR, as SessionRunner does: deduping on
+    // status alone swallows a new detail for an unchanged status, which is
+    // exactly the update a detail exists to carry. No caller here passes one
+    // yet, so this is the cheap moment to agree with the other engines.
+    if (this.#status === status && this.#statusDetail === detail) {
       return
     }
     if (this.#status === 'closed' || this.#status === 'failed') {
       return
     }
     this.#status = status
+    this.#statusDetail = detail
     this.#emit({ type: 'status_changed', status, detail })
   }
 
   #emit(body: SessionEventBody): void {
-    const event: SessionEvent = { ...body, seq: ++this.#seq, ts: Date.now() }
-    this.#lastActivityAt = event.ts
-    // Rows, not events: what a client diffs to know how much it missed.
-    this.#activityCount += transcriptActivity(body)
-    // The list's copy of the reading the transcript already has. Folded here
-    // rather than at the point it is fetched, so every producer — and any
-    // future one — passes through the same rule.
-    this.#contextUsage = contextReading(body) ?? this.#contextUsage
-    // A reset retires the conversation the window described; the old fill is
-    // not this conversation's, exactly as the transcript state clears it.
-    if (body.type === 'conversation_reset') {
-      this.#resetSeq = event.seq
-      this.#contextUsage = undefined
-    }
-    this.#events.push(event)
-    this.#subscribers.emit(event)
+    this.#subscribers.emit(this.#log.append(body))
   }
 }
 

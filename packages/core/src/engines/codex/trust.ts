@@ -1,50 +1,14 @@
 /**
  * Codex project trust: will this session's cwd get its `.codex/config.toml`?
+ * Codex layers it only for a project trusted in `$CODEX_HOME/config.toml`, and the
+ * app-server surface has no trust prompt — so an untrusted project's config, MCP
+ * servers included, is silently ignored, and the runner asks this module at
+ * session start so the transcript can say so. Discovery, per-layer trust,
+ * canonicalization and the sandbox-scoped gate: docs/GOTCHAS.md §Codex engine.
  *
- * Codex only layers a project's `.codex/config.toml` onto the operator's base
- * config when the project is *trusted* (a `[projects."<path>"]
- * trust_level = "trusted"` entry in `$CODEX_HOME/config.toml`), and the
- * app-server surface has no trust prompt — that lives in the TUI. So under
- * WorkerDeck an untrusted project's config, MCP servers included, is silently
- * ignored: no error, no notice, servers just missing. The runner asks this
- * module at session start whether that is about to happen, so the transcript
- * can say so.
- *
- * Semantics, all measured against both the bundled 0.146.0 and 0.149.0
- * (2026-08-22, via `codex mcp list` from probe cwds and via `thread/start` +
- * `mcpServerStatus/list` on the app-server surface — identical answers):
- *
- * - **Discovery**: config layers come from the cwd and its ancestors up to and
- *   including the nearest directory containing `.git` (dir or file). With no
- *   git anywhere above, the cwd alone is consulted. Directories above the
- *   nearest git root never contribute, trusted or not.
- * - **Trust per layer**: an exact entry for the layer's own canonical path
- *   decides (an explicit `"untrusted"` beats inherited trust); without one the
- *   layer inherits from the chain's git root — trusted iff the git root has a
- *   trusted entry, where a linked worktree's root also counts its main
- *   repository's entry (the `.git` file's gitdir names it). A trusted
- *   mid-chain directory does NOT trust its children, and plain path
- *   containment without git confers nothing.
- * - **Canonical paths**: codex matches entries against the canonicalized cwd —
- *   a macOS `/tmp/...` entry never matches the `/private/tmp/...` it points
- *   at, while the reverse spelling works (and the app-server canonicalizes its
- *   `cwd` param too). Both sides here are realpath'd, which can only err
- *   toward silence.
- * - **The gate is sandbox-scoped**: `thread/start` under `workspace-write` or
- *   `danger-full-access` (permission modes `acceptEdits`/`bypassPermissions`)
- *   WRITES the trust entry itself and loads the config — only `read-only`
- *   (mode `default`) leaves the project untrusted and the config ignored. A
- *   later `turn/start` with a wider sandboxPolicy does not heal the thread
- *   (measured): the caller probes `default`-mode sessions only, and the notice
- *   stays true for the session it opens.
- * - `trust_level`'s vocabulary is exactly `trusted`/`untrusted`; any other
- *   value fails codex's bootstrap outright ("unknown variant"), so a config
- *   carrying one probes silent — that session announces its own failure.
- *
- * The correctness bar for every degrade path: a FALSE notice — warning about a
- * project codex actually trusts — is worse than a missed one. The narrow TOML
- * reader below refuses (→ silence) anything it cannot interpret with
- * certainty, rather than guessing.
+ * The bar for every degrade path: a FALSE notice — warning about a project codex
+ * actually trusts — is worse than a missed one, so the narrow TOML reader below
+ * refuses (→ silence) anything it cannot interpret with certainty.
  */
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'

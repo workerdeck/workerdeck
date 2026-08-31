@@ -1,28 +1,16 @@
 import type { ModelCatalog } from '../adapter.ts'
 
 /**
- * The Claude engine's model catalog — what a create form offers before any
- * session has run.
+ * The Claude engine's model catalog — the create-form truth, before any session
+ * has run; the live `capabilities` event stays the in-session truth (both are
+ * load-bearing: docs/GOTCHAS.md §Claude engine). `defaultModel` is deliberately
+ * absent (a claude profile's default is the operator's CLI config), and
+ * hand-maintained older-model rows omit `reasoningEfforts`.
  *
  * **Refresh procedure** (release checklist): run `supportedModels()` on a
- * throwaway SDK query (no tokens spent) and re-apply the shaping rules of
- * `modelOptionsFromSdk` (`src/normalize.ts`) at authoring time: drop the
- * `default` sentinel row, derive display names from resolved ids where
- * unambiguous, mark the newest of each family `primary`, sort by family rank.
- * A unit test replays the raw extraction through `modelOptionsFromSdk` and
- * asserts these rows match, so the rules cannot drift.
- *
- * Two things the live `capabilities` event can never offer:
- * - rows for **older models** the CLI no longer reports (hand-maintained, the
- *   accepted cost of a static catalog; the CLI silently downgrades an effort a
- *   model doesn't support, so `reasoningEfforts` is omitted on them and the
- *   engine default set applies);
- * - an answer on a **cold server**. The live event still exists and remains
- *   the in-session truth for the model switcher; this catalog is the
- *   create-form truth.
- *
- * `defaultModel` is deliberately NOT here: a claude profile's default is the
- * operator's CLI config, unknowable statically.
+ * throwaway SDK query (no tokens spent) and re-apply `modelOptionsFromSdk`'s
+ * shaping rules (`src/lib/normalize.ts`) at authoring time; a unit test replays
+ * the raw extraction through it and asserts these rows match.
  */
 export const CLAUDE_CATALOG: ModelCatalog = {
   provenance:

@@ -62,21 +62,12 @@ export interface Runner {
   info(): SessionInfo
   /** Replay buffered events with seq > afterSeq, then deliver live events. Returns unsubscribe.
    *
-   * All three filters are opt-in and defaults must stay off; the stored log is
-   * never touched (full story: docs/GOTCHAS.md §Attach replay).
-   *
-   * `coalesceReplay` drops state readings superseded later in the same replay —
-   * only sound for a last-write-wins consumer; `parking.ts` (subscribed from
-   * seq 0) branches on `status_changed` instead. Replay-only.
-   *
-   * `truncateResults` delivers an oversized `tool_result` block as its head plus
-   * markers ({@link TOOL_RESULT_HEAD_CHARS}), the rest one fetch away. The
-   * opt-in must be issued by the unit that renders, or a head shows as though
-   * it were the whole result. Replay-only.
-   *
-   * `imageRefs` replaces base64 image parts with `image_ref` addresses, bytes
-   * one REST fetch away. Same renderer-issued rule, but it applies to **live
-   * events as well as replay** — the client's one render path is ref-then-fetch. */
+   * All three filters are opt-in, default off, and never touch the stored log.
+   * `coalesceReplay` (sound only for a last-write-wins consumer) and
+   * `truncateResults` are replay-only; `imageRefs` applies to live events too.
+   * The two that address bytes away must be opted into by the unit that
+   * *renders*, or a head shows as though it were the whole result.
+   * Full story: docs/GOTCHAS.md §Attach replay. */
   subscribe(
     listener: SessionEventListener,
     afterSeq?: number,

@@ -14,9 +14,6 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 import {
   ENGINE_CAPABILITIES,
-  contextReading,
-  type ContextReading,
-  transcriptActivity,
   type CreateSessionRequest,
   type McpServerStatusInfo,
   type PermissionMode,
@@ -39,7 +36,9 @@ import {
   toApiMessage,
 } from '../../lib/normalize.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
+import { EventLog } from '../../lib/event-log.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
+import { hostTitle, sessionTitle, withTitle } from '../../lib/title.ts'
 import { SubagentTracker } from './subagents.ts'
 
 export type QueryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }) => Query
@@ -88,17 +87,8 @@ export class SessionRunner implements Runner {
   #config: SessionRunnerConfig
   /** {@link SessionRunnerConfig.cwd}, checked once in the constructor. */
   readonly #cwd: string
-  #events: SessionEvent[] = []
+  #log = new EventLog()
   #subscribers = new SubscriberSet()
-  #seq = 0
-  /** Latest context-window reading, folded in the emit path so `GET /sessions`
-   * answers it without an attach (`SessionInfo.contextUsage`). */
-  #contextUsage: ContextReading | undefined
-  #activityCount = 0
-  /** Seq of the latest `conversation_reset`, 0 when none. The log is never
-   * truncated — state-bearing events are emitted once and must replay — but
-   * `subscribe()` skips transcript content strictly below this mark. */
-  #resetSeq = 0
   #status: SessionStatus = 'starting'
   #statusDetail: string | undefined
   #sdkSessionId: string | undefined
@@ -115,7 +105,6 @@ export class SessionRunner implements Runner {
   #subagents = new SubagentTracker()
   #totalCostUsd: number | undefined
   #numTurns: number | undefined
-  #lastActivityAt: number | undefined
   #input = new InputQueue()
   #query: Query | undefined
   #capabilitiesEmitted = false
@@ -151,7 +140,7 @@ export class SessionRunner implements Runner {
   }
 
   get lastSeq(): number {
-    return this.#seq
+    return this.#log.seq
   }
 
   /** 'oauth' = claude.ai subscription credentials; other values are API-key provenance. */
@@ -179,48 +168,22 @@ export class SessionRunner implements Runner {
       canBypassPermissions: this.#config.permissionMode === 'bypassPermissions' || this.#config.allowDangerouslySkipPermissions === true,
       apiKeySource: this.#apiKeySource,
       createdAt: this.createdAt,
-      lastSeq: this.#seq,
-      activityCount: this.#activityCount,
-      contextUsage: this.#contextUsage,
+      lastSeq: this.#log.seq,
+      activityCount: this.#log.activityCount,
+      contextUsage: this.#log.contextUsage,
       pendingPermissionCount: this.#pending.size,
       subagents: this.#subagents.list(),
       meta: this.#config.meta,
       scope: this.#config.scope,
-      title: this.#title(),
+      title: sessionTitle(this.#config, this.#engineTitle),
       totalCostUsd: this.#totalCostUsd,
       numTurns: this.#numTurns,
-      lastActivityAt: this.#lastActivityAt,
+      lastActivityAt: this.#log.lastActivityAt,
     }
   }
 
-  /** Most-deliberate first: the host's rename (`meta.title`), the CLI's own title,
-   * then the first prompt truncated. A person's rename must never be overwritten
-   * by a model — see `#fetchEngineTitle`. */
-  #title(): string | undefined {
-    const metaTitle = this.#config.meta?.title
-    if (typeof metaTitle === 'string' && metaTitle.length > 0) {
-      return metaTitle
-    }
-    if (this.#engineTitle) {
-      return this.#engineTitle
-    }
-    const prompt = this.#config.prompt
-    if (!prompt) {
-      return undefined
-    }
-    return prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt
-  }
-
-  /** Host-facing rename: writes `meta.title`, which `#title()` prefers. Clearing
-   * it (undefined) restores the derived title. The engine is never told. */
   setTitle(title: string | undefined): void {
-    const meta = { ...this.#config.meta }
-    if (title) {
-      meta.title = title
-    } else {
-      delete meta.title
-    }
-    this.#config = { ...this.#config, meta }
+    this.#config = withTitle(this.#config, title)
   }
 
   /** Begin the session. Idempotent; returns the run promise (resolves when the query ends). */
@@ -360,10 +323,9 @@ export class SessionRunner implements Runner {
     this.#setStatus('closed')
   }
 
-  /** See `Runner.eventAt`. A linear scan on purpose: the one caller is a reader
-   * pressing "show everything" on one row. */
+  /** See `Runner.eventAt`. */
   eventAt(seq: number): SessionEvent | undefined {
-    return this.#events.find((event) => event.seq === seq)
+    return this.#log.at(seq)
   }
 
   /**
@@ -376,7 +338,7 @@ export class SessionRunner implements Runner {
    * what clears a reconnecting client still holding pre-reset rows.
    */
   subscribe(listener: SessionEventListener, afterSeq = 0, options?: SubscribeOptions): () => void {
-    return this.#subscribers.subscribe(this.#events, listener, afterSeq, options, this.#resetSeq)
+    return this.#subscribers.subscribe(this.#log.events, listener, afterSeq, options, this.#log.resetSeq)
   }
 
   async #run(): Promise<void> {
@@ -621,8 +583,7 @@ export class SessionRunner implements Runner {
    * fallback before a session has a real title). Best-effort throughout.
    */
   async #fetchEngineTitle(): Promise<void> {
-    const metaTitle = this.#config.meta?.title
-    if (typeof metaTitle === 'string' && metaTitle.length > 0) {
+    if (hostTitle(this.#config.meta)) {
       return
     }
     const sdkSessionId = this.#sdkSessionId
@@ -830,21 +791,9 @@ export class SessionRunner implements Runner {
   }
 
   #emit(body: SessionEventBody): void {
-    const event: SessionEvent = { ...body, seq: ++this.#seq, ts: Date.now() }
-    this.#lastActivityAt = event.ts
-    // Monotonic across a conversation_reset on purpose: it is an unread cursor,
-    // not an item count (see SessionInfo.activityCount).
-    this.#activityCount += transcriptActivity(body)
-    // Folded here, not at the fetch sites, so every producer passes the same rule.
-    this.#contextUsage = contextReading(body) ?? this.#contextUsage
-    if (body.type === 'conversation_reset') {
-      this.#resetSeq = event.seq
-      // A reset retires the conversation the window described.
-      this.#contextUsage = undefined
-    }
+    const event = this.#log.append(body)
     // Before fan-out: a listener reading info() on this event must see it folded in.
     this.#subagents.observe(body, event.ts)
-    this.#events.push(event)
     this.#subscribers.emit(event)
   }
 }

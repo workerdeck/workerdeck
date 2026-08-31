@@ -9,23 +9,14 @@ import {
 } from '@workerdeck/protocol'
 
 /**
- * Which buffered events a coalesced replay should skip: everything superseded
- * by a later event with the same {@link replayCoalesceKey}.
+ * Which buffered events a coalesced replay should skip: everything superseded by
+ * a later event with the same {@link replayCoalesceKey}. A **backwards** scan, so
+ * the first occurrence of a key you meet is its last one.
  *
- * A **backwards** scan, keeping the first occurrence of each key — which is the
- * whole trick. Walking forwards would need a second pass to know which of the
- * fifty context readings was the last one; walking backwards, the first one you
- * meet *is* the last one, and everything after it (in scan order) is history.
- *
- * Note what this does **not** do: it never reorders and never touches an event
- * with no key. Transcript content is an ordered fold — a stream delta
- * accumulates onto a message, a tool result attaches to a call that came
- * earlier, a turn result finalizes — so it must arrive exactly as it was
- * emitted. Only last-write-wins *state* is eligible, and `replayCoalesceKey`
- * is where that judgement lives.
- *
- * `afterSeq` is honoured so the scan agrees with the caller's replay window: an
- * event the caller was never going to send must not suppress one it was.
+ * Never reorders, and never touches an event with no key — transcript content is
+ * an ordered fold, so only last-write-wins *state* is eligible and
+ * `replayCoalesceKey` is where that judgement lives. `afterSeq` is honoured so an
+ * event the caller was never going to send cannot suppress one it was.
  */
 export const staleReplaySeqs = (events: readonly SessionEvent[], afterSeq: number): Set<number> => {
   const stale = new Set<number>()
@@ -49,30 +40,16 @@ export const staleReplaySeqs = (events: readonly SessionEvent[], afterSeq: numbe
 }
 
 /**
- * The one replay body every runner delivers through. The rules, in the order
- * they are applied:
+ * The one replay body every runner delivers through; the five filters are
+ * documented in docs/GOTCHAS.md §Attach replay. Three invariants live here:
  *
- * 1. `afterSeq` — the caller already holds everything at or below it.
- * 2. `resetSeq` — transcript *content* strictly below the latest
- *    `conversation_reset` is skipped, so a re-attach cannot resurrect a cleared
- *    conversation while state events still replay. **Every engine that can emit
- *    a reset must track it and pass it** — a runner that forgets fails quietly:
- *    the end state looks right while every attach re-sends the whole cleared
- *    conversation.
- * 3. `coalesceReplay` — last-write-wins state readings superseded later in the
- *    same replay (`staleReplaySeqs`), plus everything `replayRetains` says the
- *    reducer reads and discards. Only sound for a last-write-wins consumer.
- * 4. `imageRefs` — a base64 image part becomes an `image_ref` address
- *    ({@link imagePartRef}). Applied **before** rule 5, because it stamps
- *    indices from the stored part array which rule 5 then reshapes; also the
- *    only rule that applies to the live path (see `SubscriberSet`).
- * 5. `truncateResults` — a huge `tool_result` block is delivered as its head
- *    plus the markers that say so. **Never mutates the stored event**: the live
- *    path, the parking snapshot and the fetch route all need the whole thing.
- *
- * The highest-seq event is delivered whatever rules 2 and 3 say — a client's
- * replay hold waits for `state.lastSeq` to reach the attach's and would
- * otherwise hang forever — but it is still truncated when rule 4 applies.
+ * - **Every engine that can emit a `conversation_reset` must track it and pass
+ *   `resetSeq`** — forgetting fails quietly, re-sending the cleared conversation
+ *   on every attach while the end state still looks right.
+ * - `imageRefs` runs **before** `truncateResults` (it stamps part indices from the
+ *   stored array, which truncation reshapes), and neither mutates a stored event.
+ * - The highest-seq event is never *dropped* (a replay hold waits for it), but it
+ *   is still truncated.
  */
 export const replaySlice = (
   events: readonly SessionEvent[],
@@ -217,20 +194,12 @@ const headOf = (content: ToolResultBlock['content'], chars: number): ToolResultB
 
 /**
  * A copy of `event` whose `tool_result` blocks carry `image_ref` addresses in
- * place of their base64 image parts — or `event` itself, unchanged and
- * un-copied, when it holds none. Same identity rule as
- * {@link truncateResultBlocks}, and it matters more here: an event carrying an
- * image at all is the exception, so the common path must not allocate.
- *
- * **Never mutates the stored event.** The log is what the parking snapshot
- * embeds, what `Runner.eventAt` reads, and therefore what the fetch route
- * serves the bytes back from — a drop that reached the log would 404 the very
- * lazy-load this rule promises.
- *
- * Indices are stamped from the **stored** array, which is why this runs *before*
- * truncation rather than after: `headOf` reshapes a block's parts, so an address
- * computed on its output would name the wrong part of the stored block. That
- * ordering is asserted in `replay-image-ref.test.ts`, not merely intended.
+ * place of their base64 image parts — or `event` itself, un-copied, when it holds
+ * none (an event carrying an image is the exception; the common path must not
+ * allocate). **Never mutates the stored event**: the log is what the fetch route
+ * serves the bytes back from, so a drop reaching it would 404 the lazy-load this
+ * rule promises. Indices are stamped from the **stored** part array, which is why
+ * this must run before truncation (`replay-image-ref.test.ts` asserts the order).
  */
 export const refImageParts = (event: SessionEvent): SessionEvent => {
   if (event.type !== 'user_message') {

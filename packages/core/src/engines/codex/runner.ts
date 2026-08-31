@@ -5,9 +5,6 @@ import { join } from 'node:path'
 import {
   ENGINE_CAPABILITIES,
   PROTOCOL_VERSION,
-  contextReading,
-  type ContextReading,
-  transcriptActivity,
   type ContentBlock,
   type CreateSessionRequest,
   type FilePatch,
@@ -25,7 +22,9 @@ import {
 import { attachmentKind, attachmentRef, normalizeMediaType, type AttachmentInput } from '../../lib/attachments.ts'
 import { parseUnifiedDiff } from '../../lib/patch.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
+import { EventLog } from '../../lib/event-log.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
+import { sessionTitle, withTitle } from '../../lib/title.ts'
 import { JsonRpcError } from './jsonrpc.ts'
 import { CodexAgentTracker, type CodexAgent } from './subagents.ts'
 import { untrustedProjectNotice } from './trust.ts'
@@ -111,17 +110,13 @@ type CodexWorkspaceWrite = {
 
 /**
  * The approval axis, stated as the GRANULAR object on both thread/start and
- * turn/start — never the string vocabulary, deliberately and unconditionally:
- * measured against 0.146.0, plain `'untrusted'` never asked anything (a
- * sandbox-violating write was silently refused, a safe echo auto-approved),
- * while the granular flags make a blocked action a real server→client
- * question. Granular policies are gated on `capabilities.experimentalApi` at
- * initialize; WorkerDeck declares it always and keeps NO non-experimental
- * fallback — a future binary that rejects either gate fails loudly (see
- * {@link CodexRunner.#ensureThread}) instead of quietly not asking.
+ * turn/start — never the string vocabulary, which never asks anything. Both gates
+ * (this object and `capabilities.experimentalApi` at initialize) are required and
+ * there is NO non-experimental fallback: a binary rejecting either fails the turn
+ * loudly rather than quietly not asking (docs/GOTCHAS.md §Codex engine).
  *
- * `default`/`acceptEdits` ask (all flags on — the sandbox axis above already
- * decides *what needs asking*); `bypassPermissions` asks nothing, same shape.
+ * `default`/`acceptEdits` ask (all flags on — the sandbox axis already decides
+ * *what needs asking*); `bypassPermissions` asks nothing, same shape.
  */
 const GRANULAR_ASK = {
   granular: {
@@ -158,22 +153,14 @@ const APPROVAL_POLICY_BY_MODE: Partial<Record<PermissionMode, object>> = {
 }
 
 /**
- * The THIRD approval axis — *who reviews*, independent of the sandbox axis and
- * the ask axis above. Codex's `approvalsReviewer` (thread/start and turn/start,
- * present since 0.146.0) routes every approval request either to the user
- * (`'user'`, codex's own default) or to `'auto_review'`: a prompted subagent
- * that gathers context and applies a risk framework before allowing or denying.
- * That is codex's "Approve for me" preset, and our `auto` mode is exactly it.
+ * The THIRD approval axis — *who reviews* — independent of the sandbox axis and
+ * the ask axis above; `auto` is codex's own "Approve for me" preset, a fixed
+ * OpenAI-prompted subagent with no configuration surface, unlike the Claude
+ * engine's operator-configurable `auto` (docs/GOTCHAS.md §Codex engine).
  *
- * Sent explicitly for EVERY mode rather than omitted for the default — a thread
- * inherits `approvalsReviewer` across turns ("this turn and subsequent turns"),
- * so leaving it unset would let a stale reviewer from an earlier turn survive a
- * mode switch back to a user-reviewed mode. Stating it every time makes the
- * mode the single source of truth.
- *
- * NOTE the asymmetry with the Claude engine's `auto`: that classifier is
- * operator-configurable (`autoMode.environment`, allow/soft_deny/hard_deny);
- * this reviewer has no configuration surface at all.
+ * Stated explicitly for EVERY mode rather than omitted for the default: a thread
+ * inherits `approvalsReviewer` across turns, so leaving it unset would let a stale
+ * `auto_review` survive a switch back to a user-reviewed mode.
  */
 const APPROVALS_REVIEWER_BY_MODE: Partial<Record<PermissionMode, string>> = {
   default: 'user',
@@ -307,14 +294,11 @@ const skillInfo = (skill: AppServerSkillMetadata): SkillInfo => {
  * Codex's MCP status → the protocol's, which is Claude Code's vocabulary
  * ('connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled').
  *
- * Two inputs, and the auth one wins where it applies: a server that started
- * fine but has no credential is *needs-auth*, not connected, because that is
- * the thing the operator has to act on. `notLoggedIn` is the only auth value
- * that means "unusable" — `unsupported` is the normal answer for a stdio server
- * that has no auth concept at all.
- *
- * A server with no startup notification yet is 'pending', not 'connected':
- * `mcpServerStatus/list` alone only proves it is *configured*.
+ * `notLoggedIn` wins over any startup status — a credential is what the operator
+ * must act on — and is the only auth value meaning "unusable" (`unsupported` is
+ * the normal answer for a stdio server). Otherwise tools imply connected and a
+ * server with neither notification nor tools stays 'pending'; the reasoning is in
+ * docs/GOTCHAS.md §MCP status.
  */
 const mcpStatusOf = (
   authStatus: string | undefined,
@@ -429,21 +413,13 @@ const offeredDecisions = (params: unknown): Set<string> | undefined => {
 }
 
 /**
- * Decision picking for the `{decision: …}` channels (commandExecution,
- * fileChange), honoring the request's own `availableDecisions`:
- *
- * - allow → 'accept' when offered (or when no list was stated). A request
- *   offering only the broader accepts ('acceptForSession',
- *   'acceptWithExecpolicyAmendment') yields undefined: a one-shot allow must
- *   not be silently widened into a session-wide or persistent policy grant, so
- *   the caller answers with the denial and says why.
- * - deny → 'decline', always: the response schema declares it unconditionally,
- *   and it was verified live against 0.146.0 answering a request whose
- *   availableDecisions omitted it — the turn completed cleanly. The list's job
- *   is to gate the accept variants, not to take "no, but keep going" away
- *   (its own alternative, 'cancel', would interrupt the whole turn).
- * - deny+interrupt → 'cancel' (codex's deny-and-interrupt) when offered;
- *   otherwise 'decline', and the caller interrupts the turn itself.
+ * Decision picking for the `{decision: …}` channels, honoring the request's own
+ * `availableDecisions` — which gates the ACCEPT side only (docs/GOTCHAS.md §Codex
+ * engine). A one-shot allow is never widened into `acceptForSession` or an
+ * execpolicy amendment, so an allow with no plain `accept` on offer yields
+ * undefined and the caller answers with the denial instead. `decline` is sent even
+ * when unlisted (the response schema declares it unconditionally, verified live);
+ * `cancel` — codex's deny-and-interrupt — is only for deny+interrupt.
  */
 const pickDecision = (behavior: 'allow' | 'deny', interrupt: boolean, offered: Set<string> | undefined): string | undefined => {
   const has = (name: string) => !offered || offered.has(name)
@@ -796,27 +772,10 @@ export class CodexRunner implements Runner {
   #config: CodexRunnerConfig
   /** {@link CodexRunnerConfig.cwd}, checked once in the constructor. */
   readonly #cwd: string
-  #events: SessionEvent[] = []
+  #log = new EventLog()
   #subscribers = new SubscriberSet()
-  #seq = 0
-  /**
-   * Latest context-window reading, retained from the last `context_usage` this
-   * runner emitted so `GET /sessions` can answer it without an attach — see
-   * `SessionInfo.contextUsage`. Folded in the emit path, so it is by
-   * construction the same number the transcript last drew.
-   */
-  #contextUsage: ContextReading | undefined
-  #activityCount = 0
-  /**
-   * Seq of the latest `conversation_reset` event, 0 when none. The log itself is
-   * never truncated — it still carries the state-bearing events (`capabilities`,
-   * `system_init`, …) a fresh attacher depends on and which are not re-emitted —
-   * but `subscribe()` skips transcript *content* strictly below this mark, so a
-   * replay does not resurrect a cleared conversation. A later reset supersedes
-   * an earlier one by overwriting it.
-   */
-  #resetSeq = 0
   #status: SessionStatus = 'starting'
+  #statusDetail: string | undefined
   #sdkSessionId: string | undefined
   #model: string | undefined
   #permissionMode: PermissionMode
@@ -837,7 +796,6 @@ export class CodexRunner implements Runner {
   #threadLoaded = false
   #numTurns = 0
   #totalCostUsd: number | undefined
-  #lastActivityAt: number | undefined
   #started = false
   #closed = false
   /** Session temp dir for image attachments (`localImage` takes host paths). */
@@ -937,7 +895,7 @@ export class CodexRunner implements Runner {
   }
 
   get lastSeq(): number {
-    return this.#seq
+    return this.#log.seq
   }
 
   get pendingApprovals(): PermissionRequest[] {
@@ -957,42 +915,22 @@ export class CodexRunner implements Runner {
       permissionMode: this.#permissionMode,
       canBypassPermissions: true,
       createdAt: this.createdAt,
-      lastSeq: this.#seq,
-      activityCount: this.#activityCount,
-      contextUsage: this.#contextUsage,
+      lastSeq: this.#log.seq,
+      activityCount: this.#log.activityCount,
+      contextUsage: this.#log.contextUsage,
       pendingPermissionCount: this.#approvals.size,
       meta: this.#config.meta,
       scope: this.#config.scope,
-      title: this.#title(),
+      title: sessionTitle(this.#config),
       totalCostUsd: this.#totalCostUsd,
       numTurns: this.#numTurns || undefined,
-      lastActivityAt: this.#lastActivityAt,
+      lastActivityAt: this.#log.lastActivityAt,
       subagents: this.#agents.list(),
     }
   }
 
-  #title(): string | undefined {
-    const metaTitle = this.#config.meta?.title
-    if (typeof metaTitle === 'string' && metaTitle.length > 0) {
-      return metaTitle
-    }
-    const prompt = this.#config.prompt
-    if (!prompt) {
-      return undefined
-    }
-    return prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt
-  }
-
-  /** Host-facing rename: writes `meta.title`, which `#title()` prefers. Clearing
-   * it (undefined) restores the derived title. The engine is never told. */
   setTitle(title: string | undefined): void {
-    const meta = { ...this.#config.meta }
-    if (title) {
-      meta.title = title
-    } else {
-      delete meta.title
-    }
-    this.#config = { ...this.#config, meta }
+    this.#config = withTitle(this.#config, title)
   }
 
   start(): Promise<void> {
@@ -1027,18 +965,12 @@ export class CodexRunner implements Runner {
   }
 
   /**
-   * One-time transcript notice for the codex trust gap: a `default`-mode
-   * session (read-only sandbox) on an untrusted cwd has its
-   * `.codex/config.toml` — MCP servers included — silently ignored, and the
-   * app-server surface has no trust prompt to say so (the TUI's prompt is
-   * where the entry normally gets written). `acceptEdits`/`bypassPermissions`
-   * sessions are exempt because their `thread/start` (workspace-write /
-   * danger-full-access sandbox) writes the trust entry itself and loads the
-   * config — measured against 0.146.0 and 0.149.0; a notice there would be
-   * false. Emitted as `session_error`, which both clients render as an inline
-   * notice while the session keeps running (the backfill-history precedent),
-   * so nothing new rides the wire. Every degrade path is silence: a false
-   * warning on a trusted project is worse than a missed one.
+   * One-time transcript notice for the codex trust gap: a `default`-mode session
+   * on an untrusted cwd has its `.codex/config.toml` silently ignored. The gate is
+   * sandbox-scoped, so wider modes are exempt — their `thread/start` writes the
+   * trust entry itself and a notice there would be *false* (docs/GOTCHAS.md §Codex
+   * engine). Emitted as `session_error`, which both clients render inline while the
+   * session keeps running; every degrade path is silence.
    */
   #warnUntrustedProject(): void {
     if (this.#permissionMode !== 'default') {
@@ -1065,18 +997,14 @@ export class CodexRunner implements Runner {
   }
 
   /**
-   * List skills over a **throwaway** connection, for a session with nothing else
-   * to do yet.
+   * List skills over a **throwaway** connection, for a session with nothing else to
+   * do yet: `skills/list` needs a live child but not a thread, so this spawns one,
+   * asks, and closes it rather than parking a codex process behind every session
+   * someone created and never typed into (docs/GOTCHAS.md §Skills).
    *
-   * `skills/list` needs a live child but not a thread, so this spawns one, asks,
-   * and closes it — rather than bringing up the session's own child early and
-   * leaving a codex process parked behind every session someone created and
-   * never typed into. The session's real connection re-lists when it arrives;
-   * the fingerprint compare in {@link #refreshSkills} makes that a no-op.
-   *
-   * Entirely best-effort and never awaited: a missing binary, a failed spawn or
-   * a rejected handshake here must not turn a session that has not started into
-   * a session that failed.
+   * Entirely best-effort and never awaited — a missing binary, a failed spawn or a
+   * rejected handshake must not turn a session that has not started into one that
+   * failed.
    */
   async #probeSkills(): Promise<void> {
     let connection: AppServerConnection | undefined
@@ -1230,33 +1158,16 @@ export class CodexRunner implements Runner {
   }
 
   /**
-   * Reset the conversation: a **fresh thread on the same session**.
+   * Reset the conversation: a **fresh thread on the same session**, because codex
+   * has no clear/reset RPC — the dead-child path minus the resume. The old thread
+   * is NOT deleted; it stays in CODEX_HOME and stays resumable.
    *
-   * Codex has no clear/reset RPC — `thread/compact/start` summarises and
-   * continues, `thread/fork` makes a second thread, and neither is "same
-   * session, empty context". So the analog is to stop resuming the old thread
-   * and start a new one, which is the path a dead child already takes minus the
-   * resume. The old thread is NOT deleted: it stays in CODEX_HOME and stays
-   * resumable from `GET /sdk-sessions`.
-   *
-   * Two things it does on the way through, both mirroring the Claude engine's
-   * SDK-driven reset (`engines/claude/runner.ts`):
-   *
-   * 1. **The new thread id is adopted before `conversation_reset` is emitted**,
-   *    whenever a child is already up — the eager `thread/start` costs no
-   *    tokens and no model call, and it is what keeps the dormant record from
-   *    ever naming the conversation that was just cleared. With no child there
-   *    is nothing to start against and the id is simply dropped; the parking
-   *    service treats a resumable session with no engine session id as one with
-   *    nothing to come back to, and forgets the stale record.
-   * 2. **The context reading is retired**, in `#emit`'s `conversation_reset`
-   *    arm. Codex cannot re-poll it the way Claude does — the only source is
-   *    `thread/tokenUsage/updated`, which arrives *during* a turn — so there is
-   *    no reading at all until the next turn runs, and the protocol's rule
-   *    applies: render nothing rather than a stale ring or a 0%.
-   *
-   * The turn counter stays monotonic across this, on purpose (it is an unread
-   * cursor, not an item count), and so does `activityCount` — `#emit` owns both.
+   * The new thread id is adopted (and rolled back on failure) *before*
+   * `conversation_reset` is emitted whenever a child is up, so a dormant record
+   * written in between can never name the cleared conversation; with no child there
+   * is no id to adopt and the parking service forgets the stale record. The context
+   * reading is retired by the event log's `conversation_reset` fold and cannot be
+   * re-polled here. Everything this rides on: docs/GOTCHAS.md §Codex engine.
    */
   async clearContext(): Promise<void> {
     if (this.#closed) {
@@ -1419,15 +1330,13 @@ export class CodexRunner implements Runner {
     this.#setStatus('closed')
   }
 
-  /** See `Runner.eventAt`. A linear scan: the one caller is a reader pressing
-   * "show everything" on one row, so a per-runner seq index would be a map
-   * maintained on every emit to save a walk nobody makes twice a minute. */
+  /** See `Runner.eventAt`. */
   eventAt(seq: number): SessionEvent | undefined {
-    return this.#events.find((event) => event.seq === seq)
+    return this.#log.at(seq)
   }
 
   subscribe(listener: SessionEventListener, afterSeq = 0, options?: SubscribeOptions): () => void {
-    return this.#subscribers.subscribe(this.#events, listener, afterSeq, options, this.#resetSeq)
+    return this.#subscribers.subscribe(this.#log.events, listener, afterSeq, options, this.#log.resetSeq)
   }
 
   #scheduleTurn(): void {
@@ -1435,23 +1344,14 @@ export class CodexRunner implements Runner {
   }
 
   /**
-   * Read `[sandbox_workspace_write]` as codex resolves it for this session's
-   * cwd, once per child, so {@link CodexRunner.#turnSandboxPolicy} can restate
-   * it verbatim.
+   * Read `[sandbox_workspace_write]` as codex resolves it for this session's cwd,
+   * once per child, so {@link CodexRunner.#turnSandboxPolicy} can restate it
+   * verbatim: `turn/start`'s sandbox policy is serde-defaulted field by field, so a
+   * bare `{type: 'workspaceWrite'}` silently resets the operator's `networkAccess`
+   * and `writableRoots` on every turn (docs/GOTCHAS.md §Codex engine).
    *
-   * Why this exists at all: `turn/start`'s object-form sandbox policy is
-   * serde-defaulted field by field, so `{type: 'workspaceWrite'}` bare means
-   * `networkAccess: false, writableRoots: []` NO MATTER what the operator
-   * configured — and we must keep sending the object every turn, because
-   * restating it is what makes a between-turns permission-mode switch take
-   * effect. Measured against 0.149.0 with `network_access = true` set: the
-   * bare object produced `curl: (6) Could not resolve host`, the fully-stated
-   * object and an omitted policy both produced `200`. `read-only` is not
-   * affected — the setting is scoped to workspace-write, as its name says, and
-   * a read-only sandbox has no network either way.
-   *
-   * A failure here is not fatal: `#workspaceWrite` stays undefined and we send
-   * the bare shape, which is exactly the behaviour that shipped before.
+   * A failure here is not fatal — `#workspaceWrite` stays undefined and the bare
+   * shape goes out, which is what shipped before.
    */
   async #readWorkspaceWrite(connection: AppServerConnection): Promise<void> {
     this.#workspaceWrite = undefined
@@ -1607,17 +1507,13 @@ export class CodexRunner implements Runner {
   /**
    * Re-read `skills/list` and publish it, if it changed.
    *
-   * **`cwds` is passed explicitly, and must be.** The schema documents the empty
-   * case as "the current session working directory", which reads like the
-   * thread's — it is not. Measured against 0.146.0: with no `cwds`, and *after*
-   * a `thread/start` carrying this session's cwd, the response comes back keyed
-   * to the app-server child's own process directory (for WorkerDeck, wherever
-   * the gateway was launched) and reports no repo-scoped skills at all. So a
-   * project's own `.codex/skills/**` were invisible until this argument existed.
+   * **`cwds` is passed explicitly, and must be**: the empty case is keyed to the
+   * app-server child's own process directory, not the thread's cwd, so a project's
+   * `.codex/skills/**` are invisible without it (docs/GOTCHAS.md §Skills).
    *
-   * Best-effort throughout. A binary too old to know the method, a broken
-   * manifest, a child that died mid-call — none of that is worth failing a
-   * session over, and the panel simply stays absent.
+   * Best-effort throughout — a binary too old to know the method, a broken
+   * manifest or a child that died mid-call leaves the panel absent, never fails
+   * the session.
    */
   async #refreshSkills(connection: AppServerConnection): Promise<void> {
     if (this.#skillsRefresh) {
@@ -1664,29 +1560,16 @@ export class CodexRunner implements Runner {
   }
 
   /**
-   * The session's MCP servers, live from the binary.
+   * The session's MCP servers, live from the binary: `mcpServerStatus/list` (what
+   * is configured, with each tool's full JSON Schema) merged with the
+   * `mcpServer/startupStatus/updated` notifications (which are up). Answers before
+   * the session has connected, over a throwaway child, for the same reason the
+   * skill list does — docs/GOTCHAS.md §MCP status.
    *
-   * Two sources merged, because codex splits them: `mcpServerStatus/list` says
-   * what is configured and what each server exposes (including every tool's
-   * full JSON Schema, which the Agent SDK does not give us), and the
-   * `mcpServer/startupStatus/updated` notifications say which of them are
-   * actually up.
-   *
-   * Answers **before the session has connected**, over a throwaway child, for
-   * the same reason the skill list does: a codex session spawns nothing until
-   * it has work, and a panel that said "no MCP servers configured" until the
-   * first turn would be stating something false about the operator's config.
-   * The request blocks until the servers are enumerated (measured: complete on
-   * the very first call), so there is no half-populated answer to race.
-   *
-   * Resolves undefined only when there is genuinely nothing to say — the
-   * session is closed, or the child could not be spoken to. The route turns
-   * that into a 501.
-   *
-   * **Listing only.** There is no per-server reconnect or toggle on this
-   * transport — hence no `reconnectMcpServer`/`setMcpServerEnabled` here, and
-   * `ENGINE_CAPABILITIES.codex.mcpServerActions: false` so clients render the
-   * panel read-only instead of offering buttons that cannot work.
+   * Resolves undefined only when there is nothing to say (closed session, or the
+   * child could not be spoken to); the route turns that into a 501. **Listing
+   * only** — this transport has no per-server reconnect or toggle, which is why
+   * `ENGINE_CAPABILITIES.codex.mcpServerActions` is false.
    */
   async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
     if (this.#closed) {
@@ -1961,19 +1844,14 @@ export class CodexRunner implements Runner {
     if (this.#closed) {
       return
     }
-    // A sub-agent runs in its OWN thread, and its notifications arrive on this
-    // same connection carrying that thread's id. Turn lifecycle and token usage
-    // are per-thread facts and must not be read off a child's: measured against
-    // 0.146.0, a spawned agent's `turn/completed` arrives while the root turn is
-    // still running, and taking it ended the session's turn early — reporting
-    // the sub-agent's last line as the session's result and dropping everything
-    // the root said afterwards (`_docs/codex-subagent-trace.jsonl`). Items and
-    // deltas are deliberately NOT filtered here: a sub-agent's work belongs in
-    // the transcript, attributed to its agent by `#agentFor`. A child thread's
-    // turn lifecycle still means something — to the AGENT, not the session:
-    // its `turn/completed` is the agent's completion signal (there is no
-    // 'completed' kind on `subAgentActivity`), and a fresh `turn/started` on a
-    // settled agent's thread means it is working again.
+    // Turn lifecycle and token usage are per-thread facts and must be read off the
+    // ROOT thread only — a sub-agent's `turn/completed` arrives while the root turn
+    // is still running, and taking it ends the session's turn early
+    // (docs/GOTCHAS.md §Codex engine). Items and deltas are deliberately NOT
+    // filtered: a sub-agent's work belongs in the transcript, attributed by
+    // `#agentFor`. A child's lifecycle still means something to the AGENT — its
+    // `turn/completed` is the agent's completion signal (`subAgentActivity` has no
+    // 'completed' kind), and a `turn/started` means a settled agent works again.
     if (THREAD_SCOPED_NOTIFICATIONS.has(method) && !this.#isRootThread(params)) {
       if (method === 'turn/completed') {
         this.#settleAgentTurn(params)
@@ -2009,20 +1887,16 @@ export class CodexRunner implements Runner {
   }
 
   /**
-   * The agent behind a notification's `threadId` — the attribution every item
-   * and delta handler asks before emitting, so two agents streaming
-   * concurrently into this one connection come apart again by the id each
-   * frame carries, never by any mutable "current agent".
+   * The agent behind a notification's `threadId` — the attribution every item and
+   * delta handler asks before emitting, so concurrent agents on this one connection
+   * come apart by the id each frame carries, never by a mutable "current agent".
    *
-   * A non-root thread with no record still gets one: a thread emitting items on
-   * this connection *is* an agent, whatever announced it (codex runs threads of
-   * its own for review/compact, and a `subAgentActivity` could in principle be
-   * missed) — the claude tracker's nested-event fallback, on a stronger signal.
-   * The minted record is label-less and its anchor is authored here, because an
-   * attributed event whose parent id matches no top-level `tool_use` would
-   * render inline rather than as a frame; a late `started` edge fills the name
-   * in. Root-thread traffic — and, defensively, the pre-thread shapes with no
-   * id at all — stays unattributed (`undefined`).
+   * A non-root thread with no record still gets one: a thread emitting items *is*
+   * an agent, whatever announced it. The minted record is label-less and its anchor
+   * `tool_use` is authored here — an attributed event whose parent id matches no
+   * top-level call renders inline instead of as a frame — and a late `started` edge
+   * fills the name in. Root-thread traffic, and the pre-thread shapes with no id,
+   * stay unattributed.
    */
   #agentFor(params: unknown): CodexAgent | undefined {
     const threadId = this.#threadIdOf(params)
@@ -2802,21 +2676,14 @@ export class CodexRunner implements Runner {
   }
 
   /**
-   * Subscription windows, mapped onto the protocol's named vocabulary.
+   * Subscription windows, mapped onto the protocol's named vocabulary **by their
+   * measured duration** — codex reports windows positionally (`primary`/
+   * `secondary`) while `rateLimitType` is a name clients act on, so a duration with
+   * no name keeps a self-describing `window_<n>m` rather than being mislabelled
+   * (docs/GOTCHAS.md §Codex engine).
    *
-   * The shapes disagree: codex reports windows *positionally* (`primary` /
-   * `secondary`) with a length in minutes, while `RateLimitInfo.rateLimitType`
-   * is a name whose meaning clients already know — iOS labels `seven_day` as
-   * "Weekly" and derives the pace marker's denominator from it. Naming the
-   * window by its measured duration is therefore the honest mapping rather
-   * than a borrowed one: codex's primary window is 10080 minutes, which *is*
-   * seven days. A duration we have no name for keeps an explicit
-   * `window_<n>m` key — clients render it verbatim and simply draw no pace
-   * marker, which beats mislabeling it as a week.
-   *
-   * `status` is 'allowed' by construction (the session is running), matching
-   * `rateLimitEventsFromUsage`; codex's `rateLimitReachedType` is the one
-   * signal that a limit is actually biting, so it becomes 'rejected'.
+   * `status` is 'allowed' by construction, as in `rateLimitEventsFromUsage`;
+   * `rateLimitReachedType` is the one signal that turns it 'rejected'.
    */
   #emitRateLimits(limits: AppServerRateLimits | undefined | null): void {
     if (!limits) {
@@ -2876,13 +2743,18 @@ export class CodexRunner implements Runner {
   }
 
   #setStatus(status: SessionStatus, detail?: string): void {
-    if (this.#status === status) {
+    // Deduped on the (status, detail) PAIR, as SessionRunner does: deduping on
+    // status alone swallows a new detail for an unchanged status, which is
+    // exactly the update a detail exists to carry. No caller here passes one
+    // yet, so this is the cheap moment to agree with the other engines.
+    if (this.#status === status && this.#statusDetail === detail) {
       return
     }
     if (this.#status === 'closed' || this.#status === 'failed') {
       return
     }
     this.#status = status
+    this.#statusDetail = detail
     this.#emit({ type: 'status_changed', status, detail })
   }
 
@@ -2892,21 +2764,6 @@ export class CodexRunner implements Runner {
     if (this.#replayingHistory && (body.type === 'assistant_message' || body.type === 'user_message')) {
       body = { ...body, replay: true }
     }
-    const event: SessionEvent = { ...body, seq: ++this.#seq, ts: Date.now() }
-    this.#lastActivityAt = event.ts
-    // Rows, not events: what a client diffs to know how much it missed.
-    this.#activityCount += transcriptActivity(body)
-    // The list's copy of the reading the transcript already has. Folded here
-    // rather than at the point it is fetched, so every producer — and any
-    // future one — passes through the same rule.
-    this.#contextUsage = contextReading(body) ?? this.#contextUsage
-    // A reset retires the conversation the window described; the old fill is
-    // not this conversation's, exactly as the transcript state clears it.
-    if (body.type === 'conversation_reset') {
-      this.#resetSeq = event.seq
-      this.#contextUsage = undefined
-    }
-    this.#events.push(event)
-    this.#subscribers.emit(event)
+    this.#subscribers.emit(this.#log.append(body))
   }
 }

@@ -238,18 +238,13 @@ export const createEngineSession = (options: EngineSessionOptions): AiSdkRunner 
 }
 
 /**
- * Refuse to build a session whose profile names an MCP server that isn't there.
+ * Refuse to build a session whose profile names an MCP server that isn't there:
+ * `mcpServers` is a **declaration**, not a filter, and honouring it partially is
+ * the worst failure mode this engine has (docs/GOTCHAS.md §Tool trust).
  *
- * A profile's `mcpServers` list is a **declaration**, not a filter: an embedder
- * who wrote it meant the agent to have those tools. Honouring it partially is
- * the worst failure mode this engine has — the session starts, reports healthy,
- * and the agent apologises its way through every request that needed the server,
- * with one warning line in a log nobody is reading.
- *
- * With a {@link McpConnection} the check is exact (did this server connect?).
- * With a bare tool set all we can see is whether any tool carries the server's
- * namespace, so a genuinely tool-less server would trip it — the fix there is to
- * pass `mcp` rather than to weaken this.
+ * With a {@link McpConnection} the check is exact; with a bare tool set it is the
+ * cruder namespace one, so a genuinely tool-less server trips it — pass `mcp`
+ * rather than weakening this.
  */
 const requireDeclaredServers = (
   profileName: string,
@@ -318,11 +313,9 @@ export type McpConnection = {
  * must never be bridged to a browser. `@ai-sdk/mcp` is imported lazily and is an
  * optional dependency — an operator who wires no MCP servers never needs it.
  *
- * **A stateless MCP server must answer `GET` with 405.** The client opens the
- * SSE stream with a `GET` before it sends anything, and a POST-only server
- * mounted under a framework's default 404 makes the whole connect fail with an
- * error that names neither the method nor the route. This is the single most
- * common way an otherwise-correct MCP mount fails.
+ * **A stateless MCP server must answer `GET` with 405** — the client opens the
+ * SSE stream with a `GET` before it sends anything, and that is the single most
+ * common way an otherwise-correct mount fails (docs/GOTCHAS.md §Tool trust).
  */
 export const connectMcpTools = async (
   servers: Record<string, McpServerConfigWire>,
