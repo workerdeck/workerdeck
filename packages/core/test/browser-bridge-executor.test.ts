@@ -3,7 +3,7 @@ import type { ToolCallRequestFrame } from '@workerdeck/protocol'
 import { createVfs } from '@workerdeck/sandbox'
 import { BrowserBridgeExecutor, type ToolExecutionCall, type ToolExecutionResult } from '../src/index.ts'
 
-const harness = (options: { send?: () => boolean; timeoutMs?: number } = {}) => {
+function harness(options: { send?: () => boolean; timeoutMs?: number } = {}) {
   const sent: ToolCallRequestFrame[] = []
   const canceled: Array<{ executionId: string; reason: string }> = []
   const results: Array<{ executionId: string; result: ToolExecutionResult }> = []
@@ -19,15 +19,17 @@ const harness = (options: { send?: () => boolean; timeoutMs?: number } = {}) => 
   return { executor, sent, canceled, results }
 }
 
-const call = (overrides: Partial<ToolExecutionCall> = {}): ToolExecutionCall => ({
-  executionId: 'exec-1',
-  sessionId: 'sess-1',
-  tool: 'eval_script',
-  input: { script: '1+1' },
-  ...overrides,
-})
+function call(overrides: Partial<ToolExecutionCall> = {}): ToolExecutionCall {
+  return {
+    executionId: 'exec-1',
+    sessionId: 'sess-1',
+    tool: 'eval_script',
+    input: { script: '1+1' },
+    ...overrides,
+  }
+}
 
-const settle = async () => {
+async function settle() {
   await new Promise((r) => setTimeout(r, 0))
 }
 

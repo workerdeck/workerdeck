@@ -29,7 +29,7 @@ const MAX_REDIRECTS = 5
 
 type CacheEntry = { expiresAt: number; page: WebFetchResult }
 
-export const createWebFetch = (options: WebFetchOptions = {}): WebFetchFn => {
+export function createWebFetch(options: WebFetchOptions = {}): WebFetchFn {
   const fetchImpl = options.fetchImpl ?? fetch
   const maxContentBytes = options.maxContentBytes ?? 1024 * 1024
   const maxMarkdownBytes = options.maxMarkdownBytes ?? 50 * 1024
@@ -133,7 +133,7 @@ export const createWebFetch = (options: WebFetchOptions = {}): WebFetchFn => {
   }
 }
 
-const parseUrl = (raw: string): URL | undefined => {
+function parseUrl(raw: string): URL | undefined {
   try {
     const url = new URL(raw)
     return url.protocol === 'https:' || url.protocol === 'http:' ? url : undefined
@@ -144,7 +144,7 @@ const parseUrl = (raw: string): URL | undefined => {
 
 // Resolution happens here and again inside fetch — a DNS-rebinding TOCTOU this tier accepts;
 // operators who need pinning supply `fetchImpl` with a pinned agent.
-const denyReason = async (url: URL, allowedHosts: string[] | undefined): Promise<string | null> => {
+async function denyReason(url: URL, allowedHosts: string[] | undefined): Promise<string | null> {
   const host = url.hostname.toLowerCase()
   if (allowedHosts && allowedHosts.length > 0 && !hostMatches(host, allowedHosts)) {
     return `host not allowed: ${host}`
@@ -173,7 +173,7 @@ const denyReason = async (url: URL, allowedHosts: string[] | undefined): Promise
   return null
 }
 
-const hostMatches = (host: string, allowedHosts: string[]): boolean => {
+function hostMatches(host: string, allowedHosts: string[]): boolean {
   return allowedHosts.some((entry) => {
     const pattern = entry.trim().toLowerCase()
     if (!pattern) {
@@ -186,7 +186,7 @@ const hostMatches = (host: string, allowedHosts: string[]): boolean => {
   })
 }
 
-export const isPrivateAddress = (address: string): boolean => {
+export function isPrivateAddress(address: string): boolean {
   const ip = address.toLowerCase()
   if (ip.includes(':')) {
     if (ip === '::' || ip === '::1') {
@@ -221,7 +221,7 @@ export const isPrivateAddress = (address: string): boolean => {
   return a >= 224 // multicast + reserved
 }
 
-const readCapped = async (response: Response, maxBytes: number): Promise<string | undefined> => {
+async function readCapped(response: Response, maxBytes: number): Promise<string | undefined> {
   if (!response.body) {
     const text = await response.text()
     return text.length > maxBytes ? undefined : text
@@ -243,11 +243,11 @@ const readCapped = async (response: Response, maxBytes: number): Promise<string 
   return out + decoder.decode()
 }
 
-const looksLikeHtml = (body: string): boolean => {
+function looksLikeHtml(body: string): boolean {
   return /<(!doctype|html|head|body)[\s>]/i.test(body.slice(0, 1024))
 }
 
-export const htmlToMarkdown = (html: string): string => {
+export function htmlToMarkdown(html: string): string {
   let text = html
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<(script|style|noscript|svg|template|iframe)\b[\s\S]*?<\/\1>/gi, '')
@@ -280,11 +280,11 @@ export const htmlToMarkdown = (html: string): string => {
     .trim()
 }
 
-const stripTags = (html: string): string => {
+function stripTags(html: string): string {
   return decodeEntities(html.replace(/<[^>]+>/g, ''))
 }
 
-const decodeEntities = (text: string): string => {
+function decodeEntities(text: string): string {
   return text
     .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
     .replace(/&#x([\da-f]+);/gi, (_, code: string) => String.fromCodePoint(parseInt(code, 16)))

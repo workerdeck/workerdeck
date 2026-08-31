@@ -2,7 +2,7 @@ import { PassThrough } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 import { JsonRpcError, JsonRpcStdioConnection } from '../src/engines/codex/jsonrpc.ts'
 
-const harness = () => {
+function harness() {
   const toClient = new PassThrough() // server stdout → client input
   const fromClient = new PassThrough() // client output → server stdin
   const connection = new JsonRpcStdioConnection({ input: toClient, output: fromClient })

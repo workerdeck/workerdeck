@@ -3,7 +3,7 @@ import { dirname, join, resolve, sep } from 'node:path'
 
 const BARE_KEY = /[A-Za-z0-9_-]/
 
-const skipWs = (text: string, pos: number): number => {
+function skipWs(text: string, pos: number): number {
   let i = pos
   while (i < text.length && (text[i] === ' ' || text[i] === '\t')) {
     i++
@@ -13,7 +13,7 @@ const skipWs = (text: string, pos: number): number => {
 
 type Parsed<T> = { value: T; end: number } | undefined
 
-const parseBasicString = (text: string, pos: number): Parsed<string> => {
+function parseBasicString(text: string, pos: number): Parsed<string> {
   let out = ''
   let i = pos + 1
   while (i < text.length) {
@@ -61,7 +61,7 @@ const parseBasicString = (text: string, pos: number): Parsed<string> => {
   return undefined
 }
 
-const parseLiteralString = (text: string, pos: number): Parsed<string> => {
+function parseLiteralString(text: string, pos: number): Parsed<string> {
   const close = text.indexOf("'", pos + 1)
   if (close === -1) {
     return undefined
@@ -69,7 +69,7 @@ const parseLiteralString = (text: string, pos: number): Parsed<string> => {
   return { value: text.slice(pos + 1, close), end: close + 1 }
 }
 
-const parseKeyPath = (text: string, pos: number): Parsed<string[]> => {
+function parseKeyPath(text: string, pos: number): Parsed<string[]> {
   const keys: string[] = []
   let i = pos
   for (;;) {
@@ -102,7 +102,7 @@ const parseKeyPath = (text: string, pos: number): Parsed<string[]> => {
 
 // Returns the bracket depth carried onto the next line (0 = the value is complete); undefined
 // refuses the whole file rather than guess what codex would read.
-const scanValueLine = (text: string, pos: number, depth: number): { depth: number; value?: string } | undefined => {
+function scanValueLine(text: string, pos: number, depth: number): { depth: number; value?: string } | undefined {
   let i = skipWs(text, pos)
   if (depth === 0 && (text[i] === '"' || text[i] === "'")) {
     if (text.startsWith('"""', i) || text.startsWith("'''", i)) {
@@ -147,7 +147,7 @@ const scanValueLine = (text: string, pos: number, depth: number): { depth: numbe
   return { depth }
 }
 
-export const parseProjectTrustEntries = (source: string): Map<string, string> | undefined => {
+export function parseProjectTrustEntries(source: string): Map<string, string> | undefined {
   const entries = new Map<string, string>()
   let section: string[] = []
   let carryDepth = 0
@@ -224,7 +224,7 @@ export const parseProjectTrustEntries = (source: string): Map<string, string> | 
   return entries
 }
 
-const mainRepositoryTrusted = (gitRootDir: string, canonical: Map<string, string>): boolean => {
+function mainRepositoryTrusted(gitRootDir: string, canonical: Map<string, string>): boolean {
   const gitPath = join(gitRootDir, '.git')
   try {
     if (!statSync(gitPath).isFile()) {
@@ -249,7 +249,7 @@ const mainRepositoryTrusted = (gitRootDir: string, canonical: Map<string, string
   }
 }
 
-export const untrustedProjectNotice = (options: { cwd: string; codexHome: string }): string | undefined => {
+export function untrustedProjectNotice(options: { cwd: string; codexHome: string }): string | undefined {
   let cwd: string
   try {
     cwd = realpathSync(options.cwd)

@@ -36,7 +36,7 @@ const CAPABILITY_TOOLS = {
   deliverFiles: 'deliver_file',
 } as const satisfies Record<string, SessionCapability>
 
-export const createEngineSession = (options: EngineSessionOptions): AiSdkRunner => {
+export function createEngineSession(options: EngineSessionOptions): AiSdkRunner {
   const vfs = options.config.vfs ?? createVfs(options.config.restore ? options.config.restore.vfs : options.seedVfs)
   // The selector's arity picks the form: 0-arg selects once, 1-arg routes per call.
   const isPerCall = options.selectExecutor.length > 0
@@ -120,12 +120,12 @@ export const createEngineSession = (options: EngineSessionOptions): AiSdkRunner 
   return runner
 }
 
-const requireDeclaredServers = (
+function requireDeclaredServers(
   profileName: string,
   declared: string[] | undefined,
   mcp: McpConnection | undefined,
   tools: ToolSet | undefined,
-): void => {
+): void {
   if (!declared || declared.length === 0) {
     return
   }
@@ -151,7 +151,7 @@ const requireDeclaredServers = (
   )
 }
 
-const selectMcpTools = (tools: ToolSet | undefined, servers: string[] | undefined): ToolSet | undefined => {
+function selectMcpTools(tools: ToolSet | undefined, servers: string[] | undefined): ToolSet | undefined {
   if (!tools || servers === undefined) {
     return tools
   }
@@ -165,7 +165,7 @@ export type McpConnection = {
   close: () => Promise<void>
 }
 
-export const connectMcpTools = async (
+export async function connectMcpTools(
   servers: Record<string, McpServerConfigWire>,
   options: {
     // May fire more than once per server: a transport failure surfaces through the client's
@@ -173,7 +173,7 @@ export const connectMcpTools = async (
     onError?: (name: string, error: unknown) => void
     required?: boolean
   } = {},
-): Promise<McpConnection> => {
+): Promise<McpConnection> {
   const entries = Object.entries(servers)
   if (entries.length === 0) {
     return { tools: {}, servers: [], close: async () => {} }
@@ -221,7 +221,7 @@ export const connectMcpTools = async (
 }
 
 // Identity minus secrets: `headers` must never travel.
-const describeServer = (server: McpServerConfigWire): Pick<McpServerStatusInfo, 'transport' | 'url' | 'command' | 'args'> => {
+function describeServer(server: McpServerConfigWire): Pick<McpServerStatusInfo, 'transport' | 'url' | 'command' | 'args'> {
   if ('url' in server) {
     return { transport: server.type === 'sse' ? 'sse' : 'http', url: server.url }
   }
@@ -230,7 +230,7 @@ const describeServer = (server: McpServerConfigWire): Pick<McpServerStatusInfo, 
 
 // A zod `inputSchema` carries no JSON Schema document; only a `jsonSchema()` wrapper does, so
 // that is the only case parameters are reported.
-const toToolInfo = (name: string, mcpTool: unknown): McpServerToolInfo => {
+function toToolInfo(name: string, mcpTool: unknown): McpServerToolInfo {
   const { description, inputSchema } = (mcpTool ?? {}) as {
     description?: unknown
     inputSchema?: { jsonSchema?: unknown }
@@ -242,7 +242,7 @@ const toToolInfo = (name: string, mcpTool: unknown): McpServerToolInfo => {
   }
 }
 
-const toTransport = (server: McpServerConfigWire) => {
+function toTransport(server: McpServerConfigWire) {
   if (!('url' in server)) {
     throw new Error(
       'stdio MCP servers are not supported by the model-agnostic engine (use an http or sse ' +

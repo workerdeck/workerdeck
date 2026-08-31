@@ -8,7 +8,7 @@ import {
   type ToolResultBlock,
 } from '@workerdeck/protocol'
 
-export const staleReplaySeqs = (events: readonly SessionEvent[], afterSeq: number): Set<number> => {
+export function staleReplaySeqs(events: readonly SessionEvent[], afterSeq: number): Set<number> {
   const stale = new Set<number>()
   const seen = new Set<string>()
   for (let index = events.length - 1; index >= 0; index--) {
@@ -29,7 +29,7 @@ export const staleReplaySeqs = (events: readonly SessionEvent[], afterSeq: numbe
   return stale
 }
 
-export const replaySlice = (
+export function replaySlice(
   events: readonly SessionEvent[],
   options: {
     afterSeq: number
@@ -38,7 +38,7 @@ export const replaySlice = (
     truncateResults?: boolean
     imageRefs?: boolean
   },
-): SessionEvent[] => {
+): SessionEvent[] {
   const { afterSeq, resetSeq = 0, coalesceReplay, truncateResults, imageRefs } = options
   const stale = coalesceReplay ? staleReplaySeqs(events, afterSeq) : undefined
   const lastSeq = events[events.length - 1]?.seq ?? 0
@@ -69,7 +69,7 @@ export const replaySlice = (
   return out
 }
 
-export const truncateResultBlocks = (event: SessionEvent): SessionEvent => {
+export function truncateResultBlocks(event: SessionEvent): SessionEvent {
   if (event.type !== 'user_message') {
     return event
   }
@@ -104,7 +104,7 @@ export const truncateResultBlocks = (event: SessionEvent): SessionEvent => {
   return { ...event, message: { ...event.message, content: blocks } }
 }
 
-const resultChars = (content: ToolResultBlock['content']): number => {
+function resultChars(content: ToolResultBlock['content']): number {
   if (typeof content === 'string') {
     return content.length
   }
@@ -114,7 +114,7 @@ const resultChars = (content: ToolResultBlock['content']): number => {
   return content.reduce((total, part, index) => total + (typeof part.text === 'string' ? part.text.length + (index > 0 ? 1 : 0) : 0), 0)
 }
 
-const headOf = (content: ToolResultBlock['content'], chars: number): ToolResultBlock['content'] => {
+function headOf(content: ToolResultBlock['content'], chars: number): ToolResultBlock['content'] {
   if (typeof content === 'string') {
     return content.slice(0, chars)
   }
@@ -142,7 +142,7 @@ const headOf = (content: ToolResultBlock['content'], chars: number): ToolResultB
   return parts
 }
 
-export const refImageParts = (event: SessionEvent): SessionEvent => {
+export function refImageParts(event: SessionEvent): SessionEvent {
   if (event.type !== 'user_message') {
     return event
   }

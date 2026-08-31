@@ -2,17 +2,23 @@ import { describe, expect, it } from 'vitest'
 import type { SessionEvent, SessionEventBody } from '@workerdeck/protocol'
 import { staleReplaySeqs } from '../src/lib/replay.ts'
 
-const seqd = (bodies: SessionEventBody[]): SessionEvent[] => bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
+function seqd(bodies: SessionEventBody[]): SessionEvent[] {
+  return bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
+}
 
-const usage = (total: number): SessionEventBody => ({
-  type: 'context_usage',
-  usage: { totalTokens: total, maxTokens: 200_000, percentage: 1, categories: [] },
-})
+function usage(total: number): SessionEventBody {
+  return {
+    type: 'context_usage',
+    usage: { totalTokens: total, maxTokens: 200_000, percentage: 1, categories: [] },
+  }
+}
 
-const limit = (rateLimitType: string, utilization: number): SessionEventBody => ({
-  type: 'rate_limit',
-  info: { rateLimitType, utilization, status: 'allowed' } as never,
-})
+function limit(rateLimitType: string, utilization: number): SessionEventBody {
+  return {
+    type: 'rate_limit',
+    info: { rateLimitType, utilization, status: 'allowed' } as never,
+  }
+}
 
 describe('staleReplaySeqs', () => {
   it('keeps the last of each key and marks the rest stale', () => {

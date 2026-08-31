@@ -4,7 +4,7 @@ import type { AppServerConnection } from './types.ts'
 
 const STDERR_TAIL_BYTES = 4096
 
-export const connectAppServer = (options: { executable: string; env: Record<string, string> }): AppServerConnection => {
+export function connectAppServer(options: { executable: string; env: Record<string, string> }): AppServerConnection {
   const child = spawn(options.executable, ['app-server'], {
     env: options.env,
     stdio: ['pipe', 'pipe', 'pipe'],

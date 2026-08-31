@@ -5,7 +5,7 @@ import { SessionRunner, type SessionRunnerConfig } from '../src/index.ts'
 
 // Minimal stand-in for the SDK: emit SDKMessages, capture options + streamed input (the
 // runner.test.ts harness without its control surface).
-const fakeHarness = () => {
+function fakeHarness() {
   const messages: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
   let done = false
@@ -62,7 +62,7 @@ const fakeHarness = () => {
   return { emit, end, captured, queryFn }
 }
 
-const makeRunner = (overrides: Partial<SessionRunnerConfig> = {}) => {
+function makeRunner(overrides: Partial<SessionRunnerConfig> = {}) {
   const harness = fakeHarness()
   const runner = new SessionRunner({
     cwd: '/tmp/project',
@@ -72,10 +72,14 @@ const makeRunner = (overrides: Partial<SessionRunnerConfig> = {}) => {
   return { harness, runner }
 }
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+function tick() {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
 
 let uuidCounter = 0
-const nextUuid = () => `uuid-${++uuidCounter}`
+function nextUuid() {
+  return `uuid-${++uuidCounter}`
+}
 
 const initMessage = {
   type: 'system',
@@ -95,20 +99,24 @@ const initMessage = {
   uuid: 'uuid-init',
 } as unknown as SDKMessage
 
-const taskCall = (id: string, input: Record<string, unknown> = {}) => ({
-  type: 'tool_use',
-  id,
-  name: 'Task',
-  input,
-})
+function taskCall(id: string, input: Record<string, unknown> = {}) {
+  return {
+    type: 'tool_use',
+    id,
+    name: 'Task',
+    input,
+  }
+}
 
 // The async spawner, as a captured real session spelled it (`Agent`, not `Task`).
-const agentCall = (id: string, input: Record<string, unknown> = {}) => ({
-  type: 'tool_use',
-  id,
-  name: 'Agent',
-  input,
-})
+function agentCall(id: string, input: Record<string, unknown> = {}) {
+  return {
+    type: 'tool_use',
+    id,
+    name: 'Agent',
+    input,
+  }
+}
 
 // The launch receipt, verbatim from the captured session: it resolves the spawn call seconds
 // after launch, long before the agent has done anything.
@@ -118,13 +126,14 @@ const ACK_TEXT =
   'agentId: a5ae18bf55ec3c1b1 (internal ID - do not mention to user.)\n' +
   'The agent is working in the background. You will be notified automatically when it completes.'
 
-const launchAck = (toolUseId: string, uuid = nextUuid()) =>
-  user([{ type: 'tool_result', tool_use_id: toolUseId, content: [{ type: 'text', text: ACK_TEXT }] }], null, uuid)
+function launchAck(toolUseId: string, uuid = nextUuid()) {
+  return user([{ type: 'tool_result', tool_use_id: toolUseId, content: [{ type: 'text', text: ACK_TEXT }] }], null, uuid)
+}
 
 // The CLI's background-task lifecycle, live: system messages passed through as `sdk_event`
 // bodies. Shapes from the captured session.
-const taskStarted = (taskId: string, toolUseId: string, subagentType: string, description: string) =>
-  ({
+function taskStarted(taskId: string, toolUseId: string, subagentType: string, description: string) {
+  return {
     type: 'system',
     subtype: 'task_started',
     task_id: taskId,
@@ -135,10 +144,11 @@ const taskStarted = (taskId: string, toolUseId: string, subagentType: string, de
     prompt: 'the brief',
     uuid: nextUuid(),
     session_id: 'sdk-session-1',
-  }) as unknown as SDKMessage
+  } as unknown as SDKMessage
+}
 
-const taskNotification = (taskId: string, toolUseId: string, status: string) =>
-  ({
+function taskNotification(taskId: string, toolUseId: string, status: string) {
+  return {
     type: 'system',
     subtype: 'task_notification',
     task_id: taskId,
@@ -148,39 +158,48 @@ const taskNotification = (taskId: string, toolUseId: string, status: string) =>
     summary: 'Agent finished',
     uuid: nextUuid(),
     session_id: 'sdk-session-1',
-  }) as unknown as SDKMessage
+  } as unknown as SDKMessage
+}
 
 // The same fact as a resume replays it: a plain-string user message wearing the
 // `<task-notification>` wrapper. None of the system events above are stored in the JSONL.
-const notificationText = (taskId: string, toolUseId: string, status: string) =>
-  `<task-notification>\n<task-id>${taskId}</task-id>\n<tool-use-id>${toolUseId}</tool-use-id>\n` +
-  `<output-file>/tmp/tasks/${taskId}.output</output-file>\n<status>${status}</status>\n` +
-  `<summary>Agent "the brief" finished</summary>\n` +
-  '<note>A task-notification fires each time this agent stops with no live background children ' +
-  'of its own.</note>\n<result>## Results\n\nEverything found.</result>'
+function notificationText(taskId: string, toolUseId: string, status: string) {
+  return (
+    `<task-notification>\n<task-id>${taskId}</task-id>\n<tool-use-id>${toolUseId}</tool-use-id>\n` +
+    `<output-file>/tmp/tasks/${taskId}.output</output-file>\n<status>${status}</status>\n` +
+    `<summary>Agent "the brief" finished</summary>\n` +
+    '<note>A task-notification fires each time this agent stops with no live background children ' +
+    'of its own.</note>\n<result>## Results\n\nEverything found.</result>'
+  )
+}
 
-const toolCall = (id: string, name = 'Bash') => ({ type: 'tool_use', id, name, input: {} })
+function toolCall(id: string, name = 'Bash') {
+  return { type: 'tool_use', id, name, input: {} }
+}
 
-const assistant = (content: unknown, parent: string | null = null) =>
-  ({
+function assistant(content: unknown, parent: string | null = null) {
+  return {
     type: 'assistant',
     message: { role: 'assistant', content, model: 'claude-test-1', stop_reason: 'end_turn' },
     parent_tool_use_id: parent,
     uuid: nextUuid(),
     session_id: 'sdk-session-1',
-  }) as unknown as SDKMessage
+  } as unknown as SDKMessage
+}
 
-const user = (content: unknown, parent: string | null = null, uuid = nextUuid()) =>
-  ({
+function user(content: unknown, parent: string | null = null, uuid = nextUuid()) {
+  return {
     type: 'user',
     message: { role: 'user', content },
     parent_tool_use_id: parent,
     uuid,
     session_id: 'sdk-session-1',
-  }) as unknown as SDKMessage
+  } as unknown as SDKMessage
+}
 
-const taskResult = (toolUseId: string, isError = false) =>
-  user([{ type: 'tool_result', tool_use_id: toolUseId, content: 'report', is_error: isError }])
+function taskResult(toolUseId: string, isError = false) {
+  return user([{ type: 'tool_result', tool_use_id: toolUseId, content: 'report', is_error: isError }])
+}
 
 const turnResult = {
   type: 'result',

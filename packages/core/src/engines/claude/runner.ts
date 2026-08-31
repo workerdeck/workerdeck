@@ -664,7 +664,7 @@ export class SessionRunner implements Runner {
   }
 }
 
-const recommendedAnswers = (input: Record<string, unknown>): Record<string, string> => {
+function recommendedAnswers(input: Record<string, unknown>): Record<string, string> {
   const answers: Record<string, string> = {}
   const questions = Array.isArray(input.questions) ? input.questions : []
   for (const entry of questions) {

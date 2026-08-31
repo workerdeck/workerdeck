@@ -2,18 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { listCodexSessions } from '../src/engines/codex/adapter.ts'
 import type { AppServerConnectFn, AppServerConnection, AppServerThreadSummary } from '../src/engines/codex/types.ts'
 
-const row = (over: Partial<AppServerThreadSummary> & { id: string }): AppServerThreadSummary => ({
-  name: null,
-  preview: 'Create a file named approved.txt',
-  createdAt: 1_785_981_891,
-  updatedAt: 1_785_982_986,
-  cwd: '/tmp/project',
-  ephemeral: false,
-  gitInfo: null,
-  ...over,
-})
+function row(over: Partial<AppServerThreadSummary> & { id: string }): AppServerThreadSummary {
+  return {
+    name: null,
+    preview: 'Create a file named approved.txt',
+    createdAt: 1_785_981_891,
+    updatedAt: 1_785_982_986,
+    cwd: '/tmp/project',
+    ephemeral: false,
+    gitInfo: null,
+    ...over,
+  }
+}
 
-const scriptedList = (pages: Array<{ data: AppServerThreadSummary[]; nextCursor?: string | null }>) => {
+function scriptedList(pages: Array<{ data: AppServerThreadSummary[]; nextCursor?: string | null }>) {
   const requests: Array<{ method: string; params: unknown }> = []
   const notifies: string[] = []
   const envs: Array<Record<string, string>> = []

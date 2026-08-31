@@ -6,7 +6,7 @@ export type ClaudeAuthStatus = 'logged_in' | 'logged_out' | 'unknown'
 
 export type ClaudeAuthProbe = (env: Record<string, string | undefined>) => Promise<ClaudeAuthStatus>
 
-export const resolveBundledClaudeExecutable = (): string | undefined => {
+export function resolveBundledClaudeExecutable(): string | undefined {
   try {
     // Two hops: the platform package is a dependency of the SDK, not of this one, so under
     // pnpm's strict layout it resolves only from the SDK's own location.
@@ -27,10 +27,10 @@ export const resolveBundledClaudeExecutable = (): string | undefined => {
   return undefined
 }
 
-export const checkClaudeAuth = (
+export function checkClaudeAuth(
   env: Record<string, string | undefined>,
   options: { executable?: string; timeoutMs?: number } = {},
-): Promise<ClaudeAuthStatus> => {
+): Promise<ClaudeAuthStatus> {
   const executable = options.executable ?? resolveBundledClaudeExecutable()
   if (!executable) {
     return Promise.resolve('unknown')

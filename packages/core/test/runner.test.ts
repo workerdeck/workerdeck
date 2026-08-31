@@ -12,7 +12,7 @@ type HarnessCapabilities = {
 
 // Controllable stand-in for the SDK: emit SDKMessages, capture options + streamed input.
 // Pass `capabilities` to also implement supportedModels/supportedCommands.
-const fakeHarness = (capabilities?: HarnessCapabilities) => {
+function fakeHarness(capabilities?: HarnessCapabilities) {
   const messages: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
   let done = false
@@ -134,7 +134,7 @@ const resultMessage = {
   session_id: 'sdk-session-1',
 } as unknown as SDKMessage
 
-const makeRunner = (overrides: Partial<SessionRunnerConfig> = {}, capabilities?: HarnessCapabilities) => {
+function makeRunner(overrides: Partial<SessionRunnerConfig> = {}, capabilities?: HarnessCapabilities) {
   const harness = fakeHarness(capabilities)
   const runner = new SessionRunner({
     cwd: '/tmp/project',
@@ -146,7 +146,9 @@ const makeRunner = (overrides: Partial<SessionRunnerConfig> = {}, capabilities?:
   return { harness, runner, events }
 }
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+function tick() {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
 
 describe('SessionRunner', () => {
   it('emits system_init, transcript events, and status transitions', async () => {

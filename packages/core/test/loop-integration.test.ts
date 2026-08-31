@@ -17,24 +17,28 @@ const USAGE = {
   outputTokens: { total: 5, text: 5, reasoning: undefined },
   raw: undefined,
 }
-const streamText = (t: string) => ({
-  stream: convertArrayToReadableStream([
-    { type: 'stream-start' as const, warnings: [] },
-    { type: 'text-start' as const, id: 't1' },
-    { type: 'text-delta' as const, id: 't1', delta: t },
-    { type: 'text-end' as const, id: 't1' },
-    { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
-  ]),
-})
-const streamCall = (toolCallId: string, toolName: string, input: unknown) => ({
-  stream: convertArrayToReadableStream([
-    { type: 'stream-start' as const, warnings: [] },
-    { type: 'tool-call' as const, toolCallId, toolName, input: JSON.stringify(input) },
-    { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
-  ]),
-})
+function streamText(t: string) {
+  return {
+    stream: convertArrayToReadableStream([
+      { type: 'stream-start' as const, warnings: [] },
+      { type: 'text-start' as const, id: 't1' },
+      { type: 'text-delta' as const, id: 't1', delta: t },
+      { type: 'text-end' as const, id: 't1' },
+      { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
+    ]),
+  }
+}
+function streamCall(toolCallId: string, toolName: string, input: unknown) {
+  return {
+    stream: convertArrayToReadableStream([
+      { type: 'stream-start' as const, warnings: [] },
+      { type: 'tool-call' as const, toolCallId, toolName, input: JSON.stringify(input) },
+      { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
+    ]),
+  }
+}
 
-const waitFor = async (predicate: () => boolean, ms = 5000): Promise<void> => {
+async function waitFor(predicate: () => boolean, ms = 5000): Promise<void> {
   const deadline = Date.now() + ms
   while (!predicate()) {
     if (Date.now() > deadline) {

@@ -23,11 +23,11 @@ const TEXT_TYPES = new Set([
   'application/sql',
 ])
 
-export const normalizeMediaType = (mediaType: string): string => {
+export function normalizeMediaType(mediaType: string): string {
   return mediaType.split(';')[0]!.trim().toLowerCase()
 }
 
-export const attachmentKind = (mediaType: string): AttachmentKind | null => {
+export function attachmentKind(mediaType: string): AttachmentKind | null {
   const type = normalizeMediaType(mediaType)
   if (IMAGE_TYPES.has(type)) {
     return 'image'
@@ -43,7 +43,7 @@ export const attachmentKind = (mediaType: string): AttachmentKind | null => {
 
 export const SUPPORTED_ATTACHMENT_TYPES = [...IMAGE_TYPES, 'application/pdf', 'text/*'].join(', ')
 
-export const attachmentContentBlocks = (attachments: readonly AttachmentInput[]): Array<Record<string, unknown>> => {
+export function attachmentContentBlocks(attachments: readonly AttachmentInput[]): Array<Record<string, unknown>> {
   return attachments.map((attachment) => {
     const mediaType = normalizeMediaType(attachment.mediaType)
     switch (attachmentKind(mediaType)) {
@@ -73,7 +73,7 @@ export const attachmentContentBlocks = (attachments: readonly AttachmentInput[])
   })
 }
 
-export const attachmentRef = (attachment: AttachmentInput): MessageAttachment => {
+export function attachmentRef(attachment: AttachmentInput): MessageAttachment {
   return {
     id: attachment.id,
     name: attachment.name,
@@ -82,6 +82,6 @@ export const attachmentRef = (attachment: AttachmentInput): MessageAttachment =>
   }
 }
 
-const decodeText = (base64: string): string => {
+function decodeText(base64: string): string {
   return Buffer.from(base64, 'base64').toString('utf8')
 }

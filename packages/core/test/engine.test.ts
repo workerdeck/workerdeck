@@ -20,28 +20,34 @@ const USAGE = {
 }
 // Loop legs are streamed (doStream); `generateSay` is the doGenerate form the web_fetch
 // digest pass uses.
-const say = (t: string) => ({
-  stream: convertArrayToReadableStream([
-    { type: 'stream-start' as const, warnings: [] },
-    { type: 'text-start' as const, id: 't1' },
-    { type: 'text-delta' as const, id: 't1', delta: t },
-    { type: 'text-end' as const, id: 't1' },
-    { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
-  ]),
-})
-const callTool = (id: string, name: string, input: unknown) => ({
-  stream: convertArrayToReadableStream([
-    { type: 'stream-start' as const, warnings: [] },
-    { type: 'tool-call' as const, toolCallId: id, toolName: name, input: JSON.stringify(input) },
-    { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
-  ]),
-})
-const generateSay = (t: string) => ({
-  content: [{ type: 'text' as const, text: t }],
-  finishReason: { unified: 'stop' as const, raw: undefined },
-  usage: USAGE,
-  warnings: [],
-})
+function say(t: string) {
+  return {
+    stream: convertArrayToReadableStream([
+      { type: 'stream-start' as const, warnings: [] },
+      { type: 'text-start' as const, id: 't1' },
+      { type: 'text-delta' as const, id: 't1', delta: t },
+      { type: 'text-end' as const, id: 't1' },
+      { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
+    ]),
+  }
+}
+function callTool(id: string, name: string, input: unknown) {
+  return {
+    stream: convertArrayToReadableStream([
+      { type: 'stream-start' as const, warnings: [] },
+      { type: 'tool-call' as const, toolCallId: id, toolName: name, input: JSON.stringify(input) },
+      { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
+    ]),
+  }
+}
+function generateSay(t: string) {
+  return {
+    content: [{ type: 'text' as const, text: t }],
+    finishReason: { unified: 'stop' as const, raw: undefined },
+    usage: USAGE,
+    warnings: [],
+  }
+}
 
 describe('createEngineSession', () => {
   it('assembles a session that runs sandboxed tools through the selected executor', async () => {

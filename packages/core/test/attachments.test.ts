@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { attachmentContentBlocks, attachmentKind, normalizeMediaType, type AttachmentInput } from '../src/lib/attachments.ts'
 
-const input = (mediaType: string, data: string, name = 'thing'): AttachmentInput => ({
-  id: 'a1',
-  name,
-  mediaType,
-  bytes: Buffer.from(data, 'base64').length,
-  data,
-})
+function input(mediaType: string, data: string, name = 'thing'): AttachmentInput {
+  return {
+    id: 'a1',
+    name,
+    mediaType,
+    bytes: Buffer.from(data, 'base64').length,
+    data,
+  }
+}
 
 describe('attachmentKind', () => {
   it('accepts what the API can be shown, and nothing else', () => {

@@ -92,7 +92,7 @@ export class BrowserBridgeExecutor implements ToolExecutor {
   }
 }
 
-export const toExecutionResult = (outcome: PendingOutcome<BridgeAnswer>): ToolExecutionResult => {
+export function toExecutionResult(outcome: PendingOutcome<BridgeAnswer>): ToolExecutionResult {
   if (outcome.ok && 'output' in outcome.value) {
     const { output, logs } = outcome.value
     return { status: 'ok', output: output.value, logs }

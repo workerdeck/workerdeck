@@ -960,7 +960,7 @@ export class AiSdkRunner implements Runner {
   }
 }
 
-const turnUsage = (accum: { input: number; output: number; cacheWrite: number; cacheRead: number }) => {
+function turnUsage(accum: { input: number; output: number; cacheWrite: number; cacheRead: number }) {
   return {
     input_tokens: accum.input,
     output_tokens: accum.output,
@@ -969,10 +969,10 @@ const turnUsage = (accum: { input: number; output: number; cacheWrite: number; c
   }
 }
 
-const textValue = (output: ToolCallOutput): string => {
+function textValue(output: ToolCallOutput): string {
   return output.type === 'text' ? output.value : JSON.stringify(output.value)
 }
 
-const errorText = (error: unknown): string => {
+function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }

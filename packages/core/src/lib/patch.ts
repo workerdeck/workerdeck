@@ -5,7 +5,7 @@ const MAX_PATCH_LINES = 400
 // `@@ -oldStart,oldLines +newStart,newLines @@` — an absent count means 1 (a single-line hunk).
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
 
-const capHunks = (hunks: PatchHunk[]): { hunks: PatchHunk[]; truncated?: boolean } => {
+function capHunks(hunks: PatchHunk[]): { hunks: PatchHunk[]; truncated?: boolean } {
   const kept: PatchHunk[] = []
   let lines = 0
   for (const hunk of hunks) {
@@ -18,7 +18,7 @@ const capHunks = (hunks: PatchHunk[]): { hunks: PatchHunk[]; truncated?: boolean
   return { hunks: kept }
 }
 
-const isHunk = (value: unknown): value is PatchHunk => {
+function isHunk(value: unknown): value is PatchHunk {
   const hunk = value as Partial<PatchHunk> | null
   return (
     !!hunk &&
@@ -31,7 +31,7 @@ const isHunk = (value: unknown): value is PatchHunk => {
   )
 }
 
-export const filePatchFromToolResult = (result: unknown): FilePatch | undefined => {
+export function filePatchFromToolResult(result: unknown): FilePatch | undefined {
   const output = result as { filePath?: unknown; structuredPatch?: unknown; originalFile?: unknown; type?: unknown } | null | undefined
   if (!output || !Array.isArray(output.structuredPatch)) {
     return undefined
@@ -53,7 +53,7 @@ export const filePatchFromToolResult = (result: unknown): FilePatch | undefined 
   }
 }
 
-export const parseUnifiedDiff = (diff: string, path?: string): FilePatch | undefined => {
+export function parseUnifiedDiff(diff: string, path?: string): FilePatch | undefined {
   const hunks: PatchHunk[] = []
   let current: PatchHunk | undefined
   for (const line of diff.split('\n')) {

@@ -39,50 +39,62 @@ class FakeRunner {
   }
 }
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+function tick() {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
 
 // A deadline, not a latency assertion: every wait here asserts something eventually settles, and vi.waitFor's 1s default
 // starved a 1ms retry timer under parallel CI workers — the flake that failed the v0.9.0 publish.
-const settles = <T>(assertion: () => T | Promise<T>): Promise<T> => vi.waitFor(assertion, { timeout: 15_000, interval: 10 })
+function settles<T>(assertion: () => T | Promise<T>): Promise<T> {
+  return vi.waitFor(assertion, { timeout: 15_000, interval: 10 })
+}
 
-const jobRequest = (overrides: Partial<CreateJobRequest> = {}): CreateJobRequest => ({
-  session: { cwd: '/tmp/project', prompt: 'do the thing' },
-  ...overrides,
-})
+function jobRequest(overrides: Partial<CreateJobRequest> = {}): CreateJobRequest {
+  return {
+    session: { cwd: '/tmp/project', prompt: 'do the thing' },
+    ...overrides,
+  }
+}
 
-const assistantWithUsage = (outputTokens: number, text = 'working on it'): SessionEventBody => ({
-  type: 'assistant_message',
-  message: {
-    role: 'assistant',
-    content: [{ type: 'text', text }],
-    usage: { input_tokens: 10, output_tokens: outputTokens },
-  },
-  parentToolUseId: null,
-  uuid: `a-${Math.random()}`,
-})
+function assistantWithUsage(outputTokens: number, text = 'working on it'): SessionEventBody {
+  return {
+    type: 'assistant_message',
+    message: {
+      role: 'assistant',
+      content: [{ type: 'text', text }],
+      usage: { input_tokens: 10, output_tokens: outputTokens },
+    },
+    parentToolUseId: null,
+    uuid: `a-${Math.random()}`,
+  }
+}
 
-const successResult = (tokens = 100): SessionEventBody => ({
-  type: 'turn_result',
-  subtype: 'success',
-  isError: false,
-  durationMs: 900,
-  numTurns: 1,
-  totalCostUsd: 0.05,
-  result: 'all done',
-  usage: { input_tokens: tokens / 2, output_tokens: tokens / 2 },
-})
+function successResult(tokens = 100): SessionEventBody {
+  return {
+    type: 'turn_result',
+    subtype: 'success',
+    isError: false,
+    durationMs: 900,
+    numTurns: 1,
+    totalCostUsd: 0.05,
+    result: 'all done',
+    usage: { input_tokens: tokens / 2, output_tokens: tokens / 2 },
+  }
+}
 
-const errorResult = (): SessionEventBody => ({
-  type: 'turn_result',
-  subtype: 'error_max_turns',
-  isError: true,
-  durationMs: 100,
-  numTurns: 3,
-  totalCostUsd: 0.2,
-  errors: ['hit max turns'],
-})
+function errorResult(): SessionEventBody {
+  return {
+    type: 'turn_result',
+    subtype: 'error_max_turns',
+    isError: true,
+    durationMs: 100,
+    numTurns: 3,
+    totalCostUsd: 0.2,
+    errors: ['hit max turns'],
+  }
+}
 
-const makeQueue = (options: Partial<JobQueueOptions> = {}) => {
+function makeQueue(options: Partial<JobQueueOptions> = {}) {
   const runners: FakeRunner[] = []
   const createRunner = vi.fn(() => {
     const runner = new FakeRunner()

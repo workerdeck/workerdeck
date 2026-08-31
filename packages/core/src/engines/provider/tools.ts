@@ -34,7 +34,7 @@ export type ToolContext = {
 
 const MAX_FILE_BYTES = 1024 * 1024
 
-export const createToolContext = (options: ToolContextOptions): ToolContext => {
+export function createToolContext(options: ToolContextOptions): ToolContext {
   const vfs = options.vfs ?? createVfs()
   const definitions: ToolDefinition[] = []
 
@@ -192,7 +192,7 @@ export const createToolContext = (options: ToolContextOptions): ToolContext => {
   }
 }
 
-export const withMcpTools = (context: ToolContext, mcpTools: ToolSet): ToolContext => {
+export function withMcpTools(context: ToolContext, mcpTools: ToolSet): ToolContext {
   return withHostTools(
     context,
     Object.fromEntries(Object.entries(mcpTools).map(([name, mcpTool]) => [name, { tool: mcpTool, trust: 'authoritative' as const }])),
@@ -205,7 +205,7 @@ export type HostToolDefinition = {
   trust: ToolTrust
 }
 
-export const withHostTools = (context: ToolContext, hostTools: Record<string, HostToolDefinition>, kind = 'host tool'): ToolContext => {
+export function withHostTools(context: ToolContext, hostTools: Record<string, HostToolDefinition>, kind = 'host tool'): ToolContext {
   const entries = Object.entries(hostTools)
   if (entries.length === 0) {
     return context
@@ -241,6 +241,6 @@ export const withHostTools = (context: ToolContext, hostTools: Record<string, Ho
   return { ...context, tools, definitions, sandboxedToolNames }
 }
 
-const truncate = (text: string): string => {
+function truncate(text: string): string {
   return text.length > MAX_FILE_BYTES ? text.slice(0, MAX_FILE_BYTES) : text
 }

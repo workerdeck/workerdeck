@@ -82,7 +82,7 @@ export class QuickJsExecutor implements ToolExecutor {
   }
 }
 
-const defaultHostFetch = async (url: string, signal: AbortSignal): Promise<string> => {
+async function defaultHostFetch(url: string, signal: AbortSignal): Promise<string> {
   const response = await fetch(url, { signal })
   if (!response.ok) {
     throw new Error(`request failed: ${response.status}`)
@@ -90,7 +90,7 @@ const defaultHostFetch = async (url: string, signal: AbortSignal): Promise<strin
   return await response.text()
 }
 
-const safeHost = (url: string): string | undefined => {
+function safeHost(url: string): string | undefined {
   try {
     return new URL(url).hostname
   } catch {
@@ -98,7 +98,7 @@ const safeHost = (url: string): string | undefined => {
   }
 }
 
-export const isHostAllowed = (url: string, allowedHosts: string[]): boolean => {
+export function isHostAllowed(url: string, allowedHosts: string[]): boolean {
   let parsed: URL
   try {
     parsed = new URL(url)

@@ -4,8 +4,9 @@ import { createWebFetch, htmlToMarkdown, isPrivateAddress } from '../src/engines
 // Literal public IPs (TEST-NET) so the SSRF guard never touches real DNS.
 const PAGE = 'http://203.0.113.5/page'
 
-const htmlResponse = (body: string, init: ResponseInit = {}): Response =>
-  new Response(body, { status: 200, headers: { 'content-type': 'text/html' }, ...init })
+function htmlResponse(body: string, init: ResponseInit = {}): Response {
+  return new Response(body, { status: 200, headers: { 'content-type': 'text/html' }, ...init })
+}
 
 describe('createWebFetch', () => {
   it('fetches a page and returns it as markdown', async () => {

@@ -17,30 +17,36 @@ const USAGE = {
   outputTokens: { total: 5, text: 5, reasoning: undefined },
   raw: undefined,
 }
-const text = (t: string) => ({
-  stream: convertArrayToReadableStream([
-    { type: 'stream-start' as const, warnings: [] },
-    { type: 'text-start' as const, id: 't1' },
-    { type: 'text-delta' as const, id: 't1', delta: t },
-    { type: 'text-end' as const, id: 't1' },
-    { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
-  ]),
-})
-const call = (id: string, name: string, input: unknown) => ({
-  stream: convertArrayToReadableStream([
-    { type: 'stream-start' as const, warnings: [] },
-    { type: 'tool-call' as const, toolCallId: id, toolName: name, input: JSON.stringify(input) },
-    { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
-  ]),
-})
+function text(t: string) {
+  return {
+    stream: convertArrayToReadableStream([
+      { type: 'stream-start' as const, warnings: [] },
+      { type: 'text-start' as const, id: 't1' },
+      { type: 'text-delta' as const, id: 't1', delta: t },
+      { type: 'text-end' as const, id: 't1' },
+      { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
+    ]),
+  }
+}
+function call(id: string, name: string, input: unknown) {
+  return {
+    stream: convertArrayToReadableStream([
+      { type: 'stream-start' as const, warnings: [] },
+      { type: 'tool-call' as const, toolCallId: id, toolName: name, input: JSON.stringify(input) },
+      { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
+    ]),
+  }
+}
 
-const stubExecutor = (): ToolExecutor => ({
-  dispatch: async (c) => ({
-    executionId: c.executionId,
-    status: 'settled',
-    result: { status: 'ok', output: null } satisfies ToolExecutionResult,
-  }),
-})
+function stubExecutor(): ToolExecutor {
+  return {
+    dispatch: async (c) => ({
+      executionId: c.executionId,
+      status: 'settled',
+      result: { status: 'ok', output: null } satisfies ToolExecutionResult,
+    }),
+  }
+}
 
 describe('capability-scoped tool set', () => {
   it('grants only what the host supplied a backend for', () => {

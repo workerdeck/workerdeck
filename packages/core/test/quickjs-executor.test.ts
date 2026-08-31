@@ -8,13 +8,15 @@ beforeAll(async () => {
   engine = await loadEngine(variant)
 })
 
-const call = (overrides: Partial<ToolExecutionCall> = {}): ToolExecutionCall => ({
-  executionId: 'exec-1',
-  sessionId: 'sess-1',
-  tool: 'eval_script',
-  input: { script: '1 + 1' },
-  ...overrides,
-})
+function call(overrides: Partial<ToolExecutionCall> = {}): ToolExecutionCall {
+  return {
+    executionId: 'exec-1',
+    sessionId: 'sess-1',
+    tool: 'eval_script',
+    input: { script: '1 + 1' },
+    ...overrides,
+  }
+}
 
 describe('QuickJsExecutor', () => {
   it('settles inline, echoing the executionId back for correlation', async () => {

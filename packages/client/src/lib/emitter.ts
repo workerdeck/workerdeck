@@ -31,4 +31,6 @@ export class Emitter<Events> {
 }
 
 /** 500ms doubling from a zero-based attempt count, capped at 10s. */
-export const reconnectDelay = (retries: number): number => Math.min(500 * 2 ** retries, 10_000)
+export function reconnectDelay(retries: number): number {
+  return Math.min(500 * 2 ** retries, 10_000)
+}

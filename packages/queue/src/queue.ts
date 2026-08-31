@@ -50,9 +50,11 @@ type RunningJob = {
   parkedMs: number
 }
 
-const dayKey = (epochMs: number): string => new Date(epochMs).toISOString().slice(0, 10)
+function dayKey(epochMs: number): string {
+  return new Date(epochMs).toISOString().slice(0, 10)
+}
 
-const sumUsage = (usage: unknown): number => {
+function sumUsage(usage: unknown): number {
   if (typeof usage !== 'object' || usage === null) {
     return 0
   }
@@ -65,7 +67,7 @@ const sumUsage = (usage: unknown): number => {
   )
 }
 
-const textPreview = (message: ApiMessage, max = 140): JobProgress | null => {
+function textPreview(message: ApiMessage, max = 140): JobProgress | null {
   const blocks = typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : message.content
   for (const block of blocks) {
     if (block.type === 'tool_use') {

@@ -11,7 +11,7 @@ import type { AppServerConnectFn, AppServerThreadListResponse, AppServerThreadSu
 
 const NOT_INSTALLED = '@openai/codex is not installed — add it (an optional peer of @workerdeck/core) to run codex profiles'
 
-export const resolveBundledCodexExecutable = (): string | undefined => {
+export function resolveBundledCodexExecutable(): string | undefined {
   const triple = targetTriple()
   if (!triple) {
     return undefined
@@ -31,7 +31,7 @@ export const resolveBundledCodexExecutable = (): string | undefined => {
   return undefined
 }
 
-const targetTriple = (): string | undefined => {
+function targetTriple(): string | undefined {
   const { platform, arch } = process
   if (platform === 'darwin') {
     return arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin'
@@ -45,15 +45,15 @@ const targetTriple = (): string | undefined => {
   return undefined
 }
 
-const platformPackageSuffix = (): string => {
+function platformPackageSuffix(): string {
   return `${process.platform}-${process.arch}`
 }
 
-const checkCodexAvailability = async (
+async function checkCodexAvailability(
   profile: ProfileInfo,
   env: Record<string, string | undefined>,
   options: { timeoutMs?: number } = {},
-): Promise<EngineAvailability> => {
+): Promise<EngineAvailability> {
   const executable = resolveBundledCodexExecutable()
   if (!executable) {
     return { available: false, reason: NOT_INSTALLED }
@@ -94,7 +94,7 @@ const checkCodexAvailability = async (
 const LIST_PAGE_SIZE = 100
 const MAX_LIST_PAGES = 40
 
-const cwdFilter = (dir: string): string[] => {
+function cwdFilter(dir: string): string[] {
   const forms = new Set([dir])
   try {
     forms.add(realpathSync(dir))
@@ -102,10 +102,11 @@ const cwdFilter = (dir: string): string[] => {
   return [...forms]
 }
 
-const secondsToMs = (value: number | null | undefined): number | undefined =>
-  typeof value === 'number' && Number.isFinite(value) ? value * 1000 : undefined
+function secondsToMs(value: number | null | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value * 1000 : undefined
+}
 
-const summarizeThread = (row: AppServerThreadSummary): SdkSessionSummary => {
+function summarizeThread(row: AppServerThreadSummary): SdkSessionSummary {
   const name = typeof row.name === 'string' && row.name.length > 0 ? row.name : undefined
   const preview = typeof row.preview === 'string' && row.preview.length > 0 ? row.preview : undefined
   return {
@@ -121,14 +122,14 @@ const summarizeThread = (row: AppServerThreadSummary): SdkSessionSummary => {
   }
 }
 
-export const listCodexSessions = async (options: {
+export async function listCodexSessions(options: {
   connectFn: AppServerConnectFn
   profile?: ProfileInfo
   env: Record<string, string | undefined>
   dir?: string
   limit?: number
   offset?: number
-}): Promise<SdkSessionSummary[]> => {
+}): Promise<SdkSessionSummary[]> {
   const childEnv = codexChildEnv(options.env, options.profile?.codexHome)
   const connection = options.connectFn({ env: childEnv })
   const rows: AppServerThreadSummary[] = []

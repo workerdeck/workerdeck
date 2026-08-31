@@ -3,7 +3,9 @@ import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
 import { createVfs, loadEngine, runScript, type SandboxEngine } from '../src/index.ts'
 
 let enginePromise: Promise<SandboxEngine> | undefined
-const engine = () => (enginePromise ??= loadEngine(variant))
+function engine() {
+  return (enginePromise ??= loadEngine(variant))
+}
 
 describe('runScript', () => {
   it('evaluates a script and returns its completion value', async () => {

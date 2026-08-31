@@ -1,6 +1,6 @@
 export type HostUrl = { baseUrl: string }
 
-export const apiUrl = (host: HostUrl): string | undefined => {
+export function apiUrl(host: HostUrl): string | undefined {
   let text = host.baseUrl.trim()
   while (text.endsWith('/')) {
     text = text.slice(0, -1)
@@ -24,7 +24,7 @@ export const apiUrl = (host: HostUrl): string | undefined => {
   return text
 }
 
-export const isLoopbackHost = (host: HostUrl): boolean => {
+export function isLoopbackHost(host: HostUrl): boolean {
   const api = apiUrl(host)
   if (!api) {
     return false

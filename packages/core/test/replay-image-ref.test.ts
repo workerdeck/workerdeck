@@ -2,25 +2,31 @@ import { describe, expect, it } from 'vitest'
 import { TOOL_RESULT_HEAD_CHARS, type SessionEvent } from '@workerdeck/protocol'
 import { refImageParts, replaySlice } from '../src/lib/replay.ts'
 
-const png = (n: number) => {
+function png(n: number) {
   // Base64 of exactly n decoded bytes, padding included, so an asserted `bytes` is the real one.
   const pad = n % 3 === 0 ? 0 : n % 3 === 1 ? 2 : 1
   return 'A'.repeat(Math.ceil(n / 3) * 4 - pad) + '='.repeat(pad)
 }
 const big = 'x'.repeat(TOOL_RESULT_HEAD_CHARS + 1_000)
 
-const image = (data: string, mediaType = 'image/png') => ({
-  type: 'image',
-  source: { type: 'base64', media_type: mediaType, data },
-})
+function image(data: string, mediaType = 'image/png') {
+  return {
+    type: 'image',
+    source: { type: 'base64', media_type: mediaType, data },
+  }
+}
 
-const resultEvent = (seq: number, blocks: unknown[]): SessionEvent =>
-  ({ seq, ts: seq, type: 'user_message', message: { role: 'user', content: blocks } }) as unknown as SessionEvent
+function resultEvent(seq: number, blocks: unknown[]): SessionEvent {
+  return { seq, ts: seq, type: 'user_message', message: { role: 'user', content: blocks } } as unknown as SessionEvent
+}
 
-const toolResult = (id: string, content: unknown) => ({ type: 'tool_result', tool_use_id: id, content })
+function toolResult(id: string, content: unknown) {
+  return { type: 'tool_result', tool_use_id: id, content }
+}
 
-const partsOf = (event: SessionEvent, block = 0) =>
-  (event as unknown as { message: { content: Array<{ content: Array<Record<string, unknown>> }> } }).message.content[block]!.content
+function partsOf(event: SessionEvent, block = 0) {
+  return (event as unknown as { message: { content: Array<{ content: Array<Record<string, unknown>> }> } }).message.content[block]!.content
+}
 
 describe('refImageParts', () => {
   it('replaces a base64 image with its address, and says how big it was', () => {

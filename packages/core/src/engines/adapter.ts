@@ -41,6 +41,6 @@ const ADAPTERS: Record<ProfileEngine, EngineAdapter> = {
   provider: providerAdapter,
 }
 
-export const getEngineAdapter = (engine: ProfileEngine | undefined): EngineAdapter => {
+export function getEngineAdapter(engine: ProfileEngine | undefined): EngineAdapter {
   return ADAPTERS[engine ?? 'claude']
 }

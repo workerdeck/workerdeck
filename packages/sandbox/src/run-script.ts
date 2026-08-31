@@ -35,7 +35,7 @@ export type SandboxVariantInput =
   | { default: QuickJSAsyncVariant }
   | Promise<QuickJSAsyncVariant | { default: QuickJSAsyncVariant }>
 
-export const loadEngine = async (variant: SandboxVariantInput): Promise<SandboxEngine> => {
+export async function loadEngine(variant: SandboxVariantInput): Promise<SandboxEngine> {
   const resolved = await variant
   const unwrapped = 'default' in resolved ? resolved.default : resolved
   return { module: await newQuickJSAsyncWASMModuleFromVariant(unwrapped) }
@@ -62,7 +62,7 @@ export type RunScriptResult =
       logs: SandboxLog[]
     }
 
-export const runScript = async (engine: SandboxEngine, options: RunScriptOptions): Promise<RunScriptResult> => {
+export async function runScript(engine: SandboxEngine, options: RunScriptOptions): Promise<RunScriptResult> {
   const logs: SandboxLog[] = []
   const deadline = Date.now() + (options.timeoutMs ?? 5000)
   let interruptedBy: 'timeout' | 'aborted' | undefined
@@ -172,13 +172,13 @@ export const runScript = async (engine: SandboxEngine, options: RunScriptOptions
   }
 }
 
-const failure = (error: unknown, interruptedBy: 'timeout' | 'aborted' | undefined, logs: SandboxLog[]): RunScriptResult => {
+function failure(error: unknown, interruptedBy: 'timeout' | 'aborted' | undefined, logs: SandboxLog[]): RunScriptResult {
   const text = describeGuestError(error)
   const reason = interruptedBy ?? (/out of memory/i.test(text) ? 'oom' : 'exception')
   return { ok: false, reason, error: text, logs }
 }
 
-const describeGuestError = (error: unknown): string => {
+function describeGuestError(error: unknown): string {
   if (typeof error === 'string') {
     return error
   }

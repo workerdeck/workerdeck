@@ -21,20 +21,20 @@ afterAll(() => {
   }
 })
 
-const tempDir = (): string => {
+function tempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), 'cw-codex-trust-'))
   roots.push(dir)
   return dir
 }
 
-const projectConfig = (dir: string): string => {
+function projectConfig(dir: string): string {
   mkdirSync(join(dir, '.codex'), { recursive: true })
   const path = join(dir, '.codex', 'config.toml')
   writeFileSync(path, '[mcp_servers.probe]\ncommand = "echo"\n')
   return path
 }
 
-const codexHome = (entries: Array<{ path: string; level: string }> = []): string => {
+function codexHome(entries: Array<{ path: string; level: string }> = []): string {
   const home = join(tempDir(), 'home')
   mkdirSync(home, { recursive: true })
   const body = entries.map((e) => `[projects."${e.path}"]\ntrust_level = "${e.level}"\n`).join('\n')

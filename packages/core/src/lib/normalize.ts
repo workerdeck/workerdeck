@@ -4,7 +4,7 @@ import { filePatchFromToolResult } from './patch.ts'
 
 const FAMILY_ORDER = ['fable', 'opus', 'sonnet', 'haiku']
 
-const singleToolResult = (message: ApiMessage): boolean => {
+function singleToolResult(message: ApiMessage): boolean {
   const content = message.content
   if (!Array.isArray(content)) {
     return false
@@ -14,7 +14,7 @@ const singleToolResult = (message: ApiMessage): boolean => {
 
 const SYNTHETIC_USER_PREFIXES = ['<task-notification>', '<local-command-caveat>']
 
-export const isSyntheticUserText = (message: ApiMessage): boolean => {
+export function isSyntheticUserText(message: ApiMessage): boolean {
   const content = message.content
   const text =
     typeof content === 'string'
@@ -29,7 +29,7 @@ export const isSyntheticUserText = (message: ApiMessage): boolean => {
   return SYNTHETIC_USER_PREFIXES.some((prefix) => head.startsWith(prefix))
 }
 
-export const toApiMessage = (message: unknown): ApiMessage => {
+export function toApiMessage(message: unknown): ApiMessage {
   const m = message as {
     role?: 'user' | 'assistant'
     content: string | ContentBlock[]
@@ -61,7 +61,7 @@ export type UsageRateLimits = {
 
 type UsageWindow = { utilization: number | null; resets_at?: string | null } | null | undefined
 
-export const rateLimitEventsFromUsage = (usage: UsageRateLimits): SessionEventBody[] => {
+export function rateLimitEventsFromUsage(usage: UsageRateLimits): SessionEventBody[] {
   if (!usage.rate_limits_available || !usage.rate_limits) {
     return []
   }
@@ -103,7 +103,7 @@ export const rateLimitEventsFromUsage = (usage: UsageRateLimits): SessionEventBo
 
 // `config` carries a stdio server's env and an HTTP server's headers, routinely API tokens:
 // this is the one place they are dropped, and they must stay dropped.
-export const mcpStatusInfo = (status: McpServerStatus): McpServerStatusInfo => {
+export function mcpStatusInfo(status: McpServerStatus): McpServerStatusInfo {
   const config = status.config as { type?: string; command?: string; args?: string[]; url?: string } | undefined
   const transport = config?.type ?? (config?.command ? 'stdio' : undefined)
   return {
@@ -133,11 +133,11 @@ export type SdkModelInfo = {
   supportsEffort?: boolean
 }
 
-export const defaultModelFromSdk = (models: readonly SdkModelInfo[]): string | undefined => {
+export function defaultModelFromSdk(models: readonly SdkModelInfo[]): string | undefined {
   return models.find((model) => model.value === 'default')?.resolvedModel
 }
 
-export const modelOptionsFromSdk = (models: readonly SdkModelInfo[]): ModelOption[] => {
+export function modelOptionsFromSdk(models: readonly SdkModelInfo[]): ModelOption[] {
   const rows = models.filter((model) => model.value !== 'default')
   const derivedCounts = new Map<string, number>()
   for (const model of rows) {
@@ -173,12 +173,12 @@ export const modelOptionsFromSdk = (models: readonly SdkModelInfo[]): ModelOptio
     .map(({ option }) => option)
 }
 
-const familyRank = (option: ModelOption): number => {
+function familyRank(option: ModelOption): number {
   const rank = FAMILY_ORDER.indexOf(modelFamily(option.resolvedModel ?? option.value))
   return rank === -1 ? FAMILY_ORDER.length : rank
 }
 
-export const friendlyModelName = (id: string): string | null => {
+export function friendlyModelName(id: string): string | null {
   const withoutVariant = id.split('[')[0] ?? id
   const parts = withoutVariant.toLowerCase().split('-').filter(Boolean)
   if (parts[0] === 'claude') {
@@ -195,7 +195,7 @@ export const friendlyModelName = (id: string): string | null => {
   return `${family.charAt(0).toUpperCase()}${family.slice(1)} ${version.join('.')}`
 }
 
-const modelFamily = (id: string): string => {
+function modelFamily(id: string): string {
   const withoutVariant = id.split('[')[0] ?? id
   const parts = withoutVariant.toLowerCase().split('-')
   if (parts[0] === 'claude') {
@@ -204,7 +204,7 @@ const modelFamily = (id: string): string => {
   return parts[0] ?? withoutVariant
 }
 
-export const normalizeSdkMessage = (msg: SDKMessage): SessionEventBody | null => {
+export function normalizeSdkMessage(msg: SDKMessage): SessionEventBody | null {
   switch (msg.type) {
     case 'assistant': {
       return {

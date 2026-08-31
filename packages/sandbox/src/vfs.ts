@@ -5,7 +5,7 @@ export type SandboxVfs = {
   snapshot(): Record<string, string>
 }
 
-export const normalizeVfsPath = (path: string): string => {
+export function normalizeVfsPath(path: string): string {
   const out: string[] = []
   for (const part of path.split('/')) {
     if (part === '' || part === '.') {
@@ -20,7 +20,7 @@ export const normalizeVfsPath = (path: string): string => {
   return '/' + out.join('/')
 }
 
-export const createVfs = (seed?: Record<string, string>): SandboxVfs => {
+export function createVfs(seed?: Record<string, string>): SandboxVfs {
   const files = new Map<string, string>()
   const write = (path: string, content: string): void => {
     files.set(normalizeVfsPath(path), content)

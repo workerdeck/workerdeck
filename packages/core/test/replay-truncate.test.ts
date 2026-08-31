@@ -4,19 +4,22 @@ import { replaySlice, truncateResultBlocks } from '../src/lib/replay.ts'
 
 const big = 'x'.repeat(TOOL_RESULT_HEAD_CHARS + 1_000)
 
-const resultEvent = (seq: number, blocks: unknown[]): SessionEvent =>
-  ({
+function resultEvent(seq: number, blocks: unknown[]): SessionEvent {
+  return {
     seq,
     ts: seq,
     type: 'user_message',
     message: { role: 'user', content: blocks },
-  }) as unknown as SessionEvent
+  } as unknown as SessionEvent
+}
 
-const toolResult = (id: string, content: unknown) => ({
-  type: 'tool_result',
-  tool_use_id: id,
-  content,
-})
+function toolResult(id: string, content: unknown) {
+  return {
+    type: 'tool_result',
+    tool_use_id: id,
+    content,
+  }
+}
 
 describe('truncateResultBlocks', () => {
   it('keeps the head, and says how much there was', () => {

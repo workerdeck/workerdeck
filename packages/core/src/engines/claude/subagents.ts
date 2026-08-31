@@ -208,12 +208,12 @@ export class SubagentTracker {
   }
 }
 
-const isLaunchAck = (content: unknown): boolean => {
+function isLaunchAck(content: unknown): boolean {
   const text = typeof content === 'string' ? content : firstText(Array.isArray(content) ? content : [])
   return typeof text === 'string' && text.trimStart().startsWith('Async agent launched')
 }
 
-const parseTaskNotification = (text: string | undefined): { toolUseId: string; status: string } | undefined => {
+function parseTaskNotification(text: string | undefined): { toolUseId: string; status: string } | undefined {
   if (text === undefined || !text.trimStart().startsWith('<task-notification>')) {
     return undefined
   }
@@ -225,7 +225,7 @@ const parseTaskNotification = (text: string | undefined): { toolUseId: string; s
   return { toolUseId, status }
 }
 
-const firstText = (content: string | ContentBlock[] | unknown[]): string | undefined => {
+function firstText(content: string | ContentBlock[] | unknown[]): string | undefined {
   if (typeof content === 'string') {
     return content
   }
@@ -238,7 +238,7 @@ const firstText = (content: string | ContentBlock[] | unknown[]): string | undef
   return undefined
 }
 
-const cleaned = (value: unknown): string | undefined => {
+function cleaned(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined
   }
@@ -249,7 +249,7 @@ const cleaned = (value: unknown): string | undefined => {
   return text.length > 80 ? text.slice(0, 79) + '…' : text
 }
 
-const toolUseBlocks = (content: string | ContentBlock[]): Array<{ id: string; name: string; input: unknown }> => {
+function toolUseBlocks(content: string | ContentBlock[]): Array<{ id: string; name: string; input: unknown }> {
   if (typeof content === 'string') {
     return []
   }

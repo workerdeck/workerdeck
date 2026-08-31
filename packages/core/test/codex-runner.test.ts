@@ -50,7 +50,7 @@ const USAGE_B = {
   totalTokens: 450,
 }
 
-const scriptedPeer = () => {
+function scriptedPeer() {
   const requests: Array<{ method: string; params: unknown; connection: number }> = []
   const notifies: string[] = []
   const envs: Array<Record<string, string>> = []
@@ -110,11 +110,11 @@ const scriptedPeer = () => {
   }
 }
 
-const scriptTurn = (
+function scriptTurn(
   peer: ScriptedPeer,
   script: (emit: (method: string, params: unknown) => void, turnId: string) => void,
   turnId = 'turn-1',
-) => {
+) {
   peer.respond('turn/start', () => {
     peer.emit('turn/started', { threadId: 'thread-1', turn: { id: turnId, status: 'inProgress' } })
     script(peer.emit, turnId)
@@ -122,14 +122,15 @@ const scriptTurn = (
   })
 }
 
-const collect = (runner: CodexRunner): SessionEvent[] => {
+function collect(runner: CodexRunner): SessionEvent[] {
   const events: SessionEvent[] = []
   runner.subscribe((event) => events.push(event))
   return events
 }
 
-const ofType = <T extends SessionEvent['type']>(events: SessionEvent[], type: T): Array<Extract<SessionEvent, { type: T }>> =>
-  events.filter((e): e is Extract<SessionEvent, { type: T }> => e.type === type)
+function ofType<T extends SessionEvent['type']>(events: SessionEvent[], type: T): Array<Extract<SessionEvent, { type: T }>> {
+  return events.filter((e): e is Extract<SessionEvent, { type: T }> => e.type === type)
+}
 
 describe('CodexRunner', () => {
   it("ignores a sub-agent thread's turn lifecycle and usage, but keeps its work", async () => {
@@ -1795,26 +1796,30 @@ describe('CodexRunner resume backfill', () => {
 
 type ToolUseBlock = { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
 
-const toolUses = (events: SessionEvent[]) =>
-  ofType(events, 'assistant_message').flatMap((e) =>
+function toolUses(events: SessionEvent[]) {
+  return ofType(events, 'assistant_message').flatMap((e) =>
     (Array.isArray(e.message.content) ? e.message.content : [])
       .filter((c): c is ToolUseBlock => (c as { type?: string }).type === 'tool_use')
       .map((block) => ({ block, parent: e.parentToolUseId ?? null, seq: e.seq })),
   )
+}
 
-const deltas = (events: SessionEvent[]) =>
-  ofType(events, 'stream_delta').map((e) => {
+function deltas(events: SessionEvent[]) {
+  return ofType(events, 'stream_delta').map((e) => {
     const delta = (e.event as { delta?: { text?: string; thinking?: string } }).delta
     return { text: delta?.text ?? delta?.thinking ?? '', parent: e.parentToolUseId ?? null }
   })
+}
 
-const spawnItem = (call: string, thread: string, path: string) => ({
-  id: call,
-  type: 'subAgentActivity',
-  kind: 'started',
-  agentThreadId: thread,
-  agentPath: path,
-})
+function spawnItem(call: string, thread: string, path: string) {
+  return {
+    id: call,
+    type: 'subAgentActivity',
+    kind: 'started',
+    agentThreadId: thread,
+    agentPath: path,
+  }
+}
 
 describe('CodexRunner sub-agents', () => {
   it("attributes two concurrent agents' interleaved work — deltas included — each to its own anchor", async () => {

@@ -42,12 +42,18 @@ class FakeSocket {
 
 const SocketImpl = FakeSocket as unknown as typeof WebSocket
 
-const makeClient = (fetchImpl?: typeof fetch) => new WorkerDeckClient({ baseUrl: 'http://host/v1', WebSocketImpl: SocketImpl, fetchImpl })
+function makeClient(fetchImpl?: typeof fetch) {
+  return new WorkerDeckClient({ baseUrl: 'http://host/v1', WebSocketImpl: SocketImpl, fetchImpl })
+}
 
-const latest = () => FakeSocket.opened.at(-1)!
+function latest() {
+  return FakeSocket.opened.at(-1)!
+}
 
 // The handles defer their first connect a tick, so nothing exists until timers run.
-const settle = () => vi.advanceTimersByTime(0)
+function settle() {
+  return vi.advanceTimersByTime(0)
+}
 
 beforeEach(() => {
   vi.useFakeTimers()

@@ -12,34 +12,37 @@ const USAGE = {
   raw: undefined,
 }
 
-const streamText = (text: string) => ({
-  stream: convertArrayToReadableStream([
-    { type: 'stream-start' as const, warnings: [] },
-    { type: 'text-start' as const, id: 't1' },
-    { type: 'text-delta' as const, id: 't1', delta: text },
-    { type: 'text-end' as const, id: 't1' },
-    { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
-  ]),
-})
+function streamText(text: string) {
+  return {
+    stream: convertArrayToReadableStream([
+      { type: 'stream-start' as const, warnings: [] },
+      { type: 'text-start' as const, id: 't1' },
+      { type: 'text-delta' as const, id: 't1', delta: text },
+      { type: 'text-end' as const, id: 't1' },
+      { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
+    ]),
+  }
+}
 
-const streamCalls = (calls: Array<{ id: string; tool: string; input: unknown }>) => ({
-  stream: convertArrayToReadableStream([
-    { type: 'stream-start' as const, warnings: [] },
-    ...calls.map((c) => ({
-      type: 'tool-call' as const,
-      toolCallId: c.id,
-      toolName: c.tool,
-      input: JSON.stringify(c.input),
-    })),
-    { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
-  ]),
-})
+function streamCalls(calls: Array<{ id: string; tool: string; input: unknown }>) {
+  return {
+    stream: convertArrayToReadableStream([
+      { type: 'stream-start' as const, warnings: [] },
+      ...calls.map((c) => ({
+        type: 'tool-call' as const,
+        toolCallId: c.id,
+        toolName: c.tool,
+        input: JSON.stringify(c.input),
+      })),
+      { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
+    ]),
+  }
+}
 
 // A turn genuinely in flight. The fake stream has to *watch* the signal: one that merely
 // never closes hangs the turn, since the runner's abort cannot cancel an unwired stream.
-const streamStalls =
-  (text: string) =>
-  async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
+function streamStalls(text: string) {
+  return async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
     stream: new ReadableStream({
       start(controller) {
         controller.enqueue({ type: 'stream-start' as const, warnings: [] })
@@ -49,10 +52,11 @@ const streamStalls =
       },
     }),
   })
+}
 
 const TOOLS = { remote_task: tool({ inputSchema: z.object({ task: z.string() }) }) }
 
-const harness = (config: Partial<AiSdkRunnerConfig> & Pick<AiSdkRunnerConfig, 'languageModel'>) => {
+function harness(config: Partial<AiSdkRunnerConfig> & Pick<AiSdkRunnerConfig, 'languageModel'>) {
   const runner = new AiSdkRunner({ tools: TOOLS, executableTools: ['remote_task'], ...config })
   const events: SessionEvent[] = []
   runner.subscribe((e) => events.push(e))

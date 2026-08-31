@@ -118,7 +118,7 @@ export class PendingRequestRegistry {
   }
 }
 
-const toEntry = (slot: Slot<unknown>): PendingEntry => {
+function toEntry(slot: Slot<unknown>): PendingEntry {
   return {
     id: slot.id,
     kind: slot.kind,

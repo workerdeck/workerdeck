@@ -1,6 +1,6 @@
 import type { ClientOptions } from './index.ts'
 
-export const hostAuth = (options: { baseUrl: string; key: string }): Pick<ClientOptions, 'headers' | 'buildWsUrl' | 'buildQueueWsUrl'> => {
+export function hostAuth(options: { baseUrl: string; key: string }): Pick<ClientOptions, 'headers' | 'buildWsUrl' | 'buildQueueWsUrl'> {
   const { baseUrl, key } = options
   if (key === '') {
     return {}

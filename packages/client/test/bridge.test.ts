@@ -4,7 +4,7 @@ import { createWorkerServer, type WorkerServer } from '@workerdeck/server'
 import type { ToolExecutionResult } from '@workerdeck/core'
 import { WorkerDeckClient, type SessionHandle } from '../src/index.ts'
 
-const idleQueryFn = () => {
+function idleQueryFn() {
   const query = {
     [Symbol.asyncIterator]() {
       return this
@@ -29,7 +29,7 @@ afterEach(async () => {
   results.length = 0
 })
 
-const start = async (bridgeTimeoutMs?: number) => {
+async function start(bridgeTimeoutMs?: number) {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
@@ -50,13 +50,14 @@ const start = async (bridgeTimeoutMs?: number) => {
   return { client, sessionId: session.id, handle: handle! }
 }
 
-const dispatch = (sessionId: string, executionId = 'exec-1') =>
-  running!.bridge.executorFor(sessionId).dispatch({
+function dispatch(sessionId: string, executionId = 'exec-1') {
+  return running!.bridge.executorFor(sessionId).dispatch({
     executionId,
     sessionId,
     tool: 'eval_script',
     input: { script: '1+1' },
   })
+}
 
 describe('SessionHandle tool-call bridge', () => {
   it('surfaces a bridged request and round-trips a result', async () => {

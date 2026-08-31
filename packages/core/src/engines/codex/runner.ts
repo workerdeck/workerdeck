@@ -122,7 +122,7 @@ export const CODEX_AGENT_TOOL = 'CodexAgent'
 
 export const CODEX_COLLAB_TOOL = 'CodexCollab'
 
-const agentName = (agentPath: string | null | undefined): string | undefined => {
+function agentName(agentPath: string | null | undefined): string | undefined {
   if (typeof agentPath !== 'string') {
     return undefined
   }
@@ -130,7 +130,7 @@ const agentName = (agentPath: string | null | undefined): string | undefined => 
   return name || undefined
 }
 
-const collabInput = (item: AppServerCollabAgentToolCallItem): Record<string, unknown> => {
+function collabInput(item: AppServerCollabAgentToolCallItem): Record<string, unknown> {
   return {
     tool: item.tool,
     ...(item.receiverThreadIds?.length ? { receiverThreadIds: item.receiverThreadIds } : {}),
@@ -139,7 +139,7 @@ const collabInput = (item: AppServerCollabAgentToolCallItem): Record<string, unk
   }
 }
 
-const turnReport = (turn: AppServerTurn): string | undefined => {
+function turnReport(turn: AppServerTurn): string | undefined {
   const items = Array.isArray(turn.items) ? turn.items : []
   for (let index = items.length - 1; index >= 0; index--) {
     const item = items[index]
@@ -152,9 +152,11 @@ const turnReport = (turn: AppServerTurn): string | undefined => {
 
 const MAX_IMAGE_RESULT_CHARS = 512
 
-const shortResult = (result: string): boolean => result.length > 0 && result.length <= MAX_IMAGE_RESULT_CHARS && !result.startsWith('data:')
+function shortResult(result: string): boolean {
+  return result.length > 0 && result.length <= MAX_IMAGE_RESULT_CHARS && !result.startsWith('data:')
+}
 
-const producedFileId = (path: string): string => {
+function producedFileId(path: string): string {
   return createHash('sha256').update(path).digest('hex').slice(0, 32)
 }
 
@@ -168,12 +170,12 @@ const PRODUCED_MEDIA_TYPES: Record<string, string> = {
   pdf: 'application/pdf',
 }
 
-const producedMediaType = (path: string): string | undefined => {
+function producedMediaType(path: string): string | undefined {
   const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
   return PRODUCED_MEDIA_TYPES[extension]
 }
 
-const skillInfo = (skill: AppServerSkillMetadata): SkillInfo => {
+function skillInfo(skill: AppServerSkillMetadata): SkillInfo {
   return {
     name: skill.name,
     ...(skill.description ? { description: skill.description } : {}),
@@ -188,11 +190,11 @@ const skillInfo = (skill: AppServerSkillMetadata): SkillInfo => {
   }
 }
 
-const mcpStatusOf = (
+function mcpStatusOf(
   authStatus: string | undefined,
   update: { status: string; failureReason?: string } | undefined,
   hasTools: boolean,
-): string => {
+): string {
   if (update?.status === 'failed') {
     return update.failureReason === 'reauthenticationRequired' ? 'needs-auth' : 'failed'
   }
@@ -211,10 +213,10 @@ const mcpStatusOf = (
   return 'pending'
 }
 
-const mcpServerInfo = (
+function mcpServerInfo(
   server: AppServerMcpServerStatus,
   update: { status: string; error?: string; failureReason?: string } | undefined,
-): McpServerStatusInfo => {
+): McpServerStatusInfo {
   const tools = Object.entries(server.tools ?? {}).flatMap(([key, tool]) => {
     if (!tool) {
       return []
@@ -246,14 +248,14 @@ const mcpServerInfo = (
   }
 }
 
-const imageGenerationInput = (item: AppServerImageGenerationItem): Record<string, unknown> => {
+function imageGenerationInput(item: AppServerImageGenerationItem): Record<string, unknown> {
   return {
     ...(item.revisedPrompt ? { prompt: item.revisedPrompt } : {}),
     ...(item.savedPath ? { savedPath: item.savedPath } : {}),
   }
 }
 
-const offeredDecisions = (params: unknown): Set<string> | undefined => {
+function offeredDecisions(params: unknown): Set<string> | undefined {
   const raw = (params as { availableDecisions?: unknown })?.availableDecisions
   if (!Array.isArray(raw)) {
     return undefined
@@ -271,7 +273,7 @@ const offeredDecisions = (params: unknown): Set<string> | undefined => {
   return names.size > 0 ? names : undefined
 }
 
-const pickDecision = (behavior: 'allow' | 'deny', interrupt: boolean, offered: Set<string> | undefined): string | undefined => {
+function pickDecision(behavior: 'allow' | 'deny', interrupt: boolean, offered: Set<string> | undefined): string | undefined {
   const has = (name: string) => !offered || offered.has(name)
   if (behavior === 'allow') {
     return has('accept') ? 'accept' : undefined
@@ -282,7 +284,7 @@ const pickDecision = (behavior: 'allow' | 'deny', interrupt: boolean, offered: S
   return 'decline'
 }
 
-const userQuestionsFromCodex = (questions: readonly AppServerUserInputQuestion[]): UserQuestion[] => {
+function userQuestionsFromCodex(questions: readonly AppServerUserInputQuestion[]): UserQuestion[] {
   return questions.map((question) => ({
     question: question.question,
     header: question.header ?? '',
@@ -293,7 +295,7 @@ const userQuestionsFromCodex = (questions: readonly AppServerUserInputQuestion[]
   }))
 }
 
-const historyUserText = (item: AppServerUserMessageItem): string => {
+function historyUserText(item: AppServerUserMessageItem): string {
   if (!Array.isArray(item.content)) {
     return ''
   }
@@ -317,10 +319,10 @@ const historyUserText = (item: AppServerUserMessageItem): string => {
   return images > 0 ? `[${images === 1 ? 'image' : `${images} images`}]` : ''
 }
 
-const codexAnswers = (
+function codexAnswers(
   questions: readonly AppServerUserInputQuestion[],
   answers: Record<string, unknown> | undefined,
-): Record<string, { answers: string[] }> => {
+): Record<string, { answers: string[] }> {
   const out: Record<string, { answers: string[] }> = {}
   for (const question of questions) {
     const value = answers?.[question.question] ?? answers?.[question.id]
@@ -344,10 +346,7 @@ type ApprovalChannel = {
   deny(params: unknown, interrupt: boolean, offered: Set<string> | undefined): { response: unknown; decision?: string }
 }
 
-const decisionChannel = (
-  describe: (params: unknown) => ApprovalSurface,
-  itemId: (params: unknown) => string | undefined,
-): ApprovalChannel => {
+function decisionChannel(describe: (params: unknown) => ApprovalSurface, itemId: (params: unknown) => string | undefined): ApprovalChannel {
   return {
     describe,
     itemId,
@@ -497,7 +496,7 @@ export type CodexRunnerConfig = CreateSessionRequest & {
 
 type QueuedTurn = { input: AppServerUserInput[] }
 
-const rateLimitWindowName = (minutes: number | null | undefined): string | undefined => {
+function rateLimitWindowName(minutes: number | null | undefined): string | undefined {
   if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) {
     return undefined
   }
