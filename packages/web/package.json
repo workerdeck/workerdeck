@@ -25,7 +25,8 @@
     "build": "vite build && node ./scripts/trim-fonts.mjs",
     "prepack": "pnpm clean && pnpm build",
     "preview": "vite preview",
-    "typecheck": "tsgo -p tsconfig.json"
+    "typecheck": "tsgo -p tsconfig.json",
+    "test": "echo \"@workerdeck/web has no unit tests — the dashboard is covered by packages/ui and packages/react tests plus a manual frontend smoke.\""
   },
   "devDependencies": {
     "@workerdeck/client": "workspace:*",

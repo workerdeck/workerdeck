@@ -42,22 +42,10 @@ export type ToolCallHostOptions = {
    * Default: `['eval_script']`. */
   tools?: string[]
   /**
-   * Client-side tool handlers, keyed by tool name. When a `tool_call_request`
-   * arrives for a name in this map, the handler is called instead of the
-   * sandbox. The tool must also appear in {@link tools} (it is added
-   * automatically when `clientTools` is set).
-   *
-   * This is the client half of the round trip — the server half is registering
-   * the tool's schema (via `tools` on `ProviderRunnerOptions` or
-   * `EngineSessionOptions`). Together they let an embedder define a tool the
-   * model can call and the client handles:
-   *
-   * ```ts
-   * // Server: register the schema
-   * tools: { app_navigate: { trust: 'sandboxed', tool: tool({ ... }) } }
-   * // Client: handle the call
-   * <SessionPanel clientTools={{ app_navigate: (input) => ({ value: 'ok' }) }} />
-   * ```
+   * Client-side tool handlers, keyed by tool name: a `tool_call_request` for a name in this map
+   * goes to the handler instead of the sandbox, and the name is added to {@link tools}
+   * automatically. The client half of a client-registered tool — the server declares the schema.
+   * See `docs/PACKAGES.md` §`packages/core`.
    */
   clientTools?: Record<string, ClientToolHandler>
   /** Guest wall-clock limit, unless the request asks for less. Default 5000. */

@@ -1,34 +1,14 @@
 /**
- * The `'provider'`-engine example: how a HOST wires the model-agnostic engine
- * through the `createEngineRunner` hook. This is the escape hatch for engines
- * the repo does not ship as adapters — the `@ai-sdk` providers below (openai,
- * moonshotai, anthropic-over-API) are not offered by default anywhere any
- * more, but this example keeps the path compiling and runnable, and it is the
- * route back if they return as bespoke adapters. Claude and codex profiles
- * need none of this: their adapters ship in `@workerdeck/core`.
+ * The `'provider'`-engine example: how a HOST wires the model-agnostic engine through the
+ * `createEngineRunner` hook — the escape hatch for engines the repo ships no adapter for (claude
+ * and codex profiles need none of this). A bare gateway, not the CLI, so it serves no dashboard:
+ *   pnpm example:server    # port 8787, NO AUTH, loopback only; reads .env for provider keys
+ *   pnpm dev:web           # then open http://localhost:5191
  *
- * Drop-in replacement for `pnpm dev:server` (same port, NO AUTH, loopback only). Unlike
- * `pnpm dev:server` this is a bare gateway, not the CLI, so it serves no dashboard —
- * pair it with `pnpm dev:web`:
- *
- *   pnpm example:server        # reads .env for provider keys (see below)
- *   pnpm dev:web                   # then open http://localhost:5191
- *
- * Declares one Claude profile (the operator's own ~/.claude) plus a provider
- * profile per API key found in the environment / repo .env:
- *
- *   ANTHROPIC_API_KEY → profile 'anthropic' (claude-sonnet-5)
- *   OPENAI_API_KEY    → profile 'openai'    (gpt-5)
- *   MOONSHOT_API_KEY  → profile 'moonshot'  (kimi-k3)
- *
- * Profiles can also be created and edited from the dashboard's Profiles view:
- * this server wires a file-backed profile store at
- * `.workerdeck/profiles.json` and marks every caller as able to manage them.
- *
- * Provider sessions get the capability-scoped tool set with a scratch VFS
- * seeded with a demo document, and `eval_script` executes IN YOUR BROWSER TAB:
- * the server has no sandbox executor here, so every eval crosses the WS bridge
- * to the attached dashboard, which runs it in a QuickJS guest and answers.
+ * Declares one claude profile plus a provider profile per API key found in the environment
+ * (`ANTHROPIC_API_KEY` → anthropic, `OPENAI_API_KEY` → openai, `MOONSHOT_API_KEY` → moonshot),
+ * with a file-backed profile store at `.workerdeck/profiles.json`. There is no server-side
+ * sandbox executor here, so `eval_script` crosses the WS bridge and runs IN YOUR BROWSER TAB.
  */
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'

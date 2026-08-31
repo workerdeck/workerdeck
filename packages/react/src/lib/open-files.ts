@@ -99,26 +99,10 @@ export type OpenFilesAction =
 export const initialOpenFilesState: OpenFilesState = { files: [] }
 
 /**
- * The tab strip and the editor's whole behaviour, as a pure function.
- *
- * The rules worth stating, because they are the ones a naive implementation
- * gets wrong:
- *
- * - **Opening an open path never re-reads it.** It focuses the tab. Re-reading
- *   would silently discard that tab's unsaved edits on a double click.
- * - **Closing the focused tab focuses its right-hand neighbour**, falling back
- *   to the left when it was last. Focusing "the first tab" instead is what makes
- *   closing several tabs in a row jump the user around.
- * - **A successful save is applied against the text that was sent**, not against
- *   the tab's current text. Typing during a save is normal; treating the write's
- *   completion as "the tab is now clean" would silently drop those keystrokes.
- * - **Nothing here discards edits implicitly.** `revert` and `loaded` are the
- *   only two things that clear a draft, and both are the direct result of
- *   someone asking for it. The conditional write exists so a browser edit cannot
- *   clobber the agent mid-run; this holds the same line in the other direction.
- *
- * Late results are addressed by path and dropped if that tab is gone, so a slow
- * read of a closed file cannot resurrect it.
+ * The tab strip and the editor's whole behaviour, as a pure function. Nothing here discards edits
+ * implicitly — only `revert` and `loaded` clear a draft — and late results are addressed by path,
+ * so a slow read of a closed tab cannot resurrect it. The four rules a naive implementation gets
+ * wrong are in `docs/PACKAGES.md` §`packages/react`.
  */
 export const openFilesReducer = (state: OpenFilesState, action: OpenFilesAction): OpenFilesState => {
   switch (action.type) {

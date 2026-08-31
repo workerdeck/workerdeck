@@ -28,21 +28,10 @@ export type SessionParkOptions = {
    * (a wifi blip, a page reload) doesn't cost a teardown. Default 2000. */
   parkDelayMs?: number
   /**
-   * Keep a live session's snapshot written through to the store, so it survives
-   * a gateway restart. **Off by default**: a library must not start writing a
-   * session's whole transcript to disk because someone upgraded.
-   *
-   * This is the restart story for the engine that cannot go dormant. Dormancy
-   * works by remembering an *engine* session id to resume from, which the
-   * provider engine does not have — there is no store behind it, the history
-   * lives in the runner. What it has instead is `snapshot()`, so the record
-   * carries the state itself and rehydration is the ordinary `restore` path.
-   * Between the two, every engine survives a restart.
-   *
-   * Written at the end of a turn, never on a shutdown hook — a `kill -9`, an OOM
-   * or a pulled power cable run no hook, and that is precisely the case this
-   * exists for. Turn-end is also a natural rate limit: one write per turn, not
-   * one per token.
+   * Keep a live session's snapshot written through to the store — the restart story for the
+   * provider engine, which has no engine-side session to go dormant against. **Off by default**:
+   * a library must not start writing a session's whole transcript to disk because someone
+   * upgraded. Written at turn end, never on a shutdown hook, because a `kill -9` runs no hook.
    */
   persistLive?: boolean
   /** Grace given at {@link SessionParkManager.hydrate} to an execution whose
@@ -63,23 +52,13 @@ export type SessionParkOptions = {
 }
 
 /**
- * Two ways a session outlives its runner, behind one door.
+ * Two ways a session outlives its runner, behind one door: **parking** (deferred execution's
+ * other half) and **dormancy** (the restart story for the engines that cannot park). Both live in
+ * the same store and come back through the same `ensureLive`, which is why this is one class.
  *
- * **Parking** is deferred execution's other half: a session waiting on work no
- * process in this server is doing.
- *
- * **Dormancy** is the restart story for the engines that cannot park. Every live
- * claude or codex session leaves a small record naming its engine session id, so
- * a gateway that comes back up lists them and resumes one the first time someone
- * attaches. Both kinds live in the same store and come back through the same
- * `ensureLive`, which is why there is one class here and not two.
- *
- * The runner announces the moment with `status_changed: 'parked'` — emitted only
- * once every dispatch of the batch has been handed over, so the snapshot can never
- * miss a call that was still being dispatched. From there this class snapshots,
- * evicts, and persists; delivering a result rebuilds the runner under the same id
- * and hands the result to it. The session's identity, event log, and seq numbering
- * survive intact, so a client reattaching with `afterSeq` sees one unbroken stream.
+ * Whichever path, the session's identity, event log and seq numbering survive intact, so a client
+ * reattaching with `afterSeq` sees one unbroken stream. See `docs/GOTCHAS.md` §Parking & bridged
+ * execution for the rules this must not break.
  */
 export class SessionParkManager {
   #options: SessionParkOptions
@@ -110,17 +89,10 @@ export class SessionParkManager {
    */
   #remembered = new Set<string>()
   /**
-   * In-flight store work per session, so operations on one record run in order.
-   *
-   * Load-bearing with any store whose writes are real I/O. `#park` must evict the
-   * runner *before* the save completes (an attach between `park()` and `evict()`
-   * would bind a client to an inert runner), which leaves a window where the
-   * session is in neither the registry nor the store. A delivery arriving inside it
-   * would read past the write: `store.get` misses, the result is answered 404, the
-   * execution is filed as settled with its watchdog cleared — and then the record
-   * lands on disk with nothing left alive that could ever wake it. A `discard`
-   * inside the same window would delete nothing and leave the save to resurrect a
-   * session the caller was told was closed.
+   * In-flight store work per session, so operations on one record run in order — load-bearing
+   * with any store whose writes are real I/O, because `#park` must evict the runner *before* the
+   * save completes and a read that slips into that window sees the session in neither the
+   * registry nor the store. See `docs/GOTCHAS.md` §Parking & bridged execution.
    */
   #storeOps = new Map<string, Promise<void>>()
   #closed = false
@@ -238,23 +210,10 @@ export class SessionParkManager {
           return
         }
         case 'conversation_reset': {
-          // Two engines, two records, and a clear invalidates whichever one this
-          // session has.
-          //
-          // The dormant record (claude, codex) names the conversation that was
-          // just cleared, and no `status_changed` follows a clear to correct it —
-          // so a restart in this window would wake the session straight back into
-          // the transcript the user threw away. `#rememberDormant` handles both
-          // halves: an engine that adopted a fresh engine session id in the same
-          // breath re-saves under the new one, one that has none yet has nothing
-          // to come back to and the stale record is deleted.
-          //
-          // The live record (the provider engine) CARRIES the transcript rather
-          // than pointing at it, and `#persistLive` is otherwise driven by
-          // `turn_result` — which a clear does not produce. Without this the
-          // on-disk snapshot keeps the pre-clear messages until the next turn
-          // ends, which is the same hazard on the one engine `#rememberDormant`
-          // deliberately no-ops for.
+          // A clear invalidates whichever record this session has, and nothing else re-writes
+          // one: no `status_changed` follows a clear, and `#persistLive` is otherwise driven by
+          // `turn_result`. Skip either call and a restart in this window wakes the session back
+          // into the transcript the user threw away.
           void this.#rememberDormant(runner)
           void this.#persistLive(runner)
           return
@@ -394,19 +353,12 @@ export class SessionParkManager {
   }
 
   /**
-   * Write (or refresh) the dormant record that lets this session survive a
-   * restart. Cheap and repeated on purpose — driven off `system_init` and every
-   * non-park status change — because the alternative is a shutdown hook, and a
-   * shutdown hook is exactly what a `kill -9`, an OOM or a pulled power cable
-   * do not run.
+   * Write (or refresh) the dormant record that lets this session survive a restart. Cheap and
+   * repeated on purpose, because the alternative is a shutdown hook and a `kill -9` runs none.
    *
-   * Four gates, each of which would otherwise produce a record that is worse
-   * than none: the engine must be able to resume at all (a provider session
-   * would come back with an empty transcript — it has `park()` instead), it must
-   * have named its session, the host must remember the config to rebuild from,
-   * and the runner must still be the registry's. That last one is what keeps a
-   * park from being overwritten: `#park` evicts before it saves, so a late event
-   * from an evicted runner finds itself a stranger here and writes nothing.
+   * Four gates, each of which would otherwise produce a record worse than none: the engine can
+   * resume, it has named its session, the config to rebuild from is remembered, and **the runner
+   * is still the registry's** — an evicted runner's late event must not overwrite a park.
    */
   async #rememberDormant(runner: Runner): Promise<void> {
     if (this.#closed) {
@@ -498,24 +450,14 @@ export class SessionParkManager {
   }
 
   /**
-   * Write a live session's snapshot through to the store, so a restart can
-   * rebuild it. The counterpart to {@link #rememberDormant} for the engine that
-   * has no engine-side session to resume from — same discipline, different
-   * mechanism: that one remembers *where the transcript is*, this one carries it.
+   * Write a live session's snapshot through to the store — `#rememberDormant`'s counterpart for
+   * the engine with no engine-side session to resume from: that one remembers *where* the
+   * transcript is, this one carries it. Same gates, plus the option and the engine's ability.
    *
-   * The gates are the same four, plus the option and the engine's ability. The
-   * `registry.get(runner.id) !== runner` check is doing the same work it does
-   * there: a runner that has been evicted (parked, or replaced by a rebuild)
-   * finds itself a stranger here and writes nothing, so a late event cannot
-   * overwrite a park with a stale live record.
-   *
-   * **This must not run synchronously inside the event listener**, and that is
-   * easy to lose. `turn_result` is emitted from inside the turn, *before* the
-   * `finally` that clears the runner's abort controller — so a `snapshot()`
-   * called straight from the listener would see a turn in flight and refuse,
-   * every single time, silently. `#queue`'s microtask hop is what puts the call
-   * after it. A refactor that "simplifies" this into a direct call produces a
-   * write-through that never writes and nothing that says so.
+   * **This must not run synchronously inside the event listener.** `turn_result` is emitted from
+   * inside the turn, before the `finally` that clears the abort controller, so a `snapshot()`
+   * called straight from the listener sees a turn in flight and refuses — every time, silently.
+   * `#queue`'s microtask hop is what puts the call after it.
    */
   async #persistLive(runner: Runner): Promise<void> {
     if (this.#closed || !this.#options.persistLive || !runner.snapshot) {

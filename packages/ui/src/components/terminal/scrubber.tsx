@@ -7,26 +7,15 @@ import { parentOf } from './blocks.ts'
 import { TerminalSurface } from './surface.tsx'
 
 /**
- * The overview ruler — VS Code's strip beside the minimap, with this
- * transcript's own semantics.
+ * The overview ruler — VS Code's strip beside the minimap, with this transcript's own semantics:
+ * a 12px rail of two 6px lanes (what went in, what came out) plus full-width annotations. Lanes,
+ * loudness, merging and the fold-aware failure rule are in docs/PACKAGES.md §`packages/ui`.
  *
- * A 12px rail over the scroller's right edge, two lanes of 6px: **left** is
- * what you typed (blue), **right** each turn's final response and its
- * `turn_result` as one merged mark (white; red when the turn failed).
- * Everything else spans the full 12px as an annotation: an error, the pending
- * approval (pinned at the foot), a bookmark (paint only — the store is the
- * client's) and the catch-up seam. A mark is its row's extent at rail scale,
- * floored at 2px; marks merge when closer than a pixel, loudest colour
- * winning.
- *
- * Positions are **pixel space**, not index space: mark y = the row's
- * virtualizer offset over `getTotalSize()`, honest only because `height.ts`
- * feeds `estimateSize`. That is also why the rail can be a real scrollbar —
- * drag writes `scrollTop` directly (via `stopScroll()`, the follow spring's
- * off switch; the rail is a third writer of `scrollTop`). The peek renders
- * from `items`, never the DOM — the row it describes is usually unmounted.
- * Under `affordances={false}` the rail is passive paint and the native
- * scrollbar stays.
+ * Positions are **pixel space, never index space** — a mark's y is the row's virtualizer offset
+ * over `getTotalSize()`, honest only because `height.ts` feeds `estimateSize`, and that is what
+ * lets a drag write `scrollTop` directly (through `stopScroll()`; the rail is a third writer of
+ * it). Peeks render from `items`, never the DOM — the row is usually unmounted — and under
+ * `affordances={false}` the rail is passive paint with the native scrollbar left in place.
  */
 
 type Lane = 'l' | 'r' | 'f'

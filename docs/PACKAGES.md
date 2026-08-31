@@ -226,6 +226,44 @@ sidebar's own bundle. `projectsOf(rows)` is the filter control's source and retu
 holds and the label is what a person picks by, so two same-named repos stay two entries wearing
 one word. Protocol
 stays **7**: an optional field, absent meaning no project, which an older client ignores.
+
+**The `.workerdeck.json` file grammar.** `{ "name": "WorkerDeck", "icon": "layers" }` or
+`{ "name": "WorkerDeck", "icon": "./docs/assets/icon.png" }` — both keys optional, unknown keys
+ignored, and an empty `{}` still marks its directory as the project root (grouping is the point;
+the name falls back to the root's basename). `icon` is one string with a **total classification
+rule**: a value ending in `.png`/`.svg` (case-insensitive) is a repo-relative image path — relative
+only, since the file is checked into a repo that clones onto other machines, where an absolute path
+is wrong by construction — and anything else must be a lucide-shaped glyph name
+(`^[a-z0-9]+(-[a-z0-9]+)*$`) or it is ignored. The two shapes cannot collide (a glyph name contains
+no dot), so this is a classification and not a guess.
+
+Three kinds are deliberately **excluded** from `replayCoalesceKey` despite looking eligible.
+`capabilities`, because `defaultModel: event.defaultModel ?? base.defaultModel` is a fallback
+*merge* and a later event without one would erase an earlier event's (it is also emitted once per
+session, so there is nothing to win). `model_changed`, because `undefined` means "reset to the
+server default" while the reducer *keeps* the last known model — the last event alone is not the
+fold. And `system_init`, pure replace for the reducer but read **first-occurrence-only** by the
+server's `watchAuthSource` to decide an auth policy, with parking treating each as a resume point.
+
+`isAgentRecord`/`subagentLabel` are the sessions list's other half of the sub-agent rule. The
+tracker opens a record for every spawner call *and* for any nested event whose parent it never saw,
+so `SessionInfo.subagents` holds two different things wearing one shape: one carries a
+`subagent_type` — a delegated agent with an identity (`Explore`) whose own work deserves a surface
+— and the other carries only a description, with no agent behind it to open. A row that offered a
+screen and then showed an empty frame would be worse than a row that offered nothing, so
+`isAgentRecord` decides what is pressable and what wears the sub-agent colour, in protocol rather
+than per client, because two surfaces must not disagree about either.
+
+`projectKey`'s cwd fallback is what makes grouping by project useful *before* anyone has written a
+`.workerdeck.json`: undeclared sessions group by their own folder, declared ones by their root, and
+a session in `packages/ui` joins its repo's group the moment the file exists. Sessions with no cwd
+at all (a filesystem-less provider session) share one per-gateway bucket and read "No project".
+
+The project-icon route is **session-scoped on purpose**: the fetch then rides the same `canSee`
+gate as every other `/sessions/:id/*` route, and a scoped principal's miss is the uniform 404. A
+project-keyed route would need the project root in the URL, and a route addressed by host paths is
+an existence oracle for the gateway's filesystem.
+
 ## `packages/core`
 
 the engines, shipped as **adapters** (`src/engines/`): one `EngineAdapter`
@@ -463,6 +501,11 @@ architectural question the embedder should be asked. The per-call form lets one 
 `permission_requested`, parks, and waits for `resolvePermission`. Bypass modes skip it.
 `clientTools` on `SessionPanel` (or `toolHost.clientTools`) is the client half of a
 client-registered tool — the server declares the schema, the client handles the call.
+
+`createEngineRunner` may be async — assembly that has to await (a per-session MCP connect, a
+credential lookup) belongs there with `onClose` as the disposer, and a rejection fails the create:
+the session POST answers 500 with the message, a job goes straight to `failed`.
+
 ## `packages/client`
 
 REST + WS client on platform `fetch`/`WebSocket`; zero runtime deps. Owns
@@ -586,12 +629,59 @@ the mirror of the Swift `PromptTokens`), and the browser tool host (`tool-host.t
 server-bridged calls in the tab. Companions must ride the hook's own `handle` — the bridge asks
 the first attached client, so a second handle sees nothing. `TranscriptState.capabilities` is
 always populated, and is what every surface renders from (see `docs/GOTCHAS.md`).
+
+Four `openFilesReducer` rules are the ones a naive tab strip gets wrong, and each is a bug someone
+hit. **Opening an already-open path never re-reads it** — it focuses the tab; re-reading silently
+discards that tab's unsaved edits on a double click. **Closing the focused tab focuses its
+right-hand neighbour**, falling back to the left when it was last; focusing "the first tab" instead
+is what makes closing several in a row jump the reader around. **A successful save is applied
+against the text that was sent**, never against the tab's current text — typing during a save is
+normal, and treating the write's completion as "this tab is now clean" drops those keystrokes. And
+**nothing discards edits implicitly**: `revert` and `loaded` are the only two actions that clear a
+draft, both at someone's direct request. The conditional write exists so a browser edit cannot
+clobber the agent mid-run; this holds the same line in the other direction. Late results are
+addressed by path and dropped if the tab is gone, so a slow read of a closed file cannot resurrect
+it.
+
+`useHostFileTree` caches listings per directory and keeps them across a collapse, so reopening a
+folder is instant and does not re-ask. That staleness is deliberate and bounded: `refresh` exists,
+and knowing *when* to call it is the next problem — the agent is editing this same tree — not
+something a tree can guess. `useOpenFiles` fires its reads from an effect keyed on "which tabs are
+still loading" rather than on `open` itself, which is what keeps the reducer pure and stops a tab
+that was opened, closed and reopened from carrying a stale in-flight request.
+
 ## `packages/ui`
 
 styled layer (Tailwind v4 + `@base-ui/react` + cva): `src/components/ui`
 primitives, `src/components/agent` components, vendored prompt-area composer (MIT). Ships source
-styles (`theme.css` + `@source`-scanned classnames; wiring in its README). Two primitives carry
-rules of their own. `PortalScope` re-establishes the `.wd-root` styling scope inside a portal:
+styles (`theme.css` + `@source`-scanned classnames; wiring in its README).
+
+`@workerdeck/ui/scoped.css` is the **second** integration, built by `scripts/build-scoped-css.mjs`,
+and it exists because `theme.css` assumes an app that hands its whole Tailwind build to WorkerDeck
+(the dashboard, `apps/embedded`). A host with its *own* Tailwind v4 design system cannot use it:
+`@theme` is global, and both sides map the same utility names (`bg-accent`, `text-code`,
+`rounded-md`, `font-sans`, …) to different semantics, so whichever theme loads last silently
+restyles the other side — the raw tokens (`--bg`, `--accent`, …) collide too, with opposite
+light/dark polarity. So the package compiles its own utilities from its own theme and its own
+sources (plus streamdown, whose markdown renderer ships Tailwind-classed markup) and rewrites every
+selector to live under `.wd-root`: `:root`/`html`/`body`/`:host` → `.wd-root` (tokens and the
+body-level canvas land on the wrapper, nothing global survives); `[data-theme='light'|'dark']`
+token blocks → forms that answer the attribute on **any** ancestor (the host's `<html>`), on
+`.wd-root` itself (a pinned panel), or on a nested element inside the panel — `mapThemeTokenBlock`
+has the cascade math; `*` and bare pseudo selectors (preflight, `:focus-visible`, `svg.lucide`) →
+`:is(.wd-root, .wd-root *)…`; everything else takes a `.wd-root ` descendant prefix. **Every
+rewrite adds exactly one class of specificity (0,1,0), uniformly** — that is what preserves the
+package's internal cascade (preflight < base additions < components < utilities, and unlayered
+`terminal.css` over everything layered) bit-for-bit against the standalone build, and it is the
+invariant any new selector form has to satisfy. `@keyframes` bodies, `@font-face` and `@property`
+are left alone (no element selectors to scope); rules inside `@media`/`@supports`/`@layer` are
+visited like any other. One cross-*namespace* hazard survives the scoping and is closed separately:
+Tailwind resolves `text-X` in the **colour** namespace when a `--color-X` exists, so a host colour
+named like one of our font-size utilities (a host `.text-code { color: … }`) would paint our
+`text-code` runs in the host's code-background colour — hence the low-order `color: inherit` guards
+prepended to the utilities layer.
+
+Two primitives carry rules of their own. `PortalScope` re-establishes the `.wd-root` styling scope inside a portal:
 `@workerdeck/ui/scoped.css` rewrites every rule to live under `.wd-root`, and Base UI popups
 (Menu, Dialog, AlertDialog, Select, Tooltip) portal to `document.body`, *outside* the embedder's
 wrapper, so without it they render unstyled or host-styled. `display: contents` — inline, so no
@@ -1339,6 +1429,11 @@ existing watermarks keep counting instead of resetting to unread; routes carry t
 old bare path kept as a redirect. Everything not yet per-gateway — jobs, profiles, the create
 form's pickers — goes through `primaryClient()` and says so; `lib/client.ts` is that accessor
 now, not a module-scope singleton.
+
+Serve hashed assets `immutable` and `index.html` with `no-cache`, or a deployed update never
+reaches a browser that already has the old one. Routing needs no server support at all — the app
+uses hash history, so only `index.html` is ever requested.
+
 ## `packages/cli`
 
 published unscoped as **`workerdeck`**, the turnkey instance (`npx

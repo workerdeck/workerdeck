@@ -1,17 +1,9 @@
 #!/usr/bin/env node
 /**
- * Regenerate the engine-mark imagesets from `packages/ui`'s `EngineIcon.tsx`.
- *
- * The marks are single-path, `fill="currentColor"` SVGs — the web draws them
- * inline from a `PATHS` table, and iOS cannot: SwiftUI has no path-data parser,
- * so the phone needs real vector assets in the catalog. Generated rather than
- * copied so the two can never drift into two different silhouettes, and checked
- * in rather than built, because the asset catalog is compiled by Xcode and there
- * is no node in that build.
- *
- * Rendered as *template* images so `.foregroundStyle` tints them — the vendor
- * colour is the row's to apply (see `VendorPalette`), exactly as the web passes
- * `vendorMarkClass` into `EngineIcon`.
+ * Regenerate the engine-mark imagesets from `packages/ui`'s `EngineIcon.tsx` — generated so the
+ * two can never drift, checked in because Xcode compiles the catalog with no node in that build,
+ * and written as *template* images so `VendorPalette` tints them. See `docs/CLIENTS.md`
+ * §`apps/ios`.
  *
  * Run: `node apps/ios/scripts/gen-engine-marks.mjs` (from the repo root).
  */

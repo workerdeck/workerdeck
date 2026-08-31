@@ -1,15 +1,8 @@
 /**
- * One transcript item, drawn as terminal rows. Each renderer answers the same
- * two questions: which marker goes in the gutter, and what the body says —
- * never a spacing, radius or border. The markers are the CLI's:
- *
- * | glyph | means                                    |
- * |-------|------------------------------------------|
- * | `❯`   | what you typed                           |
- * | `●`   | what the model said, or a tool it called |
- * | `⎿`   | that tool's output, one level in         |
- * | `✻`   | thinking                                 |
- * | `!`   | a notice from the runner, not the model  |
+ * One transcript item, drawn as terminal rows. Each renderer answers which marker goes in the
+ * gutter and what the body says — never a spacing, radius or border. The markers are the CLI's:
+ * `❯` what you typed, `●` what the model said or a tool it called, `⎿` that tool's output one
+ * level in, `✻` thinking, `!` a notice from the runner rather than the model.
  */
 
 import { useEffect, useState } from 'react'

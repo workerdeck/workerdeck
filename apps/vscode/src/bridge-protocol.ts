@@ -1,16 +1,7 @@
 /**
- * The postMessage wires between the webviews and the extension host.
- *
- * The webviews run real `WorkerDeckClient`s: the transport messages carry their
- * injected `fetchImpl`/`WebSocketImpl` across the process boundary, and the host
- * executes them with Node fetch / `ws`, adding the gateway's `Authorization`
- * header there. **Keys never enter a webview**, and no webview CSP has an external
- * `connect-src`.
- *
- * The panel holds the one live attach; the sidebar must never attach a second time.
- *
- * Dependency-free at runtime (type-only imports, erased at build). Imported by
- * BOTH tsconfigs: keep it to types and constants.
+ * The postMessage wires between the webviews and the extension host: **keys never enter a
+ * webview**, and the panel holds the one live attach. Imported by BOTH tsconfigs, so it must stay
+ * dependency-free at runtime — types and constants only. See `docs/CLIENTS.md` §`apps/vscode`.
  */
 import type { PermissionMode, ScopeRoot, SessionInfo, WorkspaceScope } from '@workerdeck/protocol'
 import type { ViewConfig } from './view-config.ts'

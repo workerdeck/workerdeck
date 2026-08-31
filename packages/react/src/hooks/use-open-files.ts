@@ -29,18 +29,10 @@ export type UseOpenFilesResult = OpenFilesState & {
 }
 
 /**
- * The open-file tabs of a workspace: which files are open, which one is focused,
- * the bytes behind each, and the edits on top of them.
- *
- * Reads are fired from an effect keyed on "which tabs are still loading" rather
- * than from `open` itself, so the reducer stays pure and a tab that was opened,
- * closed and reopened does not carry a stale in-flight request with it.
- *
- * Deliberately **not** given the session's cwd: a tab is an absolute host path,
- * and where it came from — the tree, a search hit, a path in the transcript — is
- * the caller's business. Containment is the server's job on every `/fs/read` and
- * `/fs/write`, not something re-derived here from a directory this hook would
- * have to trust.
+ * The open-file tabs of a workspace: which files are open, which is focused, the bytes behind
+ * each, and the edits on top of them. A tab is an absolute host path and this hook is
+ * deliberately not given the session's cwd — containment is the server's job on every `/fs/read`
+ * and `/fs/write` (`docs/GOTCHAS.md` §Host filesystem), never re-derived here.
  */
 export const useOpenFiles = (client: WorkerDeckClient): UseOpenFilesResult => {
   const [state, dispatch] = useReducer(openFilesReducer, initialOpenFilesState)

@@ -124,17 +124,12 @@ export function StepToggle({
 }
 
 /**
- * One step under its session — **pressable, all of them**; only what the press
- * does differs. An agent hands the panel over to its own work
- * (`SessionPanel.openSubagent`); a task selects the session and travels to that
- * task's marker inside it.
- *
- * **Only an agent can wear the selection**, and `active` is guarded on that here
- * rather than trusted from the caller: a host handing back a task's key is
- * describing where it navigated, not what it selected.
- *
- * The hover is `--row-active` — **alpha, not a flat fill** — because this row
- * must answer the pointer over a transparent card, a blue one and a grey one.
+ * One step under its session — **pressable, all of them**; only what the press does differs (an
+ * agent hands the panel over to its own work, a task travels to its marker inside the session).
+ * **Only an agent can wear the selection**, guarded on `kind` here rather than trusted from the
+ * caller, and the hover is `--row-active` — alpha, not a flat fill, since this row must answer
+ * the pointer over a transparent card, a blue one and a grey one. Reasoning in
+ * docs/PACKAGES.md §`packages/ui`.
  */
 export function StepRow({
   step,

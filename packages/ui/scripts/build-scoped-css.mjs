@@ -1,47 +1,12 @@
 /*
- * Builds `build/scoped.css` — the SELF-CONTAINED, SCOPE-REWRITTEN stylesheet
- * behind the `@workerdeck/ui/scoped.css` export.
+ * Builds `build/scoped.css` — the self-contained, scope-rewritten stylesheet behind the
+ * `@workerdeck/ui/scoped.css` export, for a host whose own Tailwind v4 design system `theme.css`
+ * would collide with. The package compiles its OWN utilities from its OWN theme and sources,
+ * then rewrites every selector to live under `.wd-root`.
  *
- * Why this exists: `theme.css` is designed for an app that hands its whole
- * Tailwind build to WorkerDeck (the dashboard, the embedded example). A host
- * with its OWN Tailwind v4 design system cannot use it: `@theme` is global, and
- * both sides map the same utility names (`bg-accent`, `text-code`, `rounded-md`,
- * `font-sans`, …) to different semantics — whichever theme loads last silently
- * restyles the other side. The raw tokens collide too (`--bg`, `--accent`, …,
- * with opposite light/dark polarity).
- *
- * So instead the package compiles its OWN utilities here, from its OWN theme and
- * its OWN sources (plus streamdown, whose markdown renderer ships Tailwind-classed
- * markup), and then rewrites every selector to live under `.wd-root`:
- *
- *   - `:root` / `html` / `body` / `:host`  →  `.wd-root` (tokens and the
- *     body-level canvas land on the wrapper; nothing global survives)
- *   - `[data-theme='light'|'dark']` token blocks → forms that respond to the
- *     attribute on ANY ancestor (the host's <html>), on `.wd-root` itself (a
- *     pinned panel), or on a nested element inside the panel — see
- *     `mapThemeTokenBlock` for the exact cascade math
- *   - `*` / bare pseudo selectors (preflight, `:focus-visible`, `svg.lucide`)
- *     →  `:is(.wd-root, .wd-root *)…`
- *   - everything else gets a `.wd-root ` descendant prefix
- *
- * Every rewrite adds exactly one class of specificity (0,1,0), uniformly, so the
- * package's internal cascade (preflight < base additions < components <
- * utilities, and unlayered terminal.css over everything layered) is preserved
- * bit-for-bit relative to the standalone build. `@keyframes` bodies,
- * `@font-face`, and `@property` are left untouched (they have no element
- * selectors to scope); rules inside `@media`/`@supports`/`@layer` are visited
- * like any other.
- *
- * The one cross-NAMESPACE hazard a host can still inject — a host color named
- * like one of our font-size utilities (Tailwind resolves `text-X` in the color
- * namespace when a `--color-X` exists, so a host `.text-code { color: … }`
- * would paint our `text-code` runs in the host's code-background color) — is
- * closed by low-order `color: inherit` guards prepended to the utilities layer.
- *
- * Portals: Base UI popups render into `document.body`, outside the wrapper.
- * `PortalScope` (components/ui/PortalScope.tsx) re-applies the `wd-root` class
- * on a `display: contents` element inside every portal, so the same scoped
- * rules and tokens reach them.
+ * **Every rewrite adds exactly one class of specificity (0,1,0), uniformly** — that is what keeps
+ * the package's internal cascade bit-for-bit identical to the standalone build, and it is the
+ * invariant any new selector form must satisfy. Rationale in docs/PACKAGES.md §`packages/ui`.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'

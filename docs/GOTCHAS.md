@@ -100,7 +100,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   is set** — a rename is a person's decision, and not fetching means nothing is stored waiting to
   resurface if the rename is later cleared — and `summary` is taken only when it **differs from
   `firstPrompt`**, because the SDK falls back to the first prompt before a session has a real
-  title, and `#title()` already has its own prompt fallback.
+  title, and `sessionTitle()` (`core/src/lib/title.ts`) already has its own prompt fallback.
 - **A resumed transcript carries no structure.** `getSessionMessages` returns exactly
   `{ type, uuid, session_id, message, parent_tool_use_id, parent_agent_id, timestamp }`: `isMeta`,
   `isSidechain`, `promptSource` and `origin` are all dropped, and `isMeta` entries are filtered
@@ -146,6 +146,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   session/job create with it, startup refuses a profile whose `defaults.permissionMode` fails it.
   Don't re-encode any per-engine list anywhere; a core test pins each adapter's `capabilities` to
   the protocol record *by identity*, so drift is impossible rather than merely tested-for.
+
+- **`disableBypassPermissions` is the server-wide mirror of Claude Code's
+  `permissions.disableBypassPermissionsMode`, enforced at the gateway.** It refuses
+  `permissionMode: 'bypassPermissions'` on session/job creation (403) *and* strips the
+  `allowDangerouslySkipPermissions` pre-authorization from requests — stripping rather than
+  refusing, so clients that ask for the capability by default keep working and only their later
+  switch attempt fails, with the CLI's own visible error.
 
 ## Provider engine (AI SDK v7)
 
@@ -557,7 +564,8 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   **(d) The context reading is retired, and cannot be re-polled.** Claude re-polls after a reset;
   codex's only source is `thread/tokenUsage/updated`, which arrives *during* a turn. So there is
   no reading at all until the next turn runs, and the protocol's standing rule applies — render
-  nothing, never 0%. `#emit`'s `conversation_reset` arm already did this.
+  nothing, never 0%. The event log's `conversation_reset` fold (`core/src/lib/event-log.ts`)
+  already did this for all three engines.
   **(e) Sub-agents are `forget()`-ten, not `sweep()`-ed — and remembered.** Sweep settles the
   running ones as failed and *keeps the rows*, which is right when the process dies (the anchor
   `tool_use` cards are still in the transcript). A clear is the other way round: the anchors go
@@ -630,6 +638,32 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   inline-table `projects`, array-of-tables, conflicting duplicates) because **a false notice is
   worse than a missed one**. We deliberately never write the trust entry ourselves — granting
   codex a privilege on the operator's behalf sits against the codex auth red lines in `CLAUDE.md`.
+
+- **`SubagentInfo.toolUseId` keeps its documented meaning on codex.** The spawn signal is the
+  `subAgentActivity` item, whose own `id` is the model's `spawn_agent` call id — a genuine tool-use
+  id — so the runner authors the anchor `tool_use` itself and keys every event of the agent's
+  *thread* to it (`engines/codex/subagents.ts`).
+
+- **The sub-agent tracker keys by thread id and publishes a tool-use id; do not confuse the two
+  vocabularies.** `engines/codex/subagents.ts` is deliberately NOT the claude tracker generalised —
+  that one infers spawns from tool names and verdicts from result-text sniffing, while
+  `subAgentActivity {kind: 'started'}` positively announces an agent, names it (`agentPath`), keys
+  it (`agentThreadId`, the id every later notification carries) and hands over the model's own
+  `spawn_agent` call id. So the map is keyed by **thread id** — the wire's handle — while
+  publishing a **tool-use id**: `parentToolUseId` on nested events must equal the anchor
+  `tool_use`'s id for `subagentItems` (the frame-membership rule every client shares) to reassemble
+  the sidechain. A record survives the runner's turns, because codex agents are designed to outlive
+  the root turn that spawned them; what ends them all is `sweep()` when the app-server child dies or
+  the session closes, since an agent whose host process is gone can never report, and `running` on a
+  closed session is a lie a 1.2s-polled list re-renders forever. The settled tail is bounded by
+  `SUBAGENT_HISTORY` and enforced at *settle* time (once per agent) rather than at `list()` time
+  (once per row of that poll); running records are never capped.
+- **An unannounced non-root thread still gets an agent record.** `#agentFor` mints one for any
+  thread emitting items on the connection — codex runs threads of its own for review/compact, and a
+  `subAgentActivity` could in principle be missed — which is the claude tracker's nested-event
+  fallback on a stronger signal. The minted record is label-less and its anchor `tool_use` is
+  authored on the spot, because an attributed event whose `parentToolUseId` matches no top-level
+  call renders inline instead of as a frame; a late `started` edge fills the name in.
 
 ## Engine adapters & capability records
 
@@ -722,6 +756,19 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - `deliver_file` exists only when `onFileDelivered` is wired; `createEngineSession` grants it by
   default (`capabilities.deliverFiles: false` withholds it). Delivered files are downloadable
   only while the session lives — in-memory VFS; durability is the persistence tier.
+
+- **`sandboxedProviderProfile()` adds no mechanism — the empty arrays are the whole thing.**
+  `capabilities: []` and `mcpServers: []` already mean what they mean and `createToolContext`
+  already withholds a tool whose backend the host did not inject; the helper only makes the three
+  fields one call, the failure mode otherwise being a profile that *looks* sandboxed and still
+  grants `deliver_file` because nobody wrote the empty array. A session under it can run untrusted
+  JS in the WASM guest under the interpreter's own timeout/memory limits and read+write the
+  session's in-memory VFS (a map, not a filesystem); it cannot touch a host path, spawn a process,
+  reach the network (`web_fetch`/`download`/`web_search` are all capabilities and none is granted),
+  deliver a file, or use MCP. Two things it does not do, because they are not a profile's to
+  decide: it authorizes nobody (that is `scope` + `authorizeSession`), and it does not make the
+  model's *input* trustworthy — a sandbox bounds what a tool can reach, not what a prompt can talk
+  the model into asking for.
 
 ## Session scope (embedded deployments)
 
@@ -843,7 +890,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     which unlike `restore` is a **public request field** — `createSession({ resume, prompt })`
     legitimately means "continue this thread, and here is the next thing". So the suppression lives
     at the wake site in `rebuild:`, never in a runner. Dropping it alone is a *different* bug:
-    `#title()` derives from `prompt` when `meta.title` is unset, so the wake also freezes
+    `sessionTitle()` derives from `prompt` when `meta.title` is unset, so the wake also freezes
     `record.info.title` into `meta` or the session comes back nameless.
   - **A rename must re-save the record, and the record must carry the runner's live `meta`.**
     `setTitle()` writes the *runner's* `#config`, which `SessionParkManager.#configs` never sees,
@@ -912,6 +959,14 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   executor via a dispatch-time delegate on `call.sessionId` (see `smoke/sdk-client.ts`). The
   browser guest engine is loaded on first bridged call, never at import; keep it that way (it is
   ~2 MB) and keep the variant an optional peer dep.
+
+- **A `conversation_reset` must re-write the record, and nothing else will.** No `status_changed`
+  follows a clear, and `#persistLive` is otherwise driven by `turn_result` — so the reset arm calls
+  both `#rememberDormant` and `#persistLive`. The dormant record names the conversation that was
+  just cleared (re-saved under a freshly adopted engine session id, or deleted if the engine has
+  none yet); the live record *carries* the transcript, so without the second call the on-disk
+  snapshot keeps the pre-clear messages until the next turn ends. Either omission means a restart
+  in that window wakes the session straight back into the transcript the user threw away.
 
 ## Server, profiles & auth
 
@@ -1031,6 +1086,19 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   landing a logged-in operator on the login page, and buys nothing the explicit Origin check does
   not already cover — the real surfaces are same-site-different-port and the WS handshake, both of
   which need that check whatever `SameSite` says.
+
+- **`cors: { origins }` is sharing policy, not a credential.** Preflights are answered *before*
+  `authenticate` (browsers strip credentials from them, so they would otherwise 401), but every
+  real request still goes through the hook — an allowlisted page that does not hold the key gets
+  nothing. Two implementation rules: **exact origins only**, no wildcards or suffix matching, and
+  `Access-Control-Allow-Credentials` is **never** sent, which is what keeps an ambient cookie from
+  becoming cross-origin authority. WebSocket upgrades are exempt from CORS entirely and are
+  unaffected — their credential is whatever `authenticate` accepts on the handshake.
+- **A `ProfileStore` holds NO credentials, by construction.** `ProviderConfig.apiKeyEnv` is a
+  variable *name* and a Claude profile's `configDir` is a *path*; both are resolved against the
+  server's own environment at session time. That is exactly what makes a stored profile safe to
+  write to disk and safe to serve from `GET /profiles` — the same rule `toDurableRecord` follows
+  when it drops `env` from a persisted session config.
 
 ## Host filesystem (`/v1/fs/*`)
 
@@ -1363,6 +1431,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   mistake.
 ## Terminal theme (`transcriptVariant: 'terminal'`)
 
+- **The gutter markers are the CLI's, and they are the whole of a row's identity.** `❯` is what
+  you typed, `●` what the model said or a tool it called, `⎿` that tool's output one level in,
+  `✻` thinking, `!` a notice from the runner rather than the model. Every renderer in
+  `terminal/items.tsx` answers exactly two questions — which marker goes in the gutter, and what
+  the body says — never a spacing, a radius or a border; those belong to `Row`/`Blank`/`Band`.
+  `❯` is also `PROMPT_GLYPH`, shared with the composer's gutter, because two spellings would put
+  the caret a glyph off the column.
 - **`--term-font-size` and `--term-line` must be whole pixels.** They are the character cell, and a
   line height of `1.5 × 13px` is 19.5px: every second row of a long transcript then lands on a
   half-pixel, the text visibly softens, and the diff bands show a seam along their edge. This is

@@ -1,16 +1,7 @@
 /**
- * The two prompt tokens the CLI understands — `@file` and `/command` — found in
- * text that has already been sent.
- *
- * The mirror of the iOS client's `PromptTokens.scan`, and deliberately the same
- * rules: a message should read the same after sending as it did in the composer,
- * on either client. It lives here, beside the transcript reducer, for the same
- * reason its Swift twin lives in the kit rather than the app — every interesting
- * case is an edge (an `@` mid-word, an email address, a slash that is really an
- * absolute path), so it is the part that gets unit-tested.
- *
- * Only the finished-text half is here; the composer's completion is the
- * prompt-area's own trigger machinery.
+ * The two prompt tokens the CLI understands — `@file` and `/command` — in text already sent, and
+ * the mirror of the iOS client's `PromptTokens.scan`: the rules must stay identical, or a message
+ * reads differently on the two clients. The composer's completion is the prompt-area's own.
  */
 export type PromptToken = {
   kind: 'file' | 'command'

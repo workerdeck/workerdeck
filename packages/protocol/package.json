@@ -20,7 +20,8 @@
     "clean": "rimraf build",
     "build": "tsdown",
     "prepack": "pnpm clean && pnpm build",
-    "typecheck": "tsgo -p tsconfig.json"
+    "typecheck": "tsgo -p tsconfig.json",
+    "test": "echo \"@workerdeck/protocol has no tests of its own — its rules (transcriptActivity, replayCoalesceKey, snapshotRetains/replayRetains, result truncation, image refs) are proven against real consumers in packages/react/test and packages/core/test.\""
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

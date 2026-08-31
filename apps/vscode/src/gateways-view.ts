@@ -15,18 +15,10 @@ export type GatewaysFeed = {
 }
 
 /**
- * The Gateways view: the gateways this window can drive, as its own VS Code view in
- * the WorkerDeck container. `visibility: "collapsed"` in the manifest, so a fresh
- * install sees the header without spending rows on it, and the header's
- * `description` carries the count.
- *
- * The webview draws no header: the form it opens one level deep is announced with
- * `wd-gateway-form-state`, and this side answers by retitling the view and swapping
- * its `+` for a back chevron.
- *
- * **No transports.** Saving a gateway is globalState plus the OS keychain, both
- * host-side; this webview runs no `WorkerDeckClient` and has no route to a gateway.
- * Auth keys reach it exactly once, prefilled into an edit form the person asked for.
+ * The Gateways view: the gateways this window can drive, as its own collapsed-by-default VS Code
+ * view. The webview draws no header — it announces its form state with `wd-gateway-form-state`
+ * and this side retitles the view. **No transports**: saving a gateway is globalState plus the OS
+ * keychain, both host-side, and this webview has no route to a gateway.
  */
 export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewId = 'workerdeck.gateways'

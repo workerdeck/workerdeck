@@ -1,40 +1,13 @@
 /**
- * The terminal theme's row-height calculator: the pixel height the renderer
- * will draw an item at, computed from cell metrics alone — no DOM. A terminal
- * capability (one line height, one cell, monospace, ligatures off); nothing
- * here transfers to the cards variant. The consumer is the virtualizer's
- * `estimateSize`; the contract is "almost always exact, and honest when it
- * cannot be" — the `exact` flag marks content whose advance this model cannot
- * know (emoji/CJK render from fallback faces whose advances are not whole
- * cells). `dev/height-audit.ts` is this file's regression gate.
- *
- * Two load-bearing invariants keep the model small:
- *
- * - **Only the default state is ever computed.** Expansion is component-local
- *   state that dies with the row, so an off-screen row is always collapsed —
- *   and an expanded row is by definition mounted and really measured. No
- *   open/expanded branch here, on purpose.
- *
- *   **This is a decided, permanent divergence from iOS**, not a gap to close.
- *   There (`TerminalExpansion.swift`) nothing self-measures — the layout takes
- *   every frame from the height book, so expansion is an input to the planner,
- *   which is what lets the iOS scrubber be expansion-aware. Lifting expansion
- *   to shared state here would buy that one rail feature and cost this
- *   invariant, the calculator's central simplification. Nor would a paint-only
- *   registry help: web expansion exists only while a row is mounted, so a rail
- *   fed by it could only band the rows already on screen. Said here because
- *   this is the file where someone would go looking to "fix" it.
- *
- * - **Mutation is object replacement.** The transcript reducer never mutates
- *   an item in place, which is what lets {@link HeightEpoch}'s cache key on
- *   identity and never go stale.
- *
- * The wrap model mirrors `.term-body` (`pre-wrap` + `break-word` in a
- * `minmax(0,1fr)` grid column): greedy fill, preserved spaces hang at the line
- * end, breaks after hyphens/dashes/`?` not followed by a digit (verified
- * against Chrome's actual break rects), breaks between CJK characters; a token
- * wider than the column moves to its own line first and then breaks per cell —
- * exactly where `break-word` differs from `anywhere`.
+ * The terminal theme's row-height calculator: the pixel height the renderer will draw an item
+ * at, from cell metrics alone and with no DOM, so the virtualizer's `estimateSize` is exact.
+ * Terminal only — nothing here transfers to the cards variant — and `exact: false` marks content
+ * whose advance this model cannot know (emoji/CJK come from fallback faces). Two invariants keep
+ * it small: **only the collapsed state is ever computed** (expansion is component-local and dies
+ * with the row, a decided permanent divergence from iOS rather than a gap to close), and
+ * **mutation is object replacement**, which is what lets {@link HeightEpoch} key its cache on
+ * item identity and never go stale. `dev/height-audit.ts` is the regression gate; the rest of
+ * the story is docs/PACKAGES.md §`packages/ui`.
  */
 
 import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
@@ -330,9 +303,13 @@ const wrapOne = (line: string, cols: number): { lines: number; exact: boolean } 
   return { lines, exact }
 }
 
-/** Visual lines of a (possibly multi-hard-line) text at `cols` columns.
- * Exported for the dev audit; also the one genuinely pure piece a unit test
- * could pin, should `ui` ever grow a runner. */
+/**
+ * Visual lines of a (possibly multi-hard-line) text at `cols` columns, mirroring `.term-body`
+ * (`pre-wrap` + `break-word` in a `minmax(0,1fr)` grid column): greedy fill, preserved spaces
+ * hang at the line end, breaks after hyphens/dashes/`?` not followed by a digit and between CJK
+ * characters, and an over-wide token takes its own line before breaking per cell — exactly where
+ * `break-word` differs from `anywhere`. Pinned by `test/text-lines.test.ts` and the dev audit.
+ */
 export const textLines = (text: string, cols: number): { lines: number; exact: boolean } => {
   let lines = 0
   let exact = true

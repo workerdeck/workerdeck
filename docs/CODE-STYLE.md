@@ -38,7 +38,12 @@ that `pnpm format` + `pnpm lint --fix` converge the whole repo, and format-on-sa
   - `wd/no-stacked-jsdoc` — two `/** */` blocks on one declaration is always a mistake: one of
     them documents the wrong symbol or went stale.
   - `wd/max-comment-lines` (warn) — a comment block over 12 lines is documentation that belongs
-    in `docs/` with a one-line pointer left behind.
+    in `docs/` with a one-line pointer left behind. Vendored code
+    (`packages/ui/src/components/prompt-area`) is exempt for the same reason it is exempt from
+    `wd/module-func-style`, plus one of its own: most of those blocks are the upstream library's
+    `@example` API docs, and rewriting them is pure diff noise against a tree we want to keep
+    diffable. The few that carry WorkerDeck-added invariants stay at the call site deliberately —
+    documenting vendored internals in our `docs/` is how the vendored boundary rots.
 
 ## Conventions the tooling cannot (yet) enforce
 

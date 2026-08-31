@@ -52,7 +52,8 @@
     {
       "files": ["packages/ui/src/components/prompt-area/**"],
       "rules": {
-        "wd/module-func-style": "off"
+        "wd/module-func-style": "off",
+        "wd/max-comment-lines": "off"
       }
     }
   ],

@@ -1,37 +1,16 @@
 import type { ProfileInfo, ProviderConfig, SessionCapability } from '@workerdeck/protocol'
 
 /**
- * A `provider` profile that grants a session nothing but the sandbox: the
- * QuickJS guest, the in-memory VFS, and the model.
+ * A `provider` profile that grants a session nothing but the sandbox: the QuickJS guest, the
+ * in-memory VFS, and the model. No host path, no process, no network, no MCP.
  *
- * This adds no mechanism. `capabilities: []` and `mcpServers: []` already mean
- * what they mean, and `createToolContext` already withholds a tool whose backend
- * the host did not inject. What the helper buys is that the locked-down profile
- * is one call rather than three fields an operator has to get right together —
- * the failure mode being a profile that *looks* sandboxed and still grants
- * `deliver_file` because nobody wrote the empty array.
+ * It adds no mechanism — the **empty arrays** are the whole thing, and writing them together in
+ * one call is the point: a profile that omits one *looks* sandboxed and still grants what the
+ * host wired. It authorizes nobody (that is `scope` + `authorizeSession`) and does not make the
+ * model's input trustworthy. See `docs/PACKAGES.md` §`packages/server`.
  *
- * What a session under it can do:
- * - run untrusted JavaScript in the WASM guest, under the interpreter's own
- *   timeout and memory limits (`eval_script`),
- * - read and write the session's in-memory VFS, which is a map and not a
- *   filesystem — no host path is reachable from it.
- *
- * What it cannot do: read or write a host path, spawn a process, reach the
- * network (`web_fetch`/`download`/`web_search` are capabilities, and none is
- * granted), deliver a file, or use an MCP server.
- *
- * Two things this helper does **not** do, because they are not a profile's to
- * decide. It does not authorize anyone — visibility is
- * `CreateSessionRequest.scope` plus the gateway's `authorizeSession`. And it
- * does not make the model's *input* trustworthy: content the loop reads is
- * attacker-influenced by default, and a sandbox bounds what a tool can reach,
- * not what a prompt can talk the model into asking for.
- *
- * @param name Profile name clients name in `CreateSessionRequest.profile`.
- * @param provider Which model to run (credentials stay in the operator's
- *   environment and are resolved by the host's `createEngineRunner` — never
- *   here, and never on the wire).
+ * @param provider Credentials stay in the operator's environment and are resolved by
+ *   `createEngineRunner` — never here, and never on the wire.
  */
 export const sandboxedProviderProfile = (
   name: string,

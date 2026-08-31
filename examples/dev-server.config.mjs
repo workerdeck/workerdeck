@@ -1,62 +1,25 @@
 /**
- * The dev gateway, as a `workerdeck` config file. Edit it directly — it is a
- * starting point to change, not a knob panel to configure.
- *
+ * The dev gateway, as a `workerdeck` config file — a starting point to edit, not a knob panel. It
+ * runs the same binary `npx workerdeck` gives a user, so dev and ship are one code path; parked
+ * sessions land in the gitignored `examples/.workerdeck/`.
  *   pnpm dev:server    # gateway + dashboard on http://127.0.0.1:8787
  *   pnpm dev:web       # optional: vite dashboard on :5191 with HMR, proxying /v1 here
- *
- * There is no separate dev entry point any more: this runs the same `workerdeck`
- * binary a user gets from `npx workerdeck`, so the thing you develop against and
- * the thing you ship are one code path — including the single-origin model, where
- * the dashboard is served from the gateway's own port rather than a vite proxy.
- *
- * Parked sessions land in `examples/.workerdeck/` (gitignored) and survive a
- * restart; `--no-parking-store` opts out.
- *
- * ## Reaching it from another device (the iOS app, over Tailscale)
- *
- * `WD_DEV_HOST` is the one knob: `pnpm dev:server` binds it *and* declares it as
- * an accepted Host header, and `pnpm dev:web` points the dashboard's proxy at it.
- * The default is loopback only. Set it in your shell, never in the committed
- * script — it names one person's machine.
- *
- *   export WD_DEV_HOST=toby
- *   pnpm dev:server
- *
- * That form is unauthenticated, because the script also passes `--insecure-host`:
- * one declaration waives the key for that host and doubles as an accepted Host
- * header (an unauthenticated instance otherwise only answers to loopback names).
- * Fine on a tailnet, and only there.
- *
- * Auth off loopback is otherwise not optional theatre: anyone who can reach the
- * port would get a coding agent session. Pass `--auth-key <secret>`, or let the
- * CLI generate one — printed once, kept in the state dir
- * (`examples/.workerdeck/auth-key` here), reused on later starts. Native clients
- * (the iOS app) send it as `Authorization: Bearer <key>`; browsers post it once at
- * the login page and ride a cookie. Then point the client at
- * `http://<your-tailscale-name>:8787`.
- *
+ * To reach it from another device (the iOS app over Tailscale), export `WD_DEV_HOST` in your own
+ * shell — never in the committed script, it names one machine. The script binds it, declares it an
+ * accepted Host header, and `--insecure-host` waives the key: a tailnet only. Elsewhere pass
+ * `--auth-key`, or let the CLI generate one into the state dir.
  * @type {import('workerdeck').WorkerDeckConfig}
  */
 export default {
   /**
-   * A claude profile from your own `~/.claude` (exactly what auto-detection
-   * would create), plus a codex profile — engine adapters ship in the box, so
-   * declaring one is all it takes. Codex auth is the binary's own: run
-   * `codex login` (or `codex login --with-api-key`) in YOUR terminal and the
-   * profile goes green; until then it lists as unavailable with the remedy,
-   * and creating a session against it simply fails with codex's own error.
-   *
-   * The claude default dir is never pinned as `CLAUDE_CONFIG_DIR` — setting the
-   * variable at all would move the CLI's credential source to
-   * `<dir>/.credentials.json` and, on macOS, away from the login Keychain. A
-   * profile pointing anywhere else IS pinned, and needs its own credentials in
-   * that directory (`CLAUDE_CONFIG_DIR=<dir> claude auth login`). The codex
-   * analogue is `codexHome` (unset = the binary's own `~/.codex`), which has no
-   * Keychain trap.
-   *
-   * Startup probes every profile's credentials and warns if one looks logged
-   * out; `checkCredentials: false` turns that off.
+   * A claude profile from your own `~/.claude` (exactly what auto-detection would create) plus a
+   * codex profile — engine adapters ship in the box, and auth is each binary's own: run
+   * `codex login` in YOUR terminal and the profile goes green. The claude default dir is never
+   * pinned as `CLAUDE_CONFIG_DIR`, because setting the variable at all moves the CLI's credential
+   * source off the macOS login Keychain; a profile pointing anywhere else IS pinned and needs its
+   * own credentials there (`docs/GOTCHAS.md` §Server, profiles & auth). `codexHome` is the codex
+   * analogue and has no Keychain trap. Startup probes every profile's credentials;
+   * `checkCredentials: false` turns that off.
    */
   profiles: [
     {
@@ -127,23 +90,13 @@ export default {
   },
 
   /**
-   * Push notifications for the iOS app. Delete this key entirely to turn the
-   * forwarder off — with it absent, `/apns/devices` 404s, which is how the app
-   * learns a gateway does not push.
-   *
-   * This is the only place in the project that holds a push credential;
-   * `packages/server` emits the notifications and knows nothing about Apple.
-   * `keyFile` is a path and never key contents, resolved relative to this file.
-   * It points into `.workerdeck/`, which is gitignored as a whole — and `*.p8`
-   * is ignored too, but neither is the actual plan: the p8 belongs in the
-   * password manager, because it downloads exactly once, Apple deletes their
-   * copy on download, and a team only gets two of them.
-   *
-   * The environment is deliberately *not* set here. It is a property of each
-   * device token: the app registers as `development` (built from Xcode) or
-   * `production` (TestFlight), and the forwarder routes each token to the
-   * endpoint it belongs to. They are different namespaces, not just different
-   * URLs — cross them and Apple answers `BadDeviceToken`.
+   * Push notifications for the iOS app, and the only place in the project holding a push
+   * credential. Delete this key entirely to turn the forwarder off — `/apns/devices` then 404s,
+   * which is how the app learns a gateway does not push. `keyFile` is a path and never key
+   * contents, resolved relative to this file; gitignore is not the plan for the p8 itself, which
+   * belongs in the password manager (it downloads exactly once and a team gets two). The
+   * environment is deliberately not set here — it is a property of each device token.
+   * See `docs/GOTCHAS.md` §APNs push.
    */
   apns: {
     keyFile: './.workerdeck/AuthKey_DD89249M52.p8',

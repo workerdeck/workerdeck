@@ -1,19 +1,14 @@
 /**
  * "What had you seen, and when" — per session, across reloads.
  *
- * Two numbers because two surfaces ask different questions. A session list has
- * only the REST rollup for sessions it isn't showing, so it compares **rows the
- * gateway counted**; a panel has the whole transcript, so it compares **rows it
- * rendered** and can put the mark in the right place. Keeping both means neither
- * surface has to attach to something it isn't rendering.
+ * Two units because two surfaces ask different questions: a list compares rows
+ * the *gateway* counted, a panel compares rows it *rendered*, and keeping both
+ * means neither has to attach to something it isn't rendering.
  *
- * A watermark is only written while a session is genuinely on screen. A surface
- * nobody can see is not being read, and marking it read is how an unread badge
- * silently stops working.
- *
- * Storage is a seam (`WatermarkStore`) rather than a dependency: the VS Code
- * extension backs it with `globalState`, the dashboard with `localStorage`, and
- * neither belongs in this package.
+ * **A watermark is only written while a session is genuinely on screen** — a
+ * surface nobody can see is not being read, and marking it read is how an unread
+ * badge silently stops working. Storage is a seam (`WatermarkStore`), not a
+ * dependency: `globalState` in the extension, `localStorage` in the dashboard.
  */
 export type Watermark = {
   /** Transcript rows seen (`SessionVitals.itemCount`). */

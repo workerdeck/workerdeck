@@ -222,18 +222,10 @@ const describeStreamError = (error: Error): string => {
 }
 
 /**
- * Whether — and how — a failed attempt may be retried without risking a
- * duplicate notification on someone's lock screen:
- *  - 'never': the request may have reached Apple. A push is not idempotent
- *    (permission requests carry no collapse id on purpose), so give up.
- *  - 'now': Apple provably refused the stream before processing anything
- *    (REFUSED_STREAM — the routine GOAWAY-rebalance race, RFC 9113 §8.7), or
- *    the cached session was found closed before a stream even existed. The
- *    network is fine; retry immediately.
- *  - 'redial': the stream never got an id, so its HEADERS frame was never
- *    handed to the transport — the connect itself failed. Retry once on a
- *    fresh connection after a beat, because whatever broke the dial (an
- *    interface still coming up, say) may need a moment to pass.
+ * Whether a failed attempt may be retried without risking a duplicate notification on someone's
+ * lock screen — only with proof Apple never processed it. `'now'` is a refusal before processing
+ * (REFUSED_STREAM, or a cached session found closed), `'redial'` is a connect that never produced
+ * a stream id, `'never'` is everything else. See `docs/GOTCHAS.md` §APNs push.
  */
 type Retry = 'never' | 'now' | 'redial'
 

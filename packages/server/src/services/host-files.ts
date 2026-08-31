@@ -3,35 +3,16 @@ import { closeSync, constants, fstatSync, ftruncateSync, lstatSync, openSync, re
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 
 /**
- * Containment core for the operator's host-filesystem routes (`/v1/fs/*`).
+ * Containment core for the operator's host-filesystem routes (`/v1/fs/*`). Every requested path
+ * is adversarial — the trees are written by the agent — so three rules hold, and
+ * `docs/GOTCHAS.md` §Host filesystem says why each one is not negotiable:
  *
- * The routes are operator privilege — gated by the auth key, outside the agent
- * permission flow — but the trees they expose are written BY the agent, so every
- * requested path is adversarial: a session can plant `root/notes -> ~/.ssh` and
- * wait for the operator's phone to browse into it. That is why `cwdAllowed` in
- * server.ts (resolve + prefix compare) is not reused here: it vets an
- * operator-typed cwd, where a lexical check is enough; here the *route* a path
- * takes matters, so containment is decided only on the realpath'd form.
- *
- * Disclosure policy: every refusal that consulted the filesystem is a uniform
- * `404 'not found'` — outside every root, escaping via symlink, dangling link,
- * and genuinely absent are indistinguishable. Anything finer would let a planted
- * link turn this API into an existence probe for paths outside the roots (403
- * iff `~/.ssh/id_rsa` exists). 403 is reserved for verdicts that reveal nothing
- * beyond the roots: malformed requests, and in-root targets of the wrong kind.
- *
- * TOCTOU: resolve-then-open is a race by construction and no check at this
- * layer closes it — between a resolve and the caller's open, the agent can swap
- * a verified component for a symlink. What resolve guarantees is that the
- * *returned* path was canonical and contained at resolve time. Callers must
- * open exactly `outcome.path` (never the requested string), preferably through
- * {@link readContained}/{@link writeContained}, which pin the final component
- * with O_NOFOLLOW, defuse fifo/device swaps with O_NONBLOCK + fstat-before-io,
- * and truncate only after the fd is proven to be a regular file. A *parent*
- * directory swapped inside the window can still redirect the open — closing
- * that needs openat2(RESOLVE_BENEATH), which Node does not expose. The window
- * is microseconds wide and the exposure is accepted and documented rather than
- * pretended away.
+ * - **Containment is decided only on the realpath'd form**, never `cwdAllowed`'s lexical compare.
+ * - **Every refusal that consulted the filesystem is a uniform `404 'not found'`**; 403 is
+ *   reserved for verdicts that reveal nothing beyond the roots.
+ * - **Callers open exactly `outcome.path`**, through {@link readContained}/{@link writeContained}
+ *   — resolve-time guarantees hold at resolve time only, and a swapped parent stays a known,
+ *   accepted race (it needs openat2(RESOLVE_BENEATH), which Node does not expose).
  */
 
 // win32 lacks O_NOFOLLOW/O_NONBLOCK (undefined at runtime despite the typing);
@@ -162,17 +143,10 @@ export const resolveExisting = (roots: HostFileRoots, requested: string): Resolv
 }
 
 /**
- * For write: the target may not exist, so realpath cannot be asked directly.
- * An existing target reuses read semantics — writing *through* a symlink that
- * canonicalizes inside a root is allowed (`root/link -> root/real.txt` edits
- * real.txt), same reasoning as {@link resolveExisting}. A missing target
- * canonicalizes its immediate parent and re-checks: only the final component
- * may be new, and anything already sitting there — in practice a dangling
- * symlink — is refused, because open(2) with O_CREAT follows it and would
- * create the file wherever it points. That refusal is `not found`, not 403: a
- * link to an existing outside file already answers 404 via the exists branch,
- * so a distinct status for the dangling case would hand back exactly the
- * existence bit the uniform 404 exists to withhold.
+ * For write: the target may not exist, so realpath cannot be asked directly. An existing target
+ * reuses {@link resolveExisting}'s semantics; a missing one canonicalizes its immediate parent, so
+ * **only the final component may be new** and anything already sitting there (a dangling symlink,
+ * which O_CREAT would follow) is refused — as `not found`, keeping the uniform-404 disclosure.
  */
 export const resolveForWrite = (roots: HostFileRoots, requested: string): ResolveOutcome => {
   if (invalidRequest(requested)) {

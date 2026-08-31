@@ -116,17 +116,11 @@ export interface SessionPanelProps {
    */
   panelSurface?: 'internal' | 'external'
   /**
-   * Where the status bar lives. `'internal'` (default) draws it across the top
-   * of the panel. `'external'` draws none — the readings still leave through
-   * {@link onVitals}, so an embedder with a status line of its own (VS Code's
-   * window status bar) renders them there instead of stacking a second bar
-   * inside a panel that already sits in one.
-   *
-   * Deliberately independent of {@link panelSurface}: hosting the dialogs and
-   * hosting the bar are separate decisions. One coupling to know about — the
-   * `⋯` menu lives in the bar's trailing slot, so `statusSurface: 'external'`
-   * with `panelSurface: 'internal'` must pass a **function** {@link header} to
-   * take the menu, or it has nowhere left to go.
+   * Where the status bar lives. `'internal'` (default) draws it across the top of the panel;
+   * `'external'` draws none and the readings leave through {@link onVitals} instead. Deliberately
+   * independent of {@link panelSurface} — one coupling: the `⋯` menu lives in the bar's trailing
+   * slot, so `'external'` here with `panelSurface: 'internal'` must pass a **function**
+   * {@link header} to take it.
    */
   statusSurface?: 'internal' | 'external'
   /**
@@ -190,19 +184,11 @@ export interface SessionPanelProps {
    */
   reveal?: { toolUseId: string; nonce: number }
   /**
-   * Open a **sub-agent takeover**: the panel body becomes that agent's own work,
-   * with a way back. Bump `nonce` to ask again for the same one.
-   *
-   * A *request*, not a controlled value: the panel owns which agent is open and
-   * *reports* through {@link SessionPanelProps.onSubagentChange}; only a
-   * **change** of this prop is a request.
-   *
-   * **Withdrawing the request closes the frame** — the prop going away without a
-   * remount means "the conversation, plainly", because a host keeping its
-   * request in route state (`?subagent=`) has only that one way to say it.
-   *
-   * Hosts must clear their request on a session switch: a stale one replayed at
-   * remount would open a frame the new transcript cannot answer.
+   * Open a **sub-agent takeover**: the panel body becomes that agent's own work, with a way back.
+   * A *request*, not a controlled value — only a **change** of this prop asks, the panel reports
+   * through {@link SessionPanelProps.onSubagentChange}, and bumping `nonce` asks again for the
+   * same one. **Withdrawing it closes the frame**, and hosts must clear their request on a
+   * session switch. See docs/PACKAGES.md §`packages/ui`.
    */
   openSubagent?: { toolUseId: string; nonce: number }
   /**
@@ -314,24 +300,12 @@ export interface SessionPanelProps {
    */
   onLinkClick?: (href: string) => boolean | void
   /**
-   * Client-side tool handlers. Each key is a tool name the model can call; the
-   * handler receives the model's input and returns a result. The tool's
-   * **schema** must be registered server-side (via `tools` on
-   * `ProviderRunnerOptions`), but the handler runs here — right where the data
-   * the tool needs lives.
-   *
-   * Shorthand for `toolHost.clientTools`; when both are set, this wins for
-   * overlapping names.
+   * Client-side tool handlers, keyed by tool name. The tool's **schema** is registered
+   * server-side (`tools` on `ProviderRunnerOptions`); the handler runs here, where the data it
+   * needs lives. Shorthand for `toolHost.clientTools`, and this wins for overlapping names.
    *
    * ```tsx
-   * <SessionPanel
-   *   clientTools={{
-   *     app_navigate: async (input) => {
-   *       router.push((input as { path: string }).path)
-   *       return { value: 'navigated' }
-   *     },
-   *   }}
-   * />
+   * <SessionPanel clientTools={{ app_navigate: async (input) => { router.push(input.path); return { value: 'ok' } } }} />
    * ```
    */
   clientTools?: Record<string, ClientToolHandler>
@@ -1223,27 +1197,14 @@ export function SessionPanel({
 }
 
 /**
- * Turns a host path a tool card is holding into something an `<img>` can show.
- *
- * Two sources, tried in that order and for a reason:
- *
- * 1. **The session's produced files.** If this session's own runner announced
- *    writing that path (`file_produced`), the gateway will serve it from
- *    `/sessions/:id/produced/:fileId` — no host-file roots to declare, no byte
- *    cap to raise. This is the path codex's generated images take, and it is
- *    why they now render out of the box.
- * 2. **`/fs/read`.** For a path nothing produced — a picture the model looked
- *    at, an image already in the tree — where the operator's declared roots are
- *    the right gate and the answer is legitimately "no" outside them.
- *
- * The cache is what makes this usable from a transcript row: rows re-render on
- * every streamed delta, and an uncached resolver would re-fetch the picture each
- * time. A refusal is cached too, so it costs one request rather than one per
- * render.
- *
- * Keyed by `fileId`-or-path so that a path which becomes produced *after* a
- * failed `/fs/read` is retried under a different key rather than staying cached
- * as a miss.
+ * Turns a host path a tool card is holding into something an `<img>` can show. **Produced files
+ * first, `/fs/read` second, and the order is the rule**: a path this session's own runner
+ * announced is served from `/sessions/:id/produced/:fileId` with no roots and no byte cap, while
+ * a path nothing produced is an agent claim about an arbitrary location and the operator's roots
+ * are the right gate (docs/GOTCHAS.md §Produced files). The cache — refusals included — is what
+ * makes it usable from a row that re-renders on every streamed delta, and it is keyed by
+ * `fileId`-or-path so a path that becomes produced after a failed `/fs/read` retries under a new
+ * key rather than staying cached as a miss.
  */
 const useHostImage = (
   client: WorkerDeckClient,

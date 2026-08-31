@@ -1,23 +1,8 @@
 /**
- * Module-scope cache of detached transcript states, so switching back to a
- * recently viewed session paints its transcript in the mount frame and
- * re-attaches with `afterSeq: lastSeq` — the wire replays only what happened
- * while the panel was away, instead of the whole event log.
- *
- * Module-scope for the same reason `useSessions` and the watermarks are: the
- * consumers that need it (the VS Code panel, the dashboard's session route)
- * remount `SessionPanel` per session, so any per-hook copy would die with the
- * unmount that is the entire point of surviving.
- *
- * Entries are the same `TranscriptState` objects the reducer held — retention,
- * not duplication — and the bound is what keeps retention from becoming a
- * leak. Eviction is least-recently-STORED: every detach stores, so store
- * recency is viewing recency, and reads don't need to reorder.
- *
- * Keys come from {@link transcriptCacheKey} and carry the client's
- * `identityKey` (gateway + auth headers), never the session id alone: a
- * session id is unique only within one gateway, and an entry must never be
- * readable through a client speaking as a different principal.
+ * Bounded module-scope LRU of detached `TranscriptState`s, keyed by {@link transcriptCacheKey} —
+ * the client's `identityKey` plus the session id, never the session id alone, so no entry is
+ * readable through a client speaking as a different principal. Eviction is least-recently-stored.
+ * See `docs/PACKAGES.md` §`packages/react` and `docs/GOTCHAS.md` §Attach replay.
  */
 
 import type { WorkerDeckClient } from '@workerdeck/client'

@@ -20,17 +20,10 @@ export type SessionNotificationOptions = {
 }
 
 /**
- * Turns session events into the handful of notifications a human away from the
- * screen cares about, and delivers them to a webhook and/or a local observer.
- *
- * This is the *primitive*, deliberately transport-agnostic: the server stays
- * credential-free and knows nothing about APNs, Slack or email. Turning a
- * notification into a push is a forwarder's job (the turnkey CLI's), and one that
- * needs credentials, so it does not live here.
- *
- * Delivery is best-effort and ordered per session, mirroring the job queue's
- * webhook behaviour — a consumer that missed one can always attach to the session
- * WS with `afterSeq` and see the truth.
+ * Turns session events into the notifications a human away from the screen cares about, delivered
+ * best-effort and ordered per session. Deliberately transport-agnostic — the server stays
+ * credential-free, and turning one into a push is the CLI forwarder's job. The three load-bearing
+ * details of its `onRegister` seam are in `docs/GOTCHAS.md` §Server, profiles & auth.
  */
 export class SessionNotifier {
   readonly #options: SessionNotificationOptions

@@ -1,19 +1,11 @@
 /**
  * `{basePath}/sessions/:id/project/icon` — the bytes behind a `ProjectIcon.image` reference.
  *
- * Session-scoped on purpose: the caller's `/sessions/:id/*` `canSee` gate is the whole
- * authorization story, and the request carries **no path and no client input at all** beyond
- * the session id — the file served is whatever the gateway's own discovery resolved for this
- * session's cwd. Re-read at serve time through `readContained` and re-capped, because
- * resolve-time guarantees hold at resolve time only.
- *
- * "No icon" is one answer whatever the reason (no project, glyph-only, a refused declaration):
- * distinguishing them would tell a caller *why* a path outside the root was refused.
- *
- * `ETag` is the icon's own content hash — the value the wire's `ProjectIcon.image.hash`
- * carries — so a client that cached bytes by hash revalidates for free. `nosniff` + attachment
- * disposition because the bytes come out of a repo: an SVG must never render as a document on
- * the gateway's origin, and `<img src>` is unaffected by disposition.
+ * The request carries **no path and no client input at all** beyond the session id, so the
+ * `/sessions/:id/*` `canSee` gate is the whole authorization story; the bytes are re-read at
+ * serve time through `readContained` and re-capped, because resolve-time guarantees hold at
+ * resolve time only. "No icon" is one 404 whatever the reason. See `docs/PACKAGES.md`
+ * §`packages/server`.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { json } from '../lib/http.ts'

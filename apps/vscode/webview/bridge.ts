@@ -1,17 +1,10 @@
 import type { HostToWebview, TransportToWebview, WebviewToHost } from '../src/bridge-protocol.ts'
 
 /**
- * Webview half of the transport bridge, shared by both webviews: a fetch and a
- * WebSocket that ride `postMessage` to the extension host, which executes them
- * with Node fetch / `ws` and the gateway's auth header. Built once per webview
- * and handed to real `WorkerDeckClient`s as `fetchImpl` / `WebSocketImpl` —
- * the client neither knows nor cares that its transports cross a process
- * boundary.
- *
- * Non-transport host messages are fanned out through `onHostMessage`. Kinds in
- * `replayKinds` have their last value replayed to late subscribers — the host
- * answers our `wd-ready` (sent at construction, i.e. module load) before React
- * has mounted and listened.
+ * Webview half of the transport bridge: a fetch and a WebSocket riding `postMessage` to the
+ * extension host, handed to real `WorkerDeckClient`s as `fetchImpl` / `WebSocketImpl`. Kinds in
+ * `replayKinds` have their last value replayed to late subscribers, because the host answers our
+ * `wd-ready` (sent at module load) before React has mounted and listened.
  */
 
 type VsCodeApi = {

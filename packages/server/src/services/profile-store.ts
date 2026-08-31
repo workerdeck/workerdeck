@@ -3,18 +3,11 @@ import { dirname, join } from 'node:path'
 import type { ProfileInfo } from '@workerdeck/protocol'
 
 /**
- * Where dashboard-managed profiles live. The seam exists for the same reason
- * `QueueAdapter` does: a single-host deployment wants the bundled file store and
- * no configuration, while an operator with a database wants their own.
- *
- * Profiles declared in `createWorkerServer({ profiles })` never enter a store —
- * they are code, and stay immutable. The store holds only what the management
- * routes created, and the two sets are unioned by name.
- *
- * A store holds NO credentials: `ProviderConfig.apiKeyEnv` is a variable name and
- * a Claude profile's `configDir` is a path. Both are resolved by the server's own
- * environment at session time, which is what keeps a stored profile safe to write
- * to disk and safe to serve from `GET /profiles`.
+ * Where dashboard-managed profiles live — a seam for the same reason `QueueAdapter` is one.
+ * Profiles declared in `createWorkerServer({ profiles })` never enter a store; the two sets are
+ * unioned by name. **A store holds NO credentials**: `apiKeyEnv` is a variable name and `configDir`
+ * a path, both resolved from the server's own environment at session time, which is what keeps a
+ * stored profile safe to write to disk and safe to serve from `GET /profiles`.
  */
 export type ProfileStore = {
   /** Every stored profile. Called once at `listen()` and after each mutation. */

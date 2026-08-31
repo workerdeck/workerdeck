@@ -47,21 +47,12 @@ export type ToolResultBlock = {
   is_error?: boolean
   /**
    * This block carries only the **head** of the result: the replay truncated it
-   * (see {@link TOOL_RESULT_HEAD_CHARS}), and the whole thing is one fetch away
-   * at `GET /sessions/:id/events/:seq/result?toolUseId=`.
-   *
-   * On the **block**, never the event, and that is the same argument
-   * `user_message.patch` has to make in reverse: the patch sits on the event and
-   * its doc must therefore caveat "only when the message carries exactly one
-   * `tool_result` block — with two, nothing says which one it belongs to". A
-   * message answering three calls truncates whichever of them is large, so
-   * paying that caveat a second time would make the marker unusable exactly
-   * when it matters. {@link FilePatch.truncated} is the shipped precedent.
-   *
-   * Only ever set on a **replay** a client asked for (`truncateResults`), so a
-   * client that has never heard of this field cannot receive one — which is why
-   * this is additive at protocol 7 rather than a bump. Absent means the block is
-   * whole.
+   * (see {@link TOOL_RESULT_HEAD_CHARS}), and the rest is one fetch away at
+   * `GET /sessions/:id/events/:seq/result?toolUseId=`. On the **block**, never
+   * the event — a message answering three calls truncates whichever of them is
+   * large. Only ever set on a **replay** a client asked for (`truncateResults`),
+   * which is what makes it additive at protocol 7; absent means whole.
+   * (docs/PACKAGES.md §packages/protocol.)
    */
   truncated?: boolean
   /** How many characters the untruncated result had. Set iff `truncated`.
@@ -88,25 +79,16 @@ export type ToolResultBlock = {
 export const TOOL_RESULT_HEAD_CHARS = 8_000
 
 /**
- * A base64 image part, delivered as an address instead of its bytes. No client
- * renders block image bytes — both draw a tool's picture from a host path — so
- * the bytes' only effect on a reader is `return base` (measurements:
- * docs/PACKAGES.md).
+ * A base64 image part delivered as an **address instead of its bytes** — no
+ * client renders block image bytes, so the fold is unchanged and the wire is
+ * not (measurements and the full argument: docs/PACKAGES.md §packages/protocol).
  *
- * A **new part type rather than a hollowed-out `image`**: a head is a valid
- * shorter text, but an image with no bytes is not a smaller image, and
- * `{ type: 'image', source }` with no `data` invites a renderer drawing
- * `data:;base64,undefined`. An unfamiliar type instead falls through every
- * existing fold, exactly as the CLI's own `tool_reference` part does — this
- * family's safe failure.
- *
- * Only ever produced for a socket that asked (`imageRefs`), so a client that has
- * never heard of this type cannot receive one — which is why this is additive at
- * protocol 7, the same argument {@link ToolResultBlock.truncated} makes. Unlike
- * truncation it applies to **live events as well as replays**: the client's one
- * render path is ref-then-fetch, so bytes on a live event would either be
- * discarded or need a second decode-from-event path pinning megabytes inside
- * the transcript cache.
+ * A new part type, never a hollowed-out `image`: an unfamiliar type falls
+ * through every existing fold, an `image` with no `data` invites a renderer
+ * drawing `data:;base64,undefined`. Produced only for a socket that asked
+ * (`imageRefs`) — additive at protocol 7 for the reason
+ * {@link ToolResultBlock.truncated} gives — and unlike truncation it applies to
+ * **live events as well as replays**, the render path being ref-then-fetch.
  */
 export type ImageRefPart = {
   type: 'image_ref'
@@ -140,17 +122,12 @@ const base64Bytes = (data: string): number => {
 
 /**
  * Project one `tool_result` content part onto its {@link ImageRefPart}, or
- * `undefined` when the part is not a base64 image and must be delivered as it
- * stands.
+ * `undefined` when the part must be delivered as it stands.
  *
  * The rule's **one spelling**, shared by the transform that replaces parts
  * (core), the route that serves them back (server) and the property test that
- * proves the fold is otherwise unchanged (react) — the same reason every other
- * member of this family lives here rather than in whichever package applies it.
- *
- * Deliberately narrow — `image` with a base64 source, never "non-text": a
- * "drop non-text parts" rule would sweep in `tool_reference` for no measurable
- * gain, and narrowness is this family's standing habit.
+ * proves the fold is unchanged (react). Deliberately narrow: `image` with a
+ * base64 source, never "non-text".
  */
 export const imagePartRef = (part: { type?: string; [key: string]: unknown }, index: number): ImageRefPart | undefined => {
   if (part.type !== 'image') {
@@ -191,17 +168,11 @@ export type PatchHunk = {
 
 /**
  * What a file-editing tool changed — the renderable half of an engine's edit
- * output, and deliberately only that half.
- *
- * Both engines can say far more: the Claude SDK's `FileEditOutput` carries
- * `originalFile`, the **entire** contents of the file before the edit. That must
- * not travel here. This log is replayed to every attaching client and captured
- * into parking snapshots, so a whole file on every edit is paid for again on
- * every attach, forever — the same reason attachment bytes are references (see
- * {@link MessageAttachment}) rather than inline base64.
- *
- * So the runner projects the engine's output down to the hunks, which is exactly
- * what a diff renders and nothing more.
+ * output, and deliberately only that half: the Claude SDK's `FileEditOutput`
+ * also carries `originalFile`, the entire pre-edit file, and this log is
+ * replayed on every attach and captured into parking snapshots (the
+ * attachment-bytes rule — see {@link MessageAttachment}). So the runner projects
+ * the engine's output down to the hunks, which is what a diff renders.
  */
 export type FilePatch = {
   /** Absolute path the engine reported, when it named one. */
@@ -217,19 +188,14 @@ export type FilePatch = {
 export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock | UnknownBlock
 
 /**
- * A file the user attached to a message — a photo, a screenshot, a document.
+ * A file the user attached to a message. **The bytes never travel on this
+ * protocol**: it is uploaded first (`POST {basePath}/sessions/:id/attachments`),
+ * the command names it by id, and what lands in the event log is this reference
+ * (docs/GOTCHAS.md §Message attachments). Clients render a thumbnail from
+ * `GET {basePath}/sessions/:id/attachments/:attachmentId`.
  *
- * The bytes never travel on this protocol. An attachment is uploaded first
- * (`POST {basePath}/sessions/:id/attachments`), and the command that sends the
- * message names it by id; what lands in the seq-numbered event log is this
- * reference. That is deliberate: the log is replayed to every attaching client
- * and captured into parking snapshots, so a few phone photos inlined as base64
- * would be paid for on every attach, forever. Clients render a thumbnail by
- * fetching `GET {basePath}/sessions/:id/attachments/:attachmentId`.
- *
- * Lifetime is the session's, like `/files` — the store is in-memory and an
- * attachment 404s after a server restart. The message itself is unaffected: the
- * model saw the bytes at send time.
+ * Lifetime is the session's — the store is in-memory and an attachment 404s
+ * after a restart, which the message itself survives.
  */
 export type MessageAttachment = {
   /** Server-assigned; the path segment of the download URL. */
@@ -349,18 +315,13 @@ export type ModelOption = {
 }
 
 /**
- * A skill the engine can decide to use — **not** a command.
+ * A skill the engine can decide to use — **not** a command (the distinction, and
+ * why it is load-bearing, is docs/GOTCHAS.md §Skills).
  *
- * The distinction is the whole point of this type existing beside
- * {@link SlashCommandInfo}. A slash command is wire syntax: the CLI parses
- * `/wrapup` out of the message and runs it. A skill is a capability the model
- * *chooses* from its description; there is no `/skillname` the engine would
- * recognise, and sending one reaches the model as literal text.
- *
- * So a client may list these, and may offer them as a **typing aid** that
- * inserts ordinary editable prose ({@link SkillInfo.defaultPrompt}) — but it
- * must never render them as command chips, and must never put them in
- * `capabilities.commands`, which means "the CLI accepts these as commands".
+ * A client may list these and may offer them as a **typing aid** inserting
+ * editable prose ({@link SkillInfo.defaultPrompt}); it must never render them as
+ * command chips, and must never put them in `capabilities.commands`, which means
+ * "the CLI accepts these as commands".
  */
 export type SkillInfo = {
   /** Directory name under the skills root — the identity the model refers to. */
@@ -425,19 +386,13 @@ export type ContextUsage = {
 
 /**
  * The context-window reading that rides the **sessions list**, as opposed to the
- * full {@link ContextUsage} that rides the event stream.
+ * full {@link ContextUsage} on the event stream: three numbers and no
+ * `categories`, because this is on every row of `GET /sessions`, which a busy
+ * client polls at 1.2s (the attachment-bytes discipline again — see
+ * {@link SessionInfo.subagents}).
  *
- * Three numbers, and the omission is the design: `categories` is a breakdown for
- * a dialog that has a live session behind it, and this field is on every row of
- * `GET /sessions`, which a busy client polls at 1.2s. Same attachment-bytes
- * discipline as {@link SessionInfo.subagents}. `percentage` alone would size a
- * ring, but the token pair is what lets a row *say* `142k / 200k` on hover or
- * long-press without a second round trip, and it is two numbers.
- *
- * **Absent is a real state and is not zero.** A parked session, one that has
- * never run a turn, or an engine that reports no window has no reading — render
- * nothing, never an empty ring, which claims "context is empty" rather than "no
- * answer". Also absent on an older server.
+ * **Absent is a real state and is not zero**: render nothing, never an empty
+ * ring.
  */
 export type ContextReading = {
   totalTokens: number
@@ -535,20 +490,12 @@ export type SessionEventBody =
   | { type: 'skills'; skills: SkillInfo[] }
   /**
    * The engine wrote a file on the **host filesystem** and handed over its path
-   * — codex's `image_gen` saving a PNG is the case that motivated it. The
-   * host-filesystem sibling of `file_delivered` (which is the scratch-VFS one).
-   *
-   * Fetch it at `GET {basePath}/sessions/:id/produced/:fileId` for as long as
-   * the session lives. That route has no root allowlist and no size cap, and
-   * that is sound *because of where the path came from*: this event is authored
-   * by the runner about a file the engine itself just wrote, not by the agent
-   * about a path it chose. `/fs/*` gates the second kind and must keep doing so
-   * — a file the agent merely *read* is not a produced file and does not belong
-   * here.
-   *
-   * Re-emitting the same file is a no-op: `fileId` is derived from the path, so
-   * a runner that learns the path twice (codex reports `savedPath` on both the
-   * progress and completed item) registers it once.
+   * — the host-filesystem sibling of `file_delivered` (the scratch-VFS one).
+   * Fetch it at `GET {basePath}/sessions/:id/produced/:fileId` for the session's
+   * lifetime; that route needs no root allowlist because the *runner* authors
+   * this event about a file the engine itself wrote — a path the agent merely
+   * read is not a produced file and stays behind `/fs/*`. Re-emitting is a
+   * no-op: `fileId` is derived from the path.
    */
   | {
       type: 'file_produced'
@@ -580,19 +527,15 @@ export type SessionEventBody =
    * subscription page shows ("Max 20x") is not in the data. */
   | { type: 'plan_info'; subscriptionType: string }
   /**
-   * The engine started a **fresh conversation inside the same session** — the
-   * CLI's `/clear`, a plan-mode exit, and whatever fresh-conversation flows the
-   * SDK grows. The session id, registry row, workspace and scope are all
-   * unchanged; only the conversation is new. Clients empty the transcript and
-   * keep every session-scoped fact (models, commands, skills, produced files,
-   * rate limits, cwd, permission mode).
+   * The engine started a **fresh conversation inside the same session** (the
+   * CLI's `/clear`, a plan-mode exit): same session id, registry row, workspace
+   * and scope — only the conversation is new, so clients empty the transcript
+   * and keep every session-scoped fact.
    *
-   * The server's replay honours it too: an attach after a reset does not
-   * resurrect the cleared rows, because the runner skips *transcript content*
-   * below the latest reset (see {@link transcriptContent}) while still
-   * replaying every state-bearing event. `SessionInfo.activityCount` stays
-   * monotonic across a reset on purpose — it is an unread cursor, not an item
-   * count, and winding it back would kill every stored watermark above it.
+   * Replay skips *transcript content* below the latest reset (see
+   * {@link transcriptContent}) while every state-bearing event still replays,
+   * and `SessionInfo.activityCount` stays monotonic across it, being an unread
+   * cursor rather than an item count.
    */
   | {
       type: 'conversation_reset'
@@ -739,19 +682,13 @@ export type SessionCommand =
     }
   | { type: 'interrupt' }
   /**
-   * Reset the conversation in place — same session id, same watermarks, same
-   * row in the list, empty context. The server answers with a
-   * `conversation_reset` event, whose replay rules are what stop a later attach
-   * from resurrecting the cleared transcript.
+   * Reset the conversation in place — same session id, same watermarks, same row
+   * in the list, empty context; the server answers with a `conversation_reset`.
    *
-   * Send only where {@link EngineCapabilities.clearContext} says so: a server
-   * that predates this command rejects it as unknown, and an engine that cannot
-   * do it errors rather than quietly doing nothing.
-   *
-   * Sent while a turn is running, it **queues** behind that turn rather than
-   * cutting it short — a clear is not an interrupt, and one that landed in the
-   * middle of the turn it was clearing would be neither. Interrupt first if the
-   * intent was to stop the work as well as forget it.
+   * Send only where {@link EngineCapabilities.clearContext} says so. Sent while a
+   * turn is running it **queues** behind that turn rather than cutting it short:
+   * a clear is not an interrupt, so interrupt first if the intent was to stop
+   * the work as well as forget it.
    */
   | { type: 'clear_context' }
   | { type: 'set_permission_mode'; mode: PermissionMode }
@@ -839,16 +776,14 @@ export type ProfileDefaults = {
 }
 
 /**
- * Which engine a profile runs on. A **closed union, deliberately**: both clients
- * switch exhaustively, the Swift mirror ships in lockstep, and a closed set is
- * what lets this package carry per-engine capability defaults
- * ({@link ENGINE_CAPABILITIES}) browser-safe, with no server round-trip. Adding a
- * member is a versioned protocol event.
+ * Which engine a profile runs on. A **closed union, deliberately**: that is what
+ * lets this package carry browser-safe per-engine capability defaults
+ * ({@link ENGINE_CAPABILITIES}), and adding a member is a versioned protocol
+ * event (docs/GOTCHAS.md §Engine adapters & capability records).
  *
  * - `claude` (default) — Claude Code via the Agent SDK, configured by a config dir.
- * - `codex` — OpenAI Codex over the codex CLI binary's `app-server` JSON-RPC
- *   surface, configured by a CODEX_HOME (auth resolved by the binary itself,
- *   like claude).
+ * - `codex` — OpenAI Codex over the codex binary's `app-server` JSON-RPC surface,
+ *   configured by a CODEX_HOME.
  * - `provider` — a model-agnostic provider over the AI SDK, assembled by the
  *   host's `createEngineRunner` hook.
  */
@@ -905,18 +840,10 @@ export type EngineCapabilities = {
   slashCommands: boolean
   /**
    * The `clear_context` command works — the engine can reset the conversation
-   * *in place*, keeping the session id, its watermarks and its place in the
-   * list, and announce it with {@link SessionEventBody} `conversation_reset`.
-   *
-   * Separate from {@link EngineCapabilities.slashCommands} because the two
-   * answer different questions and only one engine has both: Claude reaches a
-   * clear through the `/clear` its CLI already lists, codex has no command
-   * surface at all and needs the explicit operation, and a client that gated
-   * the control on `slashCommands` would offer it exactly where it was already
-   * offered and hide it where it is the only route.
-   *
-   * Absent = false, so an older gateway hides the control rather than
-   * presenting one that 501s.
+   * *in place* and announce it with `conversation_reset`. Separate from
+   * {@link EngineCapabilities.slashCommands} because only Claude has both:
+   * gating the control on that would hide it exactly where it is the only route.
+   * Absent = false, so an older gateway hides it rather than offering a 501.
    */
   clearContext?: boolean
   /** `skills` events can occur — the engine can enumerate its skills. False:
@@ -1004,21 +931,12 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     // execution — the runner authors `title`/`decisionReason` from codex's own
     // reason sentence, so render those rather than composing "wants to use X".
     interactiveApprovals: true,
-    // 'default' = read-only sandbox + ask (a blocked action becomes a real
-    // question instead of a silent refusal); acceptEdits = workspace-write +
-    // ask (in-workspace writes sail through, escalations still ask); bypass =
-    // full access, asking nothing. plan/dontAsk name CLI workflows codex cannot
-    // deliver.
-    // 'auto' is codex's own "Approve for me": workspace-write + ask, with
-    // `approvalsReviewer: 'auto_review'` on thread/turn start routing every
-    // approval to codex's risk-assessing subagent instead of to the user. It is
-    // a THIRD axis (who reviews), independent of the sandbox and ask axes — see
-    // the tables in the codex runner.
-    // NOTE the semantic gap a client should not paper over: the Claude engine's
-    // 'auto' classifier is operator-configurable (`autoMode.environment`,
-    // allow/soft_deny/hard_deny); codex's reviewer is a fixed, OpenAI-prompted
-    // subagent with NO configuration surface. Same mode name, different
-    // tunability — say so wherever the mode is explained.
+    // 'default' = read-only sandbox + ask; acceptEdits = workspace-write + ask;
+    // bypass = full access. plan/dontAsk name CLI workflows codex cannot deliver.
+    // 'auto' is codex's own "Approve for me" — workspace-write + ask with
+    // `approvalsReviewer: 'auto_review'`, a third axis (who reviews) whose
+    // reviewer is a fixed OpenAI-prompted subagent with no configuration
+    // surface, unlike the Claude engine's operator-configurable classifier.
     permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'auto'],
     defaultPermissionMode: 'default',
     resume: true,
@@ -1182,22 +1100,15 @@ export type ProfileSessionDefaults = {
 }
 
 /**
- * One rate-limit window of a profile's plan, as the *gateway* last saw it — the
- * newest {@link RateLimitInfo} any session on the profile reported, across every
- * session, live or since closed. The profile is the account boundary (one config
- * dir / codex home / provider key = one plan), so this is the single usage state
- * per account, where a session's own transcript only knows what *it* was last
- * told.
+ * One rate-limit window of a profile's plan as the *gateway* last saw it — the
+ * newest {@link RateLimitInfo} any session on the profile reported. The profile
+ * is the account boundary, so this is the single usage state per account.
  *
- * Two rules a client must keep:
- * - An absent window (or an absent {@link ProfileInfo.usage} entirely) is
- *   **unknown, not 0%** — render nothing, exactly as for session-level readings.
- *   The map is in-memory and starts empty on a cold server.
- * - `inferredReset` marks a reading the server zeroed at serve time because the
- *   reading's own `resetsAt` passed with nothing newer: the pre-reset number is
- *   then provably wrong, and 0 is the truthful *floor* (the account may have
- *   been used outside this gateway since). Distinguishable on the wire from an
- *   engine-reported 0, which carries no flag.
+ * Two rules a client must keep: an absent window (or an absent
+ * {@link ProfileInfo.usage}) is **unknown, not 0%**, and `inferredReset` marks a
+ * reading the server zeroed at serve time because its own `resetsAt` passed with
+ * nothing newer — distinguishable from an engine-reported 0, which has no flag.
+ * (docs/GOTCHAS.md §Claude engine.)
  */
 export type ProfileUsageWindow = {
   /** The reading, exactly as the session event carried it — except after an
@@ -1426,52 +1337,28 @@ export type CreateSessionRequest = {
   /**
    * Opaque string tags naming what this session *belongs to* — the gateway's
    * only intra-deployment scoping primitive. Assigned at create, **immutable
-   * afterwards** (no route writes it), echoed on {@link SessionInfo}, and
-   * carried through parking/dormancy so a restart cannot un-scope a session.
+   * afterwards**, echoed on {@link SessionInfo} and carried through
+   * parking/dormancy. WorkerDeck never interprets a key; what the tags mean is
+   * the host's `authorizeSession` predicate (docs/GOTCHAS.md §Session scope).
    *
-   * WorkerDeck never interprets a key: an embedder writes `{ space, user }` or
-   * `{ tenant }` or nothing at all. What the tags *mean* is the host's
-   * `authorizeSession` predicate; absent one, the default rule is that every
-   * key the authenticated principal pins must match here (an unset principal
-   * scope is unrestricted — the same "unset means all" rule `allowedProfiles`
-   * uses, so an operator's dashboard keeps working unchanged).
-   *
-   * NOT `meta`: `meta` is free-form, client-settable and echoed, and an
-   * enforcement rule whose input the caller supplies is not an enforcement
-   * rule. Values are visible to any principal the policy admits a session to,
-   * so use opaque ids rather than names you would not show that audience.
+   * NOT `meta`, which is client-settable: an enforcement rule whose input the
+   * caller supplies is not an enforcement rule. Values are visible to any
+   * principal the policy admits a session to, so use opaque ids.
    */
   scope?: Record<string, string>
 }
 
 /**
- * One sub-agent (a `Task` call and the sidechain it spawned), as a *list* surface
- * sees it — without attaching.
+ * One sub-agent (a `Task` call and the sidechain it spawned) as a *list* surface
+ * sees it — a **runner-owned rollup computed at read time**, exactly like
+ * {@link SessionInfo.pendingPermissionCount}, so it rides the REST list, the
+ * attach snapshot and parking snapshots for free. Sub-agent work is otherwise
+ * attach-only (`parentToolUseId`), and a sessions list never attaches.
  *
- * Sub-agent work is otherwise attach-only: it exists on the wire as
- * `parentToolUseId` on three event bodies, and is reconstructed into rows by the
- * react reducer and grouped per-Task by `terminalBlocks`. A sessions list never
- * attaches (one live attach per session, owned by the panel), so it reads
- * `SessionInfo` over REST and would otherwise have no way to know a session has
- * six agents running inside one turn.
- *
- * This is a **runner-owned rollup computed at read time**, exactly like
- * {@link SessionInfo.pendingPermissionCount}: it is not an event, it is not
- * persisted separately, and it therefore rides the REST list, the WS attach
- * snapshot and parking snapshots for free.
- *
- * **The claude and codex engines both produce it; the provider engine's absence
- * is the truth.** The AI SDK has no multi-agent primitive and no tool that runs
- * a nested agent loop, so `parentToolUseId: null` on every provider event is
- * honest. Codex's spawn signal is the `subAgentActivity` item, whose own `id` is
- * the model's `spawn_agent` call id — a genuine tool-use id — so `toolUseId`
- * keeps its documented meaning there: the codex runner authors the anchor
- * `tool_use` itself and keys every event of the agent's *thread* to it
- * (`engines/codex/subagents.ts`).
- *
- * It is deliberately **not** the input to `taskSummary`. That string is spelled
- * from the absorbed transcript items and must stay that way, so a transcript
- * replayed tomorrow spells the same line from the same items it holds today.
+ * The provider engine's absence is the truth: the AI SDK runs no nested agent
+ * loop. Deliberately **not** the input to `taskSummary`, which is spelled from
+ * the absorbed transcript items so a transcript replayed tomorrow spells the
+ * same line. (docs/PACKAGES.md §packages/protocol.)
  */
 export type SubagentInfo = {
   /** The `tool_use` id of the `Task` call that spawned it — the same id its
@@ -1486,20 +1373,15 @@ export type SubagentInfo = {
   description?: string
   /**
    * `running` until the Task's own `tool_result` arrives, then `done`/`failed`
-   * from that result's `is_error`. A turn that ends without that result — an
-   * interrupt, a session error, a turn or budget cap — settles what is still
-   * running as `failed`: the report never came, which is the one thing `done`
-   * could have claimed, and a `running` badge on an idle session would be a
-   * lie a list re-renders at every poll.
+   * from that result's `is_error`. A turn that ends without it settles what is
+   * still running as `failed` — **except a background agent**, which outlives
+   * its turn by design and is settled only by `session_closed` or a terminal
+   * status.
    *
-   * Deliberately **narrower than `taskFailed`** in `@workerdeck/ui`'s
-   * `tool-run.ts`, which reddens a Task row when *any child call* failed. That is
-   * right for a transcript row the reader can expand — the failure is one press
-   * away and hiding it would be worse. It is wrong for a list: a grep that
-   * matched nothing inside an otherwise successful Explore agent would put
-   * `failed` beside the session's name with nothing to open. So this reports the
-   * sub-agent's own outcome. If you are here to "fix" the inconsistency, this is
-   * the reason it exists.
+   * The sub-agent's **own** outcome, never "or any child's": a grep that matched
+   * nothing inside an otherwise successful agent must not put `failed` beside a
+   * session name with nothing to open. `taskFailed` in `@workerdeck/ui` draws
+   * the transcript row from the same rule.
    */
   status: 'running' | 'done' | 'failed'
   /** Epoch ms the `Task` call was emitted. */
@@ -1517,98 +1399,30 @@ export type SubagentInfo = {
 export const SUBAGENT_HISTORY = 8
 
 /**
- * A project's icon, as declared by its `.workerdeck.json` — either a named
- * glyph or a reference to an image the gateway serves.
+ * A project's icon, as declared by its `.workerdeck.json` — either a named glyph
+ * or a reference to an image the gateway serves. A discriminated union rather
+ * than one stringly field: a glyph is a lookup in the client's own icon set, an
+ * image is a fetch, and no renderer should have to infer which it holds.
  *
- * A discriminated union rather than one stringly field, because the two arms
- * have opposite render paths: a glyph is looked up in the client's own icon
- * set with no I/O, an image is a fetch. Collapsing them would put "is this a
- * name or an address" back on every renderer, which is the inference this
- * family keeps refusing (`ImageRefPart` is a new part type, never a
- * hollowed-out `image`, for the same reason).
- *
- * `glyph.name` is a lucide icon name, validated by the gateway for *shape*
- * only (lowercase kebab-case): the gateway has no lucide catalog and must not
- * grow one — icon sets version independently of this protocol. A client whose
- * set lacks the name renders its no-project fallback rather than erroring;
- * an unknown name is a stale row, never withheld state.
- *
- * `image` carries an **address, never bytes** — the attachment-bytes rule.
- * `SessionInfo` rides every row of `GET /sessions`, which clients poll at 1.2s
- * while anything is working, so an inlined base64 icon would be paid for on
- * every poll of every session forever (the same argument that keeps
- * `originalFile` off {@link FilePatch} and message bytes off events). The
- * bytes come from `GET {basePath}/sessions/:id/project/icon` — session-scoped
- * on purpose, so the fetch rides the same `canSee` gate as every other
- * `/sessions/:id/*` route and a scoped principal's miss is the uniform 404. A
- * project-keyed route would need the project root in the URL, and a route
- * addressed by host paths is an existence oracle for the gateway's
- * filesystem. `hash` (sha256 hex of the bytes) is the cross-session cache
- * key: two sessions in one project serve identical bytes, so a client caches
- * by hash rather than by URL and fetches once per project, not once per
- * session. The route answers with `ETag: "<hash>"` and honors
- * `If-None-Match`.
+ * `glyph.name` is validated for *shape* only (lowercase kebab-case); a client
+ * whose set lacks the name draws its no-project fallback. `image` carries an
+ * **address, never bytes** (the attachment-bytes rule) — they come from
+ * `GET {basePath}/sessions/:id/project/icon`, and `hash` is the cross-session
+ * cache key that route also serves as its ETag.
  */
 export type ProjectIcon = { type: 'glyph'; name: string } | { type: 'image'; mediaType: 'image/png' | 'image/svg+xml'; hash: string }
 
 /**
- * Project identity for a session — what a `.workerdeck.json` in the session's
- * ancestry declares, resolved by the **gateway** and shipped on
- * {@link SessionInfo.project}.
+ * Project identity for a session — what the nearest `.workerdeck.json` in the
+ * session's ancestry declares, resolved by the **gateway** and shipped on
+ * {@link SessionInfo.project} (clients never read the file). Discovery,
+ * degradation and the serve-time TTL cache: docs/PACKAGES.md.
  *
- * The gateway reads the file, not each client: the iOS app and a browser
- * pointed at a remote gateway have no access to that filesystem, so a
- * per-client reader would make the feature exist on exactly one client.
- * Discovery is an ancestor walk from the session's `cwd` upward — nearest
- * `.workerdeck.json` wins, so a session started in `packages/ui` still says
- * "WorkerDeck" — over the *realpath'd* cwd, which is what makes `root`
- * canonical below.
- *
- * The file's schema, stated here because this type is its wire projection
- * (clients never read the file; the gateway is its only parser):
- *
- * ```json
- * { "name": "WorkerDeck", "icon": "layers" }
- * { "name": "WorkerDeck", "icon": "./docs/assets/icon.png" }
- * ```
- *
- * Both keys optional, unknown keys ignored (forward compatibility). An empty
- * `{}` still marks its directory as the project root — grouping is the point,
- * and the name falls back to the root's basename. `icon` is one string with a
- * total classification rule: a value ending in `.png`/`.svg`
- * (case-insensitive) is a repo-relative image path — relative only, since the
- * file is checked into a repo that clones onto other machines, where an
- * absolute path is wrong by construction — and anything else must be a
- * lucide-shaped glyph name (`^[a-z0-9]+(-[a-z0-9]+)*$`) or it is ignored. The
- * two shapes cannot collide (a glyph name contains no dot), so the rule is a
- * classification, not a guess. Every degradation degrades *fieldwise and
- * silently*: a malformed or oversized file is skipped and the walk continues
- * to an ancestor (a broken nested file must not shadow the repo root's valid
- * one), a junk name falls back to the basename, a junk or escaping icon is
- * dropped — a session must never fail, or even warn, because of a display
- * declaration.
- *
- * `root` — the canonical (realpath'd) absolute directory holding the file, on
- * the **gateway's** filesystem — is the grouping key: two sessions are in the
- * same project iff same root *on the same gateway* (a remote gateway's
- * identical-looking path is another machine's directory — the `ScopeRoot`
- * argument). A *name* is not a key: two repos can both be called "api".
- * Canonicalizing at discovery is what makes two differently-spelled cwds of
- * one project agree on it.
- *
- * Resolved at **serve time** from a TTL cache, never persisted — the same
- * placement argument as the profile tracker's 0%-after-reset inference: it is
- * a function of the gateway's current filesystem, and a copy captured into a
- * parking record would replay a stale name forever. Editing the file shows up
- * on every session in the project within the TTL, with no migration and no
- * event.
- *
- * Additive at protocol **7**: an optional field on `SessionInfo`, where
- * absent means exactly what today's wire means (no project declared — render
- * the folder basename), an old client ignores it, and a new client against an
- * old gateway sees absent. The icon route is likewise unreachable by
- * accident: a client only fetches it when this gateway told it an image
- * exists.
+ * The file is `{ "name"?: string, "icon"?: string }`, unknown keys ignored, an
+ * empty `{}` still marking its directory as the root. An `icon` ending in
+ * `.png`/`.svg` is a **repo-relative** image path, anything else must be a
+ * lucide-shaped glyph name; every degradation is fieldwise and silent. Additive
+ * at protocol 7 — absent means "render the folder basename".
  */
 export type ProjectInfo = {
   /** Display name — the file's `name`, else the root's basename. Never empty. */
@@ -1660,18 +1474,13 @@ export type SessionInfo = {
   pendingPermissionCount: number
   /**
    * Sub-agents this session has running, plus a short tail of settled ones — see
-   * {@link SubagentInfo}. Absent on an engine that has no sidechains and on an
-   * older server; **absent and empty mean the same thing to a client**, so render
+   * {@link SubagentInfo}. **Absent and empty mean the same thing**: render
    * nothing rather than "0 sub-agents".
    *
-   * Bounded on purpose. This rides every row of `GET /sessions`, which a busy
-   * client polls at 1.2s, and it is captured into parking snapshots — the same
-   * attachment-bytes rule that keeps whole files off {@link FilePatch}. Every
-   * *running* sub-agent is always present (they are the live reading and there
-   * are never many at once); settled ones are kept newest-first to
-   * {@link SUBAGENT_HISTORY} and then dropped, so a day-long session with two
-   * hundred Tasks does not grow an unbounded field. A client must therefore not
-   * treat this as the session's full Task history — the transcript is that.
+   * Bounded on purpose (the attachment-bytes rule — this rides every row of a
+   * 1.2s poll and lands in parking snapshots): every *running* sub-agent, then
+   * settled ones newest-first to {@link SUBAGENT_HISTORY}. Not the session's
+   * full Task history; the transcript is that.
    */
   subagents?: SubagentInfo[]
   meta?: Record<string, unknown>
@@ -1683,40 +1492,28 @@ export type SessionInfo = {
   numTurns?: number
   /**
    * How many transcript rows this session has produced (see
-   * {@link transcriptActivity}) — a monotonic counter a client can diff against
-   * a remembered value to answer "how much happened while I wasn't looking",
-   * without attaching.
-   *
-   * `numTurns` cannot answer it: five tool calls inside one turn are one turn.
-   * `lastSeq` cannot either — it counts every event, and with token streaming on
-   * that is hundreds per reply. Absent on an older server; a client should fall
-   * back to `numTurns` rather than showing nothing.
+   * {@link transcriptActivity}) — a monotonic counter a client diffs against a
+   * remembered value to answer "how much happened while I wasn't looking",
+   * without attaching. `numTurns` undercounts and `lastSeq` counts every stream
+   * delta; absent on an older server, where `numTurns` is the fallback.
    *
    * Monotonic for the session's whole life, **including across a
-   * `conversation_reset`**: after a `/clear` this deliberately exceeds the
-   * number of rows a fresh attach renders. It is an unread *cursor* diffed
-   * against stored monotonic watermarks (see `watermarks.ts`) — resetting it to
-   * the new row count would leave every stored mark above it, and that
-   * session's badge dead until the count caught back up.
+   * `conversation_reset`** — it is an unread *cursor* diffed against stored
+   * monotonic watermarks (`watermarks.ts`), and winding it back would leave
+   * every stored mark above it and that session's badge dead.
    */
   activityCount?: number
   /** Epoch ms of the most recent emitted event. */
   lastActivityAt?: number
   /**
-   * The session's latest context-window reading — see {@link ContextReading}.
+   * The session's latest context-window reading — see {@link ContextReading} —
+   * served on the list so a row can show where a session is bloating **without
+   * attaching to it**.
    *
-   * The same number the session screen draws, served on the list so a row can
-   * show where a session is bloating **without attaching to it**. That is the
-   * whole reason it is here: context fill is the one session metric you want
-   * across *all* sessions at once, and until now it existed only as an event on
-   * an attached socket.
-   *
-   * Retained by the runner from the last `context_usage` it emitted, so it is
-   * exactly what the transcript last showed — never recomputed on the serve
-   * path, which would be a second answer to a question that already has one.
-   * Absent until the first reading (a promptless session has none), and cleared
-   * by a `conversation_reset` for the same reason the transcript state clears
-   * it: the old window is not this conversation's.
+   * Retained by the runner from the last `context_usage` it emitted, never
+   * recomputed on the serve path (that would be a second answer to a question
+   * that already has one). Absent until the first reading, and cleared by a
+   * `conversation_reset`, whose predecessor's window is not this conversation's.
    */
   contextUsage?: ContextReading
   /** Opaque scope tags this session was created with — see
@@ -1756,18 +1553,12 @@ export const contextReading = (body: SessionEventBody): ContextReading | undefin
 
 /**
  * How many transcript rows an event materializes — the unit behind
- * {@link SessionInfo.activityCount}.
+ * {@link SessionInfo.activityCount}, and deliberately the *reducer's* rule
+ * (`@workerdeck/react`'s `transcript.ts`), not a server-side approximation.
  *
- * Deliberately the *reducer's* rule (`@workerdeck/react`'s `transcript.ts`), not
- * a server-side approximation: one row per content block of an assistant
- * message (a text, a thought, each tool call), one for a user message, one per
- * turn result, delivered file or error. Everything else — status changes, usage
- * readings, stream deltas, permission bookkeeping — is state, not a row, and
- * counts zero.
- *
- * It lives in `protocol` because both sides need it and neither may import the
- * other: the runners count with it, and any client compares the totals. If the
- * reducer's row rule changes, change this with it.
+ * It lives here because both sides need it and neither may import the other: the
+ * runners count with it and clients compare the totals. **Change the reducer's
+ * row rule, change this with it.** (docs/PACKAGES.md §packages/protocol.)
  */
 export const transcriptActivity = (body: SessionEventBody): number => {
   // A subagent's own messages score 0: they render inside the `Task` call that
@@ -1804,32 +1595,16 @@ export const transcriptActivity = (body: SessionEventBody): number => {
 }
 
 /**
- * Whether an event is **transcript content** — whether the reducer
- * (`@workerdeck/react`'s `transcript.ts`, and its Swift mirror) mutates
+ * Whether an event is **transcript content** — whether the reducer mutates
  * `items` when it applies it. The rule behind `conversation_reset`'s replay
- * semantics: the runner keeps its whole event log, but `subscribe()` skips
- * content below the latest reset so an attaching client does not resurrect a
- * cleared conversation — while every *state-bearing* event (`system_init`,
- * `capabilities`, `skills`, `status_changed`, usage and rate-limit readings,
- * `file_produced`, permission bookkeeping) still replays, because a fresh
- * attacher with no model list and no cwd is broken, not cleared.
+ * semantics: `subscribe()` skips content below the latest reset, while every
+ * state-bearing event still replays, because a fresh attacher with no model list
+ * and no cwd is broken, not cleared.
  *
- * Deliberately **broader than `transcriptActivity() > 0`**: stream deltas,
- * tool results (synthetic user messages) and execution lifecycle events count
- * zero rows but still mutate items — replaying them across a reset would leave
- * orphaned deltas and results with no parent message.
- *
- * `conversation_reset` itself is content under this rule, and that is load-
- * bearing twice: a *superseded* reset (below a newer one) is skipped with the
- * conversation it cleared, while the latest reset always replays (the skip is
- * strictly-below), which is what clears a reconnecting client that still holds
- * pre-reset rows.
- *
- * Lives here beside {@link transcriptActivity} for the same reason: the
- * reducer owns the rule and the runners filter with it, and the two sides may
- * not import each other. If the reducer's items-mutating set changes, change
- * this with it. Unknown/future event types are NOT content — the safe failure
- * is replaying a stale row, never withholding state.
+ * Deliberately **broader than `transcriptActivity() > 0`**, and
+ * `conversation_reset` is itself content (the skip is strictly-below, so the
+ * latest reset always replays). Unknown event types are NOT content — the safe
+ * failure is a stale row, never withheld state. (docs/PACKAGES.md.)
  */
 export const transcriptContent = (body: SessionEventBody): boolean => {
   switch (body.type) {
@@ -1854,41 +1629,15 @@ export const transcriptContent = (body: SessionEventBody): boolean => {
 
 /**
  * The dedupe key for an event that is **last-write-wins** on replay, or
- * `undefined` for one that must always be delivered.
+ * `undefined` for one that must always be delivered — per *window* for rate
+ * limits, because the reducer stores them that way (docs/PACKAGES.md).
  *
- * The runner polls context usage and rate limits after every turn, and a
- * replay that ships every stale poll is *visible* — the usage meters count up
- * through the session's history on attach. The coalescer is a backwards scan
- * keeping the first occurrence of each key (`staleReplaySeqs` in
- * `@workerdeck/core`). The key is per *window* for rate limits, not per event
- * type: the reducer stores them keyed by window, so a single key would keep
- * only the most recently polled window and silently drop the others.
- *
- * **This is a claim about the reducer**, which is why it lives here rather
- * than in core: only the server coalesces, but only `@workerdeck/react` can
- * prove the rule correct, and neither package may import the other. The
- * property that must hold is that coalescing is *unobservable* — folding the
- * full log and the coalesced log through `applyEvent` yields identical state.
- * `packages/react/test/replay-coalesce.test.ts` asserts exactly that, over
- * every event kind. Extend the rule only with a case that test still passes.
- *
- * Three kinds are deliberately **excluded** despite looking eligible:
- *
- * - `capabilities` — `defaultModel: event.defaultModel ?? base.defaultModel`
- *   is a fallback *merge*, so a later event without one would erase an earlier
- *   event's. (It is also emitted once per session, so there is nothing to win.)
- * - `model_changed` — `undefined` means "reset to the server default" and the
- *   reducer *keeps* the last known model, so the last event alone is not the
- *   same as the fold.
- * - `system_init` — pure replace for the reducer, but the server's
- *   `watchAuthSource` reads the **first** one to decide an auth policy, and
- *   parking treats each as a resume point.
- *
- * Coalescing never drops the highest-seq event, and that is load-bearing
- * rather than incidental: the globally-last event is by definition the last of
- * its own key, so it always survives. `useClaudeSession`'s replay hold waits
- * for `state.lastSeq` to reach the attach's `session.lastSeq`, and would hang
- * on a blank panel forever if a coalescer could swallow the final event.
+ * **A claim about the reducer**, and a test rather than an argument: folding the
+ * full log and the coalesced log through `applyEvent` yields identical state
+ * (`packages/react/test/replay-coalesce.test.ts`). Extend the rule only with a
+ * case that test still passes. `capabilities`, `model_changed` and `system_init`
+ * are deliberately excluded despite looking eligible, and coalescing never drops
+ * the highest-seq event — a client's replay hold waits for it.
  */
 export const replayCoalesceKey = (body: SessionEventBody): string | undefined => {
   switch (body.type) {
@@ -1924,39 +1673,15 @@ export const replayCoalesceKey = (body: SessionEventBody): string | undefined =>
 
 /**
  * Does a **replay** have to deliver this event, or may it be dropped outright?
+ * Unlike {@link replayCoalesceKey} there is nothing to keep: these are events
+ * the reducer reads and *discards*. Today that is the `stream_delta`s it does
+ * not model (measurements: docs/PACKAGES.md §packages/protocol).
  *
- * The fifth of the family, and the closest relative of {@link snapshotRetains} —
- * the same claim ("no client can tell") pointed at the wire instead of at a
- * store. The difference from {@link replayCoalesceKey} is that this is not
- * last-write-wins: there is nothing to keep. These are events the reducer reads
- * and *discards*, so a replay that sends them is spending the reader's network
- * on frames whose whole effect is `return base`.
- *
- * Today that is exactly one thing: the `stream_delta`s the reducer does not
- * model — `input_json_delta`, `signature_delta` and the
- * `message_start`/`content_block_*` scaffolding all fall through its switch
- * untouched (sizes measured in docs/PACKAGES.md).
- *
- * What is deliberately **not** dropped, though the arithmetic would allow it:
- *
- * - `thinking_delta` — the Claude SDK delivers thinking blocks whose `thinking`
- *   is `''`, and the reducer backfills them from the accumulated streamed text
- *   (`streamedThinking`). Dropping these erases every thought from a replayed
- *   transcript. This is the same carve-out `snapshotRetains` documents, and it
- *   is the reason that rule is provider-engine-only.
- * - `text_delta` — superseded by the `assistant_message` that follows it, but
- *   dropping it would need a lookahead proving the message arrived, and it is
- *   too small to be worth a rule that has to be right about supersession.
- *
- * A live event is never affected — this is about the buffered replay alone — and
- * the caller must never drop the log's highest-seq event whatever this says, for
- * the reason {@link replayCoalesceKey} gives: the replay hold waits for
- * `state.lastSeq` to reach the attach's `session.lastSeq` and would hang on a
- * blank panel forever.
- *
- * The property is the family's usual one and is a test rather than an argument:
- * folding the full log and the retained log through `applyEvent` yields
- * identical state (`packages/react/test/replay-retain.test.ts`).
+ * `thinking_delta` is kept because the SDK's thinking blocks arrive empty and
+ * the reducer backfills them from the stream; `text_delta` because dropping it
+ * would need a lookahead. Live events are never affected, the caller must never
+ * drop the log's highest-seq event, and fold-equality is a test
+ * (`packages/react/test/replay-retain.test.ts`).
  */
 export const replayRetains = (body: SessionEventBody): boolean => {
   if (body.type !== 'stream_delta') {
@@ -1970,44 +1695,16 @@ export const replayRetains = (body: SessionEventBody): boolean => {
 }
 
 /**
- * Does a `RunnerSnapshot` keep this event in its persisted log?
+ * Does a `RunnerSnapshot` keep this event in its persisted log? Everything
+ * except `stream_delta`, which is **superseded by construction** — a snapshot is
+ * only taken at a rest point and both stream exits flush, the error path
+ * included (docs/PACKAGES.md §packages/protocol).
  *
- * The fourth of the same family, and the same shape of claim as
- * {@link replayCoalesceKey}: which events a *store* may drop without any client
- * being able to tell. A snapshot embeds the whole event log, a log is mostly
- * stream deltas sitting on disk beside the `assistant_message` that respells
- * them, and a snapshot written after every turn (restart-survival) cannot
- * afford that.
- *
- * So: everything is retained except `stream_delta`. The reason that is safe is
- * not that deltas are unimportant but that they are **superseded by
- * construction**. The reducer upserts them under one constant id and the
- * following `assistant_message` filters exactly that id out and rebuilds from
- * the full content blocks — and a snapshot may only be taken at a rest point,
- * where the stream loop has exited and flushed. Both exits flush, including the
- * error path: an interrupted turn pushes its half-finished buffers into a
- * durable `assistant_message` before it emits the failed `turn_result`. There is
- * no rest state in which a delta is the only record of anything.
- *
- * **Provider engine only**, and this is the carve-out that must not be lost:
- * against a *Claude* log the rule would be wrong. The Claude SDK delivers
- * thinking blocks whose text is `''`, with the human-readable summary existing
- * only in the delta stream, and the reducer carries the streamed text over to
- * fill them (`transcript.ts`, the `streamedThinking` backfill). Dropping deltas
- * there would silently erase every thought from a restored transcript. Today
- * that is unreachable rather than merely avoided — only the provider engine
- * implements `park()`/`snapshot()` at all, and `#restore` refuses a snapshot
- * from another engine — but an engine that gains one inherits this obligation.
- *
- * Two properties hold it up, both of which are tests rather than arguments:
- * folding the full log and the retained log through `applyEvent` yields
- * identical state (`packages/react/test/snapshot-retain.test.ts`, the same
- * property `replay-coalesce.test.ts` asserts), and the retained log's last event
- * still carries the snapshot's own `seq`. The second matters more than it looks:
- * `transcriptActivity(stream_delta)` is 0, so the count `#restore` recomputes
- * from the log is bit-identical — a client's unread cursor cannot move — and the
- * replay hold waits for `state.lastSeq` to reach the attach's `lastSeq`, which a
- * rule that could drop the final event would hang forever.
+ * **Provider engine only**, and this carve-out must not be lost: a Claude log's
+ * thinking blocks arrive empty and are backfilled from the delta stream, so the
+ * same rule there would erase every thought. Unreachable today (only that engine
+ * parks), but any engine that gains `park()` inherits it. Fold-equality and the
+ * retained log's last `seq` are tests (`packages/react/test/snapshot-retain.test.ts`).
  */
 export const snapshotRetains = (body: SessionEventBody): boolean => {
   return body.type !== 'stream_delta'
@@ -2118,19 +1815,14 @@ export type UpdateProfileRequest = Omit<Partial<ProfileInfo>, 'name'>
 
 /**
  * The **host's real project tree**, not a session's in-memory VFS — the two are
- * unrelated despite both being "files". {@link SessionFileInfo} is a deliverable
- * the agent produced inside a session; these routes read and write the operator's
- * actual disk.
+ * unrelated despite both being "files" ({@link SessionFileInfo} is a deliverable
+ * the agent produced; these routes read and write the operator's actual disk).
  *
- * That makes them **operator-privileged**: they are authorized by the server's auth
- * key alone and deliberately sit outside the agent permission flow, because the
- * caller *is* the operator, not the model. A client holding the key can already
- * start a session with any allowed cwd; browsing that same tree grants it nothing
- * new. Writing does, which is why writes are separately enabled server-side.
- *
- * The whole surface is opt-in and root-scoped: with no roots configured every route
- * below 404s. There is no "unset means anything" default here — a phone on a tailnet
- * must never be one request away from `~/.ssh`.
+ * **Operator-privileged**: authorized by the server's auth key alone and
+ * deliberately outside the agent permission flow, because the caller *is* the
+ * operator. Writing is separately enabled server-side. The whole surface is
+ * opt-in and root-scoped — with no roots configured every route below 404s, and
+ * there is no "unset means anything" default (docs/GOTCHAS.md §Host filesystem).
  */
 export type HostFileRoot = {
   /** Absolute, canonical (symlinks resolved) path of the root. */

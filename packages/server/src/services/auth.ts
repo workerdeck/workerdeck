@@ -77,18 +77,10 @@ export const createAuthService = (deps: {
   }
 
   /**
-   * The job flavour of {@link canSee}. Once the run has started, the live
-   * session's info is the real subject and the host's rule decides on it. Before
-   * that (queued) and after (finished, session gone) there is no session to
-   * hand over, so the predicate gets a **stub** built from what the job records:
-   * its scope, its profile, its cwd.
-   *
-   * A stub rather than a fallback to the default rule, which is what this did
-   * first and was wrong: a host policy *narrower* than plain tag-match (tags
-   * plus a role, say) would have had queued jobs admitted — and cancelable — by
-   * a peer it rejects. The predicate must be the only rule wherever it exists.
-   * A host reading fields a queued job cannot have (model, status detail) gets
-   * `undefined` and should treat the id and the scope as the load-bearing ones.
+   * The job flavour of {@link canSee}. With no live session to hand over (queued, or finished),
+   * the predicate gets a **stub** built from the job — never a fallback to the default rule,
+   * because a policy *narrower* than tag-match would then have had queued jobs listed and
+   * cancelable by a peer it rejects. See `docs/GOTCHAS.md` §Session scope.
    */
   const canSeeJob = (auth: AuthContext, job: JobInfo): boolean => {
     const live = job.sessionId ? refs.registry!.get(job.sessionId)?.info() : undefined
@@ -111,23 +103,13 @@ export const createAuthService = (deps: {
   }
 
   /**
-   * Is this caller the operator, rather than someone embedded inside a scope?
+   * Is this caller the operator, rather than someone embedded inside a scope? It gates the
+   * surfaces that answer about the **gateway** rather than one session, which have nothing to
+   * filter — so a non-operator is refused outright (404, like every other miss).
    *
-   * It decides the surfaces that answer about the **gateway** instead of about
-   * one session — the host filesystem, the engine's own on-disk session store,
-   * the queue and its firehose. There is nothing to filter on those and no
-   * honest way to narrow them, so a non-operator is refused outright (404, like
-   * every other miss).
-   *
-   * Two ways to be one, and the second exists because the first is not enough.
-   * A principal carrying `scope` is an end user; a principal carrying neither
-   * `scope` nor a policy is the operator — that is the unscoped default every
-   * existing deployment relies on. But a host may write `authorizeSession` over
-   * its *own* principal shape and never set `scope` at all, and reading that as
-   * "everyone is the operator" is how a locked-down gateway ends up serving its
-   * filesystem to end users. So **declaring a policy withdraws the default**,
-   * and such a host marks its operator principals explicitly with
-   * `operator: true` (`operator: false` forces the other way, at any time).
+   * **Declaring `authorizeSession` withdraws the unscoped-means-operator default**, because a
+   * host may write a policy over its own principal shape and never set `scope`; such a host marks
+   * operator principals with `operator: true`. See `docs/GOTCHAS.md` §Session scope.
    */
   const isOperator = (auth: AuthContext): boolean => auth.operator ?? (auth.scope === undefined && !options.authorizeSession)
 

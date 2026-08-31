@@ -5,28 +5,12 @@ import type { ProfileUsage, ProfileUsageWindow, RateLimitInfo } from '@workerdec
 type HeldWindow = { info: RateLimitInfo; updatedAt: number }
 
 /**
- * The gateway's single plan-usage state per profile, fed from every session's
- * `rate_limit` events and served on `GET /profiles` (`ProfileInfo.usage`).
+ * The gateway's single plan-usage state per profile — the account boundary — fed from every
+ * session's `rate_limit` events and served as `ProfileInfo.usage`.
  *
- * Why this exists at all: usage had only ever lived in session transcripts, so
- * a client attaching to a session that idled since yesterday replayed
- * yesterday's reading as if current — and a session opened today knew nothing
- * of what a sibling session on the same account spent an hour ago. The profile
- * is the account boundary (one config dir / codex home / provider key = one
- * plan), so the newest reading across all of a profile's sessions is the one
- * usage state that is ever worth showing. No history: last-write-wins per
- * window, exactly the reducer's rule on the client side.
- *
- * Last-write-wins goes by the **event's own clock**, not arrival order:
- * `watch()` subscribes from seq 0 (a replayed log is how a rebuilt session's
- * readings arrive at all), and a replayed yesterday-reading must not clobber
- * the fresher one another session on the same profile reported live. All
- * events are stamped by this gateway's clock at emit time, so the comparison
- * is sound across sessions.
- *
- * In-memory on purpose, like the learned default models and the availability
- * cache: display-only state may start empty after a restart (absent = unknown,
- * never 0%), and the first session to report refills it.
+ * Last-write-wins by the **event's own `ts`, never arrival order**, because `watch()` subscribes
+ * from seq 0 and a rebuilt session's replayed reading must not clobber a live one. In-memory:
+ * absent is unknown, never 0%. See `docs/PACKAGES.md` §`packages/server`.
  */
 export class ProfileUsageTracker {
   /** profile name → rateLimitType → newest reading. */
@@ -62,20 +46,12 @@ export class ProfileUsageTracker {
   }
 
   /**
-   * The profile's windows as they should be served *now*. Undefined until any
-   * session on the profile has reported (unknown, never 0%).
+   * The profile's windows as they should be served *now*. Undefined until a session has reported.
    *
-   * The 0%-after-reset inference lives here — at serve time — and nowhere
-   * else, because it is a function of the wall clock: a window whose own
-   * `resetsAt` has passed with no newer reading has provably rolled, so the
-   * pre-reset utilization is no longer merely stale but *wrong*. It cannot be
-   * a producer's job (the producers only relay what the engine said, and the
-   * whole problem is the engine's silence; a fabricated 0% event would be
-   * replayed from transcripts forever as if reported) and must not be every
-   * renderer's (N clients would each reimplement the clock math). The held
-   * reading stays untouched, so a late fresh report still lands by ts, and the
-   * served zero is labeled `inferredReset` — it is a floor, not a report: the
-   * account may have been used outside this gateway since the reset.
+   * The 0%-after-reset inference lives here — at **serve time** — and nowhere else, because it is
+   * a function of the wall clock: a fabricated `rate_limit` event would be replayed from
+   * transcripts forever as if reported. The held reading stays untouched (a late fresh report
+   * still lands by ts) and the served zero is labeled `inferredReset` — a floor, not a report.
    */
   usage(profile: string, now = Date.now()): ProfileUsage | undefined {
     const windows = this.#profiles.get(profile)

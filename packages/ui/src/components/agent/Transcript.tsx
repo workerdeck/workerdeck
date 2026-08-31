@@ -291,35 +291,16 @@ const promptHeadText = (item: Extract<TranscriptItem, { kind: 'user' }>): string
   item.text || (item.attachments ?? []).map((attachment) => attachment.name).join(', ')
 
 /**
- * A prompt row's sticky lane — the strip spanning its turn, leading with the
- * one-line pinned **head** (see the pinned-prompt comment in
- * {@link TranscriptRows}).
+ * A prompt row's sticky lane — the strip spanning its turn, leading with the one-line pinned
+ * **head**, whose content is the variant's own (terminal re-renders the row and clips it to one
+ * line; cards hands theme.css plain text to draw as a compact bar, and only the terminal head
+ * carries the row's gap class).
  *
- * The head's content is the variant's: the terminal passes the row again
- * (clipping it to one line is exact under a monospace grid), cards passes the
- * prompt as plain text for theme.css to draw as a compact bar. Only the
- * terminal head carries the row's gap class — its stuck geometry parks that
- * padding above the viewport edge so the visible line docks at zero
- * (terminal.css); the cards bar never aligns with the row in flow, so the gap
- * stays off it entirely and the 1st prompt and the Nth share one geometry.
- *
- * The head starts `visibility: hidden` and shows only while actually stuck —
- * an overlay that is visible in flow would sit on the real row's first line
- * and swallow its selection highlight, which reads as "the first line cannot
- * be selected". CSS cannot ask "am I stuck?", so a 1px sentinel at the head's
- * engage threshold (the line's own y) answers it: sentinel above the
- * scrollport top → stuck, read by a passive scroll listener. It was an
- * IntersectionObserver once, for the "no per-scroll work" purity — and that
- * was a real bug: IO is edge-triggered, and an *instant* jump (the open-at-
- * bottom pin, `jumpToRow`, a reveal) teleports the sentinel from below the
- * viewport to above it between two observations — ratio 0 → 0, no threshold
- * crossed, `isIntersecting` unchanged — so no entry is ever queued and the
- * flag strands, in whichever direction the jump left it (observed: a session
- * opened at the bottom, its prompt bar missing; the stale-true twin paints a
- * bar over the real bubble). The flag needs level-triggered truth. The cost
- * is two rect reads per scroll event per mounted lane — layout is clean
- * during scrolling, and the pin itself is still the compositor's; only the
- * bar's visibility rides the listener.
+ * The head is `visibility: hidden` until actually stuck — visible in flow it would swallow the
+ * real first line's selection highlight — and **stuck is read from a 1px sentinel by a passive
+ * scroll listener, never an IntersectionObserver**: IO is edge-triggered, so an instant jump
+ * teleports the sentinel across the viewport between two observations and strands the flag. See
+ * docs/GOTCHAS.md §Terminal theme and §Web dashboard.
  */
 const StickyPromptLane = ({
   top,
@@ -397,38 +378,16 @@ const StickyPromptLane = ({
 }
 
 /**
- * The virtualized row window. Only rows near the viewport are mounted, so
- * opening a thousand-row session commits a screenful of DOM rather than the
- * whole session in one go.
+ * The virtualized row window: only rows near the viewport are mounted, so a thousand-row session
+ * commits a screenful of DOM rather than all of it.
  *
- * The delicate part is that two parties want to write `scrollTop`.
- * `use-stick-to-bottom` owns *following*: its spring animates toward the
- * bottom whenever the content grows, recomputing the target from the live
- * `scrollHeight` every frame. The virtualizer wants to *correct* `scrollTop`
- * whenever a row measures differently from its estimate, so that what the
- * reader is looking at doesn't shift. Letting both write at once is jitter at
- * best — and a correction that moves the viewport *up* (a row measuring
- * smaller than estimated) reads as a user scroll to the follow logic, which
- * escapes the bottom lock mid-stream.
- *
- * The resolution is that pinned and escaped are different regimes:
- *
- * - Pinned (`state.isAtBottom`), corrections are suppressed. "At the bottom"
- *   is the entire scroll position; the offsets of rows above are moot. The
- *   height change a mismeasured row causes still re-fires the follow spring —
- *   through the same content resize observer that follows streaming — so the
- *   view converges on the bottom through the one writer that knows how to
- *   distinguish its own writes from the user's.
- * - Escaped, the virtualizer corrects (its stock rules, restated below) so
- *   the scrollback holds still under the reader while rows above it measure.
- *
- * `anchorTo`/`followOnAppend` stay at their defaults for the same reason:
- * the virtualizer must never become a second follow implementation.
- *
- * Accepted costs of virtualizing, so they are a decision and not a surprise:
- * browser find-in-page and select-all reach only the mounted rows, and a row's
- * transient UI state (an expanded tool card, an opened reasoning block) resets
- * once the row scrolls far enough away to unmount.
+ * **Two parties want to write `scrollTop`, and they are split by regime**: pinned
+ * (`state.isAtBottom`) the virtualizer's size-change corrections are suppressed outright and
+ * `use-stick-to-bottom`'s follow spring converges the view; escaped, the virtualizer corrects so
+ * the scrollback holds still under the reader. `anchorTo`/`followOnAppend` stay at their defaults
+ * so it never becomes a second follow implementation. The accepted costs of virtualizing (
+ * find-in-page and select-all reach mounted rows only; a row's transient UI state resets on
+ * unmount) and the rest are in docs/GOTCHAS.md §Web dashboard.
  */
 const TranscriptRows = ({
   rows,
@@ -737,21 +696,13 @@ const TranscriptRows = ({
   }, [terminal, scrubber, scrubInteractive, scrollElement])
 
   /**
-   * The pinned prompt: the prompt's **first line**, held at the top of the
-   * scroller. What pins is a one-line `overflow: hidden` **head** — the same
-   * row rendered again over the real row's first line, so it aligns by
-   * construction. It takes no pointer events and is `aria-hidden`: the real row
-   * owns interaction and the accessibility tree.
-   *
-   * **The pin is the browser's, not ours.** Each prompt row renders inside a
-   * **lane** — an absolutely positioned strip spanning its turn — with the head
-   * `position: sticky` inside it. The compositor pins and the lane's bottom
-   * edge pushes off. A JS-written pin (render or a scroll handler) runs behind
-   * the compositor thread and wobbles under momentum scroll.
-   *
-   * Which row falls out of the geometry: only the lane spanning the viewport
-   * top has its child stuck. The one job left to JS is keeping that row
-   * *mounted* once it scrolls above the virtual window — see `rangeExtractor`.
+   * The pinned prompt: the prompt's **first line**, held at the top of the scroller by a one-line
+   * `overflow: hidden` head that is `aria-hidden` and takes no pointer events. **The pin is the
+   * browser's, not ours** — a `position: sticky` head inside an absolutely positioned lane
+   * spanning its turn, so the compositor pins and the lane's bottom edge pushes off; a JS-written
+   * pin wobbles under momentum scroll. Which row is stuck falls out of the geometry, and the one
+   * job left to JS is keeping that row *mounted* — see `rangeExtractor`, and docs/GOTCHAS.md
+   * §Terminal theme for the three edges.
    */
   const measurements = virtualizer.measurementsCache
 

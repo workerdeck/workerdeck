@@ -5,45 +5,15 @@ import type { ProjectIcon, ProjectInfo, SessionInfo } from '@workerdeck/protocol
 import { contained, readContained } from './host-files.ts'
 
 /**
- * Project identity discovery: the `.workerdeck.json` ancestor walk behind
- * `SessionInfo.project`, and the read side of `GET /sessions/:id/project/icon`.
+ * Project identity discovery: the `.workerdeck.json` ancestor walk behind `SessionInfo.project`,
+ * and the read side of `GET /sessions/:id/project/icon`. Stamped at **serve time**, never
+ * persisted, and TTL-cached per cwd (negative results too — `GET /sessions` polls at 1.2s).
  *
- * The gateway resolves this — not each client — because the file lives on the
- * gateway's filesystem, which a phone or a remote browser cannot see. It is
- * stamped onto `SessionInfo` at **serve time** (`withProject`), never persisted:
- * a copy captured into a parking record would replay a stale name forever,
- * where a serve-time read picks up an edited file on every session at once
- * within the TTL. That is the profile tracker's 0%-after-reset placement
- * argument, applied to a filesystem fact instead of a clock.
- *
- * Every failure degrades to "no project" and never to an error: a session must
- * not fail, or even warn, because of a display declaration. A malformed,
- * oversized, or symlinked `.workerdeck.json` is *skipped and the walk
- * continues* — a broken file in `packages/ui` must not shadow the repo root's
- * valid one — and inside a valid file each field degrades on its own (junk
- * name → the root's basename, junk icon → no icon).
- *
- * The icon is the security surface, because its path comes out of a config
- * file the *agent* can write (the session cwd is the agent's working tree).
- * The rules are `host-files.ts`'s, not `cwdAllowed`'s (docs/GOTCHAS.md §Host
- * filesystem): the declared path is resolved against the project root and then
- * realpath'd **whole**, containment is decided on the canonical result only
- * (so `"icon": "../../../../etc/key.png"` and a planted `icon.png → ~/.ssh/…`
- * symlink both fail the same check), the open goes through `readContained`
- * (O_NOFOLLOW, fstat-before-io), and the media type comes from the *declared*
- * extension — png and svg only, by decision. A refused icon is
- * indistinguishable on the wire and on the route from a never-declared one:
- * `icon` absent, the route 404s. The one disclosure this feature accepts is
- * inherent to it: the walk reads ancestors of a vetted cwd, so a project file
- * an operator placed *above* their roots (`~/.workerdeck.json`) applies to
- * everything under it — nearest-wins from the cwd, exactly git's own
- * discovery, and the file is a display declaration by definition.
- *
- * Cache: per exact cwd string, TTL'd, with negative results cached at the same
- * price — `GET /sessions` polls at 1.2s while anything is working and the hit
- * path must be a Map lookup, never a walk. Keyed by cwd rather than by root
- * because the root is not known until the walk has run. Bounded by sweeping
- * expired entries once the map outgrows any plausible live session count.
+ * Every failure degrades to "no project" and the walk *continues* past a broken file, so a bad
+ * `.workerdeck.json` in a subdirectory cannot shadow the root's good one. The icon is the
+ * security surface — its path comes out of a file the agent can write — so containment is
+ * `host-files.ts`' realpath rule, never `cwdAllowed`. See `docs/PACKAGES.md` §`packages/server`
+ * and `docs/GOTCHAS.md` §Host filesystem.
  */
 
 const PROJECT_FILE = '.workerdeck.json'

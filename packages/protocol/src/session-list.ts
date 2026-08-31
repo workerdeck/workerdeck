@@ -1,17 +1,13 @@
 /**
- * How a sessions list is filtered, grouped and sorted — the whole of the view
- * config, kept pure and separate from the components so every surface renders
- * one derived list and nothing else decides what is visible.
+ * How a sessions list is filtered, grouped and sorted — the whole view config,
+ * pure and framework-free, so every surface renders one derived list and nothing
+ * else decides what is visible.
  *
- * Framework-free like `transcript.ts`, and for the same reason: more than one
- * party has to agree. In the VS Code extension the webview renders the list and
- * the extension host counts the activity-bar badge over the same rows (a badge
- * that ignored the filter would announce work in sessions the list is
- * deliberately hiding); in the dashboard the list and its subset line derive
- * from it; on iOS it is mirrored to Swift the way the reducer is.
- *
- * Sessions are shown across ALL gateways by default; the gateway is a facet like
- * any other, not the frame the list lives in.
+ * These are rules, not preferences: the extension's unread badge counts the same
+ * rows its list shows, so a client that filtered differently would announce work
+ * it is hiding. Mirrored to Swift the way the reducer is; tests in
+ * `packages/react/test/session-list.test.ts`. Sessions are shown across ALL
+ * gateways by default — the gateway is a facet, not the frame.
  */
 
 import type { SessionInfo, SubagentInfo } from './index.ts'
@@ -59,15 +55,10 @@ export const sessionState = (info: SessionInfo): SessionState => {
 /**
  * The sub-agents a list row draws as live.
  *
- * `sessionState` deliberately does **not** grow a `subagents` bucket — a fifth
- * state would split `working` in two for every client that filters by it,
- * including the ones that have not shipped this yet. Instead `working` *counts*
- * them: a synchronous `Task` keeps the turn in flight so the status already
- * says `working`, and a **background** agent — which outlives its turn on
- * purpose — is the carve-out the extra arm in `sessionState` exists for.
- * That is what makes "sub-agents are an annotation on a working row" true
- * rather than assumed: the row is in the working bucket whichever kind is
- * running, and this list only says more about it.
+ * `sessionState` deliberately grows **no fifth bucket** for them — that would
+ * split `working` for every client that has not shipped it — but it does *count*
+ * them, which is what makes "sub-agents are an annotation on a working row" true
+ * rather than assumed. See the arms of `sessionState` above.
  */
 export const runningSubagents = (info: SessionInfo): SubagentInfo[] => {
   return (info.subagents ?? []).filter((sub) => sub.status === 'running')
@@ -77,17 +68,11 @@ export const runningSubagents = (info: SessionInfo): SubagentInfo[] => {
  * Does this record name an **agent**, as opposed to a task the model merely
  * described?
  *
- * The tracker opens a record for every spawner call and for any nested event
- * whose parent it has not seen, so the list holds two different things wearing
- * one shape. One carries a `subagent_type` — a delegated agent with an identity
- * (`Explore`), whose own work is worth a surface of its own. The other carries
- * only a description, and there is no agent there to open: a row that offered a
- * screen and then showed a frame with nothing in it would be worse than a row
- * that offered nothing.
- *
- * Here rather than in a client because it decides two things a list must not
- * disagree about across surfaces — what is pressable, and what wears the
- * sub-agent colour.
+ * The tracker also opens a record for any nested event whose parent it never
+ * saw, so the list holds two things wearing one shape; only the one carrying a
+ * `subagent_type` has an agent behind it to open. Here rather than in a client
+ * because it decides what is pressable and what wears the sub-agent colour, and
+ * surfaces must not disagree about either.
  */
 export const isAgentRecord = (sub: SubagentInfo): boolean => {
   return (sub.agentType?.trim() ?? '') !== ''
@@ -210,18 +195,14 @@ export const sessionLabel = (info: SessionInfo): string => {
 }
 
 /**
- * The project facet's grouping key: gateway id + the project root, falling
- * back to the session's cwd when no project is declared.
+ * The project facet's grouping key: gateway id + the project root, falling back
+ * to the session's cwd when no project is declared.
  *
- * The root and not the name, because a name is not a key (two repos can both
- * be called "api", and a rename must regroup nothing); qualified by gateway,
- * because a remote gateway's identical-looking path is another machine's
- * directory — the same rule `ScopeRoot` states. The cwd fallback is what makes
- * grouping by project useful before anyone has written a `.workerdeck.json`:
- * undeclared sessions group by their folder, declared ones by their root, and
- * a session in `packages/ui` joins its repo's group the moment the file
- * exists. Sessions with no cwd at all (a filesystem-less engine) share one
- * per-gateway bucket — see {@link projectLabel}.
+ * The root and not the name (a name is not a key — two repos can both be called
+ * "api", and a rename must regroup nothing), qualified by gateway (a remote
+ * gateway's identical-looking path is another machine's directory — the
+ * `ScopeRoot` rule). The cwd fallback is what makes grouping by project useful
+ * before anyone has written a `.workerdeck.json`.
  */
 export const projectKey = (row: SessionRow): string => {
   return `${row.hostId}:${normalizePath(row.info.project?.root ?? row.info.cwd)}`
@@ -230,15 +211,12 @@ export const projectKey = (row: SessionRow): string => {
 /**
  * What a project group (or a row's project slot) is called: the declared name,
  * else the cwd's basename — the exact string clients rendered before this
- * feature existed, so an undeclared project looks like today. 'No project' is
- * only ever the no-cwd case (a sandboxed provider session), where there is no
- * folder to name.
+ * feature existed. 'No project' is only ever the no-cwd case (a sandboxed
+ * provider session).
  *
- * Takes only the `info` it reads, so a surface holding a bare `SessionInfo` —
- * a row component, an iOS cell — can call it without inventing the rest of a
- * `SessionRow`. That matters more than it looks: this string is what a client
- * renders *in place of* the cwd basename it used to draw, and two spellings of
- * it would put the list and its group headers on different names.
+ * Takes only the `info` it reads, so a surface holding a bare `SessionInfo` can
+ * call it: this is what a client renders *in place of* the cwd basename, and two
+ * spellings would put the list and its group headers on different names.
  */
 export const projectLabel = (row: Pick<SessionRow, 'info'>): string => {
   const name = row.info.project?.name
@@ -250,20 +228,14 @@ export const projectLabel = (row: Pick<SessionRow, 'info'>): string => {
 }
 
 /**
- * Where inside its project a session actually sits — the cwd with the project
- * root taken off the front, or `undefined` when it sits at the root, has no
- * declared project, or has no cwd at all.
+ * Where inside its project a session sits — the cwd with the project root taken
+ * off the front, or `undefined` at the root, with no declared project, or with
+ * no cwd.
  *
- * The companion to {@link projectLabel}, and it exists for one situation: a list
- * **grouped by project**. There the header has already said the project's name,
- * so repeating it on every row spends the row's most valuable line on the one
- * fact the reader already has. What the header cannot say is which *part* of the
- * project a session is working in, and two sessions in the same repo are told
- * apart by exactly that.
- *
- * Undefined is the honest answer for a session at the project root, and callers
- * must render nothing rather than a `.` or a repeated name — the slot simply
- * goes away, which is the point.
+ * The companion to {@link projectLabel}, for a list **grouped by project**: the
+ * header has already said the name, and what it cannot say is which part of the
+ * project a session is working in. Callers must render nothing for `undefined`
+ * rather than a `.` or a repeated name — the slot simply goes away.
  */
 export const projectSubpath = (row: Pick<SessionRow, 'info'>): string | undefined => {
   const root = row.info.project?.root

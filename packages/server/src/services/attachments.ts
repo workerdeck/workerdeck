@@ -23,16 +23,10 @@ const DEFAULT_MAX_SESSION_BYTES = 64 * 1024 * 1024
 /**
  * Per-session hold for files the user attached to a message.
  *
- * In memory, and deliberately so. An attachment is only *needed* for the instant
- * between the upload and the message that names it; everything after that is
- * convenience (a client re-rendering a thumbnail after a reattach). That is the
- * same bargain `GET /sessions/:id/files` makes — the session's lifetime, no
- * durability tier — and it keeps the gateway from accumulating a photo library
- * on disk that nobody asked it to look after.
- *
- * Both caps are enforced here rather than at the route, so a host embedding the
- * server cannot forget one: a single file that is too big is a 413, and so is a
- * session whose total would go over.
+ * In memory for the session's lifetime, the same bargain `GET /sessions/:id/files` makes — an
+ * attachment is only *needed* between the upload and the message that names it. Both caps live
+ * here rather than at the route so a host embedding the server cannot forget one (413 either
+ * way). See `docs/GOTCHAS.md` §Message attachments.
  */
 export class AttachmentStore {
   #bySession = new Map<string, Map<string, AttachmentInput>>()

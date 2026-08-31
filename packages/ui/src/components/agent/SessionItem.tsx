@@ -12,20 +12,11 @@ import { cn } from '../../lib/utils.ts'
 import { formatCost, formatRelativeTime, friendlyModel } from '../../lib/format.ts'
 
 /**
- * One session in a list — the **card**, and the only drawing of it in the
- * product. The dashboard's `SessionBrowser` and the VS Code sidebar both render
- * this; iOS mirrors this file's geometry.
- *
- * Two 20px lines over a shared **16px gutter cell** — the two glyphs are
- * different sizes, so centring them in a fixed cell is what keeps both text
- * columns starting at the same x.
- *
- * **Selection is the card's own fill, and the blue always marks the finest
- * thing selected.** Opening a sub-agent selects its session too, so both claims
- * are true at once: the blue goes to the agent (`--row-selected`) and the card
- * steps back to `--row-selected-weak`. A filled card does not also answer
- * hover; its steps do, on the `--row-active` tint, which works on all three
- * grounds. A **task** never takes the blue — see `StepRow`.
+ * One session in a list — the **card**, and the only drawing of it in the product (the dashboard's
+ * `SessionBrowser`, the VS Code sidebar; iOS mirrors this file's geometry). Two 20px lines over a
+ * shared 16px gutter cell, and **the blue always marks the finest thing selected**: opening a
+ * sub-agent selects its session too, so the agent takes `--row-selected` and the card steps back
+ * to `--row-selected-weak`. Geometry and the rest of the rules: docs/PACKAGES.md §`packages/ui`.
  */
 export interface SessionItemProps {
   row: SessionRow

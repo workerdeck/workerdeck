@@ -1,18 +1,9 @@
 /**
- * Availability, per profile: the adapter's probe run over the env the real
- * assembly path produces (so anything the host hook injects — a
- * CLAUDE_CODE_OAUTH_TOKEN, say — counts as logged in). Cached, and served on
- * `GET /profiles` as `available`/`unavailableReason`.
- *
- * Gated on `checkCredentials` like the old claude-only preflight (this is a
- * library; `pnpm test` must spawn nothing unless a test injects fake
- * adapters or probes). 'unknown' stays out of the cache's answers: a probe
- * that couldn't run is not evidence of a missing login. **Display-only**
- * downstream — session create against an unavailable profile still proceeds
- * and fails with the engine's own error, because the probe can be stale in
- * both directions and refusing on it would turn a probe bug into an outage.
- * (`requireAvailableProfile` is the one deliberate exception, and only on a
- * definite `false`.)
+ * Availability per profile: the adapter's probe over the env the *real* assembly path produces,
+ * cached and served as `available`/`unavailableReason`. Gated on `checkCredentials` (a library
+ * must spawn nothing), and **display-only** downstream — a probe can be stale in both directions,
+ * so refusing on it would turn a probe bug into an outage. `requireAvailableProfile` is the one
+ * deliberate exception, and only on a definite `false`; 'unknown' is never evidence of anything.
  */
 import { checkClaudeAuth } from '@workerdeck/core'
 import type { ClaudeAuthProbe, EngineAdapter, EngineAvailability } from '@workerdeck/core'

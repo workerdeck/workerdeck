@@ -6,17 +6,11 @@ import type { HostStore } from './hosts.ts'
 import { clientFor } from './gateway.ts'
 
 /**
- * `workerdeck://<hostId>/<abs path>` — a remote gateway's project, served over its
- * `/fs/*` routes. Registered globally at activation, so transcript links open even
- * when no folder is mounted.
- *
- * What `/fs` offers, and what this provider therefore cannot do:
- * - reads/lists follow the gateway's roots; outside them is a uniform 404.
- * - `writeFile` is **conditional, always**: the hash from the last read rides every
- *   write, and a mismatch (the agent edited the same file) surfaces as an error.
- *   Never a silent overwrite.
- * - no mkdir/delete/rename routes exist server-side → NoPermissions.
- * - no change stream exists → `watch` is a no-op; refreshes are event-driven.
+ * `workerdeck://<hostId>/<abs path>` — a remote gateway's project over its `/fs/*` routes,
+ * registered globally at activation so transcript links open with no folder mounted. The routes
+ * bound what this provider can do: `writeFile` is **conditional, always** (never a silent
+ * overwrite), mkdir/delete/rename are `NoPermissions`, and `watch` is a no-op.
+ * See `docs/GOTCHAS.md` §Host filesystem.
  */
 export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.Disposable {
   static readonly scheme = 'workerdeck'

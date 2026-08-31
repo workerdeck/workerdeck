@@ -55,19 +55,9 @@ export const initialReplayTarget = (frame: AttachedFrame): number | undefined =>
   frame.replayingFrom === 0 && frame.session.lastSeq > 0 ? frame.session.lastSeq : undefined
 
 /**
- * Whether an attach frame describes a DIFFERENT event log than the transcript
- * `held` was built from — in which case `afterSeq: held.lastSeq` delivers
- * nothing, forever, with no error; the only recovery is to forget the state and
- * re-attach from seq 0. Logs reset on routine paths (a dormant session is
- * rebuilt with a runner whose log starts at 0). Two checks, each of which the
- * other misses: `session.lastSeq < held.lastSeq` is proof of a reset (seq only
- * grows within one log) but blind to a backfill that already advanced past us;
- * a `createdAt` mismatch is a different runner incarnation — the provider
- * runner restores `createdAt` exactly when it restores the event log, so
- * equality truthfully means "same log" for every engine. A full replay
- * (`replayingFrom === 0`) is never stale, which is also what makes the
- * recovery loop-proof. Not cache-specific: a live handle reconnecting after a
- * gateway restart hits the identical silence, so every attach frame is checked.
+ * Whether an attach frame describes a DIFFERENT event log than `held` was built from — in which
+ * case `afterSeq: held.lastSeq` delivers nothing, forever, with no error. Checked on every attach
+ * frame, not just cached ones. See `docs/GOTCHAS.md` §Attach replay.
  */
 export const staleAttach = (frame: AttachedFrame, held: TranscriptState): boolean => {
   if (frame.replayingFrom === 0 || held.lastSeq === 0) {
@@ -93,17 +83,10 @@ export type UseClaudeSessionOptions = {
    * silently and the UI looks like "nothing happened". */
   onProtocolError?: (message: string) => void
   /**
-   * Keep this session's transcript warm after unmount (default true): the next
-   * mount of the same (client identity, session) paints the cached rows in its
-   * first frame and attaches with `afterSeq`, replaying only what it missed.
-   * Bounded module-scope LRU, keyed by the client's `identityKey` (gateway +
-   * auth headers) so nothing crosses gateways or credentials; if the attach
-   * frame shows a different event log (see {@link staleAttach}), the entry is
-   * discarded and the hook re-attaches from seq 0.
-   *
-   * Set `false` for an embedder whose principal varies on one base URL by
-   * means the client cannot see (a custom `fetchImpl` switching users, say) —
-   * or call `clearTranscriptCache()` on logout. Read at attach time.
+   * Keep this session's transcript warm after unmount (default true), so the next mount of the
+   * same (client identity, session) paints from cache and attaches with `afterSeq`. Read at
+   * attach time. Set `false` — or call `clearTranscriptCache()` on logout — for an embedder whose
+   * principal varies on one base URL by means the client cannot see.
    */
   cacheTranscript?: boolean
 }

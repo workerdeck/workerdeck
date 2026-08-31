@@ -1,17 +1,12 @@
 #!/usr/bin/env node
 /**
- * The terminal dev loop: build once, open an Extension Development Host window
- * on this extension, and keep rebuilding into `dist/` while it runs.
+ * The terminal dev loop: build once, open an Extension Development Host on this extension, and
+ * keep rebuilding into `dist/` while it runs — `src/dev-reload.ts` picks the rebuild up.
  *
- * The extension's own watcher (`src/dev-reload.ts`, development mode only) picks
- * the rebuild up — webview changes re-render in place, extension-host changes
- * reload the window — so this is the whole loop: run it, edit, watch the window.
+ *   node scripts/dev-host.mjs [folder-to-open]   # defaults to the repo root
  *
- *   node scripts/dev-host.mjs [folder-to-open]
- *
- * `folder-to-open` defaults to the repo root. An installed extension is a
- * different thing entirely: `pnpm install:local` packages a .vsix into the
- * editor you are reading this in, and needs a manual "Developer: Reload Window".
+ * `pnpm install:local` is a different thing: it packages a .vsix into the editor you are reading
+ * this in, and needs a manual "Developer: Reload Window".
  */
 import { spawn, spawnSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'

@@ -123,16 +123,10 @@ export const SelectionTaskKeyIgnored: Story = {
 /**
  * ## Click through it
  *
- * The real thing, wired to real state, so the transitions can be *used* rather
- * than read about:
- *
- * - click the **card** → the session is selected (blue card)
- * - click an **agent** → that agent is selected (blue row, grey card)
- * - click a **task** → the session is selected and the host is told where to
- *   land; the task itself never fills
- * - click the selected card again → back to nothing selected
- *
- * The line under the list is what a host would have received.
+ * The real thing, wired to real state — click the **card** to select the session, an **agent**
+ * to select it instead (blue row, grey card), a **task** to select the session and tell the host
+ * where to land (a task never fills), the selected card again to clear. The line under the list
+ * is what a host would have received.
  */
 export const SelectionInteractive: Story = {
   name: 'Selection · interactive',

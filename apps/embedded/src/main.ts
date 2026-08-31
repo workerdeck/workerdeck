@@ -11,18 +11,10 @@ import { createWikiMcp } from './wiki/mcp.ts'
 import type { AgentConfigResponse } from './shared.ts'
 
 /**
- * The whole embedded instance, in one process and on one port:
- *
- *   :PORT ─┬─ /v1/*  the WorkerDeck gateway (REST + the session WebSocket)
- *          └─ everything else, via the gateway's `fallback`:
- *             ├─ /trpc   the wiki's data API, for the SPA   ┐ ONE action set
- *             ├─ /mcp    the wiki as an MCP server, for the agent ┘ (wiki/actions.ts)
- *             ├─ /api/*  login, app state, agent config
- *             └─ /*      the built SPA
- *
- * One port is load-bearing: a browser cannot put an Authorization header on a WS
- * upgrade and a cookie only rides same-origin requests, so single-origin is what
- * makes both the session socket and cookie-authed `/trpc` possible.
+ * The whole embedded instance in one process on one port: `/v1/*` is the WorkerDeck gateway, and
+ * everything else (`/trpc`, `/mcp`, `/api/*`, the built SPA) is served through its `fallback`.
+ * One port is load-bearing — a browser cannot header a WS upgrade and a cookie only rides
+ * same-origin requests. See `docs/CLIENTS.md` §`apps/embedded`.
  */
 
 const port = Number(process.env.PORT ?? 8788)

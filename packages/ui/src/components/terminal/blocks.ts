@@ -1,30 +1,10 @@
 /**
- * The terminal theme's block model — **which rows exist**. Pure and separate
- * from `items.tsx` because the virtualizer counts these, `height.ts` sizes
- * them, the scrubber addresses them, and both renderers (the virtualized shell
- * and the plain `TerminalTranscript`) must fold identically.
- *
- * Two folds in one pass: consecutive tool calls into **runs** (`tool-run.ts`
- * owns membership and wording), and a `Task` call **absorbing** every item
- * whose `parentToolUseId` names it into ONE row — by parent id, not adjacency,
- * because parallel subagents interleave. Absorbed items are folded again
- * within the block, and the block is always collapsed by default (an unmounted
- * row is collapsed by definition — `height.ts`'s invariant).
- *
- * The absorption rule, precisely: a task block forms for a **top-level** call
- * with at least one child in the slice; an item is absorbed iff its parent is
- * such a call. The deliberate edges:
- *
- * - A **childless** `Task` call is a plain tool call and folds into runs.
- * - An **orphan** child (parent absent from the slice) renders as its own row.
- *   Load-bearing at the recap boundary: the shell folds each side separately,
- *   so a task split by the boundary shows post-boundary children *below* the
- *   seam rather than hiding new work in a collapsed row above it.
- * - A **grandchild** (nested sidechain — unreachable today) renders top-level,
- *   stepped in: an unmapped item must be visible, never gone.
- * - Two top-level calls separated only by absorbed items **fold together** —
- *   once absorbed, the calls are adjacent on screen and the count matches what
- *   the reader sees.
+ * The terminal theme's block model — **which rows exist**, and the one implementation of it, so
+ * the virtualized shell and the plain `TerminalTranscript` fold identically. Two folds in one
+ * pass: consecutive tool calls into **runs**, and a `Task` call **absorbing** every item whose
+ * `parentToolUseId` names it into one row — by parent id, never adjacency, because parallel
+ * subagents interleave. The absorption rule and its four decided edges (childless, orphan,
+ * grandchild, calls separated only by absorbed items) are in docs/PACKAGES.md §`packages/ui`.
  */
 import type { TranscriptItem } from '@workerdeck/react'
 import { foldsTogether } from './tool-run.ts'

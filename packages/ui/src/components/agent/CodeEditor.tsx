@@ -17,19 +17,12 @@ export interface CodeEditorProps {
 }
 
 /**
- * Monaco behind a small React surface, **loaded on demand** (the `import()` is
- * inside an effect, so it is a separate chunk).
- *
- * **No `MonacoEnvironment` is configured here, and none is needed.** Workers in
- * a published library become every embedder's bootstrapping problem, and
- * `packages/web` ships prebuilt static files at a domain root, where hardcoded
- * worker URLs break. The editor is configured so it never asks for one:
- * `wordBasedSuggestions` and `quickSuggestions` off, no diff editor. A host
- * that wants the worker-backed language services sets `MonacoEnvironment`
- * itself before the first file is opened.
- *
- * One model per path, kept across tab switches, so undo history and view state
- * survive clicking away and back.
+ * Monaco behind a small React surface, **loaded on demand** (the `import()` is inside an effect,
+ * so it is a separate chunk). **No `MonacoEnvironment` is configured here, and none is needed** —
+ * the editor is configured never to ask for a worker (`wordBasedSuggestions` and
+ * `quickSuggestions` off, no diff editor); a host that wants the language services sets it
+ * itself before the first file is opened. One model per path, kept across tab switches, so undo
+ * history and view state survive clicking away and back. Why: docs/PACKAGES.md §`packages/ui`.
  */
 export function CodeEditor({ path, value, onChange, onSave, readOnly, className }: CodeEditorProps) {
   const host = useRef<HTMLDivElement>(null)

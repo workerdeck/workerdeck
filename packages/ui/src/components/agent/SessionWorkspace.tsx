@@ -68,19 +68,13 @@ const AGENT_MIN = 220
 const EDITOR_MIN = 120
 
 /**
- * A VS Code-shaped workspace around a live session: file tree on the left, open
- * files above, the agent below. **Strictly additive** — {@link SessionPanel} is
- * still the whole session surface on its own.
- *
- * Two things are load-bearing and easy to break:
- *
- * 1. **The editor region is absent from the layout when nothing is open**, not
- *    collapsed to zero height, which would leave a draggable splitter behind.
- * 2. **`SessionPanel` keeps its position in the tree across that transition.**
- *    It holds the WebSocket attach and the entire transcript, so moving or
- *    conditionally wrapping it would remount it and drop the rendered history.
- *    The conditional children before it are `? :` expressions leaving a null in
- *    their slot, which is what keeps its index stable.
+ * A VS Code-shaped workspace around a live session: file tree on the left, open files above, the
+ * agent below. **Strictly additive** — {@link SessionPanel} is still the whole session surface on
+ * its own. Two things break easily: the editor region is **absent** from the layout when nothing
+ * is open (not zero-height, which leaves a draggable splitter behind), and `SessionPanel` keeps
+ * its **child index** across that transition — it holds the WS attach and the whole transcript,
+ * so the conditional children before it are `? :` expressions leaving a null in their slot rather
+ * than disappearing. See docs/PACKAGES.md §`packages/ui`.
  */
 export function SessionWorkspace({
   client,

@@ -17,25 +17,12 @@ import type { SessionStore } from './services/session-store.ts'
 export type SdkSessionLister = (options: { dir?: string; limit?: number; offset?: number }) => Promise<SdkSessionSummary[]>
 
 /**
- * Return a principal (any truthy value) to accept the request, or null/undefined to
- * reject with 401. The host app supplies this — the worker has no auth story of its
- * own. A principal object may carry `allowedProfiles: string[]` to restrict which
- * profiles the caller can create sessions/jobs under (and see in GET /profiles) —
- * without it the caller may use every declared profile. It may also carry
- * `canManageProfiles: true` to allow creating/editing/deleting managed profiles
- * (requires the `profileStore` option); anything else means no.
+ * Return a principal (any truthy value) to accept the request, null/undefined to reject with 401.
  *
- * It may also carry `scope: Record<string, string>` — the opaque tags deciding
- * which *sessions* this caller may see at all (see
- * {@link WorkerServerOptions.authorizeSession}). A principal carrying a scope is
- * an embedded end user rather than the operator, and is refused the
- * operator-privileged surfaces outright: `/fs/*`, `/sdk-sessions`, `/queue` and
- * `/queue/ws`.
- *
- * **This is the place to be expensive.** It is already async and already runs
- * once per request, so a lookup (which spaces is this user in?) belongs here,
- * landing its answer on the principal. The visibility check itself is
- * synchronous by design: it runs on every route and every row of every list.
+ * **This is the place to be expensive** — it is async and runs once per request, unlike the
+ * synchronous per-row {@link WorkerServerOptions.authorizeSession}. A principal may carry
+ * `allowedProfiles: string[]`, `canManageProfiles: true`, `operator: boolean` and
+ * `scope: Record<string, string>`; see `docs/GOTCHAS.md` §Session scope and §Server, profiles & auth.
  */
 export type Authenticator = (req: IncomingMessage) => unknown | Promise<unknown>
 
@@ -45,73 +32,19 @@ export type WorkerServerOptions = {
   /** Explicit opt-in to run without auth (local dev only). */
   allowUnauthenticated?: boolean
   /**
-   * Whether a principal may see one session — the policy half of
-   * {@link CreateSessionRequest.scope}. WorkerDeck stores the opaque tags and
-   * enforces the answer at every door; what the tags *mean* is the host's, and
-   * has to be, because "space" and "user" are one app's vocabulary and the next
-   * embedder has tenants or projects or nothing.
-   *
-   * **Synchronous, deliberately.** It runs per route and per row of every list,
-   * so resolving it against a database per request is the failure mode this
-   * signature designs out: do the lookup in {@link Authenticator} and put the
-   * answer on the principal.
-   *
-   * Unset, the default rule applies: every key the principal's `scope` pins must
-   * equal the session's, and a principal with no scope (`undefined` or `{}`) is
-   * unrestricted — the same "unset means all" rule `allowedProfiles` uses, so an
-   * operator's dashboard is unaffected. A consequence worth stating: a session
-   * carrying *no* scope is invisible to a scoped principal, which is the right
-   * fail direction — sessions predating this feature never leak into an
-   * end user's list.
-   *
-   * **False means the session does not exist**: every refusal answers 404, never
-   * 403, matching `host-files.ts`' uniform-disclosure discipline. A predicate
-   * that *throws* has not said yes — it is caught and read as false, so one
-   * surprising row cannot turn a hundred-row list into a page-wide error.
-   *
-   * **Declaring this withdraws the unscoped-means-operator default.** The
-   * gateway-wide surfaces (`/fs/*`, `/sdk-sessions`, `/queue`, `/queue/ws`) key
-   * on {@link Authenticator}'s principal carrying no `scope` — but a host may
-   * well write this predicate over its own principal shape and never set one,
-   * and reading that as "everyone is the operator" would serve the host
-   * filesystem to every end user whose sessions this correctly walls off. So
-   * with a policy declared, operator principals must say `operator: true`.
-   *
-   * **True means full control, not read access.** An attach can send
-   * `user_message`, `permission_decision`, `interrupt` and `close`, and a
-   * bridged client can settle a tool call — so this is one boolean over "may
-   * drive this session", not a visibility level. A read-only-for-my-team policy
-   * is not expressible here yet; do not approximate it with `readOnly`, which is
-   * affordance removal in a client and not an authorization boundary.
+   * Whether a principal may see — and therefore fully drive — one session; the policy half of
+   * {@link CreateSessionRequest.scope}. **Synchronous on purpose** (it runs per route and per row
+   * of every list), false means 404 rather than 403, a throw reads as false, and declaring it at
+   * all withdraws the unscoped-means-operator default. See `docs/GOTCHAS.md` §Session scope.
    */
   authorizeSession?: (principal: unknown, session: SessionInfo) => boolean
   /** If set, session cwd must resolve inside one of these roots. Strongly recommended. */
   allowedCwdRoots?: string[]
   /**
-   * The host filesystem routes (`{basePath}/fs/*`) — browse and read the
-   * operator's real project tree, and optionally write to it.
-   *
-   * **Reading follows {@link allowedCwdRoots} and needs no grant of its own.**
-   * A caller holding the auth key can already start a session in any allowed root
-   * and have the agent read whatever is in it, so serving those same trees over
-   * `/fs` adds no authority — it only removes the absurdity of going through a
-   * language model to `cat` a file. Set `roots` here only to *narrow* that (or to
-   * expose a tree sessions may not run in).
-   *
-   * With neither set the routes 404. That is not the same as inheriting
-   * `allowedCwdRoots`' permissive "unset means anywhere": no cwd policy means
-   * there is nothing to inherit, and "anywhere" is a statement about paths the
-   * operator types at a keyboard, not one about what a phone may read.
-   *
-   * **Writing is a separate opt-in**, because it is the one part that is not
-   * already implied. An agent's writes go through the permission flow; a `PUT` to
-   * `/fs/write` does not. These routes are operator-privileged by design — the
-   * caller is the operator — but that is a reason to make the bypass deliberate,
-   * not a reason to skip the switch.
-   *
-   * Containment is *not* `cwdAllowed`, whichever roots are in play: these routes
-   * walk paths the agent may have authored, so a symlink can escape a lexical
-   * prefix check. See `host-files.ts` — canonicalize, then re-check.
+   * The host filesystem routes (`{basePath}/fs/*`) — operator-privileged browse/read of the real
+   * project tree, with writing as its own opt-in. Reading follows {@link allowedCwdRoots} and
+   * `roots` only *narrows* it; containment is `host-files.ts`' realpath check, never `cwdAllowed`.
+   * See `docs/GOTCHAS.md` §Host filesystem.
    */
   hostFiles?: {
     /** Absolute paths. Unset inherits {@link allowedCwdRoots}; an explicit empty
@@ -187,33 +120,16 @@ export type WorkerServerOptions = {
   /** URL prefix for all routes. Default '/v1'. */
   basePath?: string
   /**
-   * Handle requests that fall outside `basePath` instead of 404ing them. The
-   * turnkey CLI serves the dashboard through this, which is the whole reason it
-   * exists: a browser cannot put a header on a WebSocket handshake, so the only
-   * credential a tab can present on a session attach is a cookie — and a cookie
-   * only rides requests to the origin that set it. Serving the app and the API
-   * from one origin is therefore not a convenience, it is what makes an
-   * authenticated dashboard possible without a stamping proxy in front.
-   *
-   * Upgrades are not routed here: anything outside `basePath` is still refused.
+   * Handle requests that fall outside `basePath` instead of 404ing them — how the turnkey CLI
+   * serves the dashboard from the API's own origin, which is what makes a cookie-authenticated
+   * WebSocket attach possible at all (`docs/GOTCHAS.md` §Server, profiles & auth). Anything
+   * reached here gets no `authenticate` call, and upgrades are never routed here.
    */
   fallback?: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
   /**
-   * Browser origins allowed to call this API cross-origin — for a dashboard
-   * served somewhere other than this gateway.
-   *
-   * Off unless configured, and even then it is *sharing policy, not a
-   * credential*: preflights are answered before auth (browsers strip
-   * credentials from them, so they would otherwise 401), but every real request
-   * still goes through `authenticate`, and an allowlisted page that does not
-   * hold the key gets nothing.
-   *
-   * Two rules the implementation must keep: **exact origins only**, no
-   * wildcards or suffix matching; and `Access-Control-Allow-Credentials` is
-   * **never** sent, which is what keeps an ambient cookie from becoming
-   * cross-origin authority. WebSocket upgrades are exempt from CORS entirely
-   * and are unaffected by this — their credential is whatever the host's
-   * `authenticate` accepts on the handshake.
+   * Browser origins allowed to call this API cross-origin — sharing policy, never a credential
+   * (every real request still goes through `authenticate`). Two rules the implementation must
+   * keep: **exact origins only**, and `Access-Control-Allow-Credentials` is **never** sent.
    */
   cors?: { origins: string[] }
   /** Max JSON body size in bytes. Default 1 MiB. */
@@ -237,34 +153,17 @@ export type WorkerServerOptions = {
    */
   requireApiKey?: boolean
   /**
-   * Launch-time credential sanity check: once `listen()` binds, each Claude
-   * profile's session environment — exactly what `buildRunnerConfig` would hand
-   * a session, host hook included — is probed with the SDK-bundled CLI's
-   * `claude auth status`, concurrently and fire-and-forget, and a profile that
-   * reports logged-out gets one console warning. Warn, never fail: the operator
-   * may be about to log in, and a probe that cannot run at all (missing binary,
-   * a CLI without `auth status`, unparseable output) stays silent — "couldn't
-   * check" is not "not logged in". No credential material is read or logged.
-   * Off by default (this is a library; tests must spawn nothing) — the turnkey
-   * CLI turns it on. Pass an object to inject the probe (tests) or a timeout.
+   * Probe each profile's real session env for a login at `listen()` and on a TTL, feeding
+   * `ProfileInfo.available`. **Warn, never fail**, and silent on "couldn't check" — that is not
+   * "not logged in". Off by default (a library must spawn nothing); pass an object to inject the
+   * probe or a timeout. See `docs/GOTCHAS.md` §Server, profiles & auth.
    */
   checkCredentials?: boolean | { probe?: ClaudeAuthProbe; timeoutMs?: number }
   /**
-   * Refuse to create a session or submit a job on a profile the credential
-   * probe has reported **unavailable** — 503 with the probe's own reason —
-   * rather than letting the run start and die mid-turn on a raw provider error.
-   *
-   * Off by default, and that default is right for an operator's own gateway:
-   * the verdict can be stale in both directions, the operator may be three
-   * seconds from finishing a login, and turning a probe bug into an outage is
-   * worse than one confusing failure. It is wrong in front of an **end user**,
-   * who cannot read a provider stack trace and did not choose the deployment's
-   * credentials — which is why every embedder otherwise grows its own
-   * `available` flag in front of the create button.
-   *
-   * Requires `checkCredentials`; without probes nothing is ever unavailable.
-   * A profile whose verdict is 'unknown' (never probed, probe couldn't run) is
-   * always allowed through — "couldn't check" is not "not available".
+   * Refuse create/submit on a profile the probe reported **definitely** unavailable (503 with the
+   * probe's reason). Requires `checkCredentials`; 'unknown' always passes. Off by default —
+   * display-only is right for an operator's own gateway, this is the trade for a deployment with
+   * an end user in front of it. See `docs/PACKAGES.md` §`packages/server`.
    */
   requireAvailableProfile?: boolean
   /** Injectable lister for GET /sdk-sessions (tests) — honored for the CLAUDE
@@ -277,19 +176,10 @@ export type WorkerServerOptions = {
    * sessions — attachable over the sessions WS — governed by these limits. */
   queue?: QueueServerOptions
   /**
-   * Out-of-band notification for interactive sessions: the four moments a person
-   * away from the screen needs (permission requested, turn done, error, closed)
-   * POSTed to a webhook and/or handed to a local observer. Off unless configured.
-   *
-   * Server-wide, unlike the queue's per-job webhook — the point is to hear about
-   * sessions you neither created nor are attached to, which is the situation a
-   * mobile client is in permanently (iOS will not hold a WebSocket open in the
-   * background). Every registry session qualifies, job runs included, so a job
-   * carrying its own webhook is reported on both channels.
-   *
-   * This is the primitive, and it stays transport-agnostic on purpose: the OSS
-   * server holds no push credentials. Turning a notification into an APNs push is
-   * a forwarder's job — see the turnkey CLI.
+   * The four human-attention moments (permission requested, turn done, error, closed) POSTed to a
+   * webhook and/or handed to a local observer. Server-wide and covering every registry session,
+   * unlike the queue's per-job webhook — and transport-agnostic on purpose: this server holds no
+   * push credentials, so turning one into an APNs push is the CLI forwarder's job.
    */
   notifications?: SessionNotificationOptions
   /** Browser-bridged tool execution: how long a bridged call may go unanswered
@@ -313,19 +203,10 @@ export type WorkerServerOptions = {
      * was down (durable stores only — nothing else survives a restart). Default 60000. */
     expiredGraceMs?: number
     /**
-     * Keep live `provider` sessions written through to the store after each
-     * turn, so they survive a gateway restart. **Off by default** — this writes
-     * a session's whole transcript to `store` and a library must not start doing
-     * that because someone upgraded.
-     *
-     * It is the restart story for the one engine dormancy cannot cover: claude
-     * and codex are remembered by *engine session id* and resumed from their own
-     * on-disk store, which a provider session does not have. Pair it with a
-     * durable `store` — with the default in-memory one it does nothing a park
-     * did not already do.
-     *
-     * The record is rebuilt lazily, on first attach, exactly like a dormant one;
-     * a boot with fifty remembered sessions spawns nothing.
+     * Keep live `provider` sessions written through to the store after each turn — the restart
+     * story for the one engine dormancy cannot cover. **Off by default**: this writes a session's
+     * whole transcript to `store`, and a library must not start doing that because someone
+     * upgraded. See `docs/GOTCHAS.md` §Parking & bridged execution.
      */
     persistLive?: boolean
     /** Park/remember/resume failures — storage or engine-assembly problems, not
@@ -338,16 +219,10 @@ export type WorkerServerOptions = {
    * Required if any such profile is declared — the server refuses to start
    * otherwise, rather than failing at create time.
    *
-   * Kept as a host hook so the server package neither imports a model SDK nor
-   * decides how provider credentials are resolved: the factory reads them from
-   * the operator's environment, exactly like the Claude credential chain.
-   * `claude` and `codex` profiles never come through here — those engines ship
-   * as in-repo adapters (`@workerdeck/core`'s `getEngineAdapter`).
-   *
-   * May be async: assembly that has to await — a per-session MCP connect, a
-   * credential lookup — belongs here, with `AiSdkRunnerConfig.onClose` as the
-   * disposer. A rejection fails the create — the session POST answers 500 with
-   * the message, a job goes straight to `failed`.
+   * Kept as a host hook so this package neither imports a model SDK nor decides how provider
+   * credentials are resolved; `claude` and `codex` go through core's adapters instead. May be
+   * async — a rejection fails the create (500 on the session POST, `failed` for a job).
+   * `createProviderRunner` is the 80% case.
    */
   createEngineRunner?: (context: EngineRunnerContext) => Runner | Promise<Runner>
   /**

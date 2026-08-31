@@ -5,18 +5,11 @@ import type { WikiDb } from './db.ts'
 import type { User } from '../shared.ts'
 
 /**
- * The wiki's operations, written **once**, as silkweave actions. Two adapters
- * project them onto two transports: `wiki/mcp.ts` (MCP over HTTP, for the agent, on
- * a per-session bearer token) and `wiki/trpc.ts` (tRPC, for the SPA, on the login
- * cookie).
- *
- * **Identity never comes from the caller's input.** Every action reads its user from
- * `context.get('auth')`, which each adapter resolves its own way onto the same key.
- * No action takes a `userId` argument, because an argument is something the model
- * can choose.
- *
- * `kind: 'query'` makes the read-only ones tRPC queries (so react-query can cache
- * them); `readOnlyHint` tells an agent the same fact. Both are worth setting.
+ * The wiki's operations, written **once** as silkweave actions and projected onto two transports
+ * by `wiki/mcp.ts` (the agent) and `wiki/trpc.ts` (the SPA). **Identity never comes from the
+ * caller's input**: every action reads its user from `context.get('auth')`, which each adapter
+ * resolves its own way, and no action takes a `userId` an argument could choose.
+ * See `docs/CLIENTS.md` §`apps/embedded`.
  */
 
 type AuthInfo = { token: string; userId: string }

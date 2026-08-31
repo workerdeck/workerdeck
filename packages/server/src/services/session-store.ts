@@ -4,28 +4,11 @@ import type { ParkedExecution, RunnerSnapshot, SessionRunnerConfig } from '@work
 import type { SessionInfo } from '@workerdeck/protocol'
 
 /**
- * A session captured whole: its wire-visible info, the config to rebuild the
- * runner, the engine's snapshot, and what it is waiting for.
- *
- * Two things are stored in this one shape, and the discriminator is `kind`:
- *
- * - **`parked`** — the live runner is torn down and the session is waiting on
- *   deferred executions. The record *is* the session, so waking consumes it.
- * - **`live`** — the runner is up and this is a copy taken after a turn, so the
- *   session survives a restart (`persistLive`). It is a way back that the
- *   session still needs the *next* time the process dies, so waking **refreshes
- *   it in place** and only `session_closed` removes it.
- *
- * That difference is the whole reason these are two kinds rather than one, and
- * it is a correctness difference, not bookkeeping: consuming a live record on
- * wake opens a window from the attach to the next turn in which the session
- * exists nowhere durable. A user who opens a session, reads it and types nothing
- * would lose it to a redeploy — silently, which is the failure class worth
- * spending a discriminator on.
- *
- * They share the shape so a store, and an older server, need no new code: every
- * other branch (rebuild from `config` + `snapshot`, serve `snapshot.vfs`, arm
- * `executions`, subscribe past `snapshot.seq`) is already right for both.
+ * A session captured whole: wire-visible info, the config to rebuild the runner, the engine's
+ * snapshot, and what it is waiting for. `kind` discriminates the two: a **`parked`** record *is*
+ * the session, so waking consumes it; a **`live`** one (`persistLive`) is a way back the session
+ * still needs next time the process dies, so waking **refreshes it in place**. See
+ * `docs/GOTCHAS.md` §Parking & bridged execution.
  */
 export type ParkedSessionRecord = {
   /** Absent on records written before dormant sessions existed — those are all parked. */
@@ -49,24 +32,11 @@ export type ParkedSessionRecord = {
 export const isLiveRecord = (record: StoredSessionRecord): boolean => record.kind === 'live'
 
 /**
- * A live session, remembered so it can be brought back after a gateway restart.
- *
- * The counterpart to a park, and deliberately not the same mechanism. A park
- * preserves *mid-task* state, which means a `RunnerSnapshot` — and only the
- * provider engine can produce one, because the claude and codex engines run
- * behind a binary that owns its own process state. What those two have instead
- * is a session store of their own: the transcript is already on disk under an
- * engine session id, and `CreateSessionRequest.resume` is how you get it back.
- *
- * So this record holds no transcript at all. It holds the id (every client keys
- * its watermarks and routes on it), the engine session id to resume from, and
- * the config to rebuild with — and rehydration is an ordinary create with
- * `resume` set, done **lazily on first attach**, because eagerly respawning
- * every session at boot is a fork bomb wearing a feature's clothes.
- *
- * Written only for engines whose capability record says `resume`, and only once
- * an `sdkSessionId` exists: a record that would come back with an empty
- * transcript is worse than no record.
+ * A live claude or codex session, remembered so it can be brought back after a gateway restart —
+ * the counterpart to a park, and deliberately not the same mechanism. **It holds no transcript at
+ * all**: just the id, the engine session id to resume from, and the config to rebuild with, so
+ * rehydration is an ordinary create with `resume` set, done lazily on first attach. Written only
+ * once an `sdkSessionId` exists. See `docs/GOTCHAS.md` §Parking & bridged execution.
  */
 export type DormantSessionRecord = {
   kind: 'dormant'
@@ -134,21 +104,11 @@ export class MemorySessionStore implements SessionStore {
 }
 
 /**
- * Config fields that must not be written to durable storage: two are functions
- * (JSON drops them silently), `extraOptions` is SDK `Options` and may hold hooks
- * and callbacks, and `env` is a credential-bearing map — the same rule
- * `profile-store.ts` follows, for the same reason.
- *
- * Dropping them costs a rehydrated session nothing, but the reason differs by
- * record kind and both halves matter. A provider session's credentials are
- * resolved by `createEngineRunner` from the operator's environment on every
- * build, wake included — so a parked record never needed them. A **dormant**
- * record is a claude or codex session, which does consume `env` (the profile's
- * `CLAUDE_CONFIG_DIR` pin lives there), and that is precisely why waking one
- * feeds its config back through the server's `buildRunnerConfig` instead of
- * handing it to the engine as-is: the pin and the host hook's injections are
- * re-derived from the profile, never read back off disk. Persisting them would
- * be a credential map in a file *and* a stale one.
+ * Config fields that must never be written to durable storage: two are functions JSON eats
+ * silently, `extraOptions` may hold hooks, and **`env` is a credential-bearing map**. Nothing is
+ * lost, because a wake re-derives them — a provider session resolves credentials through
+ * `createEngineRunner` on every build, and a dormant one is fed back through `buildRunnerConfig`.
+ * See `docs/GOTCHAS.md` §Parking & bridged execution.
  */
 const EPHEMERAL_CONFIG_KEYS = ['queryFn', 'historyFn', 'extraOptions', 'env'] as const
 
@@ -176,24 +136,13 @@ export type FileSessionStoreOptions = {
 }
 
 /**
- * Durable single-host store: one JSON file per parked session under `dir`, written
- * through a temp file and a rename so a crash mid-write cannot truncate a session.
- * `hydrate()` at `listen()` picks them up, re-indexes their executions, and re-arms
- * the watchdogs, so a restart no longer loses parked work.
+ * Durable single-host store: one JSON file per parked session under `dir`, written temp-then-
+ * rename so a crash mid-write cannot truncate a session. Single-process by design, like the
+ * bundled queue adapter and profile store — that is what the seam is for.
  *
- * Know what is on that disk: **the record holds the session's entire transcript** —
- * prompts, model output, and tool I/O — in plaintext. Put it somewhere with the same
- * protection as the SDK's own transcripts (`~/.claude/projects`), not in a directory
- * that gets served, synced, or backed up somewhere looser.
- *
- * Single-process by design, exactly like the bundled queue adapter and profile
- * store: two servers sharing one directory would both hydrate the same records and
- * race to rebuild them. That is what the seam is for.
- *
- * Nothing here reaps: a record leaves only when its session wakes or is deleted.
- * An execution dispatched without a deadline (a `DeferredExecutor` with no
- * `timeoutMs`) has no watchdog to end the wait, so its record — and its transcript
- * — stays until `DELETE /sessions/:id`. Give deferred calls a deadline, or sweep.
+ * Know what is on that disk: **the record holds the session's entire transcript in plaintext**.
+ * Protect `dir` like `~/.claude/projects`, and give deferred calls a deadline — nothing here
+ * reaps, so an execution with no watchdog keeps its transcript until `DELETE /sessions/:id`.
  */
 export const createFileSessionStore = (options: FileSessionStoreOptions = {}): SessionStore => {
   const dir = options.dir ?? join(process.cwd(), '.workerdeck', 'parked')

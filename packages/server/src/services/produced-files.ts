@@ -12,26 +12,10 @@ export type ProducedFile = {
 }
 
 /**
- * The paths this gateway will serve from `GET /sessions/:id/produced/:fileId`.
- *
- * **This is the whole access-control model, so it is worth being precise about
- * what it is.** The store is an allowlist built from one source and one only:
- * `file_produced` events, which a runner emits about a file its own engine just
- * wrote. It is not a directory grant. Nothing else can add to it — not a
- * request, not a config, and in particular not the agent, whose own path claims
- * go through `/fs/*` and that route's root allowlist.
- *
- * That is why the route needs neither `hostFiles.roots` nor `maxFileBytes`:
- * "somewhere under a root the operator declared" is a guess about which paths
- * are safe, while "the exact path this session's runner reported producing" is
- * a fact about one file. A 2 MB generated PNG is the common case, and making
- * the operator raise a byte cap to see their own picture was the bug this
- * replaces.
- *
- * Lifetime is the session's, like `AttachmentStore`'s: in memory, dropped when
- * the session is removed. The bytes are never held here — only the path, so a
- * gateway serving a long session accumulates a few hundred bytes per picture
- * rather than the pictures.
+ * The paths `GET /sessions/:id/produced/:fileId` will serve, and the whole access-control model
+ * for that route: an allowlist built from `file_produced` events and nothing else, so no request,
+ * config or agent path claim can add to it. Paths only, for the session's lifetime.
+ * See `docs/GOTCHAS.md` §Produced files.
  */
 export class ProducedFileStore {
   #bySession = new Map<string, Map<string, ProducedFile>>()

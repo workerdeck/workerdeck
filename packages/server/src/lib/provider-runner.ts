@@ -19,21 +19,11 @@ export type ProviderRunnerOptions = {
    */
   model: LanguageModel | ((modelId: string | undefined) => LanguageModel)
   /**
-   * Where sandboxed tools (`eval_script` and any `sandboxed` entry in `tools`)
-   * execute. This is a real architectural choice, not a default worth guessing
-   * at, so it is required:
-   *
-   * - a {@link ToolExecutor} — an in-process guest (`new QuickJsExecutor(...)`
-   *   from `@workerdeck/core`), which is right when the data the loop reasons
-   *   over lives in this process. It is also the only option that works when no
-   *   client is attached, which is every unattended job.
-   * - `'browser'` — the attached tab, resolved per call from the bridge. Right
-   *   when the data is *there* (a document the user is editing) and it should
-   *   not travel to the gateway at all. Note the trade: it hands an executor to
-   *   the party being sandboxed against, so its results are untrusted input.
-   * - a **function** — selects per call, so `eval_script` can run in-process
-   *   while a custom tool goes to the browser. The function receives the
-   *   {@link ToolExecutionCall} and returns an executor or `'browser'`.
+   * Where sandboxed tools (`eval_script`, and any `sandboxed` entry in `tools`) execute.
+   * **Required, never defaulted** — an in-process {@link ToolExecutor} is the only option that
+   * works with no client attached, `'browser'` hands an executor to the party being sandboxed
+   * against, and a per-call function splits the difference. See `docs/PACKAGES.md`
+   * §`packages/server`.
    */
   executor: ToolExecutor | 'browser' | ((call: ToolExecutionCall) => ToolExecutor | 'browser')
   /** Capability backends — the same shape {@link createEngineSession} takes.
@@ -67,28 +57,15 @@ export type ProviderRunnerOptions = {
 }
 
 /**
- * Build a provider-engine runner from the server's `createEngineRunner` context.
- *
- * `createEngineRunner` is a blank sheet: it hands you a context and wants a
- * `Runner`, and four of the five things a correct one must do are invisible in
- * the types — forward `restore`, adopt `id`, seed the VFS only when *not*
- * restoring, and dispose per-session resources. Each is a runtime-only failure
- * (a woken session that starts empty, a refused rebuild, an overwritten
- * filesystem, a connection leaked per session), and each is handled here.
+ * Build a provider-engine runner from a `createEngineRunner` context — the 80% case, never a
+ * replacement for the hook. Four of the obligations a correct hook has are invisible in its types
+ * and fail only at runtime, and all four are handled here: forward `restore`, adopt `id`, seed the
+ * VFS only when *not* restoring, and dispose per-session resources.
  *
  * ```ts
  * createEngineRunner: (ctx) =>
- *   createProviderRunner(ctx, {
- *     model: (id) => openai(id ?? 'gpt-5.6-luna'),
- *     executor: quickjs,
- *     capabilities: { webFetch: {} },
- *     mcp,
- *     onClose: () => mcp.close(),
- *   }),
+ *   createProviderRunner(ctx, { model: (id) => openai(id ?? 'gpt-5.6-luna'), executor: quickjs, mcp, onClose: () => mcp.close() })
  * ```
- *
- * The hook itself stays open for anything this does not cover — this is the
- * 80% case, not a replacement for it.
  */
 export const createProviderRunner = async (ctx: EngineRunnerContext, options: ProviderRunnerOptions): Promise<Runner> => {
   const { config, profile, bridge, restore, id } = ctx

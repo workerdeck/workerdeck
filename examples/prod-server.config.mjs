@@ -1,32 +1,13 @@
 /**
- * The *production* build, run locally — for manual testing before a release.
- * Edit it directly; like its dev sibling it is a starting point, not a knob panel.
+ * The *production* build, run locally — for manual testing before a release. Edit it directly.
  *
  *   pnpm start:prod    # builds if needed, then serves http://127.0.0.1:8788
- *
- * ## How this differs from `examples/dev-server.config.mjs`
- *
- * Not in what it configures — in *what code runs*. `pnpm dev:server` executes
- * `packages/cli/src/cli.ts` under swc-node with `--conditions=@workerdeck/source`,
- * so every workspace import resolves to `src/index.ts` and React runs its
- * development build. This one runs `packages/cli/build/cli.mjs` with no
- * conditions flag at all, so the same imports resolve through each package's
- * default export condition to its `build/` output, and the dashboard is
- * `@workerdeck/web`'s prebuilt `dist/` — minified, production React. That is the
- * only honest surface to judge perf or a release candidate on: dev-mode React
- * alone (jsxDEV, createTask) was a large share of the last scroll trace.
- *
- * Three deliberate differences from dev beyond that:
- *
- * - **Port 8788**, so it runs *alongside* `pnpm dev:server` on 8787 and the two
- *   can be compared side by side without stopping either.
- * - **State in `/tmp`**, so a throwaway test session never lands in the real
- *   store. Parked sessions and the generated auth key both live there and both
- *   evaporate on reboot — which is the point. `--state-dir` overrides it.
- * - **No `apns` key**, so the push forwarder does not exist and `/apns/devices`
- *   404s. A second gateway minting pushes to the same phone from the same p8 is
- *   noise, and the credential belongs to the instance you actually run.
- *
+ * It differs from `examples/dev-server.config.mjs` not in what it configures but in what *code
+ * runs*: the built `packages/cli/build/cli.mjs` with no `@workerdeck/source` condition, so every
+ * import resolves to `build/` and the dashboard is production React — the only honest surface to
+ * judge perf or a release candidate on (`docs/DEVELOPMENT.md`). Port 8788 so it runs alongside
+ * `dev:server`, state in `/tmp` so a throwaway session never lands in the real store, and no
+ * `apns` key — the push credential belongs to the instance you actually run.
  * @type {import('workerdeck').WorkerDeckConfig}
  */
 export default {
