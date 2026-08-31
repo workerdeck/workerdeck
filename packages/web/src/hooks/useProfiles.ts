@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ListProfilesResponse, ProfileInfo } from '@workerdeck/protocol'
 import { client } from '../lib/client.ts'
+import { readPref, writePref } from '../lib/storage.ts'
 
 const EMPTY: ListProfilesResponse = { profiles: [] }
 let cache: ListProfilesResponse | undefined
@@ -48,12 +49,12 @@ const CHOICE_KEY = 'workerdeck.last-profile'
 
 export function useProfileChoice() {
   const profiles = useProfiles()
-  const [choice, setChoice] = useState(() => localStorage.getItem(CHOICE_KEY) ?? '')
+  const [choice, setChoice] = useState(() => readPref(CHOICE_KEY) ?? '')
   const profile = profiles.some((p) => p.name === choice) ? choice : (profiles[0]?.name ?? '')
   const selected = profiles.find((p) => p.name === profile)
   const select = (name: string) => {
     setChoice(name)
-    localStorage.setItem(CHOICE_KEY, name)
+    writePref(CHOICE_KEY, name)
   }
   return { profiles, profile, selected, select }
 }

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
 import { Watermarks, unseenCount } from '@workerdeck/protocol'
 import type { SessionInfo, Watermark, WatermarkStore } from '@workerdeck/protocol'
+import { readJson, writeJson } from '../lib/storage.ts'
 
 const KEY = 'workerdeck.watermarks.v1'
 
@@ -8,19 +9,10 @@ const listeners = new Set<() => void>()
 let version = 0
 
 const store: WatermarkStore = {
-  read: () => {
-    try {
-      const raw = localStorage.getItem(KEY)
-      return raw ? (JSON.parse(raw) as Record<string, Watermark>) : undefined
-    } catch {
-      // Losing the marks costs one over-counted badge; throwing here would cost the whole list.
-      return undefined
-    }
-  },
+  // Losing the marks costs one over-counted badge, which is why readJson swallows rather than throws.
+  read: () => readJson<Record<string, Watermark> | undefined>(KEY, undefined),
   write: (marks) => {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(marks))
-    } catch {}
+    writeJson(KEY, marks)
     version += 1
     for (const listener of listeners) {
       listener()

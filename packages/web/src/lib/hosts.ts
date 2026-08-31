@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { WorkerDeckClient, apiUrl, hostAuth, isLoopbackHost } from '@workerdeck/client'
+import { readJson, readPref, writeJson, writePref } from './storage.ts'
 
 export type GatewayHost = {
   id: string
@@ -34,20 +35,16 @@ function emit(next: State): void {
 }
 
 function readStored(): GatewayHost[] {
-  try {
-    const raw = localStorage.getItem(HOSTS_KEY)
-    const parsed = raw ? (JSON.parse(raw) as GatewayHost[]) : []
-    // Never trust a stored `implicit`: the probe decides it, and a hand-edited entry claiming it has no credential path.
-    return Array.isArray(parsed) ? parsed.map(({ implicit: _, ...h }) => h) : []
-  } catch {
-    return []
-  }
+  const parsed = readJson<GatewayHost[]>(HOSTS_KEY, [])
+  // Never trust a stored `implicit`: the probe decides it, and a hand-edited entry claiming it has no credential path.
+  return Array.isArray(parsed) ? parsed.map(({ implicit: _, ...h }) => h) : []
 }
 
 function persist(hosts: GatewayHost[]): void {
-  try {
-    localStorage.setItem(HOSTS_KEY, JSON.stringify(hosts.filter((h) => !h.implicit)))
-  } catch {}
+  writeJson(
+    HOSTS_KEY,
+    hosts.filter((h) => !h.implicit),
+  )
 }
 
 // Not `crypto.randomUUID()`: it is gated on a secure context, so it is undefined on exactly the deployment this exists
@@ -64,21 +61,11 @@ export function newHostId(): string {
 }
 
 export function keyFor(id: string): string {
-  try {
-    return localStorage.getItem(keyKey(id)) ?? ''
-  } catch {
-    return ''
-  }
+  return readPref(keyKey(id)) ?? ''
 }
 
 function setKey(id: string, key: string): void {
-  try {
-    if (key === '') {
-      localStorage.removeItem(keyKey(id))
-    } else {
-      localStorage.setItem(keyKey(id), key)
-    }
-  } catch {}
+  writePref(keyKey(id), key === '' ? undefined : key)
 }
 
 const clients = new Map<string, WorkerDeckClient>()

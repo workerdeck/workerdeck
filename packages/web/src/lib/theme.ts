@@ -1,14 +1,14 @@
+import { readPref, writePref } from './storage.ts'
+
 export type Theme = 'light' | 'dark'
 
 const KEY = 'workerdeck.theme'
 
 export function getTheme(): Theme {
-  try {
-    const stored = localStorage.getItem(KEY)
-    if (stored === 'light' || stored === 'dark') {
-      return stored
-    }
-  } catch {}
+  const stored = readPref(KEY)
+  if (stored === 'light' || stored === 'dark') {
+    return stored
+  }
   return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
@@ -17,9 +17,7 @@ export function applyTheme(theme: Theme = getTheme()): void {
 }
 
 export function setTheme(theme: Theme): void {
-  try {
-    localStorage.setItem(KEY, theme)
-  } catch {}
+  writePref(KEY, theme)
   applyTheme(theme)
 }
 

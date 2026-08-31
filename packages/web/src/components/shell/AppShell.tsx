@@ -9,6 +9,7 @@ import { JobsSidebar } from './JobsSidebar.tsx'
 import { ProfilesSidebar } from './ProfilesSidebar.tsx'
 import { SessionsSidebar } from './SessionsSidebar.tsx'
 import { ThemeToggle } from './ThemeToggle.tsx'
+import { readPref, writePref } from '@/lib/storage.ts'
 
 const NAV = [
   { id: 'sessions', label: 'Sessions', icon: SquareTerminal, path: '/sessions', sidebar: SessionsSidebar },
@@ -25,18 +26,10 @@ export function AppShell({ children }: { children?: ReactNode }) {
   const section = [...NAV].sort((a, b) => b.path.length - a.path.length).find((item) => pathname.startsWith(item.path))
   const Sidebar = section?.sidebar
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem(COLLAPSED_KEY) === '1'
-    } catch {
-      return false
-    }
-  })
+  const [collapsed, setCollapsed] = useState(() => readPref(COLLAPSED_KEY) === '1')
   const toggle = () => {
     setCollapsed((prev) => {
-      try {
-        localStorage.setItem(COLLAPSED_KEY, prev ? '0' : '1')
-      } catch {}
+      writePref(COLLAPSED_KEY, prev ? '0' : '1')
       return !prev
     })
   }

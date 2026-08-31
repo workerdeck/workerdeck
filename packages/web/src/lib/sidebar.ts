@@ -1,3 +1,5 @@
+import { readPref, writePref } from './storage.ts'
+
 export type SidebarSection = 'sessions' | 'gateways' | 'jobs' | 'profiles'
 
 export const SIDEBAR_MIN = 240
@@ -14,47 +16,29 @@ function collapsedKey(section: SidebarSection): string {
 }
 
 export function getSidebarWidth(section: SidebarSection): number {
-  try {
-    const stored = Number(localStorage.getItem(widthKey(section)))
-    return stored ? Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, stored)) : SIDEBAR_DEFAULT
-  } catch {
-    return SIDEBAR_DEFAULT
-  }
+  const stored = Number(readPref(widthKey(section)))
+  return stored ? Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, stored)) : SIDEBAR_DEFAULT
 }
 
 export function setSidebarWidth(section: SidebarSection, width: number): void {
-  try {
-    localStorage.setItem(widthKey(section), String(width))
-  } catch {}
+  writePref(widthKey(section), String(width))
 }
 
 export function getSidebarCollapsed(section: SidebarSection): boolean {
-  try {
-    return localStorage.getItem(collapsedKey(section)) === '1'
-  } catch {
-    return false
-  }
+  return readPref(collapsedKey(section)) === '1'
 }
 
 export function setSidebarCollapsed(section: SidebarSection, collapsed: boolean): void {
-  try {
-    localStorage.setItem(collapsedKey(section), collapsed ? '1' : '0')
-  } catch {}
+  writePref(collapsedKey(section), collapsed ? '1' : '0')
 }
 
 // Separate from the filters themselves: closing the bar hides the controls, it does not clear them.
 const FILTERS_KEY = 'workerdeck.sessions-filters-shown'
 
 export function getFiltersShown(): boolean {
-  try {
-    return localStorage.getItem(FILTERS_KEY) === '1'
-  } catch {
-    return false
-  }
+  return readPref(FILTERS_KEY) === '1'
 }
 
 export function setFiltersShown(shown: boolean): void {
-  try {
-    localStorage.setItem(FILTERS_KEY, shown ? '1' : '0')
-  } catch {}
+  writePref(FILTERS_KEY, shown ? '1' : '0')
 }

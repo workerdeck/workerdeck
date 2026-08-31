@@ -1,4 +1,5 @@
 import type { ModelOption } from '@workerdeck/protocol'
+import { readPref, writePref } from './storage.ts'
 
 // Kept in sync by hand with the Claude Code CLI's model picker, and the fallback for a profile-less server only.
 export const MODEL_OPTIONS: ModelOption[] = [
@@ -16,11 +17,11 @@ export type TranscriptDensity = 'comfortable' | 'compact'
 const DENSITY_KEY = 'workerdeck.transcript-density'
 
 export function getTranscriptDensity(): TranscriptDensity {
-  return localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable'
+  return readPref(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable'
 }
 
 export function setTranscriptDensity(density: TranscriptDensity): void {
-  return localStorage.setItem(DENSITY_KEY, density)
+  writePref(DENSITY_KEY, density)
 }
 
 export type TranscriptVariant = 'cards' | 'terminal'
@@ -28,13 +29,13 @@ export type TranscriptVariant = 'cards' | 'terminal'
 const VARIANT_KEY = 'workerdeck.transcript-variant'
 
 export function getTranscriptVariant(): TranscriptVariant {
-  const stored = localStorage.getItem(VARIANT_KEY)
+  const stored = readPref(VARIANT_KEY)
   // `lines` was the retired no-boxes variant, and someone who turned boxes off keeps them off.
   return stored === 'terminal' || stored === 'lines' ? 'terminal' : 'cards'
 }
 
 export function setTranscriptVariant(variant: TranscriptVariant): void {
-  return localStorage.setItem(VARIANT_KEY, variant)
+  writePref(VARIANT_KEY, variant)
 }
 
 export type TranscriptFont = 'sans' | 'mono'
@@ -42,18 +43,18 @@ export type TranscriptFont = 'sans' | 'mono'
 const FONT_KEY = 'workerdeck.transcript-font'
 
 export function getTranscriptFont(): TranscriptFont {
-  return localStorage.getItem(FONT_KEY) === 'mono' ? 'mono' : 'sans'
+  return readPref(FONT_KEY) === 'mono' ? 'mono' : 'sans'
 }
 
 export function setTranscriptFont(font: TranscriptFont): void {
-  return localStorage.setItem(FONT_KEY, font)
+  writePref(FONT_KEY, font)
 }
 
 const FONT_SIZE_KEY = 'workerdeck.font-size'
 
 export function getFontSize(): number | undefined {
-  const raw = localStorage.getItem(FONT_SIZE_KEY)
-  if (raw === null) {
+  const raw = readPref(FONT_SIZE_KEY)
+  if (raw === undefined) {
     return undefined
   }
   const n = Number(raw)
@@ -61,9 +62,5 @@ export function getFontSize(): number | undefined {
 }
 
 export function setFontSize(size: number | undefined): void {
-  if (size === undefined) {
-    localStorage.removeItem(FONT_SIZE_KEY)
-  } else {
-    localStorage.setItem(FONT_SIZE_KEY, String(Math.round(size)))
-  }
+  writePref(FONT_SIZE_KEY, size === undefined ? undefined : String(Math.round(size)))
 }

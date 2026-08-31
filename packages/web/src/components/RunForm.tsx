@@ -15,6 +15,7 @@ import { ModelPicker } from '@/components/ModelPicker.tsx'
 import { ProfileSelect } from '@/components/ProfileSelect.tsx'
 import { client } from '@/lib/client.ts'
 import { engineFormOptions } from '@/lib/engine.ts'
+import { readPref, writePref } from '@/lib/storage.ts'
 import { type DefaultsKind } from '@/lib/settings.ts'
 import { useProfileChoice } from '@/hooks/useProfiles.ts'
 
@@ -30,7 +31,7 @@ function useCwdCandidates(sessions: SessionInfo[]): string[] {
       .catch(() => setRoots([]))
   }, [])
   return useMemo(() => {
-    const last = localStorage.getItem(CWD_KEY)
+    const last = readPref(CWD_KEY)
     const ordered = [
       ...(last ? [last] : []),
       ...[...sessions].sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt)).map((s) => s.cwd),
@@ -49,7 +50,7 @@ const MODE_FALLBACK: Record<DefaultsKind, PermissionMode> = {
 export type RunForm = ReturnType<typeof useRunForm>
 
 export function useRunForm(kind: DefaultsKind) {
-  const [cwd, setCwd] = useState(() => localStorage.getItem(CWD_KEY) ?? '')
+  const [cwd, setCwd] = useState(() => readPref(CWD_KEY) ?? '')
   const [prompt, setPrompt] = useState('')
   // Empty means "whatever the profile says": the gateway fills any omitted field from `ProfileInfo.defaults`.
   const [model, setModel] = useState('')
@@ -79,7 +80,7 @@ export function useRunForm(kind: DefaultsKind) {
       : {}),
   })
 
-  const rememberCwd = (used: string) => localStorage.setItem(CWD_KEY, cwd.trim() || used)
+  const rememberCwd = (used: string) => writePref(CWD_KEY, cwd.trim() || used)
 
   return {
     cwd,
