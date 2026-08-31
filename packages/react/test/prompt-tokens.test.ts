@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { scanPromptTokens } from '../src/lib/prompt-tokens.ts'
 
-const texts = (input: string) => scanPromptTokens(input).map((t) => t.text)
+function texts(input: string) {
+  return scanPromptTokens(input).map((t) => t.text)
+}
 
 describe('scanPromptTokens', () => {
   it('finds file and command tokens at word boundaries', () => {

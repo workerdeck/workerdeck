@@ -9,7 +9,7 @@ import { attachSeedToken, planAttach, shouldWriteParting } from '../lib/attach-p
 type SeedAction = { type: 'transcript_seed'; state: TranscriptState }
 type HydrateAction = { type: 'transcript_hydrate_result'; toolUseId: string; text: string }
 
-const reduce = (state: TranscriptState, action: SessionEvent | AttachedFrame | SeedAction | HydrateAction): TranscriptState => {
+function reduce(state: TranscriptState, action: SessionEvent | AttachedFrame | SeedAction | HydrateAction): TranscriptState {
   if (action.type === 'transcript_seed') {
     return action.state
   }
@@ -24,10 +24,11 @@ export type ConnectionState = 'live' | 'reconnecting' | 'offline'
 // Three failed attempts is ~3.5s of backoff — past a blip; the iOS client hardcodes the same threshold.
 const OFFLINE_AFTER_ATTEMPTS = 3
 
-export const initialReplayTarget = (frame: AttachedFrame): number | undefined =>
-  frame.replayingFrom === 0 && frame.session.lastSeq > 0 ? frame.session.lastSeq : undefined
+export function initialReplayTarget(frame: AttachedFrame): number | undefined {
+  return frame.replayingFrom === 0 && frame.session.lastSeq > 0 ? frame.session.lastSeq : undefined
+}
 
-export const staleAttach = (frame: AttachedFrame, held: TranscriptState): boolean => {
+export function staleAttach(frame: AttachedFrame, held: TranscriptState): boolean {
   if (frame.replayingFrom === 0 || held.lastSeq === 0) {
     return false
   }
@@ -65,11 +66,11 @@ export type UseClaudeSessionResult = {
   loadFullResult: (toolUseId: string) => Promise<boolean>
 }
 
-export const useClaudeSession = (
+export function useClaudeSession(
   client: WorkerDeckClient,
   sessionId: string | undefined,
   options?: UseClaudeSessionOptions,
-): UseClaudeSessionResult => {
+): UseClaudeSessionResult {
   const [state, dispatch] = useReducer(
     reduce,
     undefined,
@@ -231,7 +232,7 @@ export const useClaudeSession = (
   )
 }
 
-const useProfileModelFallback = (client: WorkerDeckClient, sessionId: string | undefined, state: TranscriptState): ModelOption[] => {
+function useProfileModelFallback(client: WorkerDeckClient, sessionId: string | undefined, state: TranscriptState): ModelOption[] {
   const [catalog, setCatalog] = useState<ModelOption[]>([])
   const profile = state.session?.profile
   const reported = state.models

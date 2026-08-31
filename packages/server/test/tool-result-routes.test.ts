@@ -6,7 +6,7 @@ import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 const BIG = 'x'.repeat(TOOL_RESULT_HEAD_CHARS + 12_000)
 
-const fakeHarness = () => {
+function fakeHarness() {
   const buffered: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
   let done = false
@@ -57,7 +57,7 @@ afterEach(async () => {
   running = undefined
 })
 
-const start = async (harness: ReturnType<typeof fakeHarness>) => {
+async function start(harness: ReturnType<typeof fakeHarness>) {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
@@ -67,7 +67,7 @@ const start = async (harness: ReturnType<typeof fakeHarness>) => {
   return { base: `http://127.0.0.1:${port}/v1`, wsBase: `ws://127.0.0.1:${port}/v1` }
 }
 
-const createSession = async (base: string): Promise<string> => {
+async function createSession(base: string): Promise<string> {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -76,7 +76,7 @@ const createSession = async (base: string): Promise<string> => {
   return ((await res.json()) as { session: SessionInfo }).session.id
 }
 
-const replay = async (wsBase: string, id: string, query = ''): Promise<SessionEvent[]> => {
+async function replay(wsBase: string, id: string, query = ''): Promise<SessionEvent[]> {
   const ws = new WebSocket(`${wsBase}/sessions/${id}/ws${query}`)
   const events: SessionEvent[] = []
   ws.on('message', (data) => {
@@ -91,14 +91,14 @@ const replay = async (wsBase: string, id: string, query = ''): Promise<SessionEv
   return events
 }
 
-const resultBlock = (event: SessionEvent | undefined): ToolResultBlock | undefined => {
+function resultBlock(event: SessionEvent | undefined): ToolResultBlock | undefined {
   if (event?.type !== 'user_message' || !Array.isArray(event.message.content)) {
     return undefined
   }
   return event.message.content.find((b) => b.type === 'tool_result') as ToolResultBlock | undefined
 }
 
-const seed = async (harness: ReturnType<typeof fakeHarness>, base: string) => {
+async function seed(harness: ReturnType<typeof fakeHarness>, base: string) {
   const id = await createSession(base)
   harness.emit({
     type: 'assistant',
@@ -198,7 +198,7 @@ const IMG_B64 = IMG.toString('base64')
 
 const imagePart = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: IMG_B64 } }
 
-const seedImage = async (harness: ReturnType<typeof fakeHarness>, base: string) => {
+async function seedImage(harness: ReturnType<typeof fakeHarness>, base: string) {
   const id = await createSession(base)
   harness.emit({
     type: 'assistant',

@@ -6,11 +6,15 @@ const MAX_ENTRIES = 5
 const entries = new Map<string, TranscriptState>()
 
 // NUL separates unambiguously: `identityKey` is JSON.stringify output, so no two pairs spell one key.
-export const transcriptCacheKey = (client: WorkerDeckClient, sessionId: string): string => `${client.identityKey}\u0000${sessionId}`
+export function transcriptCacheKey(client: WorkerDeckClient, sessionId: string): string {
+  return `${client.identityKey}\u0000${sessionId}`
+}
 
-export const readTranscriptCache = (key: string): TranscriptState | undefined => entries.get(key)
+export function readTranscriptCache(key: string): TranscriptState | undefined {
+  return entries.get(key)
+}
 
-export const writeTranscriptCache = (key: string, state: TranscriptState): void => {
+export function writeTranscriptCache(key: string, state: TranscriptState): void {
   entries.delete(key)
   entries.set(key, state)
   if (entries.size > MAX_ENTRIES) {
@@ -21,10 +25,10 @@ export const writeTranscriptCache = (key: string, state: TranscriptState): void 
   }
 }
 
-export const deleteTranscriptCache = (key: string): void => {
+export function deleteTranscriptCache(key: string): void {
   entries.delete(key)
 }
 
-export const clearTranscriptCache = (): void => {
+export function clearTranscriptCache(): void {
   entries.clear()
 }

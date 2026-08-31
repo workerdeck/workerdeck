@@ -8,12 +8,16 @@ import {
   type OpenFilesState,
 } from '../src/lib/open-files.ts'
 
-const run = (actions: OpenFilesAction[], from: OpenFilesState = initialOpenFilesState) => actions.reduce(openFilesReducer, from)
+function run(actions: OpenFilesAction[], from: OpenFilesState = initialOpenFilesState) {
+  return actions.reduce(openFilesReducer, from)
+}
 
-const paths = (state: OpenFilesState) => state.files.map((f) => f.path)
+function paths(state: OpenFilesState) {
+  return state.files.map((f) => f.path)
+}
 
-const loaded = (path: string, content = 'hello', encoding: 'utf8' | 'base64' = 'utf8') =>
-  ({
+function loaded(path: string, content = 'hello', encoding: 'utf8' | 'base64' = 'utf8') {
+  return {
     type: 'loaded',
     path,
     content,
@@ -21,7 +25,8 @@ const loaded = (path: string, content = 'hello', encoding: 'utf8' | 'base64' = '
     bytes: content.length,
     hash: `hash-${path}`,
     modifiedAt: 1,
-  }) satisfies OpenFilesAction
+  } satisfies OpenFilesAction
+}
 
 describe('openFilesReducer', () => {
   it('opens a tab in the loading state and focuses it', () => {
@@ -123,10 +128,13 @@ describe('openFilesReducer', () => {
   })
 })
 
-const edited = (draft = 'changed') =>
-  run([{ type: 'open', path: '/p/a.ts' }, loaded('/p/a.ts', 'original'), { type: 'edit', path: '/p/a.ts', content: draft }])
+function edited(draft = 'changed') {
+  return run([{ type: 'open', path: '/p/a.ts' }, loaded('/p/a.ts', 'original'), { type: 'edit', path: '/p/a.ts', content: draft }])
+}
 
-const only = (state: OpenFilesState) => state.files[0]!
+function only(state: OpenFilesState) {
+  return state.files[0]!
+}
 
 describe('openFilesReducer — editing', () => {
   it('keeps the draft separate from what was read', () => {

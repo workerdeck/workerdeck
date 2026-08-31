@@ -7,9 +7,11 @@ import { searchFiles } from '../services/host-file-search.ts'
 import { entryKind, readContained, resolveExisting, resolveForWrite, writeContained } from '../services/host-files.ts'
 import type { ServerContext } from '../context.ts'
 
-const kindRank = (type: string): number => (type === 'dir' ? 0 : 1)
+function kindRank(type: string): number {
+  return type === 'dir' ? 0 : 1
+}
 
-export const handleHostFiles = async (ctx: ServerContext, req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> => {
+export async function handleHostFiles(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
   const { basePath, hostFiles, hostFilesWritable, maxHostFileBytes, maxHostDirEntries } = ctx
   if (!hostFiles) {
     json(res, 404, { error: 'host file access is not configured on this server' })

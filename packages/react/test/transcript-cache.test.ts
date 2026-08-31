@@ -13,7 +13,7 @@ import {
   writeTranscriptCache,
 } from '../src/lib/transcript-cache.ts'
 
-const info = (overrides: Partial<SessionInfo> = {}): SessionInfo => {
+function info(overrides: Partial<SessionInfo> = {}): SessionInfo {
   return {
     id: 's1',
     status: 'idle',
@@ -25,11 +25,11 @@ const info = (overrides: Partial<SessionInfo> = {}): SessionInfo => {
   }
 }
 
-const frame = (replayingFrom: number, session: SessionInfo): AttachedFrame => {
+function frame(replayingFrom: number, session: SessionInfo): AttachedFrame {
   return { type: 'attached', protocolVersion: 7, session, replayingFrom }
 }
 
-const held = (lastSeq: number, createdAt = 1_000): TranscriptState => {
+function held(lastSeq: number, createdAt = 1_000): TranscriptState {
   return seedFromSessionInfo({ ...initialTranscriptState, lastSeq }, info({ createdAt, lastSeq }))
 }
 
@@ -124,7 +124,7 @@ describe('a reset replayed above the cached afterSeq', () => {
   })
 })
 
-const idleQueryFn = () => {
+function idleQueryFn() {
   const query = {
     [Symbol.asyncIterator]() {
       return this
@@ -149,7 +149,7 @@ afterEach(async () => {
   running = undefined
 })
 
-const start = async () => {
+async function start() {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
@@ -162,12 +162,12 @@ const start = async () => {
   })
 }
 
-const reduceAttach = (
+function reduceAttach(
   client: WorkerDeckClient,
   sessionId: string,
   seed: TranscriptState,
   afterSeq: number,
-): { handle: SessionHandle; frames: AttachedFrame[]; events: SessionEvent[]; state: () => TranscriptState } => {
+): { handle: SessionHandle; frames: AttachedFrame[]; events: SessionEvent[]; state: () => TranscriptState } {
   let state = seed
   const frames: AttachedFrame[] = []
   const events: SessionEvent[] = []

@@ -6,7 +6,7 @@ import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
 import type { ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import { createFileProfileStore, createMemoryProfileStore, createWorkerServer, type WorkerServer } from '../src/index.ts'
 
-const fakeRunner = (id: string, config: SessionRunnerConfig): Runner => {
+function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
   return {
     id,
     pendingApprovals: [],
@@ -43,17 +43,21 @@ afterEach(async () => {
   tempDir = undefined
 })
 
-const temp = (): string => (tempDir ??= mkdtempSync(join(tmpdir(), 'cw-profiles-')))
+function temp(): string {
+  return (tempDir ??= mkdtempSync(join(tmpdir(), 'cw-profiles-')))
+}
 
-const kimi = (): ProfileInfo => ({
-  name: 'kimi',
-  engine: 'provider',
-  provider: { id: 'moonshotai', model: 'kimi-k3', apiKeyEnv: 'MOONSHOT_API_KEY' },
-})
+function kimi(): ProfileInfo {
+  return {
+    name: 'kimi',
+    engine: 'provider',
+    provider: { id: 'moonshotai', model: 'kimi-k3', apiKeyEnv: 'MOONSHOT_API_KEY' },
+  }
+}
 
 // The principal manages profiles unless the request sends `x-readonly: 1`.
-const manageableServer = (options: Parameters<typeof createWorkerServer>[0] = {}) =>
-  createWorkerServer({
+function manageableServer(options: Parameters<typeof createWorkerServer>[0] = {}) {
+  return createWorkerServer({
     authenticate: (req) => ({ canManageProfiles: req.headers['x-readonly'] !== '1' }),
     allowedCwdRoots: ['/tmp'],
     profileStore: createMemoryProfileStore(),
@@ -61,13 +65,15 @@ const manageableServer = (options: Parameters<typeof createWorkerServer>[0] = {}
     profiles: [],
     ...options,
   })
+}
 
-const post = (port: number, body: unknown, headers: Record<string, string> = {}) =>
-  fetch(`http://127.0.0.1:${port}/v1/profiles`, {
+function post(port: number, body: unknown, headers: Record<string, string> = {}) {
+  return fetch(`http://127.0.0.1:${port}/v1/profiles`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
   })
+}
 
 describe('profile management', () => {
   it('creates a managed profile that sessions can immediately run under', async () => {
@@ -237,6 +243,6 @@ describe('createFileProfileStore', () => {
 })
 
 // A path that is definitely outside a fresh temp dir.
-const homedirLike = (): string => {
+function homedirLike(): string {
   return join(tmpdir(), 'cw-definitely-elsewhere')
 }

@@ -7,17 +7,12 @@ import type { AuthContext } from '../services/auth.ts'
 import type { ServerContext } from '../context.ts'
 
 // A summary with no `cwd` cannot be shown to be inside the roots, so it is dropped.
-const withinRoots = (sessions: SdkSessionSummary[], roots: string[], limit?: number, offset = 0): SdkSessionSummary[] => {
+function withinRoots(sessions: SdkSessionSummary[], roots: string[], limit?: number, offset = 0): SdkSessionSummary[] {
   const allowed = sessions.filter((s) => s.cwd !== undefined && cwdAllowed(s.cwd, roots)).sort((a, b) => b.lastModified - a.lastModified)
   return limit === undefined ? allowed.slice(offset) : allowed.slice(offset, offset + limit)
 }
 
-export const handleSdkSessions = async (
-  ctx: ServerContext,
-  req: IncomingMessage,
-  res: ServerResponse,
-  auth: AuthContext,
-): Promise<void> => {
+export async function handleSdkSessions(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, auth: AuthContext): Promise<void> {
   const { adapterFor, factory, profiles } = ctx
   if (req.method !== 'GET') {
     json(res, 405, { error: 'method not allowed' })

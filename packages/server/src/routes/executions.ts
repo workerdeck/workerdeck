@@ -5,13 +5,13 @@ import { json, readJsonBody } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
 import type { ServerContext } from '../context.ts'
 
-export const handleExecutionResult = async (
+export async function handleExecutionResult(
   ctx: ServerContext,
   req: IncomingMessage,
   res: ServerResponse,
   pathname: string,
   auth: AuthContext,
-): Promise<void> => {
+): Promise<void> {
   const { auth: authSvc, basePath, parking, registry } = ctx
   const rest = pathname.slice((basePath + '/executions/').length).split('/')
   if (rest.length !== 2 || rest[1] !== 'result' || !rest[0]) {

@@ -1,6 +1,8 @@
 import { initialTranscriptState, type TranscriptState } from './transcript.ts'
 
-export const attachSeedToken = (resyncSeq: number, key: string): string => `${resyncSeq}:${key}`
+export function attachSeedToken(resyncSeq: number, key: string): string {
+  return `${resyncSeq}:${key}`
+}
 
 export type AttachInputs = {
   resyncSeq: number
@@ -19,7 +21,7 @@ export type AttachPlan = {
   afterSeq?: number
 }
 
-export const planAttach = (input: AttachInputs): AttachPlan => {
+export function planAttach(input: AttachInputs): AttachPlan {
   const seedToken = attachSeedToken(input.resyncSeq, input.key)
   const warm = input.cacheEnabled && !input.skipCache ? input.warm : undefined
   const seed = input.seededFor !== seedToken
@@ -28,5 +30,6 @@ export const planAttach = (input: AttachInputs): AttachPlan => {
   return { held, seed, seedToken, ...(held.lastSeq > 0 ? { afterSeq: held.lastSeq } : {}) }
 }
 
-export const shouldWriteParting = (input: { cacheEnabled: boolean; skipCache: boolean; parting: TranscriptState }): boolean =>
-  input.cacheEnabled && !input.skipCache && input.parting.lastSeq > 0 && input.parting.session !== undefined
+export function shouldWriteParting(input: { cacheEnabled: boolean; skipCache: boolean; parting: TranscriptState }): boolean {
+  return input.cacheEnabled && !input.skipCache && input.parting.lastSeq > 0 && input.parting.session !== undefined
+}

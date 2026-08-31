@@ -13,7 +13,7 @@ export type HostTreeRow = {
   truncated?: boolean
 }
 
-export const flattenHostTree = (root: string, dirs: ReadonlyMap<string, HostDirState>, expanded: ReadonlySet<string>): HostTreeRow[] => {
+export function flattenHostTree(root: string, dirs: ReadonlyMap<string, HostDirState>, expanded: ReadonlySet<string>): HostTreeRow[] {
   const rows: HostTreeRow[] = []
   const rootState = dirs.get(root)
   if (!rootState) {
@@ -52,7 +52,7 @@ export const flattenHostTree = (root: string, dirs: ReadonlyMap<string, HostDirS
   return rows
 }
 
-export const ancestorsWithin = (root: string, path: string): string[] => {
+export function ancestorsWithin(root: string, path: string): string[] {
   const base = root.endsWith('/') ? root.slice(0, -1) : root
   if (path === base || !path.startsWith(`${base}/`)) {
     return []

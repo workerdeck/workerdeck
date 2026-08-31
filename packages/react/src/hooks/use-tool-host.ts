@@ -7,10 +7,10 @@ export type UseToolCallHostOptions = ToolCallHostOptions & {
   historyLimit?: number
 }
 
-export const useToolCallHost = (
+export function useToolCallHost(
   handle: SessionHandle | undefined,
   options: UseToolCallHostOptions = {},
-): { executions: ToolHostExecution[] } => {
+): { executions: ToolHostExecution[] } {
   const [executions, setExecutions] = useState<ToolHostExecution[]>([])
   const optionsRef = useRef(options)
   optionsRef.current = options

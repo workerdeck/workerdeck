@@ -25,14 +25,14 @@ afterEach(async () => {
   }
 })
 
-const tempDir = (prefix: string): string => {
+function tempDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix))
   tempDirs.push(dir)
   return dir
 }
 
 // Echoes `config.scope` the way every real runner does — what `buildRunner` asserts on.
-const fakeRunner = (id: string, config: SessionRunnerConfig): Runner => {
+function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
   let title: string | undefined
   return {
     id,
@@ -64,7 +64,9 @@ const fakeRunner = (id: string, config: SessionRunnerConfig): Runner => {
   }
 }
 
-const sandboxed = (): ProfileInfo => sandboxedProviderProfile('sandboxed', { id: 'openai-compatible', model: 'test-model' })
+function sandboxed(): ProfileInfo {
+  return sandboxedProviderProfile('sandboxed', { id: 'openai-compatible', model: 'test-model' })
+}
 
 const PRINCIPALS: Record<string, unknown> = {
   'alice-a': { scope: { space: 'a', user: 'alice' } },
@@ -73,7 +75,7 @@ const PRINCIPALS: Record<string, unknown> = {
   operator: {},
 }
 
-const startServer = async (extra: Parameters<typeof createWorkerServer>[0] = {}): Promise<string> => {
+async function startServer(extra: Parameters<typeof createWorkerServer>[0] = {}): Promise<string> {
   let n = 0
   running = createWorkerServer({
     authenticate: (req) => {
@@ -89,14 +91,19 @@ const startServer = async (extra: Parameters<typeof createWorkerServer>[0] = {})
   return `http://127.0.0.1:${port}/v1`
 }
 
-const as = (token: string): { headers: Record<string, string> } => ({
-  headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-})
+function as(token: string): { headers: Record<string, string> } {
+  return {
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+  }
+}
 
-const createSession = async (base: string, token: string, body: Record<string, unknown> = {}): Promise<Response> =>
-  fetch(`${base}/sessions`, { method: 'POST', ...as(token), body: JSON.stringify(body) })
+async function createSession(base: string, token: string, body: Record<string, unknown> = {}): Promise<Response> {
+  return fetch(`${base}/sessions`, { method: 'POST', ...as(token), body: JSON.stringify(body) })
+}
 
-const sessionIdOf = async (res: Response): Promise<string> => ((await res.json()) as { session: SessionInfo }).session.id
+async function sessionIdOf(res: Response): Promise<string> {
+  return ((await res.json()) as { session: SessionInfo }).session.id
+}
 
 describe('session scope', () => {
   it('stamps the principal scope at create and echoes it on SessionInfo', async () => {
@@ -558,7 +565,7 @@ describe('cwd for a filesystem-less engine', () => {
 })
 
 // A query that never yields — the claude sessions here are only ever built.
-const neverQuery = () => {
+function neverQuery() {
   return {
     [Symbol.asyncIterator]() {
       return this

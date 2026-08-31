@@ -44,7 +44,7 @@ export type SearchOptions = {
   maxScanned?: number
 }
 
-export const searchFiles = (base: string, options: SearchOptions = {}): SearchResult => {
+export function searchFiles(base: string, options: SearchOptions = {}): SearchResult {
   const limit = options.limit ?? 50
   const maxScanned = options.maxScanned ?? 20_000
   const ignore = new Set(options.ignore ?? DEFAULT_IGNORED_DIRS)
@@ -101,7 +101,7 @@ export const searchFiles = (base: string, options: SearchOptions = {}): SearchRe
   }
 }
 
-const scoreMatch = (relativePath: string, name: string, needle: string): number | null => {
+function scoreMatch(relativePath: string, name: string, needle: string): number | null {
   if (needle === '') {
     return 0
   }
@@ -112,7 +112,7 @@ const scoreMatch = (relativePath: string, name: string, needle: string): number 
   return subsequenceScore(relativePath.toLowerCase(), needle)
 }
 
-const subsequenceScore = (haystack: string, needle: string): number | null => {
+function subsequenceScore(haystack: string, needle: string): number | null {
   let score = 0
   let from = 0
   let previous = -2

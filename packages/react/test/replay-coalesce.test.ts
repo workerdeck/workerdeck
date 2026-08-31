@@ -3,10 +3,12 @@ import { replayCoalesceKey } from '@workerdeck/protocol'
 import type { RateLimitInfo, SessionEvent, SessionEventBody } from '@workerdeck/protocol'
 import { applyEvent, initialTranscriptState, type TranscriptState } from '../src/lib/transcript.ts'
 
-const seqd = (bodies: SessionEventBody[]): SessionEvent[] => bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
+function seqd(bodies: SessionEventBody[]): SessionEvent[] {
+  return bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
+}
 
 // A deliberate second implementation of the gateway's rule: a disagreement with `staleReplaySeqs` is a bug in one of them.
-const coalesce = (events: SessionEvent[]): SessionEvent[] => {
+function coalesce(events: SessionEvent[]): SessionEvent[] {
   const stale = new Set<number>()
   const seen = new Set<string>()
   for (let i = events.length - 1; i >= 0; i--) {
@@ -23,15 +25,20 @@ const coalesce = (events: SessionEvent[]): SessionEvent[] => {
   return events.filter((e) => !stale.has(e.seq))
 }
 
-const fold = (events: SessionEvent[]): TranscriptState => events.reduce(applyEvent, initialTranscriptState)
+function fold(events: SessionEvent[]): TranscriptState {
+  return events.reduce(applyEvent, initialTranscriptState)
+}
 
-const limit = (type: string, utilization: number): RateLimitInfo =>
-  ({ rateLimitType: type, utilization, status: 'allowed' }) as RateLimitInfo
+function limit(type: string, utilization: number): RateLimitInfo {
+  return { rateLimitType: type, utilization, status: 'allowed' } as RateLimitInfo
+}
 
-const usage = (total: number): SessionEventBody => ({
-  type: 'context_usage',
-  usage: { totalTokens: total, maxTokens: 200_000, percentage: total / 2000, categories: [] },
-})
+function usage(total: number): SessionEventBody {
+  return {
+    type: 'context_usage',
+    usage: { totalTokens: total, maxTokens: 200_000, percentage: total / 2000, categories: [] },
+  }
+}
 
 describe('replay coalescing is unobservable', () => {
   it('lands on the same state as the full log, for a session of many turns', () => {

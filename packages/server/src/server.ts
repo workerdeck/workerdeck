@@ -42,7 +42,7 @@ export type {
   WorkerServerOptions,
 } from './options.ts'
 
-export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerServer => {
+export function createWorkerServer(options: WorkerServerOptions = {}): WorkerServer {
   if (!options.authenticate && !options.allowUnauthenticated) {
     throw new Error('createWorkerServer: provide `authenticate` or explicitly set `allowUnauthenticated: true`')
   }

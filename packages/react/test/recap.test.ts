@@ -2,30 +2,38 @@ import { describe, expect, it } from 'vitest'
 import { recapLine, summarizeSince } from '../src/lib/recap.ts'
 import type { TranscriptItem } from '../src/lib/transcript.ts'
 
-const user = (id: string): TranscriptItem => ({ kind: 'user', id, text: 'hi' })
-const reply = (id: string): TranscriptItem => ({
-  kind: 'assistant_text',
-  id,
-  text: 'ok',
-  streaming: false,
-  parentToolUseId: null,
-})
-const tool = (id: string, name: string, failed = false): TranscriptItem => ({
-  kind: 'tool_call',
-  id,
-  name,
-  input: {},
-  parentToolUseId: null,
-  status: failed ? 'failed' : 'settled',
-})
-const turn = (id: string, isError = false): TranscriptItem => ({
-  kind: 'turn_result',
-  id,
-  subtype: isError ? 'error_during_execution' : 'success',
-  isError,
-  durationMs: 1000,
-  totalCostUsd: 0.01,
-})
+function user(id: string): TranscriptItem {
+  return { kind: 'user', id, text: 'hi' }
+}
+function reply(id: string): TranscriptItem {
+  return {
+    kind: 'assistant_text',
+    id,
+    text: 'ok',
+    streaming: false,
+    parentToolUseId: null,
+  }
+}
+function tool(id: string, name: string, failed = false): TranscriptItem {
+  return {
+    kind: 'tool_call',
+    id,
+    name,
+    input: {},
+    parentToolUseId: null,
+    status: failed ? 'failed' : 'settled',
+  }
+}
+function turn(id: string, isError = false): TranscriptItem {
+  return {
+    kind: 'turn_result',
+    id,
+    subtype: isError ? 'error_during_execution' : 'success',
+    isError,
+    durationMs: 1000,
+    totalCostUsd: 0.01,
+  }
+}
 
 describe('summarizeSince', () => {
   it('counts only what arrived after the boundary', () => {

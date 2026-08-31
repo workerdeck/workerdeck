@@ -13,7 +13,7 @@ export type HostFileRoot = {
 
 export type HostFileRoots = { readonly roots: readonly HostFileRoot[] }
 
-export const createHostFileRoots = (roots: string[]): HostFileRoots => {
+export function createHostFileRoots(roots: string[]): HostFileRoots {
   return {
     roots: roots.map((configured) => {
       if (invalidRequest(configured)) {
@@ -39,30 +39,30 @@ export type ResolveOutcome =
 
 type Refusal = { ok: false; status: 403 | 404; error: string }
 
-const refuse = (status: 403 | 404, error: string): Refusal => {
+function refuse(status: 403 | 404, error: string): Refusal {
   return { ok: false, status, error }
 }
 
-const notFound = (): Refusal => {
+function notFound(): Refusal {
   return refuse(404, 'not found')
 }
 
 // NUL is rejected before any fs call: Node throws a TypeError on one, and that must surface as a refusal rather than a 500.
-const invalidRequest = (requested: string): boolean => {
+function invalidRequest(requested: string): boolean {
   return requested.length === 0 || requested.includes('\0') || !isAbsolute(requested)
 }
 
 // A bare prefix check gets the boundary wrong (`/x/app` would swallow `/x/application`); both sides must be realpath output.
-export const contained = (rootCanonical: string, candidate: string): boolean => {
+export function contained(rootCanonical: string, candidate: string): boolean {
   const rel = relative(rootCanonical, candidate)
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
 }
 
-const rootContaining = (roots: HostFileRoots, canonical: string): HostFileRoot | undefined => {
+function rootContaining(roots: HostFileRoots, canonical: string): HostFileRoot | undefined {
   return roots.roots.find((root) => contained(root.canonical, canonical))
 }
 
-export const resolveExisting = (roots: HostFileRoots, requested: string): ResolveOutcome => {
+export function resolveExisting(roots: HostFileRoots, requested: string): ResolveOutcome {
   if (invalidRequest(requested)) {
     return refuse(403, 'invalid path')
   }
@@ -93,7 +93,7 @@ export const resolveExisting = (roots: HostFileRoots, requested: string): Resolv
 }
 
 // Only the final component may be new: a missing target canonicalizes its parent, so a dangling symlink sitting there is refused, not created through.
-export const resolveForWrite = (roots: HostFileRoots, requested: string): ResolveOutcome => {
+export function resolveForWrite(roots: HostFileRoots, requested: string): ResolveOutcome {
   if (invalidRequest(requested)) {
     return refuse(403, 'invalid path')
   }
@@ -151,7 +151,7 @@ export const resolveForWrite = (roots: HostFileRoots, requested: string): Resolv
 
 export type HostEntryKind = 'file' | 'dir' | 'symlink' | 'other'
 
-export const entryKind = (entry: Dirent): HostEntryKind => {
+export function entryKind(entry: Dirent): HostEntryKind {
   if (entry.isSymbolicLink()) {
     return 'symlink'
   }
@@ -166,7 +166,7 @@ export const entryKind = (entry: Dirent): HostEntryKind => {
 
 export type ReadOutcome = { ok: true; data: Buffer } | Refusal
 
-export const readContained = (path: string): ReadOutcome => {
+export function readContained(path: string): ReadOutcome {
   let fd: number
   try {
     fd = openSync(path, constants.O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
@@ -187,7 +187,7 @@ export const readContained = (path: string): ReadOutcome => {
 
 export type WriteOutcome = { ok: true } | Refusal
 
-export const writeContained = (path: string, data: string | Uint8Array): WriteOutcome => {
+export function writeContained(path: string, data: string | Uint8Array): WriteOutcome {
   let fd: number
   try {
     fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | O_NOFOLLOW | O_NONBLOCK, 0o644)

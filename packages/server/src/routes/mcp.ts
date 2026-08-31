@@ -4,13 +4,13 @@ import type { McpServerActionRequest } from '@workerdeck/protocol'
 import { json, readJsonBody } from '../lib/http.ts'
 import type { ServerContext } from '../context.ts'
 
-export const handleMcp = async (
+export async function handleMcp(
   ctx: ServerContext,
   req: IncomingMessage,
   res: ServerResponse,
   runner: Runner,
   serverName?: string,
-): Promise<void> => {
+): Promise<void> {
   const listServers = async (): Promise<boolean> => {
     const servers = await runner.mcpServers?.()
     if (!servers) {

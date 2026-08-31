@@ -13,33 +13,35 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true })
 })
 
-const record = (id: string, config: Partial<SessionRunnerConfig> = {}): ParkedSessionRecord => ({
-  id,
-  info: {
+function record(id: string, config: Partial<SessionRunnerConfig> = {}): ParkedSessionRecord {
+  return {
     id,
-    status: 'parked',
-    cwd: '/tmp/project',
+    info: {
+      id,
+      status: 'parked',
+      cwd: '/tmp/project',
+      profile: 'kimi',
+      engine: 'provider',
+      createdAt: 1,
+      lastSeq: 7,
+      pendingPermissionCount: 0,
+    },
     profile: 'kimi',
-    engine: 'provider',
-    createdAt: 1,
-    lastSeq: 7,
-    pendingPermissionCount: 0,
-  },
-  profile: 'kimi',
-  config: { cwd: '/tmp/project', profile: 'kimi', ...config },
-  snapshot: {
-    engine: 'provider',
-    id,
-    createdAt: 1,
-    seq: 7,
-    events: [{ type: 'status_changed', status: 'parked', seq: 7, ts: 2 }],
-    vfs: { '/out/report.md': '# draft' },
-    parked: [{ executionId: 'exec-1', toolName: 'remote_task', expiresAt: 99 }],
-    state: { messages: [{ role: 'assistant' }] },
-  },
-  executions: [{ executionId: 'exec-1', toolName: 'remote_task', expiresAt: 99 }],
-  parkedAt: 3,
-})
+    config: { cwd: '/tmp/project', profile: 'kimi', ...config },
+    snapshot: {
+      engine: 'provider',
+      id,
+      createdAt: 1,
+      seq: 7,
+      events: [{ type: 'status_changed', status: 'parked', seq: 7, ts: 2 }],
+      vfs: { '/out/report.md': '# draft' },
+      parked: [{ executionId: 'exec-1', toolName: 'remote_task', expiresAt: 99 }],
+      state: { messages: [{ role: 'assistant' }] },
+    },
+    executions: [{ executionId: 'exec-1', toolName: 'remote_task', expiresAt: 99 }],
+    parkedAt: 3,
+  }
+}
 
 describe('createFileSessionStore', () => {
   it('round-trips a record through the filesystem', async () => {

@@ -4,9 +4,11 @@ import type { SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/pr
 import { applyEvent, initialTranscriptState, seedFromSessionInfo, type TranscriptState } from '../src/lib/transcript.ts'
 
 let seq = 0
-const ev = (body: SessionEventBody): SessionEvent => ({ ...body, seq: ++seq, ts: 0 })
+function ev(body: SessionEventBody): SessionEvent {
+  return { ...body, seq: ++seq, ts: 0 }
+}
 
-const run = (state: TranscriptState, bodies: SessionEventBody[]): TranscriptState => {
+function run(state: TranscriptState, bodies: SessionEventBody[]): TranscriptState {
   return bodies.reduce((s, body) => applyEvent(s, ev(body)), state)
 }
 

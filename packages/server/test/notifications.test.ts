@@ -5,7 +5,7 @@ import type { SessionInfo, SessionNotification } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 // The SDK stand-in: tests hold `canUseTool` open to raise a permission request.
-const fakeHarness = () => {
+function fakeHarness() {
   const buffered: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
   const captured: { options?: Options } = {}
@@ -64,7 +64,7 @@ const turnResult = {
   uuid: 'uuid-result',
 } as unknown as SDKMessage
 
-const startReceiver = async (respond: () => number = () => 200) => {
+async function startReceiver(respond: () => number = () => 200) {
   const received: SessionNotification[] = []
   const server: Server = createServer((req, res) => {
     const chunks: Buffer[] = []
@@ -93,7 +93,7 @@ afterEach(async () => {
   running = undefined
 })
 
-const createSession = async (base: string): Promise<SessionInfo> => {
+async function createSession(base: string): Promise<SessionInfo> {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

@@ -38,7 +38,7 @@ export type ToolCallHostOptions = {
   onExecution?: (execution: ToolHostExecution) => void
 }
 
-export const createToolCallHost = (handle: SessionHandle, options: ToolCallHostOptions = {}): { dispose: () => void } => {
+export function createToolCallHost(handle: SessionHandle, options: ToolCallHostOptions = {}): { dispose: () => void } {
   const inFlight = new Map<string, AbortController>()
   let enginePromise: Promise<SandboxEngine> | undefined
   let disposed = false
@@ -211,7 +211,7 @@ export const createToolCallHost = (handle: SessionHandle, options: ToolCallHostO
   }
 }
 
-const defaultLoadEngine = async (): Promise<SandboxEngine> => {
+async function defaultLoadEngine(): Promise<SandboxEngine> {
   const [sandbox, variant] = await Promise.all([import('@workerdeck/sandbox'), import('@jitl/quickjs-singlefile-browser-release-asyncify')])
   return sandbox.loadEngine(variant as never)
 }

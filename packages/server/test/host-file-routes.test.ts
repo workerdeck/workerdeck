@@ -9,7 +9,9 @@ let running: WorkerServer | undefined
 let root: string
 let outside: string
 
-const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex')
+function sha256(text: string): string {
+  return createHash('sha256').update(text).digest('hex')
+}
 
 beforeEach(() => {
   // realpath because macOS's tmpdir is itself a symlink, and the server answers in canonical paths.
@@ -32,13 +34,13 @@ afterEach(async () => {
   }
 })
 
-const start = async (hostFiles?: { roots?: string[]; write?: boolean; maxFileBytes?: number }, allowedCwdRoots?: string[]) => {
+async function start(hostFiles?: { roots?: string[]; write?: boolean; maxFileBytes?: number }, allowedCwdRoots?: string[]) {
   running = createWorkerServer({ allowUnauthenticated: true, hostFiles, allowedCwdRoots })
   const { port } = await running.listen(0, '127.0.0.1')
   return `http://127.0.0.1:${port}/v1`
 }
 
-const get = async (base: string, path: string): Promise<[number, any]> => {
+async function get(base: string, path: string): Promise<[number, any]> {
   const res = await fetch(`${base}${path}`)
   return [res.status, await res.json()]
 }

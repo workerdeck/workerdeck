@@ -3,20 +3,22 @@ import { TOOL_RESULT_HEAD_CHARS, type SessionEvent } from '@workerdeck/protocol'
 import { replaySlice } from '@workerdeck/core'
 import { applyEvent, hydrateToolResult, initialTranscriptState } from '../src/lib/transcript.ts'
 
-const png = (n: number) => {
+function png(n: number) {
   // Exact decoded size, padding included, so an asserted `bytes` is the real one.
   const pad = n % 3 === 0 ? 0 : n % 3 === 1 ? 2 : 1
   return 'A'.repeat(Math.ceil(n / 3) * 4 - pad) + '='.repeat(pad)
 }
 const big = 'x'.repeat(TOOL_RESULT_HEAD_CHARS + 5_000)
 
-const image = (data: string, mediaType = 'image/png') => ({
-  type: 'image',
-  source: { type: 'base64', media_type: mediaType, data },
-})
+function image(data: string, mediaType = 'image/png') {
+  return {
+    type: 'image',
+    source: { type: 'base64', media_type: mediaType, data },
+  }
+}
 
-const log = (resultContent: unknown): SessionEvent[] =>
-  [
+function log(resultContent: unknown): SessionEvent[] {
+  return [
     {
       seq: 1,
       ts: 1,
@@ -37,10 +39,15 @@ const log = (resultContent: unknown): SessionEvent[] =>
     },
     { seq: 3, ts: 3, type: 'turn_result', ok: true },
   ] as unknown as SessionEvent[]
+}
 
-const fold = (events: readonly SessionEvent[]) => events.reduce(applyEvent, initialTranscriptState)
+function fold(events: readonly SessionEvent[]) {
+  return events.reduce(applyEvent, initialTranscriptState)
+}
 
-const foldOf = (events: SessionEvent[], options: Record<string, boolean>) => fold(replaySlice(events, { afterSeq: 0, ...options }))
+function foldOf(events: SessionEvent[], options: Record<string, boolean>) {
+  return fold(replaySlice(events, { afterSeq: 0, ...options }))
+}
 
 describe('image refs — the fold moves in exactly one field', () => {
   const events = log([

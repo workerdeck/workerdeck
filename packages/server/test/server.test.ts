@@ -9,7 +9,7 @@ import type { JobEvent, JobInfo, ProfileInfo, QueueServerFrame, QueueStats, Serv
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 // `models` makes the fake query answer `supportedModels`, which is what makes a runner emit `capabilities`.
-const fakeHarness = (models?: Array<Record<string, unknown>>) => {
+function fakeHarness(models?: Array<Record<string, unknown>>) {
   const messages: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
   let done = false
@@ -91,7 +91,7 @@ const initMessage = {
   uuid: 'uuid-init',
 } as unknown as SDKMessage
 
-const frameCollector = (ws: WebSocket) => {
+function frameCollector(ws: WebSocket) {
   const frames: ServerFrame[] = []
   const waiters: Array<{ match: (f: ServerFrame) => boolean; resolve: (f: ServerFrame) => void }> = []
   ws.on('message', (data) => {
@@ -129,7 +129,7 @@ afterEach(async () => {
   running = undefined
 })
 
-const startServer = async (harness: ReturnType<typeof fakeHarness>) => {
+async function startServer(harness: ReturnType<typeof fakeHarness>) {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],

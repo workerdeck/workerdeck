@@ -29,7 +29,7 @@ const TEXTUAL_TYPES = new Set([
 
 const MAX_IMAGE_EDGE = 1568
 
-export const attachmentKind = (mediaType: string): AttachmentKind | undefined => {
+export function attachmentKind(mediaType: string): AttachmentKind | undefined {
   const type = mediaType.split(';')[0]!.trim().toLowerCase()
   if (type.startsWith('image/')) {
     return 'image'
@@ -66,11 +66,11 @@ export type UseAttachmentsResult = {
   dismissError: () => void
 }
 
-export const useAttachments = (
+export function useAttachments(
   client: WorkerDeckClient,
   sessionId: string | undefined,
   { capabilities, engine }: UseAttachmentsOptions,
-): UseAttachmentsResult => {
+): UseAttachmentsResult {
   const [items, setItems] = useState<StagedAttachment[]>([])
   const [error, setError] = useState<string | undefined>()
   const counter = useRef(0)
@@ -207,7 +207,7 @@ export const useAttachments = (
   )
 }
 
-const acceptAttribute = (kinds: readonly AttachmentKind[]): string => {
+function acceptAttribute(kinds: readonly AttachmentKind[]): string {
   if (kinds.length === 0) {
     return ''
   }
@@ -240,7 +240,7 @@ const imaging = globalThis as unknown as {
   document?: { createElement(tagName: 'canvas'): CanvasLike }
 }
 
-const prepare = async (file: File): Promise<{ body: Blob; mediaType: string }> => {
+async function prepare(file: File): Promise<{ body: Blob; mediaType: string }> {
   const mediaType = file.type || 'application/octet-stream'
   const { createImageBitmap, document } = imaging
   if (!createImageBitmap || !document || !mediaType.startsWith('image/')) {

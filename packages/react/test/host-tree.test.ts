@@ -2,23 +2,29 @@ import { describe, expect, it } from 'vitest'
 import type { HostDirEntry } from '@workerdeck/protocol'
 import { ancestorsWithin, flattenHostTree, type HostDirState } from '../src/lib/host-tree.ts'
 
-const dir = (path: string): HostDirEntry => ({
-  name: path.slice(path.lastIndexOf('/') + 1),
-  path,
-  type: 'dir',
-})
-const file = (path: string): HostDirEntry => ({
-  name: path.slice(path.lastIndexOf('/') + 1),
-  path,
-  type: 'file',
-  bytes: 10,
-})
+function dir(path: string): HostDirEntry {
+  return {
+    name: path.slice(path.lastIndexOf('/') + 1),
+    path,
+    type: 'dir',
+  }
+}
+function file(path: string): HostDirEntry {
+  return {
+    name: path.slice(path.lastIndexOf('/') + 1),
+    path,
+    type: 'file',
+    bytes: 10,
+  }
+}
 
-const tree = (entries: Record<string, HostDirEntry[]>) =>
-  new Map<string, HostDirState>(Object.entries(entries).map(([k, v]) => [k, { entries: v }]))
+function tree(entries: Record<string, HostDirEntry[]>) {
+  return new Map<string, HostDirState>(Object.entries(entries).map(([k, v]) => [k, { entries: v }]))
+}
 
-const shape = (rows: ReturnType<typeof flattenHostTree>) =>
-  rows.map((r) => `${'  '.repeat(r.depth)}${r.entry.name}${r.entry.type === 'dir' ? '/' : ''}`)
+function shape(rows: ReturnType<typeof flattenHostTree>) {
+  return rows.map((r) => `${'  '.repeat(r.depth)}${r.entry.name}${r.entry.type === 'dir' ? '/' : ''}`)
+}
 
 describe('flattenHostTree', () => {
   const dirs = tree({

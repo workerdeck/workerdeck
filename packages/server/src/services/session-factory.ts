@@ -31,7 +31,7 @@ export type SessionFactoryDeps = {
 
 export type SessionFactory = ReturnType<typeof createSessionFactory>
 
-export const createSessionFactory = (deps: SessionFactoryDeps) => {
+export function createSessionFactory(deps: SessionFactoryDeps) {
   const { adapterFor, profiles, refs } = deps
 
   const subscriptionNoticeShown = new Set<string>()

@@ -18,7 +18,7 @@ import {
 } from '@workerdeck/protocol'
 import type { SessionInfo, SessionRow, SubagentInfo, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
 
-const info = (over: Partial<SessionInfo> = {}): SessionInfo => {
+function info(over: Partial<SessionInfo> = {}): SessionInfo {
   return {
     id: 'sess-00000001',
     status: 'idle',
@@ -31,7 +31,7 @@ const info = (over: Partial<SessionInfo> = {}): SessionInfo => {
   } as SessionInfo
 }
 
-const row = (over: Partial<SessionRow> = {}): SessionRow => {
+function row(over: Partial<SessionRow> = {}): SessionRow {
   const inf = over.info ?? info()
   return {
     hostId: 'mac',
@@ -45,7 +45,9 @@ const row = (over: Partial<SessionRow> = {}): SessionRow => {
   }
 }
 
-const config = (over: Partial<ViewConfig> = {}): ViewConfig => ({ ...DEFAULT_VIEW_CONFIG, ...over })
+function config(over: Partial<ViewConfig> = {}): ViewConfig {
+  return { ...DEFAULT_VIEW_CONFIG, ...over }
+}
 
 describe('sessionState', () => {
   it('promotes a pending approval over the raw status', () => {

@@ -5,7 +5,7 @@ import type { ServerFrame, SessionInfo, ToolCallRequestFrame } from '@workerdeck
 import type { ToolExecutionResult } from '@workerdeck/core'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
-const idleHarness = () => {
+function idleHarness() {
   const query = {
     [Symbol.asyncIterator]() {
       return this
@@ -21,7 +21,7 @@ const idleHarness = () => {
   }
 }
 
-const frameCollector = (ws: WebSocket) => {
+function frameCollector(ws: WebSocket) {
   const frames: ServerFrame[] = []
   const waiters: Array<{ match: (f: ServerFrame) => boolean; resolve: (f: ServerFrame) => void }> = []
   ws.on('message', (data) => {
@@ -56,7 +56,7 @@ afterEach(async () => {
   results.length = 0
 })
 
-const startServer = async (bridgeTimeoutMs?: number) => {
+async function startServer(bridgeTimeoutMs?: number) {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
@@ -70,7 +70,7 @@ const startServer = async (bridgeTimeoutMs?: number) => {
   return { base: `http://127.0.0.1:${port}/v1`, wsBase: `ws://127.0.0.1:${port}/v1` }
 }
 
-const createSession = async (base: string): Promise<SessionInfo> => {
+async function createSession(base: string): Promise<SessionInfo> {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -79,20 +79,21 @@ const createSession = async (base: string): Promise<SessionInfo> => {
   return ((await res.json()) as { session: SessionInfo }).session
 }
 
-const attach = async (wsBase: string, sessionId: string) => {
+async function attach(wsBase: string, sessionId: string) {
   const ws = new WebSocket(`${wsBase}/sessions/${sessionId}/ws`)
   const collector = frameCollector(ws)
   await collector.waitFor((f) => f.type === 'attached')
   return { ws, collector }
 }
 
-const dispatch = (sessionId: string, executionId = 'exec-1', input: unknown = { script: '1+1' }) =>
-  running!.bridge.executorFor(sessionId).dispatch({
+function dispatch(sessionId: string, executionId = 'exec-1', input: unknown = { script: '1+1' }) {
+  return running!.bridge.executorFor(sessionId).dispatch({
     executionId,
     sessionId,
     tool: 'eval_script',
     input,
   })
+}
 
 describe('browser-bridged tool execution over the wire', () => {
   it('sends a tool_call_request to the attached client and routes its answer back', async () => {

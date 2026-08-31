@@ -19,13 +19,13 @@ const USAGE = {
 }
 
 // The codex adapter with the binary swapped for a scripted app-server peer, so the full path runs and `pnpm test` spawns nothing.
-const fakeCodexAdapter = (options: {
+function fakeCodexAdapter(options: {
   turns?: string[]
   probe?: () => EngineAvailability
   onCreate?: (config: SessionRunnerConfig) => void
   onTurn?: (notify: (method: string, params: unknown) => void) => void
   mcpServers?: unknown[]
-}): { adapter: EngineAdapter; probeCalls: () => number } => {
+}): { adapter: EngineAdapter; probeCalls: () => number } {
   let probeCalls = 0
   let turnIndex = 0
   const adapter: EngineAdapter = {
@@ -88,11 +88,13 @@ const fakeCodexAdapter = (options: {
   return { adapter, probeCalls: () => probeCalls }
 }
 
-const codexProfile = (extra: Partial<ProfileInfo> = {}): ProfileInfo => ({
-  name: 'codex',
-  engine: 'codex',
-  ...extra,
-})
+function codexProfile(extra: Partial<ProfileInfo> = {}): ProfileInfo {
+  return {
+    name: 'codex',
+    engine: 'codex',
+    ...extra,
+  }
+}
 
 let running: WorkerServer | undefined
 let scratchDir: string | undefined

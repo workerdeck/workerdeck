@@ -13,11 +13,11 @@ export type UseProfileUsageResult = {
   refresh: () => void
 }
 
-export const useProfileUsage = (
+export function useProfileUsage(
   client: WorkerDeckClient,
   profile: string | undefined,
   options: UseProfileUsageOptions = {},
-): UseProfileUsageResult => {
+): UseProfileUsageResult {
   const { intervalMs = 60_000, enabled = true } = options
   const [usage, setUsage] = useState<ProfileUsage | undefined>()
   const [unsupported, setUnsupported] = useState(false)

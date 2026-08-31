@@ -4,7 +4,7 @@ import type { Runner } from '@workerdeck/core'
 import { PROTOCOL_VERSION, type ClientFrame, type ServerFrame } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 
-export const attachClient = (ctx: ServerContext, ws: WebSocket, runner: Runner, req: IncomingMessage): void => {
+export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, req: IncomingMessage): void {
   const { bridge, parking } = ctx
   const url = new URL(req.url ?? '/', 'http://internal')
   const afterSeq = Number(url.searchParams.get('afterSeq') ?? '0') || 0
@@ -52,7 +52,7 @@ export const attachClient = (ctx: ServerContext, ws: WebSocket, runner: Runner, 
   })
 }
 
-const handleCommand = async (ctx: ServerContext, frame: ClientFrame, runner: Runner): Promise<void> => {
+async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Runner): Promise<void> {
   const { attachmentStore, bridge } = ctx
   switch (frame.type) {
     case 'user_message': {

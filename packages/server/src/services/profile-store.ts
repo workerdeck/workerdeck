@@ -8,7 +8,7 @@ export type ProfileStore = {
   delete(name: string): void | Promise<void>
 }
 
-export const createMemoryProfileStore = (seed: ProfileInfo[] = []): ProfileStore => {
+export function createMemoryProfileStore(seed: ProfileInfo[] = []): ProfileStore {
   const profiles = new Map(seed.map((p) => [p.name, p]))
   return {
     list: () => [...profiles.values()],
@@ -17,7 +17,7 @@ export const createMemoryProfileStore = (seed: ProfileInfo[] = []): ProfileStore
   }
 }
 
-export const createFileProfileStore = (path = join(process.cwd(), '.workerdeck', 'profiles.json')): ProfileStore => {
+export function createFileProfileStore(path = join(process.cwd(), '.workerdeck', 'profiles.json')): ProfileStore {
   const read = (): Map<string, ProfileInfo> => {
     try {
       const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown

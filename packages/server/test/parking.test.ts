@@ -14,11 +14,13 @@ import {
 import { createFileSessionStore, createWorkerServer, type SessionStore, type WorkerServer } from '../src/index.ts'
 import { ParkableRunner } from './parkable-runner.ts'
 
-const providerProfile = (name = 'kimi'): ProfileInfo => ({
-  name,
-  engine: 'provider',
-  provider: { id: 'moonshotai', model: 'kimi-k3' },
-})
+function providerProfile(name = 'kimi'): ProfileInfo {
+  return {
+    name,
+    engine: 'provider',
+    provider: { id: 'moonshotai', model: 'kimi-k3' },
+  }
+}
 
 let running: WorkerServer | undefined
 afterEach(async () => {
@@ -32,7 +34,7 @@ type Harness = {
   base: string
 }
 
-const startServer = async (options: Partial<Parameters<typeof createWorkerServer>[0]> = {}): Promise<Harness> => {
+async function startServer(options: Partial<Parameters<typeof createWorkerServer>[0]> = {}): Promise<Harness> {
   const runners: ParkableRunner[] = []
   running = createWorkerServer({
     allowUnauthenticated: true,
@@ -50,7 +52,7 @@ const startServer = async (options: Partial<Parameters<typeof createWorkerServer
   return { port, runners, base: `http://127.0.0.1:${port}/v1` }
 }
 
-const createSession = async (base: string, profile = 'kimi'): Promise<SessionInfo> => {
+async function createSession(base: string, profile = 'kimi'): Promise<SessionInfo> {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -59,13 +61,14 @@ const createSession = async (base: string, profile = 'kimi'): Promise<SessionInf
   return ((await res.json()) as { session: SessionInfo }).session
 }
 
-const submitResult = (base: string, executionId: string, body: unknown, init: RequestInit = {}) =>
-  fetch(`${base}/executions/${executionId}/result`, {
+function submitResult(base: string, executionId: string, body: unknown, init: RequestInit = {}) {
+  return fetch(`${base}/executions/${executionId}/result`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
     ...init,
   })
+}
 
 describe('deferred execution: parking and result ingestion', () => {
   it('parks an unattended session and keeps it readable while its runner is gone', async () => {

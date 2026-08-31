@@ -5,8 +5,8 @@ import { applyEvent, hydrateToolResult, initialTranscriptState } from '../src/li
 
 const big = 'x'.repeat(TOOL_RESULT_HEAD_CHARS + 5_000)
 
-const log = (): SessionEvent[] =>
-  [
+function log(): SessionEvent[] {
+  return [
     {
       seq: 1,
       ts: 1,
@@ -32,8 +32,11 @@ const log = (): SessionEvent[] =>
       },
     },
   ] as unknown as SessionEvent[]
+}
 
-const fold = (events: SessionEvent[]) => events.reduce(applyEvent, initialTranscriptState)
+function fold(events: SessionEvent[]) {
+  return events.reduce(applyEvent, initialTranscriptState)
+}
 
 describe('a truncated replay', () => {
   const whole = fold(log())

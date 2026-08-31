@@ -8,7 +8,7 @@ import type { Runner, SessionRunnerConfig, ToolExecutionResult } from '@workerde
 import type { ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type EngineRunnerContext, type WorkerServer } from '../src/index.ts'
 
-const fakeRunner = (id: string, config: SessionRunnerConfig): Runner => {
+function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
   return {
     id,
     pendingApprovals: [],
@@ -46,17 +46,19 @@ afterEach(async () => {
   configDir = undefined
 })
 
-const claudeProfile = (): ProfileInfo => {
+function claudeProfile(): ProfileInfo {
   configDir = mkdtempSync(join(tmpdir(), 'cw-profile-'))
   return { name: 'claude', configDir }
 }
 
-const providerProfile = (): ProfileInfo => ({
-  name: 'kimi',
-  engine: 'provider',
-  provider: { id: 'moonshotai', model: 'kimi-k3', apiKeyEnv: 'MOONSHOT_API_KEY' },
-  defaults: { model: 'kimi-k3' },
-})
+function providerProfile(): ProfileInfo {
+  return {
+    name: 'kimi',
+    engine: 'provider',
+    provider: { id: 'moonshotai', model: 'kimi-k3', apiKeyEnv: 'MOONSHOT_API_KEY' },
+    defaults: { model: 'kimi-k3' },
+  }
+}
 
 describe('provider profiles and engine selection', () => {
   it('refuses to start when a provider profile has no engine factory', () => {
@@ -506,7 +508,7 @@ describe('provider profiles and engine selection', () => {
   })
 })
 
-const idleQuery = () => {
+function idleQuery() {
   return {
     [Symbol.asyncIterator]() {
       return this

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Watermarks, unseenCount } from '@workerdeck/protocol'
 import type { Watermark, WatermarkStore } from '@workerdeck/protocol'
 
-const store = (initial: Record<string, Watermark> = {}) => {
+function store(initial: Record<string, Watermark> = {}) {
   let data = { ...initial }
   const writes: number[] = []
   return {

@@ -6,7 +6,7 @@ import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
 
-const fakeHarness = () => {
+function fakeHarness() {
   const captured: SDKUserMessage[] = []
   let done = false
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
@@ -44,7 +44,7 @@ afterEach(async () => {
   running = undefined
 })
 
-const start = async (harness: ReturnType<typeof fakeHarness>) => {
+async function start(harness: ReturnType<typeof fakeHarness>) {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
@@ -54,7 +54,7 @@ const start = async (harness: ReturnType<typeof fakeHarness>) => {
   return { base: `http://127.0.0.1:${port}/v1`, wsBase: `ws://127.0.0.1:${port}/v1` }
 }
 
-const createSession = async (base: string): Promise<string> => {
+async function createSession(base: string): Promise<string> {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -63,7 +63,7 @@ const createSession = async (base: string): Promise<string> => {
   return ((await res.json()) as { session: SessionInfo }).session.id
 }
 
-const upload = async (base: string, id: string, name: string, mediaType: string, body: Buffer | string): Promise<Response> => {
+async function upload(base: string, id: string, name: string, mediaType: string, body: Buffer | string): Promise<Response> {
   return await fetch(`${base}/sessions/${id}/attachments?name=${encodeURIComponent(name)}`, {
     method: 'POST',
     headers: { 'content-type': mediaType },
@@ -71,7 +71,7 @@ const upload = async (base: string, id: string, name: string, mediaType: string,
   })
 }
 
-const withSocket = async (wsBase: string, id: string, fn: (ws: WebSocket, events: SessionEvent[]) => Promise<void>): Promise<void> => {
+async function withSocket(wsBase: string, id: string, fn: (ws: WebSocket, events: SessionEvent[]) => Promise<void>): Promise<void> {
   const ws = new WebSocket(`${wsBase}/sessions/${id}/ws`)
   const events: SessionEvent[] = []
   ws.on('message', (data) => {
@@ -88,7 +88,9 @@ const withSocket = async (wsBase: string, id: string, fn: (ws: WebSocket, events
   }
 }
 
-const settle = () => new Promise((resolve) => setTimeout(resolve, 60))
+function settle() {
+  return new Promise((resolve) => setTimeout(resolve, 60))
+}
 
 describe('session attachments', () => {
   it('uploads bytes, sends them as content blocks, and logs only the reference', async () => {

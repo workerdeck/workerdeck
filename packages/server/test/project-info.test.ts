@@ -9,7 +9,7 @@ import { ProjectInfoService } from '../src/services/project-info.ts'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 // A query that emits nothing and unblocks its consumer on close: these sessions never speak.
-const queryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }): Query => {
+function queryFn(params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }): Query {
   void (async () => {
     for await (const _ of params.prompt) {
     }
@@ -45,13 +45,13 @@ afterEach(async () => {
   }
 })
 
-const tempRoot = (): string => {
+function tempRoot(): string {
   const dir = mkdtempSync(join(tmpdir(), 'wd-project-'))
   tempDirs.push(dir)
   return dir
 }
 
-const startServer = async (root: string, extra: Parameters<typeof createWorkerServer>[0] = {}): Promise<string> => {
+async function startServer(root: string, extra: Parameters<typeof createWorkerServer>[0] = {}): Promise<string> {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: [root],
@@ -62,7 +62,7 @@ const startServer = async (root: string, extra: Parameters<typeof createWorkerSe
   return `http://127.0.0.1:${port}/v1`
 }
 
-const createSession = async (base: string, cwd: string, headers: Record<string, string> = {}): Promise<SessionInfo> => {
+async function createSession(base: string, cwd: string, headers: Record<string, string> = {}): Promise<SessionInfo> {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...headers },
@@ -72,7 +72,9 @@ const createSession = async (base: string, cwd: string, headers: Record<string, 
   return ((await res.json()) as { session: SessionInfo }).session
 }
 
-const sha256 = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('hex')
+function sha256(bytes: Buffer | string): string {
+  return createHash('sha256').update(bytes).digest('hex')
+}
 
 // Anything at all passes as a PNG here: the gateway types by declared extension and never sniffs.
 const PNG_BYTES = Buffer.from('89504e470d0a1a0a-not-a-real-png', 'utf8')

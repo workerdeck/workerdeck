@@ -3,49 +3,65 @@ import { snapshotRetains, transcriptActivity } from '@workerdeck/protocol'
 import type { SessionEvent, SessionEventBody } from '@workerdeck/protocol'
 import { applyEvent, initialTranscriptState, type TranscriptState } from '../src/lib/transcript.ts'
 
-const seqd = (bodies: SessionEventBody[]): SessionEvent[] => bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
+function seqd(bodies: SessionEventBody[]): SessionEvent[] {
+  return bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
+}
 
-const retain = (events: SessionEvent[]): SessionEvent[] => events.filter((e) => snapshotRetains(e))
+function retain(events: SessionEvent[]): SessionEvent[] {
+  return events.filter((e) => snapshotRetains(e))
+}
 
-const fold = (events: SessionEvent[]): TranscriptState => events.reduce(applyEvent, initialTranscriptState)
+function fold(events: SessionEvent[]): TranscriptState {
+  return events.reduce(applyEvent, initialTranscriptState)
+}
 
-const textDelta = (text: string, uuid: string): SessionEventBody => ({
-  type: 'stream_delta',
-  event: { type: 'content_block_delta', delta: { type: 'text_delta', text } },
-  parentToolUseId: null,
-  uuid,
-})
+function textDelta(text: string, uuid: string): SessionEventBody {
+  return {
+    type: 'stream_delta',
+    event: { type: 'content_block_delta', delta: { type: 'text_delta', text } },
+    parentToolUseId: null,
+    uuid,
+  }
+}
 
-const thinkingDelta = (thinking: string, uuid: string): SessionEventBody => ({
-  type: 'stream_delta',
-  event: { type: 'content_block_delta', delta: { type: 'thinking_delta', thinking } },
-  parentToolUseId: null,
-  uuid,
-})
+function thinkingDelta(thinking: string, uuid: string): SessionEventBody {
+  return {
+    type: 'stream_delta',
+    event: { type: 'content_block_delta', delta: { type: 'thinking_delta', thinking } },
+    parentToolUseId: null,
+    uuid,
+  }
+}
 
 // How the provider runner flushes: the full text is in the block, never empty.
-const assistantText = (text: string, uuid: string): SessionEventBody => ({
-  type: 'assistant_message',
-  message: { role: 'assistant', content: [{ type: 'text', text }], model: 'm' },
-  parentToolUseId: null,
-  uuid,
-})
+function assistantText(text: string, uuid: string): SessionEventBody {
+  return {
+    type: 'assistant_message',
+    message: { role: 'assistant', content: [{ type: 'text', text }], model: 'm' },
+    parentToolUseId: null,
+    uuid,
+  }
+}
 
-const turnEnd = (isError = false): SessionEventBody => ({
-  type: 'turn_result',
-  subtype: isError ? 'error_during_execution' : 'success',
-  isError,
-  durationMs: 10,
-  numTurns: 1,
-  totalCostUsd: 0,
-  ...(isError ? { errors: ['interrupted'] } : {}),
-})
+function turnEnd(isError = false): SessionEventBody {
+  return {
+    type: 'turn_result',
+    subtype: isError ? 'error_during_execution' : 'success',
+    isError,
+    durationMs: 10,
+    numTurns: 1,
+    totalCostUsd: 0,
+    ...(isError ? { errors: ['interrupted'] } : {}),
+  }
+}
 
-const user = (content: string): SessionEventBody => ({
-  type: 'user_message',
-  message: { role: 'user', content },
-  parentToolUseId: null,
-})
+function user(content: string): SessionEventBody {
+  return {
+    type: 'user_message',
+    message: { role: 'user', content },
+    parentToolUseId: null,
+  }
+}
 
 describe('snapshot retention is unobservable', () => {
   it('lands on the same state as the full log, over a session of many turns', () => {

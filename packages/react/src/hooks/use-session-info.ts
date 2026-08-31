@@ -8,7 +8,7 @@ export type UseSessionInfoResult = {
   error: string | undefined
 }
 
-export const useSessionInfo = (client: WorkerDeckClient, sessionId: string | undefined): UseSessionInfoResult => {
+export function useSessionInfo(client: WorkerDeckClient, sessionId: string | undefined): UseSessionInfoResult {
   const [info, setInfo] = useState<SessionInfo | undefined>()
   const [loading, setLoading] = useState(!!sessionId)
   const [error, setError] = useState<string | undefined>()

@@ -4,7 +4,7 @@ import { attachSeedToken, planAttach, shouldWriteParting } from '../src/lib/atta
 import { initialTranscriptState, seedFromSessionInfo, type TranscriptState } from '../src/lib/transcript.ts'
 import { clearTranscriptCache, deleteTranscriptCache, readTranscriptCache, writeTranscriptCache } from '../src/lib/transcript-cache.ts'
 
-const info = (overrides: Partial<SessionInfo> = {}): SessionInfo => {
+function info(overrides: Partial<SessionInfo> = {}): SessionInfo {
   return {
     id: 's1',
     status: 'idle',
@@ -16,13 +16,13 @@ const info = (overrides: Partial<SessionInfo> = {}): SessionInfo => {
   }
 }
 
-const held = (lastSeq: number): TranscriptState => {
+function held(lastSeq: number): TranscriptState {
   return seedFromSessionInfo({ ...initialTranscriptState, lastSeq }, info({ lastSeq }))
 }
 
 const KEY = 'identity s1'
 
-const inputs = (overrides: Partial<Parameters<typeof planAttach>[0]> = {}) => {
+function inputs(overrides: Partial<Parameters<typeof planAttach>[0]> = {}) {
   return {
     resyncSeq: 0,
     key: KEY,

@@ -5,13 +5,13 @@ import { vetCreateRequest } from './create-vet.ts'
 import type { AuthContext } from '../services/auth.ts'
 import type { ServerContext } from '../context.ts'
 
-export const handleJobs = async (
+export async function handleJobs(
   ctx: ServerContext,
   req: IncomingMessage,
   res: ServerResponse,
   pathname: string,
   auth: AuthContext,
-): Promise<void> => {
+): Promise<void> {
   const { auth: authSvc, basePath, queue } = ctx
   if (!queue) {
     json(res, 404, { error: 'job queue not configured' })

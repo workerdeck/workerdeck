@@ -1,7 +1,7 @@
 const MAX_SCOPE_KEYS = 16
 const MAX_SCOPE_LEN = 200
 
-export const readScope = (value: unknown): Record<string, string> | undefined => {
+export function readScope(value: unknown): Record<string, string> | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return undefined
   }
@@ -12,7 +12,7 @@ export const readScope = (value: unknown): Record<string, string> | undefined =>
   return Object.fromEntries(entries) as Record<string, string>
 }
 
-export const checkScope = (value: unknown): string | null => {
+export function checkScope(value: unknown): string | null {
   if (value === undefined) {
     return null
   }
@@ -35,13 +35,13 @@ export const checkScope = (value: unknown): string | null => {
   return null
 }
 
-export const sameScope = (a: Record<string, string> | undefined, b: Record<string, string> | undefined): boolean => {
+export function sameScope(a: Record<string, string> | undefined, b: Record<string, string> | undefined): boolean {
   const left = Object.entries(a ?? {}).sort(([x], [y]) => (x < y ? -1 : 1))
   const right = Object.entries(b ?? {}).sort(([x], [y]) => (x < y ? -1 : 1))
   return left.length === right.length && left.every(([key, value], i) => right[i]![0] === key && right[i]![1] === value)
 }
 
-export const scopeMatches = (principal: Record<string, string> | undefined, session: Record<string, string> | undefined): boolean => {
+export function scopeMatches(principal: Record<string, string> | undefined, session: Record<string, string> | undefined): boolean {
   if (!principal) {
     return true
   }

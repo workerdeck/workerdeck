@@ -3,24 +3,24 @@ import { homedir } from 'node:os'
 import { join, resolve as resolvePath, sep } from 'node:path'
 import type { ProfileConfigSnapshot, ProfileEngine, ProfileInfo } from '@workerdeck/protocol'
 
-export const isProviderProfile = (profile: ProfileInfo): boolean => {
+export function isProviderProfile(profile: ProfileInfo): boolean {
   return profile.engine === 'provider'
 }
 
-export const engineOf = (profile: ProfileInfo | undefined): ProfileEngine => {
+export function engineOf(profile: ProfileInfo | undefined): ProfileEngine {
   return profile?.engine ?? 'claude'
 }
 
-export const cliConfigDir = (env: Record<string, string | undefined>): string => {
+export function cliConfigDir(env: Record<string, string | undefined>): string {
   return env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude')
 }
 
-export const detectDefaultProfiles = (): ProfileInfo[] => {
+export function detectDefaultProfiles(): ProfileInfo[] {
   const dir = cliConfigDir(process.env)
   return existsSync(dir) ? [{ name: 'default', configDir: dir }] : []
 }
 
-export const canonicalDir = (path: string): string => {
+export function canonicalDir(path: string): string {
   try {
     return realpathSync(path)
   } catch {
@@ -29,11 +29,11 @@ export const canonicalDir = (path: string): string => {
 }
 
 // Skipping the pin is load-bearing: CLAUDE_CONFIG_DIR set at all moves the CLI off the macOS Keychain.
-export const claudeSessionEnv = (profile: ProfileInfo, base: Record<string, string | undefined>): Record<string, string | undefined> => {
+export function claudeSessionEnv(profile: ProfileInfo, base: Record<string, string | undefined>): Record<string, string | undefined> {
   return canonicalDir(profile.configDir!) === canonicalDir(cliConfigDir(base)) ? base : { ...base, CLAUDE_CONFIG_DIR: profile.configDir! }
 }
 
-export const cwdAllowed = (cwd: string, roots: string[] | undefined): boolean => {
+export function cwdAllowed(cwd: string, roots: string[] | undefined): boolean {
   if (!roots || roots.length === 0) {
     return true
   }
@@ -45,7 +45,7 @@ export const cwdAllowed = (cwd: string, roots: string[] | undefined): boolean =>
 }
 
 // Env var VALUES are never read into this snapshot — names only.
-export const readProfileConfig = (profile: ProfileInfo): ProfileConfigSnapshot => {
+export function readProfileConfig(profile: ProfileInfo): ProfileConfigSnapshot {
   const dir = profile.configDir
   if (!dir) {
     return { hasUserMemory: false, skills: [], agents: [], commands: [] }

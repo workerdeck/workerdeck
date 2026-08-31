@@ -17,7 +17,7 @@ export type UseOpenFilesResult = OpenFilesState & {
   dismissConflict: (path: string) => void
 }
 
-export const useOpenFiles = (client: WorkerDeckClient): UseOpenFilesResult => {
+export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
   const [state, dispatch] = useReducer(openFilesReducer, initialOpenFilesState)
 
   const requested = useRef(new Set<string>())

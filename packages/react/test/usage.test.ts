@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { mergeUsage, usageInfos } from '@workerdeck/protocol'
 import type { ProfileUsage, RateLimitInfo } from '@workerdeck/protocol'
 
-const info = (utilization: number, extra: Partial<RateLimitInfo> = {}): RateLimitInfo => ({
-  status: 'allowed',
-  rateLimitType: 'five_hour',
-  utilization,
-  ...extra,
-})
+function info(utilization: number, extra: Partial<RateLimitInfo> = {}): RateLimitInfo {
+  return {
+    status: 'allowed',
+    rateLimitType: 'five_hour',
+    utilization,
+    ...extra,
+  }
+}
 
 describe('mergeUsage', () => {
   it('is empty when neither side has reported', () => {

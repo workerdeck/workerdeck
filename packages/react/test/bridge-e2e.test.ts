@@ -7,7 +7,7 @@ import type { ToolExecutionResult } from '@workerdeck/core'
 import { WorkerDeckClient, type SessionHandle } from '@workerdeck/client'
 import { createToolCallHost } from '../src/lib/tool-host.ts'
 
-const idleQueryFn = () => {
+function idleQueryFn() {
   const query = {
     [Symbol.asyncIterator]() {
       return this
@@ -21,7 +21,9 @@ const idleQueryFn = () => {
 }
 
 let engine: SandboxEngine | undefined
-const getEngine = async () => (engine ??= await loadEngine(variant))
+async function getEngine() {
+  return (engine ??= await loadEngine(variant))
+}
 
 let running: WorkerServer | undefined
 let handle: SessionHandle | undefined
@@ -38,7 +40,7 @@ afterEach(async () => {
   results.length = 0
 })
 
-const start = async (bridgeTimeoutMs?: number) => {
+async function start(bridgeTimeoutMs?: number) {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],
@@ -60,8 +62,8 @@ const start = async (bridgeTimeoutMs?: number) => {
   return { sessionId: session.id }
 }
 
-const dispatch = (sessionId: string, script: string, vfsSeed?: Record<string, string>, executionId = 'exec-1') =>
-  running!.bridge.executorFor(sessionId).dispatch({
+function dispatch(sessionId: string, script: string, vfsSeed?: Record<string, string>, executionId = 'exec-1') {
+  return running!.bridge.executorFor(sessionId).dispatch({
     executionId,
     sessionId,
     tool: 'eval_script',
@@ -69,6 +71,7 @@ const dispatch = (sessionId: string, script: string, vfsSeed?: Record<string, st
     vfs: vfsSeed ? createVfs(vfsSeed) : undefined,
     limits: { timeoutMs: 3000 },
   })
+}
 
 describe('bridged execution, end to end', () => {
   it('runs a real script in the client guest and returns the value', async () => {

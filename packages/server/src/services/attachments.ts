@@ -99,7 +99,7 @@ export class AttachmentStore {
   }
 }
 
-const ref = (attachment: AttachmentInput): MessageAttachment => {
+function ref(attachment: AttachmentInput): MessageAttachment {
   return {
     id: attachment.id,
     name: attachment.name,
@@ -108,7 +108,7 @@ const ref = (attachment: AttachmentInput): MessageAttachment => {
   }
 }
 
-const safeName = (name: string): string => {
+function safeName(name: string): string {
   const leaf = name.split(/[/\\]/).pop() ?? ''
   // oxlint-disable-next-line no-control-regex
   const cleaned = leaf.replace(/[\u0000-\u001f\u007f"<>]/g, '').trim()

@@ -7,11 +7,13 @@ import type { ProfileInfo, SessionEvent, SessionInfo } from '@workerdeck/protoco
 import { createFileSessionStore, createWorkerServer, type SessionStore, type WorkerServer } from '../src/index.ts'
 import { ParkableRunner } from './parkable-runner.ts'
 
-const profile = (name: string): ProfileInfo => ({
-  name,
-  engine: 'provider',
-  provider: { id: 'test', model: 'test-model' },
-})
+function profile(name: string): ProfileInfo {
+  return {
+    name,
+    engine: 'provider',
+    provider: { id: 'test', model: 'test-model' },
+  }
+}
 
 type Gateway = {
   server: WorkerServer
@@ -31,7 +33,7 @@ afterEach(async () => {
   }
 })
 
-const startGateway = async (store: SessionStore, persistLive = true): Promise<Gateway> => {
+async function startGateway(store: SessionStore, persistLive = true): Promise<Gateway> {
   const built: ParkableRunner[] = []
   const server = createWorkerServer({
     allowUnauthenticated: true,
@@ -49,7 +51,7 @@ const startGateway = async (store: SessionStore, persistLive = true): Promise<Ga
   return { server, base: `http://127.0.0.1:${port}/v1`, built }
 }
 
-const create = async (base: string, scope?: Record<string, string>): Promise<SessionInfo> => {
+async function create(base: string, scope?: Record<string, string>): Promise<SessionInfo> {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -58,16 +60,17 @@ const create = async (base: string, scope?: Record<string, string>): Promise<Ses
   return ((await res.json()) as { session: SessionInfo }).session
 }
 
-const list = async (base: string): Promise<SessionInfo[]> =>
-  ((await (await fetch(`${base}/sessions`)).json()) as { sessions: SessionInfo[] }).sessions
+async function list(base: string): Promise<SessionInfo[]> {
+  return ((await (await fetch(`${base}/sessions`)).json()) as { sessions: SessionInfo[] }).sessions
+}
 
-const stateDir = async (): Promise<string> => {
+async function stateDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'wd-live-'))
   dirs.push(dir)
   return dir
 }
 
-const openSocket = async (base: string, id: string): Promise<{ socket: WebSocket; events: SessionEvent[] }> => {
+async function openSocket(base: string, id: string): Promise<{ socket: WebSocket; events: SessionEvent[] }> {
   const socket = new WebSocket(`${base.replace('http', 'ws')}/sessions/${id}/ws`)
   const events: SessionEvent[] = []
   socket.on('message', (raw) => {
@@ -83,7 +86,7 @@ const openSocket = async (base: string, id: string): Promise<{ socket: WebSocket
   return { socket, events }
 }
 
-const attach = async (base: string, id: string): Promise<SessionEvent[]> => {
+async function attach(base: string, id: string): Promise<SessionEvent[]> {
   const url = `${base.replace('http', 'ws')}/sessions/${id}/ws`
   const socket = new WebSocket(url)
   const events: SessionEvent[] = []

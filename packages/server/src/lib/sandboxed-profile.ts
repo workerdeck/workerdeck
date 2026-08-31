@@ -1,6 +1,6 @@
 import type { ProfileInfo, ProviderConfig, SessionCapability } from '@workerdeck/protocol'
 
-export const sandboxedProviderProfile = (
+export function sandboxedProviderProfile(
   name: string,
   provider: ProviderConfig,
   options: {
@@ -10,7 +10,7 @@ export const sandboxedProviderProfile = (
     capabilities?: SessionCapability[]
     mcpServers?: string[]
   } = {},
-): ProfileInfo => {
+): ProfileInfo {
   return {
     name,
     engine: 'provider',

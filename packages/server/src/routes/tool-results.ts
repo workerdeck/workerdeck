@@ -4,7 +4,7 @@ import { json } from '../lib/http.ts'
 
 export type EventLookup = ((seq: number) => SessionEvent | undefined) | undefined
 
-export const handleToolResult = (req: IncomingMessage, res: ServerResponse, lookup: EventLookup, seq: number): void => {
+export function handleToolResult(req: IncomingMessage, res: ServerResponse, lookup: EventLookup, seq: number): void {
   if (req.method !== 'GET') {
     json(res, 405, { error: 'method not allowed' })
     return

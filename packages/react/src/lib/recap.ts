@@ -17,7 +17,7 @@ export type RecapInput = {
 }
 
 // The boundary is clamped, never rejected: a transcript can shrink (a `/clear`, a compaction).
-export const summarizeSince = (state: RecapInput, fromIndex: number): RecapSummary => {
+export function summarizeSince(state: RecapInput, fromIndex: number): RecapSummary {
   const start = Math.max(0, Math.min(fromIndex, state.items.length))
   const fresh = state.items.slice(start)
   const toolCounts = new Map<string, number>()
@@ -78,7 +78,7 @@ export const summarizeSince = (state: RecapInput, fromIndex: number): RecapSumma
   }
 }
 
-export const recapLine = (summary: RecapSummary): string | undefined => {
+export function recapLine(summary: RecapSummary): string | undefined {
   if (!summary.any) {
     return undefined
   }
@@ -105,4 +105,6 @@ export const recapLine = (summary: RecapSummary): string | undefined => {
   return parts.join(' · ')
 }
 
-const plural = (count: number, one: string, many = `${one}s`): string => `${count} ${count === 1 ? one : many}`
+function plural(count: number, one: string, many = `${one}s`): string {
+  return `${count} ${count === 1 ? one : many}`
+}

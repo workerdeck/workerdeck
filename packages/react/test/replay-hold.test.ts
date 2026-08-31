@@ -5,7 +5,7 @@ import { WorkerDeckClient, type SessionHandle } from '@workerdeck/client'
 import type { AttachedFrame, SessionEvent, SessionInfo } from '@workerdeck/protocol'
 import { initialReplayTarget } from '../src/hooks/use-session.ts'
 
-const frame = (replayingFrom: number, lastSeq: number): AttachedFrame => {
+function frame(replayingFrom: number, lastSeq: number): AttachedFrame {
   const session: SessionInfo = {
     id: 's1',
     status: 'idle',
@@ -32,7 +32,7 @@ describe('initialReplayTarget', () => {
   })
 })
 
-const idleQueryFn = () => {
+function idleQueryFn() {
   const query = {
     [Symbol.asyncIterator]() {
       return this
@@ -57,7 +57,7 @@ afterEach(async () => {
   running = undefined
 })
 
-const start = async () => {
+async function start() {
   running = createWorkerServer({
     allowUnauthenticated: true,
     allowedCwdRoots: ['/tmp'],

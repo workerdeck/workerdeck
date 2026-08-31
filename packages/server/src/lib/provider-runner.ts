@@ -27,7 +27,7 @@ export type ProviderRunnerOptions = {
   onClose?: () => void | Promise<void>
 }
 
-export const createProviderRunner = async (ctx: EngineRunnerContext, options: ProviderRunnerOptions): Promise<Runner> => {
+export async function createProviderRunner(ctx: EngineRunnerContext, options: ProviderRunnerOptions): Promise<Runner> {
   const { config, profile, bridge, restore, id } = ctx
   const resolveModel = (modelId: string | undefined): LanguageModel =>
     typeof options.model === 'function' ? options.model(modelId) : options.model

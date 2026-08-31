@@ -4,7 +4,7 @@ import type { ToolCallRequestFrame } from '@workerdeck/protocol'
 import type { RunScriptResult } from '@workerdeck/sandbox'
 import { createToolCallHost, type ToolCallHostOptions } from '../src/lib/tool-host.ts'
 
-const fakeHandle = () => {
+function fakeHandle() {
   const listeners = {
     toolCallRequest: [] as Array<(f: ToolCallRequestFrame) => void>,
     toolCallCanceled: [] as Array<(p: { executionId: string; reason: string }) => void>,
@@ -49,12 +49,14 @@ const fakeHandle = () => {
   return { handle, results, errors, request, cancel }
 }
 
-const mount = (handle: SessionHandle, options: ToolCallHostOptions) => {
+function mount(handle: SessionHandle, options: ToolCallHostOptions) {
   const host = createToolCallHost(handle, options)
   return { cleanup: () => host.dispose() }
 }
 
-const ok = (value: unknown): RunScriptResult => ({ ok: true, value, logs: [{ level: 'log', text: 'hi' }] })
+function ok(value: unknown): RunScriptResult {
+  return { ok: true, value, logs: [{ level: 'log', text: 'hi' }] }
+}
 
 describe('tool-call host', () => {
   it('executes an allowed tool and returns the value with logs', async () => {

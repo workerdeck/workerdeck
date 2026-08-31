@@ -121,11 +121,13 @@ class UnresumableRunner extends ResumableRunner {
   }
 }
 
-const profile = (name: string): ProfileInfo => ({
-  name,
-  engine: 'provider',
-  provider: { id: 'test', model: 'test-model' },
-})
+function profile(name: string): ProfileInfo {
+  return {
+    name,
+    engine: 'provider',
+    provider: { id: 'test', model: 'test-model' },
+  }
+}
 
 type Gateway = {
   server: WorkerServer
@@ -146,7 +148,7 @@ afterEach(async () => {
   }
 })
 
-const startGateway = async (store: SessionStore): Promise<Gateway> => {
+async function startGateway(store: SessionStore): Promise<Gateway> {
   const built: ResumableRunner[] = []
   const server = createWorkerServer({
     allowUnauthenticated: true,
@@ -167,7 +169,7 @@ const startGateway = async (store: SessionStore): Promise<Gateway> => {
   return { server, base: `http://127.0.0.1:${port}/v1`, built }
 }
 
-const create = async (base: string, profileName = 'resumable', prompt?: string): Promise<SessionInfo> => {
+async function create(base: string, profileName = 'resumable', prompt?: string): Promise<SessionInfo> {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -176,7 +178,7 @@ const create = async (base: string, profileName = 'resumable', prompt?: string):
   return ((await res.json()) as { session: SessionInfo }).session
 }
 
-const rename = async (base: string, id: string, title: string): Promise<SessionInfo> => {
+async function rename(base: string, id: string, title: string): Promise<SessionInfo> {
   const res = await fetch(`${base}/sessions/${id}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
@@ -185,10 +187,11 @@ const rename = async (base: string, id: string, title: string): Promise<SessionI
   return ((await res.json()) as { session: SessionInfo }).session
 }
 
-const list = async (base: string): Promise<SessionInfo[]> =>
-  ((await (await fetch(`${base}/sessions`)).json()) as { sessions: SessionInfo[] }).sessions
+async function list(base: string): Promise<SessionInfo[]> {
+  return ((await (await fetch(`${base}/sessions`)).json()) as { sessions: SessionInfo[] }).sessions
+}
 
-const stateDir = async (): Promise<string> => {
+async function stateDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'wd-dormant-'))
   dirs.push(dir)
   return dir

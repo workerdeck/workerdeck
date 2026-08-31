@@ -14,7 +14,9 @@ export type ParkedSessionRecord = {
   parkedAt: number
 }
 
-export const isLiveRecord = (record: StoredSessionRecord): boolean => record.kind === 'live'
+export function isLiveRecord(record: StoredSessionRecord): boolean {
+  return record.kind === 'live'
+}
 
 export type DormantSessionRecord = {
   kind: 'dormant'
@@ -28,7 +30,9 @@ export type DormantSessionRecord = {
 
 export type StoredSessionRecord = ParkedSessionRecord | DormantSessionRecord
 
-export const isDormant = (record: StoredSessionRecord): record is DormantSessionRecord => record.kind === 'dormant'
+export function isDormant(record: StoredSessionRecord): record is DormantSessionRecord {
+  return record.kind === 'dormant'
+}
 
 export interface SessionStore {
   save(record: StoredSessionRecord): Promise<void>
@@ -60,7 +64,7 @@ export class MemorySessionStore implements SessionStore {
 
 const EPHEMERAL_CONFIG_KEYS = ['queryFn', 'historyFn', 'extraOptions', 'env'] as const
 
-export const toDurableRecord = <T extends StoredSessionRecord>(record: T): T => {
+export function toDurableRecord<T extends StoredSessionRecord>(record: T): T {
   const config: SessionRunnerConfig = { ...record.config }
   for (const key of EPHEMERAL_CONFIG_KEYS) {
     delete config[key]
@@ -75,7 +79,7 @@ export type FileSessionStoreOptions = {
   onError?: (error: unknown, context: { path: string; op: 'save' | 'read' | 'delete' }) => void
 }
 
-export const createFileSessionStore = (options: FileSessionStoreOptions = {}): SessionStore => {
+export function createFileSessionStore(options: FileSessionStoreOptions = {}): SessionStore {
   const dir = options.dir ?? join(process.cwd(), '.workerdeck', 'parked')
   // Encoded, not interpolated: an id is a runner-assigned string, and a '/' in one would otherwise write outside `dir`.
   const fileFor = (id: string): string => join(dir, `${encodeURIComponent(id)}.json`)
@@ -176,9 +180,11 @@ export const createFileSessionStore = (options: FileSessionStoreOptions = {}): S
   }
 }
 
-const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === 'ENOENT'
+function isMissing(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException).code === 'ENOENT'
+}
 
-const parseRecord = (value: unknown): StoredSessionRecord | null => {
+function parseRecord(value: unknown): StoredSessionRecord | null {
   if (!value || typeof value !== 'object') {
     return null
   }

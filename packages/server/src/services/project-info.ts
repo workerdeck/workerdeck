@@ -65,7 +65,7 @@ export class ProjectInfoService {
   }
 }
 
-const discover = (cwd: string): Omit<Resolution, 'expiresAt'> => {
+function discover(cwd: string): Omit<Resolution, 'expiresAt'> {
   if (!isAbsolute(cwd) || cwd.includes('\0')) {
     return {}
   }
@@ -88,7 +88,7 @@ const discover = (cwd: string): Omit<Resolution, 'expiresAt'> => {
   }
 }
 
-const tryLoad = (file: string, root: string): Omit<Resolution, 'expiresAt'> | undefined => {
+function tryLoad(file: string, root: string): Omit<Resolution, 'expiresAt'> | undefined {
   let stat
   try {
     stat = lstatSync(file)
@@ -121,7 +121,7 @@ const tryLoad = (file: string, root: string): Omit<Resolution, 'expiresAt'> | un
   }
 }
 
-const classifyIcon = (value: unknown, root: string): { wire: ProjectIcon; resolved?: ResolvedProjectIcon } | undefined => {
+function classifyIcon(value: unknown, root: string): { wire: ProjectIcon; resolved?: ResolvedProjectIcon } | undefined {
   if (typeof value !== 'string') {
     return undefined
   }

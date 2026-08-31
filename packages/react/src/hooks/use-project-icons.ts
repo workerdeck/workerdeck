@@ -8,7 +8,7 @@ const failed = new Set<string>()
 
 export type ClientForHost = (hostId: string) => WorkerDeckClient | undefined
 
-export const useProjectIcons = (rows: readonly SessionRow[], clientFor: ClientForHost): Record<string, string> => {
+export function useProjectIcons(rows: readonly SessionRow[], clientFor: ClientForHost): Record<string, string> {
   const [resolved, setResolved] = useState<Record<string, string>>(() => Object.fromEntries(byHash))
 
   useEffect(() => {

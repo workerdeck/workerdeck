@@ -3,26 +3,38 @@ import { replayRetains } from '@workerdeck/protocol'
 import type { SessionEvent, SessionEventBody } from '@workerdeck/protocol'
 import { applyEvent, initialTranscriptState, type TranscriptState } from '../src/lib/transcript.ts'
 
-const seqd = (bodies: SessionEventBody[]): SessionEvent[] => bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
+function seqd(bodies: SessionEventBody[]): SessionEvent[] {
+  return bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
+}
 
-const fold = (events: SessionEvent[]): TranscriptState => events.reduce(applyEvent, initialTranscriptState)
+function fold(events: SessionEvent[]): TranscriptState {
+  return events.reduce(applyEvent, initialTranscriptState)
+}
 
 // The rule as the runners apply it, including the guard that delivers the log's last event whatever it says.
-const retain = (events: SessionEvent[]): SessionEvent[] => {
+function retain(events: SessionEvent[]): SessionEvent[] {
   const lastSeq = events.at(-1)?.seq ?? 0
   return events.filter((event) => event.seq === lastSeq || replayRetains(event))
 }
 
-const delta = (event: Record<string, unknown>, uuid = 'u'): SessionEventBody => ({
-  type: 'stream_delta',
-  event: event as { type: string; [key: string]: unknown },
-  parentToolUseId: null,
-  uuid,
-})
+function delta(event: Record<string, unknown>, uuid = 'u'): SessionEventBody {
+  return {
+    type: 'stream_delta',
+    event: event as { type: string; [key: string]: unknown },
+    parentToolUseId: null,
+    uuid,
+  }
+}
 
-const text = (t: string) => delta({ type: 'content_block_delta', delta: { type: 'text_delta', text: t } })
-const thought = (t: string) => delta({ type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: t } })
-const args = (t: string) => delta({ type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: t } })
+function text(t: string) {
+  return delta({ type: 'content_block_delta', delta: { type: 'text_delta', text: t } })
+}
+function thought(t: string) {
+  return delta({ type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: t } })
+}
+function args(t: string) {
+  return delta({ type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: t } })
+}
 
 describe('replay dropping is unobservable', () => {
   it('lands on the same state as the full log, over a turn with every delta kind', () => {

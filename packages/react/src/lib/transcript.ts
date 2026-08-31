@@ -123,15 +123,20 @@ const LOCAL_COMMAND_OUTPUT = /^<local-command-(stdout|stderr)>([\s\S]*?)<\/local
 
 const COMMAND_NAME = /<command-name>([\s\S]*?)<\/command-name>/
 const COMMAND_ARGS = /<command-args>([\s\S]*?)<\/command-args>/
-const streamingTextId = (parentToolUseId: string | null): string =>
-  parentToolUseId == null ? STREAMING_ID : `${STREAMING_ID}:${parentToolUseId}`
-const streamingThinkingId = (parentToolUseId: string | null): string =>
-  parentToolUseId == null ? STREAMING_THINKING_ID : `${STREAMING_THINKING_ID}:${parentToolUseId}`
-const isStreamingItem = (item: TranscriptItem): boolean =>
-  (item.kind === 'assistant_text' && item.id.startsWith(STREAMING_ID)) ||
-  (item.kind === 'thinking' && item.id.startsWith(STREAMING_THINKING_ID))
+function streamingTextId(parentToolUseId: string | null): string {
+  return parentToolUseId == null ? STREAMING_ID : `${STREAMING_ID}:${parentToolUseId}`
+}
+function streamingThinkingId(parentToolUseId: string | null): string {
+  return parentToolUseId == null ? STREAMING_THINKING_ID : `${STREAMING_THINKING_ID}:${parentToolUseId}`
+}
+function isStreamingItem(item: TranscriptItem): boolean {
+  return (
+    (item.kind === 'assistant_text' && item.id.startsWith(STREAMING_ID)) ||
+    (item.kind === 'thinking' && item.id.startsWith(STREAMING_THINKING_ID))
+  )
+}
 
-const blockText = (content: ToolResultBlock['content']): string => {
+function blockText(content: ToolResultBlock['content']): string {
   if (content === undefined) {
     return ''
   }
@@ -144,7 +149,7 @@ const blockText = (content: ToolResultBlock['content']): string => {
     .join('\n')
 }
 
-const imageRefsOf = (content: ToolResultBlock['content'], seq: number): ReadonlyArray<ToolResultImageRef> | undefined => {
+function imageRefsOf(content: ToolResultBlock['content'], seq: number): ReadonlyArray<ToolResultImageRef> | undefined {
   if (!Array.isArray(content)) {
     return undefined
   }
@@ -163,10 +168,11 @@ const imageRefsOf = (content: ToolResultBlock['content'], seq: number): Readonly
   return refs.length > 0 ? refs : undefined
 }
 
-const contentToBlocks = (content: string | ContentBlock[]): ContentBlock[] =>
-  typeof content === 'string' ? [{ type: 'text', text: content }] : content
+function contentToBlocks(content: string | ContentBlock[]): ContentBlock[] {
+  return typeof content === 'string' ? [{ type: 'text', text: content }] : content
+}
 
-const outputText = (output: ToolExecutionOutput): string => {
+function outputText(output: ToolExecutionOutput): string {
   if (output.type === 'text') {
     return output.value
   }
@@ -177,7 +183,7 @@ const outputText = (output: ToolExecutionOutput): string => {
   }
 }
 
-const slashCommandText = (text: string): string | undefined => {
+function slashCommandText(text: string): string | undefined {
   const name = COMMAND_NAME.exec(text)?.[1]?.trim()
   if (!name) {
     return undefined
@@ -186,7 +192,7 @@ const slashCommandText = (text: string): string | undefined => {
   return args ? `${name} ${args}` : name
 }
 
-const upsert = (items: TranscriptItem[], item: TranscriptItem): TranscriptItem[] => {
+function upsert(items: TranscriptItem[], item: TranscriptItem): TranscriptItem[] {
   const index = items.findIndex((existing) => existing.id === item.id && existing.kind === item.kind)
   if (index === -1) {
     return [...items, item]
@@ -196,7 +202,7 @@ const upsert = (items: TranscriptItem[], item: TranscriptItem): TranscriptItem[]
   return next
 }
 
-export const seedFromSessionInfo = (state: TranscriptState, info: SessionInfo): TranscriptState => {
+export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): TranscriptState {
   // No event carries the engine — the snapshot is the only source.
   const engine = info.engine ?? state.engine
   return {
@@ -213,10 +219,11 @@ export const seedFromSessionInfo = (state: TranscriptState, info: SessionInfo): 
   }
 }
 
-export const rateLimitWindows = (state: TranscriptState): UsageWindowRow[] =>
-  orderUsageWindows(mergeUsage({ rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt }, undefined))
+export function rateLimitWindows(state: TranscriptState): UsageWindowRow[] {
+  return orderUsageWindows(mergeUsage({ rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt }, undefined))
+}
 
-export const hydrateToolResult = (state: TranscriptState, toolUseId: string, text: string): TranscriptState => {
+export function hydrateToolResult(state: TranscriptState, toolUseId: string, text: string): TranscriptState {
   let changed = false
   const items = state.items.map((item) => {
     if (item.kind !== 'tool_call' || item.id !== toolUseId || !item.result?.truncated) {
@@ -236,7 +243,7 @@ export const hydrateToolResult = (state: TranscriptState, toolUseId: string, tex
   return changed ? { ...state, items } : state
 }
 
-export const applyEvent = (state: TranscriptState, event: SessionEvent): TranscriptState => {
+export function applyEvent(state: TranscriptState, event: SessionEvent): TranscriptState {
   if (event.seq <= state.lastSeq) {
     return state
   }

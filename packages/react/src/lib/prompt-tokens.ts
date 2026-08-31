@@ -10,7 +10,7 @@ const COMMAND_BODY = /^[A-Za-z0-9\-_.:]+$/
 
 const SENTENCE_TAIL = new Set(['.', ',', ';', ':', '!', '?', ')', ']', '}', '"', "'"])
 
-export const scanPromptTokens = (text: string): PromptToken[] => {
+export function scanPromptTokens(text: string): PromptToken[] {
   const tokens: PromptToken[] = []
   const words = /\S+/g
   let match: RegExpExecArray | null

@@ -69,11 +69,13 @@ class ReportingRunner implements Runner {
   }
 }
 
-const profile = (name: string): ProfileInfo => ({
-  name,
-  engine: 'provider',
-  provider: { id: 'test', model: 'test-model' },
-})
+function profile(name: string): ProfileInfo {
+  return {
+    name,
+    engine: 'provider',
+    provider: { id: 'test', model: 'test-model' },
+  }
+}
 
 type Gateway = { server: WorkerServer; base: string; built: ReportingRunner[] }
 
@@ -84,7 +86,7 @@ afterEach(async () => {
   }
 })
 
-const startGateway = async (): Promise<Gateway> => {
+async function startGateway(): Promise<Gateway> {
   const built: ReportingRunner[] = []
   const server = createWorkerServer({
     allowUnauthenticated: true,
@@ -101,7 +103,7 @@ const startGateway = async (): Promise<Gateway> => {
   return { server, base: `http://127.0.0.1:${port}/v1`, built }
 }
 
-const create = async (base: string, profileName: string): Promise<SessionInfo> => {
+async function create(base: string, profileName: string): Promise<SessionInfo> {
   const res = await fetch(`${base}/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -111,7 +113,7 @@ const create = async (base: string, profileName: string): Promise<SessionInfo> =
   return ((await res.json()) as { session: SessionInfo }).session
 }
 
-const getProfile = async (base: string, name: string): Promise<ProfileInfo> => {
+async function getProfile(base: string, name: string): Promise<ProfileInfo> {
   const res = await fetch(`${base}/profiles`)
   expect(res.status).toBe(200)
   const { profiles } = (await res.json()) as { profiles: ProfileInfo[] }
@@ -121,7 +123,9 @@ const getProfile = async (base: string, name: string): Promise<ProfileInfo> => {
 }
 
 // Epoch seconds (the protocol's `resetsAt` unit), offset from now in ms.
-const resetsAtIn = (offsetMs: number): number => (Date.now() + offsetMs) / 1000
+function resetsAtIn(offsetMs: number): number {
+  return (Date.now() + offsetMs) / 1000
+}
 
 describe('per-profile plan usage on GET /profiles', () => {
   it("serves the newest reading per window, last-write-wins across the profile's sessions", async () => {

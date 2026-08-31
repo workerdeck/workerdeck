@@ -8,11 +8,11 @@ import type { AuthContext } from '../services/auth.ts'
  * the order and the refusals have to come from a single place rather than two copies that can
  * drift. Mutates `req`: strips inert fields and pins the resolved profile name.
  */
-export const vetCreateRequest = (
+export function vetCreateRequest(
   ctx: ServerContext,
   req: CreateSessionRequest,
   auth: AuthContext,
-): { status: number; error: string } | null => {
+): { status: number; error: string } | null {
   const { availability, factory } = ctx
   const refusedScope = factory.applyScope(req, auth)
   if (refusedScope) {

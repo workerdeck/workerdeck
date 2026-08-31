@@ -5,13 +5,13 @@ import { readProfileConfig } from '../lib/profile-env.ts'
 import type { AuthContext } from '../services/auth.ts'
 import type { ServerContext } from '../context.ts'
 
-export const handleProfiles = async (
+export async function handleProfiles(
   ctx: ServerContext,
   req: IncomingMessage,
   res: ServerResponse,
   pathname: string,
   auth: AuthContext,
-): Promise<void> => {
+): Promise<void> {
   const { auth: authSvc, availability, basePath, profiles } = ctx
   const saveManaged = async (incoming: ProfileInfo): Promise<void> => {
     const saved = await profiles.saveManaged(incoming)

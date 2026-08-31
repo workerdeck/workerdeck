@@ -9,7 +9,7 @@ export type UseHostFileSearchResult = {
   search: (query: string, options?: { limit?: number; signal?: AbortSignal }) => Promise<HostFileMatch[]>
 }
 
-export const useHostFileSearch = (client: WorkerDeckClient, cwd: string | undefined): UseHostFileSearchResult => {
+export function useHostFileSearch(client: WorkerDeckClient, cwd: string | undefined): UseHostFileSearchResult {
   const [unsupported, setUnsupported] = useState(false)
   const lastCwd = useRef(cwd)
   useEffect(() => {
@@ -45,7 +45,7 @@ export type UseHostFileRootsResult = {
   canWrite: boolean
 }
 
-export const useHostFileRoots = (client: WorkerDeckClient): UseHostFileRootsResult => {
+export function useHostFileRoots(client: WorkerDeckClient): UseHostFileRootsResult {
   const [result, setResult] = useState<UseHostFileRootsResult>({
     available: false,
     canWrite: false,
@@ -82,7 +82,7 @@ export type UseHostFileTreeResult = {
   refresh: (path?: string) => void
 }
 
-export const useHostFileTree = (client: WorkerDeckClient, cwd: string | undefined): UseHostFileTreeResult => {
+export function useHostFileTree(client: WorkerDeckClient, cwd: string | undefined): UseHostFileTreeResult {
   const [dirs, setDirs] = useState<Map<string, HostDirState>>(() => new Map())
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [unsupported, setUnsupported] = useState(false)
