@@ -8,19 +8,9 @@ import { workspaceScope } from './workspace-scope.ts'
 
 type HostSnapshot = { probe: 'connected'; sessions: SessionInfo[] } | { probe: 'unauthorized' } | { probe: 'unreachable' }
 
-/**
- * The list cannot ride the live socket — the agent panel owns the one attach a
- * session gets, and the tool bridge asks the *first* attached client — so it polls,
- * tightening while anything is running or waiting on a human.
- */
 const POLL_IDLE_MS = 5000
 const POLL_BUSY_MS = 1200
 
-/**
- * The extension host's picture of every gateway's sessions: REST rollups on a poll
- * while any view that renders them is visible (`setWatching`), never a WS attach.
- * Consumers subscribe to `onDidChange` and read `sidebarState()`.
- */
 export class SessionsModel implements vscode.Disposable {
   readonly #store: HostStore
   readonly #onDidChange = new vscode.EventEmitter<void>()
@@ -28,23 +18,17 @@ export class SessionsModel implements vscode.Disposable {
   readonly #snapshots = new Map<string, HostSnapshot>()
   #selected: SidebarState['selected']
   #timer: NodeJS.Timeout | undefined
-  /** The interval the running timer was started with, so a change can restart it. */
   #timerMs: number | undefined
-  /** Views that currently want fresh readings — see `setWatching`. */
   readonly #watchers = new Set<string>()
   #refreshing = false
-  /** A coalescing timer for `nudge`. */
   #nudge: NodeJS.Timeout | undefined
   readonly #folders: vscode.Disposable
 
-  /** Supplied by `activate`: turns-since-last-seen per session. The model owns
-   * no watermarks itself — it is the poll, not the memory of what was read. */
   #unseen: ((sessions: SidebarState['sessions']) => Record<string, number>) | undefined
 
   constructor(store: HostStore) {
     this.#store = store
     store.onDidChange(() => void this.refresh())
-    // The open folders are part of the state consumers render, so a change has to reach them without a poll.
     this.#folders = vscode.workspace.onDidChangeWorkspaceFolders(() => this.#onDidChange.fire())
   }
 
@@ -53,13 +37,6 @@ export class SessionsModel implements vscode.Disposable {
     this.#onDidChange.fire()
   }
 
-  /**
-   * Which sub-agent the panel has framed, reported by the panel itself. A separate
-   * setter from `setSelected` because the two facts have different owners and
-   * lifetimes: the selected session is this window's and survives a reload, the
-   * frame belongs to the panel and dies with it. A report with no session selected
-   * is dropped — holding it would hand the next session a frame it never opened.
-   */
   setSelectedSubagent(toolUseId: string | undefined): void {
     if (!this.#selected) {
       return
@@ -71,12 +48,6 @@ export class SessionsModel implements vscode.Disposable {
     this.#onDidChange.fire()
   }
 
-  /**
-   * Report whether a view needs fresh readings. A set, not a boolean: several
-   * independently collapsible views render this state, and gating the poll on one
-   * of them leaves the others showing probes frozen at `pending`. Cheap to call
-   * repeatedly; only the first and last watcher move the timer.
-   */
   setWatching(key: string, watching: boolean): void {
     const before = this.#watchers.size
     if (watching) {
@@ -107,8 +78,6 @@ export class SessionsModel implements vscode.Disposable {
     this.#timerMs = undefined
   }
 
-  /** Point the timer at the rate the current state deserves. A no-op unless the
-   * rate actually changed, so it is safe to call after every refresh. */
   #retime(): void {
     const wanted = this.#busy() ? POLL_BUSY_MS : POLL_IDLE_MS
     if (this.#timer && this.#timerMs === wanted) {
@@ -121,7 +90,6 @@ export class SessionsModel implements vscode.Disposable {
     this.#timer = setInterval(() => void this.refresh(), wanted)
   }
 
-  /** Is anything worth watching closely? */
   #busy(): boolean {
     for (const snap of this.#snapshots.values()) {
       if (snap.probe !== 'connected') {
@@ -139,12 +107,6 @@ export class SessionsModel implements vscode.Disposable {
     return false
   }
 
-  /**
-   * Something just happened that the rollups do not know about yet — refresh now
-   * rather than on the next tick. Called by the agent panel off its own socket, and
-   * coalesced: the point is to collapse the delay to one round-trip, not to poll
-   * per frame.
-   */
   nudge(): void {
     if (!this.#timer || this.#nudge) {
       return
@@ -171,7 +133,6 @@ export class SessionsModel implements vscode.Disposable {
           }
           try {
             const sessions = await client.listSessions()
-            // Most recent activity first — the session being steered is the one touched last.
             sessions.sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt))
             this.#snapshots.set(host.id, { probe: 'connected', sessions })
           } catch {
@@ -187,7 +148,6 @@ export class SessionsModel implements vscode.Disposable {
         }
       }
       this.#onDidChange.fire()
-      // A turn that just started (or ended) changes what the right rate is.
       if (this.#timer) {
         this.#retime()
       }
@@ -201,7 +161,6 @@ export class SessionsModel implements vscode.Disposable {
     return snap?.probe === 'connected' ? snap.sessions : []
   }
 
-  /** Sessions awaiting a human — what colours the unread status-bar item. */
   attentionCount(): number {
     let waiting = 0
     for (const snap of this.#snapshots.values()) {
@@ -228,8 +187,6 @@ export class SessionsModel implements vscode.Disposable {
       }
       const snap = this.#snapshots.get(host.id)
       const local = isLoopbackHost(host)
-      // The open folder is a guess only where this gateway could chdir into it: its own mount,
-      // or any folder when the gateway runs on this machine. Otherwise, where its sessions live.
       const folder = scope?.roots.find((r) => (r.hostId ? r.hostId.toLowerCase() === host.id.toLowerCase() : local))?.path
       hosts.push({
         id: host.id,

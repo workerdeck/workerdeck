@@ -24,24 +24,11 @@ import {
 
 type Persisted = { config?: ViewConfig }
 
-/** The resolved bytes for a session's project icon. Shared by the row and its group
- * header so the two cannot draw different pictures for one project. */
 const iconSrcOf = (info: SessionInfo | undefined, icons: Record<string, string>): string | undefined => {
   const icon = info?.project?.icon
   return icon?.type === 'image' ? icons[icon.hash] : undefined
 }
 
-/**
- * The Sessions view: every gateway's sessions in one list, grouped and sorted, and
- * nothing else — no screens, no forms, no navigation.
- *
- * Two things it does not own: the **filter bar**, revealed by a native view-title
- * toggle whose boolean the host holds, and the **`+`** in that same title bar, which
- * is the only way to start a session — this body never grows a second button for it.
- *
- * It does own the view config (search, facets, group, sort), which it persists and
- * mirrors to the host so the unread item counts the rows the list is showing.
- */
 export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const [state, setState] = useState<SidebarState | undefined>(undefined)
   // Merged, never replaced: the host sends each hash once as it resolves.
@@ -59,8 +46,6 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
     bridge.setState<Persisted>({ config })
   }, [bridge, config])
 
-  // …and the host mirrors it, so the unread item counts the rows this list is showing.
-  // One-way: the webview owns the config, the host only reads it.
   useEffect(() => {
     bridge.post({ kind: 'wd-view-config', config })
   }, [bridge, config])
@@ -96,19 +81,11 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const connected = hosts.filter((h) => h.probe === 'connected')
   const scoping = scopeActive(config, scope)
   const subset = subsetSummary(config, scope, filtered.length, rows.length)
-  /**
-   * `state.selected` if it names *this* row. Matched on **host and session**, never on
-   * session alone: ids come from the engines, so two gateways can hand out the same
-   * one, and an id-only test lights the wrong card in exactly the multi-gateway case
-   * this window exists to make legible.
-   */
   const selectedIs = (row: SessionRow) =>
     state?.selected?.hostId === row.hostId && state.selected.sessionId === row.info.id ? state.selected : undefined
 
   return (
     <div className="flex h-screen flex-col text-body-sm">
-      {/* Behind the title bar's filter toggle, and hidden by default — which is why the
-          subset line below is unconditional. */}
       {filterOpen ? (
         <ViewConfigPanel config={config} hosts={hosts} adapters={adapters} projects={projects} scope={scope} onChange={setConfig} />
       ) : null}
@@ -145,7 +122,6 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             }
           />
         ) : groups.length === 0 ? (
-          // Three different nothings: the filter matched none, the scope holds none, or there are none.
           subset ? (
             scoping && !hasFacetFilter(config) ? (
               <Empty

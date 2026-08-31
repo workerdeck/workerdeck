@@ -1,8 +1,3 @@
-/**
- * `@workerdeck/ui` themes off `<html data-theme>`; VS Code stamps
- * `vscode-light`/`vscode-dark`/`vscode-high-contrast*` onto `<body>` and swaps it
- * live on theme change. Map one onto the other and keep it mapped.
- */
 export const syncVsCodeTheme = (): void => {
   const apply = () => {
     const cls = document.body.classList

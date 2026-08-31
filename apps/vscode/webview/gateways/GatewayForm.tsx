@@ -4,11 +4,6 @@ import type { WebviewToHost } from '../../src/bridge-protocol.ts'
 
 export type GatewayFormValue = { id: string; name: string; baseUrl: string; authKey: string }
 
-/**
- * Add/edit a gateway. Saving is the extension host's job (the key goes to the
- * OS keychain, which no webview can reach): submit posts wd-submit-gateway and
- * the host answers wd-form-result — an error keeps the form up.
- */
 export function GatewayForm({
   editing,
   defaults,
@@ -18,8 +13,6 @@ export function GatewayForm({
   onCancel,
 }: {
   editing: GatewayFormValue | undefined
-  /** Prefill for a fresh form (the first gateway is nearly always the turnkey
-   * one on this machine). Ignored when editing. */
   defaults?: { name: string; baseUrl: string }
   error: string | undefined
   busy: boolean

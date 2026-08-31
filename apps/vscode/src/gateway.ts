@@ -3,12 +3,6 @@ import { WorkerDeckClient } from '@workerdeck/client'
 import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl } from './hosts.ts'
 
-/**
- * Extension-host-side client: real Node fetch with the gateway's auth header.
- * `WebSocketImpl` must be passed even though the host never attaches a session —
- * the client resolves its WS implementation at construction and VS Code's Node 18
- * has no global `WebSocket`.
- */
 export const clientFor = async (store: HostStore, host: GatewayHost): Promise<WorkerDeckClient | undefined> => {
   const base = apiUrl(host)
   if (!base) {
@@ -19,13 +13,13 @@ export const clientFor = async (store: HostStore, host: GatewayHost): Promise<Wo
     baseUrl: base,
     headers,
     fetchImpl: fetch,
+    // Required even though the host never attaches: the client resolves its WS impl at construction and Node 18 has no global `WebSocket`.
     WebSocketImpl: NodeWebSocket as unknown as typeof WebSocket,
   })
 }
 
 export type ProbeResult = 'connected' | 'unauthorized' | 'unreachable'
 
-/** One cheap authenticated GET decides all three states. */
 export const probe = async (client: WorkerDeckClient): Promise<ProbeResult> => {
   try {
     await client.listSessions()

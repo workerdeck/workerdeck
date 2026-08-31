@@ -10,10 +10,6 @@ const PROBE_LABELS: Record<WireHost['probe'], string> = {
   unreachable: 'unreachable',
 }
 
-/**
- * The gateways a window can drive: view, add, edit, remove. The only place a
- * gateway is managed — the sessions list has no picker to keep in sync.
- */
 export function GatewayList({
   hosts,
   sessionCounts,

@@ -3,17 +3,9 @@ import type { HostStore, GatewayHost } from './hosts.ts'
 import { apiUrl } from './hosts.ts'
 import type { TransportToHost, TransportToWebview, WebviewToHost } from './bridge-protocol.ts'
 
-/**
- * Host side of a webview's bridged transports; one instance per webview, transport
- * ids being per-webview. Executes the webview client's fetch/WS with Node fetch /
- * `ws`, injecting the matched gateway's `Authorization` header. It **refuses URLs
- * belonging to no registered gateway** — otherwise a webview could use the
- * extension host as an open proxy.
- */
 export class WebviewTransportHost {
   readonly #store: HostStore
   readonly #post: (msg: TransportToWebview) => void
-  /** Observe server→client WS frames (the panel's notification tap). */
   readonly #onFrame: ((text: string) => void) | undefined
   readonly #sockets = new Map<number, InstanceType<typeof NodeWebSocket>>()
   readonly #aborts = new Map<number, AbortController>()
@@ -24,7 +16,6 @@ export class WebviewTransportHost {
     this.#onFrame = onFrame
   }
 
-  /** True when the message was a transport message and has been handled. */
   async handle(msg: WebviewToHost): Promise<boolean> {
     switch (msg.kind) {
       case 'wd-fetch': {

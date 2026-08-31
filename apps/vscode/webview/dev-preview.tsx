@@ -1,14 +1,3 @@
-/**
- * `pnpm --filter workerdeck-vscode dev:preview` — the Sessions sidebar's cards, in a
- * browser, against canned data. The webview has no dev server, and every state worth
- * checking here is otherwise rare or expensive to produce on demand.
- *
- * **The fidelity risk**: `dev/preview.html` hand-supplies the `--vscode-*` variables
- * at their Dark+ values, so a token it forgets falls back to a `theme.css` default
- * and looks fine here while being wrong in the editor.
- *
- * Dev-only, and unpackaged: `.vscodeignore` allows `dist/` and nothing else.
- */
 import { createRoot } from 'react-dom/client'
 import './styles.css'
 import { sessionState } from '@workerdeck/protocol'
@@ -24,13 +13,8 @@ const base = {
 
 const mk = (o: Record<string, unknown>) => ({ ...(base as object), ...o }) as never
 
-/**
- * `agentType`, not `name` — that is what `isAgentRecord` reads, and the two are
- * not interchangeable. With `name` these records were all **tasks**: muted, no
- * arrow, unselectable, which is the opposite of what this fixture is for. The
- * last one keeps no `agentType` on purpose, so the preview carries one real task
- * beside the agents and the difference is visible rather than asserted.
- */
+// `agentType`, not `name`: that is what `isAgentRecord` reads, and with `name` these records all draw as tasks.
+// The last one drops `agentType` on purpose, so the preview carries one real task beside the agents.
 const agents = [
   { toolUseId: 'a', agentType: 'Explore', description: 'Fix base-url and re-run', status: 'done', toolCount: 4 },
   { toolUseId: 'b', agentType: 'Explore', description: 'Send measurement in debug', status: 'done', toolCount: 7 },
@@ -40,13 +24,6 @@ const agents = [
   { toolUseId: 'f', description: 'Fix release build and redeploy', status: 'done', toolCount: 1 },
 ]
 
-/**
- * Projects, in all four shapes a row can be in: an image icon (the bytes
- * arrived), an image icon whose bytes have NOT arrived — the state every card
- * is in for the first beat after a poll — a glyph, a glyph name this build does
- * not know (which must draw the folder fallback, not a hole), and no project at
- * all, which must still read exactly as it did before the feature existed.
- */
 const ICON_HASH = 'deadbeef'
 const projectIcons = {
   [ICON_HASH]:
@@ -158,9 +135,6 @@ createRoot(document.getElementById('root')!).render(
           }}
           projectIcons={projectIcons}
           selected={i === 0}
-          /* The secondary selection: card grey, that agent's row blue. It is the
-             state with two claims on screen at once, so it is the one worth
-             having a fixture for. */
           activeSubagentId={i === 0 ? 'a' : undefined}
           onSelect={() => {}}
           onSelectSubagent={() => {}}

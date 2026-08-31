@@ -4,26 +4,14 @@ import type { GatewaysToHost, HostToGateways, SidebarState } from './bridge-prot
 import { apiUrl, type HostStore } from './hosts.ts'
 import { webviewHtml } from './webview-html.ts'
 
-/** What the Gateways view reads from, and reports to, the extension host. */
 export type GatewaysFeed = {
   state: () => SidebarState
-  /** The gateway set changed — re-probe now rather than waiting for a poll. */
   refresh: () => Promise<void>
-  /** Whether this view needs fresh probe readings. It is collapsible on its own, and
-   * gating the poll elsewhere leaves it showing every gateway stuck at `pending`. */
   setWatching: (watching: boolean) => void
 }
 
-/**
- * The Gateways view: the gateways this window can drive, as its own collapsed-by-default VS Code
- * view. The webview draws no header — it announces its form state with `wd-gateway-form-state`
- * and this side retitles the view. **No transports**: saving a gateway is globalState plus the OS
- * keychain, both host-side, and this webview has no route to a gateway.
- */
 export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewId = 'workerdeck.gateways'
-  /** Gates the view title's `+` against its back chevron — see `SidebarProvider`
-   * for why a stateful title button has to be a context key. */
   static readonly formContextKey = 'workerdeck.gatewayFormOpen'
 
   readonly #extensionUri: vscode.Uri
@@ -32,7 +20,6 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
   #view: vscode.WebviewView | undefined
   #ready = false
   #htmlVersion = 0
-  /** Queued while the view is closed or still booting; delivered on wd-ready. */
   #pendingForm: Extract<HostToGateways, { kind: 'wd-gateway-form' }> | undefined
 
   constructor(extensionUri: vscode.Uri, store: HostStore, feed: GatewaysFeed) {
@@ -50,7 +37,6 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
     view.webview.onDidReceiveMessage((msg: GatewaysToHost) => void this.#onMessage(msg))
     view.onDidChangeVisibility(() => this.#feed.setWatching(view.visible))
     this.#feed.setWatching(view.visible)
-    // The header can be right before the body exists.
     this.push()
     view.onDidDispose(() => {
       this.#view = undefined
@@ -61,8 +47,6 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
     })
   }
 
-  /** Dress the view for the form being open or closed: its title, and the key
-   * the manifest gates the title actions on. */
   #setFormOpen(open: boolean, name?: string): void {
     // `undefined` restores the manifest's name.
     if (this.#view) {
@@ -71,7 +55,6 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
     void vscode.commands.executeCommand('setContext', GatewaysViewProvider.formContextKey, open)
   }
 
-  /** The back chevron — it is a title-bar command, so this side presses it. */
   back(): void {
     this.#pendingForm = undefined
     this.#setFormOpen(false)
@@ -82,14 +65,12 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
     void this.#view?.webview.postMessage(msg)
   }
 
-  /** Push the gateway list (a host change, a sessions poll, or `wd-ready`). */
   push(): void {
     if (!this.#view) {
       return
     }
     const state = this.#feed.state()
     const connected = state.hosts.filter((h) => h.probe === 'connected').length
-    // Said while collapsed: whether anything is reachable is worth having without opening it.
     this.#view.description =
       state.hosts.length === 0 ? 'none' : connected === state.hosts.length ? String(connected) : `${connected}/${state.hosts.length}`
     if (!this.#ready) {
@@ -102,8 +83,6 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
     })
   }
 
-  /** Reveal the view, and optionally open its add form — the `+` title action,
-   * the palette commands, and the sessions list's empty states. */
   async reveal(options: { add?: boolean } = {}): Promise<void> {
     if (options.add) {
       this.#pendingForm = { kind: 'wd-gateway-form', open: true }
@@ -153,7 +132,6 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
         return
       }
       case 'wd-gateway-form-state': {
-        // The webview is the authority on whether the form is up; this side only dresses the frame.
         this.#setFormOpen(msg.open)
         return
       }
@@ -193,8 +171,6 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
     }
   }
 
-  /** Re-render this webview from disk — the dev reloader after a rebuild. The
-   * webview re-announces `wd-ready`, which is what re-pushes its state. */
   reloadWebview(): void {
     const view = this.#view
     if (!view) {

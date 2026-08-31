@@ -12,7 +12,6 @@ import { SidebarProvider } from './sidebar.ts'
 import { SessionStatusBar, SubagentStatusItem, UnreadStatusItem, badgeEnabled, currentModel, modelLabel } from './status-bar.ts'
 import { createWatermarks } from './watermarks.ts'
 
-/** Section view ids — each its OWN view, so VS Code owns collapse/placement. */
 const SECTION_VIEWS: Record<SectionKind, string> = {
   info: 'workerdeck.sessionInfo',
   context: 'workerdeck.context',
@@ -20,26 +19,10 @@ const SECTION_VIEWS: Record<SectionKind, string> = {
   mcp: 'workerdeck.mcp',
 }
 
-/**
- * Whether a session is on screen in the agent panel, as a `when`-clause key. The
- * four section views are gated on it; Sessions and Gateways stay ungated, which is
- * what keeps both containers' shape stable.
- */
 const HAS_SESSION_KEY = 'workerdeck.hasSession'
 
-/**
- * The watcher key the unread status-bar item holds on the sessions poll. Every other
- * watcher is a view reporting its own visibility, so with nothing open the poll
- * stops — and the window bar's only always-visible signal would freeze. While the
- * item is enabled it therefore watches unconditionally.
- */
 const UNREAD_WATCHER = 'workerdeck.statusBar.unread'
 
-/**
- * Which session the panel was showing, so a window reload lands back on it.
- * **Workspace** state, not global: which session you are reading is a fact about
- * this window's folder, and two windows on two projects must not fight over one slot.
- */
 const ACTIVE_SESSION_KEY = 'workerdeck.activeSession'
 
 export const activate = (context: vscode.ExtensionContext): void => {
@@ -47,24 +30,14 @@ export const activate = (context: vscode.ExtensionContext): void => {
   const model = new SessionsModel(store)
   const fs = new WorkerdeckFileSystem(store)
 
-  // Vitals for the SELECTED session, relayed panel → here → section views. Cleared on
-  // selection change so a new session never wears the old one's readings.
   let vitals: SessionVitals | undefined
   const statusBar = new SessionStatusBar()
   const unread = new UnreadStatusItem()
   const subagents = new SubagentStatusItem()
   const watermarks = createWatermarks(context)
-  // The item and the poll behind it are one switch. **Either** badge keeps it alive:
-  // they are computed in the same pass, so gating on `unread` alone leaves someone
-  // who turned unread off and sub-agents on watching a count that never moves.
   const syncUnreadWatcher = () => model.setWatching(UNREAD_WATCHER, badgeEnabled('unread') || badgeEnabled('subagents'))
   syncUnreadWatcher()
 
-  /**
-   * Record what is on screen as read — but only while it really is on screen. The
-   * panel being visible AND showing this session is the whole test; a dock behind the
-   * Terminal tab is not being read.
-   */
   const markSeen = (force = false) => {
     const active = panel.active
     if (!active || (!panel.visible && !force)) {
@@ -76,8 +49,6 @@ export const activate = (context: vscode.ExtensionContext): void => {
       activity: info?.activityCount,
       turns: info?.numTurns,
     })
-    // Reading rows is the *other* way the unread count changes, and it is silent — no
-    // poll, no model event. Guarded because a poll can land before `sidebar` is assigned.
     if (moved) {
       sidebar?.refreshUnread()
     }
@@ -95,8 +66,6 @@ export const activate = (context: vscode.ExtensionContext): void => {
       provider.push()
     }
   }
-  // Gateways are their own view in the same container. It reads the same state the list
-  // does, and a save there refreshes the model, which re-pushes every view.
   const gateways = new GatewaysViewProvider(context.extensionUri, store, {
     state: () => model.sidebarState(),
     refresh: () => model.refresh(),
@@ -105,9 +74,6 @@ export const activate = (context: vscode.ExtensionContext): void => {
   model.onDidChange(() => gateways.push())
 
   model.onDidChange(() => pushSections())
-  // Unread: transcript rows the rollup counted minus the rows this window had seen.
-  // **Rows, not turns** — a turn that runs five tools is one turn and eight rows.
-  // Turns stay the fallback for a gateway too old to report `activityCount`.
   model.setUnseenProvider((sessions) => {
     const unseen: Record<string, number> = {}
     for (const [hostId, list] of Object.entries(sessions)) {
@@ -124,11 +90,9 @@ export const activate = (context: vscode.ExtensionContext): void => {
     }
     return unseen
   })
-  // A poll landing while the panel is visible is also a chance to catch the count up.
   model.onDidChange(() => markSeen())
 
-  // Panel and sidebar reference each other only through these delegates; construction
-  // order breaks the cycle, and no delegate fires before activate() returns.
+  // Panel and sidebar reference each other only through these delegates; construction order breaks the cycle.
   let sidebar: SidebarProvider
   const panel = new SessionPanelProvider(context.extensionUri, store, {
     openPanel: async (p) => {
@@ -139,9 +103,7 @@ export const activate = (context: vscode.ExtensionContext): void => {
       await vscode.commands.executeCommand(`${viewId}.focus`)
     },
     vitals: (v) => {
-      // The panel's socket is the first place this window learns a turn started or
-      // stopped. A status change is the cheap signal — the rest of `vitals` moves on
-      // every stream delta — so only it nudges the model.
+      // Only a status change nudges the model: the rest of `vitals` moves on every stream delta.
       const moved = v.status !== vitals?.status
       vitals = v
       if (moved) {
@@ -151,7 +113,6 @@ export const activate = (context: vscode.ExtensionContext): void => {
       pushSections()
       pushStatusBar()
     },
-    // What the panel now has framed: a statement, not a decision this file gets to make.
     subagent: (toolUseId) => model.setSelectedSubagent(toolUseId),
     unseen: (hostId, sessionId) => {
       const mark = watermarks.get(hostId, sessionId)
@@ -159,13 +120,10 @@ export const activate = (context: vscode.ExtensionContext): void => {
     },
     visibilityChanged: () => {
       markSeen()
-      // The mark is written from the last *poll*, so anything produced since would count
-      // as unread despite having been on screen. Refresh and mark once more, with
-      // `force`, the panel being already hidden and the rule being about what was visible.
+      // The mark is written from the last poll, so refresh and mark once more — with `force`, the panel being already hidden.
       void model.refresh().then(() => markSeen(true))
     },
   })
-  // Title and cost come from the REST rollup, the live readings from vitals — different clocks.
   const pushStatusBar = () => {
     const active = panel.active
     if (!active) {
@@ -182,31 +140,22 @@ export const activate = (context: vscode.ExtensionContext): void => {
       vitals,
     )
   }
-  // Show a session in the agent panel. Both the list and the new-session QuickPick end here.
   const selectSession = async (hostId: string, sessionId: string, subagentToolUseId?: string, revealToolUseId?: string) => {
     const host = store.get(hostId)
     if (!host) {
       return
     }
     const info = model.sessionsOf(hostId).find((s) => s.id === sessionId)
-    // Only a REAL change drops the readings: re-clicking the session already on screen
-    // does not remount the panel, so nothing would re-send them.
+    // Re-clicking the session already on screen does not remount the panel, so nothing would re-send the readings.
     if (!panel.isShowing(hostId, sessionId)) {
       vitals = undefined
     }
-    // Seeded with the pick so the card answers the click in the same frame; the panel
-    // reports the same value back a beat later and `setSelectedSubagent` no-ops on it.
     model.setSelected({ hostId, sessionId, subagentToolUseId })
-    // `cwd` resolves Cmd-clicked relative paths, and the model has no snapshot of it at activation.
     void context.workspaceState.update(ACTIVE_SESSION_KEY, { hostId, sessionId, cwd: info?.cwd })
-    // Choosing a session is a request to talk to it, so the caret goes to the composer.
-    // Choosing a sub-agent or a task under it is a request to *read*, so it does not.
     await panel.show({ host, sessionId, cwd: info?.cwd }, { focus: !subagentToolUseId && !revealToolUseId })
     if (subagentToolUseId) {
       panel.openSubagent(subagentToolUseId)
-    }
-    // A **task** has no agent to hand the body over to — travel to its row instead.
-    else if (revealToolUseId) {
+    } else if (revealToolUseId) {
       panel.reveal(revealToolUseId)
     }
   }
@@ -226,7 +175,6 @@ export const activate = (context: vscode.ExtensionContext): void => {
     subagents: (running, sessions) => subagents.update(running, sessions),
   })
 
-  // What the new-session / resume QuickPicks need.
   const sessionFlow: NewSessionDeps = {
     store,
     state: () => model.sidebarState(),
@@ -234,21 +182,15 @@ export const activate = (context: vscode.ExtensionContext): void => {
     reveal: selectSession,
   }
 
-  // The window status bar IS the agent's status bar — the panel renders none of its own
-  // (`statusSurface='external'`).
   panel.onDidChangeActive(() => pushStatusBar())
   model.onDidChange(() => pushStatusBar())
   pushStatusBar()
 
-  // The four section views exist only while there is a session for them to be about.
   const syncHasSession = (has: boolean) => void vscode.commands.executeCommand('setContext', HAS_SESSION_KEY, has)
   panel.onDidChangeActive((active) => syncHasSession(active !== undefined))
   syncHasSession(panel.active !== undefined)
 
-  // Come back to the session this window was reading. **After** the `onDidChangeActive`
-  // subscribers above, so restoring feeds the status bar and the `when` key the way
-  // selecting would. The refresh below is unconditional and one-shot: the poll only runs
-  // while something is watching, which after a reload may be nothing at all.
+  // Must stay after the `onDidChangeActive` subscribers above, so restoring feeds the status bar and the `when` key the way selecting would.
   const remembered = context.workspaceState.get<{
     hostId: string
     sessionId: string
@@ -256,9 +198,7 @@ export const activate = (context: vscode.ExtensionContext): void => {
   }>(ACTIVE_SESSION_KEY)
   if (remembered) {
     const host = store.get(remembered.hostId)
-    // A gateway removed since the reload leaves nothing to restore — drop the record.
     if (host) {
-      // No `subagentToolUseId`: a frame belongs to the panel and dies with it.
       model.setSelected({ hostId: remembered.hostId, sessionId: remembered.sessionId })
       panel.restoreActive({ host, sessionId: remembered.sessionId, cwd: remembered.cwd })
     } else {
@@ -269,8 +209,6 @@ export const activate = (context: vscode.ExtensionContext): void => {
 
   context.subscriptions.push(
     startDevReload(context, [panel, sidebar, gateways, ...Object.values(sections)]),
-    // These settings are baked into the panel's HTML for the first paint, so changing
-    // one means re-rendering it — the same re-render the dev reloader does.
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (
         e.affectsConfiguration('workerdeck.fontSize') ||
@@ -278,18 +216,15 @@ export const activate = (context: vscode.ExtensionContext): void => {
         e.affectsConfiguration('workerdeck.transcriptDensity') ||
         e.affectsConfiguration('workerdeck.transcriptVariant') ||
         e.affectsConfiguration('workerdeck.terminal') ||
-        // The cell follows the editor's own size unless overridden, so an editor change is ours.
         e.affectsConfiguration('editor.fontSize') ||
         e.affectsConfiguration('editor.lineHeight')
       ) {
         panel.reloadWebview()
       }
-      // Which badges the bar carries is a per-render read, so a change is only a re-render.
       if (e.affectsConfiguration('workerdeck.statusBar')) {
         statusBar.refresh()
         unread.render()
         subagents.render()
-        // The unread item is the one badge that also owns a poll.
         syncUnreadWatcher()
       }
     }),
@@ -304,8 +239,7 @@ export const activate = (context: vscode.ExtensionContext): void => {
     vscode.window.registerWebviewViewProvider(SidebarProvider.viewId, sidebar, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
-    // Retained: the add/edit form is the one place typing can be lost to a view being torn
-    // down, and its auth key can only be re-fetched by asking to edit the gateway again.
+    // Retained: a torn-down add/edit form loses typing, and its auth key can only be re-fetched by asking to edit the gateway again.
     vscode.window.registerWebviewViewProvider(GatewaysViewProvider.viewId, gateways, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
@@ -323,19 +257,14 @@ export const activate = (context: vscode.ExtensionContext): void => {
     vscode.commands.registerCommand('workerdeck.addGateway', () => gateways.reveal({ add: true })),
     vscode.commands.registerCommand('workerdeck.showGateways', () => gateways.reveal()),
     vscode.commands.registerCommand('workerdeck.gatewaysBack', () => gateways.back()),
-    // Creating a session is a native multi-step QuickPick — see `new-session.ts`.
     vscode.commands.registerCommand('workerdeck.newSession', () => createSession(sessionFlow)),
     vscode.commands.registerCommand('workerdeck.resumeSession', () => resumeSession(sessionFlow)),
     vscode.commands.registerCommand('workerdeck.refreshSessions', () => model.refresh()),
 
-    // One toggle, two commands: a `view/title` button has a fixed icon, so open and closed
-    // are a pair of commands with opposite `when` clauses.
     vscode.commands.registerCommand('workerdeck.showFilter', () => sidebar.setFilterOpen(true)),
     vscode.commands.registerCommand('workerdeck.hideFilter', () => sidebar.setFilterOpen(false)),
     vscode.commands.registerCommand('workerdeck.toggleFilter', () => sidebar.toggleFilter()),
 
-    // The status bar's two pickers. A StatusBarItem carries one command and no dropdown,
-    // so command → QuickPick is the native shape. The options come from the panel's vitals.
     vscode.commands.registerCommand('workerdeck.selectModel', async () => {
       const models = vitals?.models ?? []
       if (models.length === 0) {

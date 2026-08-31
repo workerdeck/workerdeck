@@ -1,12 +1,3 @@
-// The agent's status bar, rendered as VS Code's own: the window status bar is
-// where an IDE user already looks for "what is running", so the panel's React bar
-// is suppressed (`statusSurface='external'`) and its readings arrive here over
-// `wd-vitals`. Separate items, not one, because each has its own section view to
-// focus and one item would mean one click target for many destinations.
-//
-// `UnreadStatusItem` and `SubagentStatusItem` live here because this is where the
-// window bar is owned, not because they share the others' lifecycle: everything
-// else on this bar is about the session on screen and hides when there is none.
 import * as vscode from 'vscode'
 import type { ContextUsage, RateLimitInfo } from '@workerdeck/protocol'
 import type { SessionVitals } from '@workerdeck/ui'
@@ -24,30 +15,19 @@ import {
 } from '@workerdeck/ui/format'
 import type { StatusSeverity, UsageLane } from '@workerdeck/ui/format'
 
-// The status *presentation* rules live in `@workerdeck/ui/format`, since every
-// surface that draws a session's readings has to agree on them. Re-exported
-// because the QuickPick commands read them too.
 export { currentModel, meterSeverity, modelLabel, statusPresentation, tightestWindow }
 export type { StatusPresentation } from '@workerdeck/ui/format'
 
-/** The badges, each its own boolean setting — checkboxes in the Settings UI, which
- * an array-of-enum or an object map would not be. Read per render rather than
- * cached: `activate` re-renders the bar on a config change. */
 export type StatusBadge = 'unread' | 'subagents' | 'status' | 'context' | 'sessionUsage' | 'weeklyUsage' | 'modelUsage' | 'model' | 'mode'
 
-/** How often the countdowns in the usage tooltip are re-rendered. */
 const TICK_MS = 30_000
 
-/** The three usage badges, in bar order, paired with the lane each reads.
- * Iterated rather than unrolled so the item, the setting and the lane cannot drift. */
 const USAGE_BADGES: readonly { badge: StatusBadge; lane: UsageLane }[] = [
   { badge: 'sessionUsage', lane: 'session' },
   { badge: 'weeklyUsage', lane: 'weekly' },
   { badge: 'modelUsage', lane: 'model' },
 ]
 
-/** Not every badge defaults on: three usage numbers in the bar by default is a
- * status bar nobody reads. */
 const BADGE_DEFAULT: Partial<Record<StatusBadge, boolean>> = { modelUsage: false }
 
 const severityBackground = (severity: StatusSeverity): vscode.ThemeColor | undefined => {
@@ -60,13 +40,6 @@ const severityBackground = (severity: StatusSeverity): vscode.ThemeColor | undef
   return undefined
 }
 
-/**
- * A working session's badge, coloured on the **foreground**.
- * `StatusBarItem.backgroundColor` accepts exactly `statusBarItem.errorBackground`
- * and `statusBarItem.warningBackground` and silently ignores anything else — and
- * both are alarm colours, which is the wrong thing to say about a session doing its
- * job. `charts.blue` is a theme token, so it tracks the user's theme.
- */
 const statusForeground = (status: string | undefined): vscode.ThemeColor | undefined => {
   return status === 'running' || status === 'starting' ? new vscode.ThemeColor('charts.blue') : undefined
 }
@@ -104,13 +77,6 @@ export const badgeEnabled = (badge: StatusBadge): boolean => {
   return vscode.workspace.getConfiguration('workerdeck.statusBar').get<boolean>(badge, BADGE_DEFAULT[badge] ?? true)
 }
 
-/**
- * The unread count: transcript rows produced since this window last had each
- * session on screen, summed over **only the sessions the Sessions view's filter is
- * showing** — a number announcing work in a session the filter or the workspace
- * scope hides sends you looking for something that isn't there. Sessions waiting on
- * a human lead the tooltip and colour the item without replacing the count.
- */
 export class UnreadStatusItem implements vscode.Disposable {
   readonly #item: vscode.StatusBarItem
   #rows = 0
@@ -128,7 +94,6 @@ export class UnreadStatusItem implements vscode.Disposable {
     this.render()
   }
 
-  /** Re-render against unchanged readings — for a settings change. */
   render(): void {
     const rows = this.#rows
     const waiting = this.#waiting
@@ -153,12 +118,6 @@ export class UnreadStatusItem implements vscode.Disposable {
   }
 }
 
-/**
- * How many sub-agents are running right now, across the sessions the Sessions
- * view's filter is showing. Its own item rather than part of `SessionStatusBar`
- * because, like unread, it is about *every* session and is most worth showing when
- * no panel is open. Foreground-coloured, for the reason `statusForeground` gives.
- */
 export class SubagentStatusItem implements vscode.Disposable {
   readonly #item: vscode.StatusBarItem
   #running = 0
@@ -171,18 +130,14 @@ export class SubagentStatusItem implements vscode.Disposable {
     this.#item.color = new vscode.ThemeColor('charts.blue')
   }
 
-  /** @param running total sub-agents in flight. @param sessions how many sessions
-   * they are spread across — "6 agents" in one session and in four are different days. */
   update(running: number, sessions: number): void {
     this.#running = running
     this.#sessions = sessions
     this.render()
   }
 
-  /** Re-render against unchanged readings — for a settings change. */
   render(): void {
     const running = this.#running
-    // Zero hides rather than showing `0`: a permanent zero is a thing people learn to stop seeing.
     if (!badgeEnabled('subagents') || running <= 0) {
       this.#item.hide()
       return
@@ -209,15 +164,9 @@ export type StatusBarSubject = {
   cost: number | undefined
 }
 
-/**
- * Owns the three items. Fed by `update()` — from the panel's vitals relay, from
- * a selection change, and from the sessions poll (which is what renames the
- * item when a session is retitled elsewhere).
- */
 export class SessionStatusBar implements vscode.Disposable {
   readonly #status: vscode.StatusBarItem
   readonly #context: vscode.StatusBarItem
-  /** One per {@link USAGE_BADGES} entry, same order. */
   readonly #usage: readonly vscode.StatusBarItem[]
   readonly #model: vscode.StatusBarItem
   readonly #mode: vscode.StatusBarItem
@@ -230,11 +179,8 @@ export class SessionStatusBar implements vscode.Disposable {
     this.#status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50)
     this.#context = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49)
     this.#usage = USAGE_BADGES.map((_, index) => vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 48 - index))
-    // The two controls, after the gauges. A status bar item has one command and no
-    // dropdown of its own, so command → QuickPick is the only shape VS Code offers.
     this.#model = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 45)
     this.#mode = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 44)
-    // Each gauge leads to the view that answers *its* question.
     this.#status.command = 'workerdeck.sessionInfo.focus'
     this.#context.command = 'workerdeck.context.focus'
     for (const item of this.#usage) {
@@ -244,19 +190,16 @@ export class SessionStatusBar implements vscode.Disposable {
     this.#mode.command = 'workerdeck.selectPermissionMode'
   }
 
-  /** Every item, for the two places that touch all of them. */
   get #items(): vscode.StatusBarItem[] {
     return [this.#status, this.#context, ...this.#usage, this.#model, this.#mode]
   }
 
-  /** `subject: undefined` = no session selected; everything hides. */
   update(subject: StatusBarSubject | undefined, vitals: SessionVitals | undefined): void {
     this.#subject = subject
     this.#vitals = vitals
     this.#render()
   }
 
-  /** Re-render against unchanged readings — for a settings change. */
   refresh(): void {
     this.#render()
   }
@@ -295,7 +238,6 @@ export class SessionStatusBar implements vscode.Disposable {
       this.#status.hide()
     }
 
-    // Capability gating, same rule as the panel: no context window reported, no item.
     const usage = badgeEnabled('context') && vitals?.capabilities?.contextUsage ? vitals.contextUsage : undefined
     if (usage) {
       this.#context.text = `$(dashboard) ${formatTokens(usage.totalTokens)}`
@@ -306,7 +248,6 @@ export class SessionStatusBar implements vscode.Disposable {
       this.#context.hide()
     }
 
-    // A lane the account has no window for hides rather than showing a dash.
     const rateLimits = vitals?.rateLimits
     let anyUsage = false
     for (const [index, { badge, lane }] of USAGE_BADGES.entries()) {
@@ -321,7 +262,6 @@ export class SessionStatusBar implements vscode.Disposable {
       const reading = pct !== undefined ? `${pct.toFixed(0)}%` : '—'
       item.text = `$(pulse) ${windowLabel(window.key)} ${reading}`
       item.backgroundColor = severityBackground(window.info.status === 'rejected' ? 'error' : meterSeverity(pct))
-      // One tooltip for all three: "and the others?" is asked of whichever you point at.
       item.tooltip = usageTooltip(rateLimits ?? {}, now)
       item.show()
       anyUsage = true
@@ -332,7 +272,6 @@ export class SessionStatusBar implements vscode.Disposable {
       this.#stopTicking()
     }
 
-    // Each picker is shown only where switching is possible: an empty QuickPick is worse than no item.
     if (badgeEnabled('model') && vitals?.models.length) {
       this.#model.text = `$(sparkle) ${modelLabel(vitals)}`
       this.#model.tooltip = 'WorkerDeck: switch model'

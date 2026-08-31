@@ -1,12 +1,6 @@
 import * as vscode from 'vscode'
 export { apiUrl, isLoopbackHost } from '@workerdeck/client'
 
-/**
- * A workerdeck gateway this window can drive. `baseUrl` is stored exactly as the
- * user typed it; `apiUrl()` appends the `/v1` prefix. Names and URLs live in
- * `globalState`; the auth key lives in `SecretStorage`, keyed by host id, and is
- * deleted with the host.
- */
 export type GatewayHost = {
   id: string
   name: string
@@ -27,8 +21,6 @@ export class HostStore {
     this.#secrets = context.secrets
   }
 
-  /** The gateways the operator configured — nothing more. There is deliberately no
-   * implicit localhost entry, only an empty list with an "add gateway" affordance. */
   all(): GatewayHost[] {
     return this.#state.get<GatewayHost[]>(HOSTS_KEY, [])
   }
@@ -60,13 +52,10 @@ export class HostStore {
     this.#onDidChange.fire()
   }
 
-  /** The auth key, or undefined for keyless (loopback) gateways. */
   async authKey(id: string): Promise<string | undefined> {
     return (await this.#secrets.get(secretKey(id))) || undefined
   }
 
-  /** Auth headers for REST/WS against this host — the single place the
-   * `Authorization: Bearer` transport is spelled. */
   async authHeaders(id: string): Promise<Record<string, string>> {
     const key = await this.authKey(id)
     return key ? { authorization: `Bearer ${key}` } : {}

@@ -8,11 +8,7 @@ import { ContextSection, InfoSection, McpSection, UsageSection } from './content
 
 export type SectionKind = 'info' | 'context' | 'usage' | 'mcp'
 
-/**
- * One section view. The manifest's `when` clauses keep a view hidden when no
- * session is selected or the engine lacks the capability, so the fallbacks
- * here only cover the races in between.
- */
+// The manifest's `when` clauses hide a view with no session or no capability, so the fallbacks here only cover the races in between.
 export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind }) {
   const [state, setState] = useState<SidebarState | undefined>(undefined)
   const [vitals, setVitals] = useState<SessionVitals | undefined>(undefined)
@@ -33,7 +29,6 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
   const info: SessionInfo | undefined = selected ? state?.sessions[selected.hostId]?.find((s) => s.id === selected.sessionId) : undefined
   const host = selected ? state?.hosts.find((h) => h.id === selected.hostId) : undefined
 
-  // MCP's REST client for the selected session's gateway — never attaches.
   const client = useMemo(
     () =>
       host
@@ -50,7 +45,6 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
     return <Empty>Select a session in the WorkerDeck sidebar.</Empty>
   }
 
-  // Live capabilities, then the REST rollup, then the engine's record — the panel's own gating order.
   const caps = vitals?.capabilities ?? info.capabilities ?? ENGINE_CAPABILITIES[info.engine ?? 'claude']
   const engine = info.engine ?? 'claude'
 

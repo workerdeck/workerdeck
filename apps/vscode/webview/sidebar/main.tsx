@@ -6,7 +6,6 @@ import { syncVsCodeTheme } from '../theme.ts'
 import { SidebarApp } from './SidebarApp.tsx'
 
 syncVsCodeTheme()
-// Navigation is deliberately not replayed: a re-resolved webview comes back to the list, not a stale form.
 const bridge = new Bridge(['wd-sidebar-state', 'wd-vitals'])
 
 const root = document.getElementById('root')

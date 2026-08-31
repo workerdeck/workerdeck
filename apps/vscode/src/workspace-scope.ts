@@ -2,12 +2,6 @@ import * as vscode from 'vscode'
 import { WorkerdeckFileSystem } from './fsp.ts'
 import type { ScopeRoot, WorkspaceScope } from './bridge-protocol.ts'
 
-/**
- * What "this project" means in this window: the open folders, each tagged with the
- * gateway whose sessions could be inside it. A `file:` folder scopes loopback
- * gateways only (`hostId` absent → any local host); a `workerdeck://<hostId>/…`
- * mount scopes exactly that gateway; anything else has no meaning as a session cwd.
- */
 export const workspaceScope = (): WorkspaceScope | undefined => {
   const folders = vscode.workspace.workspaceFolders ?? []
   const roots: ScopeRoot[] = []

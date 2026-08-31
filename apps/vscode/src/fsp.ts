@@ -5,22 +5,13 @@ import type { HostDirEntry } from '@workerdeck/protocol'
 import type { HostStore } from './hosts.ts'
 import { clientFor } from './gateway.ts'
 
-/**
- * `workerdeck://<hostId>/<abs path>` — a remote gateway's project over its `/fs/*` routes,
- * registered globally at activation so transcript links open with no folder mounted. The routes
- * bound what this provider can do: `writeFile` is **conditional, always** (never a silent
- * overwrite), mkdir/delete/rename are `NoPermissions`, and `watch` is a no-op.
- * See `docs/GOTCHAS.md` §Host filesystem.
- */
 export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.Disposable {
   static readonly scheme = 'workerdeck'
 
   readonly #store: HostStore
   readonly #emitter = new vscode.EventEmitter<vscode.FileChangeEvent[]>()
   readonly onDidChangeFile = this.#emitter.event
-  /** uri → sha256 of the last content this window read. The write guard. */
   readonly #hashes = new Map<string, string>()
-  /** Write opt-in per host, learned from `/fs/roots` once per window. */
   readonly #canWrite = new Map<string, boolean>()
 
   constructor(store: HostStore) {
@@ -130,7 +121,6 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
     }
   }
 
-  /** No server routes exist for these — see docs/GOTCHAS.md §Host filesystem. */
   createDirectory(): never {
     throw vscode.FileSystemError.NoPermissions('workerdeck gateways do not support mkdir')
   }
@@ -141,7 +131,6 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
     throw vscode.FileSystemError.NoPermissions('workerdeck gateways do not support rename')
   }
 
-  /** Nudge open editors/trees after the agent finished a turn. */
   refresh(uri: vscode.Uri): void {
     this.#emitter.fire([{ type: vscode.FileChangeType.Changed, uri }])
   }

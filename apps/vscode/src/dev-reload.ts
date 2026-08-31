@@ -2,16 +2,8 @@ import * as vscode from 'vscode'
 import { watch, type FSWatcher } from 'node:fs'
 import { join } from 'node:path'
 
-/** What the reloader can refresh in place. */
 export type ReloadableView = { reloadWebview: () => void }
 
-/**
- * The dev loop for an Extension Development Host window: watches this extension's
- * `dist/` and re-renders the webviews in place, or reloads the whole window when
- * the extension-host bundle changed — VS Code cannot swap extension code in a live
- * host. Development mode only; a self-triggered reload of a real install would be
- * the last thing a user's editor should do.
- */
 export const startDevReload = (context: vscode.ExtensionContext, views: readonly ReloadableView[]): vscode.Disposable => {
   const enabled =
     context.extensionMode === vscode.ExtensionMode.Development &&
@@ -48,7 +40,6 @@ export const startDevReload = (context: vscode.ExtensionContext, views: readonly
       return
     }
     pendingHostReload ||= hostSide
-    // A build writes many files; settle before acting on any of them.
     clearTimeout(timer)
     timer = setTimeout(flush, 400)
   }
@@ -59,7 +50,6 @@ export const startDevReload = (context: vscode.ExtensionContext, views: readonly
     watchers.push(watch(join(dist, 'webview'), (_e, file) => onChange(file, false)))
     output.appendLine(`watching ${dist} for rebuilds`)
   } catch (err) {
-    // No dist yet (a first run before any build) — not worth failing activation.
     output.appendLine(`dev reload off: ${err instanceof Error ? err.message : String(err)}`)
   }
 

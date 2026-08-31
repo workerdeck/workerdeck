@@ -211,10 +211,20 @@ The colours are not this file's business either: `styles.css` repoints `--row-ho
 without a `--vscode-*` variable being named in the component. The disclosure
 reads `1/6` rather than `1 of 6 agents`, the words having truncated the folder name away to say
 what three characters say, with the sentence kept for the tooltip and the screen reader.
+The webview build has **no dev server**: `localResourceRoots` means every asset must be a real
+file on disk, so the dev loop is `vite build --watch` plus `src/dev-reload.ts` re-rendering the
+views in place. Vite's dep optimizer therefore never runs here, and none of its traps are
+inherited. The CSP has no external `connect-src`, but `img-src` does allow `http:`/`https:`, and
+that is the one hole: an inline transcript image loads directly only from a **keyless** gateway,
+header auth being unable to ride an `<img>` — the same trade the iOS client makes. Project icons
+are exempt because the host fetches their bytes and hands them over as data URLs. And
+`transcriptVariant` resolves **anything that is not `cards`** to `terminal` rather than matching
+`'terminal'` exactly, which is deliberate compatibility: a settings file still holding the retired
+`lines` value must land on the terminal theme rather than on an unhandled variant.
 `dev/preview.html` + `pnpm dev:preview` renders the cards in a browser against canned data,
 because every state worth checking is otherwise rare or expensive to produce on demand; its
-fidelity risk is named in the file (it hand-supplies the `--vscode-*` variables, so a token it
-forgets looks fine there and wrong in the editor), and `.vscodeignore` allows `dist/` only, so
+fidelity risk is that it hand-supplies the `--vscode-*` variables, so a token it
+forgets looks fine there and wrong in the editor; and `.vscodeignore` allows `dist/` only, so
 none of it ships.
 A session row **expands** to its sub-agents (`SessionInfo.subagents`) — `sessionSteps`,
 `StepToggle` and `StepRow`, which live in **`packages/ui`** (`SessionSteps.tsx`) rather than in

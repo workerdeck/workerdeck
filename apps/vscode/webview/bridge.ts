@@ -1,16 +1,10 @@
 import type { HostToWebview, TransportToWebview, WebviewToHost } from '../src/bridge-protocol.ts'
 
-/**
- * Webview half of the transport bridge: a fetch and a WebSocket riding `postMessage` to the
- * extension host, handed to real `WorkerDeckClient`s as `fetchImpl` / `WebSocketImpl`. Kinds in
- * `replayKinds` have their last value replayed to late subscribers, because the host answers our
- * `wd-ready` (sent at module load) before React has mounted and listened.
- */
+// Kinds in `replayKinds` have their last value replayed to late subscribers: the host answers our
+// `wd-ready` (sent at module load) before React has mounted and listened.
 
 type VsCodeApi = {
   postMessage(msg: unknown): void
-  /** Webview-local persistence: survives the view being torn down and rebuilt
-   * (VS Code does that freely), which `useState` does not. */
   getState(): unknown
   setState(state: unknown): void
 }
@@ -40,7 +34,6 @@ export class Bridge {
     this.#vscode.postMessage(msg)
   }
 
-  /** The webview's own persisted state (view preferences, not session data). */
   getState<T>(): T | undefined {
     return this.#vscode.getState() as T | undefined
   }
@@ -73,7 +66,6 @@ export class Bridge {
           pending.reject(new TypeError(msg.error))
           return
         }
-        // A real Response — .json()/.text()/.blob()/.ok all behave exactly.
         // Bodyless statuses refuse a body in the constructor.
         const bodyless = msg.status === 204 || msg.status === 205 || msg.status === 304
         pending.resolve(
@@ -101,7 +93,6 @@ export class Bridge {
     }
   }
 
-  /** `fetchImpl` for `WorkerDeckClient`. */
   fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const id = nextId++
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
@@ -123,11 +114,9 @@ export class Bridge {
     return promise
   }
 
-  /** `WebSocketImpl` for `WorkerDeckClient` — bound to this bridge instance. */
   get WebSocketImpl(): typeof WebSocket {
-    // The client uses: constructor(url), readyState, send, close, and the four
-    // on* handlers. BridgedWebSocket implements exactly that; the cast hands it
-    // over under the lib.dom type.
+    // The client uses constructor(url), readyState, send, close and the four on* handlers; the cast hands
+    // `BridgedWebSocket`, which implements exactly that, over under the lib.dom type.
     const make = (url: string | URL) => new BridgedWebSocket(this, String(url))
     const ctor = function (this: unknown, url: string | URL) {
       return make(url)

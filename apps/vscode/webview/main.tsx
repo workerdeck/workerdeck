@@ -13,11 +13,8 @@ if (!root) {
   throw new Error('Root element #root not found')
 }
 
-// Stamped on #root by the provider rather than awaited over the bridge: variant and
-// density decide every row's shape, so the first paint has to have them. A change re-renders the HTML.
 const density = root.dataset.density === 'compact' ? 'compact' : 'comfortable'
 const variant = root.dataset.variant === 'cards' ? 'cards' : 'terminal'
-// The terminal cell, resolved host-side against the editor's own font size; whole pixels by now.
 const terminalMetrics = {
   fontSize: Number(root.dataset.fontSize) || undefined,
   lineHeight: Number(root.dataset.lineHeight) || undefined,

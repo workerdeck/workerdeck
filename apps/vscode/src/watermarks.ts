@@ -2,12 +2,6 @@ import type * as vscode from 'vscode'
 import { Watermarks } from '@workerdeck/protocol'
 import type { Watermark, WatermarkStore } from '@workerdeck/protocol'
 
-/**
- * The unread model, backed by `globalState`. Every rule (monotonicity, the
- * once-a-minute touch, the 30-day prune, `unseenCount`) lives in
- * `@workerdeck/protocol` so the dashboard cannot drift from it; only the storage
- * is VS Code-shaped.
- */
 export type { Watermark }
 export { unseenCount } from '@workerdeck/protocol'
 

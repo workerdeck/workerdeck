@@ -5,13 +5,6 @@ import { rateLimitWindows, type TranscriptState } from '@workerdeck/react'
 import { Badge, Button, Spinner, UsageMeters, cn } from '@workerdeck/ui'
 import { RefreshCw } from 'lucide-react'
 
-/**
- * The scoped surfaces for the selected session, each in its own VS Code view. Info
- * renders from the pushed REST rollup; Context and Usage from the vitals the agent
- * panel relays — **it owns the one live attach, so these views must never attach**;
- * MCP fetches over its view's own bridged client, REST only.
- */
-
 function Row({ label, value }: { label: string; value: ReactNode }) {
   if (value === undefined || value === null || value === '') {
     return null
@@ -65,11 +58,6 @@ export function ContextSection({ usage }: { usage: ContextUsage | undefined }) {
   )
 }
 
-/**
- * `UsageMeters` rather than a bar of our own: the pace marker is the whole value of
- * these meters — "17% used" only means something once you know how far into the
- * window you are.
- */
 export function UsageSection({ rateLimits }: { rateLimits: Record<string, RateLimitInfo> | undefined }) {
   // rateLimitWindows reads only `rateLimits`; the cast avoids building a whole transcript state.
   const windows = rateLimitWindows({ rateLimits } as TranscriptState)
