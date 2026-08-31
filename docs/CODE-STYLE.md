@@ -67,7 +67,7 @@ The supporting rules:
 - **Deleting a comment is not the end of the job.** If it carried critical information that is
   hard to derive from the code, or anything system-relevant (a status flow, a state machine, a
   lifecycle), it must reach `docs/` — and if it cannot be placed immediately, it goes in
-  `_docs/DOC-DEBT.md` so the next pass covers it. Be strict about what qualifies: most comments
+  `_docs/DOC-DEBT.md` (gitignored scratch) so the next pass covers it, never straight to /dev/null. Be strict about what qualifies: most comments
   are restating the code and simply go.
 
 Why the rule reads this way: an earlier attempt enforced "comments under 12 lines" with a lint
