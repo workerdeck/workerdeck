@@ -50,7 +50,7 @@ export const activate = (context: vscode.ExtensionContext): void => {
       turns: info?.numTurns,
     })
     if (moved) {
-      sidebar?.refreshUnread()
+      sidebar.refreshUnread()
     }
   }
 

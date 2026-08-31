@@ -3,6 +3,7 @@ import type { WorkerDeckClient } from '@workerdeck/client'
 import type { ContextUsage, McpServerStatusInfo, RateLimitInfo, SessionInfo } from '@workerdeck/protocol'
 import { rateLimitWindows, type TranscriptState } from '@workerdeck/react'
 import { Badge, Button, Spinner, UsageMeters, cn } from '@workerdeck/ui'
+import { formatTokens } from '@workerdeck/ui/format'
 import { RefreshCw } from 'lucide-react'
 
 function Row({ label, value }: { label: string; value: ReactNode }) {
@@ -157,12 +158,3 @@ function Meter({ percent, warn }: { percent: number; warn: number }) {
   )
 }
 
-const formatTokens = (tokens: number): string => {
-  if (tokens >= 1_000_000) {
-    return `${(tokens / 1_000_000).toFixed(1)}M`
-  }
-  if (tokens >= 1_000) {
-    return `${Math.round(tokens / 1_000)}k`
-  }
-  return String(tokens)
-}
