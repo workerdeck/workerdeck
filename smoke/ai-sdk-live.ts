@@ -8,55 +8,13 @@ import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
 import { createVfs, loadEngine } from '@workerdeck/sandbox'
 import { AiSdkRunner, QuickJsExecutor } from '@workerdeck/core'
 import type { SessionEvent } from '@workerdeck/protocol'
+import { indent, resolveProvider, sleep } from './lib/providers.ts'
 
-type ProviderName = 'moonshot' | 'openai' | 'anthropic'
-
-function indent(text: string): string {
-  return text
-    .split('\n')
-    .map((line) => '   │ ' + line)
-    .join('\n')
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms))
-}
-
-const PROVIDERS: Record<ProviderName, { env: string; defaultModel: string; load: () => Promise<unknown> }> = {
-  moonshot: {
-    env: 'MOONSHOT_API_KEY',
-    defaultModel: 'kimi-k3',
-    load: () => import('@ai-sdk/moonshotai').then((m) => m.moonshotai),
-  },
-  openai: {
-    env: 'OPENAI_API_KEY',
-    defaultModel: 'gpt-5',
-    load: () => import('@ai-sdk/openai').then((m) => m.openai),
-  },
-  anthropic: {
-    env: 'ANTHROPIC_API_KEY',
-    defaultModel: 'claude-sonnet-5',
-    load: () => import('@ai-sdk/anthropic').then((m) => m.anthropic),
-  },
-}
-
-const providerName = (process.argv[2] ?? 'moonshot') as ProviderName
-const provider = PROVIDERS[providerName]
-if (!provider) {
-  console.error(`Unknown provider '${providerName}'. Use one of: ${Object.keys(PROVIDERS).join(', ')}`)
-  process.exit(1)
-}
-if (!process.env[provider.env]) {
-  console.error(`\nMissing ${provider.env} in the environment.\n`)
-  console.error(`  ${provider.env}=... pnpm smoke:live ${providerName}\n`)
-  process.exit(1)
-}
-const modelId = process.argv[3] ?? provider.defaultModel
+const { providerName, modelId, factory } = await resolveProvider(process.argv.slice(2), 'smoke:live')
 
 console.log(`\nProvider: ${providerName}   Model: ${modelId}`)
 console.log('='.repeat(60))
 
-const factory = (await provider.load()) as (id: string) => never
 const engine = await loadEngine(variant)
 const executor = new QuickJsExecutor({ engine })
 

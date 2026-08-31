@@ -3,9 +3,9 @@
 //
 // The only place a real streamable-http MCP connection is exercised end to end: tools arrive namespaced, stay
 // authoritative (server-side execute, never bridged), and the turn completes on their output.
-import type { LanguageModel } from 'ai'
 import type { SessionEvent, ToolUseBlock } from '@workerdeck/protocol'
 import { connectMcpTools, createEngineSession, type ToolExecutor } from '@workerdeck/core'
+import { resolveProvider } from './lib/providers.ts'
 
 const DEEPWIKI_URL = 'https://mcp.deepwiki.com/mcp'
 
@@ -34,38 +34,7 @@ if (probeOnly) {
   process.exit(0)
 }
 
-type ProviderName = 'moonshot' | 'openai' | 'anthropic'
-const PROVIDERS: Record<ProviderName, { env: string; defaultModel: string; load: () => Promise<unknown> }> = {
-  moonshot: {
-    env: 'MOONSHOT_API_KEY',
-    defaultModel: 'kimi-k3',
-    load: () => import('@ai-sdk/moonshotai').then((m) => m.moonshotai),
-  },
-  openai: {
-    env: 'OPENAI_API_KEY',
-    defaultModel: 'gpt-5',
-    load: () => import('@ai-sdk/openai').then((m) => m.openai),
-  },
-  anthropic: {
-    env: 'ANTHROPIC_API_KEY',
-    defaultModel: 'claude-sonnet-5',
-    load: () => import('@ai-sdk/anthropic').then((m) => m.anthropic),
-  },
-}
-
-const providerName = (args[0] ?? 'moonshot') as ProviderName
-const provider = PROVIDERS[providerName]
-if (!provider) {
-  console.error(`Unknown provider '${providerName}'. Use one of: ${Object.keys(PROVIDERS).join(', ')}`)
-  process.exit(1)
-}
-if (!process.env[provider.env]) {
-  console.error(`\nMissing ${provider.env} in the environment.\n`)
-  console.error(`  ${provider.env}=... pnpm smoke:mcp ${providerName}\n`)
-  process.exit(1)
-}
-const modelId = args[1] ?? provider.defaultModel
-const factory = (await provider.load()) as (id: string) => LanguageModel
+const { providerName, modelId, factory } = await resolveProvider(args, 'smoke:mcp')
 const model = factory(modelId)
 
 console.log(`\nProvider: ${providerName}   Model: ${modelId}`)
