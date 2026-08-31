@@ -205,6 +205,78 @@ describe('JobQueue', () => {
     expect((await queue.stats()).running).toBe(0)
   })
 
+  // Every abort path reports the same usage patch — the tokens seen so far, no cost, no turns —
+  // because a run that never produced a turn_result has no authoritative usage to report. Only
+  // turn_result carries real numbers, so these four are the shape that must not drift apart.
+  describe('the abort patch', () => {
+    it('cancel reports the tokens seen so far, no cost, no turns', async () => {
+      const { queue, runners } = makeQueue()
+      const job = await queue.submit(jobRequest())
+      await tick()
+      runners[0]!.emit(assistantWithUsage(20))
+      await queue.cancel(job.id)
+      await tick()
+      expect(await queue.get(job.id)).toMatchObject({
+        status: 'canceled',
+        error: 'canceled',
+        usage: { tokens: 30, totalCostUsd: 0, numTurns: 0 },
+      })
+    })
+
+    it('a session that errors reports the same patch, failed', async () => {
+      const { queue, runners } = makeQueue()
+      const job = await queue.submit(jobRequest())
+      await tick()
+      runners[0]!.emit(assistantWithUsage(20))
+      runners[0]!.emit({ type: 'session_error', message: 'spawn failed' })
+      await tick()
+      expect(await queue.get(job.id)).toMatchObject({
+        status: 'failed',
+        error: 'spawn failed',
+        usage: { tokens: 30, totalCostUsd: 0, numTurns: 0 },
+      })
+    })
+
+    it('a session that closes before a result fails with the same patch', async () => {
+      const { queue, runners } = makeQueue()
+      const job = await queue.submit(jobRequest())
+      await tick()
+      runners[0]!.emit(assistantWithUsage(20))
+      runners[0]!.close('server')
+      await tick()
+      expect(await queue.get(job.id)).toMatchObject({
+        status: 'failed',
+        error: 'session closed before completing',
+        usage: { tokens: 30, totalCostUsd: 0, numTurns: 0 },
+      })
+    })
+
+    it('a kill reason outranks the event that delivered the news', async () => {
+      const { queue, runners } = makeQueue({ maxJobDurationMs: 10, killGraceMs: 10_000 })
+      const job = await queue.submit(jobRequest())
+      await tick()
+      await settles(() => expect(runners[0]!.interrupt).toHaveBeenCalled())
+      runners[0]!.close('error')
+      await settles(async () =>
+        expect(await queue.get(job.id)).toMatchObject({
+          status: 'failed',
+          error: expect.stringContaining('max duration'),
+          usage: { tokens: 0, totalCostUsd: 0, numTurns: 0 },
+        }),
+      )
+    })
+
+    it('a canceled run that is killed lands as canceled, not failed', async () => {
+      const { queue, runners } = makeQueue({ killGraceMs: 10_000 })
+      const job = await queue.submit(jobRequest())
+      await tick()
+      await queue.cancel(job.id)
+      await tick()
+      expect(await queue.get(job.id)).toMatchObject({ status: 'canceled', error: 'canceled' })
+      expect(runners[0]!.closed).toBe(true)
+    })
+  })
+
   it('interrupts a run that exceeds its session token limit and fails the job', async () => {
     const { queue, runners } = makeQueue({ sessionTokenLimit: 100 })
     const job = await queue.submit(jobRequest())

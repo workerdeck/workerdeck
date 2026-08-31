@@ -256,11 +256,7 @@ export class JobQueue {
     if (running) {
       running.canceled = true
       running.killReason = 'canceled'
-      await this.#finalize(running, {
-        usage: { tokens: running.estimatedTokens, totalCostUsd: 0, numTurns: 0 },
-        status: 'canceled',
-        error: 'canceled',
-      })
+      await this.#finalize(running, this.#abortPatch(running, 'canceled'))
       return running.record.info
     }
     if (record.info.status !== 'queued') {
@@ -385,26 +381,32 @@ export class JobQueue {
     job.unsubscribe = runner.subscribe((event) => void this.#handleEvent(job, event))
   }
 
+  /**
+   * How a run that never produced a `turn_result` is written down. There is no authoritative
+   * usage for such a run, so it reports the tokens counted from the message stream, no cost
+   * and no turns. `turn_result` is the one path that does NOT come through here — it has real
+   * numbers — which is exactly the distinction five inline copies of this used to hide.
+   */
+  #abortPatch(job: RunningJob, error: string): Partial<JobInfo> {
+    return {
+      usage: { tokens: job.estimatedTokens, totalCostUsd: 0, numTurns: 0 },
+      status: job.canceled ? 'canceled' : 'failed',
+      error,
+    }
+  }
+
   #kill(job: RunningJob, reason: string): void {
     if (job.finalized || job.killReason) {
       return
     }
     job.killReason = reason
     if (job.parkedAt !== undefined) {
-      void this.#finalize(job, {
-        usage: { tokens: job.estimatedTokens, totalCostUsd: 0, numTurns: 0 },
-        status: job.canceled ? 'canceled' : 'failed',
-        error: reason,
-      })
+      void this.#finalize(job, this.#abortPatch(job, reason))
       return
     }
     void job.runner.interrupt().catch(() => {})
     job.forceTimer = setTimeout(() => {
-      void this.#finalize(job, {
-        usage: { tokens: job.estimatedTokens, totalCostUsd: 0, numTurns: 0 },
-        status: job.canceled ? 'canceled' : 'failed',
-        error: reason,
-      })
+      void this.#finalize(job, this.#abortPatch(job, reason))
     }, this.#options.killGraceMs ?? 5000)
     job.forceTimer.unref?.()
   }
@@ -467,19 +469,11 @@ export class JobQueue {
         return
       }
       case 'session_error': {
-        await this.#finalize(job, {
-          usage: { tokens: job.estimatedTokens, totalCostUsd: 0, numTurns: 0 },
-          status: job.canceled ? 'canceled' : 'failed',
-          error: job.killReason ?? event.message,
-        })
+        await this.#finalize(job, this.#abortPatch(job, job.killReason ?? event.message))
         return
       }
       case 'session_closed': {
-        await this.#finalize(job, {
-          usage: { tokens: job.estimatedTokens, totalCostUsd: 0, numTurns: 0 },
-          status: job.canceled ? 'canceled' : 'failed',
-          error: job.killReason ?? 'session closed before completing',
-        })
+        await this.#finalize(job, this.#abortPatch(job, job.killReason ?? 'session closed before completing'))
         return
       }
       default: {
