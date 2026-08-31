@@ -54,10 +54,17 @@ quietly coercing. Each engine declares an **`EngineCapabilities` record** — se
 switching on the engine name:
 
 - `permissionMode` is Claude Code's vocabulary. A provider session runs `default`,
-  `bypassPermissions` and `dontAsk`; a codex session runs `default`, `acceptEdits` and
-  `bypassPermissions`, mapped onto codex's own sandbox (read-only / workspace-write / full
-  access) plus its ask policy. Asking for a mode outside the record is a **400**, and a profile
-  whose `defaults.permissionMode` is outside it fails `createWorkerServer` at startup.
+  `bypassPermissions` and `dontAsk`; a codex session runs `default`, `acceptEdits`,
+  `bypassPermissions` and `auto`, mapped onto codex's own sandbox (read-only / workspace-write /
+  full access) plus its ask policy. Asking for a mode outside the record is a **400**, and a
+  profile whose `defaults.permissionMode` is outside it fails `createWorkerServer` at startup.
+- **`auto` means the same word on both engines and a different mechanism.** It is codex's own
+  "Approve for me": workspace-write plus ask, with approvals routed to codex's risk-assessing
+  subagent rather than to you. That is a third axis — *who reviews* — independent of the sandbox
+  and ask axes. The asymmetry worth knowing before you rely on it: the Claude engine's `auto`
+  classifier is operator-configurable (`autoMode.environment`, with allow / soft_deny /
+  hard_deny), while codex's reviewer is a fixed, OpenAI-prompted subagent with no configuration
+  surface at all.
 - Codex approvals ride the **same permission surface** as Claude's: the binary's ask channels
   (command escalations, file changes, permission grants, questions, MCP elicitations) arrive as
   pending approvals, answerable from any client or over REST. One semantic difference, carried
