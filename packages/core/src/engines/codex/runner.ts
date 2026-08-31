@@ -1384,12 +1384,16 @@ export class CodexRunner implements Runner {
         return
       }
       const index = payload.contentIndex ?? payload.summaryIndex ?? 0
-      // The method rides the key: the two reasoning streams must never share a section boundary.
-      const key = `${payload.itemId ?? ''}:${method}`
+      const agent = this.#agentFor(params)
+      // Both the agent and the method ride the key. sectionIndex lives on the root turn, and whether
+      // app-server item ids are unique across a turn's threads is unverified (docs/GOTCHAS.md
+      // §Codex), so two agents must not be able to share a section counter; the two reasoning
+      // streams must never share a section boundary either.
+      const key = `${agent?.toolUseId ?? ''}:${payload.itemId ?? ''}:${method}`
       const previous = active.sectionIndex.get(key)
       active.sectionIndex.set(key, index)
       const separator = previous !== undefined && index > previous ? '\n\n' : ''
-      this.#emitDelta({ type: 'thinking_delta', thinking: separator + payload.delta }, this.#agentFor(params)?.toolUseId ?? null)
+      this.#emitDelta({ type: 'thinking_delta', thinking: separator + payload.delta }, agent?.toolUseId ?? null)
     }
   }
 
