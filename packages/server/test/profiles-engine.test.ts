@@ -4,36 +4,10 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import { createVfs } from '@workerdeck/sandbox'
-import type { Runner, SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
+import type { SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
 import type { ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type EngineRunnerContext, type WorkerServer } from '../src/index.ts'
-
-function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
-  return {
-    id,
-    pendingApprovals: [],
-    start: async () => {},
-    info: (): SessionInfo => ({
-      id,
-      status: 'idle',
-      cwd: config.cwd ?? '',
-      profile: config.profile,
-      model: config.model,
-      createdAt: Date.now(),
-      lastSeq: 0,
-      pendingPermissionCount: 0,
-    }),
-    subscribe: () => () => {},
-    sendMessage: () => {},
-    setTitle: () => {},
-    resolvePermission: () => false,
-    interrupt: async () => {},
-    setPermissionMode: async () => {},
-    setModel: async () => {},
-    fail: () => {},
-    close: () => {},
-  }
-}
+import { fakeRunner, idleQuery } from './helpers.ts'
 
 let running: WorkerServer | undefined
 let configDir: string | undefined
@@ -507,15 +481,3 @@ describe('provider profiles and engine selection', () => {
     expect(((await res.json()) as { session: SessionInfo }).session.engine).toBe('claude')
   })
 })
-
-function idleQuery() {
-  return {
-    [Symbol.asyncIterator]() {
-      return this
-    },
-    next: () => new Promise<never>(() => {}),
-    interrupt: async () => {},
-    setModel: async () => {},
-    close: () => {},
-  }
-}

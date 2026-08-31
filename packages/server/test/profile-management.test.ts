@@ -2,35 +2,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
-import type { ProfileInfo, SessionInfo } from '@workerdeck/protocol'
+import type { ProfileInfo } from '@workerdeck/protocol'
 import { createFileProfileStore, createMemoryProfileStore, createWorkerServer, type WorkerServer } from '../src/index.ts'
-
-function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
-  return {
-    id,
-    pendingApprovals: [],
-    start: async () => {},
-    info: (): SessionInfo => ({
-      id,
-      status: 'idle',
-      cwd: config.cwd ?? '',
-      profile: config.profile,
-      createdAt: Date.now(),
-      lastSeq: 0,
-      pendingPermissionCount: 0,
-    }),
-    subscribe: () => () => {},
-    sendMessage: () => {},
-    setTitle: () => {},
-    resolvePermission: () => false,
-    interrupt: async () => {},
-    setPermissionMode: async () => {},
-    setModel: async () => {},
-    fail: () => {},
-    close: () => {},
-  }
-}
+import { fakeRunner } from './helpers.ts'
 
 let running: WorkerServer | undefined
 let tempDir: string | undefined

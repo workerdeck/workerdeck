@@ -4,74 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
-import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { JobEvent, JobInfo, ProfileInfo, QueueServerFrame, QueueStats, ServerFrame, SessionInfo } from '@workerdeck/protocol'
+import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { JobEvent, JobInfo, ProfileInfo, QueueServerFrame, QueueStats, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
-
-// `models` makes the fake query answer `supportedModels`, which is what makes a runner emit `capabilities`.
-function fakeHarness(models?: Array<Record<string, unknown>>) {
-  const messages: SDKMessage[] = []
-  let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
-  let done = false
-  const captured: { options?: Options; inputs: SDKUserMessage[] } = { inputs: [] }
-  const interrupt = vi.fn(async () => {})
-  const setModel = vi.fn(async () => {})
-
-  const emit = (msg: SDKMessage) => {
-    if (waiter) {
-      const resolve = waiter
-      waiter = null
-      resolve({ value: msg, done: false })
-    } else {
-      messages.push(msg)
-    }
-  }
-  const end = () => {
-    done = true
-    if (waiter) {
-      const resolve = waiter
-      waiter = null
-      resolve({ value: undefined, done: true })
-    }
-  }
-  const query = {
-    [Symbol.asyncIterator]() {
-      return this
-    },
-    next(): Promise<IteratorResult<SDKMessage>> {
-      const buffered = messages.shift()
-      if (buffered !== undefined) {
-        return Promise.resolve({ value: buffered, done: false })
-      }
-      if (done) {
-        return Promise.resolve({ value: undefined, done: true })
-      }
-      return new Promise((resolve) => {
-        waiter = resolve
-      })
-    },
-    interrupt,
-    setModel,
-    close: end,
-    ...(models
-      ? {
-          supportedModels: vi.fn(async () => models),
-          supportedCommands: vi.fn(async () => []),
-        }
-      : {}),
-  } as unknown as Query
-
-  const queryFn = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => {
-    captured.options = params.options
-    void (async () => {
-      for await (const input of params.prompt as AsyncIterable<SDKUserMessage>) {
-        captured.inputs.push(input)
-      }
-    })()
-    return query
-  }
-  return { emit, end, captured, interrupt, setModel, queryFn }
-}
+import { fakeHarness, frameCollector, listenOn } from './helpers.ts'
 
 const initMessage = {
   type: 'system',
@@ -91,38 +27,6 @@ const initMessage = {
   uuid: 'uuid-init',
 } as unknown as SDKMessage
 
-function frameCollector(ws: WebSocket) {
-  const frames: ServerFrame[] = []
-  const waiters: Array<{ match: (f: ServerFrame) => boolean; resolve: (f: ServerFrame) => void }> = []
-  ws.on('message', (data) => {
-    const frame = JSON.parse(String(data)) as ServerFrame
-    frames.push(frame)
-    for (let i = waiters.length - 1; i >= 0; i--) {
-      if (waiters[i]!.match(frame)) {
-        waiters[i]!.resolve(frame)
-        waiters.splice(i, 1)
-      }
-    }
-  })
-  const waitFor = (match: (f: ServerFrame) => boolean, timeoutMs = 2000): Promise<ServerFrame> => {
-    const existing = frames.find(match)
-    if (existing) {
-      return Promise.resolve(existing)
-    }
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('timed out waiting for frame')), timeoutMs)
-      waiters.push({
-        match,
-        resolve: (f) => {
-          clearTimeout(timer)
-          resolve(f)
-        },
-      })
-    })
-  }
-  return { frames, waitFor }
-}
-
 let running: WorkerServer | undefined
 afterEach(async () => {
   await running?.close()
@@ -135,8 +39,7 @@ async function startServer(harness: ReturnType<typeof fakeHarness>) {
     allowedCwdRoots: ['/tmp'],
     buildRunnerConfig: (req) => ({ ...req, queryFn: harness.queryFn }),
   })
-  const { port } = await running.listen(0, '127.0.0.1')
-  return { base: `http://127.0.0.1:${port}/v1`, wsBase: `ws://127.0.0.1:${port}/v1` }
+  return listenOn(running)
 }
 
 describe('createWorkerServer', () => {

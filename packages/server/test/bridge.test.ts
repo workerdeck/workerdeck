@@ -1,51 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
-import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { ServerFrame, SessionInfo, ToolCallRequestFrame } from '@workerdeck/protocol'
+import type { SessionInfo, ToolCallRequestFrame } from '@workerdeck/protocol'
 import type { ToolExecutionResult } from '@workerdeck/core'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
-
-function idleHarness() {
-  const query = {
-    [Symbol.asyncIterator]() {
-      return this
-    },
-    next: () => new Promise<IteratorResult<SDKMessage>>(() => {}),
-    interrupt: async () => {},
-    setModel: async () => {},
-    close: () => {},
-  } as unknown as Query
-  return (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => {
-    void params
-    return query
-  }
-}
-
-function frameCollector(ws: WebSocket) {
-  const frames: ServerFrame[] = []
-  const waiters: Array<{ match: (f: ServerFrame) => boolean; resolve: (f: ServerFrame) => void }> = []
-  ws.on('message', (data) => {
-    const frame = JSON.parse(String(data)) as ServerFrame
-    frames.push(frame)
-    for (let i = waiters.length - 1; i >= 0; i--) {
-      if (waiters[i]!.match(frame)) {
-        waiters[i]!.resolve(frame)
-        waiters.splice(i, 1)
-      }
-    }
-  })
-  const waitFor = (match: (f: ServerFrame) => boolean, timeoutMs = 2000): Promise<ServerFrame> => {
-    const existing = frames.find(match)
-    if (existing) {
-      return Promise.resolve(existing)
-    }
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('timed out waiting for frame')), timeoutMs)
-      waiters.push({ match, resolve: (f) => (clearTimeout(timer), resolve(f)) })
-    })
-  }
-  return { frames, waitFor }
-}
+import { frameCollector, idleHarness, listenOn } from './helpers.ts'
 
 let running: WorkerServer | undefined
 const results: Array<{ sessionId: string; executionId: string; result: ToolExecutionResult }> = []
@@ -66,8 +24,7 @@ async function startServer(bridgeTimeoutMs?: number) {
       onResult: (sessionId, executionId, result) => results.push({ sessionId, executionId, result }),
     },
   })
-  const { port } = await running.listen(0, '127.0.0.1')
-  return { base: `http://127.0.0.1:${port}/v1`, wsBase: `ws://127.0.0.1:${port}/v1` }
+  return listenOn(running)
 }
 
 async function createSession(base: string): Promise<SessionInfo> {

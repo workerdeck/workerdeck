@@ -1,42 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
-import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { ServerFrame, SessionEvent, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
+import { fakeHarness, listenOn } from './helpers.ts'
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
-
-function fakeHarness() {
-  const captured: SDKUserMessage[] = []
-  let done = false
-  let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
-  const query = {
-    [Symbol.asyncIterator]() {
-      return this
-    },
-    next(): Promise<IteratorResult<SDKMessage>> {
-      if (done) {
-        return Promise.resolve({ value: undefined, done: true })
-      }
-      return new Promise((resolve) => {
-        waiter = resolve
-      })
-    },
-    close: () => {
-      done = true
-      waiter?.({ value: undefined, done: true })
-    },
-  } as unknown as Query
-  const queryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }) => {
-    void (async () => {
-      for await (const input of params.prompt) {
-        captured.push(input)
-      }
-    })()
-    return query
-  }
-  return { captured, queryFn }
-}
 
 let running: WorkerServer | undefined
 afterEach(async () => {
@@ -50,8 +19,7 @@ async function start(harness: ReturnType<typeof fakeHarness>) {
     allowedCwdRoots: ['/tmp'],
     buildRunnerConfig: (req) => ({ ...req, queryFn: harness.queryFn }),
   })
-  const { port } = await running.listen(0, '127.0.0.1')
-  return { base: `http://127.0.0.1:${port}/v1`, wsBase: `ws://127.0.0.1:${port}/v1` }
+  return listenOn(running)
 }
 
 async function createSession(base: string): Promise<string> {
@@ -117,7 +85,7 @@ describe('session attachments', () => {
       )
       await settle()
 
-      const sent = harness.captured.at(-1)!
+      const sent = harness.captured.inputs.at(-1)!
       expect(sent.message.content).toEqual([
         {
           type: 'image',
@@ -146,7 +114,7 @@ describe('session attachments', () => {
     await withSocket(wsBase, id, async (ws) => {
       ws.send(JSON.stringify({ type: 'user_message', text: '', attachmentIds: [uploaded.attachment.id] }))
       await settle()
-      expect(harness.captured.at(-1)!.message.content).toEqual([
+      expect(harness.captured.inputs.at(-1)!.message.content).toEqual([
         {
           type: 'image',
           source: { type: 'base64', media_type: 'image/png', data: PNG.toString('base64') },
@@ -167,7 +135,7 @@ describe('session attachments', () => {
     await withSocket(wsBase, id, async (ws) => {
       ws.send(JSON.stringify({ type: 'user_message', text: 'read it', attachmentIds: [uploaded.attachment.id] }))
       await settle()
-      expect(harness.captured.at(-1)!.message.content).toEqual([
+      expect(harness.captured.inputs.at(-1)!.message.content).toEqual([
         {
           type: 'text',
           text: '<attachment name="notes.txt" type="text/plain">\nhello there\n</attachment>',
@@ -230,7 +198,7 @@ describe('session attachments', () => {
       ws.send(JSON.stringify({ type: 'user_message', text: 'look', attachmentIds: ['nope'] }))
       await settle()
       expect(errors.join()).toMatch(/unknown attachment\(s\): nope/)
-      expect(harness.captured).toHaveLength(0)
+      expect(harness.captured.inputs).toHaveLength(0)
     })
   })
 

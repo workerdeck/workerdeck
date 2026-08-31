@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
-import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
 import type { CreateSessionRequest, JobInfo, ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import { ParkableRunner } from './parkable-runner.ts'
 import {
@@ -14,6 +13,7 @@ import {
   type EngineRunnerContext,
   type WorkerServer,
 } from '../src/index.ts'
+import { fakeRunner, idleQuery } from './helpers.ts'
 
 let running: WorkerServer | undefined
 const tempDirs: string[] = []
@@ -29,39 +29,6 @@ function tempDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix))
   tempDirs.push(dir)
   return dir
-}
-
-// Echoes `config.scope` the way every real runner does — what `buildRunner` asserts on.
-function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
-  let title: string | undefined
-  return {
-    id,
-    pendingApprovals: [],
-    start: async () => {},
-    info: (): SessionInfo => ({
-      id,
-      status: 'idle',
-      cwd: config.cwd ?? '',
-      profile: config.profile,
-      model: config.model,
-      createdAt: Date.now(),
-      lastSeq: 0,
-      pendingPermissionCount: 0,
-      scope: config.scope,
-      title,
-    }),
-    subscribe: () => () => {},
-    sendMessage: () => {},
-    setTitle: (next) => {
-      title = next
-    },
-    resolvePermission: () => false,
-    interrupt: async () => {},
-    setPermissionMode: async () => {},
-    setModel: async () => {},
-    fail: () => {},
-    close: () => {},
-  }
 }
 
 function sandboxed(): ProfileInfo {
@@ -223,7 +190,7 @@ describe('session scope', () => {
     const configDir = tempDir('cw-scope-wake-')
     const buildRunnerConfig = vi.fn((req: CreateSessionRequest) => ({
       ...req,
-      queryFn: (() => neverQuery()) as never,
+      queryFn: (() => idleQuery()) as never,
     }))
     const base = await startServer({
       profiles: [sandboxed(), { name: 'claude', configDir }],
@@ -548,7 +515,7 @@ describe('cwd for a filesystem-less engine', () => {
     const configDir = tempDir('cw-scope-claude-')
     const base = await startServer({
       profiles: [sandboxed(), { name: 'claude', configDir }],
-      buildRunnerConfig: (req) => ({ ...req, queryFn: (() => neverQuery()) as never }),
+      buildRunnerConfig: (req) => ({ ...req, queryFn: (() => idleQuery()) as never }),
     })
     expect((await createSession(base, 'operator', { profile: 'sandboxed' })).status).toBe(201)
     const missing = await createSession(base, 'operator', { profile: 'claude' })
@@ -563,16 +530,3 @@ describe('cwd for a filesystem-less engine', () => {
     expect((await createSession(base, 'operator', { profile: 'sandboxed', cwd: roots })).status).toBe(201)
   })
 })
-
-// A query that never yields — the claude sessions here are only ever built.
-function neverQuery() {
-  return {
-    [Symbol.asyncIterator]() {
-      return this
-    },
-    next: () => new Promise<never>(() => {}),
-    interrupt: async () => {},
-    setModel: async () => {},
-    close: () => {},
-  }
-}
