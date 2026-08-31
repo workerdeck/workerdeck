@@ -41,6 +41,6 @@ export const api = {
   setUiState: (openDocId: string | undefined) => call<void>('/api/ui-state', { method: 'PUT', body: JSON.stringify({ openDocId }) }),
 }
 
-export type UiIntent = { type: 'open_doc'; docId: string } | { type: 'doc_deleted'; docId: string }
+export type { UiIntent } from '../../src/app/state.ts'
 
 export type { Doc, User }
