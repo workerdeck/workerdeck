@@ -1,22 +1,10 @@
 import { useEffect, useState } from 'react'
 
-/**
- * The brand mark's pulse as characters (`docs/assets/BRAND.md`, "The loading
- * state"), 150ms a frame so one cycle is the mark's 0.6s clock.
- *
- * `U+25C6/7/8` are East-Asian **ambiguous width**: they can render double-width
- * under an East-Asian locale and shift every line with them. Safe only where
- * the glyph is centred in a fixed-width box (the terminal theme's gutter cell).
- * Anything writing to a real terminal must use the ASCII set instead.
- */
 export const PULSE_FRAMES = ['⋄', '◇', '◈', '◆'] as const
 export const PULSE_MS = 150
 
-/** The resting state: stopping the animation lands on the complete mark rather
- * than a half-drawn frame. */
 export const PULSE_REST = PULSE_FRAMES[PULSE_FRAMES.length - 1]
 
-/** The OS-level "stop moving things" setting. */
 export const usePrefersReducedMotion = (): boolean => {
   const [reduced, setReduced] = useState(false)
   useEffect(() => {
@@ -32,8 +20,6 @@ export const usePrefersReducedMotion = (): boolean => {
   return reduced
 }
 
-/** The current pulse frame, ticking while `animated`; holds at rest under
- * reduced motion. */
 export const usePulse = (animated: boolean): string => {
   const reduced = usePrefersReducedMotion()
   const running = animated && !reduced

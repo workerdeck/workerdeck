@@ -115,12 +115,6 @@ import {
 import type { ComponentType } from 'react'
 import { cn } from '../../lib/utils.ts'
 
-/**
- * A curated glyph set — **never a namespace import over lucide**: `import * as`
- * defeats tree-shaking and costs the VS Code sidebar bundle 927 KB against
- * 77 KB for these. An unlisted-but-valid name draws {@link Folder}; grow the
- * set freely, each addition is ~400 bytes.
- */
 const GLYPHS: Record<string, ComponentType<{ className?: string }>> = {
   anchor: Anchor,
   atom: Atom,
@@ -235,9 +229,6 @@ const GLYPHS: Record<string, ComponentType<{ className?: string }>> = {
   zap: Zap,
 }
 
-/** A project's icon — the render side of protocol's `ProjectIcon`. An image
- * icon cannot take the row's colour (an `<img>`-embedded SVG is its own
- * document); a repo that wants that should declare a glyph. */
 export function ProjectIcon({
   icon,
   src,
@@ -245,12 +236,7 @@ export function ProjectIcon({
   className,
 }: {
   icon: ProjectIconSpec | undefined
-  /** Resolved bytes for the `image` arm — an object URL or a data URL. **The
-   * caller fetches**, because who can differs per client: a VS Code webview
-   * cannot reach the gateway and must be handed a data URL by its extension
-   * host. Absent draws nothing. */
   src?: string
-  /** The project's name, for the alt text. */
   name?: string
   className?: string
 }) {
@@ -261,16 +247,7 @@ export function ProjectIcon({
     if (!src) {
       return null
     }
-    return (
-      <img
-        src={src}
-        alt=""
-        aria-hidden
-        title={name}
-        // `object-contain`: a declared icon is whatever aspect the repo checked in.
-        className={cn('inline-block size-3 shrink-0 object-contain', className)}
-      />
-    )
+    return <img src={src} alt="" aria-hidden title={name} className={cn('inline-block size-3 shrink-0 object-contain', className)} />
   }
   const Glyph = GLYPHS[icon.name] ?? Folder
   return <Glyph className={cn('inline-block size-3 shrink-0', className)} />

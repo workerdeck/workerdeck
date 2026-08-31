@@ -10,13 +10,10 @@ export interface ContextDialogProps {
   className?: string
 }
 
-/** The CLI reports category colors as its own theme token names ('inactive',
- * 'promptBorder', ...), not CSS colors — only pass through what CSS can render. */
 const cssColor = (color: string): string | undefined => (typeof CSS !== 'undefined' && CSS.supports('color', color) ? color : undefined)
 
 const usageTint = (pct: number) => (pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-warning' : 'bg-accent')
 
-/** What is in the model's context window right now, category by category. */
 export function ContextDialog({ usage, open, onOpenChange, className }: ContextDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -41,8 +38,6 @@ export function ContextDialog({ usage, open, onOpenChange, className }: ContextD
                   style={{ width: `${Math.min(100, Math.max(2, usage.percentage))}%` }}
                 />
               </div>
-              {/* Codex reports occupancy with no breakdown, so an engine can
-                  send a real reading and an empty `categories`. */}
               {usage.categories.length > 0 ? (
                 <div className="mt-5">
                   <h3 className="text-label font-medium text-fg-3">Breakdown</h3>

@@ -12,14 +12,12 @@ export type QuestionBehaviorMeta = {
   description: string
 }
 
-/** The AskUserQuestion policies surfaced on job/session creation forms. */
 export const QUESTION_BEHAVIORS: QuestionBehaviorMeta[] = [
   { value: 'auto', label: 'Auto-answer', description: 'pick each question’s recommended option' },
   { value: 'ask', label: 'Ask', description: 'wait for a watcher or webhook controller to answer' },
   { value: 'deny', label: 'Disabled', description: 'the agent is told to decide on its own' },
 ]
 
-/** Extract well-formed questions from an AskUserQuestion permission request's input. */
 export const parseUserQuestions = (input: Record<string, unknown>): UserQuestion[] => {
   const raw = Array.isArray(input.questions) ? input.questions : []
   return raw.flatMap((entry): UserQuestion[] => {
@@ -46,8 +44,6 @@ type Selection = { labels: string[]; other: string; otherActive: boolean }
 
 const EMPTY_SELECTION: Selection = { labels: [], other: '', otherActive: false }
 
-/** A question's answer string: chosen label(s) (multi-select comma-joined), with any
- * free-text "Other" appended — the value the CLI expects in `updatedInput.answers`. */
 const answerFor = (selection: Selection): string => {
   const parts = [...selection.labels]
   if (selection.otherActive && selection.other.trim()) {
@@ -57,18 +53,12 @@ const answerFor = (selection: Selection): string => {
 }
 
 export interface QuestionPromptProps {
-  /** A pending permission whose toolName is 'AskUserQuestion'. */
   request: PermissionRequest
-  /** Allow the tool with `updatedInput` (the original input plus `answers`). */
   onAnswer: (requestId: string, updatedInput: Record<string, unknown>) => void
-  /** Deny the tool — the model proceeds without an answer. */
   onDismiss: (requestId: string, message?: string) => void
   className?: string
 }
 
-/** Interactive form for the AskUserQuestion tool. Renders nothing usable when
- * `parseUserQuestions` finds no questions — the caller should fall back to a
- * generic `PermissionPrompt` in that case. */
 export function QuestionPrompt({ request, onAnswer, onDismiss, className }: QuestionPromptProps) {
   const questions = parseUserQuestions(request.input)
   const [selections, setSelections] = useState<Selection[]>(() => questions.map(() => EMPTY_SELECTION))

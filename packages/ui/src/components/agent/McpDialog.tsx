@@ -13,17 +13,10 @@ export interface McpDialogProps {
   sessionId: string | undefined
   open: boolean
   onOpenChange: (open: boolean) => void
-  /**
-   * Whether this engine can reconnect/enable/disable a server
-   * (`EngineCapabilities.mcpServerActions`). False renders the panel read-only —
-   * codex reports rich status but exposes no per-server action.
-   */
   canManageServers?: boolean
   className?: string
 }
 
-/** The engine's status vocabulary is open — anything unrecognised renders
- * neutrally rather than being forced into one of these. */
 const STATUS_VARIANT: Record<string, NonNullable<BadgeProps['variant']>> = {
   connected: 'success',
   failed: 'danger',
@@ -32,21 +25,11 @@ const STATUS_VARIANT: Record<string, NonNullable<BadgeProps['variant']>> = {
   disabled: 'neutral',
 }
 
-/**
- * The session's MCP servers, at the CLI's own `/mcp` depth: servers → one
- * server → its tools → one tool.
- *
- * Two things vary by engine: the **actions** exist only where the engine has
- * them (`canManageServers`), and **tool parameters** only where it reports a
- * schema (codex returns full JSON Schema, the Agent SDK returns none).
- */
 export function McpDialog({ client, sessionId, open, onOpenChange, canManageServers = true, className }: McpDialogProps) {
   const [servers, setServers] = useState<McpServerStatusInfo[] | undefined>()
   const [error, setError] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
   const [busyServer, setBusyServer] = useState<string | undefined>()
-  // By name rather than by object: an action replaces the whole list, and a
-  // held reference would go stale on the first Reconnect.
   const [selectedServer, setSelectedServer] = useState<string | undefined>()
   const [selectedTool, setSelectedTool] = useState<string | undefined>()
 
@@ -125,7 +108,7 @@ export function McpDialog({ client, sessionId, open, onOpenChange, canManageServ
               onAct={(action) => void act(server.name, action)}
               onSelectTool={setSelectedTool}
             />
-          ) : error && !servers ? null : ( // The strip above already said what went wrong; the empty list would claim the operator has no servers configured.
+          ) : error && !servers ? null : (
             <ServerList servers={servers} loading={loading} onSelect={setSelectedServer} />
           )}
         </DialogBody>
@@ -153,7 +136,6 @@ const ServerList = ({
   if (!servers?.length) {
     return <p className="py-6 text-center text-body-sm text-fg-4">No MCP servers configured for this session.</p>
   }
-  // Grouped by where they were configured, like the CLI's own screen.
   const scopes = [...new Set(servers.map((s) => s.scope ?? 'other'))]
   return (
     <div className="flex flex-col gap-4">
@@ -229,7 +211,6 @@ const ServerView = ({
 
       {server.error ? <div className="rounded-md bg-danger-bg px-3 py-2 text-body-sm break-words text-danger">{server.error}</div> : null}
 
-      {/* Absent, not disabled, when the engine has no per-server action. */}
       {canManage ? (
         <div className="flex gap-2">
           <Button variant="outline" size="sm" disabled={busy} onClick={() => onAct('reconnect')}>
@@ -286,8 +267,6 @@ const ToolView = ({ tool }: { tool: McpServerToolInfo }) => {
           {annotations.openWorld ? <Badge variant="warning">open world</Badge> : null}
         </div>
       ) : null}
-      {/* Engine-dependent: codex returns each tool's full JSON Schema, the
-          Agent SDK returns none at all. */}
       {tool.inputSchema !== undefined ? (
         <div>
           <h3 className="text-label font-medium text-fg-3">Parameters</h3>
@@ -304,8 +283,6 @@ const ToolView = ({ tool }: { tool: McpServerToolInfo }) => {
   )
 }
 
-/** The schema is an opaque JSON document from another process — pretty-print it,
- * and never let an unserializable value take the dialog down with it. */
 const safeSchema = (schema: unknown): string => {
   try {
     return JSON.stringify(schema, null, 2)

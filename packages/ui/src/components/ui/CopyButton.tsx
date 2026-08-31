@@ -6,8 +6,6 @@ import { cn } from '../../lib/utils.ts'
 
 export interface CopyButtonProps extends Omit<ButtonProps, 'onClick' | 'children'> {
   value: string
-  /** Draw the state as characters (`⧉` / `✓`) rather than line-art icons — for
-   * terminal-styled surfaces, where an SVG reads as another app's button. */
   glyph?: boolean
 }
 
@@ -20,10 +18,7 @@ export function CopyButton({ value, glyph, className, variant = 'ghost', size = 
       aria-label="Copy"
       className={cn('text-fg-3', className)}
       onClick={() => {
-        // `copyText` falls back for insecure origins: the dashboard on a LAN address
-        // has no `navigator.clipboard`, and `.writeText` there throws.
         void copyText(value).then((ok) => {
-          // Only tick when it really copied.
           if (!ok) {
             return
           }

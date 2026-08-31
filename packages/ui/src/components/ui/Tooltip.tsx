@@ -24,11 +24,6 @@ export const TooltipContent: FunctionComponent<
   </TooltipPrimitive.Portal>
 )
 
-/**
- * Convenience wrapper: `<Tip content="..."><Button/></Tip>`. Pass `render` when the
- * trigger must *be* an element you already have — the default wrapping span adds a box
- * that breaks any layout styling its own children (a flex tab strip).
- */
 export function Tip({
   content,
   render,

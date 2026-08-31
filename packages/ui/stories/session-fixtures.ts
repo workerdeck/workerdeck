@@ -1,19 +1,9 @@
 import { sessionState } from '@workerdeck/protocol'
 import type { SessionInfo, SessionRow, SubagentInfo } from '@workerdeck/protocol'
 
-/**
- * Canned rows for the session-list stories. Ages are offsets from *now*, not a frozen
- * timestamp: the card draws `formatRelativeTime`, so a fixed epoch drifts while a fixed
- * offset renders the same two characters forever.
- */
+// Ages are offsets from *now*, never a frozen epoch: the card draws `formatRelativeTime`, so a fixed timestamp drifts while a fixed offset renders the same two characters forever.
 const MINUTE = 60_000
 
-/**
- * Three sub-agents, one per state the step row draws. `agentType` is what makes these
- * *agents* rather than tasks (`isAgentRecord`): an agent wears the sub-agent colour and
- * opens its own frame, where a task is muted, can never be selected, and travels to its
- * transcript row instead. A fixture without it exercises the wrong half of the component.
- */
 export const AGENTS: SubagentInfo[] = [
   { toolUseId: 'a', agentType: 'Explore', description: 'Fix base-url and re-run', status: 'done', toolCount: 4 },
   { toolUseId: 'b', agentType: 'Explore', description: 'Fix base-url and re-run', status: 'running', toolCount: 7 },
@@ -55,12 +45,6 @@ export const makeRow = (patch: Partial<SessionInfo> & { id: string }, unseen = 0
   }
 }
 
-/**
- * Two agents and a task: the rule that a task can be pressed but never selected is
- * unfalsifiable against a list with no task in it. A task is a record with no
- * `agentType` — nothing was dispatched, so the row is a reference to a place in the
- * transcript rather than a thing to open.
- */
 export const MIXED: SubagentInfo[] = [
   { toolUseId: 'a', agentType: 'Explore', description: 'Fix base-url and re-run', status: 'done', toolCount: 4 },
   { toolUseId: 'b', agentType: 'fable', description: 'Fix base-url and re-run', status: 'running', toolCount: 7 },

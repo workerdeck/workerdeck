@@ -5,15 +5,6 @@ import type { ViewConfig } from '@workerdeck/protocol'
 import { SessionBrowser } from '../src/components/agent/SessionBrowser.tsx'
 import { AGENTS, makeRow } from './session-fixtures.ts'
 
-/**
- * The dashboard's list — the same `SessionItem` as the extension's, with the
- * search-and-facet chrome above it that the extension renders natively instead.
- *
- * This is the story to open when the question is about the *list*: what the
- * group headers do to the metadata line (`showProject`), what the subset line
- * says when a filter is hiding rows, and how the three hover actions sit in the
- * card's `actions` slot.
- */
 const meta: Meta<typeof SessionBrowser> = {
   title: 'Sessions/SessionBrowser',
   component: SessionBrowser,
@@ -47,8 +38,6 @@ const ROWS = [
   makeRow({ id: '5', title: 'Grid layout exploration', status: 'closed' } as never),
 ]
 
-/** Live config, because the facets are the point — a frozen `config` prop makes
- * every control in the filter bar inert and the story a screenshot. */
 function Browser(props: Partial<React.ComponentProps<typeof SessionBrowser>>) {
   const [config, setConfig] = useState<ViewConfig>({ ...DEFAULT_VIEW_CONFIG, scoped: false })
   return (
@@ -67,11 +56,8 @@ function Browser(props: Partial<React.ComponentProps<typeof SessionBrowser>>) {
   )
 }
 
-/** Grouped by state, filter bar hidden — the dashboard's default. */
 export const Default: Story = { render: () => <Browser showControls={false} /> }
 
-/** With the filter bar open, which the dashboard toggles from its title bar. */
 export const WithControls: Story = { render: () => <Browser showControls /> }
 
-/** No sessions at all. */
 export const Empty: Story = { render: () => <Browser rows={[]} showControls={false} /> }

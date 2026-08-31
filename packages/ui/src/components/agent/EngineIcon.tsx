@@ -1,13 +1,6 @@
 import { cn } from '../../lib/utils.ts'
 
-/**
- * Engine marks, monochrome. Paths from `@lobehub/icons-static-svg` (MIT, ©
- * LobeHub), inlined because the React package pulls antd, `@lobehub/ui` and a
- * second copy of lucide-react.
- *
- * The marks are trademarks of their owners (Anthropic, OpenAI, Google,
- * DeepSeek, Moonshot), used here only to identify which engine a session runs on.
- */
+// Paths from `@lobehub/icons-static-svg` (MIT, © LobeHub), inlined. The marks are trademarks of their owners, used only to identify a session's engine.
 const PATHS: Record<string, { title: string; d: string }> = {
   claude: {
     title: 'Claude',
@@ -31,9 +24,6 @@ const PATHS: Record<string, { title: string; d: string }> = {
   },
 }
 
-/** Which mark a session wears. A `provider` session's *model* is the only thing
- * that says whose it is — sniffed loosely, falling through to no mark rather
- * than guessing wrong. */
 export const engineMark = (engine: string, model?: string): string | undefined => {
   if (engine === 'claude') {
     return 'claude'
@@ -63,12 +53,6 @@ export const engineMark = (engine: string, model?: string): string | undefined =
   return undefined
 }
 
-/**
- * Which engines wear their vendor's colour, and how far it reaches: `MARK` is
- * the glyph, `TEXT` the model name beside it. OpenAI has no `TEXT` entry —
- * their guidelines forbid adding colour to the mark, and their pure white/black
- * at label size outshines the session title above it. Absent = muted.
- */
 const VENDOR_MARK: Record<string, string> = {
   claude: 'text-vendor-claude',
   codex: 'text-vendor-openai',
@@ -77,20 +61,12 @@ const VENDOR_TEXT: Record<string, string> = {
   claude: 'text-vendor-claude',
 }
 
-/** The colour a session's engine mark wears. Pass it to `EngineIcon`'s
- *  `className` rather than to a parent: the svg carries its own `text-fg-3`,
- *  and only a class on the element itself is merged over it. */
 export const vendorMarkClass = (engine: string, model?: string): string => VENDOR_MARK[engineMark(engine, model) ?? ''] ?? 'text-fg-3'
 
-/** The colour the model *name* wears beside that mark. The fallback is
- *  `text-fg-3` rather than the metadata line's `text-fg-4`, so an unbranded
- *  model still sits one step above the project and gateway beside it. */
 export const vendorTextClass = (engine: string, model?: string): string => VENDOR_TEXT[engineMark(engine, model) ?? ''] ?? 'text-fg-3'
 
 export function EngineIcon({ engine, model, className }: { engine: string; model?: string; className?: string }) {
   const mark = PATHS[engineMark(engine, model) ?? '']
-  // An engine this build has never heard of still gets a slot, so the second
-  // line doesn't reflow around a missing glyph.
   if (!mark) {
     return (
       <span aria-hidden title={engine} className={cn('shrink-0 text-fg-3', className)}>

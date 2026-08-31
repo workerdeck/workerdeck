@@ -4,14 +4,8 @@ import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 import { Transcript } from '../src/components/agent/Transcript.tsx'
 import { TranscriptDensityProvider, TranscriptVariantProvider } from '../src/components/agent/transcript-variant.tsx'
 
-/**
- * Sticky prompt in both variants — the prompt of the turn you are reading
- * pins to the top of the scroller.
- */
-
 const mockItems = (): TranscriptItem[] => {
   const items: TranscriptItem[] = []
-  // Turn 1
   items.push({
     kind: 'user',
     id: 'u1',
@@ -44,7 +38,6 @@ const mockItems = (): TranscriptItem[] => {
     parentToolUseId: null,
   })
 
-  // Turn 2
   items.push({
     kind: 'user',
     id: 'u2',
@@ -77,7 +70,6 @@ const mockItems = (): TranscriptItem[] => {
     parentToolUseId: null,
   })
 
-  // Turn 3
   items.push({ kind: 'user', id: 'u3', text: 'How does the gateway decide when to park a session? And what triggers dormancy?' })
   items.push({
     kind: 'assistant_text',
@@ -87,7 +79,6 @@ const mockItems = (): TranscriptItem[] => {
     parentToolUseId: null,
   })
 
-  // Turn 4
   items.push({
     kind: 'user',
     id: 'u4',
@@ -124,7 +115,6 @@ const meta: Meta<typeof Transcript> = {
 export default meta
 type Story = StoryObj<typeof Transcript>
 
-/** Cards variant with sticky prompt — the prompt pins to the top as you scroll through the response. */
 export const Cards: Story = {
   decorators: [
     (Story) => (
@@ -145,7 +135,6 @@ export const Cards: Story = {
   },
 }
 
-/** Cards compact with sticky prompt. */
 export const CardsCompact: Story = {
   decorators: [
     (Story) => (
@@ -166,7 +155,6 @@ export const CardsCompact: Story = {
   },
 }
 
-/** Terminal variant for comparison — same data, same stickyPrompt, different renderer. */
 export const Terminal: Story = {
   decorators: [
     (Story) => (

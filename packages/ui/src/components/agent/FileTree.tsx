@@ -8,37 +8,22 @@ import { Input } from '../ui/Input.tsx'
 import { Spinner } from '../ui/Spinner.tsx'
 
 export interface FileTreeProps {
-  /** Tree state from `useHostFileTree` — this component holds none of its own. */
   tree: UseHostFileTreeResult
-  /** Optional search from `useHostFileSearch`; omit and the box is not offered. */
   search?: UseHostFileSearchResult
-  /** Path of the focused file, highlighted in the tree. */
   activePath?: string
   onOpenFile: (path: string) => void
-  /** Offered as a button in the header when given. */
   onCollapse?: () => void
   style?: CSSProperties
   className?: string
 }
 
-/** How far one level of nesting indents, in pixels. Inline rather than a Tailwind
- * class because depth is a number at runtime and `pl-${n}` is not a class. */
 const INDENT = 12
 
-/**
- * The workspace's left rail. Presentational — every piece of state comes from
- * the hooks in `@workerdeck/react`; it owns only the search query.
- *
- * Searching **replaces** the tree with matches rather than filtering it: the
- * route answers with paths from all over the project.
- */
 export function FileTree({ tree, search, activePath, onOpenFile, onCollapse, style, className }: FileTreeProps) {
   const [query, setQuery] = useState('')
   const [matches, setMatches] = useState<HostFileMatch[] | undefined>()
   const searching = query.trim().length > 0
 
-  // Debounced; an empty box means "show me the tree again", not "match
-  // everything".
   useEffect(() => {
     if (!search?.available) {
       return
@@ -115,8 +100,6 @@ export function FileTree({ tree, search, activePath, onOpenFile, onCollapse, sty
                 <li key={match.path}>
                   <Row
                     label={fileName(match.relative)}
-                    // Truncated separately, so a deep path cannot push the
-                    // filename out of the row.
                     detail={directoryOf(match.relative)}
                     title={match.relative}
                     icon={<File className="size-3.5 shrink-0 text-fg-4" />}
@@ -175,8 +158,6 @@ export function FileTree({ tree, search, activePath, onOpenFile, onCollapse, sty
   )
 }
 
-/** One clickable line. A directory and a file differ only in what the click does
- * and whether there is a chevron — visually they are the same row. */
 const Row = ({
   label,
   detail,
@@ -188,7 +169,6 @@ const Row = ({
   onClick,
 }: {
   label: string
-  /** Secondary text after the label, dimmed and the first thing to be truncated. */
   detail?: string
   title?: string
   icon: ReactNode
@@ -197,7 +177,6 @@ const Row = ({
   active?: boolean
   onClick: () => void
 }) => {
-  // `nearest` moves the minimum, so a row already visible does not jump.
   const ref = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (active) {
@@ -219,27 +198,19 @@ const Row = ({
     >
       <span className="flex size-3 shrink-0 items-center justify-center">{chevron}</span>
       {icon}
-      {/* `shrink-0` on the name and `min-w-0` on the detail: when the row runs
-          out of room the directory gives way and the filename stays whole. The
-          rail reads in the **UI font**, never mono — it is workbench chrome, and
-          independent of `transcriptFont`, which scopes to the session panel. */}
       <span className="shrink-0 truncate text-label">{label}</span>
       {detail ? <span className="min-w-0 flex-1 truncate text-label text-fg-4">{detail}</span> : null}
     </button>
   )
 }
 
-/** Last segment of a relative match. */
 const fileName = (relative: string): string => relative.slice(relative.lastIndexOf('/') + 1)
 
-/** Everything before it, or `undefined` for a file at the search root. */
 const directoryOf = (relative: string): string | undefined => {
   const cut = relative.lastIndexOf('/')
   return cut === -1 ? undefined : relative.slice(0, cut)
 }
 
-/** A symlink is reported as itself and never silently resolved — following it is
- * the next request's problem, and that request is refused if it escapes the roots. */
 const EntryIcon = ({ type }: { type: HostDirEntry['type'] }) => {
   if (type === 'symlink') {
     return <Link2 className="size-3.5 shrink-0 text-fg-4" />

@@ -1329,7 +1329,14 @@ is needed**: workers in a published library become every embedder's bootstrappin
 worker URL breaks — so the editor is configured never to ask for one (`wordBasedSuggestions` and
 `quickSuggestions` off, no diff editor). A host that wants worker-backed language services sets
 `MonacoEnvironment` itself before the first file is opened; Monaco is a singleton and nothing
-here fights that. Monaco reaches its workers with `new URL(…, import.meta.url)`,
+here fights that. Monaco's **theme is global to the namespace, not per-editor**: `api.editor.setTheme`
+takes no editor, so two `CodeEditor`s mounted at once cannot disagree about light/dark and the last
+one to observe a `data-theme` flip wins for both. `CodeEditor` follows that attribute with a
+`MutationObserver` rather than a media query — the app has a manual toggle and the attribute is what
+it writes — and treats an *unset* attribute as dark, so a host that never opted into the token themes
+still gets this package's default surface. The Monaco module is cached as a **promise**, not a
+module, so several editors mounting in one frame share one dynamic import instead of racing it.
+Monaco reaches its workers with `new URL(…, import.meta.url)`,
 which Rollup resolves at build time but **Vite's dev dep-optimizer breaks** by rewriting the
 package into `.vite/deps/` — hence `optimizeDeps.exclude: ['monaco-editor']` in `web`, without
 which Monaco silently runs its worker code on the main thread. Any Vite-based embedder needs the

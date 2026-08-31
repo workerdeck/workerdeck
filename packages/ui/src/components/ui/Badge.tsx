@@ -21,15 +21,12 @@ const badgeVariants = cva('inline-flex items-center gap-1.5 rounded-full border 
 })
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {
-  /** Render a leading status dot in the variant's color. */
   dot?: boolean
 }
 
 export function Badge({ className, variant = 'neutral', mono, dot, children, ...props }: BadgeProps) {
   return (
     <span data-slot="badge" className={cn(badgeVariants({ variant, mono, className }))} {...props}>
-      {/* `self-center` so a caller that baseline-aligns the badge gets the *text* as
-          the contributed baseline, not the dot's box. */}
       {dot ? <span aria-hidden className="size-1.5 shrink-0 self-center rounded-full bg-current" /> : null}
       {children}
     </span>

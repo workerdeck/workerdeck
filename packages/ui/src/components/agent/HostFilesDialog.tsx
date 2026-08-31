@@ -11,17 +11,11 @@ import { formatBytes } from '../../lib/format.ts'
 
 export interface HostFilesDialogProps {
   client: WorkerDeckClient
-  /** The session's working directory — the browser is rooted here. */
   cwd: string | undefined
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-/**
- * Browse the project the session is working in. Rooted at the session's cwd,
- * not at the server's `hostFiles.roots` — the roots are the *security* boundary
- * and the server enforces them on every request. Read-only.
- */
 export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDialogProps) {
   const [path, setPath] = useState<string | undefined>(cwd)
   const [entries, setEntries] = useState<HostDirEntry[]>([])
@@ -50,8 +44,6 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
     [client],
   )
 
-  // Navigation is explicit (`list`) rather than an effect on `path`, so walking
-  // into a folder is one request and not two.
   useEffect(() => {
     if (!open) {
       return
@@ -65,7 +57,6 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
     }
   }, [open, cwd, list])
 
-  // Debounced; an empty box is "show me the directory again".
   useEffect(() => {
     if (!open || !cwd) {
       return
@@ -196,8 +187,6 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
   )
 }
 
-/** A symlink is reported as itself and never silently resolved — following it is
- * the next request's problem, and that request is refused if it escapes the roots. */
 const EntryIcon = ({ type }: { type: HostDirEntry['type'] }) => {
   if (type === 'dir') {
     return <Folder className="size-3.5 shrink-0 text-accent" />

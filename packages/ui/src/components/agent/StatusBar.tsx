@@ -14,36 +14,19 @@ import { useTranscriptVariant } from './transcript-variant.tsx'
 
 export interface StatusBarProps {
   state: TranscriptState
-  /**
-   * Plan windows to draw, when they should not be the session's own — the panel
-   * hands over the gateway's per-profile state merged over this transcript's
-   * reading (`mergeUsage`), because a session's own `rate_limit` readings arrive
-   * only at a turn's edges. Absent = `state.rateLimits`.
-   */
   rateLimits?: Record<string, RateLimitInfo>
-  /** @deprecated Pass {@link StatusBarProps.connection}; kept so an embedder
-   * still handing over a boolean keeps working. */
+  /** @deprecated Pass {@link StatusBarProps.connection}. */
   connected?: boolean
-  /** How the client is doing at reaching the gateway. A dropped socket wins the
-   * status slot — session status over a dead socket is a stale reading. */
   connection?: ConnectionState
-  /** Where the gauges lead. Omit a handler and that gauge stays a read-only
-   * tooltip. */
   onOpenStatus?: () => void
   onOpenContext?: () => void
   onOpenUsage?: () => void
-  /** The session's own controls (model, permission mode), for
-   * `controlsSurface: 'status'` — at the end of the readings cluster. */
   controls?: ReactNode
-  /** Trailing slot — the session-actions menu, at the bar's trailing edge. */
   actions?: ReactNode
-  /** Which edge the bar sits on, so its separating rule goes on the other side.
-   * Placement is the panel's decision; this only styles it. */
   placement?: 'top' | 'bottom'
   className?: string
 }
 
-/** Ticking clock for reset countdowns — rate_limit events are sparse, so tick locally. */
 const useNow = (intervalMs = 30_000): number => {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -53,8 +36,6 @@ const useNow = (intervalMs = 30_000): number => {
   return now
 }
 
-/** The CLI reports category colors as its own theme token names ('inactive',
- * 'promptBorder', ...), not CSS colors — only pass through what CSS can render. */
 const cssColor = (color: string): string | undefined => (typeof CSS !== 'undefined' && CSS.supports('color', color) ? color : undefined)
 
 const ContextMeter = ({ usage }: { usage: ContextUsage }) => {
@@ -86,7 +67,6 @@ const ContextMeter = ({ usage }: { usage: ContextUsage }) => {
 }
 
 const RateLimitMeter = ({ label, info, now }: { label: string; info: RateLimitInfo; now: number }) => {
-  // The CLI omits utilization on some updates — show the window without a made-up 0%.
   const pct = info.utilization
   const resetsAtMs = info.resetsAt !== undefined ? info.resetsAt * 1000 : undefined
   return (
@@ -108,9 +88,6 @@ const RateLimitMeter = ({ label, info, now }: { label: string; info: RateLimitIn
         </div>
       }
     >
-      {/* Inline, not `inline-flex`: a flex container contributes its FIRST
-          item's baseline, which here is the ring's — every reading beside it
-          would sit on a different line. */}
       <span
         className={cn(
           'cursor-default font-mono text-label whitespace-nowrap',
@@ -126,8 +103,6 @@ const RateLimitMeter = ({ label, info, now }: { label: string; info: RateLimitIn
   )
 }
 
-/** A gauge that leads somewhere. `undefined` handler leaves it inert, so an
- * embedder that mounts no panels doesn't get buttons that do nothing. */
 const Slot = ({ onClick, hint, children }: { onClick?: () => void; hint: string; children: ReactNode }) => {
   if (!onClick) {
     return <>{children}</>
@@ -137,9 +112,6 @@ const Slot = ({ onClick, hint, children }: { onClick?: () => void; hint: string;
       type="button"
       onClick={onClick}
       aria-label={hint}
-      // No horizontal padding: the bar's own 6px is the inset. `leading-4`
-      // matches the label metrics inside — a button's own line box is the
-      // page's 24px one, and the strut padded the bar with nothing.
       className="rounded-md py-0.5 leading-4 transition-colors outline-none hover:bg-surface-hover focus-visible:bg-surface-hover"
     >
       {children}
@@ -171,22 +143,13 @@ export function StatusBar({
     <div
       data-slot="status-bar"
       className={cn(
-        // Baselines, not boxes: the children are boxes of different heights for
-        // reasons unrelated to their text, and centring lands their text on
-        // four different lines. The height is shared with the docked composer
-        // above it (see `Composer.tsx`) so the two strips read as one chrome.
         'flex h-[var(--wd-status-bar-height)] items-baseline gap-2 border-border bg-surface p-1.5',
-        // The rule follows the placement — except under the terminal theme at
-        // the foot, where the composer above already closes itself with one.
         placement === 'bottom' ? (terminal ? undefined : 'border-t') : 'border-b',
         className,
       )}
     >
-      {/* One slot, two meanings: connection trouble wins it. */}
       <Slot onClick={onOpenStatus} hint="Session info">
         {link === 'live' ? (
-          // `items-baseline` so the badge answers the row with its label's
-          // baseline rather than its pill's box.
           <Badge variant={meta.variant} dot={!meta.busy} className="items-baseline">
             {meta.busy ? <Spinner className="size-3 self-center text-current" /> : null}
             {meta.label}
@@ -202,7 +165,6 @@ export function StatusBar({
           </Badge>
         )}
       </Slot>
-      {/* Never a 0% meter for an engine that doesn't measure. */}
       {state.capabilities.contextUsage && state.contextUsage ? (
         <Slot onClick={onOpenContext} hint="Context breakdown">
           <ContextMeter usage={state.contextUsage} />

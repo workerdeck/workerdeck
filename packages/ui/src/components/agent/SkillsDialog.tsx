@@ -9,14 +9,10 @@ export interface SkillsDialogProps {
   skills: SkillInfo[] | undefined
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Insert a skill's opening message into the composer, if the host offers
-   * that. Omit and the dialog is read-only. */
   onUse?: (skill: SkillInfo) => void
   className?: string
 }
 
-/** Where the skill came from. The engine's set is open, so an unrecognised
- * scope renders as itself rather than being forced into a bucket. */
 const SCOPE_LABEL: Record<string, string> = {
   user: 'Personal',
   repo: 'This project',
@@ -24,13 +20,6 @@ const SCOPE_LABEL: Record<string, string> = {
   admin: 'Managed',
 }
 
-/**
- * The skills this session's engine found, grouped by scope.
- *
- * A skill is **not** a command — the model decides to use one by reading its
- * description, and there is no wire syntax that invokes it. So "Use this skill"
- * only drafts a message into the composer for the operator to edit and send.
- */
 export function SkillsDialog({ skills, open, onOpenChange, onUse, className }: SkillsDialogProps) {
   const [selected, setSelected] = useState<string | undefined>()
   const skill = skills?.find((s) => s.name === selected)
@@ -78,8 +67,6 @@ export function SkillsDialog({ skills, open, onOpenChange, onUse, className }: S
 
 const SkillList = ({ skills, onSelect }: { skills: SkillInfo[] | undefined; onSelect: (name: string) => void }) => {
   if (!skills) {
-    // Not "none" — codex can only list skills over a live child, which it does
-    // not spawn until the session has something to do.
     return <p className="py-6 text-center text-body-sm text-fg-4">Skills are listed once the session connects — send a message first.</p>
   }
   if (skills.length === 0) {
@@ -107,7 +94,6 @@ const SkillList = ({ skills, onSelect }: { skills: SkillInfo[] | undefined; onSe
                         <span className="block truncate text-label text-fg-4">{s.shortDescription ?? s.description}</span>
                       ) : null}
                     </span>
-                    {/* Listed but switched off — a different answer from absent. */}
                     {!s.enabled ? (
                       <Badge variant="neutral" className="mt-0.5 shrink-0">
                         off
@@ -138,7 +124,6 @@ const SkillView = ({ skill, onUse, onUsed }: { skill: SkillInfo; onUse?: (skill:
       {skill.description ? (
         <div>
           <h3 className="text-label font-medium text-fg-3">Description</h3>
-          {/* Verbatim: this is the text the MODEL selects on. */}
           <p className="mt-1 text-body-sm whitespace-pre-wrap text-fg-2">{skill.description}</p>
         </div>
       ) : (

@@ -5,31 +5,16 @@ import { formatAgoPrecise, formatCost } from '../../lib/format.ts'
 import { UsageMeters, useMinuteClock } from './UsageMeters.tsx'
 
 export interface UsageDialogProps {
-  /**
-   * Windows in reading order — session, weekly, then per-model weeklies.
-   *
-   * `updatedAt`/`inferredReset` ride each window because the readings do not
-   * share one clock: the panel merges the gateway's per-profile state over this
-   * session's. `inferredReset` marks the ones the *gateway* zeroed because their
-   * reset time passed with nothing newer — a floor, not a report.
-   */
   rateLimits: UsageWindowRow[]
-  /** claude.ai plan behind the windows ('max', 'pro', …), when there is one. */
   subscriptionType?: string
   engine: ProfileEngine
   totalCostUsd: number
-  /** When the *freshest* of the windows was read. Readings arrive one per turn
-   * at best, so a stale one is normal and worth saying out loud. */
   updatedAt?: number
   open: boolean
   onOpenChange: (open: boolean) => void
   className?: string
 }
 
-/**
- * The session's view of the plan: every window as a meter (see
- * {@link UsageMeters}), the plan tier, and what this session itself has cost.
- */
 export function UsageDialog({
   rateLimits,
   subscriptionType,
@@ -48,8 +33,6 @@ export function UsageDialog({
           title="Usage"
           description={engine === 'claude' ? 'Claude Code' : engine}
           actions={
-            // The CLI reports a tier ('max'), never the multiplier a
-            // subscription page shows — so this says "Max" and stops there.
             subscriptionType ? (
               <Badge variant="accent" className="mt-0.5 shrink-0 capitalize">
                 {subscriptionType}

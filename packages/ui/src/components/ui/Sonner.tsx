@@ -2,7 +2,6 @@ import { Toaster as SonnerToaster, toast } from 'sonner'
 
 export { toast }
 
-/** Token-themed toaster; relies on the [data-theme] swap, so no `theme` prop needed. */
 export function Toaster() {
   return (
     <SonnerToaster

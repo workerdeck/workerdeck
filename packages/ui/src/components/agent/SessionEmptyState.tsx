@@ -3,24 +3,15 @@ import { cn } from '../../lib/utils.ts'
 
 export interface SessionEmptyStateProps {
   cwd?: string
-  /** Whether `/command` completion is live yet — the CLI reports its commands a
-   * beat after the session starts. */
   hasCommands?: boolean
-  /** Whether the engine has reported skills. Its own flag, not a variant of
-   * `hasCommands`: a command is submitted, a skill is typed for you to edit,
-   * and an engine can have one without the other. */
   hasSkills?: boolean
-  /** Whether this gateway serves `@file` search for the session's directory. */
   canBrowseFiles?: boolean
   className?: string
 }
 
-/** What a session shows before it has said anything. Every hint is conditional
- * on the affordance actually existing. */
 export function SessionEmptyState({ cwd, hasCommands, hasSkills, canBrowseFiles, className }: SessionEmptyStateProps) {
   const hints = [
     { icon: MessageSquareText, text: 'Tell the agent what to do.' },
-    // `$` is codex's own sigil for skills; `/` stays the CLI's commands.
     ...(hasCommands ? [{ icon: SlashSquare, text: 'Type / for the CLI’s slash commands.' }] : []),
     ...(hasSkills ? [{ icon: Sparkles, text: 'Type $ to draft a message for one of the agent’s skills.' }] : []),
     ...(canBrowseFiles ? [{ icon: AtSign, text: 'Type @ to search this project’s files.' }] : []),

@@ -2,8 +2,6 @@ import { Fragment } from 'react'
 import { scanPromptTokens } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
 
-/** A sent message with its `@file` and `/command` tokens tinted. Literal text,
- * never markdown: what was typed is what was sent. */
 export function PromptTokenText({ text, className }: { text: string; className?: string }) {
   const tokens = scanPromptTokens(text)
   if (tokens.length === 0) {

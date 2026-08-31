@@ -1,16 +1,12 @@
 import { cn } from '../../lib/utils.ts'
 
 export interface ProgressRingProps {
-  /** Filled share, 0–100 (clamped). */
   value: number
-  /** Outer diameter in px. */
   size?: number
   strokeWidth?: number
   className?: string
 }
 
-/** Tiny SVG progress circle; stroke color comes from `currentColor` so callers set it
- * via text color classes (e.g. warning/danger past thresholds). */
 export function ProgressRing({ value, size = 13, strokeWidth = 2, className }: ProgressRingProps) {
   const clamped = Math.min(100, Math.max(0, value))
   const radius = (size - strokeWidth) / 2

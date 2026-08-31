@@ -69,7 +69,14 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   what keeps a pre-reset *client* (protocol 7, no reducer case) correct on its next attach.
   (2) `#activityCount` stays **monotonic** across the reset: it is the unread cursor watermarks
   diff against, and winding it back to the fresh row count would leave every stored mark above it
-  and that badge silently dead. (3) The runner adopts `new_conversation_id` as `#sdkSessionId`
+  and that badge silently dead. The client consequence of that monotonicity is the part nobody can
+  re-derive: a catch-up boundary at or past the end of `items` yields **no recap row and no dimming
+  at all**, and that arm is what covers `/clear` — the reset empties `items` while the watermark the
+  embedder stored stays where the unread cursor left it. An index into a conversation that no longer
+  exists cannot say what you missed, so the transcript renders as if nothing were new. **Clamping the
+  boundary to the item count is the tempting fix and the wrong one**: it would draw a recap row
+  claiming "nothing is new" about a session that was cleared out from under the reader.
+  (3) The runner adopts `new_conversation_id` as `#sdkSessionId`
   **immediately**, not at the follow-up `system_init` (which only comes with the next prompt) — a
   dormant record written in between must resume the fresh conversation, not replay the cleared
   one. Pending approvals deliberately survive: the runner still holds them, so
@@ -1391,6 +1398,22 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   re-attach streams the remainder visibly instead of sitting blank until the backstop fires.
   Guarding that set with "only when defined" silently re-creates exactly that blank window.
 
+- **The client end of an image ref is a bounded, promise-keyed cache, and eviction must revoke.**
+  `useToolResultImages` caches the **pending promise** per address, not the resolved URL: a
+  transcript row re-renders on every streamed delta, so an uncached resolver re-fetches the same
+  picture per token. The key is the **whole** address (`sessionId:seq:toolUseId:partIndex`) because
+  a dormant wake restarts the seqs, and a cached address that outlived its log must miss rather
+  than serve another call's pixels. The budget is **64 MB of decoded bytes** — at the corpus's
+  335 KB median, ~190 images, which no viewport holds; it exists so a session scrolled end to end
+  does not pin every screenshot it passed. `evict` drops oldest-first (`Map` iterates in insertion
+  order and a hit re-inserts, which is the whole of the LRU) and **must `URL.revokeObjectURL` as it
+  goes**: an object URL pins its blob until revoked, so freeing only the `Map` entry frees nothing
+  and the budget silently stops being one. That is the opposite decision from `useProjectIcons`,
+  which never revokes because its URLs *are* the cache. Loading is deferred `MOUNT_SETTLE_MS`
+  (150ms) after a row mounts so a fast scrub fetches nothing it flew past, with no
+  `IntersectionObserver` beside it — the transcript is virtualized, so a mounted row is already
+  within an overscan of the viewport. Once started, a load **runs to completion**: an aborted fetch
+  re-pays the whole image on the return visit.
 - **Image refs are the fifth filter, and the only one that also applies to the LIVE path.** With
   `imageRefs`, a `tool_result`'s base64 `image` parts are delivered as `image_ref` addresses
   (`media_type`, decoded `bytes`, `part_index`) and the bytes come back from the *same* route the

@@ -15,38 +15,17 @@ import {
   type Mark,
 } from './scrubber-marks.ts'
 
-/**
- * The cards variant's overview rail.
- *
- * Positions are **index space**: mark y is `itemIndex / items.length` of the
- * rail, because proportional text and variable row heights leave the cards
- * transcript with no honest pixel claim. Because they are approximate the rail
- * is an **annotation, not a scrollbar** — no drag-to-scrub, no viewport band,
- * and the container never takes the pointer (only the marks do, when
- * interactive) so the native scrollbar keeps working through the paint. Peeks
- * read `items`, never the DOM: the row a mark describes is usually unmounted.
- */
-
 export interface ScrubberProps {
   items: readonly TranscriptItem[]
   pendingApprovals: readonly PermissionRequest[]
-  /** The catch-up boundary's item index, when the recap is spliced in. */
   recapItemIndex?: number
-  /** Bookmarked item indices. Paint only — no store, no set affordance. */
   bookmarks?: readonly number[]
-  /** The sub-agent takeover's parent id, when this rail belongs to a frame —
-   * what "top level" means to the mark walk (see `buildMarks`). */
   frameParentId?: string
-  /** Whether the rail answers the pointer (hover peek, click to jump). False
-   * renders passive paint. */
   interactive?: boolean
-  /** Jump to an item index. The caller owns the row mapping — item indices are
-   * not row indices (`rowIndexForItem`). */
   onJumpToItem?: (itemIndex: number) => void
   className?: string
 }
 
-/** `first` is the member the pointer resolved to — see {@link nearestMember}. */
 const peekContent = (
   cluster: Cluster,
   first: Mark | undefined,
@@ -68,8 +47,6 @@ const peekContent = (
   } else if (first && first.kind !== 'recap') {
     const item = items[first.itemIndex]
     if (first.kind === 'turn' || first.kind === 'turnFailed') {
-      // The merged mark's peek carries both halves: the message the turn ended
-      // on, and the done-line (with its reasons, when it failed).
       const turn = first.turnIndex === undefined ? undefined : items[first.turnIndex]
       body = (
         <>
@@ -97,7 +74,6 @@ const peekContent = (
             {first.kind === 'user' ? <span data-tone="muted">{'❯ '}</span> : null}
             {excerpt(item)}
           </div>
-          {/* The first non-blank line of what the tool said back. */}
           {failure ? (
             <div className="wd-scrub-ex" data-tone="danger">
               {failure}
@@ -144,14 +120,10 @@ export function Scrubber({
     return () => observer.disconnect()
   }, [])
 
-  // A peek is a snapshot of the cluster it was opened on; drop it when the
-  // transcript changes underneath rather than describe vanished items.
   useEffect(() => {
     setPeek(null)
   }, [items])
 
-  // The peek can be taller than the space beside its mark — clamp it into the
-  // rail after it has a measured height.
   useLayoutEffect(() => {
     const element = peekRef.current
     if (!element || !peek) {
@@ -173,13 +145,10 @@ export function Scrubber({
     return built
   }, [items, frameParentId, bookmarks, recapItemIndex, pendingApprovals, railH])
 
-  /** A pointer's y in rail space. */
   const railY = (clientY: number): number => clientY - (railRef.current?.getBoundingClientRect().top ?? 0)
 
   const activate = (cluster: Cluster, clientY: number) => {
     if (cluster.kind === 'approval' && cluster.marks.length === 0) {
-      // The approval prompt renders below the transcript — the closest an
-      // item jump can take the reader is the tail.
       if (items.length > 0) {
         onJumpToItem?.(items.length - 1)
       }
@@ -201,8 +170,6 @@ export function Scrubber({
     )
   }
 
-  // `aria-hidden` either way: the rail duplicates what the transcript carries,
-  // and the native scrollbar stays the accessible scroll surface.
   return (
     <div ref={railRef} className={cn('wd-scrubber', className)} data-interactive={interactive || undefined} aria-hidden>
       {clusters.map((cluster, index) => (
@@ -216,8 +183,6 @@ export function Scrubber({
             ? {
                 onClick: (event) => activate(cluster, event.clientY),
                 onPointerEnter: (event) => showPeek(cluster, event.clientY),
-                // A chain-merged bar can span the rail; sliding along it
-                // retargets the peek to the member under the pointer.
                 onPointerMove: (event) => showPeek(cluster, event.clientY),
                 onPointerLeave: () => setPeek(null),
               }

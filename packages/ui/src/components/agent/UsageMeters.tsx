@@ -4,8 +4,6 @@ import { RotateCcw } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
 import { formatAgoPrecise, formatCountdown, formatRateLimitWindowLong, rateLimitWindowSeconds } from '../../lib/format.ts'
 
-/** Ticking clock for the countdowns and pace markers — a minute is the finest
- * resolution either prints. `active` is what a dialog passes its `open`. */
 export const useMinuteClock = (active = true): number => {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -21,26 +19,7 @@ export const useMinuteClock = (active = true): number => {
 
 const usageTint = (pct: number) => (pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-warning' : 'bg-accent')
 
-/**
- * The plan's rate-limit windows: how much of each is used, how that compares to
- * the pace that would spend the window exactly, and when it resets.
- *
- * The duration behind the pace marker comes from the window key (5h, 7d) —
- * the engine reports a reset time and a percentage and never a duration, so a
- * window whose key doesn't say gets no marker rather than a guessed one.
- */
-export function UsageMeters({
-  windows,
-  now,
-  className,
-}: {
-  /** In reading order — protocol's `orderUsageWindows`. */
-  windows: UsageWindowRow[]
-  /** A shared clock, when the caller already ticks one; otherwise this ticks
-   * its own while mounted. */
-  now?: number
-  className?: string
-}) {
+export function UsageMeters({ windows, now, className }: { windows: UsageWindowRow[]; now?: number; className?: string }) {
   const ownClock = useMinuteClock(now === undefined)
   const clock = now ?? ownClock
   return (
@@ -56,8 +35,6 @@ const UsageMeter = ({ window, now }: { window: UsageWindowRow; now: number }) =>
   const { key: windowKey, info, updatedAt, inferredReset } = window
   const utilization = info.utilization ?? 0
   const resetsAtMs = info.resetsAt !== undefined ? info.resetsAt * 1000 : undefined
-  // Share of the window already elapsed — where usage *would* be if it were
-  // spent evenly. Needs both a duration (from the key) and a reset time.
   const duration = rateLimitWindowSeconds(windowKey)
   const remaining = resetsAtMs !== undefined ? (resetsAtMs - now) / 1000 : undefined
   const pace =
@@ -75,8 +52,6 @@ const UsageMeter = ({ window, now }: { window: UsageWindowRow; now: number }) =>
       <div className="relative mt-2 h-2 rounded-full bg-border">
         <div
           className={cn('h-full rounded-full', usageTint(utilization))}
-          // A floor, so a barely-touched window still shows a mark instead of
-          // reading as missing data.
           style={{ width: `${Math.min(100, Math.max(2, utilization))}%` }}
         />
         {pace !== undefined ? (
@@ -96,10 +71,7 @@ const UsageMeter = ({ window, now }: { window: UsageWindowRow; now: number }) =>
         ) : null}
         {info.isUsingOverage ? <span className="text-warning">overage</span> : null}
         {info.status === 'rejected' ? <span className="text-danger">limit reached</span> : null}
-        {/* The gateway zeroed this because the reading's own reset time passed
-            with nothing newer, so 0 is a floor. */}
         {inferredReset ? <span>window reset · nothing reported since</span> : null}
-        {/* Per window: readings do not share one clock. */}
         {updatedAt && !inferredReset ? <span>{formatAgoPrecise(updatedAt, now)}</span> : null}
       </div>
     </div>

@@ -15,81 +15,39 @@ import type { TriggerSuggestion } from '../prompt-area/types.ts'
 import { cn } from '../../lib/utils.ts'
 import { formatBytes } from '../../lib/format.ts'
 
-/** Files matching an `@` query, for the composer's file trigger. Structural so
- * the ui package doesn't have to reach for the protocol's `HostFileMatch`. */
 export type ComposerFileMatch = { path: string; relative: string }
 
-/** Imperative surface for panels that draft a message the user then finishes —
- * the skills dialog's "Use this skill". Nothing here sends. */
 export type ComposerHandle = {
-  /** Append plain text at the caret's end and focus, separating it from
-   * whatever is already there. */
   insertText: (text: string) => void
-  /** Put the caret in the field, changing nothing. */
   focus: () => void
 }
 
 export interface ComposerProps {
-  /** `attachmentIds` are the staged uploads, in the order they were picked. */
   onSend: (text: string, attachmentIds: string[]) => void
   onInterrupt: () => void
   busy: boolean
-  /** Disable input entirely (session failed/closed). */
   disabled?: boolean
   placeholder?: string
-  /** Slash commands offered as autocomplete; picked ones render as chips. */
   commands?: SlashCommandInfo[]
-  /**
-   * Skills offered under a **`$`** popover of their own — codex's sigil, kept
-   * separate from `/` because the two behave differently. Picking one inserts
-   * editable text and sends nothing; no engine parses `$skillname` as syntax,
-   * which is why these can never resolve to a chip the way `commands` do.
-   */
   skills?: SkillInfo[]
-  /** Host-file search behind the `@` trigger. Omit to leave `@` inert — a
-   * gateway without host files has nothing to complete. */
   onSearchFiles?: (query: string, options: { signal: AbortSignal }) => Promise<ComposerFileMatch[]>
-  /** Attachment staging (see `useAttachments`). Omit for a text-only composer. */
   attachments?: UseAttachmentsResult
-  /** Left side of the toolbar row (mode selects, …). */
   toolbar?: ReactNode
-  /**
-   * `'stacked'` (default) gives the buttons a row of their own under the field.
-   * `'inline'` puts field and buttons on ONE line, growing as the message does —
-   * for a host whose session controls live in its own chrome.
-   */
   layout?: 'stacked' | 'inline'
-  /**
-   * Terminal theme only: the cell the composer draws on. **It has to be
-   * passed** — the composer sits outside the transcript's scroller, so it
-   * establishes a second {@link TerminalSurface}, and one handed no metrics
-   * falls back to the 13/18 default and puts the caret on a different column
-   * from the text above it.
-   */
   fontSize?: number
   lineHeight?: number
-  /** Terminal theme only; see {@link TerminalAffordances}. */
   affordances?: TerminalAffordances | boolean
   className?: string
   ref?: Ref<ComposerHandle>
 }
 
-/** CLI names may carry display annotations (e.g. "foo (MCP)") the parser rejects. */
 const cleanName = (name: string) => name.replace(/\s*\(MCP\)$/i, '')
 
-/**
- * What a picked skill types into the composer: the engine's own `defaultPrompt`,
- * else `$name` — codex's native way of referring to a skill in prompt text.
- * Ordinary text, ending in a space; nothing is submitted or parsed back out.
- */
 export const skillPrompt = (skill: SkillInfo): string => {
   const base = skill.defaultPrompt?.trim() || `$${skill.name}`
   return /\s$/.test(base) ? base : base + ' '
 }
 
-/** Ranks a haystack set against the typed query: 2 for a prefix hit, 1 for a
- * substring, 0 for no match. Shared so commands and skills sort as one list
- * rather than two concatenated ones. */
 const matchScore = (query: string, haystacks: string[]): number => {
   const needle = query.toLowerCase()
   const lowered = haystacks.map((s) => s.toLowerCase())
@@ -99,18 +57,6 @@ const matchScore = (query: string, haystacks: string[]): number => {
   return lowered.some((h) => h.includes(needle)) ? 1 : 0
 }
 
-/**
- * Framed prompt input built on prompt-area's contentEditable.
- *
- * Three completions ride the same field: `/` (commands) and `$` (skills) are
- * local and filter instantly, `@` searches the host filesystem, debounced and
- * abortable. A command resolves to a **chip** because the CLI really does parse
- * `/name` out of the message; a skill resolves to plain editable **text**
- * because no engine parses `$name` as syntax.
- *
- * Files arrive three ways — paperclip, drop, paste — and the upload starts the
- * moment one lands rather than at send time.
- */
 export function Composer({
   onSend,
   onInterrupt,
@@ -139,8 +85,6 @@ export function Composer({
     ref,
     () => ({
       insertText: (text: string) => {
-        // A space in front only when there is something to separate from, so a
-        // draft into an empty composer doesn't start with one.
         const prefix = plainText.length > 0 && !/\s$/.test(plainText) ? ' ' : ''
         bind.ref.current?.appendText(prefix + text)
         focus()
@@ -154,7 +98,6 @@ export function Composer({
     const configured = []
     const usableSkills = (skills ?? []).filter((s) => s.enabled)
     if (commands && commands.length > 0) {
-      // The CLI list can contain the same skill name from several sources — first wins.
       const seen = new Set<string>()
       const unique = commands.flatMap((c) => {
         const name = cleanName(c.name)
@@ -169,8 +112,6 @@ export function Composer({
           onSearch: (query: string): TriggerSuggestion[] => {
             const scored: Array<{ score: number; suggestion: TriggerSuggestion }> = []
             for (const c of unique) {
-              // "wrapup" should find "dev:wrapup" — the bare half of a
-              // namespaced name is what people type.
               const score = matchScore(query, [c.name, ...(c.aliases ?? []), ...c.name.split(':')])
               if (score === 0) {
                 continue
@@ -187,16 +128,12 @@ export function Composer({
             scored.sort((a, b) => b.score - a.score)
             return scored.map(({ suggestion }) => suggestion)
           },
-          // Chip text renders as trigger + displayText — return the bare name so
-          // the chip reads "/name" (label carries the argument hint for the menu).
           onSelect: (suggestion) => suggestion.value,
           chipClassName: 'font-mono',
         }),
       )
     }
     if (usableSkills.length > 0) {
-      // `$`, not `/`: codex's TUI completes skills on `$` and reserves `/` for
-      // commands, and its bundled prompts refer to skills that way in prose.
       configured.push(
         commandTrigger({
           char: '$',
@@ -222,8 +159,6 @@ export function Composer({
             scored.sort((a, b) => b.score - a.score)
             return scored.map(({ suggestion }) => suggestion)
           },
-          // Always text, never a chip: a skill is not wire syntax the engine
-          // parses back out, so what lands stays ordinary editable prose.
           insertAsText: (suggestion) => {
             const skill = usableSkills.find((s) => s.name === suggestion.value)
             return skill ? skillPrompt(skill) : `$${suggestion.value} `
@@ -234,7 +169,6 @@ export function Composer({
     if (onSearchFiles) {
       configured.push(
         mentionTrigger({
-          // A round trip per keystroke would be eight requests for one word.
           searchDebounceMs: 150,
           onSearch: async (query, options) => {
             const matches = await onSearchFiles(query, options)
@@ -255,8 +189,6 @@ export function Composer({
   }, [commands, skills, onSearchFiles])
 
   const staged = attachments?.items ?? []
-  // A photo on its own is a message, but send waits for the upload: an id that
-  // has not landed cannot be named.
   const canSend = !disabled && (!isEmpty || staged.length > 0) && !attachments?.uploading && !attachments?.hasFailure
 
   const submit = () => {
@@ -275,8 +207,6 @@ export function Composer({
     }
   }
 
-  // Built once, placed twice: stacked gives these a toolbar row, inline sets
-  // them either side of the field.
   const fileField =
     attachments && !attachments.disabled ? (
       <input
@@ -303,11 +233,6 @@ export function Composer({
     </>
   ) : null
 
-  // The terminal composer's gutter cell: `✕` to stop while busy, `+` to attach
-  // otherwise, `❯` when neither applies so the column is never empty and the
-  // typed line never shifts. `✕` rather than `■` because the square reads as a
-  // *state* in a column where `●` and `◆` really are states — and because it
-  // measures exactly 1ch in JetBrains Mono, which `⏹`/`⏸`/`⏻` do not.
   const gutter = busy ? (
     <GlyphButton gutter label="Interrupt" tone="yellow" onClick={onInterrupt}>
       ✕
@@ -324,7 +249,6 @@ export function Composer({
 
   const interrupting = busy && !canSend
   const submitButton = terminal ? (
-    // Terminal furniture: a glyph that lights up on hover/focus, not a pill.
     <GlyphButton label="Send" disabled={!canSend} onClick={submit} tone={canSend ? 'blue' : undefined}>
       ↵
     </GlyphButton>
@@ -367,10 +291,6 @@ export function Composer({
   ) : null
 
   if (terminal) {
-    // The CLI's own prompt on the CLI's own grid: the gutter cell aligns what
-    // you type with what you are reading. That alignment is why this is its own
-    // branch — the composer is outside the transcript's scroller and needs a
-    // surface of its own at the same metrics.
     const line = lineHeight ?? 18
     return (
       <div data-slot="composer" className={cn('shrink-0', className)}>
@@ -386,23 +306,16 @@ export function Composer({
           <div className="term-composer-body">
             {staged.length > 0 && attachments ? <AttachmentStrip attachments={attachments} /> : null}
             <div className="term-row">
-              {/* The hidden input only — its trigger lives in the gutter. */}
               {canAttach ? fileField : null}
               {gutter}
               <div className="flex min-w-0 items-start">
                 <PromptArea
                   {...bind}
                   triggers={triggers}
-                  // The agent receives markdown, so the typed marker must
-                  // survive. Left on, the editor rewrites `- ` to `• ` in the
-                  // *model*, and `• item` is not a list to any markdown parser.
-                  // Off, `insertListContinuation` still reuses the line's own
-                  // marker, so Enter after `- item` inserts `\n- `.
                   normalizeBullets={false}
                   onSubmit={submit}
                   disabled={disabled}
                   placeholder={disabled ? 'Session ended' : placeholder}
-                  // The field's metrics are the cell's: one row is one line.
                   minHeight={line}
                   maxHeight={line * 10}
                   aria-label="Message the agent"
@@ -412,9 +325,6 @@ export function Composer({
                 {submitButton}
               </div>
             </div>
-            {/* Model and mode below the prompt, on the body column so they read
-                as a continuation of the line rather than new chrome. Absent
-                under `controlsSurface: 'external'`. */}
             {toolbar ? (
               <div className="term-row">
                 <span aria-hidden className="term-gutter" />
@@ -440,19 +350,13 @@ export function Composer({
           disabled && 'opacity-60',
         )}
       >
-        {/* Above the field, like the picture you are talking about should be. */}
         {staged.length > 0 && attachments ? <AttachmentStrip attachments={attachments} /> : null}
         {inline ? (
-          // One row until the message needs more. On a single line the 28px
-          // buttons and 20px text need 4px of padding either side so their
-          // centres land on the same line.
           <div className="flex items-end gap-1 p-1">
             {attach}
             <PromptArea
               {...bind}
               triggers={triggers}
-              // See the terminal composer above: `•` is not a markdown list
-              // marker, and this rewrite reaches the sent message.
               normalizeBullets={false}
               onSubmit={submit}
               disabled={disabled}
@@ -470,8 +374,6 @@ export function Composer({
             <PromptArea
               {...bind}
               triggers={triggers}
-              // See the terminal composer above: `•` is not a markdown list
-              // marker, and this rewrite reaches the sent message.
               normalizeBullets={false}
               onSubmit={submit}
               disabled={disabled}
@@ -497,8 +399,6 @@ export function Composer({
   )
 }
 
-/** A composer action as a **character**: one cell wide and one line tall
- * (`term-glyph` in `terminal.css`), so removing it would move nothing. */
 const GlyphButton = ({
   tone,
   label,
@@ -512,9 +412,6 @@ const GlyphButton = ({
   label: string
   disabled?: boolean
   onClick: () => void
-  /** Standing in the gutter cell rather than at the row's trailing edge, so the
-   * glyph aligns to the column's start like every transcript marker instead of
-   * centring in the 2ch cell — see `.term-glyph[data-gutter]`. */
   gutter?: boolean
   className?: string
   children: ReactNode
@@ -535,19 +432,10 @@ const GlyphButton = ({
   )
 }
 
-/** Staged files as a scrolling row of chips above the field. The thumbnail is
- * the local blob, so nothing here waits on the network. */
 const AttachmentStrip = ({ attachments }: { attachments: UseAttachmentsResult }) => {
   const terminal = useTranscriptVariant() === 'terminal'
   return (
-    <div
-      className={cn(
-        'flex gap-2 overflow-x-auto',
-        // The terminal form draws no rule of its own: the composer's frame is
-        // already directly below. Geometry in `terminal.css`.
-        terminal ? 'term-attachments' : 'border-b border-border px-2 py-2',
-      )}
-    >
+    <div className={cn('flex gap-2 overflow-x-auto', terminal ? 'term-attachments' : 'border-b border-border px-2 py-2')}>
       {attachments.items.map((item) => (
         <AttachmentChip
           key={item.key}
@@ -563,9 +451,6 @@ const AttachmentStrip = ({ attachments }: { attachments: UseAttachmentsResult })
 function AttachmentChip({ item, onRetry, onRemove }: { item: StagedAttachment; onRetry: () => void; onRemove: () => void }) {
   const failed = item.status === 'failed'
   const terminal = useTranscriptVariant() === 'terminal'
-  // Corners are the whole difference: rounded and floating in `cards`, square
-  // and inside the frame here. One flag so a thumbnail and its overlays cannot
-  // disagree about their shape.
   const round = terminal ? '' : 'rounded-md'
   return (
     <div className="group relative shrink-0" title={failed ? `${item.name} — ${item.error}` : `${item.name} · ${formatBytes(item.bytes)}`}>
@@ -608,8 +493,6 @@ function AttachmentChip({ item, onRetry, onRemove }: { item: StagedAttachment; o
         aria-label={`Remove ${item.name}`}
         className={cn(
           'absolute flex size-4 items-center justify-center bg-surface text-fg-3 hover:text-fg-1',
-          // Cards hang it off the corner as a round badge; the terminal tucks
-          // it inside, squared (`terminal.css`).
           terminal ? 'term-attachment-remove' : '-top-1 -right-1 rounded-full border border-border shadow-(--shadow-xs)',
         )}
       >

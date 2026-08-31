@@ -9,18 +9,12 @@ import { toolInputPreview } from '../../lib/format.ts'
 import { toolIcon } from '../../lib/tool-icon.ts'
 import { useToolResultFetcher } from './tool-result-fetch.tsx'
 import { useToolResultImageSrc } from './tool-result-image.tsx'
-// One spelling, in the terminal folder because its height calculator is why it
-// is a constant at all. Both themes need the frame so a virtualized list does
-// not reflow when the bytes land.
 import { IMAGE_UNAVAILABLE, imagePlaceholder } from '../terminal/image-box.ts'
 
 export type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
 
 const RESULT_PREVIEW_CHARS = 2000
 
-/** Codex's built-in image tools name a host path rather than sending bytes —
- * an event log carries references, never base64. Rendering the picture means
- * reading that path back through the gateway's host-file route. */
 const IMAGE_TOOLS = new Set(['CodexImageGeneration', 'CodexImageView'])
 
 const imagePathOf = (item: ToolCallItem): string | undefined => {
@@ -34,20 +28,10 @@ const imagePathOf = (item: ToolCallItem): string | undefined => {
 
 export interface ToolCallCardProps {
   item: ToolCallItem
-  /**
-   * Reads a host file as a data URL, for tools whose output is a picture on the
-   * host. Resolves `undefined` when the gateway won't serve that path — a
-   * generated image saved outside the allowed roots (codex's default
-   * `$CODEX_HOME/generated_images/`) is one, and the card then names the path
-   * instead of showing it.
-   */
   hostImage?: (path: string) => Promise<string | undefined>
   className?: string
 }
 
-/** Badge per execution state. `pending`/`deferred` mean the work is happening
- * somewhere else (this tab's sandbox, a queue) — distinct from the model still
- * running the call itself. */
 const STATE_BADGE = {
   running: { label: 'Running', variant: 'info', busy: true },
   pending: { label: 'Executing', variant: 'info', busy: true },
@@ -56,8 +40,6 @@ const STATE_BADGE = {
   failed: { label: 'Error', variant: 'danger', busy: false },
 } as const
 
-/** The language to highlight a payload as: the extension in `file_path`/`path`
- * is the best evidence there is, and a call that names no file gets no guess. */
 const EXTENSION_LANGUAGE: Record<string, string> = {
   ts: 'ts',
   tsx: 'tsx',
@@ -132,9 +114,6 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
   const resultText = item.result?.text ?? ''
   const clipped = !fullResult && resultText.length > RESULT_PREVIEW_CHARS
   const shownResult = clipped ? resultText.slice(0, RESULT_PREVIEW_CHARS) : resultText
-  // The replay sent a head (protocol's `ToolResultBlock.truncated`): the press
-  // fetches rather than only lifting the clip, and the count must be
-  // `totalChars`, since `resultText.length` is the head's.
   const headOnly = item.result?.truncated === true
   const totalChars = item.result?.totalChars ?? resultText.length
 
@@ -173,12 +152,8 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
     </div>
   ) : null
 
-  // The picture is the point of the call — shown without expanding.
   const image = imagePath && hostImage ? <HostImage path={imagePath} load={hostImage} /> : null
 
-  // Beside the host-path picture above, never instead of it: that one is a file
-  // the engine wrote; these are image parts of the result itself, addressed by
-  // `(seq, toolUseId, part)`. A call can have both.
   const resultImages = item.result?.images?.length ? (
     <div className="flex flex-col gap-2 border-t border-border p-2.5">
       {item.result.images.map((ref) => (
@@ -223,22 +198,12 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
   )
 }
 
-/** The framed card the `cards` transcript expands into. Unhighlighted by
- * design: it is structured data in a panel, not a file. */
 const PlainPayload = ({ code, label, className }: { code: string; label: string; language?: string; className?: string }) => {
   return <CodeBlock code={code} label={label} variant="panel" className={className} />
 }
 
-/** One image part of a tool result, as the reducer holds it. */
 type ToolResultImage = NonNullable<NonNullable<ToolCallItem['result']>['images']>[number]
 
-/**
- * An image part of the result, fetched by reference. The frame is a **fixed
- * height in all three states** — placeholder, picture, failure — because the
- * transcript is virtualized and a box that appears when the bytes land shoves
- * every row below it down. Unlike `HostImage`, a failure here is *said*: there
- * is no host path in the result text to fall back on.
- */
 const ResultImage = ({ toolUseId, image }: { toolUseId: string; image: ToolResultImage }) => {
   const { src, failed } = useToolResultImageSrc({ toolUseId, ...image })
   return (
@@ -252,12 +217,6 @@ const ResultImage = ({ toolUseId, image }: { toolUseId: string; image: ToolResul
   )
 }
 
-/**
- * A picture that lives on the host, fetched through the gateway's host-file
- * route. **Silent on failure by design**: a path outside the server's allowed
- * roots is the expected case for codex's default save location, and the card's
- * result text already names where the file went.
- */
 const HostImage = ({ path, load }: { path: string; load: (path: string) => Promise<string | undefined> }) => {
   const [src, setSrc] = useState<string | undefined>()
   useEffect(() => {
@@ -269,9 +228,7 @@ const HostImage = ({ path, load }: { path: string; load: (path: string) => Promi
           setSrc(url)
         }
       })
-      .catch(() => {
-        // Not readable from here — the path in the result is the answer.
-      })
+      .catch(() => {})
     return () => {
       cancelled = true
     }

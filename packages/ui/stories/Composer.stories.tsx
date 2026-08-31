@@ -30,7 +30,6 @@ const meta: Meta<typeof Composer> = {
 export default meta
 type Story = StoryObj<typeof Composer>
 
-/** The default stacked layout with attach + toolbar below the field. */
 export const Stacked: Story = {
   args: {
     layout: 'stacked',
@@ -48,7 +47,6 @@ export const Stacked: Story = {
   },
 }
 
-/** The inline layout used in VS Code — all on one row. */
 export const Inline: Story = {
   args: {
     layout: 'inline',
@@ -66,7 +64,6 @@ export const Inline: Story = {
   },
 }
 
-/** Inline at a narrow width, like a VS Code bottom dock. */
 export const InlineNarrow: Story = {
   decorators: [
     (Story) => (

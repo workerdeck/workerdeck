@@ -5,14 +5,11 @@ import { Response } from './Response.tsx'
 
 export interface ReasoningProps {
   children: string
-  /** Auto-opens while true, auto-closes shortly after it flips false. */
   isStreaming?: boolean
   defaultOpen?: boolean
   className?: string
 }
 
-/** Collapsible extended-thinking block: open while the model is thinking, tucks itself
- * away once the thought is finished (unless the user toggled it manually). */
 export function Reasoning({ children, isStreaming = false, defaultOpen, className }: ReasoningProps) {
   const [open, setOpen] = useState(defaultOpen ?? isStreaming)
   const userToggled = useRef(false)
@@ -29,8 +26,6 @@ export function Reasoning({ children, isStreaming = false, defaultOpen, classNam
     }
   }, [isStreaming])
 
-  // Models with encrypted thinking emit the blocks but never the summary text. Then there is
-  // nothing to expand: show a bare "Thinking…" marker live, and nothing at all once it's done.
   const hasText = children.trim() !== ''
   if (!hasText && !isStreaming) {
     return null

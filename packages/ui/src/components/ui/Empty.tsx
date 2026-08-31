@@ -1,14 +1,6 @@
 import type { ReactNode } from 'react'
 import { Button } from './Button.tsx'
 
-/**
- * A view with nothing in it: icon, title, description, and at most one action.
- *
- * **At most one action, and never one the view header already offers** — creating a
- * session and adding a gateway are the native title bar's `+`, exclusively, so those
- * empty states name it in words. A button here is only for a state the header has no
- * answer to: clearing a filter, widening a scope.
- */
 export function Empty({
   icon,
   title,
@@ -36,7 +28,6 @@ export function Empty({
   )
 }
 
-/** A key or icon named inline in an empty state's description — "use the + above". */
 export function EmptyKey({ children }: { children: ReactNode }) {
   return <span className="rounded border border-border px-1 font-mono text-fg-3">{children}</span>
 }

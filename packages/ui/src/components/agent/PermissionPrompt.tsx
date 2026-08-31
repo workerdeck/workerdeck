@@ -10,21 +10,10 @@ import { toolIcon } from '../../lib/tool-icon.ts'
 export interface PermissionPromptProps {
   request: PermissionRequest
   onApprove: (requestId: string) => void
-  /** `message` is fed back to the agent, which can then try something else;
-   * `interrupt` also stops the turn. */
   onDeny: (requestId: string, message?: string, interrupt?: boolean) => void
   className?: string
 }
 
-/**
- * Generic allow/deny prompt for a pending permission request. Three outcomes,
- * not two: plain Deny lets the turn continue (with an optional reason the agent
- * reads), "Deny & stop" also interrupts.
- *
- * The heading is whatever the engine authored — composing "wants to use {tool}"
- * would be wrong for codex, where an approval is an escalation after a sandbox
- * refusal and the runner has already written the sentence that says so.
- */
 export function PermissionPrompt({ request, onApprove, onDeny, className }: PermissionPromptProps) {
   const [showInput, setShowInput] = useState(false)
   const [denying, setDenying] = useState(false)

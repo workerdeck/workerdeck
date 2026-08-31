@@ -7,15 +7,10 @@ export type FileDeliveredItem = Extract<TranscriptItem, { kind: 'file_delivered'
 
 export interface FileCardProps {
   item: FileDeliveredItem
-  /** Download URL for the delivered path (the server's session file route).
-   * Without it the card renders informational only. */
   href?: string
   className?: string
 }
 
-/** A file the agent handed over (`file_delivered`): name, size, download link.
- * The file lives in the session's in-memory VFS — the link works while the
- * session lives. */
 export function FileCard({ item, href, className }: FileCardProps) {
   const name = item.path.split('/').pop() || item.path
   return (

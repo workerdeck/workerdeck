@@ -9,23 +9,16 @@ import { CodeEditor } from './CodeEditor.tsx'
 
 export interface FileViewerProps {
   file: OpenFile | undefined
-  /** From `/fs/roots`. False renders the editor read-only rather than letting
-   * someone type into a file this gateway will refuse to write. */
   canWrite?: boolean
   onChange?: (path: string, content: string) => void
   onSave?: (path: string) => void
-  /** Discard this tab's edits — local only, no re-read. */
   onRevert?: (path: string) => void
-  /** Take the version on disk, discarding this tab's edits. */
   onReload?: (path: string) => void
-  /** Take this tab's version, over whatever is on disk now. */
   onOverwrite?: (path: string) => void
   onDismissConflict?: (path: string) => void
   className?: string
 }
 
-/** The focused file: Monaco, plus the states a file can be in that are not
- * "here is some text". No path row — the tab's tooltip carries it. */
 export function FileViewer({
   file,
   canWrite,
@@ -43,8 +36,6 @@ export function FileViewer({
 
   return (
     <div data-slot="file-viewer" className={cn('flex min-h-0 min-w-0 flex-1 flex-col bg-bg', className)}>
-      {/* The one failure with a choice attached, so it gets a bar rather than a
-          toast: which version wins is not ours to decide. */}
       {file.conflict ? (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-warning/40 bg-warning-bg px-3 py-2">
           <TriangleAlert className="size-3.5 shrink-0 text-warning" />
@@ -94,7 +85,6 @@ export function FileViewer({
         />
       )}
 
-      {/* A status strip only while there is something to say. */}
       {file.status === 'ready' && (file.saving || isDirty(file) || !canWrite) ? (
         <div className="flex shrink-0 items-center gap-2 border-t border-border px-3 py-1">
           {file.saving ? (
@@ -108,8 +98,6 @@ export function FileViewer({
             <>
               <span className="text-label text-fg-3">Unsaved changes</span>
               <span className="flex-1" />
-              {/* Revert, not reload: discard *my* edits and go back to what
-                  this tab read. Re-reading is the conflict bar's job. */}
               <Button variant="ghost" size="xs" onClick={() => onRevert?.(file.path)}>
                 Revert
               </Button>

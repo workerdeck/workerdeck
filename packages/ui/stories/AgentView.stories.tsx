@@ -9,28 +9,15 @@ import {
   type TranscriptVariant,
 } from '../src/components/agent/transcript-variant.tsx'
 
-/**
- * The agent transcript with all visual knobs exposed — font size, variant,
- * density, sticky prompt, scrubber, affordances. Use this story to test
- * the visual effect of each setting in isolation and in combination.
- *
- * The fixture exercises all message features: headings, code blocks, tables,
- * lists, inline code, blockquotes, bold, italic, links, and long markdown.
- */
-
-// ── Fixture: a rich transcript with every markdown feature ──────────────
-
 const richItems = (): TranscriptItem[] => {
   const items: TranscriptItem[] = []
 
-  // Turn 1 — user prompt with a skill chip
   items.push({
     kind: 'user',
     id: 'u1',
     text: 'Can you give me a complete overview of the data model? Include tables, code examples, and architecture notes.',
   })
 
-  // Turn 1 — assistant response with headings, lists, bold, inline code
   items.push({
     kind: 'assistant_text',
     id: 'a1',
@@ -107,7 +94,6 @@ interface SessionEvent {
 `,
   })
 
-  // Turn 2 — tool call
   items.push({
     kind: 'tool_call',
     id: 'tc1',
@@ -120,7 +106,6 @@ interface SessionEvent {
     },
   } as unknown as TranscriptItem)
 
-  // Turn 2 — response with blockquote, inline code
   items.push({
     kind: 'assistant_text',
     id: 'a2',
@@ -145,14 +130,12 @@ ALTER TABLE events ADD COLUMN metadata jsonb DEFAULT '{}';
 This is safe online because the default is not volatile and the column is nullable in effect (the default fills it).`,
   })
 
-  // Turn 3 — another user turn
   items.push({
     kind: 'user',
     id: 'u3',
     text: 'What about the relationship between sessions and the queue? How do jobs fit in?',
   })
 
-  // Turn 3 — response with a comparison table
   items.push({
     kind: 'assistant_text',
     id: 'a3',
@@ -200,7 +183,6 @@ while (true) {
 The key constraint: **\`claimNext\` must be atomic.** Two workers calling it simultaneously must never receive the same job. This is enforced at the adapter level (\`PostgresAdapter\` uses \`SELECT ... FOR UPDATE SKIP LOCKED\`).`,
   })
 
-  // Turn 4 — short follow-up
   items.push({
     kind: 'user',
     id: 'u4',
@@ -239,13 +221,6 @@ const state: TranscriptState = {
   lastSeq: 40,
 }
 
-// ── Story ────────────────────────────────────────────────────────────────
-
-/**
- * Wraps the Transcript with the variant/density context providers and
- * applies `--wd-font-size` on the container (the same mechanism
- * SessionPanel uses).
- */
 function AgentViewShell({
   variant = 'cards',
   density = 'comfortable',
@@ -342,7 +317,6 @@ const Template = (args: AgentViewArgs) => (
   </AgentViewShell>
 )
 
-/** Cards at 13px (default) — the baseline. */
 export const Default: Story = {
   render: Template,
   args: {
@@ -355,7 +329,6 @@ export const Default: Story = {
   },
 }
 
-/** Cards at 11px — the compact reading the user asked for. */
 export const Small: Story = {
   render: Template,
   args: {
@@ -368,7 +341,6 @@ export const Small: Story = {
   },
 }
 
-/** Cards at 16px — large, for high-DPI or accessibility. */
 export const Large: Story = {
   render: Template,
   args: {
@@ -381,7 +353,6 @@ export const Large: Story = {
   },
 }
 
-/** Terminal at 11px with scrubber and sticky prompt. */
 export const TerminalSmall: Story = {
   render: Template,
   args: {
@@ -394,7 +365,6 @@ export const TerminalSmall: Story = {
   },
 }
 
-/** Terminal at default size. */
 export const TerminalDefault: Story = {
   render: Template,
   args: {

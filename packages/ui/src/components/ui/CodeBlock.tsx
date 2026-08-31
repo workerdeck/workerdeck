@@ -4,20 +4,12 @@ import { cn } from '../../lib/utils.ts'
 
 export interface CodeBlockProps {
   code: string
-  /** Header label, e.g. a language or "Parameters". */
   label?: ReactNode
   copyable?: boolean
-  /**
-   * `'panel'` (default) is the framed card; `'plain'` is the terminal treatment —
-   * dim label line, flat code band, copy as a character. A prop rather than a read
-   * of the transcript variant context: a `ui/` primitive knows nothing of transcripts.
-   */
   variant?: 'panel' | 'plain'
   className?: string
 }
 
-/** Plain (unhighlighted) code panel for structured data like tool inputs. Markdown code
- * inside assistant responses is highlighted by <Response> instead. */
 export function CodeBlock({ code, label, copyable = true, variant = 'panel', className }: CodeBlockProps) {
   const plain = variant === 'plain'
   const header = label !== undefined || copyable

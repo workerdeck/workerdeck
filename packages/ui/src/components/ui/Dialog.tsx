@@ -8,11 +8,6 @@ export const Dialog = DialogPrimitive.Root
 export const DialogTrigger = DialogPrimitive.Trigger
 export const DialogClose = DialogPrimitive.Close
 
-/**
- * A dismissible panel sized for reading rather than confirming: taller than
- * {@link AlertDialogContent} and scrollable inside, because these carry lists whose
- * length is the engine's business.
- */
 export const DialogContent: FunctionComponent<DialogPrimitive.Popup.Props & { size?: 'sm' | 'md' | 'lg' }> = ({
   className,
   children,
@@ -49,11 +44,9 @@ export const DialogContent: FunctionComponent<DialogPrimitive.Popup.Props & { si
   </DialogPrimitive.Portal>
 )
 
-/** Title row with the close button, pinned above the scrolling body. */
 export const DialogHeader: FunctionComponent<{
   title: string
   description?: string
-  /** Rendered between the title and the close button. */
   actions?: React.ReactNode
 }> = ({ title, description, actions }) => (
   <div className="flex items-start gap-2 border-b border-border px-4 py-3">
@@ -73,12 +66,10 @@ export const DialogHeader: FunctionComponent<{
   </div>
 )
 
-/** The scrolling region under the header. */
 export const DialogBody: FunctionComponent<React.HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
   <div className={cn('min-h-0 flex-1 overflow-y-auto p-4', className)} {...props} />
 )
 
-/** A label/value row — the shape every one of these panels is mostly made of. */
 export const DialogRow: FunctionComponent<{
   label: string
   children: React.ReactNode
