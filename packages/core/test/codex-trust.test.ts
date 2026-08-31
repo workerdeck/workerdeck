@@ -21,17 +21,12 @@ afterAll(() => {
   }
 })
 
-/** A fresh sandbox dir. `mkdtemp` under macOS's tmpdir returns a symlinked
- * spelling (`/var/...` → `/private/var/...`), so every test here exercises the
- * canonicalization rule for free. */
 const tempDir = (): string => {
   const dir = mkdtempSync(join(tmpdir(), 'cw-codex-trust-'))
   roots.push(dir)
   return dir
 }
 
-/** `<dir>/.codex/config.toml` declaring one MCP server — the project config
- * whose silent loss this whole feature is about. */
 const projectConfig = (dir: string): string => {
   mkdirSync(join(dir, '.codex'), { recursive: true })
   const path = join(dir, '.codex', 'config.toml')
@@ -39,8 +34,6 @@ const projectConfig = (dir: string): string => {
   return path
 }
 
-/** A codex home whose config.toml carries the given trust entries, written the
- * way codex itself writes them. */
 const codexHome = (entries: Array<{ path: string; level: string }> = []): string => {
   const home = join(tempDir(), 'home')
   mkdirSync(home, { recursive: true })
@@ -70,8 +63,6 @@ describe('parseProjectTrustEntries', () => {
     )
     expect(entries?.get('/a/"b"/\\c/A')).toBe('trusted')
     expect(entries?.get('/lit/path')).toBe('untrusted')
-    // The bare form names a relative path, which can never match an absolute
-    // cwd — but it must parse rather than refuse the file.
     expect(entries?.get('bare-key')).toBe('trusted')
   })
 
@@ -114,15 +105,12 @@ describe('parseProjectTrustEntries', () => {
   })
 
   it('refuses whole-entry forms it does not interpret', () => {
-    // A trust_level could hide inside any of these; guessing risks a false notice.
     expect(parseProjectTrustEntries('projects = { "/a" = { trust_level = "trusted" } }\n')).toBeUndefined()
     expect(parseProjectTrustEntries('[projects]\n"/a" = { trust_level = "trusted" }\n')).toBeUndefined()
     expect(parseProjectTrustEntries('[[projects."/a"]]\ntrust_level = "trusted"\n')).toBeUndefined()
   })
 
   it('refuses multi-line strings anywhere — where a line reader starts lying', () => {
-    // The body of a multi-line string could be misread as sections and
-    // entries, flipping a real verdict; the file is refused instead.
     expect(parseProjectTrustEntries('[mcp_servers.x]\nnote = """\n[projects."/a"]\n"""\n')).toBeUndefined()
     expect(parseProjectTrustEntries("[a]\nnote = '''\ntext\n'''\n")).toBeUndefined()
   })
@@ -146,7 +134,6 @@ describe('untrustedProjectNotice', () => {
     const message = untrustedProjectNotice({ cwd: proj, codexHome: home })
     expect(message).toBeDefined()
     expect(message).toContain(configPath)
-    // The suggested entry names the canonical path — the only spelling codex matches.
     expect(message).toContain(`[projects."${realpathSync(proj)}"]`)
     expect(message).toContain(join(home, 'config.toml'))
   })
@@ -158,8 +145,6 @@ describe('untrustedProjectNotice', () => {
   it('stays silent for a trusted project, matching entries through realpath', () => {
     const proj = tempDir()
     projectConfig(proj)
-    // The entry is written with the symlinked tmpdir spelling; the cwd
-    // canonicalizes to /private/... — only realpath'ing both sides matches.
     const home = codexHome([{ path: proj, level: 'trusted' }])
     expect(untrustedProjectNotice({ cwd: proj, codexHome: home })).toBeUndefined()
   })
@@ -181,8 +166,6 @@ describe('untrustedProjectNotice', () => {
   it('stays silent on trust levels outside codex vocabulary and on unparseable config', () => {
     const proj = tempDir()
     projectConfig(proj)
-    // codex refuses to bootstrap on an unknown variant — that session fails
-    // loudly on its own, and a notice on top would be noise at best.
     const weird = codexHome([{ path: proj, level: 'bananas' }])
     expect(untrustedProjectNotice({ cwd: proj, codexHome: weird })).toBeUndefined()
     const broken = join(tempDir(), 'home')
@@ -197,15 +180,10 @@ describe('untrustedProjectNotice', () => {
     const rootConfig = projectConfig(root)
     const deeper = join(root, 'sub', 'deeper')
     mkdirSync(deeper, { recursive: true })
-    // Trusted git root: the whole chain is covered (measured, 0.146.0/0.149.0).
     const trusted = codexHome([{ path: root, level: 'trusted' }])
     expect(untrustedProjectNotice({ cwd: deeper, codexHome: trusted })).toBeUndefined()
-    // Untrusted: the ROOT's config is what codex would have loaded from this
-    // cwd, so the notice must name it even though the cwd has no .codex.
     const message = untrustedProjectNotice({ cwd: deeper, codexHome: codexHome() })
     expect(message).toContain(rootConfig)
-    // And the suggested trust entry targets the git root, as codex's own
-    // prompt would write it.
     expect(message).toContain(`[projects."${realpathSync(root)}"]`)
   })
 
@@ -217,8 +195,6 @@ describe('untrustedProjectNotice', () => {
     mkdirSync(deeper, { recursive: true })
     projectConfig(sub)
     const deeperConfig = projectConfig(deeper)
-    // Measured: an exact entry trusts that directory alone — inheritance flows
-    // only from the git root's entry.
     const home = codexHome([{ path: sub, level: 'trusted' }])
     const message = untrustedProjectNotice({ cwd: deeper, codexHome: home })
     expect(message).toContain(deeperConfig)
@@ -230,11 +206,8 @@ describe('untrustedProjectNotice', () => {
     const deeper = join(root, 'sub', 'deeper')
     mkdirSync(deeper, { recursive: true })
     projectConfig(deeper)
-    // Trusting the ancestor does nothing for the cwd (measured).
     const home = codexHome([{ path: root, level: 'trusted' }])
     expect(untrustedProjectNotice({ cwd: deeper, codexHome: home })).toBeDefined()
-    // And an ancestor's config is never consulted from a git-less cwd, so
-    // there is nothing to warn about from down here.
     const other = tempDir()
     projectConfig(other)
     const inner = join(other, 'inner')
@@ -251,9 +224,6 @@ describe('untrustedProjectNotice', () => {
     symlinkSync(real, link)
     const canonical = codexHome([{ path: realpathSync(real), level: 'trusted' }])
     expect(untrustedProjectNotice({ cwd: link, codexHome: canonical })).toBeUndefined()
-    // An entry written with the symlink spelling would never match codex's
-    // canonicalized cwd — but realpath'ing it can only say "trusted" for the
-    // very directory it points at, so silence errs the right way.
     const spelled = codexHome([{ path: link, level: 'trusted' }])
     expect(untrustedProjectNotice({ cwd: real, codexHome: spelled })).toBeUndefined()
   })
@@ -264,7 +234,6 @@ describe('untrustedProjectNotice', () => {
     const wt = join(base, 'wt')
     mkdirSync(main, { recursive: true })
     mkdirSync(wt, { recursive: true })
-    // The linked worktree's .git is a FILE naming <main>/.git/worktrees/<name>.
     writeFileSync(join(wt, '.git'), `gitdir: ${join(main, '.git', 'worktrees', 'wt')}\n`)
     projectConfig(wt)
     const home = codexHome([{ path: main, level: 'trusted' }])
@@ -275,8 +244,6 @@ describe('untrustedProjectNotice', () => {
   it('stays silent when the project .codex IS the codex home, and when the cwd is missing', () => {
     const proj = tempDir()
     projectConfig(proj)
-    // cwd = the directory whose .codex is CODEX_HOME itself: that config.toml
-    // is the base config and always loads — nothing is being ignored.
     expect(untrustedProjectNotice({ cwd: proj, codexHome: join(proj, '.codex') })).toBeUndefined()
     expect(untrustedProjectNotice({ cwd: join(proj, 'gone'), codexHome: codexHome() })).toBeUndefined()
   })
@@ -308,7 +275,6 @@ describe('CodexRunner untrusted-project notice', () => {
     const notices = events.filter((e) => e.type === 'session_error')
     expect(notices).toHaveLength(1)
     expect(notices[0]!.message).toContain(configPath)
-    // The session itself is fine — the notice rides the inline-notice channel.
     expect(events.some((e) => e.type === 'status_changed' && e.status === 'idle')).toBe(true)
   })
 
@@ -316,15 +282,12 @@ describe('CodexRunner untrusted-project notice', () => {
     const proj = tempDir()
     projectConfig(proj)
     const trusting = codexHome([{ path: proj, level: 'trusted' }])
-    // The profile's codexHome pin outranks the session env's CODEX_HOME —
-    // exactly as it does in the child env the session will run under.
     const pinned = await startAndCollect({
       cwd: proj,
       codexHome: trusting,
       env: { CODEX_HOME: codexHome() },
     })
     expect(pinned.some((e) => e.type === 'session_error')).toBe(false)
-    // And the same home via env alone, for symmetry.
     const viaEnv = await startAndCollect({ cwd: proj, env: { CODEX_HOME: trusting } })
     expect(viaEnv.some((e) => e.type === 'session_error')).toBe(false)
   })

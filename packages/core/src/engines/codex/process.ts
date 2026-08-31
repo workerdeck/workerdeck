@@ -2,20 +2,8 @@ import { spawn } from 'node:child_process'
 import { JsonRpcStdioConnection } from './jsonrpc.ts'
 import type { AppServerConnection } from './types.ts'
 
-/** How much stderr to keep for the exit diagnostic. The binary logs startup
- * noise there; only the tail explains a death. */
 const STDERR_TAIL_BYTES = 4096
 
-/**
- * Spawn one `codex app-server` child and frame JSON-RPC over its stdio — the
- * real {@link AppServerConnectFn}. The child's env is passed **complete**
- * (a provided spawn env replaces process.env, never merges with it), with the
- * profile's CODEX_HOME pin already applied by the runner.
- *
- * No spawn cwd: the working directory is a thread/turn parameter, and a cwd
- * that doesn't exist should fail the *turn* with codex's own error, not the
- * spawn.
- */
 export const connectAppServer = (options: { executable: string; env: Record<string, string> }): AppServerConnection => {
   const child = spawn(options.executable, ['app-server'], {
     env: options.env,
@@ -53,8 +41,7 @@ export const connectAppServer = (options: { executable: string; env: Record<stri
       closeHandler = handler
     },
     close: () => {
-      // Deliberate teardown: suppress the exit callback so a session close
-      // doesn't read as a crash, then let SIGTERM end the child.
+      // Suppress the exit callback so a deliberate close doesn't read as a crash.
       done = true
       rpc.fail('codex app-server connection closed')
       child.kill()

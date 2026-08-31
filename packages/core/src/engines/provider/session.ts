@@ -7,125 +7,28 @@ import type { ToolExecutionCall, ToolExecutionProfile, ToolExecutor } from '../.
 import { createWebFetch, type WebFetchFn, type WebFetchOptions } from './web-fetch.ts'
 
 export type EngineSessionOptions = {
-  /** Resolved session config (profile defaults already applied). */
   config: AiSdkRunnerConfig
-  /** The profile that selected this engine, when there was one. */
   profile?: ProfileInfo
-  /**
-   * Resolve the profile's provider config into a model instance. The host owns
-   * this so core never imports a provider SDK and never reads credentials —
-   * they come from the operator's environment, exactly like the Claude chain.
-   */
   resolveModel: (profile: ProfileInfo | undefined, config: AiSdkRunnerConfig) => LanguageModel
-  /**
-   * Executor for sandboxed tools. Return the browser bridge when a client is
-   * attached and the server sandbox otherwise; the seam makes them
-   * interchangeable, so this is the only place the choice is made.
-   *
-   * A function accepting a {@link ToolExecutionCall} selects **per call**:
-   * `eval_script` may run on the in-process sandbox while a custom tool goes
-   * to the browser, with no coupling between them.
-   */
   selectExecutor: (() => ToolExecutor) | ((call: ToolExecutionCall) => ToolExecutor)
-  /**
-   * Which backend `selectExecutor` returned, for the `execution_dispatched`
-   * events. A function returns the backend per call — pair it with a per-call
-   * `selectExecutor` so the event matches the executor that actually ran.
-   *
-   * When `selectExecutor` is per-call and `backend` is static, every call is
-   * reported under one label. When omitted, falls back to `'server'`.
-   */
   backend?: 'server' | 'browser' | 'managed' | 'remote' | ((call: ToolExecutionCall) => 'server' | 'browser' | 'managed' | 'remote')
-  /** Backends for the granted capabilities. Omitted ones are simply not granted. */
   capabilities?: {
     search?: ToolContextOptions['search']
     download?: ToolContextOptions['download']
-    /**
-     * Grants `web_fetch`. Pass options (or `{}`) to use the built-in
-     * {@link createWebFetch} backend — its digest pass then runs on the
-     * session's own model, billed into the turn's usage. Pass `digest: false`
-     * to skip the digest (the tool returns page markdown), a custom digest fn
-     * to bring your own model, or a complete {@link WebFetchFn} to replace the
-     * backend outright.
-     */
     webFetch?: WebFetchFn | (Omit<WebFetchOptions, 'digest'> & { digest?: WebFetchOptions['digest'] | false })
-    /** Grants `deliver_file`: the agent can hand VFS files over to the user
-     * (emitting `file_delivered`, downloadable via the server's file routes).
-     * Default true — set false to withhold it. */
     deliverFiles?: boolean
   }
-  /**
-   * A live MCP connection from {@link connectMcpTools} — the preferred way to
-   * hand MCP to a session, and the only one that can fail loudly.
-   *
-   * With this set, the session knows *which servers connected*, so two things
-   * that were previously silent become impossible: a profile naming a server
-   * that never connected refuses to build (see {@link mcpTools} for what that
-   * used to look like), and `runner.mcpServers()` answers `GET
-   * /sessions/:id/mcp` with the real per-server status instead of 501.
-   */
   mcp?: McpConnection
-  /** Authoritative tools that run server-side with server credentials (MCP).
-   * Never bridged to a client. Namespaced `<server>__<tool>` by
-   * {@link connectMcpTools}, which is how a profile grants servers by name.
-   *
-   * The bare tool set, for a host assembling one itself. Prefer {@link mcp}:
-   * a tool set alone cannot distinguish "this server connected and exposes no
-   * tools" from "this server never connected", so the check here has to be the
-   * cruder one — a declared server contributing no tools is refused. */
   mcpTools?: ToolSet
-  /**
-   * Extra host tools, each at an explicit trust level (see
-   * {@link withHostTools}). This is the seam for a tool that is neither one of
-   * the built-in capabilities nor MCP — including a **sandboxed** one, which
-   * `mcpTools` cannot express because everything in it is authoritative by
-   * construction.
-   *
-   * A sandboxed tool here rides the same {@link ToolExecutor} seam
-   * `eval_script` does, so it executes wherever `selectExecutor` points — an
-   * in-process QuickJS guest, or the browser tab that asked the question.
-   */
   tools?: Record<string, HostToolDefinition>
-  /** Extra instructions prepended to the session's system prompt. Overridden by
-   * the profile's `session.instructions` when it declares one. */
   instructions?: string
   executionLimits?: { timeoutMs?: number; memoryLimitBytes?: number }
-  /**
-   * Gate tool execution behind user approval. When this returns `true` for a
-   * given call and the session's permission mode is `'default'`, the runner
-   * emits `permission_requested` and waits for the user to approve or deny
-   * before dispatching. Bypass modes skip the check entirely.
-   *
-   * By default nothing requires approval — tools dispatch as soon as the model
-   * calls them, which is the right call for trusted pipelines and the pre-§7
-   * behavior.
-   */
   shouldApprove?: (call: { toolName: string; input: unknown }) => boolean
-  /** Timeout for permission prompts (ms). Default 120 000. */
   approvalTimeoutMs?: number
-  /**
-   * Initial scratch-filesystem contents for a **new** session, and the safe way
-   * to seed one: it is ignored outright when `config.restore` is set, because a
-   * rehydrated session brings back the files its parked turn already wrote and
-   * seeding over them destroys exactly the work that was preserved.
-   *
-   * (Hand-building `config.vfs` still works and still wins — but then the
-   * `restore ? undefined : createVfs(...)` dance is yours to get right.)
-   */
   seedVfs?: Record<string, string>
-  /**
-   * Build the session under this id rather than minting one.
-   *
-   * Forward the server's `EngineRunnerContext.id` here, always: it is set when
-   * the gateway is rehydrating a session across a restart, and a runner that
-   * ignores it comes back as a *different* session — the rebuild is refused,
-   * and every client's route and unread watermark is stranded. Ignored when
-   * `config.restore` is present, which carries its own id.
-   */
   id?: string
 }
 
-/** Which capability a wired backend yields, for grant filtering. */
 const CAPABILITY_TOOLS = {
   search: 'web_search',
   download: 'download',
@@ -133,27 +36,9 @@ const CAPABILITY_TOOLS = {
   deliverFiles: 'deliver_file',
 } as const satisfies Record<string, SessionCapability>
 
-/**
- * Assemble a model-agnostic session: provider model, capability-scoped tools,
- * a scratch VFS, and the executor that runs the sandboxed ones.
- *
- * This is the piece an operator wires into the server's `createEngineRunner`.
- *
- * The host wires the *backends*; the profile and the session request decide which
- * of them are actually granted (`profile.session`, `config.capabilities`). A
- * backend that isn't granted is simply not built into the tool set, so withholding
- * a capability costs the host no branching. No declaration anywhere = everything
- * the host wired, which is what a host that ignores profiles gets.
- */
 export const createEngineSession = (options: EngineSessionOptions): AiSdkRunner => {
-  // A rehydrated session brings its scratch filesystem back with it — the
-  // deliverables and working files the parked turn already produced. `seedVfs`
-  // is for a *new* session only, which is the whole reason it exists here
-  // rather than at each call site.
   const vfs = options.config.vfs ?? createVfs(options.config.restore ? options.config.restore.vfs : options.seedVfs)
-  // Per-call executors: wrap the selector into a routing ToolExecutor so the
-  // runner gets one interface. The selector's arity tells us which form it is:
-  // 0-arg = the original "select once" call, 1-arg = per-call routing.
+  // The selector's arity picks the form: 0-arg selects once, 1-arg routes per call.
   const isPerCall = options.selectExecutor.length > 0
   const executor: ToolExecutor = isPerCall
     ? {
@@ -168,12 +53,12 @@ export const createEngineSession = (options: EngineSessionOptions): AiSdkRunner 
         },
       }
     : (options.selectExecutor as () => ToolExecutor)()
-  // Narrowing only: the gateway has already refused a request naming a capability
-  // its profile doesn't grant, so the request value wins when present.
+  // The request value wins only because the gateway already 400s a request that widens the
+  // profile's grants; a host calling this directly owes that check itself.
   const granted = options.config.capabilities ?? options.profile?.session?.capabilities
   const isGranted = (key: keyof typeof CAPABILITY_TOOLS): boolean => granted === undefined || granted.includes(CAPABILITY_TOOLS[key])
-  // The runner doesn't exist yet while the tools are being built; these
-  // capabilities reach back into it lazily (they only ever run mid-turn).
+  // The runner does not exist yet while the tools are built; the capabilities below reach back
+  // into it lazily, and only ever run mid-turn.
   let runner: AiSdkRunner | undefined
   const webFetchCap = isGranted('webFetch') ? options.capabilities?.webFetch : undefined
   const webFetch =
@@ -223,8 +108,6 @@ export const createEngineSession = (options: EngineSessionOptions): AiSdkRunner 
       executionLimits: options.executionLimits,
       shouldApprove: options.shouldApprove,
       approvalTimeoutMs: options.approvalTimeoutMs,
-      // Only the servers this profile was granted: the /mcp screen must not
-      // report a connection the session cannot actually reach.
       reportMcpServers: options.mcp
         ? () =>
             Promise.resolve(
@@ -237,15 +120,6 @@ export const createEngineSession = (options: EngineSessionOptions): AiSdkRunner 
   return runner
 }
 
-/**
- * Refuse to build a session whose profile names an MCP server that isn't there:
- * `mcpServers` is a **declaration**, not a filter, and honouring it partially is
- * the worst failure mode this engine has (docs/GOTCHAS.md §Tool trust).
- *
- * With a {@link McpConnection} the check is exact; with a bare tool set it is the
- * cruder namespace one, so a genuinely tool-less server trips it — pass `mcp`
- * rather than weakening this.
- */
 const requireDeclaredServers = (
   profileName: string,
   declared: string[] | undefined,
@@ -277,15 +151,6 @@ const requireDeclaredServers = (
   )
 }
 
-/**
- * Restrict a connected tool set to the MCP servers a profile grants, by the
- * `<server>__<tool>` namespace {@link connectMcpTools} assigns. Undefined `servers`
- * = no declaration, so every connected server passes through.
- *
- * This is how one process-wide MCP connection serves a mixed fleet: the host
- * connects everything once, each profile grants a subset. The transport configs —
- * and any credentials in their headers — never leave the host for a profile.
- */
 const selectMcpTools = (tools: ToolSet | undefined, servers: string[] | undefined): ToolSet | undefined => {
   if (!tools || servers === undefined) {
     return tools
@@ -296,44 +161,16 @@ const selectMcpTools = (tools: ToolSet | undefined, servers: string[] | undefine
 
 export type McpConnection = {
   tools: ToolSet
-  /**
-   * One entry per configured server, connected or not — the truth a session was
-   * assembled against. Handed to {@link createEngineSession} as `mcp`, it is
-   * what `GET /sessions/:id/mcp` answers with and what makes a half-connected
-   * session refuse to build rather than run degraded.
-   */
   servers: McpServerStatusInfo[]
   close: () => Promise<void>
 }
 
-/**
- * Connect to MCP servers and return their tools, ready for {@link withMcpTools}.
- *
- * Server-side only, with server credentials: these tools are authoritative and
- * must never be bridged to a browser. `@ai-sdk/mcp` is imported lazily and is an
- * optional dependency — an operator who wires no MCP servers never needs it.
- *
- * **A stateless MCP server must answer `GET` with 405** — the client opens the
- * SSE stream with a `GET` before it sends anything, and that is the single most
- * common way an otherwise-correct mount fails (docs/GOTCHAS.md §Tool trust).
- */
 export const connectMcpTools = async (
   servers: Record<string, McpServerConfigWire>,
   options: {
-    /** `onError` may fire more than once for a single server: transport-level
-     * failures surface through the client's own uncaught-error channel as well as
-     * the connect failure. Treat it as a report, not a count. */
+    // May fire more than once per server: a transport failure surfaces through the client's
+    // uncaught-error channel as well as the connect failure.
     onError?: (name: string, error: unknown) => void
-    /**
-     * Reject if any server fails to connect, after closing the ones that did.
-     *
-     * Off by default, which is right for an operator's fleet — one unreachable
-     * server should not take a whole gateway's sessions down. Turn it **on**
-     * when the servers are the app's own: an embedder who mounts one wiki server
-     * and gets a session without it has a session that cannot do its job, and
-     * finding that out at connect time beats finding it out from a transcript
-     * where the agent apologises.
-     */
     required?: boolean
   } = {},
 ): Promise<McpConnection> => {
@@ -359,8 +196,6 @@ export const connectMcpTools = async (
       })
       clients.push(client as unknown as { close: () => Promise<void> })
       const connected = await client.tools()
-      // Namespaced so two servers exposing the same tool name cannot collide
-      // (and so a tool's origin stays legible in the transcript).
       for (const [toolName, mcpTool] of Object.entries(connected)) {
         tools[`${name}__${toolName}`] = mcpTool as ToolSet[string]
       }
@@ -368,8 +203,7 @@ export const connectMcpTools = async (
         name,
         status: 'connected',
         ...identity,
-        // Unnamespaced here: this is the server's own view of itself, and the
-        // `<server>__` prefix is this engine's routing detail.
+        // Unnamespaced: this is the server's own view of itself, and `<server>__` is routing.
         tools: Object.entries(connected).map(([toolName, mcpTool]) => toToolInfo(toolName, mcpTool)),
       })
     } catch (error) {
@@ -377,20 +211,16 @@ export const connectMcpTools = async (
       statuses.push({ name, status: 'failed', error: message, ...identity })
       options.onError?.(name, error)
       if (options.required) {
-        // Nothing is half-open: the clients already connected are closed before
-        // this leaves, or an embedder's failed create leaks a socket per attempt.
         await closeAll()
         throw new Error(`MCP server '${name}' failed to connect: ${message}`, { cause: error })
       }
-      // Otherwise one unreachable server must not take down the session; the
-      // agent simply does not get those tools.
     }
   }
 
   return { tools, servers: statuses, close: closeAll }
 }
 
-/** The connection's identity, minus its secrets — `headers` never travel. */
+// Identity minus secrets: `headers` must never travel.
 const describeServer = (server: McpServerConfigWire): Pick<McpServerStatusInfo, 'transport' | 'url' | 'command' | 'args'> => {
   if ('url' in server) {
     return { transport: server.type === 'sse' ? 'sse' : 'http', url: server.url }
@@ -398,12 +228,8 @@ const describeServer = (server: McpServerConfigWire): Pick<McpServerStatusInfo, 
   return { transport: 'stdio', command: server.command, args: server.args }
 }
 
-/**
- * The AI SDK hands back its own `Tool`, whose `inputSchema` may be a zod schema
- * or a `jsonSchema()` wrapper. Only the latter carries a JSON Schema document,
- * so that is the only case where parameters are reported — `McpServerToolInfo`
- * models the absence deliberately, and inventing one here would be worse.
- */
+// A zod `inputSchema` carries no JSON Schema document; only a `jsonSchema()` wrapper does, so
+// that is the only case parameters are reported.
 const toToolInfo = (name: string, mcpTool: unknown): McpServerToolInfo => {
   const { description, inputSchema } = (mcpTool ?? {}) as {
     description?: unknown
@@ -416,12 +242,6 @@ const toToolInfo = (name: string, mcpTool: unknown): McpServerToolInfo => {
   }
 }
 
-/**
- * Only http/sse: the AI SDK's built-in transports are the remote ones, and its
- * own docs mark stdio local-only and not deployable. A stdio server here is a
- * misconfiguration worth surfacing rather than silently dropping — the Claude
- * engine still supports stdio, since the CLI spawns those itself.
- */
 const toTransport = (server: McpServerConfigWire) => {
   if (!('url' in server)) {
     throw new Error(

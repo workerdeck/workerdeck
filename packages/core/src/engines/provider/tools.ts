@@ -4,76 +4,40 @@ import { createVfs, type SandboxVfs } from '@workerdeck/sandbox'
 import type { ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
 import type { WebFetchFn } from './web-fetch.ts'
 
-/**
- * How much authority a tool carries, which decides where it may run.
- *
- * - `sandboxed` — no ambient authority; safe to execute anywhere, including an
- *   untrusted browser tab. Its results are untrusted input.
- * - `authoritative` — runs server-side with server credentials (MCP, secret-bearing
- *   APIs). **Never bridged to a client**: bridging it would hand a browser the
- *   ability to forge authoritative results.
- */
 export type ToolTrust = 'sandboxed' | 'authoritative'
 
 export type ToolDefinition = {
   name: string
   trust: ToolTrust
-  /** The AI SDK tool. Sandboxed tools are declared WITHOUT `execute` so the loop
-   * hands them to the ToolExecutor seam rather than running them inline. */
   tool: Tool
 }
 
 export type ToolContextOptions = {
-  /** Executor for sandboxed tools. Selected per call by the host (browser bridge
-   * when a client is attached, server QuickJS otherwise). */
   executor: ToolExecutor
   sessionId: string
-  /** Scratch filesystem shared by this session's sandboxed tools. */
   vfs?: SandboxVfs
-  /** Search backend. Omitted = `web_search` is not granted at all. */
   search?: (query: string, limit: number) => Promise<Array<{ title: string; url: string; snippet?: string }>>
-  /** Document fetcher for `download`. Omitted = the tool is not granted. */
   download?: (url: string) => Promise<{ contentType?: string; text: string }>
-  /** Page digester for `web_fetch` (see {@link createWebFetch}). Omitted = the
-   * tool is not granted. */
   webFetch?: WebFetchFn
-  /** Notified when the agent hands over a VFS file via `deliver_file`, so the
-   * host can emit the `file_delivered` session event. The tool is only granted
-   * when this is set — a delivery nobody hears is not a delivery. */
   onFileDelivered?: (file: { path: string; bytes: number; description?: string }) => void
-  /** Per-call sandbox limits. */
   limits?: { timeoutMs?: number; memoryLimitBytes?: number }
-  /** Notified when a sandboxed execution is dispatched and when it settles, so
-   * the host can emit execution_* events. */
   onDispatch?: (executionId: string, toolName: string) => void
   onSettle?: (executionId: string, result: ToolExecutionResult) => void
 }
 
-/** Everything a session's tools need, plus the tool set to hand the runner. */
 export type ToolContext = {
   vfs: SandboxVfs
   tools: ToolSet
   definitions: ToolDefinition[]
-  /** Names the loop must not execute inline (they go through the executor). */
   sandboxedToolNames: string[]
 }
 
 const MAX_FILE_BYTES = 1024 * 1024
 
-/**
- * Build the capability-scoped tool set for a session.
- *
- * The agent's authority is exactly what is granted here — there are no built-in
- * filesystem or shell tools, and nothing reaches the host filesystem: `fs_*`
- * operate on an in-memory scratch VFS. Tools whose backend is not supplied are
- * simply absent rather than present-and-failing, so a model cannot be tempted
- * by a capability the operator did not grant.
- */
 export const createToolContext = (options: ToolContextOptions): ToolContext => {
   const vfs = options.vfs ?? createVfs()
   const definitions: ToolDefinition[] = []
 
-  // --- Scratch filesystem (server-side, in-memory; never the host disk) -----
   definitions.push({
     name: 'fs_list',
     trust: 'authoritative',
@@ -111,7 +75,6 @@ export const createToolContext = (options: ToolContextOptions): ToolContext => {
     }),
   })
 
-  // --- File hand-over: only when the host listens for deliveries ------------
   if (options.onFileDelivered) {
     const onFileDelivered = options.onFileDelivered
     definitions.push({
@@ -137,7 +100,6 @@ export const createToolContext = (options: ToolContextOptions): ToolContext => {
     })
   }
 
-  // --- Network capabilities: only when the host supplied a backend ----------
   if (options.search) {
     const search = options.search
     definitions.push({
@@ -205,7 +167,6 @@ export const createToolContext = (options: ToolContextOptions): ToolContext => {
     })
   }
 
-  // --- Untrusted evaluation: no `execute`, so it rides the executor seam ----
   definitions.push({
     name: 'eval_script',
     trust: 'sandboxed',
@@ -231,8 +192,6 @@ export const createToolContext = (options: ToolContextOptions): ToolContext => {
   }
 }
 
-/** Add host-side MCP tools to a context. They are ALWAYS authoritative: they run
- * server-side with server credentials, and must never be handed to a browser. */
 export const withMcpTools = (context: ToolContext, mcpTools: ToolSet): ToolContext => {
   return withHostTools(
     context,
@@ -241,28 +200,11 @@ export const withMcpTools = (context: ToolContext, mcpTools: ToolSet): ToolConte
   )
 }
 
-/** A tool the host supplies, with the trust level it is to run at. */
 export type HostToolDefinition = {
   tool: Tool
-  /**
-   * Where this tool may run. `authoritative` tools execute inline in the
-   * gateway and MUST declare `execute`; `sandboxed` ones must NOT, because the
-   * loop hands them to the {@link ToolExecutor} seam instead — which is what
-   * makes them bridgeable to an untrusted tab.
-   */
   trust: ToolTrust
 }
 
-/**
- * Add host-supplied tools to a context at an explicit trust level — the only way
- * to express a sandboxed (therefore bridgeable) host tool, since
- * {@link withMcpTools} produces authoritative tools by construction.
- *
- * Both contradictions are refused here, at assembly, rather than discovered at
- * runtime: `sandboxed` + `execute` would run inline with the gateway's ambient
- * authority, `authoritative` without `execute` would park the turn on a call no
- * executor claims. Full story: docs/GOTCHAS.md §Tool trust & the sandbox.
- */
 export const withHostTools = (context: ToolContext, hostTools: Record<string, HostToolDefinition>, kind = 'host tool'): ToolContext => {
   const entries = Object.entries(hostTools)
   if (entries.length === 0) {
@@ -273,8 +215,8 @@ export const withHostTools = (context: ToolContext, hostTools: Record<string, Ho
   const sandboxedToolNames = [...context.sandboxedToolNames]
   for (const [name, { tool: hostTool, trust }] of entries) {
     if (name in tools) {
-      // Silently overwriting would let a host tool shadow `eval_script` — or an
-      // MCP name promote untrusted execution to authoritative. Refuse instead.
+      // A collision would let a host tool shadow `eval_script`, or an MCP name promote untrusted
+      // execution to authoritative.
       throw new Error(`${kind} '${name}' collides with an existing tool of the same name`)
     }
     const executes = typeof (hostTool as { execute?: unknown }).execute === 'function'

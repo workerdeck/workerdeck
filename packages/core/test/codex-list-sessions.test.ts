@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { listCodexSessions } from '../src/engines/codex/adapter.ts'
 import type { AppServerConnectFn, AppServerConnection, AppServerThreadSummary } from '../src/engines/codex/types.ts'
 
-/** A thread/list row as 0.146.0 returns it (timestamps in epoch SECONDS). */
 const row = (over: Partial<AppServerThreadSummary> & { id: string }): AppServerThreadSummary => ({
   name: null,
   preview: 'Create a file named approved.txt',
@@ -14,7 +13,6 @@ const row = (over: Partial<AppServerThreadSummary> & { id: string }): AppServerT
   ...over,
 })
 
-/** Scripted connection: pages served by index, requests recorded, close counted. */
 const scriptedList = (pages: Array<{ data: AppServerThreadSummary[]; nextCursor?: string | null }>) => {
   const requests: Array<{ method: string; params: unknown }> = []
   const notifies: string[] = []
@@ -72,8 +70,6 @@ describe('listCodexSessions', () => {
       params: { capabilities: { experimentalApi: true } },
     })
     expect(peer.notifies).toEqual(['initialized'])
-    // The complete child env with the profile's CODEX_HOME pin (undefined
-    // entries dropped — spawn env replaces, never merges).
     expect(peer.envs[0]).toEqual({ PATH: '/usr/bin', CODEX_HOME: '/homes/codex' })
     expect(peer.closed()).toBe(1)
 
@@ -114,7 +110,6 @@ describe('listCodexSessions', () => {
       offset: 1,
     })
     expect(summaries.map((s) => s.sessionId)).toEqual(['b', 'c'])
-    // Two pages were enough for offset 1 + limit 2; the third was never asked for.
     const lists = peer.requests.filter((r) => r.method === 'thread/list')
     expect(lists).toHaveLength(2)
     expect(lists[0]!.params).toMatchObject({ sortKey: 'updated_at' })
@@ -133,8 +128,6 @@ describe('listCodexSessions', () => {
     const params = peer.requests.find((r) => r.method === 'thread/list')!.params as {
       cwd: string[]
     }
-    // The spelled form always; the canonical form too when it differs (macOS
-    // records /tmp threads under /private/tmp).
     expect(params.cwd).toContain('/tmp/project')
     expect(peer.requests.filter((r) => r.method === 'thread/list')).toHaveLength(1)
   })

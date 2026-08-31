@@ -14,9 +14,6 @@ const THREAD_RESULT = {
   reasoningEffort: 'medium',
 }
 
-/** The wire shape of the ask policy (default/acceptEdits) and its all-off
- * mirror (bypassPermissions) — granular objects, never the string vocabulary
- * (plain 'untrusted' never asks; measured against 0.146.0). */
 const GRANULAR_ASK = {
   granular: {
     sandbox_approval: true,
@@ -53,11 +50,6 @@ const USAGE_B = {
   totalTokens: 450,
 }
 
-/**
- * The `queryFn` injection pattern at the wire level: a scripted JSON-RPC peer. Requests are
- * recorded and answered by method responders; the test emits server→client
- * notifications and requests through the handlers the runner registered.
- */
 const scriptedPeer = () => {
   const requests: Array<{ method: string; params: unknown; connection: number }> = []
   const notifies: string[] = []
@@ -118,8 +110,6 @@ const scriptedPeer = () => {
   }
 }
 
-/** Scripted happy-path turn: deltas, items, usage, completion — all emitted
- * synchronously from inside the turn/start responder. */
 const scriptTurn = (
   peer: ScriptedPeer,
   script: (emit: (method: string, params: unknown) => void, turnId: string) => void,
@@ -143,11 +133,6 @@ const ofType = <T extends SessionEvent['type']>(events: SessionEvent[], type: T)
 
 describe('CodexRunner', () => {
   it("ignores a sub-agent thread's turn lifecycle and usage, but keeps its work", async () => {
-    // Reproduced against codex 0.146.0 with two spawned agents: a child thread's
-    // `turn/completed` arrived ~14s before the root's, and taking it ended the
-    // session's turn early — the sub-agent's last line became the turn result
-    // and the root's real answer, emitted afterwards, was dropped on the floor
-    // (`_docs/codex-subagent-trace.jsonl`).
     const on = scriptedPeer()
     scriptTurn(on, (emit, turnId) => {
       emit('item/completed', {
@@ -161,21 +146,18 @@ describe('CodexRunner', () => {
           agentPath: '/root/luna_1',
         },
       })
-      // The child's own turn and its usage: both must be ignored.
       emit('turn/started', { threadId: 'thread-child', turn: { id: 'turn-child', status: 'inProgress' } })
       emit('thread/tokenUsage/updated', {
         threadId: 'thread-child',
         turnId: 'turn-child',
         tokenUsage: { last: USAGE_B, total: USAGE_B, modelContextWindow: 1_000 },
       })
-      // The child's work, however, belongs in the transcript.
       emit('item/completed', {
         threadId: 'thread-child',
         turnId: 'turn-child',
         item: { id: 'item_child', type: 'agentMessage', text: 'child says hi' },
       })
       emit('turn/completed', { threadId: 'thread-child', turn: { id: 'turn-child', status: 'completed' } })
-      // Only now does the session's own turn finish, with its own answer.
       emit('item/completed', {
         threadId: 'thread-1',
         turnId,
@@ -195,14 +177,11 @@ describe('CodexRunner', () => {
     const results = ofType(events, 'turn_result')
     expect(results).toHaveLength(1)
     expect(results[0]!.result).toBe('the real answer')
-    // The child's message still reached the transcript, before the root's.
     const texts = ofType(events, 'assistant_message')
       .flatMap((e) => (Array.isArray(e.message.content) ? e.message.content : []))
       .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
       .map((c) => c.text)
     expect(texts).toEqual(['child says hi', 'the real answer'])
-    // Usage and context are the session's own, never the sub-agent's.
-    // (`input_tokens` is the Anthropic convention's uncached remainder.)
     expect(results[0]!.usage).toMatchObject({
       input_tokens: USAGE_A.inputTokens - USAGE_A.cachedInputTokens,
     })
@@ -244,7 +223,6 @@ describe('CodexRunner', () => {
       'He',
       'llo',
     ])
-    // The completed message supersedes the stream, exec-style.
     const texts = ofType(events, 'assistant_message').filter(
       (e) => Array.isArray(e.message.content) && e.message.content[0]!.type === 'text',
     )
@@ -261,7 +239,6 @@ describe('CodexRunner', () => {
     const quietEvents = collect(quiet)
     await quiet.start()
     expect(quietEvents.some((e) => e.type === 'stream_delta')).toBe(false)
-    // Suppressing deltas must not suppress the answer.
     expect(ofType(quietEvents, 'turn_result')[0]).toMatchObject({ result: 'Hello' })
   })
 
@@ -347,14 +324,8 @@ describe('CodexRunner', () => {
     const events = collect(runner)
     await runner.start()
 
-    // The JSON-RPC choreography: initialize → (initialized) → thread/start →
-    // skills/list → turn/start. skills/list rides the same thread-load seam
-    // (it needs a live child and nothing else), and being fire-and-forget it
-    // must not delay the turn — which is why it lands before it, not instead.
     expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'config/read', 'thread/start', 'skills/list', 'turn/start'])
     expect(peer.notifies).toEqual(['initialized'])
-    // experimentalApi is unconditional — granular approval policies are
-    // rejected without it, and there is no non-experimental fallback.
     expect(peer.requests[0]!.params).toMatchObject({ capabilities: { experimentalApi: true } })
     expect(peer.requests[1]!.params).toEqual({ cwd: '/tmp/project' })
     expect(peer.requests[2]!.params).toMatchObject({
@@ -374,24 +345,16 @@ describe('CodexRunner', () => {
     })
     expect(runner.sdkSessionId).toBe('thread-1')
 
-    // The record's forsworn events never occur. (permission_requested is no
-    // longer forsworn — approvals are wired — but this quiet turn asks none.)
     const types = events.map((e) => e.type)
     for (const forsworn of ['system_init']) {
       expect(types).not.toContain(forsworn)
     }
     expect(types).not.toContain('permission_requested')
-    // context_usage and rate_limit are NOT forsworn — the record declares both.
-    // They are absent here because this turn reported neither a
-    // `modelContextWindow` nor an `account/rateLimits/updated`, and a reading
-    // without its window (or without a percentage) is not a reading: the
-    // protocol is explicit that a client renders nothing rather than 0%.
     expect(types).not.toContain('context_usage')
     expect(types).not.toContain('rate_limit')
     expect(types).not.toContain('plan_info')
 
     const assistants = ofType(events, 'assistant_message')
-    // Reasoning: its own thinking message, sections joined as paragraphs.
     expect(
       assistants.some((e) =>
         (e.message.content as Array<{ type: string; thinking?: string }>).some(
@@ -399,8 +362,6 @@ describe('CodexRunner', () => {
         ),
       ),
     ).toBe(true)
-    // Command execution: tool_use at item/started, paired tool_result at completion,
-    // ids per-turn-namespaced with the raw id surviving as the suffix.
     const commandUse = assistants.find(
       (e) => Array.isArray(e.message.content) && (e.message.content[0] as { name?: string }).name === 'CodexCommand',
     )!
@@ -410,13 +371,10 @@ describe('CodexRunner', () => {
     expect(
       results.some((e) => (e.message.content as Array<{ tool_use_id?: string; content?: string }>)[0]!.tool_use_id === commandBlock.id),
     ).toBe(true)
-    // v2's object kind renders like exec's string kind did.
     const fileResult = results.find((e) => String((e.message.content as Array<{ content?: string }>)[0]!.content).includes('update: a.ts'))
     expect(fileResult).toBeDefined()
-    // The user's own echoed item is dropped: exactly one non-synthetic user message.
     expect(ofType(events, 'user_message').filter((e) => !e.synthetic)).toHaveLength(1)
 
-    // Unknown items and the plan ride sdk_event, exec-style.
     const sdkTypes = ofType(events, 'sdk_event').map((e) => e.payload.type)
     expect(sdkTypes).toContain('codex.exoticNovelty')
     expect(sdkTypes).toContain('codex.todo_list')
@@ -426,8 +384,6 @@ describe('CodexRunner', () => {
       { text: 'write', completed: false },
     ])
 
-    // Usage: summed across the turn's updates, Anthropic convention (input
-    // excludes cache, reasoning is output), totalCostUsd 0 = unknown.
     expect(ofType(events, 'turn_result')[0]).toMatchObject({
       subtype: 'success',
       isError: false,
@@ -447,7 +403,6 @@ describe('CodexRunner', () => {
   it('maps a generated image to a tool card carrying its host path', async () => {
     const peer = scriptedPeer()
     scriptTurn(peer, (emit, turnId) => {
-      // While it runs there is no path yet — only the prompt.
       emit('item/started', {
         threadId: 'thread-1',
         turnId,
@@ -471,7 +426,6 @@ describe('CodexRunner', () => {
           savedPath: '/Users/me/.codex/generated_images/flower.png',
         },
       })
-      // A result long enough to be an encoded image never reaches the log.
       emit('item/completed', {
         threadId: 'thread-1',
         turnId,
@@ -489,8 +443,6 @@ describe('CodexRunner', () => {
     const events = collect(runner)
     await runner.start()
 
-    // The finished card carries the path as a *field*, which is what a client
-    // keys an inline preview off — not a sentence it would have to parse.
     const uses = ofType(events, 'assistant_message').flatMap((e) =>
       (e.message.content as Array<{ type: string; id?: string; name?: string; input?: unknown }>).filter(
         (b) => b.type === 'tool_use' && b.name === 'CodexImageGeneration',
@@ -509,39 +461,21 @@ describe('CodexRunner', () => {
       .filter((e) => e.synthetic)
       .map((e) => (e.message.content as Array<{ content?: string }>)[0]!.content ?? '')
     expect(results.some((r) => r.includes('Saved to /Users/me/.codex/generated_images/flower.png'))).toBe(true)
-    // Never a 4000-character blob: an undocumented free-form field is not a
-    // licence to put an encoded image in the event log.
     expect(results.some((r) => r.includes('xxxx'))).toBe(false)
     expect(results.some((r) => r.includes('No saved path reported'))).toBe(true)
-    // It is not swallowed into the unknown-item channel any more.
     expect(ofType(events, 'sdk_event').map((e) => e.payload.type)).not.toContain('codex.imageGeneration')
 
-    // …and the path is announced as a produced file, which is what makes the
-    // bytes fetchable without the operator declaring `$CODEX_HOME` as a
-    // host-file root. ONE announcement despite the path being reported on both
-    // the progress and completed item: the id derives from the path.
     const produced = ofType(events, 'file_produced')
     expect(produced.map((e) => e.path)).toEqual(['/Users/me/.codex/generated_images/flower.png'])
     expect(produced[0]).toMatchObject({
       mediaType: 'image/png',
       toolUseId: expect.stringMatching(/:g1$/),
     })
-    // Stable, and derived: the same path in a rebuilt session gets the same id,
-    // so a client's cached URL survives a park/restore.
     expect(produced[0]!.fileId).toMatch(/^[0-9a-f]{32}$/)
-    // A generation with no savedPath announces nothing — there is no file.
     expect(produced.length).toBe(1)
   })
 
   it("restates the operator's [sandbox_workspace_write] on every turn instead of clobbering it", async () => {
-    // turn/start's object-form sandbox policy is serde-defaulted FIELD BY
-    // FIELD, so `{type:'workspaceWrite'}` bare means networkAccess:false and
-    // writableRoots:[] no matter what the operator configured — and we cannot
-    // simply stop sending it, because restating it is what makes a
-    // between-turns mode switch take effect. Measured against 0.149.0 with
-    // `network_access = true` set: bare → `curl: (6) Could not resolve host`,
-    // fully stated → `200`. So the policy is read from config/read (which
-    // resolves project layers for THIS cwd) and echoed back verbatim.
     const peer = scriptedPeer()
     peer.respond('config/read', () => ({
       config: {
@@ -579,10 +513,6 @@ describe('CodexRunner', () => {
   })
 
   it('leaves read-only alone — network_access is scoped to workspace-write', async () => {
-    // The setting's name is the whole story: a read-only sandbox has no
-    // network either way (measured against 0.149.0, both with the policy
-    // stated and with it omitted), so `default` mode must not inherit the
-    // workspace-write block and quietly claim a grant it does not have.
     const peer = scriptedPeer()
     peer.respond('config/read', () => ({
       config: { sandbox_workspace_write: { writable_roots: [], network_access: true } },
@@ -604,8 +534,6 @@ describe('CodexRunner', () => {
   })
 
   it('falls back to the bare policy shape when config/read is unavailable', async () => {
-    // An older binary must not fail the session over a config probe — it just
-    // gets codex's own defaults, which is exactly what shipped before.
     const peer = scriptedPeer()
     peer.respond('config/read', () => {
       throw new JsonRpcError(-32601, 'unknown variant `config/read`')
@@ -648,8 +576,6 @@ describe('CodexRunner', () => {
                   defaultPrompt: 'Generate an image of',
                 },
               },
-              // Second page, same skill: codex can report one skill under
-              // several cwds and the first wins.
               { name: 'imagegen', description: 'duplicate', scope: 'repo' },
               ...(listCalls > 1 ? [{ name: 'pdf-fill', description: 'Fill PDF forms', enabled: false }] : []),
             ],
@@ -670,10 +596,6 @@ describe('CodexRunner', () => {
     const events = collect(runner)
     await runner.start()
 
-    // The session's cwd is passed EXPLICITLY. Omitting it does not fall back to
-    // the thread's directory — measured against 0.146.0, it falls back to the
-    // app-server child's own process cwd, and a project's `.codex/skills/**`
-    // are then invisible. This assertion is the guard on that.
     expect(peer.requests.find((r) => r.method === 'skills/list')?.params).toEqual({
       cwds: ['/tmp/project'],
     })
@@ -686,25 +608,18 @@ describe('CodexRunner', () => {
         description: 'Generate images from a prompt',
         shortDescription: 'Make a picture',
         displayName: 'Image generation',
-        // Codex's own suggested opener — the field that makes a picker possible
-        // without pretending `/imagegen` is a command.
         defaultPrompt: 'Generate an image of',
         scope: 'user',
         enabled: true,
       },
     ])
 
-    // The watcher fires; the list is re-read and the new skill published.
     peer.emit('skills/changed', {})
     await vi.waitFor(() => expect(ofType(events, 'skills')).toHaveLength(2))
     const second = ofType(events, 'skills')[1]!
     expect(second.skills.map((s) => s.name)).toEqual(['imagegen', 'pdf-fill'])
-    // Listed, not hidden: "installed but off" is a different answer from
-    // "not installed".
     expect(second.skills[1]).toMatchObject({ name: 'pdf-fill', enabled: false })
 
-    // An unchanged list does not re-publish — the watcher fires per touched
-    // file and an event per keystroke would fill the log with identical rows.
     peer.emit('skills/changed', {})
     peer.emit('skills/changed', {})
     await vi.waitFor(() => expect(listCalls).toBeGreaterThanOrEqual(3))
@@ -717,17 +632,12 @@ describe('CodexRunner', () => {
       data: [{ cwd: '/tmp/project', skills: [{ name: 'scratch-notes', enabled: true }] }],
     }))
 
-    // Promptless and not resuming: the dashboard's "create a session, then type"
-    // flow. Nothing else would bring a child up, so without the probe this
-    // session would have no skill list at all until its first turn — the one
-    // place codex's own TUI has them and we did not.
     const runner = new CodexRunner({ cwd: '/tmp/project', connectFn: peer.connectFn })
     const events = collect(runner)
     void runner.start()
 
     await vi.waitFor(() => expect(ofType(events, 'skills')).toHaveLength(1))
     expect(ofType(events, 'skills')[0]!.skills.map((s) => s.name)).toEqual(['scratch-notes'])
-    // Thrown away, not adopted: no thread was started on it, and it is closed.
     expect(peer.requests.some((r) => r.method === 'thread/start')).toBe(false)
     await vi.waitFor(() => expect(peer.closed()).toBe(1))
     expect(runner.status).toBe('idle')
@@ -740,8 +650,6 @@ describe('CodexRunner', () => {
       emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
     })
 
-    // A prompt means a turn, which means a child within moments. A second
-    // spawn just to ask the same question would be pure waste.
     const runner = new CodexRunner({ cwd: '/tmp/p', prompt: 'go', connectFn: peer.connectFn })
     await runner.start()
 
@@ -756,8 +664,6 @@ describe('CodexRunner', () => {
           name: 'scratch',
           serverInfo: { name: 'scratch-mcp', version: '0.1.0', title: null },
           authStatus: 'unsupported',
-          // A MAP keyed by tool name, not an array — and carrying the full
-          // input schema, which the Agent SDK never gives us.
           tools: {
             scratch_ping: {
               name: 'scratch_ping',
@@ -770,10 +676,6 @@ describe('CodexRunner', () => {
         { name: 'broken', authStatus: 'unsupported', tools: {} },
         { name: 'needs-login', authStatus: 'notLoggedIn', tools: {} },
         { name: 'never-reported', authStatus: 'unsupported', tools: {} },
-        // Up, serving tools, and never announced — the case that actually
-        // happens: startup notifications only fire for servers that come up
-        // while we are attached, and a child whose servers were already running
-        // sends none. Measured against the real binary.
         {
           name: 'silently-fine',
           authStatus: 'unsupported',
@@ -788,8 +690,6 @@ describe('CodexRunner', () => {
     const runner = new CodexRunner({ cwd: '/tmp/p', prompt: 'go', connectFn: peer.connectFn })
     await runner.start()
 
-    // Liveness arrives ONLY on this notification — the list response has no
-    // status field at all.
     peer.emit('mcpServer/startupStatus/updated', { name: 'scratch', status: 'ready' })
     peer.emit('mcpServer/startupStatus/updated', {
       name: 'broken',
@@ -801,15 +701,8 @@ describe('CodexRunner', () => {
     expect(servers?.map((s) => `${s.name}:${s.status}`)).toEqual([
       'scratch:connected',
       'broken:failed',
-      // Auth beats a missing notification: no credential is the thing to act on.
       'needs-login:needs-auth',
-      // Listed, never announced, and exposing nothing: genuinely ambiguous
-      // (not started, or switched off in config — the list cannot tell them
-      // apart), so 'pending' rather than a guess.
       'never-reported:pending',
-      // …but tools could only have been enumerated over a completed handshake,
-      // so they are direct evidence the server is up. Without this a healthy
-      // server reads as 'pending' forever.
       'silently-fine:connected',
     ])
     expect(servers?.find((s) => s.name === 'broken')?.error).toBe('spawn ENOENT')
@@ -820,16 +713,11 @@ describe('CodexRunner', () => {
           name: 'scratch_ping',
           description: 'Prove the server is reachable',
           inputSchema: { type: 'object', properties: { note: { type: 'string' } } },
-          // A null hint is absent, not false — codex sends nulls for "unstated".
           annotations: { readOnly: true },
         },
       ],
     })
 
-    // Listing only: there is no per-server action on this transport, and the
-    // absent methods are what make the gateway 501 rather than silently no-op.
-    // Read through `Runner`, where they are declared optional — on CodexRunner
-    // itself they do not exist at all, which is the stronger statement.
     const asRunner: Runner = runner
     expect(asRunner.reconnectMcpServer).toBeUndefined()
     expect(asRunner.setMcpServerEnabled).toBeUndefined()
@@ -840,14 +728,10 @@ describe('CodexRunner', () => {
     peer.respond('mcpServerStatus/list', () => ({
       data: [{ name: 'scratch', authStatus: 'unsupported', tools: { ping: { name: 'ping' } } }],
     }))
-    // Promptless and never started: no session child exists. The panel must
-    // still answer — saying "no MCP servers configured" here would state
-    // something false about the operator's config.
     const runner = new CodexRunner({ cwd: '/tmp/p', connectFn: peer.connectFn })
 
     const servers = await runner.mcpServers()
     expect(servers?.map((s) => `${s.name}:${s.status}`)).toEqual(['scratch:connected'])
-    // Throwaway, not adopted: no thread was started on it, and it is closed.
     expect(peer.requests.some((r) => r.method === 'thread/start')).toBe(false)
     expect(peer.closed()).toBe(1)
   })
@@ -856,8 +740,6 @@ describe('CodexRunner', () => {
     const peer = scriptedPeer()
     const runner = new CodexRunner({ cwd: '/tmp/p', connectFn: peer.connectFn })
     runner.close()
-    // Undefined becomes a 501 at the route. Spawning a child to answer for a
-    // session that is over would be work nobody asked for.
     expect(await runner.mcpServers()).toBeUndefined()
   })
 
@@ -874,8 +756,6 @@ describe('CodexRunner', () => {
     const events = collect(runner)
     await runner.start()
 
-    // A binary too old to list skills is a session with no skills panel — not
-    // a session error, and not a failed turn.
     expect(ofType(events, 'skills')).toHaveLength(0)
     expect(events.some((e) => e.type === 'session_error')).toBe(false)
     expect(runner.status).toBe('idle')
@@ -883,7 +763,6 @@ describe('CodexRunner', () => {
 
   it('interrupts via turn/interrupt and lands as an interrupted turn result', async () => {
     const peer = scriptedPeer()
-    // A turn that starts and hangs (the responder returns without a terminal).
     peer.respond('turn/start', () => {
       peer.emit('turn/started', { threadId: 'thread-1', turn: { id: 'turn-9', status: 'inProgress' } })
       return { turn: { id: 'turn-9', status: 'inProgress' } }
@@ -934,8 +813,6 @@ describe('CodexRunner', () => {
     })
     expect(ofType(events, 'turn_result')[0]).toMatchObject({ subtype: 'success', result: 'back' })
 
-    // The child dies while idle; the next message spawns a fresh one and
-    // resumes the SAME thread — a dead child is never a dead session.
     peer.die('codex app-server exited (code 1): boom')
     runner.sendMessage('again')
     await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
@@ -1065,8 +942,6 @@ describe('CodexRunner', () => {
     })
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
     await runner.start()
-    // No model configured: the resolved default from thread/start is named
-    // explicitly (overrides persist per thread, so every turn states its model).
     const turnParams = () => peer.requests.filter((r) => r.method === 'turn/start')
     expect(turnParams()[0]!.params).toMatchObject({
       model: 'gpt-5.6-terra',
@@ -1081,12 +956,10 @@ describe('CodexRunner', () => {
     expect(turnParams()[1]!.params).toMatchObject({
       model: 'gpt-5.5',
       sandboxPolicy: { type: 'dangerFullAccess' },
-      // bypassPermissions asks NOTHING — same granular shape, all flags off.
       approvalPolicy: GRANULAR_NEVER,
     })
     expect(runner.info().model).toBe('gpt-5.5')
 
-    // Back to default — possible because the resolved default is remembered.
     await runner.setModel(undefined)
     expect(runner.info().model).toBe('gpt-5.6-terra')
 
@@ -1099,9 +972,6 @@ describe('CodexRunner', () => {
   })
 
   it('surfaces a command escalation as permission_requested and accepts on allow', async () => {
-    // The real shape, measured against 0.146.0: the command already RAN inside
-    // the read-only sandbox and was refused — the approval is an escalation
-    // ("command failed; retry without sandbox?"), not a pre-execution gate.
     const peer = scriptedPeer()
     let approvalResponse: unknown
     peer.respond('turn/start', () => {
@@ -1145,14 +1015,11 @@ describe('CodexRunner', () => {
     await vi.waitFor(() => expect(ofType(events, 'permission_requested')).toHaveLength(1))
 
     const request = ofType(events, 'permission_requested')[0]!.request
-    // Codex's own reason sentence IS the headline — the honest tense (the
-    // command already ran and was blocked; approving re-runs it unsandboxed).
     expect(request.toolName).toBe('CodexCommand')
     expect(request.title).toBe('command failed; retry without sandbox?')
     expect(request.decisionReason).toBe('command failed; retry without sandbox?')
     expect(request.input).toMatchObject({ command: 'printf x > /tmp/p.txt', cwd: '/tmp' })
     expect(request.expiresAt).toBeGreaterThan(Date.now())
-    // Anchored to the tool card the item already produced.
     const use = ofType(events, 'assistant_message')
       .flatMap((e) => (Array.isArray(e.message.content) ? e.message.content : []))
       .find((b) => b.type === 'tool_use') as { id: string }
@@ -1171,7 +1038,6 @@ describe('CodexRunner', () => {
     })
     expect(runner.status).toBe('idle')
     expect(runner.info().pendingPermissionCount).toBe(0)
-    // Unknown ids (already settled) answer false.
     expect(runner.resolvePermission(request.id, { behavior: 'allow' })).toBe(false)
   })
 
@@ -1184,11 +1050,6 @@ describe('CodexRunner', () => {
     const events = collect(runner)
     await runner.start()
 
-    // Deny → 'decline', even when availableDecisions omits it: the response
-    // schema declares decline unconditionally and a live decline against this
-    // exact shape completed cleanly (0.146.0) — the list gates the accept
-    // variants, it does not take "no, but keep going" away ('cancel', its only
-    // listed alternative, would interrupt the whole turn).
     const deny = peer.serverRequest('item/commandExecution/requestApproval', {
       threadId: 'thread-1',
       itemId: 'c1',
@@ -1207,7 +1068,6 @@ describe('CodexRunner', () => {
       message: 'no thanks',
     })
 
-    // Deny+interrupt → 'cancel' (codex's own deny-and-interrupt decision).
     const cancel = peer.serverRequest('item/commandExecution/requestApproval', {
       threadId: 'thread-1',
       itemId: 'c2',
@@ -1218,8 +1078,6 @@ describe('CodexRunner', () => {
     runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'deny', interrupt: true })
     await expect(cancel).resolves.toEqual({ decision: 'cancel' })
 
-    // An allow the request offered no plain accept for is NEVER widened into a
-    // broader grant — the runner answers with the denial and says why.
     const noAccept = peer.serverRequest('item/commandExecution/requestApproval', {
       threadId: 'thread-1',
       itemId: 'c3',
@@ -1235,7 +1093,6 @@ describe('CodexRunner', () => {
       message: expect.stringContaining('no plain accept'),
     })
 
-    // Unhandled server requests still get -32601, never a hang.
     await expect(peer.serverRequest('account/chatgptAuthTokens/refresh', {})).rejects.toMatchObject({
       code: -32601,
     })
@@ -1276,7 +1133,6 @@ describe('CodexRunner', () => {
       message: 'Approval timed out',
     })
     expect(runner.status).toBe('idle')
-    // The runner stays usable after the timeout.
     scriptTurn(
       peer,
       (emit, turnId) => {
@@ -1312,9 +1168,6 @@ describe('CodexRunner', () => {
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
     await runner.start()
 
-    // 'ask' (default): pending, in the exact UserQuestion wire shape the
-    // existing QuestionPrompt UIs parse; the allow's `updatedInput.answers`
-    // (question text → chosen label) maps back to codex's id-keyed shape.
     const asked = peer.serverRequest('item/tool/requestUserInput', QUESTIONS)
     await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(1))
     const request = runner.pendingApprovals[0]!
@@ -1337,8 +1190,6 @@ describe('CodexRunner', () => {
     })
     await expect(asked).resolves.toEqual({ answers: { q1: { answers: ['API key'] } } })
 
-    // 'auto': settled synchronously with each question's first (recommended)
-    // option — request/resolved events still fire, nothing pends.
     const autoPeer = scriptedPeer()
     scriptTurn(autoPeer, (emit, turnId) => {
       emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
@@ -1360,7 +1211,6 @@ describe('CodexRunner', () => {
       resolvedBy: 'policy',
     })
 
-    // 'deny': the model is sent back to decide, with the guidance message.
     const denyPeer = scriptedPeer()
     scriptTurn(denyPeer, (emit, turnId) => {
       emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
@@ -1404,8 +1254,6 @@ describe('CodexRunner', () => {
       title: 'need to write build output',
     })
     runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'allow' })
-    // The grant echoes the REQUESTED profile — turn-scoped by default, never a
-    // widened one.
     await expect(granted).resolves.toEqual({ permissions: PROFILE })
 
     const refused = peer.serverRequest('item/permissions/requestApproval', {
@@ -1417,7 +1265,6 @@ describe('CodexRunner', () => {
     runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'deny' })
     await expect(refused).resolves.toEqual({ permissions: {} })
 
-    // An MCP elicitation allow carries the filled form as content; deny declines.
     const elicited = peer.serverRequest('mcpServer/elicitation/request', {
       threadId: 'thread-1',
       serverName: 'deepwiki',
@@ -1432,7 +1279,6 @@ describe('CodexRunner', () => {
     })
     await expect(elicited).resolves.toEqual({ action: 'accept', content: { token: 'abc' } })
 
-    // Session close settles what's left with the channel's own "no".
     const orphan = peer.serverRequest('mcpServer/elicitation/request', {
       threadId: 'thread-1',
       serverName: 'deepwiki',
@@ -1454,8 +1300,6 @@ describe('CodexRunner', () => {
     const responses: unknown[] = []
     peer.respond('turn/start', () => {
       peer.emit('turn/started', { threadId: 'thread-1', turn: { id: 't1', status: 'inProgress' } })
-      // Two asks codex settles without us: one it resolves itself (announced
-      // via serverRequest/resolved), one simply outlived by the turn.
       void peer
         .serverRequest('item/commandExecution/requestApproval', { threadId: 'thread-1', itemId: 'c1', command: 'a' }, 'wire-7')
         .then((r) => responses.push(r))
@@ -1469,7 +1313,6 @@ describe('CodexRunner', () => {
     const run = runner.start()
     await vi.waitFor(() => expect(runner.pendingApprovals).toHaveLength(2))
 
-    // Codex resolved wire-7 on its own (auto-resolution): the card retires.
     peer.emit('serverRequest/resolved', { threadId: 'thread-1', requestId: 'wire-7' })
     expect(runner.pendingApprovals).toHaveLength(1)
     expect(ofType(events, 'permission_resolved')[0]).toMatchObject({
@@ -1477,7 +1320,6 @@ describe('CodexRunner', () => {
       message: 'resolved by codex',
     })
 
-    // The turn ends with the second still pending: swept, never wedged.
     peer.emit('turn/completed', { threadId: 'thread-1', turn: { id: 't1', status: 'completed' } })
     await run
     expect(runner.pendingApprovals).toHaveLength(0)
@@ -1501,7 +1343,6 @@ describe('CodexRunner', () => {
     expect(result).toMatchObject({ subtype: 'error_during_execution' })
     expect(result!.errors?.[0]).toMatch(/experimentalApi/)
     expect(result!.errors?.[0]).toMatch(/no non-experimental fallback/)
-    // A failed handshake is a failed turn, not a failed session.
     expect(events.some((e) => e.type === 'session_error')).toBe(false)
     expect(runner.status).toBe('idle')
   })
@@ -1538,11 +1379,8 @@ describe('CodexRunner', () => {
     expect(texts[0]).toContain('<attachment name="notes.txt" type="text/plain">')
     expect(texts[1]).toBe('what is this?')
 
-    // Counted as a DELTA across close(), not as a total: a promptless session
-    // also opens a throwaway connection to list skills, and that one closes
-    // itself. What matters here is that close() tore down the session's own
-    // child exactly once. Snapshot and assert are back to back on purpose —
-    // no await between them for the probe's close to slip through.
+    // A delta across close(), not a total: a promptless session also opens a throwaway probe
+    // connection. Snapshot and assert back to back — no await for that close to slip through.
     const closedBefore = peer.closed()
     runner.close()
     expect(existsSync(image.path!)).toBe(false)
@@ -1597,12 +1435,6 @@ describe('CodexRunner', () => {
   })
 
   it('measures context occupancy from `last`, never the cumulative `total`', async () => {
-    // Two model requests in one turn, as a tool-looping turn produces. `total`
-    // is cumulative billing and grows every request; `last` is the occupancy of
-    // the window, because a request's input already carries the conversation.
-    // Sizing the meter off `total` would climb toward 100% on an almost-empty
-    // thread — measured against the real binary at 13931 → 27878 total while
-    // last stayed ~13.9k of a 258400 window.
     const peer = scriptedPeer()
     scriptTurn(peer, (emit, turnId) => {
       emit('thread/tokenUsage/updated', {
@@ -1627,14 +1459,10 @@ describe('CodexRunner', () => {
 
     const [usage] = ofType(events, 'context_usage')
     expect(usage).toBeDefined()
-    // USAGE_B.totalTokens (the LAST request), not 675 + 450.
     expect(usage!.usage.totalTokens).toBe(USAGE_B.totalTokens)
     expect(usage!.usage.maxTokens).toBe(1000)
     expect(usage!.usage.percentage).toBeCloseTo(45)
-    // No breakdown exists on this surface — an empty list, never a fabricated row.
     expect(usage!.usage.categories).toEqual([])
-    // Per-turn token accounting still SUMS, which is the opposite choice and
-    // deliberately so: it is billing, not occupancy.
     const [result] = ofType(events, 'turn_result')
     expect(result!.usage).toMatchObject({
       output_tokens: USAGE_A.outputTokens + USAGE_A.reasoningOutputTokens + USAGE_B.outputTokens + USAGE_B.reasoningOutputTokens,
@@ -1652,8 +1480,6 @@ describe('CodexRunner', () => {
           rateLimitReachedType: null,
         },
       })
-      // A second update with the same plan must not re-announce it, and an
-      // unnamed duration keeps a self-describing key rather than borrowing one.
       emit('account/rateLimits/updated', {
         rateLimits: {
           primary: { usedPercent: 90, windowDurationMins: 43_200 },
@@ -1669,8 +1495,6 @@ describe('CodexRunner', () => {
     await runner.start()
 
     const limits = ofType(events, 'rate_limit').map((e) => e.info)
-    // 300 min IS five hours and 10080 IS seven days — the names clients already
-    // label and size their pace markers from.
     expect(limits[0]).toMatchObject({
       status: 'allowed',
       rateLimitType: 'five_hour',
@@ -1678,8 +1502,6 @@ describe('CodexRunner', () => {
       resetsAt: 1_786_518_770,
     })
     expect(limits[1]).toMatchObject({ rateLimitType: 'seven_day', utilization: 43 })
-    // Second update: unnamed duration stays self-describing; a null percentage
-    // is unknown, not zero, so that window is dropped entirely.
     expect(limits[2]).toMatchObject({
       status: 'rejected',
       rateLimitType: 'window_43200m',
@@ -1688,7 +1510,6 @@ describe('CodexRunner', () => {
     expect(limits[2]!.resetsAt).toBeUndefined()
     expect(limits).toHaveLength(3)
 
-    // plan_info names the windows once, not per update.
     const plans = ofType(events, 'plan_info')
     expect(plans).toHaveLength(1)
     expect(plans[0]!.subscriptionType).toBe('plus')
@@ -1723,8 +1544,8 @@ describe('CodexRunner', () => {
   })
 })
 
-/** Two historical turns whose item ids overlap on purpose: codex restarts item
- * numbering per turn, so the per-turn nonce is what keeps them apart. */
+// Two historical turns whose item ids overlap on purpose: codex restarts item numbering per
+// turn, so the per-turn nonce is what keeps them apart.
 const HISTORY_TURNS = [
   {
     id: 'turn-h1',
@@ -1770,7 +1591,6 @@ describe('CodexRunner resume backfill', () => {
     const events = collect(runner)
     await runner.start()
 
-    // The whole history, in order, through the live item mapping.
     const messages = events.filter(
       (e): e is Extract<SessionEvent, { type: 'user_message' | 'assistant_message' }> =>
         e.type === 'user_message' || e.type === 'assistant_message',
@@ -1784,11 +1604,8 @@ describe('CodexRunner resume backfill', () => {
       return (block.text ?? block.content ?? block.name) as string
     })
     expect(texts).toEqual(['make a file', 'Making it.', 'CodexCommand', 'ok\n', 'now delete it', 'Deleted.'])
-    // Every replayed event says so — the reducers key dedupe and styling off it.
     expect(messages.every((e) => e.replay === true)).toBe(true)
 
-    // Ids are namespaced per HISTORICAL turn: both turns carry an `item-1`
-    // (codex restarts numbering per turn), and the nonce keeps them apart.
     const uuidOf = (index: number) => messages[index]!.uuid as string
     const nonceOf = (index: number) => uuidOf(index).split(':')[0]!
     expect(uuidOf(0).endsWith(':item-1')).toBe(true)
@@ -1797,12 +1614,10 @@ describe('CodexRunner resume backfill', () => {
     expect(nonceOf(0)).toBe(nonceOf(1)) // one namespace within a turn…
     expect(nonceOf(0)).not.toBe(nonceOf(4)) // …a fresh one for the next
 
-    // The tool card pair agrees with itself.
     const toolUse = messages[2]!.message.content as Array<{ type: string; id: string }>
     const toolResult = messages[3]!.message.content as Array<{ type: string; tool_use_id: string }>
     expect(toolResult[0]!.tool_use_id).toBe(toolUse[0]!.id)
 
-    // History was one page and complete: no thread/read, no turn ran, no notice.
     expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'config/read', 'thread/resume', 'skills/list'])
     expect(events.some((e) => e.type === 'session_error')).toBe(false)
     expect(events.some((e) => e.type === 'turn_result')).toBe(false)
@@ -1810,10 +1625,6 @@ describe('CodexRunner resume backfill', () => {
   })
 
   it('replays an image-only prompt as a named picture, not as a missing turn', async () => {
-    // The bytes went to the model, not into the rollout, so there is nothing to
-    // render — but skipping the item cost the turn its user row *and* the
-    // prompt mark the scrubber navigates by, leaving an answer with no visible
-    // question.
     const peer = scriptedPeer()
     peer.respond('thread/resume', () => ({
       ...THREAD_RESULT,
@@ -1854,8 +1665,6 @@ describe('CodexRunner resume backfill', () => {
       turnsBackwardsCursor: null,
     }))
     scriptTurn(peer, (emit, turnId) => {
-      // The live answer reuses a history item id — the per-turn nonce must
-      // keep the transcript bubbles separate anyway (b026e70).
       emit('item/completed', {
         threadId: 'thread-1',
         turnId,
@@ -1879,13 +1688,10 @@ describe('CodexRunner resume backfill', () => {
     const texts = messages.map((e) =>
       typeof e.message.content === 'string' ? e.message.content : ((e.message.content as Array<{ text?: string }>)[0]!.text ?? ''),
     )
-    // Replay first, then the new turn's echo, then its answer — never interleaved.
     expect(texts).toEqual(['now delete it', 'Deleted.', 'continue', 'Live answer.'])
     expect(messages.map((e) => e.replay === true)).toEqual([true, true, false, false])
-    // One resume, one replay: nothing is emitted twice.
     expect(peer.requests.filter((r) => r.method === 'thread/resume')).toHaveLength(1)
     expect(texts.filter((t) => t === 'Deleted.')).toHaveLength(1)
-    // Same item id, different namespace.
     expect(messages[1]!.uuid!.endsWith(':item-2')).toBe(true)
     expect(messages[3]!.uuid!.endsWith(':item-2')).toBe(true)
     expect(messages[1]!.uuid).not.toBe(messages[3]!.uuid)
@@ -1927,8 +1733,6 @@ describe('CodexRunner resume backfill', () => {
     const events = collect(runner)
     await runner.start()
 
-    // The notice precedes the partial replay it qualifies, and the session
-    // stays alive and idle — incomplete history is not a failed resume.
     const errorIndex = events.findIndex((e) => e.type === 'session_error')
     const firstReplay = events.findIndex((e) => (e.type === 'user_message' || e.type === 'assistant_message') && e.replay)
     expect(errorIndex).toBeGreaterThanOrEqual(0)
@@ -1984,25 +1788,13 @@ describe('CodexRunner resume backfill', () => {
     peer.die('codex app-server exited (code 1): gone')
     runner.sendMessage('again')
     await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(1))
-    // The respawned child went through thread/resume again — same responder,
-    // same turns on the wire — and none of it was replayed a second time.
     expect(peer.requests.filter((r) => r.method === 'thread/resume')).toHaveLength(2)
     expect(replayCount()).toBe(2)
   })
 })
 
-// ---------------------------------------------------------------------------
-// Sub-agents: the attribution contract the takeover is built on. Everything a
-// spawned agent's thread produces carries that agent's anchor id as
-// `parentToolUseId` — which must equal the anchor tool_use's own id (frame
-// membership is exact-id equality in `subagentItems`) and
-// `SubagentInfo.toolUseId` (the sessions list's handle). Wire shapes mirror
-// `_docs/codex-subagent-trace-fixed.jsonl`.
-// ---------------------------------------------------------------------------
-
 type ToolUseBlock = { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
 
-/** Every emitted tool_use, with the parent its event carried. */
 const toolUses = (events: SessionEvent[]) =>
   ofType(events, 'assistant_message').flatMap((e) =>
     (Array.isArray(e.message.content) ? e.message.content : [])
@@ -2010,7 +1802,6 @@ const toolUses = (events: SessionEvent[]) =>
       .map((block) => ({ block, parent: e.parentToolUseId ?? null, seq: e.seq })),
   )
 
-/** Every streamed delta as (text, parent) — the attribution under test. */
 const deltas = (events: SessionEvent[]) =>
   ofType(events, 'stream_delta').map((e) => {
     const delta = (e.event as { delta?: { text?: string; thinking?: string } }).delta
@@ -2032,8 +1823,6 @@ describe('CodexRunner sub-agents', () => {
       const root = { threadId: 'thread-1', turnId }
       emit('item/completed', { ...root, item: spawnItem('call_a', 'thread-a', '/root/alpha') })
       emit('item/completed', { ...root, item: spawnItem('call_b', 'thread-b', '/root/beta') })
-      // Three streams share one connection, tokens interleaved — only each
-      // frame's own threadId can pull them apart again.
       emit('item/agentMessage/delta', { ...root, itemId: 'm-r', delta: 'root ' })
       emit('item/agentMessage/delta', { threadId: 'thread-a', turnId: 'turn-a', itemId: 'm-a', delta: 'alpha ' })
       emit('item/agentMessage/delta', { threadId: 'thread-b', turnId: 'turn-b', itemId: 'm-b', delta: 'beta ' })
@@ -2045,7 +1834,6 @@ describe('CodexRunner sub-agents', () => {
         summaryIndex: 0,
         delta: 'weighing',
       })
-      // An agent's tool call, started and completed on ITS thread.
       emit('item/started', {
         threadId: 'thread-a',
         turnId: 'turn-a',
@@ -2063,8 +1851,6 @@ describe('CodexRunner sub-agents', () => {
     const events = collect(runner)
     await runner.start()
 
-    // One top-level anchor per spawn, labelled with the agent's name (the
-    // `subagent_type` slot is what `taskIdentity`/`isAgentRecord` read).
     const anchors = toolUses(events).filter((t) => t.block.name === 'CodexAgent')
     expect(anchors).toHaveLength(2)
     const anchorA = anchors.find((t) => t.block.input.subagent_type === 'alpha')!
@@ -2074,8 +1860,6 @@ describe('CodexRunner sub-agents', () => {
     expect(anchorA.block.id.endsWith(':call_a')).toBe(true)
     expect(anchorA.block.input.agentThreadId).toBe('thread-a')
 
-    // Every delta went home: the root's stayed top-level, each agent's carries
-    // its own anchor — including the thinking stream.
     expect(deltas(events)).toEqual([
       { text: 'root ', parent: null },
       { text: 'alpha ', parent: anchorA.block.id },
@@ -2084,7 +1868,6 @@ describe('CodexRunner sub-agents', () => {
       { text: 'weighing', parent: anchorB.block.id },
     ])
 
-    // The agent's command nests under it, call and result alike.
     const exec = toolUses(events).find((t) => t.block.name === 'CodexCommand')!
     expect(exec.parent).toBe(anchorA.block.id)
     const execResult = ofType(events, 'user_message').find((e) => {
@@ -2093,14 +1876,10 @@ describe('CodexRunner sub-agents', () => {
     })!
     expect(execResult.parentToolUseId).toBe(anchorA.block.id)
 
-    // The root's answer is still the root's, and the turn still ends once.
     const results = ofType(events, 'turn_result')
     expect(results).toHaveLength(1)
     expect(results[0]!.result).toBe('root answer')
 
-    // The rollup: no agent turn ended, so both honestly still run — a codex
-    // agent outlives the root turn by design, and the root turn ending sweeps
-    // nothing (only the child process dying or the session closing does).
     expect(runner.info().subagents).toMatchObject([
       { toolUseId: anchorA.block.id, agentType: 'alpha', status: 'running', toolCount: 1 },
       { toolUseId: anchorB.block.id, agentType: 'beta', status: 'running', toolCount: 0 },
@@ -2115,19 +1894,14 @@ describe('CodexRunner sub-agents', () => {
       const root = { threadId: 'thread-1', turnId }
       emit('item/completed', { ...root, item: spawnItem('call_a', 'thread-a', '/root/alpha') })
       emit('item/completed', { ...root, item: spawnItem('call_b', 'thread-b', '/root/beta') })
-      // The root blocks on its agents: the collab `wait` card exists while it
-      // does (the trace's one observed collab verb, rich fields empty).
       emit('item/started', {
         ...root,
         item: { id: 'call_w', type: 'collabAgentToolCall', tool: 'wait', status: 'inProgress', receiverThreadIds: [], agentsStates: {} },
       })
-      // Alpha reports and its thread's turn completes — the agent's one true
-      // completion signal (`subAgentActivity` has no 'completed' kind).
       emit('turn/completed', {
         threadId: 'thread-a',
         turn: { id: 'turn-a', status: 'completed', items: [{ id: 'm-final', type: 'agentMessage', text: 'alpha: Fri Aug 21' }] },
       })
-      // Beta dies instead of reporting.
       emit('turn/completed', {
         threadId: 'thread-b',
         turn: { id: 'turn-b', status: 'failed', error: { message: 'model refused' } },
@@ -2144,14 +1918,11 @@ describe('CodexRunner sub-agents', () => {
     const events = collect(runner)
     await runner.start()
 
-    // Settled the moment their threads' turns ended, root still mid-turn.
     expect(mid).toMatchObject([
       { agentType: 'alpha', status: 'done' },
       { agentType: 'beta', status: 'failed' },
     ])
 
-    // Alpha's report became its anchor's tool_result (top-level: the result
-    // settles the frame's own row, it is not a row inside the frame)…
     const anchors = toolUses(events).filter((t) => t.block.name === 'CodexAgent')
     const anchorA = anchors.find((t) => t.block.input.subagent_type === 'alpha')!
     const anchorB = anchors.find((t) => t.block.input.subagent_type === 'beta')!
@@ -2165,19 +1936,16 @@ describe('CodexRunner sub-agents', () => {
     expect((reportA.message.content as Array<{ content?: string; is_error?: boolean }>)[0]).toMatchObject({
       content: 'alpha: Fri Aug 21',
     })
-    // …beta's failure carried the error, flagged.
     expect((resultFor(anchorB.block.id)!.message.content as Array<{ content?: string; is_error?: boolean }>)[0]).toMatchObject({
       content: 'model refused',
       is_error: true,
     })
 
-    // Both settled BEFORE the root's own result — which is intact.
     const results = ofType(events, 'turn_result')
     expect(results).toHaveLength(1)
     expect(results[0]!.result).toBe('both done')
     expect(reportA.seq).toBeLessThan(results[0]!.seq)
 
-    // The wait card: one CodexCollab call, verb in the input, clean result.
     const wait = toolUses(events).filter((t) => t.block.name === 'CodexCollab')
     expect(wait).toHaveLength(1)
     expect(wait[0]!.block.input).toEqual({ tool: 'wait' })
@@ -2195,7 +1963,6 @@ describe('CodexRunner sub-agents', () => {
     collect(runner)
     await runner.start()
     expect(runner.info().subagents).toMatchObject([{ status: 'running' }])
-    // The process those agents lived in is gone; their reports can never come.
     peer.die('codex app-server exited (code 1): gone')
     expect(runner.info().subagents).toMatchObject([{ status: 'failed' }])
   })
@@ -2203,7 +1970,6 @@ describe('CodexRunner sub-agents', () => {
   it('work from a thread that was never announced still gets an anchor — label-less, but a frame', async () => {
     const peer = scriptedPeer()
     scriptTurn(peer, (emit, turnId) => {
-      // No subAgentActivity: the first sign of thread-x is its own delta.
       emit('item/agentMessage/delta', { threadId: 'thread-x', turnId: 'turn-x', itemId: 'm-x', delta: 'stray' })
       emit('item/completed', { threadId: 'thread-x', turnId: 'turn-x', item: { id: 'm-x', type: 'agentMessage', text: 'stray' } })
       emit('item/completed', { threadId: 'thread-1', turnId, item: { id: 'm-root', type: 'agentMessage', text: 'root' } })
@@ -2216,8 +1982,6 @@ describe('CodexRunner sub-agents', () => {
     const anchor = toolUses(events).find((t) => t.block.name === 'CodexAgent')!
     expect(anchor.block.input).toEqual({ agentThreadId: 'thread-x' })
     expect(deltas(events)).toEqual([{ text: 'stray', parent: anchor.block.id }])
-    // The anchor precedes the first attributed event — absorption needs the
-    // top-level call to exist for the frame to have a row.
     expect(anchor.seq).toBeLessThan(ofType(events, 'stream_delta')[0]!.seq)
     expect(runner.info().subagents).toMatchObject([{ toolUseId: anchor.block.id, status: 'running' }])
     expect(runner.info().subagents![0]!.agentType).toBeUndefined()
@@ -2246,9 +2010,6 @@ describe('CodexRunner sub-agents', () => {
     const events = collect(runner)
     await runner.start()
 
-    // The row exists, replay-flagged, and closes with the neutral notice — a
-    // resumed root's history carries neither the agent's work nor its outcome,
-    // so the one claim it must not make is 'running' (or 'failed').
     const anchor = toolUses(events).find((t) => t.block.name === 'CodexAgent')!
     expect(anchor.block.input.subagent_type).toBe('hist')
     const result = ofType(events, 'user_message').find((e) => {
@@ -2257,18 +2018,12 @@ describe('CodexRunner sub-agents', () => {
     })!
     expect(result.replay).toBe(true)
     expect((result.message.content as Array<{ is_error?: boolean }>)[0]!.is_error).toBeUndefined()
-    // And the rollup stays silent: these agents belong to a process that is gone.
     expect(runner.info().subagents).toBeUndefined()
   })
 })
 
 describe('CodexRunner clearContext', () => {
   it('clears by starting a FRESH thread on the same session, not by resuming', async () => {
-    // Codex has no clear/reset RPC — `thread/compact/start` summarises and
-    // continues, `thread/fork` makes a second thread. So the analog of a clear
-    // is a new thread on the same WorkerDeck session, and the assertion that
-    // matters is thread/start-not-resume: a resume here would replay exactly
-    // the conversation the user asked to be rid of.
     const peer = scriptedPeer()
     let threads = 0
     peer.respond('thread/start', () => ({ ...THREAD_RESULT, thread: { id: `thread-${++threads}` } }))
@@ -2300,29 +2055,18 @@ describe('CodexRunner clearContext', () => {
 
     await runner.clearContext()
 
-    // A second thread/start, and NO thread/resume anywhere.
     expect(peer.requests.filter((r) => r.method === 'thread/start')).toHaveLength(2)
     expect(peer.requests.filter((r) => r.method === 'thread/resume')).toHaveLength(0)
-    // The child was already up, so the fresh id is adopted before the event is
-    // emitted — a dormant record written in between must name the new thread.
     const resets = ofType(events, 'conversation_reset')
     expect(resets).toHaveLength(1)
     expect(resets[0]!.sdkSessionId).toBe('thread-2')
     expect(runner.info().sdkSessionId).toBe('thread-2')
-    // The reading described the conversation that is gone. Codex cannot re-poll
-    // it (its only source arrives *during* a turn), so it must read as absent
-    // rather than stale — "render nothing, not 0%".
     expect(runner.info().contextUsage).toBeUndefined()
-    // The agents lived on the thread we just left; their reports can never come.
     expect(runner.info().subagents).toBeUndefined()
-    // An unread cursor, not an item count: monotonic across the reset.
     expect(runner.info().activityCount).toBeGreaterThan(0)
   })
 
   it('intercepts a bare /clear prompt instead of sending it to the model', async () => {
-    // `slashCommands: false` here is honest — the app-server has no command
-    // surface — but it meant `/clear` went to the model as an ordinary prompt
-    // and came back with an ordinary answer. It did not error, which is worse.
     const peer = scriptedPeer()
     let threads = 0
     peer.respond('thread/start', () => ({ ...THREAD_RESULT, thread: { id: `thread-${++threads}` } }))
@@ -2339,12 +2083,10 @@ describe('CodexRunner clearContext', () => {
 
     expect(peer.requests.filter((r) => r.method === 'turn/start')).toHaveLength(turnsBefore)
     expect(ofType(events, 'conversation_reset')).toHaveLength(1)
-    // No user_message echo: the reset would clear it in the same breath.
     expect(ofType(events, 'user_message').some((e) => e.message.content === '  /clear  ')).toBe(false)
   })
 
   it('treats /clear inside a longer prompt as an ordinary message', async () => {
-    // The intercept must never silently steal a message someone meant to send.
     const peer = scriptedPeer()
     scriptTurn(peer, (emit, turnId) => {
       emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
@@ -2361,15 +2103,6 @@ describe('CodexRunner clearContext', () => {
   })
 
   it('queues a clear behind the running turn, and keeps the message typed after it', async () => {
-    // Two things this pins, both of which were wrong first time round.
-    //
-    // A clear does not race the turn it is clearing — it rides the turn chain,
-    // which is also what serialises `#ensureThread` against `#runTurn` and the
-    // resume backfill. And it must NOT wipe `#queue`: by the time the clear
-    // runs, every message queued before it has already run, so whatever is left
-    // was typed *after* the clear and belongs to the new conversation. Wiping it
-    // swallowed exactly those messages, silently — the echo appeared, the reset
-    // cleared it, and no turn ever ran.
     const peer = scriptedPeer()
     let threads = 0
     peer.respond('thread/start', () => ({ ...THREAD_RESULT, thread: { id: `thread-${++threads}` } }))
@@ -2382,8 +2115,6 @@ describe('CodexRunner clearContext', () => {
       const threadId = (params as { threadId: string }).threadId
       peer.emit('turn/started', { threadId, turn: { id: turnId, status: 'inProgress' } })
       const finish = () => peer.emit('turn/completed', { threadId, turn: { id: turnId, status: 'completed' } })
-      // The FIRST turn is held open, so the clear and the message after it are
-      // both issued while it is still running.
       if (prompts.length === 1) {
         firstTurn = finish
       } else {
@@ -2398,7 +2129,6 @@ describe('CodexRunner clearContext', () => {
 
     runner.sendMessage('/clear')
     runner.sendMessage('after the clear')
-    // Still nothing: both are queued behind the turn that is holding the chain.
     expect(ofType(events, 'conversation_reset')).toHaveLength(0)
     expect(prompts).toEqual(['first'])
 
@@ -2407,7 +2137,6 @@ describe('CodexRunner clearContext', () => {
     await vi.waitFor(() => expect(prompts).toHaveLength(2))
 
     expect(ofType(events, 'conversation_reset')).toHaveLength(1)
-    // The message typed after the clear ran, on the new thread.
     expect(prompts[1]).toBe('after the clear')
     const second = peer.requests.find(
       (r) => r.method === 'turn/start' && (r.params as { input: Array<{ text?: string }> }).input[0]?.text === 'after the clear',
@@ -2416,10 +2145,6 @@ describe('CodexRunner clearContext', () => {
   })
 
   it('leaves the session on its old thread when the fresh thread/start fails', async () => {
-    // Half-clear is the worst outcome: the id dropped, the transcript intact and
-    // no `conversation_reset` to say anything happened — so the next message
-    // would silently start a new thread while every client, watermark and
-    // dormant record still described the old conversation.
     const peer = scriptedPeer()
     let threads = 0
     peer.respond('thread/start', () => {
@@ -2442,13 +2167,6 @@ describe('CodexRunner clearContext', () => {
   })
 
   it('does not replay the cleared conversation to a client that attaches after', async () => {
-    // The `resetSeq` half of the replay rule, which every engine that can emit a
-    // reset must pass to `subscribe` — and which codex silently did not, because
-    // until this feature claude was the only engine that could produce the
-    // event. The failure is quiet: the end state is right for a current reducer,
-    // so nothing looks broken while every attach re-sends the whole cleared
-    // conversation for the process's lifetime, and a reducer that predates
-    // `conversation_reset` renders it resurrected.
     const peer = scriptedPeer()
     let threads = 0
     peer.respond('thread/start', () => ({ ...THREAD_RESULT, thread: { id: `thread-${++threads}` } }))
@@ -2464,7 +2182,6 @@ describe('CodexRunner clearContext', () => {
     await runner.start()
     await runner.clearContext()
 
-    // A fresh attach: everything from seq 0.
     const replayed: SessionEvent[] = []
     runner.subscribe((event) => replayed.push(event), 0)
 
@@ -2474,13 +2191,7 @@ describe('CodexRunner clearContext', () => {
       .map((c) => c.text)
     expect(texts).toEqual([])
     expect(ofType(replayed, 'user_message')).toHaveLength(0)
-    // The reset itself still replays (the skip is strictly-below), which is what
-    // clears a reconnecting client that still holds pre-reset rows…
     expect(ofType(replayed, 'conversation_reset')).toHaveLength(1)
-    // …and every state-bearing event survives: a fresh attacher with no status
-    // and no readings is broken, not cleared. (This engine emits no
-    // `system_init` — that is the Claude CLI's — so `status_changed` is the
-    // state-bearing event to check here.)
     expect(ofType(replayed, 'status_changed').length).toBeGreaterThan(0)
   })
 })

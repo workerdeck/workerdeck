@@ -768,7 +768,10 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   following; 15-min page cache by URL) and the digest pass runs on the **session's own model**
   via `AiSdkRunner.generateDigest`, which adds its tokens into `#turnAccum` — any extra model
   call made outside that method loses tokens from the turn's accounting. The digest is never
-  cached (it's per-prompt).
+  cached (it's per-prompt). One limit the layering does not close: the guard resolves the hostname
+  itself and then hands the URL to `fetch`, which resolves it **again** — a DNS-rebinding TOCTOU
+  this tier accepts rather than closes. An operator who needs the check bound to the connection
+  supplies `fetchImpl` with a pinned agent; nothing in core pins for them.
 - `deliver_file` exists only when `onFileDelivered` is wired; `createEngineSession` grants it by
   default (`capabilities.deliverFiles: false` withholds it). Delivered files are downloadable
   only while the session lives — in-memory VFS; durability is the persistence tier.
@@ -839,6 +842,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   is the fix and is not built.
 
 ## Parking & bridged execution
+
+- **`AiSdkRunner.clearContext()` refuses while tool calls are outstanding, and waiting is not the
+  fix.** A parked call's result is owed by a client that may answer in two days, and the messages
+  it would be spliced into are exactly what a clear drops. The clear rides the turn chain like
+  everything else that touches `#messages`, so one typed mid-turn queues behind that turn rather
+  than racing it — but a *parked* turn has no end to queue behind. `interrupt()` is the way out: it
+  fails the parked calls and finishes the turn, after which the clear runs.
 
 - **A `RunnerSnapshot` must round-trip `JSON.stringify` unchanged, `state` included.** The engine's
   continuation state is typed `unknown` and opaque to the host precisely so `packages/server` never
@@ -1086,7 +1096,11 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `default` profile; opting out of that is still `profiles: []`.
 - Provider-session grants live on `ProfileInfo.session` (`capabilities`, `mcpServers`,
   `instructions`) and narrow — never widen — via `CreateSessionRequest.capabilities`; the gateway
-  400s a widening request rather than silently downgrading it. MCP is **named, never configured**
+  400s a widening request rather than silently downgrading it. The enforcement is the gateway's
+  alone: `createEngineSession` takes `config.capabilities ?? profile.session.capabilities` and lets
+  the request value win outright, because by then the widening check has already run. A host that
+  calls `createEngineSession` directly — it is public API — with capabilities it took from a client
+  owes that check itself. MCP is **named, never configured**
   there: a transport config's headers can carry credentials and `ProfileInfo` is served by
   `GET /profiles`, so the names refer to servers the host connected in `createEngineRunner` and
   `selectMcpTools` filters by the `<server>__<tool>` namespace. For the same reason a provider

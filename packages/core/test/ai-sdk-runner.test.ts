@@ -11,8 +11,6 @@ const USAGE = {
   raw: undefined,
 }
 
-// The runner streams every model call (doStream, not doGenerate). One entry =
-// one LLM call; text arrives as deltas like a real provider would send it.
 const textResponse = (text: string) => ({
   stream: convertArrayToReadableStream([
     { type: 'stream-start' as const, warnings: [] },
@@ -72,8 +70,6 @@ describe('AiSdkRunner', () => {
     })
     expect(runner.info().status).toBe('idle')
     expect(runner.info().model).toBe('mock-1')
-    // Session surfaces gate CLI-only affordances on this, so the runner reports
-    // its own engine rather than the profile being looked back up.
     expect(runner.info().engine).toBe('provider')
   })
 
@@ -100,7 +96,6 @@ describe('AiSdkRunner', () => {
     const synthetic = harness.eventsOf('user_message').filter((e) => (e as { synthetic?: boolean }).synthetic)
     expect(synthetic.length).toBeGreaterThan(0)
     expect(harness.eventsOf('turn_result')[0]).toMatchObject({ subtype: 'success', result: 'found it' })
-    // v7 result.usage is cumulative across steps: two steps of 10/5 each.
     expect(harness.eventsOf('turn_result')[0]).toMatchObject({
       usage: { input_tokens: 20, output_tokens: 10 },
     })
@@ -121,16 +116,11 @@ describe('AiSdkRunner', () => {
     h.runner.sendMessage('go')
     await h.waitFor(() => h.eventsOf('turn_result').length === 1)
 
-    // Token-by-token deltas in the Anthropic content_block_delta shape the
-    // reducer already renders ('found it' char-by-char = several deltas).
     const deltas = h.eventsOf('stream_delta')
     expect(deltas.length).toBeGreaterThan(1)
     expect(deltas[0]).toMatchObject({
       event: { type: 'content_block_delta', delta: { type: 'text_delta' } },
     })
-    // Step messages arrive AS the turn progresses: the tool call and its
-    // result are both emitted before the final text message, not in one blob
-    // after the loop ends.
     const toolUseSeq = h
       .eventsOf('assistant_message')
       .find((e) => (e as { message: { content: Array<{ type: string }> } }).message.content.some((b) => b.type === 'tool_use'))!.seq
@@ -161,19 +151,16 @@ describe('AiSdkRunner', () => {
       doStream: [toolCallResponse('call-9', 'eval_script', { script: '1+1' }), textResponse('the answer is 2')],
     })
     const tools = {
-      // No execute: the loop halts and the call surfaces as a pending execution.
       eval_script: tool({ inputSchema: z.object({ script: z.string() }) }),
     }
     const h = makeRunner({ languageModel: model, tools })
     h.runner.sendMessage('evaluate 1+1')
 
     await h.waitFor(() => h.runner.pendingToolCalls.length === 1)
-    // Parked: no turn_result yet, session still mid-turn.
     expect(h.eventsOf('turn_result')).toHaveLength(0)
     expect(h.runner.pendingToolCalls[0]).toMatchObject({ toolCallId: 'call-9', toolName: 'eval_script' })
     expect(h.runner.info().status).toBe('running')
 
-    // Unknown ids are rejected; the real one is accepted exactly once.
     expect(h.runner.resolveToolCall('nope', { type: 'text', value: 'x' })).toBe(false)
     expect(h.runner.resolveToolCall('call-9', { type: 'json', value: { result: 2 } })).toBe(true)
     expect(h.runner.resolveToolCall('call-9', { type: 'json', value: { result: 2 } })).toBe(false)
@@ -181,14 +168,11 @@ describe('AiSdkRunner', () => {
     await h.waitFor(() => h.eventsOf('turn_result').length === 1)
     expect(h.eventsOf('turn_result')[0]).toMatchObject({ subtype: 'success', result: 'the answer is 2' })
     expect(h.runner.info().status).toBe('idle')
-    // The tool result was appended to the durable message state for the replay.
     const toolMessage = h.runner.messages.find((m) => m.role === 'tool')
     expect(toolMessage).toBeDefined()
   })
 
   it('accounts usage across every leg of a parked turn, not just the final one', async () => {
-    // Found by the live smoke: a turn that parks spans several generate() calls,
-    // and reporting only the last one silently drops the parked legs' tokens.
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
       doStream: [
@@ -207,7 +191,6 @@ describe('AiSdkRunner', () => {
     h.runner.resolveToolCall('call-2', { type: 'text', value: 'second' })
     await h.waitFor(() => h.eventsOf('turn_result').length === 1)
 
-    // Three legs of 10 in / 5 out each — the two parked legs must not vanish.
     expect(h.eventsOf('turn_result')[0]).toMatchObject({
       subtype: 'success',
       numTurns: 1,
@@ -216,10 +199,6 @@ describe('AiSdkRunner', () => {
   })
 
   it('treats an errored local tool execution as settled, never as a park', async () => {
-    // Regression: the SDK reports a thrown `execute` as a `tool-error` part,
-    // which is absent from result.toolResults — deriving "settled" from that
-    // list parked the session forever on a call the SDK had already answered
-    // (hit live: a deepwiki MCP call failing at transport level hung the turn).
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
       doStream: [toolCallResponse('c1', 'flaky', {}), textResponse('recovered from the tool failure')],
@@ -262,8 +241,6 @@ describe('AiSdkRunner', () => {
     expect(runner.pendingToolCalls).toHaveLength(0)
     expect(eventsOf('turn_result')[0]).toMatchObject({ isError: true, errors: ['interrupted'] })
     expect(runner.status).toBe('idle')
-    // The parked call was recorded as an error result, so the history stays
-    // replayable and the session accepts new input.
     runner.sendMessage('are you still there?')
     await waitFor(() => eventsOf('turn_result').length === 2)
     expect(eventsOf('turn_result')[1]).toMatchObject({ subtype: 'success', result: 'hello again' })
@@ -281,7 +258,6 @@ describe('AiSdkRunner', () => {
     runner.sendMessage('go')
     await waitFor(() => runner.pendingToolCalls.length === 1)
 
-    // Arrives mid-park: must not wedge itself between the call and its result.
     runner.sendMessage('also, one more thing')
     runner.resolveToolCall('c1', { type: 'text', value: 'yes' })
     await waitFor(() => eventsOf('turn_result').length === 1)
@@ -293,11 +269,7 @@ describe('AiSdkRunner', () => {
   it('echoes its scope and reports no cwd rather than the gateway’s', () => {
     const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: textResponse('x') })
     const scope = { space: 'a', user: 'alice' }
-    // The echo is what every gateway-side scope check reads; `buildRunner`
-    // refuses a runner that drops it, so this is that contract from below.
     expect(new AiSdkRunner({ languageModel: model, scope }).info().scope).toEqual(scope)
-    // Never process.cwd(): this engine opens no directory, and reporting the
-    // gateway's deploy path would leak host layout to every client.
     expect(new AiSdkRunner({ languageModel: model }).info().cwd).toBe('')
   })
 

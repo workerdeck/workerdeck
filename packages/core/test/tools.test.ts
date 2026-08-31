@@ -46,8 +46,6 @@ describe('capability-scoped tool set', () => {
   it('grants only what the host supplied a backend for', () => {
     const minimal = createToolContext({ executor: stubExecutor(), sessionId: 's' })
     expect(Object.keys(minimal.tools).sort()).toEqual(['eval_script', 'fs_list', 'fs_read', 'fs_write'])
-    // No web_search or download: a model cannot be tempted by a capability the
-    // operator never granted.
     const full = createToolContext({
       executor: stubExecutor(),
       sessionId: 's',
@@ -72,7 +70,6 @@ describe('capability-scoped tool set', () => {
 
   it('declares sandboxed tools without execute so they ride the executor seam', () => {
     const context = createToolContext({ executor: stubExecutor(), sessionId: 's' })
-    // The AI SDK halts the loop on a tool with no execute — that halt IS the seam.
     expect(context.tools.eval_script!.execute).toBeUndefined()
     expect(context.tools.fs_read!.execute).toBeTypeOf('function')
   })
@@ -83,7 +80,6 @@ describe('capability-scoped tool set', () => {
       import_leads: tool({ inputSchema: z.object({}), execute: async () => ({ ok: true }) }),
     })
     expect(withMcp.definitions.find((d) => d.name === 'import_leads')?.trust).toBe('authoritative')
-    // Still only eval_script may leave the server.
     expect(withMcp.sandboxedToolNames).toEqual(['eval_script'])
 
     expect(() => withMcpTools(base, { eval_script: tool({ inputSchema: z.object({}) }) })).toThrow(/collides/)
@@ -153,8 +149,6 @@ describe('capability-scoped tool set', () => {
 
 describe('runner-driven tool execution', () => {
   it('runs the enrich workflow: download, sandboxed eval, authoritative push', async () => {
-    // A realistic sequence: fetch a doc, score it in the sandbox, push the score
-    // through an MCP tool, then answer.
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
       doStream: [
@@ -203,15 +197,12 @@ describe('runner-driven tool execution', () => {
       timeout: 15_000,
     })
 
-    // The document reached the scratch VFS, the sandbox scored it, and only the
-    // authoritative tool wrote anything outward.
     expect(vfs.read('/leads/acme.txt')).toBe('revenue: 120')
     expect(pushed).toEqual([{ lead: 'acme', score: 'qualified' }])
     expect(events.find((e) => e.type === 'turn_result')).toMatchObject({
       subtype: 'success',
       result: 'Acme is qualified.',
     })
-    // The sandboxed call is visible as its own execution lifecycle.
     expect(events.find((e) => e.type === 'execution_dispatched')).toMatchObject({
       executionId: 'c2',
       toolName: 'eval_script',
@@ -272,7 +263,6 @@ describe('runner-driven tool execution', () => {
 
     await vi.waitFor(() => expect(runner.pendingToolCalls).toHaveLength(1))
     expect(dispatched).toEqual([])
-    // The host answers it out-of-band, exactly as before.
     expect(runner.resolveToolCall('c1', { type: 'text', value: 'yes' })).toBe(true)
   })
 })

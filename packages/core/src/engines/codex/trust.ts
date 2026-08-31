@@ -1,15 +1,3 @@
-/**
- * Codex project trust: will this session's cwd get its `.codex/config.toml`?
- * Codex layers it only for a project trusted in `$CODEX_HOME/config.toml`, and the
- * app-server surface has no trust prompt — so an untrusted project's config, MCP
- * servers included, is silently ignored, and the runner asks this module at
- * session start so the transcript can say so. Discovery, per-layer trust,
- * canonicalization and the sandbox-scoped gate: docs/GOTCHAS.md §Codex engine.
- *
- * The bar for every degrade path: a FALSE notice — warning about a project codex
- * actually trusts — is worse than a missed one, so the narrow TOML reader below
- * refuses (→ silence) anything it cannot interpret with certainty.
- */
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 
@@ -25,9 +13,6 @@ const skipWs = (text: string, pos: number): number => {
 
 type Parsed<T> = { value: T; end: number } | undefined
 
-/** One-line TOML basic string starting at `pos` (which must be `"`). Undefined
- * on an escape TOML doesn't define or a close quote that never comes — the
- * caller refuses the file rather than guessing what codex would read. */
 const parseBasicString = (text: string, pos: number): Parsed<string> => {
   let out = ''
   let i = pos + 1
@@ -76,7 +61,6 @@ const parseBasicString = (text: string, pos: number): Parsed<string> => {
   return undefined
 }
 
-/** One-line TOML literal string starting at `pos` (which must be `'`). */
 const parseLiteralString = (text: string, pos: number): Parsed<string> => {
   const close = text.indexOf("'", pos + 1)
   if (close === -1) {
@@ -85,8 +69,6 @@ const parseLiteralString = (text: string, pos: number): Parsed<string> => {
   return { value: text.slice(pos + 1, close), end: close + 1 }
 }
 
-/** A dotted key path — bare, `"basic"` and `'literal'` keys, whitespace around
- * the dots — as found in table headers and on the left of assignments. */
 const parseKeyPath = (text: string, pos: number): Parsed<string[]> => {
   const keys: string[] = []
   let i = pos
@@ -118,15 +100,8 @@ const parseKeyPath = (text: string, pos: number): Parsed<string[]> => {
   }
 }
 
-/**
- * Scan an assignment's value (or the continuation line of a multi-line array),
- * confirming where it ends. Returns the bracket depth carried onto the next
- * line (0 = the value is complete) plus the string itself when the whole value
- * was one plain one-line string. Undefined refuses the file: multi-line
- * strings are where a line reader starts misreading string *content* as
- * sections and entries — the exact mistake that could flip a real trust entry
- * — so they are not parsed around, they end the attempt.
- */
+// Returns the bracket depth carried onto the next line (0 = the value is complete); undefined
+// refuses the whole file rather than guess what codex would read.
 const scanValueLine = (text: string, pos: number, depth: number): { depth: number; value?: string } | undefined => {
   let i = skipWs(text, pos)
   if (depth === 0 && (text[i] === '"' || text[i] === "'")) {
@@ -172,18 +147,6 @@ const scanValueLine = (text: string, pos: number, depth: number): { depth: numbe
   return { depth }
 }
 
-/**
- * The `[projects."<path>"] trust_level = "..."` entries of a codex
- * `config.toml`, by a deliberately narrow reader (core takes no TOML
- * dependency for this). Handles what codex itself writes plus the reasonable
- * hand-edits — comments, CRLF, whitespace, quoted keys with escapes, literal
- * and bare keys, `[projects]`-with-dotted-keys and top-level dotted forms,
- * single-line inline tables, multi-line arrays — and returns **undefined for
- * anything else it meets anywhere in the file** (multi-line strings,
- * `projects` as an inline table, array-of-tables, junk): the caller treats
- * undefined as "cannot know" and stays silent. Conflicting duplicate entries
- * also refuse — invalid for TOML, and guessing wrong is a false notice.
- */
 export const parseProjectTrustEntries = (source: string): Map<string, string> | undefined => {
   const entries = new Map<string, string>()
   let section: string[] = []
@@ -238,8 +201,8 @@ export const parseProjectTrustEntries = (source: string): Map<string, string> | 
     if (full[0] !== 'projects') {
       continue
     }
-    // `projects = {...}` / `projects."<p>" = {...}`: whole-entry forms this
-    // reader does not interpret — refuse rather than miss a trust_level inside.
+    // `projects = {...}` / `projects."<p>" = {...}`: whole-entry forms this reader does not
+    // interpret — refuse rather than miss a trust_level inside.
     if (full.length < 3) {
       return undefined
     }
@@ -261,14 +224,6 @@ export const parseProjectTrustEntries = (source: string): Map<string, string> | 
   return entries
 }
 
-/**
- * A linked worktree inherits trust from its main repository's entry (measured:
- * trusting the main repo path loads the worktree's project config). The
- * worktree's `.git` is a FILE whose `gitdir:` line names
- * `<main>/.git/worktrees/<name>`; the directory owning that `.git` is the
- * anchor to look up. Anything unreadable or shaped differently resolves false
- * — this route can only ADD trust, i.e. silence, never a false notice.
- */
 const mainRepositoryTrusted = (gitRootDir: string, canonical: Map<string, string>): boolean => {
   const gitPath = join(gitRootDir, '.git')
   try {
@@ -287,40 +242,24 @@ const mainRepositoryTrusted = (gitRootDir: string, canonical: Map<string, string
     let main = gitdir.slice(0, at)
     try {
       main = realpathSync(main)
-    } catch {
-      // a main repo that moved still compares by the name the gitdir uses
-    }
+    } catch {}
     return canonical.get(main) === 'trusted'
   } catch {
     return false
   }
 }
 
-/**
- * The notice for a codex session about to run on a cwd whose
- * `.codex/config.toml` codex will ignore, or undefined when there is nothing
- * to say — no project config anywhere codex would look, the project is
- * trusted, or the situation cannot be established with certainty. Read-only
- * throughout: WorkerDeck never writes trust entries (adjacent to the auth red
- * lines — trusting a directory is the operator's decision, made in codex's
- * own prompt or by their own hand).
- */
 export const untrustedProjectNotice = (options: { cwd: string; codexHome: string }): string | undefined => {
   let cwd: string
   try {
     cwd = realpathSync(options.cwd)
   } catch {
-    // A cwd that doesn't resolve is the engine's own loud failure, not ours.
     return undefined
   }
   let home = resolve(options.codexHome)
   try {
     home = realpathSync(options.codexHome)
-  } catch {
-    // Keep the resolved spelling; only used to recognize the home-as-layer case.
-  }
-  // Discovery: cwd up to and including the nearest `.git` holder; without one,
-  // the cwd alone (measured — no-git ancestors are never consulted).
+  } catch {}
   const chain: string[] = []
   let dir = cwd
   for (;;) {
@@ -341,15 +280,12 @@ export const untrustedProjectNotice = (options: { cwd: string; codexHome: string
       return false
     }
     try {
-      // The cwd whose `.codex` IS the codex home: that config is the base
-      // config and always loads — nothing is being ignored there.
+      // The cwd whose `.codex` IS the codex home: that config is the base config and always loads.
       return realpathSync(join(layer, '.codex')) !== home
     } catch {
       return false
     }
   })
-  // Only read the operator's config once a project config exists to be ignored
-  // — the common session touches nothing outside its own cwd chain.
   if (layers.length === 0) {
     return undefined
   }
@@ -372,17 +308,14 @@ export const untrustedProjectNotice = (options: { cwd: string; codexHome: string
       return undefined
     }
   }
-  // Entries land under their canonical path, matching codex's canonical-cwd
-  // comparison. Two spellings of one directory with conflicting verdicts keep
-  // the trusted one — the direction that stays silent.
+  // Two spellings of one directory with conflicting verdicts keep the trusted one — the
+  // direction that stays silent.
   const canonical = new Map<string, string>()
   for (const [key, value] of entries) {
     let path = key
     try {
       path = realpathSync(key)
-    } catch {
-      // an entry for a path that no longer exists still compares literally
-    }
+    } catch {}
     if (canonical.get(path) === 'trusted') {
       continue
     }
@@ -391,8 +324,6 @@ export const untrustedProjectNotice = (options: { cwd: string; codexHome: string
   const rootTrusted = gitRoot !== undefined && (canonical.get(gitRoot) === 'trusted' || mainRepositoryTrusted(gitRoot, canonical))
   const ignored = layers.filter((layer) => {
     const entry = canonical.get(layer)
-    // An explicit verdict on the layer's own path beats inherited trust
-    // (measured); absent one, the git root's trust covers the whole chain.
     if (entry !== undefined) {
       return entry !== 'trusted'
     }

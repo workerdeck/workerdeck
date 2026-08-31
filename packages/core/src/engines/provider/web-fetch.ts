@@ -1,23 +1,10 @@
 import { lookup } from 'node:dns/promises'
 
-/**
- * `web_fetch` backend, close to Claude Code's original WebFetch: fetch a URL,
- * convert HTML to markdown, and (optionally) digest it with a model against the
- * caller's prompt. Server-side only — this runs with server egress, which is
- * exactly why it is an authoritative capability the operator grants explicitly.
- */
-
 export type WebFetchResult = {
-  /** The URL that was fetched (after same-host redirects). */
   url: string
-  /** Model digest of the page against the prompt (when a digest fn is wired). */
   digest?: string
-  /** Page content as markdown (when no digest fn is wired, or digesting failed). */
   markdown?: string
-  /** True when the markdown was cut at the size cap. */
   truncated?: boolean
-  /** Redirect-to-a-different-host notice: the redirect is surfaced, not followed
-   * (the agent can decide to fetch `redirectUrl` itself). */
   notice?: string
   redirectUrl?: string
   error?: string
@@ -25,23 +12,14 @@ export type WebFetchResult = {
 
 export type WebFetchFn = (url: string, prompt: string) => Promise<WebFetchResult>
 
-/** Runs the digest pass over the fetched markdown. Wire the session's own model
- * here (see createEngineSession) so its tokens land in the turn's usage. */
 export type WebFetchDigest = (markdown: string, prompt: string) => Promise<string>
 
 export type WebFetchOptions = {
   fetchImpl?: typeof fetch
-  /** Raw-body cap, enforced while streaming (before any conversion). Default 1 MiB. */
   maxContentBytes?: number
-  /** Markdown cap handed to the model. Default 50 KB. */
   maxMarkdownBytes?: number
-  /** Fetched-page cache TTL (keyed by URL; the digest is per-prompt and never
-   * cached). Default 15 minutes. */
   cacheTtlMs?: number
-  /** Optional hostname allowlist on top of the SSRF guard (exact or `*.example.com`).
-   * Unset = any public host. */
   allowedHosts?: string[]
-  /** Per-request timeout. Default 30000. */
   timeoutMs?: number
   digest?: WebFetchDigest
 }
@@ -94,8 +72,6 @@ export const createWebFetch = (options: WebFetchOptions = {}): WebFetchFn => {
           return { url: url.href, error: `redirect to unsupported URL: ${location}` }
         }
         if (target.host !== url.host) {
-          // Like the original: surface a cross-host redirect instead of silently
-          // following it — the agent may fetch the new URL explicitly.
           return {
             url: url.href,
             redirectUrl: target.href,
@@ -166,10 +142,8 @@ const parseUrl = (raw: string): URL | undefined => {
   }
 }
 
-/** SSRF guard: resolve the hostname and refuse private, loopback, and link-local
- * destinations. Checked per redirect hop. Resolution happens once here and again
- * inside fetch (a DNS-rebinding TOCTOU); this tier accepts that — operators who
- * need pinning can supply `fetchImpl` with a pinned agent. */
+// Resolution happens here and again inside fetch — a DNS-rebinding TOCTOU this tier accepts;
+// operators who need pinning supply `fetchImpl` with a pinned agent.
 const denyReason = async (url: URL, allowedHosts: string[] | undefined): Promise<string | null> => {
   const host = url.hostname.toLowerCase()
   if (allowedHosts && allowedHosts.length > 0 && !hostMatches(host, allowedHosts)) {
@@ -212,7 +186,6 @@ const hostMatches = (host: string, allowedHosts: string[]): boolean => {
   })
 }
 
-/** Private / loopback / link-local / unspecified, IPv4 and IPv6 (incl. v4-mapped). */
 export const isPrivateAddress = (address: string): boolean => {
   const ip = address.toLowerCase()
   if (ip.includes(':')) {
@@ -274,12 +247,6 @@ const looksLikeHtml = (body: string): boolean => {
   return /<(!doctype|html|head|body)[\s>]/i.test(body.slice(0, 1024))
 }
 
-/**
- * Dependency-free HTML → markdown, tuned for "give the model readable text":
- * drops non-content subtrees, keeps headings/lists/links/emphasis/code, strips
- * everything else. Not a spec-grade converter on purpose — a small predictable
- * transform beats dragging a DOM into core.
- */
 export const htmlToMarkdown = (html: string): string => {
   let text = html
     .replace(/<!--[\s\S]*?-->/g, '')
@@ -294,7 +261,6 @@ export const htmlToMarkdown = (html: string): string => {
     })
     .replace(/<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href: string, body: string) => {
       const label = stripTags(body).trim()
-      // Skip anchors/scripts and empty labels; keep the label when it IS the URL.
       if (!label || href.startsWith('#') || href.startsWith('javascript:')) {
         return label
       }

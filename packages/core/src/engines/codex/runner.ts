@@ -56,15 +56,6 @@ import type {
   AppServerUserMessageItem,
 } from './types.ts'
 
-/**
- * thread/start's sandbox axis (string form) — our permission modes as codex
- * sandbox modes: `default` → read-only (reads run; any mutation is refused by
- * the OS sandbox and — with the ask policy below — escalates to a real
- * question), `acceptEdits` → workspace-write (in-workspace writes sail
- * through, the acceptEdits grant), `bypassPermissions` → danger-full-access.
- * `auto` rides the SAME sandbox as acceptEdits — it is not a wider grant, it
- * only moves *who answers* the approvals (see {@link APPROVALS_REVIEWER_BY_MODE}).
- */
 const THREAD_SANDBOX_BY_MODE: Partial<Record<PermissionMode, string>> = {
   default: 'read-only',
   acceptEdits: 'workspace-write',
@@ -72,17 +63,9 @@ const THREAD_SANDBOX_BY_MODE: Partial<Record<PermissionMode, string>> = {
   bypassPermissions: 'danger-full-access',
 }
 
-/**
- * turn/start's sandboxPolicy axis (object form — same policy, second shape).
- *
- * The `workspaceWrite` entries here are a SHAPE, not the whole policy: every
- * unstated field of that variant is serde-defaulted by the app-server, so
- * sending it bare silently overrides the operator's `[sandbox_workspace_write]`
- * — `network_access` back to false, `writable_roots` back to empty — on every
- * turn. {@link CodexRunner.#turnSandboxPolicy} restates those fields from
- * `config/read`; nothing else may send this map's `workspaceWrite` entries
- * directly.
- */
+// Only `#turnSandboxPolicy` may send the workspaceWrite entry: every unstated field of that
+// variant is serde-defaulted, so a bare object resets the operator's networkAccess and
+// writableRoots on every turn.
 const TURN_SANDBOX_BY_MODE: Partial<Record<PermissionMode, { type: string }>> = {
   default: { type: 'readOnly' },
   acceptEdits: { type: 'workspaceWrite' },
@@ -90,17 +73,6 @@ const TURN_SANDBOX_BY_MODE: Partial<Record<PermissionMode, { type: string }>> = 
   bypassPermissions: { type: 'dangerFullAccess' },
 }
 
-/**
- * `[sandbox_workspace_write]` as codex resolves it FOR THIS CWD (project
- * layers included), read once per child from `config/read` and restated on
- * every `turn/start` — see {@link CodexRunner.#readWorkspaceWrite}.
- *
- * Note the axis this represents: network access is **not** an approval
- * question, it is a property of the workspace-write sandbox, off by default,
- * and no approval policy turns it on. WorkerDeck sets it nowhere — the
- * operator's `config.toml` is the only source, exactly as codex documents.
- * All this type does is stop us from clobbering their answer.
- */
 type CodexWorkspaceWrite = {
   writableRoots: string[]
   networkAccess: boolean
@@ -108,16 +80,6 @@ type CodexWorkspaceWrite = {
   excludeSlashTmp: boolean
 }
 
-/**
- * The approval axis, stated as the GRANULAR object on both thread/start and
- * turn/start — never the string vocabulary, which never asks anything. Both gates
- * (this object and `capabilities.experimentalApi` at initialize) are required and
- * there is NO non-experimental fallback: a binary rejecting either fails the turn
- * loudly rather than quietly not asking (docs/GOTCHAS.md §Codex engine).
- *
- * `default`/`acceptEdits` ask (all flags on — the sandbox axis already decides
- * *what needs asking*); `bypassPermissions` asks nothing, same shape.
- */
 const GRANULAR_ASK = {
   granular: {
     sandbox_approval: true,
@@ -136,32 +98,15 @@ const GRANULAR_NEVER = {
     skill_approval: false,
   },
 }
-/**
- * Notifications whose meaning is scoped to ONE thread, and which are therefore
- * only ever read off the session's own. Everything else (items, deltas) is
- * accepted from any thread on the connection — see `#handleNotification`.
- */
 const THREAD_SCOPED_NOTIFICATIONS = new Set(['turn/started', 'turn/completed', 'thread/tokenUsage/updated'])
 
 const APPROVAL_POLICY_BY_MODE: Partial<Record<PermissionMode, object>> = {
   default: GRANULAR_ASK,
   acceptEdits: GRANULAR_ASK,
-  // `auto` still ASKS — the flags are what produce an approval request at all.
-  // Without them there would be nothing for the reviewer below to answer.
   auto: GRANULAR_ASK,
   bypassPermissions: GRANULAR_NEVER,
 }
 
-/**
- * The THIRD approval axis — *who reviews* — independent of the sandbox axis and
- * the ask axis above; `auto` is codex's own "Approve for me" preset, a fixed
- * OpenAI-prompted subagent with no configuration surface, unlike the Claude
- * engine's operator-configurable `auto` (docs/GOTCHAS.md §Codex engine).
- *
- * Stated explicitly for EVERY mode rather than omitted for the default: a thread
- * inherits `approvalsReviewer` across turns, so leaving it unset would let a stale
- * `auto_review` survive a switch back to a user-reviewed mode.
- */
 const APPROVALS_REVIEWER_BY_MODE: Partial<Record<PermissionMode, string>> = {
   default: 'user',
   acceptEdits: 'user',
@@ -169,35 +114,14 @@ const APPROVALS_REVIEWER_BY_MODE: Partial<Record<PermissionMode, string>> = {
   bypassPermissions: 'user',
 }
 
-/** Fallback timeout for a pending approval nobody answers — the SessionRunner
- * default, so unattended codex sessions land the same way Claude ones do. */
 const DEFAULT_APPROVAL_TIMEOUT_MS = 300_000
 
-/**
- * Tool name for codex's built-in `image_gen`. A stable string because it is a
- * rendering contract: both clients key an icon (and, where they can reach the
- * host filesystem, an inline preview) off it.
- */
 export const CODEX_IMAGE_TOOL = 'CodexImageGeneration'
 
-/**
- * Tool name for a spawned agent's anchor `tool_use` — the claude engine's
- * `Task` in this engine's vocabulary. Codex never sends such a call: the model's
- * `spawn_agent` surfaces only as the `subAgentActivity` marker item, so the
- * runner authors the call itself, because everything downstream is built on a
- * top-level `tool_use` existing — `terminalBlocks` absorbs a sidechain into the
- * call whose id its events carry as `parentToolUseId`, the takeover frames by
- * it, and `taskIdentity` labels it from the input's `subagent_type`. Not a new
- * wire idea, just a row: the same shape every other codex tool card uses.
- */
 export const CODEX_AGENT_TOOL = 'CodexAgent'
 
-/** Tool name for the model's collab-agent calls (`wait`, `sendInput`, …), the
- * `tool` field carried in the input. One name for the whole open axis rather
- * than a name per verb, so a future verb renders instead of vanishing. */
 export const CODEX_COLLAB_TOOL = 'CodexCollab'
 
-/** An agent's name is its path's basename: '/root/date_one' → 'date_one'. */
 const agentName = (agentPath: string | null | undefined): string | undefined => {
   if (typeof agentPath !== 'string') {
     return undefined
@@ -206,9 +130,6 @@ const agentName = (agentPath: string | null | undefined): string | undefined => 
   return name || undefined
 }
 
-/** The collab card's input: the verb always, the rich fields only when codex
- * actually filled them (measured against 0.146.0 they arrive empty — the card
- * must not render five null columns to say 'wait'). */
 const collabInput = (item: AppServerCollabAgentToolCallItem): Record<string, unknown> => {
   return {
     tool: item.tool,
@@ -218,9 +139,6 @@ const collabInput = (item: AppServerCollabAgentToolCallItem): Record<string, unk
   }
 }
 
-/** A completed turn's answer, from its summary `items` page — the last
- * `agentMessage` text. For a sub-agent's thread this is the agent's report,
- * which is exactly what belongs in the anchor's `tool_result`. */
 const turnReport = (turn: AppServerTurn): string | undefined => {
   const items = Array.isArray(turn.items) ? turn.items : []
   for (let index = items.length - 1; index >= 0; index--) {
@@ -232,22 +150,10 @@ const turnReport = (turn: AppServerTurn): string | undefined => {
   return undefined
 }
 
-/** Longest `result` worth putting in a tool card. The field is free-form and
- * undocumented; anything past this is assumed to be an encoded image rather
- * than a sentence, and encoded images do not go in the event log. */
 const MAX_IMAGE_RESULT_CHARS = 512
 
 const shortResult = (result: string): boolean => result.length > 0 && result.length <= MAX_IMAGE_RESULT_CHARS && !result.startsWith('data:')
 
-/**
- * `file_produced.fileId` — derived from the path, not minted fresh.
- *
- * Two properties fall out of that and both are load-bearing: codex reports the
- * same `savedPath` on the progress item and again on the completed one, so a
- * derived id makes the second emission a no-op instead of a duplicate row; and
- * a session rebuilt from a snapshot re-derives the same ids, so a client's
- * cached URL still resolves after a park/restore.
- */
 const producedFileId = (path: string): string => {
   return createHash('sha256').update(path).digest('hex').slice(0, 32)
 }
@@ -262,20 +168,11 @@ const PRODUCED_MEDIA_TYPES: Record<string, string> = {
   pdf: 'application/pdf',
 }
 
-/** Media type from the extension, for the handful a client renders inline.
- * Undefined for everything else — the route sniffs, and guessing here is how a
- * text file ends up labelled `image/png`. */
 const producedMediaType = (path: string): string | undefined => {
   const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
   return PRODUCED_MEDIA_TYPES[extension]
 }
 
-/**
- * Codex's `SkillMetadata` as the protocol states it. `interface.shortDescription`
- * beats the legacy top-level one (codex's own comment says to prefer it), and
- * `enabled` defaults to true — an entry codex listed without the field is one it
- * considers live, and defaulting to false would hide working skills.
- */
 const skillInfo = (skill: AppServerSkillMetadata): SkillInfo => {
   return {
     name: skill.name,
@@ -286,20 +183,11 @@ const skillInfo = (skill: AppServerSkillMetadata): SkillInfo => {
     ...(skill.interface?.displayName ? { displayName: skill.interface.displayName } : {}),
     ...(skill.interface?.defaultPrompt ? { defaultPrompt: skill.interface.defaultPrompt } : {}),
     ...(skill.scope ? { scope: skill.scope } : {}),
+    // Codex omits `enabled` for a skill it considers live; defaulting to false would hide it.
     enabled: skill.enabled !== false,
   }
 }
 
-/**
- * Codex's MCP status → the protocol's, which is Claude Code's vocabulary
- * ('connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled').
- *
- * `notLoggedIn` wins over any startup status — a credential is what the operator
- * must act on — and is the only auth value meaning "unusable" (`unsupported` is
- * the normal answer for a stdio server). Otherwise tools imply connected and a
- * server with neither notification nor tools stays 'pending'; the reasoning is in
- * docs/GOTCHAS.md §MCP status.
- */
 const mcpStatusOf = (
   authStatus: string | undefined,
   update: { status: string; failureReason?: string } | undefined,
@@ -308,8 +196,6 @@ const mcpStatusOf = (
   if (update?.status === 'failed') {
     return update.failureReason === 'reauthenticationRequired' ? 'needs-auth' : 'failed'
   }
-  // codex's 'cancelled' has no Claude equivalent; it means the startup was
-  // abandoned, which for a reader is the same actionable state as failed.
   if (update?.status === 'cancelled') {
     return 'failed'
   }
@@ -319,30 +205,16 @@ const mcpStatusOf = (
   if (update?.status === 'ready') {
     return 'connected'
   }
-  // **Tools imply connected, and this branch is not a nicety.** The startup
-  // notifications only fire for servers that come up *while we are attached*;
-  // a session whose child already had its servers running receives none at all
-  // (measured against the real binary — a working server with three tools and
-  // no notification). Tools can only have been enumerated over a completed
-  // handshake, so their presence is direct evidence the server is up, and
-  // without this a healthy server would read as 'pending' forever.
   if (hasTools) {
     return 'connected'
   }
-  // No notification and nothing exposed. Genuinely ambiguous: not started yet,
-  // or switched off in config — and `mcpServerStatus/list` cannot tell the two
-  // apart (it lists disabled servers too, also toolless). 'pending' is the
-  // honest one of the two; claiming 'disabled' would be a guess.
   return 'pending'
 }
 
-/** One `mcpServerStatus/list` entry as the protocol states it. */
 const mcpServerInfo = (
   server: AppServerMcpServerStatus,
   update: { status: string; error?: string; failureReason?: string } | undefined,
 ): McpServerStatusInfo => {
-  // A map keyed by tool name, not an array — and the key is authoritative when
-  // the value omits its own `name`.
   const tools = Object.entries(server.tools ?? {}).flatMap(([key, tool]) => {
     if (!tool) {
       return []
@@ -370,16 +242,10 @@ const mcpServerInfo = (
     status: mcpStatusOf(server.authStatus ?? undefined, update, tools.length > 0),
     ...(update?.error ? { error: update.error } : {}),
     ...(server.serverInfo?.name ? { serverInfo: { name: server.serverInfo.name, version: server.serverInfo.version ?? '' } } : {}),
-    // Deliberately no `transport`/`command`/`args`/`url`: the list response
-    // carries none of them. Inventing a transport from the server's name would
-    // be a guess rendered as a fact, and the panel already omits what is absent.
     ...(tools.length > 0 ? { tools } : {}),
   }
 }
 
-/** What the card shows while the picture is being made, and after. `savedPath`
- * only exists once it lands — a client keys its preview off it, so it is a
- * field rather than a sentence in the result text. */
 const imageGenerationInput = (item: AppServerImageGenerationItem): Record<string, unknown> => {
   return {
     ...(item.revisedPrompt ? { prompt: item.revisedPrompt } : {}),
@@ -387,13 +253,6 @@ const imageGenerationInput = (item: AppServerImageGenerationItem): Record<string
   }
 }
 
-/**
- * The experimental per-request decision list, normalized to names: a string
- * entry is its own name, a structured entry (`{acceptWithExecpolicyAmendment:
- * …}`) is named by its key. Undefined = the request stated no list and the
- * channel's schema enum applies. Present only under `experimentalApi: true` —
- * which WorkerDeck always declares.
- */
 const offeredDecisions = (params: unknown): Set<string> | undefined => {
   const raw = (params as { availableDecisions?: unknown })?.availableDecisions
   if (!Array.isArray(raw)) {
@@ -412,15 +271,6 @@ const offeredDecisions = (params: unknown): Set<string> | undefined => {
   return names.size > 0 ? names : undefined
 }
 
-/**
- * Decision picking for the `{decision: …}` channels, honoring the request's own
- * `availableDecisions` — which gates the ACCEPT side only (docs/GOTCHAS.md §Codex
- * engine). A one-shot allow is never widened into `acceptForSession` or an
- * execpolicy amendment, so an allow with no plain `accept` on offer yields
- * undefined and the caller answers with the denial instead. `decline` is sent even
- * when unlisted (the response schema declares it unconditionally, verified live);
- * `cancel` — codex's deny-and-interrupt — is only for deny+interrupt.
- */
 const pickDecision = (behavior: 'allow' | 'deny', interrupt: boolean, offered: Set<string> | undefined): string | undefined => {
   const has = (name: string) => !offered || offered.has(name)
   if (behavior === 'allow') {
@@ -432,8 +282,6 @@ const pickDecision = (behavior: 'allow' | 'deny', interrupt: boolean, offered: S
   return 'decline'
 }
 
-/** Codex `requestUserInput` questions in the AskUserQuestion wire shape both
- * clients already render (QuestionPrompt / QuestionPromptView). */
 const userQuestionsFromCodex = (questions: readonly AppServerUserInputQuestion[]): UserQuestion[] => {
   return questions.map((question) => ({
     question: question.question,
@@ -445,13 +293,6 @@ const userQuestionsFromCodex = (questions: readonly AppServerUserInputQuestion[]
   }))
 }
 
-/**
- * The text of a history `userMessage` item: its content entries' text parts
- * joined. Image parts have no replayable representation (the bytes went to the
- * model, not into the rollout), so they are named rather than dropped — an
- * image-only prompt must still yield a user row, or the resumed turn loses the
- * prompt mark the scrubber navigates by.
- */
 const historyUserText = (item: AppServerUserMessageItem): string => {
   if (!Array.isArray(item.content)) {
     return ''
@@ -463,9 +304,6 @@ const historyUserText = (item: AppServerUserMessageItem): string => {
       if (candidate?.type === 'text' && typeof candidate.text === 'string') {
         return candidate.text
       }
-      // By name, because the part vocabulary is codex's and open ('image',
-      // 'localImage', …). Anything else unnamed stays unrepresented rather than
-      // counted as a picture it may not be.
       if (typeof candidate?.type === 'string' && candidate.type.toLowerCase().includes('image')) {
         images += 1
       }
@@ -479,9 +317,6 @@ const historyUserText = (item: AppServerUserMessageItem): string => {
   return images > 0 ? `[${images === 1 ? 'image' : `${images} images`}]` : ''
 }
 
-/** The AskUserQuestion answer convention (question text → chosen label(s),
- * comma-joined) mapped back to codex's id-keyed shape. Questions the client
- * did not answer are absent, not empty. */
 const codexAnswers = (
   questions: readonly AppServerUserInputQuestion[],
   answers: Record<string, unknown> | undefined,
@@ -498,14 +333,6 @@ const codexAnswers = (
 
 type ApprovalSurface = Pick<PermissionRequest, 'toolName' | 'input' | 'title' | 'displayName' | 'description' | 'decisionReason'>
 
-/**
- * One server→client ask channel: how it surfaces as a {@link PermissionRequest}
- * and what its wire responses are. `allow` may return undefined — the request
- * offered no plain accept — in which case the caller answers with `deny` and
- * says so. `decision` names the wire decision when the channel has one, so the
- * caller knows whether a deny+interrupt still needs an explicit
- * `turn/interrupt` ('cancel' carries the interrupt itself).
- */
 type ApprovalChannel = {
   describe(params: unknown): ApprovalSurface
   itemId(params: unknown): string | undefined
@@ -517,7 +344,6 @@ type ApprovalChannel = {
   deny(params: unknown, interrupt: boolean, offered: Set<string> | undefined): { response: unknown; decision?: string }
 }
 
-/** The two channels whose response is `{decision: …}` share their pick logic. */
 const decisionChannel = (
   describe: (params: unknown) => ApprovalSurface,
   itemId: (params: unknown) => string | undefined,
@@ -536,11 +362,6 @@ const decisionChannel = (
   }
 }
 
-/**
- * The ask channels, wired to the permission surface. Anything not listed here
- * still gets a JSON-RPC -32601 — never a hang (an unanswered server request
- * wedges the turn).
- */
 const APPROVAL_CHANNELS: Record<string, ApprovalChannel> = {
   'item/commandExecution/requestApproval': decisionChannel(
     (raw) => {
@@ -553,10 +374,6 @@ const APPROVAL_CHANNELS: Record<string, ApprovalChannel> = {
           ...(params.cwd ? { cwd: params.cwd } : {}),
           ...(params.reason ? { reason: params.reason } : {}),
         },
-        // Codex's own sentence is the truth of what is being asked: for a
-        // sandbox escalation it reads "command failed; retry without sandbox?"
-        // — an after-the-refusal question, NOT a pre-execution gate — and the
-        // clients render `title` verbatim, so the tense stays honest.
         title: params.reason ?? (command ? `Codex wants to run: ${command}` : 'Codex wants to run a command'),
         displayName: 'Run command',
         description: params.reason && command ? command : (params.cwd ?? undefined),
@@ -599,9 +416,6 @@ const APPROVAL_CHANNELS: Record<string, ApprovalChannel> = {
       }
     },
     itemId: (raw) => (raw as AppServerPermissionsApprovalParams).itemId,
-    // Allow grants exactly what was asked (or the client's narrowed rewrite via
-    // `updatedInput.permissions`), scoped to the turn — the response's default
-    // scope, never 'session'.
     allow: (raw, updatedInput) => ({
       response: {
         permissions:
@@ -610,7 +424,6 @@ const APPROVAL_CHANNELS: Record<string, ApprovalChannel> = {
           {},
       },
     }),
-    // This channel's "no" is an empty grant.
     deny: () => ({ response: { permissions: {} } }),
   },
   'item/tool/requestUserInput': {
@@ -654,66 +467,36 @@ const APPROVAL_CHANNELS: Record<string, ApprovalChannel> = {
       }
     },
     itemId: () => undefined,
-    // An allow's `updatedInput` IS the elicitation content (the filled form);
-    // content is nullable in the schema, so an allow without one is an accept
-    // with no content and the MCP server judges it.
     allow: (_raw, updatedInput) => ({
       response: {
         action: 'accept',
         ...(updatedInput !== undefined ? { content: updatedInput } : {}),
       },
     }),
-    // 'cancel' here cancels the ELICITATION, not the codex turn — no
-    // `decision` is reported, so a deny+interrupt still interrupts the turn
-    // explicitly.
     deny: (_raw, interrupt) => ({ response: { action: interrupt ? 'cancel' : 'decline' } }),
   },
 }
 
-/** One pending server→client approval: the surfaced request, the channel that
- * knows its wire vocabulary, and the resolver that answers the JSON-RPC
- * request when a decision lands. */
 type PendingCodexApproval = {
   request: PermissionRequest
   channel: ApprovalChannel
   params: unknown
   offered: Set<string> | undefined
-  /** JSON-RPC wire id — `serverRequest/resolved` names it when codex settles
-   * the request itself. */
   wireId: string | number | undefined
   timer: ReturnType<typeof setTimeout>
   respond: (response: unknown) => void
 }
 
 export type CodexRunnerConfig = CreateSessionRequest & {
-  /** The injectable connection factory. The codex adapter passes
-   * `connectAppServer` under the resolved binary; unit tests pass a scripted
-   * peer. Required — this class never spawns anything itself. */
   connectFn: AppServerConnectFn
-  /** Base environment for the codex child. Defaults to process.env. Passed to
-   * spawn **complete** — a child env replaces, never merges. */
   env?: Record<string, string | undefined>
-  /** CODEX_HOME pin from the profile (auth, config.toml, thread storage). */
   codexHome?: string
-  /** Timeout for pending approvals when the request itself doesn't set one.
-   * Default 300000 — the SessionRunner default. */
   defaultApprovalTimeoutMs?: number
-  /** With `resume`: replay the thread's prior turns as `replay: true` events
-   * before anything else, so late-attaching clients get a full transcript —
-   * the SessionRunner option, same name, same default (true). */
   backfillHistory?: boolean
 }
 
-/** One queued user message: the input for exactly one turn. */
 type QueuedTurn = { input: AppServerUserInput[] }
 
-/**
- * Name a subscription window by its measured length, so codex's positional
- * windows land in the protocol's named vocabulary. The two names clients
- * already understand are exact matches for codex's durations (300 min = 5h,
- * 10080 min = 7d); anything else keeps a self-describing key rather than
- * borrowing a name that would size it wrongly.
- */
 const rateLimitWindowName = (minutes: number | null | undefined): string | undefined => {
   if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) {
     return undefined
@@ -727,50 +510,28 @@ const rateLimitWindowName = (minutes: number | null | undefined): string | undef
   return `window_${minutes}m`
 }
 
-/** Everything one in-flight turn accumulates between `turn/start` and its
- * terminal `turn/completed`. */
 type ActiveTurn = {
-  /** Per-turn namespace for item-derived ids, kept unconditionally (the retired
-   * exec transport's id-collision bug, b026e70): app-server item-id uniqueness
-   * across turns (and across a respawned child) is not something we rely on. */
   nonce: string
   turnId?: string
   interrupted: boolean
   finalText?: string
-  /** Last `error` notification, explaining a turn that fails without a message. */
   lastError?: string
   usage: AppServerTokenUsage
   sawUsage: boolean
-  /** Context occupancy from the most recent model request, with the window it
-   * was measured against. NOT `total` — see {@link CodexRunner.emitContextUsage}. */
   contextTokens?: number
   contextWindow?: number
   toolUseEmitted: Set<string>
-  /** Last seen reasoning section index per item+kind, for '\n\n' separators. */
   sectionIndex: Map<string, number>
   settled: boolean
   resolve: (outcome: AppServerTurn) => void
   reject: (error: Error) => void
 }
 
-/**
- * The Codex engine, over the binary's `app-server` JSON-RPC surface: ONE
- * `codex app-server` child per *session* (spawned lazily, held across turns),
- * streaming `item/agentMessage/delta` and the reasoning deltas token-by-token
- * (`streaming: 'token'`). Follows `SessionRunner`'s event-log/seq/status
- * discipline with `AiSdkRunner`'s turn-chain (one turn at a time; sendMessage
- * queues).
- *
- * A dead child is a failed *turn*, not a failed session: the thread persists
- * on disk, the connection is dropped, and the next message spawns a fresh
- * child that `thread/resume`s the same thread id.
- */
 export class CodexRunner implements Runner {
   readonly id: string
   readonly createdAt: number
 
   #config: CodexRunnerConfig
-  /** {@link CodexRunnerConfig.cwd}, checked once in the constructor. */
   readonly #cwd: string
   #log = new EventLog()
   #subscribers = new SubscriberSet()
@@ -780,70 +541,29 @@ export class CodexRunner implements Runner {
   #model: string | undefined
   #permissionMode: PermissionMode
   #reasoningEffort: string | undefined
-  /** What the binary said the profile's defaults resolve to (thread/start
-   * response) — lets `setModel(undefined)` mean "back to the default" even
-   * though a turn/start override persists for subsequent turns. */
   #resolvedModel: string | undefined
-  /** Last reported ChatGPT plan, so `plan_info` is emitted once per change. */
   #planType: string | undefined
   #resolvedEffort: string | undefined
   #queue: QueuedTurn[] = []
   #turnChain: Promise<void> = Promise.resolve()
   #activeTurn: ActiveTurn | undefined
   #connection: AppServerConnection | undefined
-  /** Per-child, from `config/read`; undefined = read failed, send the bare shape. */
   #workspaceWrite: CodexWorkspaceWrite | undefined
   #threadLoaded = false
   #numTurns = 0
   #totalCostUsd: number | undefined
   #started = false
   #closed = false
-  /** Session temp dir for image attachments (`localImage` takes host paths). */
   #imageDir: string | undefined
-  /** Pending server→client approvals, keyed by the surfaced request id. */
   #approvals = new Map<string, PendingCodexApproval>()
-  /** True from start() until the resume backfill (the turn chain's first link)
-   * settles — while set, sendMessage defers its user_message echo behind the
-   * chain so a new turn can never precede or interleave the replayed history. */
   #backfillPending = false
-  /** The resumed thread's prior turns, stashed by {@link #ensureThread} from
-   * the ONE thread/resume the backfill consumes (`partial` = the response's
-   * turnsBackwardsCursor said older turns exist beyond this page). A mid-life
-   * reconnect also goes through thread/resume, but with no backfill pending
-   * nothing is stashed — history is never replayed twice. */
   #resumedHistory: { turns: AppServerHistoryTurn[]; partial: boolean } | undefined
-  /** Set around history replay: {@link #emit} stamps `replay: true` onto the
-   * message events the live item mapping produces. */
   #replayingHistory = false
-  /** Last `skills` payload emitted, serialized — the comparison that keeps a
-   * `skills/changed` storm (the watcher fires per touched file) from filling
-   * the event log with identical lists. */
   #skillsFingerprint: string | undefined
-  /** In-flight `skills/list`, so a burst of `skills/changed` makes one call.
-   * The pending promise is reused rather than queued: the request has no
-   * arguments, so a second one would ask the same question. */
   #skillsRefresh: Promise<void> | undefined
-  /** Host paths already announced via `file_produced`, so the same picture
-   * reported on both the progress and the completed item registers once. */
   #producedPaths = new Set<string>()
-  /** Per-server liveness, accumulated from `mcpServer/startupStatus/updated`.
-   * `mcpServerStatus/list` does not carry a status field at all, so without
-   * this every server would read as "configured" and never as up or down. */
   #mcpStatus = new Map<string, { status: string; error?: string; failureReason?: string }>()
-  /** The spawned agents, keyed by their thread ids — the attribution table
-   * behind `parentToolUseId` and the rollup behind `info().subagents`. Runner-
-   * level, not per-turn: an agent's thread outlives the root turn that spawned
-   * it, and only the child process dying (or the session closing) ends them
-   * all — see the module doc in `subagents.ts`. */
   #agents = new CodexAgentTracker()
-  /** Threads that belonged to a conversation this session has cleared — the
-   * agents that were still running when it happened. Their notifications keep
-   * arriving on the same connection (a clear does not interrupt them and does
-   * not drop the child), and without this {@link CodexRunner.#agentFor} would
-   * mint them a fresh anchor and stream the cleared conversation's agent work
-   * into the new one. Never pruned: it is a handful of uuids for the session's
-   * life, and a late report from a long-dead agent is exactly what it exists to
-   * catch. */
   #clearedThreads = new Set<string>()
 
   constructor(config: CodexRunnerConfig, id: string = randomUUID()) {
@@ -854,8 +574,6 @@ export class CodexRunner implements Runner {
     if (config.forkSession) {
       throw new Error('the codex engine cannot fork a resumed thread')
     }
-    // Optional on the wire, required here — the codex binary runs in a real
-    // directory (see the same check in `SessionRunner`).
     if (!config.cwd) {
       throw new Error('the codex engine requires a cwd')
     }
@@ -869,9 +587,6 @@ export class CodexRunner implements Runner {
     this.createdAt = Date.now()
   }
 
-  /** The complete child environment — spawn env replaces process.env wholesale,
-   * so this must carry everything a shell would, with the profile's CODEX_HOME
-   * pin winning over operator env. */
   #childEnv(): Record<string, string> {
     const base = this.#config.env ?? process.env
     const env: Record<string, string> = {}
@@ -940,11 +655,6 @@ export class CodexRunner implements Runner {
     this.#started = true
     this.#warnUntrustedProject()
     if (this.#config.resume && this.#config.backfillHistory !== false) {
-      // First link of the turn chain: connect, thread/resume, and replay the
-      // thread's prior turns as `replay: true` events before any queued turn
-      // runs (and before its echo — see sendMessage). This is also why a
-      // promptless resume now connects eagerly rather than on first message:
-      // its history is the whole point of attaching to it.
       this.#backfillPending = true
       this.#turnChain = this.#turnChain.then(() => this.#backfillHistory())
     } else {
@@ -953,34 +663,18 @@ export class CodexRunner implements Runner {
     if (this.#config.prompt) {
       this.sendMessage(this.#config.prompt)
     }
-    // A session that is about to connect anyway (a prompt to run, or a resume
-    // to backfill) gets its skills from that connection a moment later. Only
-    // the promptless, non-resume case — the dashboard's "create, then type" —
-    // would otherwise sit with no child and therefore no skill list at all,
-    // which is the one place codex's own TUI has them and we did not.
     if (!this.#config.prompt && !this.#config.resume) {
       void this.#probeSkills()
     }
     return this.#turnChain
   }
 
-  /**
-   * One-time transcript notice for the codex trust gap: a `default`-mode session
-   * on an untrusted cwd has its `.codex/config.toml` silently ignored. The gate is
-   * sandbox-scoped, so wider modes are exempt — their `thread/start` writes the
-   * trust entry itself and a notice there would be *false* (docs/GOTCHAS.md §Codex
-   * engine). Emitted as `session_error`, which both clients render inline while the
-   * session keeps running; every degrade path is silence.
-   */
   #warnUntrustedProject(): void {
     if (this.#permissionMode !== 'default') {
       return
     }
     try {
       const env = this.#childEnv()
-      // Mirror the child's own home resolution: the profile pin already won
-      // inside #childEnv, then the session env's CODEX_HOME, then ~/.codex
-      // under the env's HOME (codex reads $HOME, not the process owner's).
       const pin = env.CODEX_HOME
       if (pin !== undefined && pin.length === 0) {
         return
@@ -990,22 +684,9 @@ export class CodexRunner implements Runner {
       if (message) {
         this.#emit({ type: 'session_error', message })
       }
-    } catch {
-      // Silence, deliberately — a failed probe must neither warn nor break
-      // the start.
-    }
+    } catch {}
   }
 
-  /**
-   * List skills over a **throwaway** connection, for a session with nothing else to
-   * do yet: `skills/list` needs a live child but not a thread, so this spawns one,
-   * asks, and closes it rather than parking a codex process behind every session
-   * someone created and never typed into (docs/GOTCHAS.md §Skills).
-   *
-   * Entirely best-effort and never awaited — a missing binary, a failed spawn or a
-   * rejected handshake must not turn a session that has not started into one that
-   * failed.
-   */
   async #probeSkills(): Promise<void> {
     let connection: AppServerConnection | undefined
     try {
@@ -1015,24 +696,11 @@ export class CodexRunner implements Runner {
       }
       await this.#refreshSkills(connection)
     } catch {
-      // The session is fine; it simply has no skill list until its own child
-      // comes up and asks again.
     } finally {
       connection?.close()
     }
   }
 
-  /**
-   * A handshaken child that is **not** the session's — for the questions a
-   * client can ask before the session has anything to run (its skills, its MCP
-   * servers). The caller owns it and must close it.
-   *
-   * No onNotification/onRequest/onClose wiring on purpose: this child answers
-   * one question and goes away, so its notifications are noise and its death is
-   * not the session's problem. The alternative — bringing the session's real
-   * child up early — would park a codex process behind every session someone
-   * created and never typed into.
-   */
   async #openScratchConnection(): Promise<AppServerConnection> {
     const connection = this.#config.connectFn({ env: this.#childEnv() })
     try {
@@ -1056,14 +724,6 @@ export class CodexRunner implements Runner {
     if (this.#closed) {
       throw new Error('session is closed')
     }
-    // `/clear` typed into a codex session, intercepted rather than sent: the
-    // app-server has no command surface (`slashCommands: false`), so the model
-    // would otherwise answer it as an ordinary prompt. Deliberately narrow —
-    // the bare word, no attachments; `/clear` with a file attached, or any
-    // sentence containing it, is a prompt and must never be silently stolen.
-    // `clearContext()` queues behind in-flight work; fire-and-forget with the
-    // failure surfaced as `session_error` (`sendMessage` is void by contract).
-    // No `user_message` echo: the reset would clear it in the same breath.
     if (text.trim() === '/clear' && !attachments?.length) {
       void this.clearContext().catch((error: unknown) => {
         this.#emit({
@@ -1082,10 +742,6 @@ export class CodexRunner implements Runner {
         attachments: attachments?.length ? attachments.map(attachmentRef) : undefined,
         uuid: randomUUID(),
       })
-    // While a resume's history replay is still pending, the echo rides the
-    // turn chain (which the replay heads), so the new turn's user message can
-    // never precede the history it follows. Otherwise it is immediate — a
-    // message queued behind a running turn still echoes right away.
     if (this.#backfillPending) {
       this.#turnChain = this.#turnChain.then(echo)
     } else {
@@ -1095,12 +751,6 @@ export class CodexRunner implements Runner {
     this.#scheduleTurn()
   }
 
-  /**
-   * App-server input for a message with attachments: images land in a session
-   * temp dir and travel as `localImage` host paths, text files inline into the
-   * prompt in the shared named envelope, PDF has no representation (the
-   * gateway's 415 normally refuses it first).
-   */
   #buildInput(text: string, attachments: readonly AttachmentInput[]): AppServerUserInput[] {
     const parts: AppServerUserInput[] = []
     for (const attachment of attachments) {
@@ -1135,8 +785,6 @@ export class CodexRunner implements Runner {
     return parts
   }
 
-  /** Resolve a pending approval. Returns false if the id is unknown (e.g.
-   * timed out, or already settled by codex itself). */
   resolvePermission(requestId: string, decision: PermissionDecision): boolean {
     const pending = this.#approvals.get(requestId)
     if (!pending) {
@@ -1147,9 +795,6 @@ export class CodexRunner implements Runner {
   }
 
   async interrupt(): Promise<void> {
-    // A pending approval is what's holding the turn open — settle each as a
-    // denied interrupt first (codex's 'cancel' where the request offers it,
-    // which itself ends the turn).
     for (const [id, pending] of this.#approvals) {
       this.#settleApproval(id, pending, { behavior: 'deny', message: 'interrupted', interrupt: true }, 'policy')
     }
@@ -1157,33 +802,10 @@ export class CodexRunner implements Runner {
     await this.#turnChain
   }
 
-  /**
-   * Reset the conversation: a **fresh thread on the same session**, because codex
-   * has no clear/reset RPC — the dead-child path minus the resume. The old thread
-   * is NOT deleted; it stays in CODEX_HOME and stays resumable.
-   *
-   * The new thread id is adopted (and rolled back on failure) *before*
-   * `conversation_reset` is emitted whenever a child is up, so a dormant record
-   * written in between can never name the cleared conversation; with no child there
-   * is no id to adopt and the parking service forgets the stale record. The context
-   * reading is retired by the event log's `conversation_reset` fold and cannot be
-   * re-polled here. Everything this rides on: docs/GOTCHAS.md §Codex engine.
-   */
   async clearContext(): Promise<void> {
     if (this.#closed) {
       throw new Error('session is closed')
     }
-    // Rides the TURN CHAIN, exactly like the intercepted `/clear`, and that is
-    // the whole safety argument. The chain is what serialises everything that
-    // touches `#ensureThread` — every `#runTurn`, and the resume backfill,
-    // which is the chain's first link and is NOT a turn (so a guard on
-    // `#activeTurn` would have let a clear run straight through the middle of a
-    // history replay, re-adopting the old thread id and replaying the cleared
-    // conversation ABOVE the reset). Websocket frames are not serialised with
-    // each other, so the route can and does arrive at any moment.
-    //
-    // The chain must not be poisoned by a failed clear: the caller gets the
-    // rejection, the chain keeps its own settled link.
     const run = this.#turnChain.then(() => this.#clearNow())
     this.#turnChain = run.then(
       () => undefined,
@@ -1192,27 +814,15 @@ export class CodexRunner implements Runner {
     await run
   }
 
-  /** The clear itself, only ever called as a turn-chain link. */
   async #clearNow(): Promise<void> {
     if (this.#closed) {
       throw new Error('session is closed')
     }
-    // Deliberately NOT wiping `#queue`: everything queued before the clear has
-    // already run (its `#runTurn` links sit ahead on the chain), so whatever is
-    // left was pushed *after* the clear and belongs to the new conversation.
-    //
-    // Order matters below. The fallible step happens FIRST among the things
-    // that can fail, and the state that cannot be rolled back is only dropped
-    // once it has succeeded — a failed `thread/start` must leave the session
-    // exactly as it was, still resuming the old thread, rather than half-clear
-    // with no `conversation_reset` to say so.
     const previousThread = this.#sdkSessionId
     this.#sdkSessionId = undefined
     this.#threadLoaded = false
     if (this.#connection) {
       try {
-        // `#ensureThread` sees no thread id and no loaded thread, so this is a
-        // `thread/start`, not a `thread/resume`.
         await this.#ensureThread()
       } catch (error) {
         this.#sdkSessionId = previousThread
@@ -1220,33 +830,17 @@ export class CodexRunner implements Runner {
         throw error
       }
     }
-    // The agents belong to the thread being left behind. `forget`, not the
-    // dead-child path's `sweep`: their anchor tool cards go with the transcript,
-    // so a row settled-but-kept would name a `toolUseId` that no longer resolves
-    // to anything a client can open.
-    //
-    // They are also, possibly, still RUNNING — an agent outlives the root turn
-    // that spawned it by design, and a clear neither interrupts them nor drops
-    // the child. So their thread ids are remembered: `#agentFor` drops their
-    // traffic instead of minting a fresh anchor for it, which is what would
-    // otherwise stream the cleared conversation's agent work into the new one.
     for (const agent of this.#agents.threadIds()) {
       this.#clearedThreads.add(agent)
     }
     this.#agents.forget()
-    // An approval raised by one of those agents between root turns is a card
-    // whose anchor was just cleared; it can never be answered against anything
-    // the user can now see.
     for (const [id, pending] of this.#approvals) {
       this.#settleApproval(id, pending, { behavior: 'deny', message: 'the conversation was cleared' }, 'policy')
     }
-    // Nothing stashed here can survive the thread it was read from.
     this.#resumedHistory = undefined
     this.#emit({ type: 'conversation_reset', sdkSessionId: this.#sdkSessionId })
   }
 
-  /** Address the in-flight turn only (no approval sweep) — also the follow-up
-   * for a deny+interrupt whose wire decision couldn't carry the interrupt. */
   async #interruptTurn(): Promise<void> {
     const active = this.#activeTurn
     const connection = this.#connection
@@ -1258,15 +852,10 @@ export class CodexRunner implements Runner {
             threadId: this.#sdkSessionId,
             turnId: active.turnId,
           })
-          // The terminal turn/completed (status 'interrupted') settles the turn.
-        } catch {
-          // The turn may already be over, or the child gone — both settle it.
-        }
+        } catch {}
       } else if (connection) {
-        // No turn id yet (interrupted before turn/started): there is nothing
-        // to address the request to, so end the child — the thread survives on
-        // disk and the next message respawns into it.
-        // The onClose rejection settles the turn; `interrupted` explains it.
+        // No turn id yet: nothing to address the interrupt to, so end the child. The thread
+        // survives on disk and the next message respawns into it.
         connection.close()
         if (this.#connection === connection) {
           this.#connection = undefined
@@ -1310,8 +899,6 @@ export class CodexRunner implements Runner {
     }
     this.#closed = true
     this.#queue.length = 0
-    // Settle pending approvals before the connection goes: each gets its
-    // channel's own "no" on the wire and a permission_resolved in the log.
     for (const [id, pending] of this.#approvals) {
       this.#settleApproval(id, pending, { behavior: 'deny', message: 'Session closed' }, 'policy')
     }
@@ -1322,15 +909,12 @@ export class CodexRunner implements Runner {
     if (this.#imageDir) {
       try {
         rmSync(this.#imageDir, { recursive: true, force: true })
-      } catch {
-        // Temp-dir cleanup must never break teardown.
-      }
+      } catch {}
     }
     this.#emit({ type: 'session_closed', reason })
     this.#setStatus('closed')
   }
 
-  /** See `Runner.eventAt`. */
   eventAt(seq: number): SessionEvent | undefined {
     return this.#log.at(seq)
   }
@@ -1343,16 +927,6 @@ export class CodexRunner implements Runner {
     this.#turnChain = this.#turnChain.then(() => this.#runTurn())
   }
 
-  /**
-   * Read `[sandbox_workspace_write]` as codex resolves it for this session's cwd,
-   * once per child, so {@link CodexRunner.#turnSandboxPolicy} can restate it
-   * verbatim: `turn/start`'s sandbox policy is serde-defaulted field by field, so a
-   * bare `{type: 'workspaceWrite'}` silently resets the operator's `networkAccess`
-   * and `writableRoots` on every turn (docs/GOTCHAS.md §Codex engine).
-   *
-   * A failure here is not fatal — `#workspaceWrite` stays undefined and the bare
-   * shape goes out, which is what shipped before.
-   */
   async #readWorkspaceWrite(connection: AppServerConnection): Promise<void> {
     this.#workspaceWrite = undefined
     try {
@@ -1370,12 +944,9 @@ export class CodexRunner implements Runner {
         excludeTmpdirEnvVar: block.exclude_tmpdir_env_var === true,
         excludeSlashTmp: block.exclude_slash_tmp === true,
       }
-    } catch {
-      // Older binary, or no readable config layer — the bare shape it is.
-    }
+    } catch {}
   }
 
-  /** The mode's turn-level sandbox policy, with the operator's workspace-write settings intact. */
   #turnSandboxPolicy(): { type: string } | undefined {
     const policy = TURN_SANDBOX_BY_MODE[this.#permissionMode]
     if (policy?.type !== 'workspaceWrite' || !this.#workspaceWrite) {
@@ -1384,13 +955,6 @@ export class CodexRunner implements Runner {
     return { type: 'workspaceWrite', ...this.#workspaceWrite }
   }
 
-  /**
-   * The session's live connection with its thread loaded, (re)building both as
-   * needed: spawn + `initialize`/`initialized` on a fresh child, then
-   * `thread/start` (new) or `thread/resume` (a create-request `resume`, or a
-   * thread orphaned by a dead child). The response's resolved model/effort are
-   * kept so per-turn overrides can name "the profile default" explicitly.
-   */
   async #ensureThread(): Promise<AppServerConnection> {
     if (this.#closed) {
       throw new Error('session is closed')
@@ -1407,23 +971,13 @@ export class CodexRunner implements Runner {
           this.#connection = undefined
           this.#threadLoaded = false
         }
-        // Approvals pending against a dead child can never be answered on the
-        // wire — retire their cards and timers.
         for (const [id, pending] of this.#approvals) {
           this.#settleApproval(id, pending, { behavior: 'deny', message }, 'policy')
         }
-        // Spawned agents lived in that process; their reports can never come.
         this.#agents.sweep()
-        // A child dying mid-turn fails that turn (with the exit diagnostic);
-        // idle, there is nothing to settle and the next turn respawns.
         this.#activeTurn?.reject(new Error(message))
       })
       try {
-        // `experimentalApi` is load-bearing, not a nicety: granular approval
-        // policies are rejected without it, and WorkerDeck ships ONE code path
-        // (no string-policy fallback). A binary that rejects the capability
-        // must fail loudly here — a session that quietly stops asking for
-        // approvals is worse than one that refuses to start and says why.
         await connection.request('initialize', {
           clientInfo: {
             name: 'workerdeck',
@@ -1433,8 +987,7 @@ export class CodexRunner implements Runner {
           capabilities: { experimentalApi: true },
         })
       } catch (error) {
-        // Don't leave a half-initialized child around — the next message must
-        // respawn from scratch, not talk to a child that refused the handshake.
+        // Don't leave a half-initialized child around: the next message must respawn from scratch.
         connection.close()
         if (this.#connection === connection) {
           this.#connection = undefined
@@ -1471,7 +1024,6 @@ export class CodexRunner implements Runner {
         thread?: { id?: string; turns?: AppServerHistoryTurn[] }
         model?: string | null
         reasoningEffort?: string | null
-        /** Non-null: `thread.turns` is one PAGE and older turns exist beyond it. */
         turnsBackwardsCursor?: string | null
       }
       if (typeof result?.thread?.id === 'string') {
@@ -1483,10 +1035,6 @@ export class CodexRunner implements Runner {
       if (typeof result?.reasoningEffort === 'string') {
         this.#resolvedEffort = result.reasoningEffort
       }
-      // The resume that backfill is waiting on carries the thread's prior
-      // turns — stash them for it. A reconnect after a dead child resumes the
-      // same thread but has no backfill pending, so nothing is stashed and
-      // history is never replayed twice.
       if (resuming && this.#backfillPending && !this.#resumedHistory) {
         this.#resumedHistory = {
           turns: Array.isArray(result?.thread?.turns) ? result.thread.turns : [],
@@ -1495,26 +1043,10 @@ export class CodexRunner implements Runner {
       }
       this.#threadLoaded = true
     }
-    // Fire and forget, and only now: `skills/list` needs a live child, and a
-    // codex session does not spawn one until it has something to do. So the
-    // skill list arrives with the first turn rather than at create time —
-    // which is why clients gate the affordance on having received a `skills`
-    // event, not on the capability flag alone.
     void this.#refreshSkills(connection)
     return connection
   }
 
-  /**
-   * Re-read `skills/list` and publish it, if it changed.
-   *
-   * **`cwds` is passed explicitly, and must be**: the empty case is keyed to the
-   * app-server child's own process directory, not the thread's cwd, so a project's
-   * `.codex/skills/**` are invisible without it (docs/GOTCHAS.md §Skills).
-   *
-   * Best-effort throughout — a binary too old to know the method, a broken
-   * manifest or a child that died mid-call leaves the panel absent, never fails
-   * the session.
-   */
   async #refreshSkills(connection: AppServerConnection): Promise<void> {
     if (this.#skillsRefresh) {
       return this.#skillsRefresh
@@ -1532,8 +1064,6 @@ export class CodexRunner implements Runner {
         const skills: SkillInfo[] = []
         for (const entry of entries) {
           for (const skill of entry?.skills ?? []) {
-            // The same skill can be reported under several cwds; the first
-            // wins, matching how codex itself resolves a name collision.
             if (typeof skill?.name !== 'string' || seen.has(skill.name)) {
               continue
             }
@@ -1549,8 +1079,6 @@ export class CodexRunner implements Runner {
         this.#skillsFingerprint = fingerprint
         this.#emit({ type: 'skills', skills })
       } catch {
-        // Nothing to say: an engine that cannot list its skills is an engine
-        // whose skills panel does not appear.
       } finally {
         this.#skillsRefresh = undefined
       }
@@ -1559,18 +1087,6 @@ export class CodexRunner implements Runner {
     return run
   }
 
-  /**
-   * The session's MCP servers, live from the binary: `mcpServerStatus/list` (what
-   * is configured, with each tool's full JSON Schema) merged with the
-   * `mcpServer/startupStatus/updated` notifications (which are up). Answers before
-   * the session has connected, over a throwaway child, for the same reason the
-   * skill list does — docs/GOTCHAS.md §MCP status.
-   *
-   * Resolves undefined only when there is nothing to say (closed session, or the
-   * child could not be spoken to); the route turns that into a 501. **Listing
-   * only** — this transport has no per-server reconnect or toggle, which is why
-   * `ENGINE_CAPABILITIES.codex.mcpServerActions` is false.
-   */
   async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
     if (this.#closed) {
       return undefined
@@ -1578,8 +1094,6 @@ export class CodexRunner implements Runner {
     const live = this.#connection
     let scratch: AppServerConnection | undefined
     try {
-      // The session's own child when it has one — its accumulated
-      // `#mcpStatus` makes the answer sharper — and a throwaway otherwise.
       const connection = live ?? (scratch = await this.#openScratchConnection())
       const result = (await connection.request('mcpServerStatus/list', {})) as AppServerMcpServerStatusResponse
       return (result?.data ?? []).map((server) => mcpServerInfo(server, this.#mcpStatus.get(server.name)))
@@ -1590,15 +1104,6 @@ export class CodexRunner implements Runner {
     }
   }
 
-  /**
-   * Announce a file the ENGINE wrote on the host, so a client can fetch it
-   * without the operator having declared its directory as a host-file root.
-   *
-   * Deliberately narrow: only paths codex reports as *written by its own tool*
-   * belong here. A path the model merely read (`imageView`) is an agent-chosen
-   * claim, and those keep going through `/fs/*` and its root allowlist — see
-   * the note on `file_produced` in the protocol.
-   */
   #emitFileProduced(path: string, toolUseId: string): void {
     if (this.#producedPaths.has(path)) {
       return
@@ -1610,13 +1115,7 @@ export class CodexRunner implements Runner {
       if (stat.isFile()) {
         bytes = stat.size
       }
-      // A `savedPath` that is not a regular file is still announced: the route
-      // re-checks before serving, and a client showing the path it was given
-      // beats one silently dropping it.
-    } catch {
-      // Reported but not there (yet, or at all) — announce it anyway and let
-      // the fetch be the thing that fails.
-    }
+    } catch {}
     this.#emit({
       type: 'file_produced',
       fileId: producedFileId(path),
@@ -1627,16 +1126,6 @@ export class CodexRunner implements Runner {
     })
   }
 
-  /**
-   * On resume, replay the thread's prior turns as `replay: true` events,
-   * seq'd before any live turn — the SessionRunner backfill contract, fed
-   * from `thread/resume`'s own `thread.turns`. When the resume response says
-   * that page is partial (`turnsBackwardsCursor`), the FULL rollout history
-   * is fetched via `thread/read {includeTurns: true}` instead — and if even
-   * that fails, the partial page is replayed under a visible notice rather
-   * than silently posing as the whole thread. Best-effort like the Claude
-   * backfill: an unreadable history never blocks the resume itself.
-   */
   async #backfillHistory(): Promise<void> {
     try {
       if (this.#closed) {
@@ -1664,9 +1153,6 @@ export class CodexRunner implements Runner {
         }
       }
       if (partialReason) {
-        // Rendered as an inline notice by both clients (the session keeps
-        // running) — a truthful-but-partial transcript must say so, above the
-        // part it does show.
         this.#emit({
           type: 'session_error',
           message: `Resumed thread history is incomplete — older turns could not be loaded (${partialReason})`,
@@ -1674,32 +1160,22 @@ export class CodexRunner implements Runner {
       }
       this.#replayTurns(turns)
     } catch {
-      // A missing/unreadable thread must not block the resume: the next real
-      // turn retries the connection and surfaces its own failure loudly.
     } finally {
       this.#backfillPending = false
       this.#setStatus('idle')
     }
   }
 
-  /** Replay historical turns through the SAME item mapping the live path uses. */
   #replayTurns(turns: readonly AppServerHistoryTurn[]): void {
     for (const turn of turns) {
       if (this.#closed) {
         return
       }
-      // "Per turn" means per HISTORICAL turn: each replayed turn gets its own
-      // nonce exactly as each live turn does — codex item ids restart per turn
-      // ("item-1", …), so one shared namespace would fold turn N's items into
-      // turn 1's bubbles (b026e70), and a fresh random nonce per turn also
-      // keeps replayed ids disjoint from every future live turn's.
       const state = this.#newTurnState()
       this.#replayingHistory = true
       try {
         for (const item of turn.items ?? []) {
           if (item.type === 'userMessage') {
-            // Dropped on the live path (sendMessage already echoed it); in
-            // history this IS the turn's user message.
             const text = historyUserText(item)
             if (!text) {
               continue
@@ -1720,8 +1196,6 @@ export class CodexRunner implements Runner {
     }
   }
 
-  /** Fresh per-turn state — one per live turn, and one per REPLAYED turn (the
-   * nonce is the item-id namespace, and its per-turn-ness is the invariant). */
   #newTurnState(): ActiveTurn {
     return {
       nonce: randomUUID(),
@@ -1781,9 +1255,6 @@ export class CodexRunner implements Runner {
         sandboxPolicy: this.#turnSandboxPolicy(),
         approvalsReviewer: APPROVALS_REVIEWER_BY_MODE[this.#permissionMode],
       }
-      // Overrides persist "for this turn and subsequent turns", so name the
-      // model/effort explicitly every turn — the resolved default when no
-      // override is set, which is what makes setModel(undefined) a real reset.
       const model = this.#model ?? this.#resolvedModel
       if (model) {
         params.model = model
@@ -1792,9 +1263,8 @@ export class CodexRunner implements Runner {
       if (effort) {
         params.effort = effort
       }
-      // The terminal signal is the turn/completed NOTIFICATION; the response's
-      // timing is unspecified, so it only contributes its turn id, a JSON-RPC
-      // error (no turn ran → fail now), or — defensively — a terminal status.
+      // The terminal signal is the `turn/completed` notification; this response's timing is
+      // unspecified, so it only contributes the turn id or a failure.
       connection.request('turn/start', params).then(
         (result) => {
           const started = (result as { turn?: AppServerTurn })?.turn
@@ -1825,8 +1295,6 @@ export class CodexRunner implements Runner {
       if (this.#closed) {
         return
       }
-      // A failed turn is not a failed session: the thread persists on disk and
-      // the next message reconnects and resumes it.
       const message = error instanceof Error ? error.message : String(error)
       this.#finishTurn('failure', startedAt, active, [active.interrupted ? 'interrupted' : message])
     } finally {
@@ -1836,22 +1304,10 @@ export class CodexRunner implements Runner {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Server→client traffic
-  // -------------------------------------------------------------------------
-
   #handleNotification(method: string, params: unknown): void {
     if (this.#closed) {
       return
     }
-    // Turn lifecycle and token usage are per-thread facts and must be read off the
-    // ROOT thread only — a sub-agent's `turn/completed` arrives while the root turn
-    // is still running, and taking it ends the session's turn early
-    // (docs/GOTCHAS.md §Codex engine). Items and deltas are deliberately NOT
-    // filtered: a sub-agent's work belongs in the transcript, attributed by
-    // `#agentFor`. A child's lifecycle still means something to the AGENT — its
-    // `turn/completed` is the agent's completion signal (`subAgentActivity` has no
-    // 'completed' kind), and a `turn/started` means a settled agent works again.
     if (THREAD_SCOPED_NOTIFICATIONS.has(method) && !this.#isRootThread(params)) {
       if (method === 'turn/completed') {
         this.#settleAgentTurn(params)
@@ -1864,15 +1320,9 @@ export class CodexRunner implements Runner {
       }
       return
     }
-    // The app-server surface is wide (mcpServer/*, account/*, thread
-    // housekeeping…) — everything unmapped is deliberately dropped.
     this.#notifications[method]?.(params)
   }
 
-  /** Whether a notification is about the session's own thread. A notification
-   * with no `threadId` counts as the root's: every thread-scoped method the
-   * schema defines carries one, so an absent id means an older or narrower
-   * shape, not a sub-agent. */
   #isRootThread(params: unknown): boolean {
     const threadId = this.#threadIdOf(params)
     if (threadId === undefined) {
@@ -1886,18 +1336,6 @@ export class CodexRunner implements Runner {
     return typeof threadId === 'string' ? threadId : undefined
   }
 
-  /**
-   * The agent behind a notification's `threadId` — the attribution every item and
-   * delta handler asks before emitting, so concurrent agents on this one connection
-   * come apart by the id each frame carries, never by a mutable "current agent".
-   *
-   * A non-root thread with no record still gets one: a thread emitting items *is*
-   * an agent, whatever announced it. The minted record is label-less and its anchor
-   * `tool_use` is authored here — an attributed event whose parent id matches no
-   * top-level call renders inline instead of as a frame — and a late `started` edge
-   * fills the name in. Root-thread traffic, and the pre-thread shapes with no id,
-   * stay unattributed.
-   */
   #agentFor(params: unknown): CodexAgent | undefined {
     const threadId = this.#threadIdOf(params)
     if (threadId === undefined || threadId === this.#sdkSessionId) {
@@ -1907,9 +1345,6 @@ export class CodexRunner implements Runner {
     if (known) {
       return known
     }
-    // An agent from a conversation that has been cleared. Its work belonged to
-    // a transcript that no longer exists, so it is dropped rather than minted
-    // an anchor in the conversation that replaced it.
     if (this.#clearedThreads.has(threadId)) {
       return undefined
     }
@@ -1920,14 +1355,6 @@ export class CodexRunner implements Runner {
     return record
   }
 
-  /**
-   * A child thread's `turn/completed` is that AGENT's completion — the one
-   * codex sends (`subAgentActivity` has no 'completed' kind, verified live).
-   * The verdict is the turn's own status, and the report is the completed
-   * turn's final message, delivered as the anchor's `tool_result` so the row
-   * settles exactly the way a claude `Task`'s does. Deliberately not gated on
-   * `#activeTurn`: an agent finishing between root turns still finished.
-   */
   #settleAgentTurn(params: unknown): void {
     const threadId = this.#threadIdOf(params)
     const record = threadId ? this.#agents.get(threadId) : undefined
@@ -1941,11 +1368,6 @@ export class CodexRunner implements Runner {
     this.#emitToolResult(record.toolUseId, report, status === 'failed')
   }
 
-  /** Reasoning deltas arrive on two methods that differ only in which section
-   * counter they advance; the section key carries the method so the two streams
-   * never share a boundary (and item ids are per-thread, so two agents' streams
-   * never share one either). Section boundaries (a new summary/content entry)
-   * render as paragraph breaks — the completed item joins sections with '\n\n'. */
   #reasoningDelta(method: string): (params: unknown) => void {
     return (params) => {
       const active = this.#activeTurn
@@ -1962,6 +1384,7 @@ export class CodexRunner implements Runner {
         return
       }
       const index = payload.contentIndex ?? payload.summaryIndex ?? 0
+      // The method rides the key: the two reasoning streams must never share a section boundary.
       const key = `${payload.itemId ?? ''}:${method}`
       const previous = active.sectionIndex.get(key)
       active.sectionIndex.set(key, index)
@@ -1970,7 +1393,6 @@ export class CodexRunner implements Runner {
     }
   }
 
-  /** One item-progress handler serves `item/started` and `item/updated`. */
   #itemProgress = (params: unknown): void => {
     const active = this.#activeTurn
     if (!active) {
@@ -1982,9 +1404,6 @@ export class CodexRunner implements Runner {
     }
   }
 
-  /** The notification dispatch table — every method the child emits that this
-   * runner maps, in one place. Handlers read `this.#activeTurn` themselves:
-   * dispatch is synchronous, so the read is the same one the old switch made. */
   readonly #notifications: Record<string, (params: unknown) => void> = {
     'thread/started': (params) => {
       const thread = (params as { thread?: { id?: string } })?.thread
@@ -2005,8 +1424,6 @@ export class CodexRunner implements Runner {
       if (!active || !turn) {
         return
       }
-      // Defence in depth behind the root-thread gate: a turn that is not the
-      // one being awaited never ends it.
       if (active.turnId && turn.id && turn.id !== active.turnId) {
         return
       }
@@ -2030,9 +1447,6 @@ export class CodexRunner implements Runner {
       }
       const delta = (params as { delta?: string })?.delta
       if (typeof delta === 'string' && delta) {
-        // Two agents stream concurrently into this one connection, tokens
-        // interleaved — each frame's own `threadId` is what pulls them apart,
-        // so attribution rides the frame rather than any notion of "current".
         this.#emitDelta({ type: 'text_delta', text: delta }, this.#agentFor(params)?.toolUseId ?? null)
       }
     },
@@ -2047,30 +1461,17 @@ export class CodexRunner implements Runner {
       if (!last) {
         return
       }
-      // `last` is one model request; a tool-looping turn makes several. The
-      // per-turn number the Anthropic convention wants is their sum.
       active.sawUsage = true
       active.usage.inputTokens += last.inputTokens ?? 0
       active.usage.cachedInputTokens += last.cachedInputTokens ?? 0
       active.usage.cacheWriteInputTokens = (active.usage.cacheWriteInputTokens ?? 0) + (last.cacheWriteInputTokens ?? 0)
       active.usage.outputTokens += last.outputTokens ?? 0
       active.usage.reasoningOutputTokens += last.reasoningOutputTokens ?? 0
-      // Context occupancy is the OPPOSITE choice from the accounting above:
-      // `last` (overwritten, not summed) against the window, because a request's
-      // input already contains the whole conversation. `total` is cumulative
-      // billing — it grows every turn while the context stays where it is, so a
-      // meter built on it would climb to 100% on an almost-empty thread
-      // (measured: total 13931 → 27878 across two trivial turns, last 13931 →
-      // 13947, window 258400).
       const update = params as AppServerTokenUsageUpdate
       active.contextTokens = last.totalTokens ?? undefined
       active.contextWindow = update.tokenUsage?.modelContextWindow ?? undefined
     },
     'mcpServer/startupStatus/updated': (params) => {
-      // The ONLY place a server's liveness comes from — `mcpServerStatus/list`
-      // reports what is configured and what it exposes, never whether it is
-      // up. Not gated on `active`: servers start with the child, well before
-      // any turn.
       const update = params as AppServerMcpStatusUpdate
       if (typeof update?.name !== 'string') {
         return
@@ -2082,25 +1483,15 @@ export class CodexRunner implements Runner {
       })
     },
     'skills/changed': () => {
-      // An invalidation signal with no payload — codex's watcher saying
-      // "re-run skills/list", which is exactly what this does. Not gated on
-      // `active`: the operator can edit a skill between turns, and that is
-      // in fact when they usually do.
       const connection = this.#connection
       if (connection) {
         void this.#refreshSkills(connection)
       }
     },
     'account/rateLimits/updated': (params) => {
-      // Pushed during a turn, so — unlike the Claude engine, whose CLI only
-      // pushes on change and therefore needs an explicit poll — listening is
-      // enough. Not gated on `active`: a window update is about the account,
-      // not the turn.
       this.#emitRateLimits((params as { rateLimits?: AppServerRateLimits })?.rateLimits)
     },
     'turn/plan/updated': (params) => {
-      // v2's todo list, published as the codex.todo_list sdk_event payload
-      // both clients already render.
       const active = this.#activeTurn
       if (!active) {
         return
@@ -2119,25 +1510,21 @@ export class CodexRunner implements Runner {
       })
     },
     'serverRequest/resolved': (params) => {
-      // Codex settled one of its own asks (auto-resolution, e.g.
-      // requestUserInput's autoResolutionMs) — retire the matching card. The
-      // late JSON-RPC response we still send is ignored by the peer. The
-      // resolved event reports 'deny' because we cannot know what codex
-      // chose; the message says who really decided.
       const requestId = (params as { requestId?: string | number })?.requestId
       if (requestId === undefined) {
         return
       }
       for (const [id, pending] of this.#approvals) {
         if (pending.wireId === requestId) {
+          // Reported as a deny because codex's own choice is unknowable; the message says who decided.
           this.#settleApproval(id, pending, { behavior: 'deny', message: 'resolved by codex' }, 'policy')
           return
         }
       }
     },
+    // Mostly retry noise (`willRetry: true`); the last message is what explains a turn that
+    // fails without carrying its own error.
     error: (params) => {
-      // Mostly retry noise (`willRetry: true`); keep the last message so a
-      // turn that fails without its own error still explains itself.
       const active = this.#activeTurn
       const error = (params as { error?: { message?: string } })?.error
       if (active && typeof error?.message === 'string') {
@@ -2146,9 +1533,6 @@ export class CodexRunner implements Runner {
     },
   }
 
-  /** Answer a server→client request: the ask channels become pending
-   * permission requests; anything else gets a JSON-RPC -32601 rather than a
-   * hang (an unanswered server request wedges the turn). */
   async #answerServerRequest(method: string, params: unknown, wireId?: string | number): Promise<unknown> {
     const channel = APPROVAL_CHANNELS[method]
     if (channel) {
@@ -2157,16 +1541,7 @@ export class CodexRunner implements Runner {
     throw new JsonRpcError(-32601, `workerdeck does not handle server request '${method}'`)
   }
 
-  /**
-   * Surface one ask-channel request as a pending {@link PermissionRequest};
-   * the returned promise is the JSON-RPC response, resolved when a
-   * `permission_decision` lands — or by the timeout, an interrupt, turn end,
-   * session close, or codex resolving it itself. Never left hanging.
-   */
   #requestApproval(channel: ApprovalChannel, method: string, params: unknown, wireId: string | number | undefined): Promise<unknown> {
-    // AskUserQuestion policy resolution, the SessionRunner convention: 'auto'
-    // picks each question's first (recommended) option, 'deny' sends the model
-    // back to decide for itself — both visibly, neither pending.
     if (method === 'item/tool/requestUserInput') {
       const behavior = this.#config.questionBehavior ?? 'ask'
       if (behavior !== 'ask') {
@@ -2179,9 +1554,6 @@ export class CodexRunner implements Runner {
     const request: PermissionRequest = {
       id,
       ...channel.describe(params),
-      // Anchored to the tool card the turn already emitted for this item (the
-      // command that ran and was refused, the file change in flight); channels
-      // with no item anchor on the request itself.
       toolUseId: itemId ? `${this.#activeTurn?.nonce ?? 'codex'}:${itemId}` : id,
       expiresAt: Date.now() + timeoutMs,
     }
@@ -2208,9 +1580,6 @@ export class CodexRunner implements Runner {
     })
   }
 
-  /** 'auto'/'deny' sessions settle codex questions synchronously instead of
-   * pending. Request/resolved events still fire so transcripts and job
-   * webhooks show what was chosen. */
   #resolveQuestionByPolicy(channel: ApprovalChannel, params: unknown, mode: 'auto' | 'deny'): unknown {
     const itemId = channel.itemId(params)
     const request: PermissionRequest = {
@@ -2245,13 +1614,6 @@ export class CodexRunner implements Runner {
     return { answers }
   }
 
-  /**
-   * Settle one pending approval: pick the channel's wire response for the
-   * decision, answer the JSON-RPC request, and emit `permission_resolved`.
-   * An allow the request offered no plain accept for becomes the channel's
-   * denial, said out loud — never a silently widened grant, and never a
-   * decision the request didn't offer.
-   */
   #settleApproval(id: string, pending: PendingCodexApproval, decision: PermissionDecision, resolvedBy: PermissionDecisionSource): void {
     clearTimeout(pending.timer)
     this.#approvals.delete(id)
@@ -2274,7 +1636,6 @@ export class CodexRunner implements Runner {
     pending.respond(sent.response)
     this.#emit({ type: 'permission_resolved', requestId: id, behavior, resolvedBy, message })
     if (behavior === 'deny' && decision.behavior === 'deny' && decision.interrupt && sent.decision !== 'cancel') {
-      // The wire decision couldn't carry the interrupt itself.
       void this.#interruptTurn()
     }
     if (!this.#closed && this.#approvals.size === 0 && this.#status === 'awaiting_approval') {
@@ -2282,19 +1643,8 @@ export class CodexRunner implements Runner {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Item mapping (the v2 camelCase vocabulary → protocol events)
-  // -------------------------------------------------------------------------
-
-  /** Tool calls surface as tool_use when they start; text and reasoning stream
-   * natively via the delta notifications. `agent` is the sub-agent whose thread
-   * the item arrived on — undefined for the session's own. */
   #handleItemProgress(item: AppServerItem, active: ActiveTurn, agent?: CodexAgent): void {
     const id = `${active.nonce}:${item.id}`
-    // The spawn marker is processed on sight rather than on completion, so the
-    // agent's record exists before its thread's first delta can arrive — the
-    // handler is idempotent (observed on the wire, started and completed carry
-    // the same snapshot in the same batch, but that timing is not a contract).
     if (item.type === 'subAgentActivity') {
       this.#itemCompleted.subAgentActivity(item, active, id, agent)
       return
@@ -2309,22 +1659,14 @@ export class CodexRunner implements Runner {
       this.#emitToolUse(id, `mcp__${item.server}__${item.tool}`, item.arguments, agent)
       return
     }
-    // A `wait` on spawned agents takes as long as the agents do — the card
-    // exists while it blocks, like a command's, rather than appearing only
-    // once every agent has answered.
     if (item.type === 'collabAgentToolCall' && !active.toolUseEmitted.has(id)) {
       active.toolUseEmitted.add(id)
       this.#emitToolUse(id, CODEX_COLLAB_TOOL, collabInput(item), agent)
       return
     }
-    // Generating a picture takes seconds — the card exists while it runs, like
-    // a command's does, rather than appearing only once it is finished.
     if (item.type === 'imageGeneration' && !active.toolUseEmitted.has(id)) {
       active.toolUseEmitted.add(id)
       this.#emitToolUse(id, CODEX_IMAGE_TOOL, imageGenerationInput(item), agent)
-      // Rare but real: a progress item can already carry `savedPath`. Announce
-      // it here too — `#emitFileProduced` dedupes by path, so the completed
-      // item's second report costs nothing.
       if (item.savedPath) {
         this.#emitFileProduced(item.savedPath, id)
       }
@@ -2340,27 +1682,13 @@ export class CodexRunner implements Runner {
       handler(item, active, id, agent)
       return
     }
-    // An item type the union does not model yet: passed through as an sdk_event
-    // rather than dropped — an unmapped item must not be invisible.
     const unknown = item as AppServerUnknownItem
     this.#emit({ type: 'sdk_event', payload: { type: `codex.${unknown.type}`, item: unknown } })
   }
 
-  /**
-   * The completed-item mapping, one handler per member of the {@link AppServerItem}
-   * union. The mapped type is the invariant made checkable: model a new item
-   * type in `types.ts` and this table fails to compile until it says what the
-   * item becomes on the wire. (The runtime still receives types the union has
-   * never heard of; those take the passthrough above.)
-   */
   readonly #itemCompleted: {
     [K in AppServerItem['type']]: (item: Extract<AppServerItem, { type: K }>, active: ActiveTurn, id: string, agent?: CodexAgent) => void
   } = {
-    // On the session's own thread, the echo of our turn/start input — already
-    // in the log. On an agent's thread it would be the agent's brief; none has
-    // been observed on the wire (the prompt travels in the spawn call, not as
-    // an item), but if one ever arrives it is the frame's opening row, exactly
-    // where a claude sidechain puts its brief.
     userMessage: (item, active, _id, agent) => {
       if (!agent) {
         return
@@ -2379,15 +1707,11 @@ export class CodexRunner implements Runner {
     agentMessage: (item, active, id, agent) => {
       const text = typeof item.text === 'string' ? item.text : ''
       this.#emitAssistant(id, [{ type: 'text', text }], agent?.toolUseId ?? null)
-      // An agent's prose is its own report, never the session's final line.
       if (!agent) {
         active.finalText = text
       }
     },
     reasoning: (item, _active, id, agent) => {
-      // `summary` is what streamed (the default config); raw `content` only
-      // exists when the operator's config enables it. Joined the way the
-      // deltas rendered: sections as paragraphs.
       const summary = Array.isArray(item.summary) ? item.summary.filter(Boolean) : []
       const content = Array.isArray(item.content) ? item.content.filter(Boolean) : []
       const thinking = (summary.length > 0 ? summary : content).join('\n\n')
@@ -2406,19 +1730,12 @@ export class CodexRunner implements Runner {
       this.#emitToolResult(id, output, failed, undefined, agent?.toolUseId ?? null)
     },
     fileChange: (item, _active, id, agent) => {
-      // The completed item: by the time it lands the patch applied, failed,
-      // or was declined (a pending proposal rides the approval channel, not
-      // this item). v2's `kind` is an object (`{type: 'update', …}`), mapped
-      // defensively.
       this.#emitToolUse(id, 'CodexFileChange', { changes: item.changes }, agent)
       const lines = item.changes.map((change) => {
         const kind = typeof change.kind === 'string' ? change.kind : change.kind?.type
         return `${kind ?? 'change'}: ${change.path}`
       })
-      // Codex reports a unified diff per change, so the wire can carry the
-      // same `FilePatch` the Claude engine sends and every client renders one
-      // shape. Only for a single-file change: the patch names one file, and a
-      // multi-file edit has no honest way to say which.
+      // A patch names one file, and a multi-file edit has no honest way to say which.
       const only = item.changes.length === 1 ? item.changes[0] : undefined
       this.#emitToolResult(
         id,
@@ -2447,16 +1764,10 @@ export class CodexRunner implements Runner {
       this.#emitToolResult(id, '', false, undefined, agent?.toolUseId ?? null)
     },
     imageGeneration: (item, active, id, agent) => {
-      // Re-emitted, not guarded by `toolUseEmitted`: `savedPath` only exists
-      // now, and the reducer upserts a tool_use by id — so this replaces the
-      // in-progress card's input with the finished one. The result event
-      // follows immediately, which is what settles the status again.
+      // Re-emitted without the `toolUseEmitted` guard: `savedPath` only exists now, and the
+      // reducer upserts a tool_use by id, so this replaces the in-progress card's input.
       active.toolUseEmitted.add(id)
       this.#emitToolUse(id, CODEX_IMAGE_TOOL, imageGenerationInput(item), agent)
-      // The path IS the deliverable — the bytes live on the host and no event
-      // may carry them. `file_produced` is what makes those bytes reachable
-      // anyway: the gateway serves a path its own runner reported, with no
-      // host-file root to declare first.
       if (item.savedPath) {
         this.#emitFileProduced(item.savedPath, id)
       }
@@ -2471,25 +1782,7 @@ export class CodexRunner implements Runner {
       this.#emitToolResult(id, item.path, false, undefined, agent?.toolUseId ?? null)
     },
     subAgentActivity: (item, _active, id, agent) => {
-      // The spawn signal — and the whole reason the takeover works on codex.
-      // `kind: 'started'` announces an agent (verified live against 0.146.0:
-      // the model's `spawn_agent` never produces a collab item, this is the
-      // only birth certificate), its `id` is the model's own spawn call id,
-      // and `agentThreadId` is the key every one of the agent's later
-      // notifications carries. The anchor `tool_use` authored here is what
-      // gives the sidechain a row: `terminalBlocks` absorbs by parent id into
-      // a top-level call, so without it the attributed events would render
-      // inline and there would be nothing to press. `agent` — the SPAWNING
-      // thread's record — is normally undefined (the root spawns); a
-      // grandchild spawn arriving on a child thread nests one level and
-      // counts as that child's tool call, exactly like any other.
       if (this.#replayingHistory) {
-        // A resumed thread's history is the root's items only: the agents'
-        // work, and their outcomes, are in THEIR threads' rollouts, which the
-        // backfill does not read. So the replayed row closes with a neutral
-        // notice instead of dangling as running-forever, and the rollup stays
-        // silent rather than invent verdicts for agents a dead process ran —
-        // the one claim history cannot back is that they failed.
         if (item.kind !== 'started') {
           return
         }
@@ -2503,6 +1796,8 @@ export class CodexRunner implements Runner {
           },
           agent,
         )
+        // A resumed thread's history holds the root's items only, so a replayed agent row closes
+        // neutrally: the one claim history cannot back is that the agent failed.
         this.#emitToolResult(
           id,
           "(ran in its own thread — its work is not part of this thread's stored history)",
@@ -2514,9 +1809,6 @@ export class CodexRunner implements Runner {
       }
       const record = this.#agents.get(item.agentThreadId) ?? this.#agents.open(item.agentThreadId, id, undefined, Date.now())
       const name = agentName(item.agentPath)
-      // Fill-in, and re-anchor when the name arrives late: the reducer upserts
-      // a tool_use by id, so re-emitting the anchor relabels the row a
-      // fallback record opened nameless.
       const relabel = record.agentType === undefined && name !== undefined
       if (relabel) {
         record.agentType = name
@@ -2534,10 +1826,6 @@ export class CodexRunner implements Runner {
           agent,
         )
       }
-      // 'interrupted': cut off before its report — which is the one thing
-      // 'done' could have claimed. Anything else that is not the birth edge
-      // ('interacted': the root sent it more work) means the agent is working
-      // again, so a settled verdict no longer describes it.
       if (item.kind === 'interrupted') {
         if (record.status === 'running') {
           this.#agents.settle(record, 'failed')
@@ -2550,11 +1838,6 @@ export class CodexRunner implements Runner {
       }
     },
     collabAgentToolCall: (item, active, id, agent) => {
-      // The model's collab tool surface, mapped as an ordinary tool card —
-      // and deliberately nothing more: on the wire it is decoration (only
-      // `wait` has been observed, every rich field empty), so no tracker
-      // state hangs off it. The card matters for one honest reason: a `wait`
-      // blocks the root visibly for as long as its agents run.
       if (!active.toolUseEmitted.has(id)) {
         active.toolUseEmitted.add(id)
         this.#emitToolUse(id, CODEX_COLLAB_TOOL, collabInput(item), agent)
@@ -2566,18 +1849,6 @@ export class CodexRunner implements Runner {
       this.#emitToolResult(id, failed ? item.status : '', failed, undefined, agent?.toolUseId ?? null)
     },
   }
-
-  // -------------------------------------------------------------------------
-  // Emission (the AiSdkRunner tool_result shape, so the reducer and both UIs
-  // render their existing cards unchanged)
-  // -------------------------------------------------------------------------
-
-  // `parent` on the four emitters below is the owning agent's anchor id — the
-  // protocol's sidechain key, resolved per-notification from the frame's own
-  // `threadId` (`#agentFor`). Null is the session's own thread, and the
-  // reducer's contract makes the distinction cheap to honor: it keys its
-  // streaming buffers `streaming:<parentToolUseId>`, so two agents' interleaved
-  // deltas accumulate apart as long as every frame says whose it is.
 
   #emitDelta(delta: { type: 'text_delta'; text: string } | { type: 'thinking_delta'; thinking: string }, parent: string | null): void {
     if (this.#config.includePartialMessages === false) {
@@ -2600,10 +1871,6 @@ export class CodexRunner implements Runner {
     })
   }
 
-  /** `agent` (rather than a bare parent id) because a nested call is also the
-   * agent's progress reading: `SubagentInfo.toolCount` ticks here, once per
-   * card — the `counted` set is what keeps an upserted re-emission (the
-   * finished imageGeneration input) from counting one picture twice. */
   #emitToolUse(id: string, name: string, input: unknown, agent?: CodexAgent): void {
     if (agent && !agent.counted.has(id)) {
       agent.counted.add(id)
@@ -2635,18 +1902,7 @@ export class CodexRunner implements Runner {
     })
   }
 
-  /**
-   * Per-turn usage re-mapped to the Anthropic accounting convention the whole
-   * stack assumes (GOTCHAS §Codex engine): OpenAI's `inputTokens` includes the
-   * cached share, so input excludes it (else queue token budgets double-count
-   * cache-heavy runs); reasoning tokens are billed output; `totalCostUsd: 0` =
-   * unknown, the AiSdkRunner precedent. Usage is summed from the turn's
-   * `thread/tokenUsage/updated` notifications — `turn/completed` carries none.
-   */
   #finishTurn(kind: 'success' | 'failure', startedAt: number, active: ActiveTurn, errors?: string[]): void {
-    // Approvals that outlived the turn (codex moved on, or the turn failed
-    // around them) are settled now — a card must never outlive what it gates,
-    // and an unanswered timer must never fire into a finished turn.
     for (const [id, pending] of this.#approvals) {
       this.#settleApproval(id, pending, { behavior: 'deny', message: 'Turn ended' }, 'policy')
     }
@@ -2675,24 +1931,12 @@ export class CodexRunner implements Runner {
     this.#setStatus('idle')
   }
 
-  /**
-   * Subscription windows, mapped onto the protocol's named vocabulary **by their
-   * measured duration** — codex reports windows positionally (`primary`/
-   * `secondary`) while `rateLimitType` is a name clients act on, so a duration with
-   * no name keeps a self-describing `window_<n>m` rather than being mislabelled
-   * (docs/GOTCHAS.md §Codex engine).
-   *
-   * `status` is 'allowed' by construction, as in `rateLimitEventsFromUsage`;
-   * `rateLimitReachedType` is the one signal that turns it 'rejected'.
-   */
   #emitRateLimits(limits: AppServerRateLimits | undefined | null): void {
     if (!limits) {
       return
     }
     const status = limits.rateLimitReachedType ? 'rejected' : 'allowed'
     for (const window of [limits.primary, limits.secondary]) {
-      // A window with no percentage is unknown, not zero — dropped rather than
-      // reported at 0%, the same rule the Claude mapping follows.
       if (!window || window.usedPercent === null || window.usedPercent === undefined) {
         continue
       }
@@ -2706,24 +1950,12 @@ export class CodexRunner implements Runner {
         },
       })
     }
-    // Emitted once per change, like the Claude engine's — it names the windows
-    // rather than sizing them.
     if (limits.planType && limits.planType !== this.#planType) {
       this.#planType = limits.planType
       this.#emit({ type: 'plan_info', subscriptionType: limits.planType })
     }
   }
 
-  /**
-   * Context occupancy, after the turn — the same cadence the Claude runner
-   * polls `getContextUsage()` on, so clients need nothing new.
-   *
-   * Emitted only when the binary gave BOTH numbers: the protocol is explicit
-   * that a client renders nothing rather than a 0% ring, and a window of
-   * `null` (which app-server does send) would otherwise divide into a
-   * meaningless percentage. `categories` is empty because codex publishes no
-   * breakdown — clients must not render an empty "Breakdown" section for it.
-   */
   #emitContextUsage(active: ActiveTurn): void {
     const totalTokens = active.contextTokens
     const maxTokens = active.contextWindow
@@ -2743,10 +1975,8 @@ export class CodexRunner implements Runner {
   }
 
   #setStatus(status: SessionStatus, detail?: string): void {
-    // Deduped on the (status, detail) PAIR, as SessionRunner does: deduping on
-    // status alone swallows a new detail for an unchanged status, which is
-    // exactly the update a detail exists to carry. No caller here passes one
-    // yet, so this is the cheap moment to agree with the other engines.
+    // Deduped on the (status, detail) pair: deduping on status alone would swallow a new detail
+    // for an unchanged status, which is the one update a detail exists to carry.
     if (this.#status === status && this.#statusDetail === detail) {
       return
     }
@@ -2759,8 +1989,6 @@ export class CodexRunner implements Runner {
   }
 
   #emit(body: SessionEventBody): void {
-    // History replay reuses the live item mapping wholesale; the replay flag
-    // is stamped here so the mapping itself stays one code path.
     if (this.#replayingHistory && (body.type === 'assistant_message' || body.type === 'user_message')) {
       body = { ...body, replay: true }
     }

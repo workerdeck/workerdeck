@@ -10,24 +10,14 @@ import type { AppServerConnectFn, AppServerThreadListResponse, AppServerThreadSu
 
 const NOT_INSTALLED = '@openai/codex is not installed — add it (an optional peer of @workerdeck/core) to run codex profiles'
 
-/**
- * The codex binary sessions will run: the per-platform package installed next
- * to `@openai/codex`, `vendor/<target-triple>/bin/codex` — the same file the
- * npm wrapper's own `bin/codex.js` launcher execs. Probing this binary rather
- * than whatever `codex` is on PATH means the availability answer is about the
- * executable sessions will actually run. Undefined when it can't be found;
- * callers degrade to 'unknown'.
- */
 export const resolveBundledCodexExecutable = (): string | undefined => {
   const triple = targetTriple()
   if (!triple) {
     return undefined
   }
   try {
-    // Two hops on purpose (the claude-auth pattern): the platform package is a
-    // dependency of @openai/codex, so under pnpm's strict layout it only
-    // resolves from @openai/codex's own location, never from ours. Plain
-    // createRequire throughout — neither package has an exports map.
+    // Two hops: the platform package is a dependency of @openai/codex, not of this one, so under
+    // pnpm's strict layout it resolves only from @openai/codex's own location.
     const fromHere = createRequire(import.meta.url)
     const wrapper = fromHere.resolve('@openai/codex/package.json')
     const fromWrapper = createRequire(wrapper)
@@ -36,9 +26,7 @@ export const resolveBundledCodexExecutable = (): string | undefined => {
     if (existsSync(path)) {
       return path
     }
-  } catch {
-    // not installed — nothing to probe
-  }
+  } catch {}
   return undefined
 }
 
@@ -60,16 +48,6 @@ const platformPackageSuffix = (): string => {
   return `${process.platform}-${process.arch}`
 }
 
-/**
- * Availability comes from `codex login status` alone: the app-server surface reads
- * neither `CODEX_API_KEY` nor `OPENAI_API_KEY`, so no env key is a credential route
- * here (docs/GOTCHAS.md §Codex engine). Anything unparseable is 'unknown', never a
- * verdict — the `checkClaudeAuth` never-overclaim discipline.
- *
- * **Only the exit code and the fixed verdict line may be consulted, and neither
- * `login status` line may be surfaced**: its success output carries a masked key
- * fragment. `smoke:codex --canary` is the drift alarm.
- */
 const checkCodexAvailability = async (
   profile: ProfileInfo,
   env: Record<string, string | undefined>,
@@ -94,8 +72,9 @@ const checkCodexAvailability = async (
         resolve({ available: true })
         return
       }
-      // The verdict line lands on stderr (0.146.0); check both streams so a
-      // future move doesn't silently degrade every verdict to 'unknown'.
+      // The verdict line lands on stderr (0.146.0); check both streams so a future move doesn't
+      // degrade every verdict to 'unknown'. Neither stream may reach `reason`: the success line
+      // carries a masked key fragment.
       if (`${stdout}\n${stderr}`.includes('Not logged in')) {
         // Presence checks on the NAMES only; values are never read.
         const hint = childEnv.CODEX_API_KEY
@@ -119,34 +98,25 @@ const checkCodexAvailability = async (
   })
 }
 
-/** `thread/list` page size (its own default is 25) and a hard page bound so a
- * misbehaving cursor can never spin the listing forever. */
 const LIST_PAGE_SIZE = 100
 const MAX_LIST_PAGES = 40
 
-/** thread/list's `cwd` filter is an EXACT path match (measured, 0.146.0), so
- * offer both the spelled and canonical forms — macOS listings would otherwise
- * miss `/tmp/...` threads recorded under `/private/tmp/...`. */
 const cwdFilter = (dir: string): string[] => {
   const forms = new Set([dir])
   try {
     forms.add(realpathSync(dir))
-  } catch {
-    // A directory that no longer exists still names its recorded threads.
-  }
+  } catch {}
   return [...forms]
 }
 
 const secondsToMs = (value: number | null | undefined): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value * 1000 : undefined
 
-/** One thread row in the protocol's browser-safe summary shape. `id` is what
- * `CreateSessionRequest.resume` feeds `thread/resume` — the row's separate
- * `sessionId` field is not it. */
 const summarizeThread = (row: AppServerThreadSummary): SdkSessionSummary => {
   const name = typeof row.name === 'string' && row.name.length > 0 ? row.name : undefined
   const preview = typeof row.preview === 'string' && row.preview.length > 0 ? row.preview : undefined
   return {
+    // The resume handle is the row's `id`; codex's own `sessionId` field is a different value.
     sessionId: row.id,
     summary: name ?? preview ?? row.id,
     lastModified: secondsToMs(row.updatedAt) ?? secondsToMs(row.createdAt) ?? 0,
@@ -158,15 +128,6 @@ const summarizeThread = (row: AppServerThreadSummary): SdkSessionSummary => {
   }
 }
 
-/**
- * CODEX_HOME's threads over ONE short-lived `codex app-server` child: the
- * runner's own handshake (`experimentalApi` and all — one code path, no
- * second vocabulary to drift), `thread/list` pages walked by cursor, child
- * closed before returning. Requires no live session and costs no tokens —
- * it is how "resume" is offered before anything is running. The `connectFn`
- * seam exists for the scripted-peer tests; the adapter passes the real
- * spawn.
- */
 export const listCodexSessions = async (options: {
   connectFn: AppServerConnectFn
   profile?: ProfileInfo
@@ -196,8 +157,6 @@ export const listCodexSessions = async (options: {
       capabilities: { experimentalApi: true },
     })
     connection.notify('initialized')
-    // Newest-first by *update* time — `lastModified` is the field the pickers
-    // sort and render, and codex's own default sort is by creation.
     const base: Record<string, unknown> = {
       limit: LIST_PAGE_SIZE,
       sortKey: 'updated_at',
@@ -231,15 +190,6 @@ export const listCodexSessions = async (options: {
   return options.limit === undefined ? summaries.slice(start) : summaries.slice(start, start + options.limit)
 }
 
-/**
- * OpenAI Codex as an engine: the codex CLI binary driven over its `app-server`
- * JSON-RPC surface — structurally the Claude engine's sibling (a local agent
- * binary with sessions, sandboxing and resume, resolving its own credentials
- * from the operator's environment). `@openai/codex` — the npm package that
- * carries the binary — is an **optional peer**: absent, every codex profile
- * reports unavailable and createRunner throws the same message, and no
- * consumer downloads a ~40 MB per-platform binary it never uses.
- */
 export const codexAdapter: EngineAdapter = {
   engine: 'codex',
   capabilities: ENGINE_CAPABILITIES.codex,

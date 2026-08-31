@@ -1,16 +1,8 @@
 import { appendFileSync } from 'node:fs'
 import type { Readable, Writable } from 'node:stream'
 
-/**
- * Set to a file path to append every inbound app-server notification and
- * server→client request as JSONL. Off unless set; see `docs/GOTCHAS.md` §codex.
- */
 export const CODEX_TRACE_ENV = 'WORKERDECK_CODEX_TRACE'
 
-/**
- * A JSON-RPC error response from the peer, or one we return to it. `code`
- * follows the JSON-RPC 2.0 reserved ranges (-32601 = method not found).
- */
 export class JsonRpcError extends Error {
   readonly code: number
   constructor(code: number, message: string) {
@@ -26,18 +18,6 @@ type Pending = {
   reject: (error: Error) => void
 }
 
-/**
- * JSON-RPC over a `codex app-server` child's stdio: **newline-delimited JSON**,
- * one message per line, and — verified against 0.146.0 — an envelope *without*
- * the `jsonrpc: "2.0"` field (`{id, method, params}` / `{id, result}` /
- * `{id, error}`; the binary's own schema marks only those required). Server→
- * client notifications additionally carry a top-level `emittedAtMs`, ignored
- * here.
- *
- * Transport only: no method knowledge, no process ownership. The process
- * wrapper (`process.ts`) owns the child and calls {@link fail} when it dies so
- * every in-flight request rejects instead of hanging.
- */
 export class JsonRpcStdioConnection {
   #output: Writable
   #nextId = 1
@@ -45,7 +25,6 @@ export class JsonRpcStdioConnection {
   #buffer = ''
   #closed = false
   #notificationHandler: ((method: string, params: unknown) => void) | undefined
-  /** Where {@link CODEX_TRACE_ENV} pointed, or undefined — read once. */
   #trace: string | undefined
   #requestHandler: ((method: string, params: unknown, id: string | number) => Promise<unknown>) | undefined
 
@@ -53,8 +32,7 @@ export class JsonRpcStdioConnection {
     this.#output = options.output
     this.#trace = process.env[CODEX_TRACE_ENV] || undefined
     options.input.on('data', (chunk: Buffer | string) => this.#feed(String(chunk)))
-    // Stream errors surface via the process wrapper's exit handling; swallowing
-    // here just prevents an unhandled 'error' crash between the two.
+    // Stream errors surface via the process wrapper's exit handling; this only prevents an unhandled crash between the two.
     options.input.on('error', () => {})
     options.output.on('error', () => {})
   }
@@ -85,8 +63,6 @@ export class JsonRpcStdioConnection {
     this.#requestHandler = handler
   }
 
-  /** Reject everything in flight and refuse new traffic — the child is gone
-   * (or the session is over). Idempotent. */
   fail(message: string): void {
     if (this.#closed) {
       return
@@ -127,15 +103,6 @@ export class JsonRpcStdioConnection {
     }
   }
 
-  /**
-   * Append one inbound message to the trace file, when the operator asked for
-   * one. **Notifications and server→client requests only** — a response body is
-   * not needed to answer the questions this exists for, and `account/*` results
-   * are the one place app-server traffic can carry a masked credential
-   * fragment, which nothing of ours writes to disk (see the auth red lines).
-   * Best-effort and synchronous: a debug sink that loses lines proves nothing,
-   * and a debug sink that throws must not take the session with it.
-   */
   #traceLine(message: Record<string, unknown>): void {
     if (!this.#trace) {
       return
@@ -144,6 +111,7 @@ export class JsonRpcStdioConnection {
     if (typeof method !== 'string') {
       return
     }
+    // account/* and login* are the one place this protocol carries a masked credential fragment.
     if (method.startsWith('account/') || method.startsWith('login')) {
       return
     }
@@ -161,9 +129,6 @@ export class JsonRpcStdioConnection {
         this.#notificationHandler?.(method, message.params)
         return
       }
-      // Server→client request: the handler's resolution is the response. No
-      // handler (or a throw) becomes a JSON-RPC error, never a hang — an
-      // unanswered approval would wedge the turn.
       const respond = (payload: object) => this.#write({ id: id as string | number, ...payload })
       const handler = this.#requestHandler
       if (!handler) {
