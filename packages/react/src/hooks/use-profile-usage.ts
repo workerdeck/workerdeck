@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { WorkerDeckError, type WorkerDeckClient } from '@workerdeck/client'
+import { useCallback, useEffect, useState } from 'react'
+import type { WorkerDeckClient } from '@workerdeck/client'
+import { isRouteUnsupported, useAliveRef } from '../lib/async-guards.ts'
 import type { ProfileUsage } from '@workerdeck/protocol'
 
 export type UseProfileUsageOptions = {
@@ -20,22 +21,10 @@ export type UseProfileUsageResult = {
 }
 
 /**
- * The gateway's per-profile plan usage, over REST.
- *
- * The session's own event stream carries a `rate_limit` reading only when the
- * engine volunteers one — for claude that is at a turn's edges and nowhere else,
- * so a session idle since yesterday replays yesterday's number, and a session
- * opened today knows nothing of what a sibling on the same account spent an hour
- * ago. `GET /profiles` answers the account-wide question, which is why this is a
- * poll and not a subscription: nothing pushes it.
- *
- * Polling and not attaching, deliberately — a second WebSocket per surface is
- * exactly what the bridge's "asks the first attached client" rule forbids, and
- * this is one small GET a minute.
- *
- * Self-disabling on a 404, like {@link useHostFileSearch}: a gateway without the
- * route will never grow one mid-session, so stop asking rather than log a miss
- * every minute.
+ * The gateway's per-profile plan usage, over REST. A **poll**, never a second attach: nothing
+ * pushes account-wide usage (a session's own `rate_limit` readings land only at a turn's edges),
+ * and the bridge asks the first attached client, so a second socket per surface is forbidden.
+ * Self-disabling on a 404, like {@link useHostFileSearch}.
  */
 export const useProfileUsage = (
   client: WorkerDeckClient,
@@ -52,13 +41,7 @@ export const useProfileUsage = (
   // another account's plan, not a stale view of this one.
   useEffect(() => setUsage(undefined), [client, profile])
 
-  const alive = useRef(true)
-  useEffect(() => {
-    alive.current = true
-    return () => {
-      alive.current = false
-    }
-  }, [])
+  const alive = useAliveRef()
 
   useEffect(() => {
     if (!profile || !enabled || unsupported) {
@@ -85,7 +68,7 @@ export const useProfileUsage = (
           if (cancelled || !alive.current) {
             return
           }
-          if (e instanceof WorkerDeckError && e.status === 404) {
+          if (isRouteUnsupported(e)) {
             setUnsupported(true)
           }
           // Anything else is a blip: keep the last reading, which is dated, and

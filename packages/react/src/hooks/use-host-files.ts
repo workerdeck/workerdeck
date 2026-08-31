@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { WorkerDeckError, type WorkerDeckClient } from '@workerdeck/client'
+import type { WorkerDeckClient } from '@workerdeck/client'
+import { isRouteUnsupported, useAliveRef } from '../lib/async-guards.ts'
 import type { HostFileMatch } from '@workerdeck/protocol'
 import { ancestorsWithin, flattenHostTree, type HostDirState, type HostTreeRow } from '../lib/host-tree.ts'
 
@@ -20,17 +21,9 @@ export type UseHostFileSearchResult = {
 }
 
 /**
- * Fuzzy file search rooted at a session's working directory — what an `@file`
- * picker needs.
- *
- * Deliberately session-scoped: the server's `hostFiles.roots` are the security
- * boundary, but what someone wants while talking to an agent is *this* project's
- * tree, so this never offers the roots list.
- *
- * A gateway that answers 404 once has answered for the session: host files are
- * either configured or they aren't, and the answer will not change while the cwd
- * holds. Asking again on every character would be a request per keystroke for a
- * feature that does not exist here.
+ * Fuzzy file search rooted at a session's working directory — what an `@file` picker needs. Never
+ * offers the roots list: `hostFiles.roots` is the server's security boundary, not a place to
+ * navigate. Self-disabling on a 404, which is answered once for the whole session.
  */
 export const useHostFileSearch = (client: WorkerDeckClient, cwd: string | undefined): UseHostFileSearchResult => {
   const [unsupported, setUnsupported] = useState(false)
@@ -54,7 +47,7 @@ export const useHostFileSearch = (client: WorkerDeckClient, cwd: string | undefi
         return options?.signal?.aborted ? [] : response.matches
       } catch (e) {
         // No host files on this gateway (or the cwd isn't under a root).
-        if (e instanceof WorkerDeckError && e.status === 404) {
+        if (isRouteUnsupported(e)) {
           setUnsupported(true)
         }
         return []
@@ -141,21 +134,9 @@ export type UseHostFileTreeResult = {
 }
 
 /**
- * An expandable file tree rooted at a session's working directory.
- *
- * Rooted at the cwd rather than at `/fs/roots` for the same reason
- * {@link useHostFileSearch} is: the roots are the *security* boundary the server
- * enforces on every request, but what someone wants while watching an agent work
- * is this project's tree. The roots may well be broader; showing them would
- * offer navigation to directories the session has nothing to do with.
- *
- * Listings are cached per directory and kept across a collapse, so reopening a
- * folder is instant and does not re-ask. That staleness is deliberate and
- * bounded: `refresh` exists, and knowing when to call it is the *next* problem
- * (the agent is editing this same tree), not something a tree can guess.
- *
- * Like the search hook, a 404 is answered once for the session: host files are
- * either configured here or they are not.
+ * An expandable file tree rooted at a session's working directory, for the same reason
+ * {@link useHostFileSearch} is. Listings are cached per directory and kept across a collapse, so
+ * a reopened folder is instant and deliberately stale until `refresh`. Self-disabling on a 404.
  */
 export const useHostFileTree = (client: WorkerDeckClient, cwd: string | undefined): UseHostFileTreeResult => {
   const [dirs, setDirs] = useState<Map<string, HostDirState>>(() => new Map())
@@ -177,13 +158,7 @@ export const useHostFileTree = (client: WorkerDeckClient, cwd: string | undefine
     setError(undefined)
   }, [cwd])
 
-  const alive = useRef(true)
-  useEffect(() => {
-    alive.current = true
-    return () => {
-      alive.current = false
-    }
-  }, [])
+  const alive = useAliveRef()
 
   // Directories whose listing has been asked for. A ref rather than state: it
   // must not re-render anything, and it is what keeps an expand-collapse-expand
@@ -219,7 +194,7 @@ export const useHostFileTree = (client: WorkerDeckClient, cwd: string | undefine
             return
           }
           requested.current.delete(target)
-          if (e instanceof WorkerDeckError && e.status === 404) {
+          if (isRouteUnsupported(e)) {
             // No host files on this gateway, or the cwd is not under a root.
             // Not an error banner — the rail simply is not on offer.
             setUnsupported(true)

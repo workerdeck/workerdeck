@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
+import { copyText } from '../../lib/clipboard.ts'
 import { cn } from '../../lib/utils.ts'
 
 /**
@@ -90,15 +91,19 @@ export function CopyAction({ text, label = 'Copy' }: { text: string; label?: str
       onClick={(event) => {
         // The row underneath is usually pressable; copying is not expanding.
         event.stopPropagation()
-        void navigator.clipboard
-          ?.writeText(text)
-          .then(() => {
-            setCopied(true)
-            setTimeout(() => setCopied(false), 1200)
-          })
-          // No toast, no error row: a failed copy that says nothing is better
-          // than a transcript that grows an error.
-          .catch(() => {})
+        // Through `copyText`, never `navigator.clipboard` directly: that object
+        // is absent on the plain-HTTP LAN origin most gateways are reached on,
+        // where the optional chain used to swallow the whole copy — no bytes and
+        // no `✓`, so the button read as broken. The `✓` follows the return value
+        // for the same reason: it may only claim what actually landed. A failure
+        // still says nothing, which beats a transcript that grows an error row.
+        void copyText(text).then((ok) => {
+          if (!ok) {
+            return
+          }
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1200)
+        })
       }}
     >
       {copied ? '✓' : '⧉'}
