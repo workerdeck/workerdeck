@@ -1248,6 +1248,9 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   are orthogonal. Claude's CLI reports skill *names* on `system_init` and nothing else — no
   descriptions, no scope, no suggested prompt — which is not enough to fill a picker honestly, so
   `skillsList` is false there rather than rendering a list of bare words.
+- **Clients gate the skills affordance on the `skills` event having arrived** (`state.skills`
+  defined), never on `capabilities.skillsList` alone: the flag says the engine *can* answer, the
+  list says it *has*. The list is always asynchronous to the capability.
 - **A promptless session lists skills over a throwaway connection.** `skills/list` needs a live
   child but not a thread, and a codex session otherwise spawns nothing until it has work — so the
   dashboard's "create, then type" flow had no skill list at all, which is the one place codex's
@@ -1323,6 +1326,14 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   "Disable" on a server list otherwise reads as an edit to config.
 
 ## Attach replay (the hold, the cache, the five filters)
+
+- **Only a fresh attach (`replayingFrom === 0`) yields a hold target, and the reconnect's
+  `undefined` is load-bearing.** A reconnect replays into a transcript the reader is already
+  looking at, and blanking it mid-turn would be a worse bug than the flicker the hold fixes.
+  Because `useClaudeSession` sets the target unconditionally on every `attached` frame, a
+  reconnect's `undefined` also *releases* a hold whose replay a socket drop cut short — the
+  re-attach streams the remainder visibly instead of sitting blank until the backstop fires.
+  Guarding that set with "only when defined" silently re-creates exactly that blank window.
 
 - **Image refs are the fifth filter, and the only one that also applies to the LIVE path.** With
   `imageRefs`, a `tool_result`'s base64 `image` parts are delivered as `image_ref` addresses

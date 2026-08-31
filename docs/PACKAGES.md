@@ -575,7 +575,7 @@ of `buildWsUrl` changes and callers do not.
 ## `packages/react`
 
 headless: `useClaudeSession`, the pure transcript reducer
-(`src/lib/transcript.ts`, framework-free, unit-tested — keep rendering out). Two reducer rules
+(`src/lib/transcript.ts`, framework-free, unit-tested — keep rendering out). Three reducer rules
 are not readable off the types. **Streaming is per agent, not per session**: the in-flight ids
 are `streaming` / `streaming-thinking` on the main thread and `streaming:<parentToolUseId>` /
 `streaming-thinking:<parentToolUseId>` inside a subagent, because a forwarded subagent streams
@@ -587,7 +587,17 @@ sends the superseding `assistant_message`, so a leftover streaming item would be
 next turn's message and glued onto by the next turn's deltas, and a leftover
 `streaming:<id>` would be adopted by the next `Task` reusing that id. The stable id carries the
 agent because two agents finalizing on one `turn_result` would otherwise collide — upsert keys by
-id. A person's **slash command** arrives as a user message wrapped in
+id. The third is the **tool-call status machine**. `status` runs `running` (the model called it,
+nothing reported) → `pending` or `deferred` on `execution_dispatched` (dispatched to an executor —
+bridged to this client or queued — versus parked beyond this turn, possibly outliving the
+session's liveness) → `settled` on `execution_result` or a non-error `tool_result`, and `failed`
+on `execution_failed` or an error one. Surfaces derive their UI from `status`, never from `result`
+being present: a pending or deferred call has no result yet and is not the same thing as a running
+one. The execution events are keyed by `executionId`, which **equals the `tool_use` id for calls
+the model made**, and an event for an unknown id is ignored rather than fabricating an item — the
+`tool_use` that explains it may simply not have arrived, or may belong to another session. Swift
+mirror: `ToolCallStatus` in `Transcript.swift`.
+A person's **slash command** arrives as a user message wrapped in
 `<command-message>/<command-name>/<command-args>` markup; the reducer renders the typed command
 line and never the wrapper, and it must not be suppressed here *or* in the runner — hiding it
 erases the turn's cause, and protocol's `transcriptActivity` counts a non-synthetic user message
