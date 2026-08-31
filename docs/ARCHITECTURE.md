@@ -276,6 +276,19 @@ boundary: anything a client needs must be expressible as protocol events and com
 
 ## Session lifecycle
 
+`SessionStatus` is the whole of a session's state, and only two of its seven values are terminal:
+
+- `starting` — runner spawned, waiting for the SDK init handshake
+- `running` — a turn is in progress
+- `awaiting_approval` — blocked on at least one pending permission request
+- `idle` — between turns; accepting user messages
+- `parked` — waiting on a deferred tool execution. The live runner has been torn down and the
+  session's state persisted; delivering the execution's result
+  (`POST {basePath}/executions/:executionId/result`) rehydrates it under the same id and the run
+  continues. **Not terminal** — the one that reads like it should be.
+- `failed` — the underlying query errored; terminal
+- `closed` — closed by a client or the host; terminal
+
 1. `POST /v1/sessions` → registry creates a `SessionRunner`; the runner starts `query()` with a
    streaming-input iterable and re-pins `cwd` every call (the SDK treats it as per-query).
 2. Every SDKMessage is normalized into a protocol event, stamped with a monotonic `seq`, logged,
@@ -344,10 +357,22 @@ enforces).
 
 ## Job lifecycle
 
+`JobStatus`, and which values are terminal:
+
+- `queued` — accepted, waiting for a concurrency slot (or the daily token budget)
+- `running` — a session is executing the prompt
+- `parked` — waiting on a deferred execution. **Not terminal**, and it holds no concurrency slot
+- `succeeded` / `failed` — terminal; `result` (and `error` on failure) are set
+- `canceled` — terminal; canceled by a client before or during the run
+
 `POST /v1/jobs` → adapter enqueues → `JobQueue` claims (`claimNext`) when a concurrency slot
 frees and budgets allow → the job runs as an ordinary registry session → webhooks deliver
 `job_started` / `job_progress` (per assistant message and permission request) / `job_retrying` /
-`job_completed` in order → first turn result completes the job and closes the session. Token
+`job_completed` in order → first turn result completes the job and closes the session.
+`job_submitted` is **not** among them: it reaches local observers and the queue WS only, since the
+submitter already holds the POST response, so webhook delivery starts at `job_started`.
+`job_retrying` marks a failed run that was re-queued (`job.nextRunAt` says when); `job_completed`
+is always terminal. Token
 accounting sums per-turn `usage` (input + output + cache_creation + cache_read);
 `total_cost_usd`/`num_turns` are session-cumulative and rolled up last-seen, never summed.
 

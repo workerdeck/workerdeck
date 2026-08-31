@@ -897,7 +897,8 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     and the wake rebuilds from `record.config` while discarding `record.info` — so a rename used to
     survive the listing and die on the wake. `#rememberDormant` persists `{ ...config, meta:
     info.meta }`, and `PATCH /sessions/:id` calls `parking.touch()` because a rename emits no event
-    and nothing else would trigger a save.
+    and nothing else would trigger a save. A **parked** session 409s the PATCH instead: it has no
+    runner to carry the change, and its snapshot is the host's to rewrite, not this route's.
 - Parking is a persistence boundary, not an ending, and its invariants are load-bearing:
   `park()` emits `status_changed: 'parked'` and NEVER `session_closed`, snapshots *after* that
   emit and keeps the seq counter (a rehydrated runner continuing at a reused seq is silently
@@ -1072,6 +1073,10 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   synchronously, a `session_closed` notification reports `status: 'starting'`. Seq and ts still
   come from the event, so identity and ordering are untouched. Two more rules on that snapshot:
   `runner.info()` is read at **send** time, not delivery time — the payload must describe the
+  **Session webhooks are server-wide, not per session** — the whole point is to hear about
+  sessions you did not create and are not attached to, which a per-session subscription could not
+  give you.
+  Read at **send** time, not delivery time: the payload must describe the
   session as the event left it, not as it is after three webhook retries — and the notifier's
   webhook delivery is a deliberate near-copy of the queue's job-webhook delivery rather than a
   shared helper, because coupling them would let a change to job deliveries silently change
@@ -1135,6 +1140,10 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   nothing means "create" — a path that already exists then 409s. There is no unconditional
   overwrite, because the agent is editing the same tree; a client that lost track of its base can
   only re-read, never force. The response's own hash chains into the next write.
+- **`/fs/find`'s ranking is part of its contract**, because it is what an `@file` picker is
+  built on: subsequence matching (`seslist` finds `SessionListView.swift`), filename hits above
+  path hits, shallow above deep, and an empty `q` returns the shallowest files rather than
+  nothing. Build directories are skipped.
 - **`/fs/find` walks, so it must not follow.** The recursive search (`host-file-search.ts`) skips
   symlinks as files *and* as directories: as directories that is the difference between a bounded
   walk and a cycle, and as files it guarantees every path it offers is one `/fs/read` will accept.
@@ -1153,6 +1162,10 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   first, the command names it by id, and what lands in the log is a `MessageAttachment` reference.
   `SessionRunner.sendMessage` is the seam: it builds the content blocks from the bytes and emits
   the refs. If you ever find yourself putting `data` on a `SessionEvent`, this is why not.
+- **The attachment store is in-memory, so a restart outlives it.** The `MessageAttachment`
+  reference in the transcript survives (it is in the log), but
+  `GET {basePath}/sessions/:id/attachments/:attachmentId` 404s afterwards — a message can outlive
+  the bytes it names, and a client rendering one has to tolerate that.
 - **An unknown attachment id fails the whole command.** Not "send the message without it" — a
   message that quietly lost its picture reads as the model ignoring it, which is far worse to
   debug than a `protocol_error`.

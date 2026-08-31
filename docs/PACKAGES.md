@@ -5,7 +5,11 @@ the package map and the dependency rule live there.
 
 ## `packages/protocol`
 
-wire types (events/commands/REST). Dependency-free, browser-safe, depends
+wire types (events/commands/REST). One session is **one ordered stream of `SessionEvent`s**, each
+stamped with a monotonic `seq`, plus a small command set (`SessionCommand`); clients attach over
+WebSocket, optionally replaying from a known `seq`, and drive the session with commands. API
+message content is modelled structurally (`ApiMessage`) so a client can render a transcript without
+the Agent SDK. Dependency-free, browser-safe, depends
 on nothing and everything depends on it. Breaking → bump `PROTOCOL_VERSION`. It also owns the
 few *rules* both sides must agree on rather than each guess: `transcriptActivity(event)` is
 the row-count rule the react reducer renders by and the runners count with
@@ -258,6 +262,11 @@ than per client, because two surfaces must not disagree about either.
 `.workerdeck.json`: undeclared sessions group by their own folder, declared ones by their root, and
 a session in `packages/ui` joins its repo's group the moment the file exists. Sessions with no cwd
 at all (a filesystem-less provider session) share one per-gateway bucket and read "No project".
+
+A `ProjectIcon` is either a named glyph — looked up in the client's own icon set, with an unknown
+name drawing the no-project fallback — or an image **address, never bytes**, fetched from
+`GET {basePath}/sessions/:id/project/icon`. Its `hash` is the cache key, and the route serves that
+same hash as the ETag, so an edited icon arrives as a new key rather than a stale hit.
 
 The project-icon route is **session-scoped on purpose**: the fetch then rides the same `canSee`
 gate as every other `/sessions/:id/*` route, and a scoped principal's miss is the uniform 404. A

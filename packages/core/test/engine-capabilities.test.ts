@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  ENGINE_CAPABILITIES,
-  PROVIDER_PERMISSION_MODES,
-  supportsPermissionMode,
-  type PermissionMode,
-  type ProfileEngine,
-} from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, supportsPermissionMode, type PermissionMode, type ProfileEngine } from '@workerdeck/protocol'
 import { claudeAdapter } from '../src/engines/claude/adapter.ts'
 import { codexAdapter } from '../src/engines/codex/adapter.ts'
 import { providerAdapter } from '../src/engines/provider/adapter.ts'
@@ -23,11 +17,6 @@ describe('ENGINE_CAPABILITIES invariants', () => {
       const caps = ENGINE_CAPABILITIES[engine]
       expect(caps.permissionModes).toContain(caps.defaultPermissionMode)
     }
-  })
-
-  it('keeps the deprecated PROVIDER_PERMISSION_MODES an alias of the provider record', () => {
-    expect(PROVIDER_PERMISSION_MODES).toBe(ENGINE_CAPABILITIES.provider.permissionModes)
-    expect([...PROVIDER_PERMISSION_MODES]).toEqual(['default', 'bypassPermissions', 'dontAsk'])
   })
 
   it('answers supportsPermissionMode exactly as before for claude and provider', () => {
